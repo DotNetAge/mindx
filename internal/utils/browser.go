@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"mindx/pkg/i18n"
 	"os"
 	"os/exec"
 	"sync"
@@ -70,14 +69,14 @@ func StartChromeDriver() error {
 
 	seleniumPath := findChromeDriver()
 	if seleniumPath == "" {
-		return fmt.Errorf(i18n.T("browser.chrome_driver_not_found"))
+		return fmt.Errorf("chrome driver not found")
 	}
 	debugLog("[ChromeDriver] Found driver: %s", seleniumPath)
 
 	debugLog("[ChromeDriver] Starting service on port %d...", chromeDriverPort)
 	service, err := selenium.NewChromeDriverService(seleniumPath, chromeDriverPort)
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("browser.chrome_driver_start_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to start chrome driver: %w", err)
 	}
 
 	sharedService = service
@@ -145,13 +144,13 @@ func NewBrowser(proxy string) (*Browser, error) {
 	debugLog("[Browser] Connecting to ChromeDriver...")
 	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", chromeDriverPort))
 	if err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("browser.chrome_driver_connect_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to connect to chrome driver: %w", err)
 	}
 
 	hideWebdriverScript := `Object.defineProperty(navigator, 'webdriver', {get: () => undefined});`
 	if _, err := wd.ExecuteScript(hideWebdriverScript, nil); err != nil {
 		wd.Quit()
-		return nil, fmt.Errorf(i18n.TWithData("browser.hide_webdriver_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to hide webdriver: %w", err)
 	}
 
 	secChUa, secChUaPlatform := generateRandomFingerprint()
@@ -176,20 +175,20 @@ func (b *Browser) Close() {
 
 func (b *Browser) Search(terms string, limit int) ([]SearchResult, error) {
 	if err := b.wd.Get("https://duckduckgo.com/"); err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("browser.page_access_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to access page: %w", err)
 	}
 
 	searchBox, err := b.wd.FindElement(selenium.ByName, "q")
 	if err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("browser.search_box_not_found", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("search box not found: %w", err)
 	}
 
 	if err := searchBox.SendKeys(terms); err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("browser.search_input_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to input search term: %w", err)
 	}
 
 	if err := searchBox.SendKeys(selenium.EnterKey); err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("browser.search_submit_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to submit search: %w", err)
 	}
 
 	time.Sleep(2 * time.Second)
@@ -208,7 +207,7 @@ func (b *Browser) Search(terms string, limit int) ([]SearchResult, error) {
 	var results []SearchResult
 	articles, err := b.wd.FindElements(selenium.ByTagName, "article")
 	if err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("browser.search_results_not_found", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("search results not found: %w", err)
 	}
 
 	for _, ele := range articles {
@@ -251,7 +250,7 @@ func (b *Browser) Search(terms string, limit int) ([]SearchResult, error) {
 
 func (b *Browser) Open(url string) (*OpenResult, error) {
 	if err := b.wd.Get(url); err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("browser.page_access_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to access page: %w", err)
 	}
 
 	_ = b.wd.Wait(func(wd selenium.WebDriver) (bool, error) {
@@ -261,15 +260,15 @@ func (b *Browser) Open(url string) (*OpenResult, error) {
 
 	text, err := b.wd.FindElements(selenium.ByTagName, "body")
 	if err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("browser.page_text_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to get page text: %w", err)
 	}
 	if len(text) == 0 {
-		return nil, fmt.Errorf(i18n.T("browser.page_body_not_found"))
+		return nil, fmt.Errorf("page body not found")
 	}
 
 	content, err := text[0].Text()
 	if err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("browser.page_text_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to get page text: %w", err)
 	}
 
 	links, err := b.wd.FindElements(selenium.ByTagName, "a")

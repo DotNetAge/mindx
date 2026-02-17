@@ -1,10 +1,10 @@
 package training
 
 import (
-	"mindx/pkg/i18n"
-	"mindx/pkg/logging"
 	"encoding/json"
 	"fmt"
+	"mindx/pkg/i18n"
+	"mindx/pkg/logging"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,14 +19,14 @@ type Collector struct {
 
 func NewCollector(dataSource TrainingDataSource, logger logging.Logger) (*Collector, error) {
 	if dataSource == nil {
-		return nil, fmt.Errorf(i18n.T("collector.datasource_nil"))
+		return nil, fmt.Errorf("data source is nil")
 	}
 
 	homeDir, _ := os.UserHomeDir()
 	lastTrainLog := filepath.Join(homeDir, ".bot", "training", "last_training.json")
 
 	if err := os.MkdirAll(filepath.Dir(lastTrainLog), 0755); err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("collector.create_dir_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to create dir: %w", err)
 	}
 
 	return &Collector{
@@ -43,14 +43,14 @@ func (c *Collector) GetLastTrainTime() (time.Time, error) {
 
 	data, err := os.ReadFile(c.lastTrainLog)
 	if err != nil {
-		return time.Time{}, fmt.Errorf(i18n.TWithData("collector.read_log_failed", map[string]interface{}{"Error": err.Error()}))
+		return time.Time{}, fmt.Errorf("failed to read log: %w", err)
 	}
 
 	var trainLog struct {
 		LastTrainTime time.Time `json:"last_train_time"`
 	}
 	if err := json.Unmarshal(data, &trainLog); err != nil {
-		return time.Time{}, fmt.Errorf(i18n.TWithData("collector.parse_log_failed", map[string]interface{}{"Error": err.Error()}))
+		return time.Time{}, fmt.Errorf("failed to parse log: %w", err)
 	}
 
 	return trainLog.LastTrainTime, nil
@@ -65,11 +65,11 @@ func (c *Collector) UpdateLastTrainTime(t time.Time) error {
 
 	data, err := json.MarshalIndent(trainLog, "", "  ")
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("collector.marshal_log_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to marshal log: %w", err)
 	}
 
 	if err := os.WriteFile(c.lastTrainLog, data, 0644); err != nil {
-		return fmt.Errorf(i18n.TWithData("collector.write_log_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to write log: %w", err)
 	}
 
 	c.logger.Info(i18n.T("collector.train_time_updated"), logging.String("time", t.Format("2006-01-02 15:04:05")))
@@ -84,7 +84,7 @@ func (c *Collector) CollectMemoryPoints() ([]MemoryPoint, error) {
 
 	allPoints, err := c.dataSource.GetAllMemoryPoints()
 	if err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("collector.get_points_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to get points: %w", err)
 	}
 
 	var recentPoints []MemoryPoint

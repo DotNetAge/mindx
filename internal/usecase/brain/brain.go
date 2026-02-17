@@ -46,9 +46,31 @@ func NewBrain(
 	tokenUsageRepo core.TokenUsageRepository,
 ) (*core.Brain, error) {
 
+	modelsMgr := config.GetModelsManager()
+	brainModels := modelsMgr.GetBrainModels()
+
 	leftBrainPrompt := buildLeftBrainPrompt(persona)
-	lbrain := NewThinking(&cfg.Brain.LeftbrainModel, leftBrainPrompt, logger, tokenUsageRepo, &cfg.Brain.TokenBudget)
-	rbrain := NewThinking(&cfg.Brain.RightbrainModel, "", logger, tokenUsageRepo, &cfg.Brain.TokenBudget)
+
+	leftModelName := brainModels.SubconsciousLeftModel
+	if leftModelName == "" {
+		leftModelName = brainModels.SubconsciousModel
+	}
+	if leftModelName == "" {
+		leftModelName = modelsMgr.GetDefaultModel()
+	}
+	leftModel := modelsMgr.MustGetModel(leftModelName)
+
+	rightModelName := brainModels.SubconsciousRightModel
+	if rightModelName == "" {
+		rightModelName = brainModels.SubconsciousModel
+	}
+	if rightModelName == "" {
+		rightModelName = modelsMgr.GetDefaultModel()
+	}
+	rightModel := modelsMgr.MustGetModel(rightModelName)
+
+	lbrain := NewThinking(leftModel, leftBrainPrompt, logger, tokenUsageRepo, &cfg.TokenBudget)
+	rbrain := NewThinking(rightModel, "", logger, tokenUsageRepo, &cfg.TokenBudget)
 
 	contextPreparer := NewContextPreparer(memory, historyRequest, logger)
 	toolCaller := NewToolCaller(skillMgr, logger)
@@ -85,8 +107,8 @@ func NewBrain(
 	impl.brain = brain
 
 	logger.Info(i18n.T("brain.init_success"),
-		logging.String(i18n.T("brain.left_brain"), cfg.Brain.LeftbrainModel.Name),
-		logging.String(i18n.T("brain.right_brain"), cfg.Brain.RightbrainModel.Name),
+		logging.String(i18n.T("brain.left_brain"), leftModel.Name),
+		logging.String(i18n.T("brain.right_brain"), rightModel.Name),
 		logging.String(i18n.T("brain.persona_name"), persona.Name),
 		logging.String(i18n.T("brain.persona_gender"), persona.Gender),
 		logging.String(i18n.T("brain.persona_character"), persona.Character))
@@ -108,7 +130,7 @@ func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, e
 
 	ctx, err := b.contextPreparer.Prepare(req.Question, b.leftBrain)
 	if err != nil {
-		return nil, fmt.Errorf(i18n.T("brain.prepare_context_failed")+": %w", err)
+		return nil, fmt.Errorf("failed to prepare context: %w", err)
 	}
 
 	eventChan := req.EventChan
@@ -120,7 +142,7 @@ func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, e
 	if err != nil {
 		b.leftBrain.SetEventChan(nil)
 		b.logger.Error(i18n.T("brain.left_think_failed"), logging.Err(err))
-		return nil, fmt.Errorf(i18n.T("brain.left_think_failed")+": %w", err)
+		return nil, fmt.Errorf("left brain think failed: %w", err)
 	}
 
 	b.logger.Info(i18n.T("brain.left_think_complete"),
@@ -319,7 +341,7 @@ func (b *BionicBrain) consciousnessWithTools(question string, thinkResult *core.
 
 	if err != nil {
 		b.logger.Error(i18n.T("brain.consciousness_tool_failed"), logging.Err(err))
-		return nil, fmt.Errorf(i18n.T("brain.consciousness_tool_call_failed")+": %w", err)
+		return nil, fmt.Errorf("consciousness tool call failed: %w", err)
 	}
 
 	return b.responseBuilder.BuildToolCallResponse(answer, tools, thinkResult.SendTo), nil
@@ -401,6 +423,7 @@ func (b *BionicBrain) parseCapabilityPrefix(question string) (capabilityName, ac
 	return capabilityName, actualQuestion
 }
 
+// TODO: 需要在 SystemPrompt中补充的对技能的使用引导
 func (b *BionicBrain) handleWithConsciousness(req *core.ThinkingRequest, capabilityName, actualQuestion string) (*core.ThinkingResponse, error) {
 	ctx, err := b.contextPreparer.Prepare(actualQuestion, b.leftBrain)
 	if err != nil {

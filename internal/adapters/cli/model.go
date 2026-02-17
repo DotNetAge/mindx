@@ -43,7 +43,7 @@ func testModelTools(modelName string) error {
 	configPath := "config/models.json"
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("cli.model.test.config_read_error", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("config read error: %w", err)
 	}
 
 	var config struct {
@@ -51,7 +51,7 @@ func testModelTools(modelName string) error {
 	}
 
 	if err := json.Unmarshal(data, &config); err != nil {
-		return fmt.Errorf(i18n.TWithData("cli.model.test.config_parse_error", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("config parse error: %w", err)
 	}
 
 	baseURL := ""
@@ -63,7 +63,7 @@ func testModelTools(modelName string) error {
 	}
 
 	if baseURL == "" {
-		return fmt.Errorf(i18n.T("cli.model.test.no_ollama"))
+		return fmt.Errorf("no ollama config")
 	}
 
 	if modelName == "" {
@@ -92,7 +92,7 @@ func testModelTools(modelName string) error {
 		}
 	}
 
-	return fmt.Errorf(i18n.TWithData("cli.model.test.not_found", map[string]interface{}{"Name": modelName}))
+	return fmt.Errorf("model not found: %s", modelName)
 }
 
 func testSingleModel(model config.ModelConfig, baseURL string) error {

@@ -7,26 +7,26 @@
   background-color: #030712;
 }
 
-.channels-header {
+.channels-container .channels-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
 }
 
-.channels-header h1 {
+.channels-container .channels-header h1 {
   font-size: 24px;
   font-weight: 600;
   color: #f9fafb;
   margin: 0;
 }
 
-.header-actions {
+.channels-container .header-actions {
   display: flex;
   gap: 12px;
 }
 
-.action-btn {
+.channels-container .action-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -41,53 +41,53 @@
   color: #f9fafb;
 }
 
-.action-btn:hover:not(:disabled) {
+.channels-container .action-btn:hover:not(:disabled) {
   background-color: #4b5563;
   transform: translateY(-1px);
 }
 
-.action-btn:disabled {
+.channels-container .action-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.action-btn.primary {
+.channels-container .action-btn.primary {
   background-color: #3b82f6;
   color: white;
 }
 
-.action-btn.primary:hover:not(:disabled) {
+.channels-container .action-btn.primary:hover:not(:disabled) {
   background-color: #2563eb;
 }
 
-.action-btn.secondary {
+.channels-container .action-btn.secondary {
   background-color: #374151;
   color: #f9fafb;
 }
 
-.action-btn.secondary:hover:not(:disabled) {
+.channels-container .action-btn.secondary:hover:not(:disabled) {
   background-color: #4b5563;
 }
 
-.action-btn.success {
+.channels-container .action-btn.success {
   background-color: #28a745;
   color: white;
 }
 
-.action-btn.success:hover:not(:disabled) {
+.channels-container .action-btn.success:hover:not(:disabled) {
   background-color: #218838;
 }
 
-.action-btn.danger {
+.channels-container .action-btn.danger {
   background-color: #dc3545;
   color: white;
 }
 
-.action-btn.danger:hover:not(:disabled) {
+.channels-container .action-btn.danger:hover:not(:disabled) {
   background-color: #c82333;
 }
 
-.message {
+.channels-container .message {
   padding: 12px 16px;
   border-radius: 6px;
   margin-bottom: 24px;
@@ -95,25 +95,25 @@
   font-weight: 500;
 }
 
-.message.success {
+.channels-container .message.success {
   background-color: rgba(40, 167, 69, 0.2);
   color: #28a745;
   border: 1px solid rgba(40, 167, 69, 0.3);
 }
 
-.message.error {
+.channels-container .message.error {
   background-color: rgba(220, 53, 69, 0.2);
   color: #dc3545;
   border: 1px solid rgba(220, 53, 69, 0.3);
 }
 
-.channels-list {
+.channels-container .channels-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.channel-card {
+.channels-container .channel-card {
   background-color: #111827;
   border-radius: 8px;
   padding: 20px;
@@ -121,35 +121,35 @@
   transition: all 0.3s ease;
 }
 
-.channel-card.enabled {
+.channels-container .channel-card.enabled {
   border-color: rgba(40, 167, 69, 0.3);
   background-color: rgba(40, 167, 69, 0.05);
 }
 
-.channel-card.disabled {
+.channels-container .channel-card.disabled {
   border-color: #374151;
   opacity: 0.7;
 }
 
-.channel-card:hover {
+.channels-container .channel-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.channel-header {
+.channels-container .channel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
 }
 
-.channel-info {
+.channels-container .channel-info {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.channel-logo {
+.channels-container .channel-logo {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -157,18 +157,18 @@
   overflow: hidden;
 }
 
-.channel-logo svg {
+.channels-container .channel-logo svg {
   display: block;
 }
 
-.channel-name {
+.channels-container .channel-name {
   font-size: 20px;
   font-weight: 600;
   color: #f9fafb;
   margin: 0;
 }
 
-.channel-status {
+.channels-container .channel-status {
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 12px;
@@ -176,23 +176,23 @@
   text-transform: uppercase;
 }
 
-.channel-status.active {
+.channels-container .channel-status.active {
   background-color: rgba(40, 167, 69, 0.2);
   color: #28a745;
 }
 
-.channel-status.inactive {
+.channels-container .channel-status.inactive {
   background-color: rgba(108, 117, 125, 0.2);
   color: #6c757d;
 }
 
-.channel-actions {
+.channels-container .channel-actions {
   display: flex;
   gap: 8px;
   align-items: center;
 }
 
-.toggle-btn {
+.channels-container .toggle-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -207,45 +207,45 @@
   transition: all 0.2s ease;
 }
 
-.toggle-btn:hover:not(:disabled) {
+.channels-container .toggle-btn:hover:not(:disabled) {
   background-color: #1f2937;
 }
 
-.toggle-btn.active {
+.channels-container .toggle-btn.active {
   background-color: rgba(40, 167, 69, 0.2);
   border-color: rgba(40, 167, 69, 0.5);
   color: #28a745;
 }
 
-.toggle-btn:disabled {
+.channels-container .toggle-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.channel-details {
+.channels-container .channel-details {
   padding-top: 16px;
   border-top: 1px solid #2a2a2a;
 }
 
-.config-summary {
+.channels-container .config-summary {
   display: flex;
   gap: 24px;
   margin-bottom: 12px;
 }
 
-.config-summary span {
+.channels-container .config-summary span {
   font-size: 13px;
   color: #9ca3af;
 }
 
-.channel-description {
+.channels-container .channel-description {
   font-size: 14px;
   color: #9ca3af;
   margin: 0;
   line-height: 1.5;
 }
 
-.config-form {
+.channels-container .config-form {
   margin-top: 16px;
   padding: 16px;
   background-color: #1f2937;
@@ -253,11 +253,11 @@
   border: 1px solid #374151;
 }
 
-.config-field {
+.channels-container .config-field {
   margin-bottom: 16px;
 }
 
-.config-field label {
+.channels-container .config-field label {
   display: block;
   font-size: 14px;
   font-weight: 500;
@@ -265,7 +265,8 @@
   margin-bottom: 8px;
 }
 
-.config-field input {
+.channels-container .config-field input,
+.channels-container .config-field select {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #374151;
@@ -276,23 +277,24 @@
   transition: border-color 0.2s ease;
 }
 
-.config-field input:focus {
+.channels-container .config-field input:focus,
+.channels-container .config-field select:focus {
   outline: none;
   border-color: #3b82f6;
 }
 
-.config-field input::placeholder {
+.channels-container .config-field input::placeholder {
   color: #6b7280;
 }
 
-.config-actions {
+.channels-container .config-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
   margin-top: 20px;
 }
 
-.cancel-btn {
+.channels-container .cancel-btn {
   padding: 8px 16px;
   border-radius: 6px;
   border: 1px solid #374151;
@@ -304,11 +306,11 @@
   transition: all 0.2s ease;
 }
 
-.cancel-btn:hover {
+.channels-container .cancel-btn:hover {
   background-color: #1f2937;
 }
 
-.save-btn {
+.channels-container .save-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -323,11 +325,34 @@
   transition: all 0.2s ease;
 }
 
-.save-btn:hover:not(:disabled) {
+.channels-container .save-btn:hover:not(:disabled) {
   background-color: #2563eb;
 }
 
-.save-btn:disabled {
+.channels-container .save-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.channels-container .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  background-color: #111827;
+  border-radius: 12px;
+  border: 1px dashed #374151;
+}
+
+.channels-container .empty-state p {
+  margin: 0;
+  color: #9ca3af;
+  font-size: 16px;
+}
+
+.channels-container .empty-state .empty-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #6b7280;
 }

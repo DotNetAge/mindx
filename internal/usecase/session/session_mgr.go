@@ -50,7 +50,7 @@ func (fs *FileSessionStorage) Save(session entity.Session) error {
 
 	data, err := json.MarshalIndent(session, "", "  ")
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("session.marshal_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to marshal session: %w", err)
 	}
 
 	return os.WriteFile(filePath, data, 0644)
@@ -133,7 +133,7 @@ func (sm *SessionMgr) RestoreSession() error {
 
 	allSessions, err := sm.storage.LoadAll()
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("session.load_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to load sessions: %w", err)
 	}
 
 	var lastActive *entity.Session
@@ -383,7 +383,7 @@ func (sm *SessionMgr) SwitchSession(id string) (*entity.Session, error) {
 			logging.Err(err),
 			logging.String(i18n.T("session.session_id"), id),
 		)
-		return nil, fmt.Errorf(i18n.TWithData("session.switch_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to switch session: %w", err)
 	}
 
 	session.IsEnded = false

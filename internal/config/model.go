@@ -1,23 +1,28 @@
 package config
 
 type ModelsConfig struct {
-	Models         []ModelConfig  `mapstructure:"models" json:"models"`
-	BrainModels    map[string]string `mapstructure:"brain_models,omitempty" json:"brain_models,omitempty"`
-	EmbeddingModel string          `mapstructure:"embedding_model,omitempty" json:"embedding_model,omitempty"`
-	DefaultModel   string          `mapstructure:"default_model,omitempty" json:"default_model,omitempty"`
+	Models []ModelConfig `mapstructure:"models" json:"models" yaml:"models"`
+}
+
+type BrainModelsConfig struct {
+	SubconsciousModel      string `mapstructure:"subconscious" json:"subconscious,omitempty" yaml:"subconscious"`
+	SubconsciousLeftModel  string `mapstructure:"subconscious_left" json:"subconscious_left,omitempty" yaml:"subconscious_left"`
+	SubconsciousRightModel string `mapstructure:"subconscious_right" json:"subconscious_right,omitempty" yaml:"subconscious_right"`
+	ConsciousnessModel     string `mapstructure:"consciousness" json:"consciousness,omitempty" yaml:"consciousness"`
+	ConsciousnessLeftModel string `mapstructure:"consciousness_left" json:"consciousness_left,omitempty" yaml:"consciousness_left"`
+	ConsciousnessRightModel string `mapstructure:"consciousness_right" json:"consciousness_right,omitempty" yaml:"consciousness_right"`
+	MemoryModel            string `mapstructure:"memory" json:"memory,omitempty" yaml:"memory"`
+	IndexModel             string `mapstructure:"index" json:"index,omitempty" yaml:"index"`
 }
 
 type ModelConfig struct {
 	Name        string  `mapstructure:"name" json:"name" yaml:"name"`
-	Domain      string  `mapstructure:"domain" json:"domain,omitempty" yaml:"domain"`
-	APIKey      string  `mapstructure:"api_key" json:"api_key" yaml:"api_key"`
+	Description string  `mapstructure:"description,omitempty" json:"description,omitempty" yaml:"description"`
+	Domain      string  `mapstructure:"domain,omitempty" json:"domain,omitempty" yaml:"domain"`
 	BaseURL     string  `mapstructure:"base_url" json:"base_url" yaml:"base_url"`
+	APIKey      string  `mapstructure:"api_key" json:"api_key" yaml:"api_key"`
 	Temperature float64 `mapstructure:"temperature" json:"temperature,omitempty" yaml:"temperature"`
 	MaxTokens   int     `mapstructure:"max_tokens" json:"max_tokens,omitempty" yaml:"max_tokens"`
-	Description string  `mapstructure:"description,omitempty" json:"description,omitempty" yaml:"description"`
-
-	Provider string `mapstructure:"provider" json:"provider,omitempty" yaml:"provider,omitempty"`
-	Model    string `mapstructure:"model" json:"model,omitempty" yaml:"model,omitempty"`
 }
 
 type TokenBudgetConfig struct {

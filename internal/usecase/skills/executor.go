@@ -61,7 +61,7 @@ func (e *SkillExecutor) Execute(name string, def *entity.SkillDef, params map[st
 	e.mu.RUnlock()
 
 	if !exists {
-		return "", fmt.Errorf(i18n.TWithData("skill.not_found", map[string]interface{}{"Name": name}))
+		return "", fmt.Errorf("skill not found: %s", name)
 	}
 
 	startTime := time.Now()
@@ -80,7 +80,7 @@ func (e *SkillExecutor) executeInternal(name string, params map[string]any, star
 
 	if !exists {
 		e.UpdateStats(name, false, time.Since(startTime).Milliseconds())
-		return "", fmt.Errorf(i18n.TWithData("skill.internal_not_registered", map[string]interface{}{"Name": name}))
+		return "", fmt.Errorf("internal skill not registered: %s", name)
 	}
 
 	result, err := fn(params)
@@ -101,7 +101,7 @@ func (e *SkillExecutor) executeExternal(name string, def *entity.SkillDef, param
 	cmd, err := e.buildCommand(def, params)
 	if err != nil {
 		e.UpdateStats(name, false, time.Since(startTime).Milliseconds())
-		return "", fmt.Errorf(i18n.TWithData("skill.build_cmd_failed", map[string]interface{}{"Error": err.Error()}))
+		return "", fmt.Errorf("failed to build command: %w", err)
 	}
 
 	timeout := 30 * time.Second
@@ -120,7 +120,7 @@ func (e *SkillExecutor) executeExternal(name string, def *entity.SkillDef, param
 	env, err := e.envMgr.PrepareExecutionEnv(name, nil)
 	if err != nil {
 		e.UpdateStats(name, false, time.Since(startTime).Milliseconds())
-		return "", fmt.Errorf(i18n.TWithData("skill.prep_env_failed", map[string]interface{}{"Error": err.Error()}))
+		return "", fmt.Errorf("failed to prepare env: %w", err)
 	}
 
 	cmdEnv := make([]string, 0, len(env))
@@ -133,7 +133,7 @@ func (e *SkillExecutor) executeExternal(name string, def *entity.SkillDef, param
 		jsonParams, err := json.Marshal(params)
 		if err != nil {
 			e.UpdateStats(name, false, time.Since(startTime).Milliseconds())
-			return "", fmt.Errorf(i18n.TWithData("skill.serialize_params_failed", map[string]interface{}{"Error": err.Error()}))
+			return "", fmt.Errorf("failed to serialize params: %w", err)
 		}
 		cmd.Stdin = bytes.NewReader(jsonParams)
 	}
@@ -148,7 +148,7 @@ func (e *SkillExecutor) executeExternal(name string, def *entity.SkillDef, param
 		}
 		e.UpdateStats(name, false, time.Since(startTime).Milliseconds())
 		e.logger.Error(i18n.T("skill.execute_failed"), logging.String(i18n.T("skill.output"), string(output)), logging.Err(err))
-		return string(output), fmt.Errorf(i18n.TWithData("skill.execute_failed", map[string]interface{}{"Error": err.Error()}))
+		return string(output), fmt.Errorf("failed to execute skill: %w", err)
 	}
 
 	e.UpdateStats(name, true, time.Since(startTime).Milliseconds())
@@ -171,7 +171,7 @@ func (e *SkillExecutor) ExecuteFunc(function core.ToolCallFunction) (string, err
 	e.mu.RUnlock()
 
 	if !exists {
-		return "", fmt.Errorf(i18n.TWithData("skill.not_found", map[string]interface{}{"Name": function.Name}))
+		return "", fmt.Errorf("skill not found: %s", function.Name)
 	}
 
 	return e.Execute(function.Name, info.Def, params)
@@ -179,12 +179,12 @@ func (e *SkillExecutor) ExecuteFunc(function core.ToolCallFunction) (string, err
 
 func (e *SkillExecutor) buildCommand(def *entity.SkillDef, params map[string]any) (*exec.Cmd, error) {
 	if def.Command == "" {
-		return nil, fmt.Errorf(i18n.T("skill.no_command"))
+		return nil, fmt.Errorf("no command for skill")
 	}
 
 	parts := ParseCommand(def.Command)
 	if len(parts) == 0 {
-		return nil, fmt.Errorf(i18n.T("skill.cmd_format_error"))
+		return nil, fmt.Errorf("command format error")
 	}
 
 	skillDir := e.getSkillDir(def.Name)
@@ -201,7 +201,7 @@ func (e *SkillExecutor) buildCommand(def *entity.SkillDef, params map[string]any
 
 	env, err := e.envMgr.PrepareExecutionEnv(def.Name, nil)
 	if err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("skill.prep_env_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to prepare env: %w", err)
 	}
 
 	cmdEnv := make([]string, 0, len(env))
@@ -213,7 +213,7 @@ func (e *SkillExecutor) buildCommand(def *entity.SkillDef, params map[string]any
 	if len(params) > 0 {
 		jsonParams, err := json.Marshal(params)
 		if err != nil {
-			return nil, fmt.Errorf(i18n.TWithData("skill.serialize_params_failed", map[string]interface{}{"Error": err.Error()}))
+			return nil, fmt.Errorf("failed to serialize params: %w", err)
 		}
 		cmd.Stdin = bytes.NewReader(jsonParams)
 	}

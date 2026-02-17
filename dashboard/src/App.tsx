@@ -5,11 +5,13 @@ import Settings from './components/Settings';
 import GeneralSettings from './components/GeneralSettings';
 import Skills from './components/Skills';
 import Capabilities from './components/Capabilities';
+import Models from './components/Models';
 import AdvancedSettings from './components/AdvancedSettings';
 import Monitor from './components/Monitor';
 import Channels from './components/Channels';
 import Usage from './components/Usage';
 import History from './components/History';
+import Cron from './components/Cron';
 import { SessionProvider } from './contexts/SessionContext';
 import './App.css';
 
@@ -22,6 +24,8 @@ function App() {
         return <Chat />;
       case 'history':
         return <History />;
+      case 'models':
+        return <Models />;
       case 'settings':
         return <GeneralSettings />;
       case 'skills':
@@ -36,6 +40,8 @@ function App() {
         return <Channels />;
       case 'usage':
         return <Usage />;
+      case 'cron':
+        return <Cron />;
       default:
         return <Settings />;
     }

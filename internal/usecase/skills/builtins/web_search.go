@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"mindx/internal/utils"
-	"mindx/pkg/i18n"
 	"os"
 	"time"
 )
@@ -17,7 +16,7 @@ func Search(params map[string]any) (string, error) {
 
 	br, err := utils.NewBrowser("")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, i18n.TWithData("browser.create_failed", map[string]interface{}{"Error": err.Error()})+"\n")
+		fmt.Fprintf(os.Stderr, "browser create failed: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -47,7 +46,7 @@ func getJSONOutput(results []utils.SearchResult, elapsed time.Duration) string {
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, i18n.TWithData("json_serialize_failed", map[string]interface{}{"Error": err.Error()})+"\n", err)
+		fmt.Fprintf(os.Stderr, "json serialize failed: %v\n", err)
 		os.Exit(1)
 	}
 	return string(data)

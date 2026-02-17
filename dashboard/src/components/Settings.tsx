@@ -2,13 +2,30 @@ import { useState, useEffect } from 'react';
 import { SaveIcon, RefreshIcon } from 'tdesign-icons-react';
 import './styles/Settings.css';
 
-interface ModelConfig {
-  provider: string;
-  model: string;
-  apiKey: string;
-  baseUrl: string;
-  temperature: number;
-  maxTokens: number;
+interface TokenBudgetConfig {
+  reserved_output_tokens: number;
+  min_history_rounds: number;
+  avg_tokens_per_round: number;
+}
+
+interface BrainHalfConfig {
+  default: string;
+  left: string;
+  right: string;
+}
+
+interface ServerConfig {
+  version: string;
+  host: string;
+  port: number;
+  ws_port: number;
+  token_budget: TokenBudgetConfig;
+  subconscious: BrainHalfConfig;
+  consciousness: BrainHalfConfig;
+  memory_model: string;
+  index_model: string;
+  embedding_model: string;
+  default_model: string;
 }
 
 interface AppConfig {
@@ -18,20 +35,38 @@ interface AppConfig {
   autoSaveHistory: boolean;
 }
 
+const defaultServerConfig: ServerConfig = {
+  version: '0.0.1',
+  host: 'localhost',
+  port: 911,
+  ws_port: 1314,
+  token_budget: {
+    reserved_output_tokens: 8192,
+    min_history_rounds: 5,
+    avg_tokens_per_round: 200,
+  },
+  subconscious: {
+    default: '',
+    left: '',
+    right: '',
+  },
+  consciousness: {
+    default: '',
+    left: '',
+    right: '',
+  },
+  memory_model: '',
+  index_model: '',
+  embedding_model: '',
+  default_model: '',
+};
+
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<'models' | 'skills' | 'general'>('models');
+  const [activeTab, setActiveTab] = useState<'server' | 'general'>('server');
   const [loading, setLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   
-  const [modelConfig, setModelConfig] = useState<ModelConfig>({
-    provider: 'ollama',
-    model: 'llama3.2',
-    apiKey: '',
-    baseUrl: 'http://localhost:11434',
-    temperature: 0.7,
-    maxTokens: 2048,
-  });
-
+  const [serverConfig, setServerConfig] = useState<ServerConfig>(defaultServerConfig);
   const [appConfig, setAppConfig] = useState<AppConfig>({
     theme: 'dark',
     language: 'zh-CN',
@@ -45,15 +80,11 @@ export default function Settings() {
 
   const loadSettings = async () => {
     try {
-      const response = await fetch('http://localhost:1314/api/settings');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.modelConfig) {
-          setModelConfig(data.modelConfig);
-        }
-        if (data.appConfig) {
-          setAppConfig(data.appConfig);
-        }
+      const serverRes = await fetch('/api/config/server');
+      
+      if (serverRes.ok) {
+        const data = await serverRes.json();
+        setServerConfig({ ...defaultServerConfig, ...data.server });
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -64,18 +95,13 @@ export default function Settings() {
     setLoading(true);
     setSaveSuccess(false);
     try {
-      const response = await fetch('http://localhost:1314/api/settings', {
+      const serverRes = await fetch('/api/config/server', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          modelConfig,
-          appConfig,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ server: serverConfig }),
       });
 
-      if (response.ok) {
+      if (serverRes.ok) {
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 3000);
       } else {
@@ -88,14 +114,24 @@ export default function Settings() {
     }
   };
 
-  const handleReset = () => {
-    setModelConfig({
-      provider: 'ollama',
-      model: 'llama3.2',
-      apiKey: '',
-      baseUrl: 'http://localhost:11434',
-      temperature: 0.7,
-      maxTokens: 2048,
+  const updateTokenBudget = (field: keyof TokenBudgetConfig, value: number) => {
+    setServerConfig({
+      ...serverConfig,
+      token_budget: { ...serverConfig.token_budget, [field]: value }
+    });
+  };
+
+  const updateSubconscious = (field: keyof BrainHalfConfig, value: string) => {
+    setServerConfig({
+      ...serverConfig,
+      subconscious: { ...serverConfig.subconscious, [field]: value }
+    });
+  };
+
+  const updateConsciousness = (field: keyof BrainHalfConfig, value: string) => {
+    setServerConfig({
+      ...serverConfig,
+      consciousness: { ...serverConfig.consciousness, [field]: value }
     });
   };
 
@@ -104,9 +140,9 @@ export default function Settings() {
       <div className="settings-header">
         <h1>设置</h1>
         <div className="header-actions">
-          <button className="action-btn secondary" onClick={handleReset}>
+          <button className="action-btn secondary" onClick={loadSettings}>
             <RefreshIcon size={16} />
-            重置
+            刷新
           </button>
           <button 
             className={`action-btn primary ${loading ? 'loading' : ''} ${saveSuccess ? 'success' : ''}`} 
@@ -127,16 +163,10 @@ export default function Settings() {
 
       <div className="settings-tabs">
         <button
-          className={`tab ${activeTab === 'models' ? 'active' : ''}`}
-          onClick={() => setActiveTab('models')}
+          className={`tab ${activeTab === 'server' ? 'active' : ''}`}
+          onClick={() => setActiveTab('server')}
         >
-          模型配置
-        </button>
-        <button
-          className={`tab ${activeTab === 'skills' ? 'active' : ''}`}
-          onClick={() => setActiveTab('skills')}
-        >
-          技能管理
+          服务器配置
         </button>
         <button
           className={`tab ${activeTab === 'general' ? 'active' : ''}`}
@@ -147,103 +177,186 @@ export default function Settings() {
       </div>
 
       <div className="settings-content">
-        {activeTab === 'models' && (
+        {activeTab === 'server' && (
           <div className="settings-section">
-            <h2>模型配置</h2>
+            <h2>基础配置</h2>
             <div className="form-group">
-              <label>提供商</label>
-              <select
-                value={modelConfig.provider}
-                onChange={(e) => setModelConfig({ ...modelConfig, provider: e.target.value })}
-              >
-                <option value="ollama">Ollama</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>模型</label>
+              <label>版本</label>
               <input
                 type="text"
-                value={modelConfig.model}
-                onChange={(e) => setModelConfig({ ...modelConfig, model: e.target.value })}
-                placeholder="llama3.2"
+                value={serverConfig.version}
+                onChange={(e) => setServerConfig({ ...serverConfig, version: e.target.value })}
+                title="版本号"
+                placeholder="版本号"
               />
             </div>
             <div className="form-group">
-              <label>API 密钥</label>
-              <input
-                type="password"
-                value={modelConfig.apiKey}
-                onChange={(e) => setModelConfig({ ...modelConfig, apiKey: e.target.value })}
-                placeholder="••••••••"
-              />
-            </div>
-            <div className="form-group">
-              <label>基础 URL</label>
+              <label>主机地址</label>
               <input
                 type="text"
-                value={modelConfig.baseUrl}
-                onChange={(e) => setModelConfig({ ...modelConfig, baseUrl: e.target.value })}
-                placeholder="http://localhost:11434"
+                value={serverConfig.host}
+                onChange={(e) => setServerConfig({ ...serverConfig, host: e.target.value })}
+                title="主机地址"
+                placeholder="localhost"
               />
             </div>
             <div className="form-group">
-              <label>温度: {modelConfig.temperature}</label>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                value={modelConfig.temperature}
-                onChange={(e) => setModelConfig({ ...modelConfig, temperature: parseFloat(e.target.value) })}
-              />
-            </div>
-            <div className="form-group">
-              <label>最大 Tokens: {modelConfig.maxTokens}</label>
+              <label>HTTP 端口</label>
               <input
                 type="number"
-                min="1"
-                max="8192"
-                value={modelConfig.maxTokens}
-                onChange={(e) => setModelConfig({ ...modelConfig, maxTokens: parseInt(e.target.value) })}
+                value={serverConfig.port}
+                onChange={(e) => setServerConfig({ ...serverConfig, port: parseInt(e.target.value) || 911 })}
+                title="HTTP 端口"
+                placeholder="911"
               />
             </div>
-          </div>
-        )}
+            <div className="form-group">
+              <label>WebSocket 端口</label>
+              <input
+                type="number"
+                value={serverConfig.ws_port}
+                onChange={(e) => setServerConfig({ ...serverConfig, ws_port: parseInt(e.target.value) || 1314 })}
+                title="WebSocket 端口"
+                placeholder="1314"
+              />
+            </div>
+            <div className="form-group">
+              <label>默认模型</label>
+              <input
+                type="text"
+                value={serverConfig.default_model}
+                onChange={(e) => setServerConfig({ ...serverConfig, default_model: e.target.value })}
+                title="默认模型"
+                placeholder="qwen3:0.6b"
+              />
+            </div>
+            <div className="form-group">
+              <label>记忆模型</label>
+              <input
+                type="text"
+                value={serverConfig.memory_model}
+                onChange={(e) => setServerConfig({ ...serverConfig, memory_model: e.target.value })}
+                title="记忆模型"
+                placeholder="qwen3:0.6b"
+              />
+            </div>
+            <div className="form-group">
+              <label>索引模型</label>
+              <input
+                type="text"
+                value={serverConfig.index_model}
+                onChange={(e) => setServerConfig({ ...serverConfig, index_model: e.target.value })}
+                title="索引模型"
+                placeholder="qwen3:0.6b"
+              />
+            </div>
+            <div className="form-group">
+              <label>嵌入模型</label>
+              <input
+                type="text"
+                value={serverConfig.embedding_model}
+                onChange={(e) => setServerConfig({ ...serverConfig, embedding_model: e.target.value })}
+                title="嵌入模型"
+                placeholder="qllama/bge-small-zh-v1.5:latest"
+              />
+            </div>
 
-        {activeTab === 'skills' && (
-          <div className="settings-section">
-            <h2>技能管理</h2>
-            <div className="skills-list">
-              <div className="skill-item">
-                <div className="skill-info">
-                  <h3>系统技能</h3>
-                  <p>sysinfo, screenshot, voice, notify, volume</p>
-                </div>
-                <span className="skill-status enabled">启用</span>
-              </div>
-              <div className="skill-item">
-                <div className="skill-info">
-                  <h3>文件技能</h3>
-                  <p>finder, search, clipboard</p>
-                </div>
-                <span className="skill-status enabled">启用</span>
-              </div>
-              <div className="skill-item">
-                <div className="skill-info">
-                  <h3>网络技能</h3>
-                  <p>wifi, openurl</p>
-                </div>
-                <span className="skill-status enabled">启用</span>
-              </div>
-              <div className="skill-item">
-                <div className="skill-info">
-                  <h3>通信技能</h3>
-                  <p>mail, imessage, contacts</p>
-                </div>
-                <span className="skill-status enabled">启用</span>
-              </div>
+            <h2>潜意识模型 (Subconscious)</h2>
+            <p className="section-desc">用于快速响应和直觉处理的模型</p>
+            <div className="form-group">
+              <label>默认模型</label>
+              <input
+                type="text"
+                value={serverConfig.subconscious.default}
+                onChange={(e) => updateSubconscious('default', e.target.value)}
+                title="潜意识默认模型"
+                placeholder="qwen3:0.6b"
+              />
+            </div>
+            <div className="form-group">
+              <label>左脑模型</label>
+              <input
+                type="text"
+                value={serverConfig.subconscious.left}
+                onChange={(e) => updateSubconscious('left', e.target.value)}
+                title="潜意识左脑模型"
+                placeholder="qwen3:0.6b"
+              />
+            </div>
+            <div className="form-group">
+              <label>右脑模型</label>
+              <input
+                type="text"
+                value={serverConfig.subconscious.right}
+                onChange={(e) => updateSubconscious('right', e.target.value)}
+                title="潜意识右脑模型"
+                placeholder="qwen3:0.6b"
+              />
+            </div>
+
+            <h2>意识模型 (Consciousness)</h2>
+            <p className="section-desc">用于深度思考和复杂推理的模型</p>
+            <div className="form-group">
+              <label>默认模型</label>
+              <input
+                type="text"
+                value={serverConfig.consciousness.default}
+                onChange={(e) => updateConsciousness('default', e.target.value)}
+                title="意识默认模型"
+                placeholder="qwen3:1.7b"
+              />
+            </div>
+            <div className="form-group">
+              <label>左脑模型</label>
+              <input
+                type="text"
+                value={serverConfig.consciousness.left}
+                onChange={(e) => updateConsciousness('left', e.target.value)}
+                title="意识左脑模型"
+                placeholder="qwen3:0.6b"
+              />
+            </div>
+            <div className="form-group">
+              <label>右脑模型</label>
+              <input
+                type="text"
+                value={serverConfig.consciousness.right}
+                onChange={(e) => updateConsciousness('right', e.target.value)}
+                title="意识右脑模型"
+                placeholder="qwen3:1.7b"
+              />
+            </div>
+
+            <h2>Token 预算</h2>
+            <div className="form-group">
+              <label>预留输出 Tokens</label>
+              <input
+                type="number"
+                value={serverConfig.token_budget.reserved_output_tokens}
+                onChange={(e) => updateTokenBudget('reserved_output_tokens', parseInt(e.target.value) || 0)}
+                title="预留输出 Token 数"
+                placeholder="8192"
+              />
+            </div>
+            <div className="form-group">
+              <label>最小历史轮数</label>
+              <input
+                type="number"
+                value={serverConfig.token_budget.min_history_rounds}
+                onChange={(e) => updateTokenBudget('min_history_rounds', parseInt(e.target.value) || 0)}
+                title="最小历史对话轮数"
+                placeholder="5"
+              />
+            </div>
+            <div className="form-group">
+              <label>平均每轮 Tokens</label>
+              <input
+                type="number"
+                value={serverConfig.token_budget.avg_tokens_per_round}
+                onChange={(e) => updateTokenBudget('avg_tokens_per_round', parseInt(e.target.value) || 0)}
+                title="单轮对话平均 Token 数"
+                placeholder="200"
+              />
             </div>
           </div>
         )}
@@ -256,6 +369,7 @@ export default function Settings() {
               <select
                 value={appConfig.theme}
                 onChange={(e) => setAppConfig({ ...appConfig, theme: e.target.value as 'dark' | 'light' })}
+                title="主题"
               >
                 <option value="dark">深色</option>
                 <option value="light">浅色</option>
@@ -266,6 +380,7 @@ export default function Settings() {
               <select
                 value={appConfig.language}
                 onChange={(e) => setAppConfig({ ...appConfig, language: e.target.value })}
+                title="语言"
               >
                 <option value="zh-CN">简体中文</option>
                 <option value="en-US">English</option>
@@ -278,6 +393,7 @@ export default function Settings() {
                   type="checkbox"
                   checked={appConfig.enableNotifications}
                   onChange={(e) => setAppConfig({ ...appConfig, enableNotifications: e.target.checked })}
+                  title="启用通知"
                 />
                 <span className="slider"></span>
               </label>
@@ -289,6 +405,7 @@ export default function Settings() {
                   type="checkbox"
                   checked={appConfig.autoSaveHistory}
                   onChange={(e) => setAppConfig({ ...appConfig, autoSaveHistory: e.target.checked })}
+                  title="自动保存历史"
                 />
                 <span className="slider"></span>
               </label>

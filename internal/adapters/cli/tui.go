@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"time"
 
+	"mindx/pkg/i18n"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
-	"mindx/pkg/i18n"
 )
 
 var tuiCmd = &cobra.Command{
@@ -275,7 +276,7 @@ func connectWebSocket(port int, sessionID string, msgChan chan tea.Msg) tea.Cmd 
 
 		conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 		if err != nil {
-			return errorMsg(fmt.Errorf("%s: %w", i18n.T("cli.tui.connection_failed"), err))
+			return errorMsg(fmt.Errorf("connection failed: %w", err))
 		}
 
 		go func() {
@@ -309,7 +310,7 @@ func connectWebSocket(port int, sessionID string, msgChan chan tea.Msg) tea.Cmd 
 func sendMessage(conn *websocket.Conn, content string) tea.Cmd {
 	return func() tea.Msg {
 		if conn == nil {
-			return errorMsg(fmt.Errorf(i18n.T("cli.tui.not_connected")))
+			return errorMsg(fmt.Errorf("not connected"))
 		}
 
 		msg := map[string]any{
@@ -318,7 +319,7 @@ func sendMessage(conn *websocket.Conn, content string) tea.Cmd {
 		}
 
 		if err := conn.WriteJSON(msg); err != nil {
-			return errorMsg(fmt.Errorf("%s: %w", i18n.T("cli.tui.send_failed"), err))
+			return errorMsg(fmt.Errorf("send failed: %w", err))
 		}
 
 		return nil

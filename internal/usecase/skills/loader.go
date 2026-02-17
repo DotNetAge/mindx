@@ -1,11 +1,11 @@
 package skills
 
 import (
+	"fmt"
 	"mindx/internal/core"
 	"mindx/internal/entity"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,7 +37,7 @@ func (l *SkillLoader) LoadAll() error {
 
 	entries, err := os.ReadDir(l.skillsDir)
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("skill.read_dir_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to read dir: %w", err)
 	}
 
 	for _, entry := range entries {
@@ -60,12 +60,12 @@ func (l *SkillLoader) LoadAll() error {
 func (l *SkillLoader) Load(name, path string) error {
 	data, err := os.ReadFile(filepath.Join(path, "SKILL.md"))
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("skill.read_file_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to read file: %w", err)
 	}
 
 	def, err := ParseSkillDef(data)
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("skill.parse_def_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to parse skill def: %w", err)
 	}
 
 	if !def.Enabled {
@@ -165,19 +165,19 @@ func (l *SkillLoader) UpdateSkillInfo(name string, info *entity.SkillInfo) {
 func ParseSkillDef(data []byte) (*entity.SkillDef, error) {
 	content := string(data)
 	if !strings.HasPrefix(content, "---") {
-		return nil, fmt.Errorf(i18n.T("skill.invalid_format"))
+		return nil, fmt.Errorf("invalid skill format")
 	}
 
 	parts := strings.SplitN(content, "---", 3)
 	if len(parts) < 3 {
-		return nil, fmt.Errorf(i18n.T("skill.invalid_frontmatter"))
+		return nil, fmt.Errorf("invalid frontmatter")
 	}
 
 	yamlContent := strings.TrimSpace(parts[1])
 
 	var def entity.SkillDef
 	if err := yaml.Unmarshal([]byte(yamlContent), &def); err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("skill.parse_yaml_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to parse yaml: %w", err)
 	}
 
 	return &def, nil

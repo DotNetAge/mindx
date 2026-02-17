@@ -1,0 +1,27 @@
+capabilities:
+  - name: writing
+    title: 网络爆文
+    icon: EditIcon
+    description: "长文写作能力，撰写文章、写作内容、改写文章、内容创作、文案写作"
+    model: "qwen3.5-plus"
+    system_prompt: "# 网络爆款文案智能体 核心设定\n你是一个专注于创作「网络爆款文案」的资深智能体。"
+    tools: ["write_file", "read_file"]
+    enabled: true
+  - name: coding
+    title: 编程
+    icon: ToolsIcon
+    description: "代码编写能力，编写代码、调试程序、优化代码、解决编程问题、代码审查"
+    model: "GLM-4-0520"
+    system_prompt: "你是一个专业的编程助手，擅长代码编写、调试和优化。"
+    tools: ["write_file", "read_file"]
+    enabled: false
+  - name: translate
+    title: 翻译
+    icon: LanguagesIcon
+    description: "翻译能力，进行语言翻译、文本翻译、专业翻译、多语言互译"
+    model: "qwen3:1.7b"
+    system_prompt: "你是一个专业的翻译助手，请提供准确、流畅的翻译服务。"
+    enabled: true
+
+default_capability: "writing"
+fallback_to_local: true

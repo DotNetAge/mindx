@@ -119,32 +119,32 @@ else
 fi
 
 # Check install path
-MINDX_INSTALL_PATH="${MINDX_PATH:-/usr/local/mindx}"
-if [ -d "$MINDX_INSTALL_PATH" ]; then
-    echo -e "${GREEN}✓ Install directory exists: $MINDX_INSTALL_PATH${NC}"
+MINDX_PATH="${MINDX_PATH:-/usr/local/mindx}"
+if [ -d "$MINDX_PATH" ]; then
+    echo -e "${GREEN}✓ Install directory exists: $MINDX_PATH${NC}"
     ((PASSED++))
     
     # Check binary
-    if [ -f "$MINDX_INSTALL_PATH/bin/mindx" ]; then
-        echo -e "${GREEN}✓ Binary exists: $MINDX_INSTALL_PATH/bin/mindx${NC}"
+    if [ -f "$MINDX_PATH/bin/mindx" ]; then
+        echo -e "${GREEN}✓ Binary exists: $MINDX_PATH/bin/mindx${NC}"
         ((PASSED++))
     else
-        echo -e "${RED}✗ Binary missing: $MINDX_INSTALL_PATH/bin/mindx${NC}"
+        echo -e "${RED}✗ Binary missing: $MINDX_PATH/bin/mindx${NC}"
         ISSUES+=("Binary missing. Please run: make build && make install")
         ((ERRORS++))
     fi
     
     # Check static files
-    if [ -d "$MINDX_INSTALL_PATH/static" ]; then
-        echo -e "${GREEN}✓ Static files exist: $MINDX_INSTALL_PATH/static${NC}"
+    if [ -d "$MINDX_PATH/static" ]; then
+        echo -e "${GREEN}✓ Static files exist: $MINDX_PATH/static${NC}"
         ((PASSED++))
     else
-        echo -e "${YELLOW}⚠ Static files missing: $MINDX_INSTALL_PATH/static${NC}"
+        echo -e "${YELLOW}⚠ Static files missing: $MINDX_PATH/static${NC}"
         ISSUES+=("Static files missing. Dashboard may not work. Please run: make build")
         ((WARNINGS++))
     fi
 else
-    echo -e "${RED}✗ Install directory missing: $MINDX_INSTALL_PATH${NC}"
+    echo -e "${RED}✗ Install directory missing: $MINDX_PATH${NC}"
     ISSUES+=("Install directory missing. Please run: make install")
     ((ERRORS++))
 fi
@@ -168,7 +168,7 @@ if [ -d "$MINDX_WORKSPACE" ]; then
         ((PASSED++))
         
         # Check config files
-        CONFIG_FILES=("server.yml" "models.json" "capabilities.json" "channels.json")
+        CONFIG_FILES=("server.yml" "models.yml" "capabilities.yml" "channels.yml")
         for cfg in "${CONFIG_FILES[@]}"; do
             if [ -f "$MINDX_WORKSPACE/config/$cfg" ]; then
                 echo -e "${GREEN}✓ Config exists: $cfg${NC}"

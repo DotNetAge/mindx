@@ -2,25 +2,16 @@ import { useState, useEffect } from 'react';
 import './AdvancedSettings.css';
 import { useTranslation } from '../i18n';
 
-interface ModelConfig {
-  name: string;
-  domain: string;
-  api_key: string;
-  base_url: string;
-  temperature: number;
-  max_tokens: number;
-}
-
-interface TokenBudget {
+interface TokenBudgetConfig {
   reserved_output_tokens: number;
   min_history_rounds: number;
   avg_tokens_per_round: number;
 }
 
-interface BrainConfig {
-  leftbrain: ModelConfig;
-  rightbrain: ModelConfig;
-  token_budget: TokenBudget;
+interface BrainHalfConfig {
+  default: string;
+  left: string;
+  right: string;
 }
 
 interface MemoryConfig {
@@ -35,21 +26,60 @@ interface VectorStoreConfig {
   data_path: string;
 }
 
-interface AdvancedConfig {
-  ollama_url: string;
-  brain: BrainConfig;
+interface ServerConfig {
+  version: string;
+  host: string;
+  port: number;
+  ws_port: number;
+  ollama_url?: string;
+  token_budget: TokenBudgetConfig;
+  subconscious: BrainHalfConfig;
+  consciousness: BrainHalfConfig;
+  memory_model: string;
   index_model: string;
-  embedding: string;
-  memory: MemoryConfig;
+  embedding_model: string;
+  default_model: string;
+  memory?: MemoryConfig;
   vector_store: VectorStoreConfig;
 }
 
+const defaultConfig: ServerConfig = {
+  version: '0.0.1',
+  host: 'localhost',
+  port: 911,
+  ws_port: 1314,
+  token_budget: {
+    reserved_output_tokens: 8192,
+    min_history_rounds: 5,
+    avg_tokens_per_round: 200,
+  },
+  subconscious: {
+    default: '',
+    left: '',
+    right: '',
+  },
+  consciousness: {
+    default: '',
+    left: '',
+    right: '',
+  },
+  memory_model: '',
+  index_model: '',
+  embedding_model: '',
+  default_model: '',
+  vector_store: {
+    type: 'badger',
+    data_path: '',
+  },
+};
+
 export default function AdvancedSettings() {
-  const [config, setConfig] = useState<AdvancedConfig | null>(null);
+  const [config, setConfig] = useState<ServerConfig>(defaultConfig);
   const [loading, setLoading] = useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<any>(null);
   const [testingModel, setTestingModel] = useState('');
   const [message, setMessage] = useState('');
+  const [loadError, setLoadError] = useState(false);
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -59,11 +89,20 @@ export default function AdvancedSettings() {
 
   const fetchConfig = async () => {
     try {
-      const response = await fetch('/api/config/advanced');
-      const data = await response.json();
-      setConfig(data);
+      const response = await fetch('/api/config/server');
+      if (response.ok) {
+        const data = await response.json();
+        setConfig({ ...defaultConfig, ...data.server });
+        setLoadError(false);
+      } else {
+        console.error('API returned status:', response.status);
+        setLoadError(true);
+        setMessage('加载服务器配置失败');
+      }
     } catch (error) {
       console.error('Failed to fetch config:', error);
+      setLoadError(true);
+      setMessage('加载配置失败，使用默认配置');
     }
   };
 
@@ -121,17 +160,15 @@ export default function AdvancedSettings() {
   };
 
   const handleSave = async () => {
-    if (!config) return;
-
     setLoading(true);
     setMessage('');
     try {
-      const response = await fetch('/api/config/advanced', {
+      const response = await fetch('/api/config/server', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ server: config }),
       });
 
       if (response.ok) {
@@ -146,41 +183,28 @@ export default function AdvancedSettings() {
     setLoading(false);
   };
 
-  const updateLeftbrain = (field: keyof ModelConfig, value: string | number) => {
-    if (!config) return;
+  const updateTokenBudget = (field: keyof TokenBudgetConfig, value: number) => {
     setConfig({
       ...config,
-      brain: {
-        ...config.brain,
-        leftbrain: { ...config.brain.leftbrain, [field]: value }
-      }
+      token_budget: { ...config.token_budget, [field]: value }
     });
   };
 
-  const updateRightbrain = (field: keyof ModelConfig, value: string | number) => {
-    if (!config) return;
+  const updateSubconscious = (field: keyof BrainHalfConfig, value: string) => {
     setConfig({
       ...config,
-      brain: {
-        ...config.brain,
-        rightbrain: { ...config.brain.rightbrain, [field]: value }
-      }
+      subconscious: { ...config.subconscious, [field]: value }
     });
   };
 
-  const updateTokenBudget = (field: keyof TokenBudget, value: number) => {
-    if (!config) return;
+  const updateConsciousness = (field: keyof BrainHalfConfig, value: string) => {
     setConfig({
       ...config,
-      brain: {
-        ...config.brain,
-        token_budget: { ...config.brain.token_budget, [field]: value }
-      }
+      consciousness: { ...config.consciousness, [field]: value }
     });
   };
 
   const updateMemory = (field: keyof MemoryConfig, value: string | boolean) => {
-    if (!config) return;
     setConfig({
       ...config,
       memory: { ...config.memory, [field]: value }
@@ -188,20 +212,20 @@ export default function AdvancedSettings() {
   };
 
   const updateVectorStore = (field: keyof VectorStoreConfig, value: string) => {
-    if (!config) return;
     setConfig({
       ...config,
       vector_store: { ...config.vector_store, [field]: value }
     });
   };
 
-  if (!config) {
-    return <div className="loading">{t('common.loading')}</div>;
-  }
-
   return (
     <div className="advanced-settings">
       <h2>{t('advanced.title')}</h2>
+      {loadError && (
+        <div className="warning-banner">
+          加载配置失败，当前显示的是默认配置
+        </div>
+      )}
 
       <div className="config-section">
         <h3>{t('advanced.ollamaStatus')}</h3>
@@ -238,14 +262,65 @@ export default function AdvancedSettings() {
       </div>
 
       <div className="config-section">
-        <h3>{t('advanced.basicConfig')}</h3>
+        <h3>基础配置</h3>
         <div className="config-item">
-          <label>{t('advanced.ollamaUrl')}</label>
+          <label>版本</label>
           <input
             type="text"
-            value={config.ollama_url}
-            onChange={(e) => setConfig({ ...config, ollama_url: e.target.value })}
+            value={config.version}
+            onChange={(e) => setConfig({ ...config, version: e.target.value })}
+            title="版本号"
+            placeholder="版本号"
           />
+        </div>
+        <div className="config-item">
+          <label>主机地址</label>
+          <input
+            type="text"
+            value={config.host}
+            onChange={(e) => setConfig({ ...config, host: e.target.value })}
+            title="主机地址"
+            placeholder="localhost"
+          />
+        </div>
+        <div className="config-item">
+          <label>HTTP 端口</label>
+          <input
+            type="number"
+            value={config.port}
+            onChange={(e) => setConfig({ ...config, port: parseInt(e.target.value) || 911 })}
+            title="HTTP 端口"
+            placeholder="911"
+          />
+        </div>
+        <div className="config-item">
+          <label>WebSocket 端口</label>
+          <input
+            type="number"
+            value={config.ws_port}
+            onChange={(e) => setConfig({ ...config, ws_port: parseInt(e.target.value) || 1314 })}
+            title="WebSocket 端口"
+            placeholder="1314"
+          />
+        </div>
+        <div className="config-item">
+          <label>默认模型</label>
+          <div className="model-input-group">
+            <input
+              type="text"
+              value={config.default_model}
+              onChange={(e) => setConfig({ ...config, default_model: e.target.value })}
+              title="默认模型"
+              placeholder="qwen3:0.6b"
+            />
+            <button
+              className="test-button"
+              onClick={() => handleTestModel(config.default_model)}
+              disabled={testingModel === config.default_model}
+            >
+              {testingModel === config.default_model ? t('advanced.testing') : t('advanced.test')}
+            </button>
+          </div>
         </div>
         <div className="config-item">
           <label>{t('advanced.indexModel')}</label>
@@ -253,143 +328,118 @@ export default function AdvancedSettings() {
             type="text"
             value={config.index_model}
             onChange={(e) => setConfig({ ...config, index_model: e.target.value })}
+            title="索引模型"
+            placeholder="qwen3:0.6b"
           />
         </div>
         <div className="config-item">
           <label>{t('advanced.embeddingModel')}</label>
           <input
             type="text"
-            value={config.embedding}
-            onChange={(e) => setConfig({ ...config, embedding: e.target.value })}
+            value={config.embedding_model}
+            onChange={(e) => setConfig({ ...config, embedding_model: e.target.value })}
+            title="嵌入模型"
+            placeholder="qllama/bge-small-zh-v1.5:latest"
+          />
+        </div>
+        <div className="config-item">
+          <label>记忆模型</label>
+          <input
+            type="text"
+            value={config.memory_model}
+            onChange={(e) => setConfig({ ...config, memory_model: e.target.value })}
+            title="记忆模型"
+            placeholder="qwen3:0.6b"
           />
         </div>
       </div>
 
       <div className="config-section">
-        <h3>{t('advanced.leftbrainConfig')}</h3>
-        <p className="section-desc">{t('advanced.leftbrainDesc')}</p>
-        <div className="brain-config">
-          <div className="config-item">
-            <label>{t('advanced.modelName')}</label>
-            <div className="model-input-group">
-              <input
-                type="text"
-                value={config.brain.leftbrain.name}
-                onChange={(e) => updateLeftbrain('name', e.target.value)}
-              />
-              <button
-                className="test-button"
-                onClick={() => handleTestModel(config.brain.leftbrain.name)}
-                disabled={testingModel === config.brain.leftbrain.name}
-              >
-                {testingModel === config.brain.leftbrain.name ? t('advanced.testing') : t('advanced.test')}
-              </button>
-            </div>
-            <small>{t('advanced.mustSupportFC')}</small>
-          </div>
-
-          <div className="config-item">
-            <label>{t('advanced.baseUrl')}</label>
+        <h3>潜意识模型 (Subconscious)</h3>
+        <p className="section-desc">用于快速响应和直觉处理的模型</p>
+        <div className="config-item">
+          <label>默认模型</label>
+          <div className="model-input-group">
             <input
               type="text"
-              value={config.brain.leftbrain.base_url}
-              onChange={(e) => updateLeftbrain('base_url', e.target.value)}
+              value={config.subconscious.default}
+              onChange={(e) => updateSubconscious('default', e.target.value)}
+              title="潜意识默认模型"
+              placeholder="qwen3:0.6b"
             />
+            <button
+              className="test-button"
+              onClick={() => handleTestModel(config.subconscious.default)}
+              disabled={testingModel === config.subconscious.default}
+            >
+              {testingModel === config.subconscious.default ? t('advanced.testing') : t('advanced.test')}
+            </button>
           </div>
-
-          <div className="config-item">
-            <label>{t('advanced.apiKey')}</label>
-            <input
-              type="password"
-              value={config.brain.leftbrain.api_key}
-              onChange={(e) => updateLeftbrain('api_key', e.target.value)}
-            />
-          </div>
-
-          <div className="config-item">
-            <label>{t('advanced.temperature')}</label>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              max="2"
-              value={config.brain.leftbrain.temperature}
-              onChange={(e) => updateLeftbrain('temperature', parseFloat(e.target.value) || 0)}
-            />
-          </div>
-
-          <div className="config-item">
-            <label>{t('advanced.maxTokens')}</label>
-            <input
-              type="number"
-              value={config.brain.leftbrain.max_tokens}
-              onChange={(e) => updateLeftbrain('max_tokens', parseInt(e.target.value) || 0)}
-            />
-          </div>
+        </div>
+        <div className="config-item">
+          <label>左脑模型</label>
+          <input
+            type="text"
+            value={config.subconscious.left}
+            onChange={(e) => updateSubconscious('left', e.target.value)}
+            title="潜意识左脑模型"
+            placeholder="qwen3:0.6b"
+          />
+        </div>
+        <div className="config-item">
+          <label>右脑模型</label>
+          <input
+            type="text"
+            value={config.subconscious.right}
+            onChange={(e) => updateSubconscious('right', e.target.value)}
+            title="潜意识右脑模型"
+            placeholder="qwen3:0.6b"
+          />
         </div>
       </div>
 
       <div className="config-section">
-        <h3>{t('advanced.rightbrainConfig')}</h3>
-        <p className="section-desc">{t('advanced.rightbrainDesc')}</p>
-        <div className="brain-config">
-          <div className="config-item">
-            <label>{t('advanced.modelName')}</label>
-            <div className="model-input-group">
-              <input
-                type="text"
-                value={config.brain.rightbrain.name}
-                onChange={(e) => updateRightbrain('name', e.target.value)}
-              />
-              <button
-                className="test-button"
-                onClick={() => handleTestModel(config.brain.rightbrain.name)}
-                disabled={testingModel === config.brain.rightbrain.name}
-              >
-                {testingModel === config.brain.rightbrain.name ? t('advanced.testing') : t('advanced.test')}
-              </button>
-            </div>
-            <small>{t('advanced.mustSupportFC')}</small>
-          </div>
-
-          <div className="config-item">
-            <label>{t('advanced.baseUrl')}</label>
+        <h3>意识模型 (Consciousness)</h3>
+        <p className="section-desc">用于深度思考和复杂推理的模型，需要支持 Function Calling</p>
+        <div className="config-item">
+          <label>默认模型</label>
+          <div className="model-input-group">
             <input
               type="text"
-              value={config.brain.rightbrain.base_url}
-              onChange={(e) => updateRightbrain('base_url', e.target.value)}
+              value={config.consciousness.default}
+              onChange={(e) => updateConsciousness('default', e.target.value)}
+              title="意识默认模型"
+              placeholder="qwen3:1.7b"
             />
+            <button
+              className="test-button"
+              onClick={() => handleTestModel(config.consciousness.default)}
+              disabled={testingModel === config.consciousness.default}
+            >
+              {testingModel === config.consciousness.default ? t('advanced.testing') : t('advanced.test')}
+            </button>
           </div>
-
-          <div className="config-item">
-            <label>{t('advanced.apiKey')}</label>
-            <input
-              type="password"
-              value={config.brain.rightbrain.api_key}
-              onChange={(e) => updateRightbrain('api_key', e.target.value)}
-            />
-          </div>
-
-          <div className="config-item">
-            <label>{t('advanced.temperature')}</label>
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              max="2"
-              value={config.brain.rightbrain.temperature}
-              onChange={(e) => updateRightbrain('temperature', parseFloat(e.target.value) || 0)}
-            />
-          </div>
-
-          <div className="config-item">
-            <label>{t('advanced.maxTokens')}</label>
-            <input
-              type="number"
-              value={config.brain.rightbrain.max_tokens}
-              onChange={(e) => updateRightbrain('max_tokens', parseInt(e.target.value) || 0)}
-            />
-          </div>
+          <small>{t('advanced.mustSupportFC')}</small>
+        </div>
+        <div className="config-item">
+          <label>左脑模型</label>
+          <input
+            type="text"
+            value={config.consciousness.left}
+            onChange={(e) => updateConsciousness('left', e.target.value)}
+            title="意识左脑模型"
+            placeholder="qwen3:0.6b"
+          />
+        </div>
+        <div className="config-item">
+          <label>右脑模型</label>
+          <input
+            type="text"
+            value={config.consciousness.right}
+            onChange={(e) => updateConsciousness('right', e.target.value)}
+            title="意识右脑模型"
+            placeholder="qwen3:1.7b"
+          />
         </div>
       </div>
 
@@ -399,8 +449,10 @@ export default function AdvancedSettings() {
           <label>{t('advanced.reservedOutputTokens')}</label>
           <input
             type="number"
-            value={config.brain.token_budget.reserved_output_tokens}
+            value={config.token_budget.reserved_output_tokens}
             onChange={(e) => updateTokenBudget('reserved_output_tokens', parseInt(e.target.value) || 0)}
+            title="预留输出 Token 数"
+            placeholder="8192"
           />
           <small>{t('advanced.reservedOutputTokensDesc')}</small>
         </div>
@@ -408,16 +460,20 @@ export default function AdvancedSettings() {
           <label>{t('advanced.minHistoryRounds')}</label>
           <input
             type="number"
-            value={config.brain.token_budget.min_history_rounds}
+            value={config.token_budget.min_history_rounds}
             onChange={(e) => updateTokenBudget('min_history_rounds', parseInt(e.target.value) || 0)}
+            title="最小历史对话轮数"
+            placeholder="5"
           />
         </div>
         <div className="config-item">
           <label>{t('advanced.avgTokensPerRound')}</label>
           <input
             type="number"
-            value={config.brain.token_budget.avg_tokens_per_round}
+            value={config.token_budget.avg_tokens_per_round}
             onChange={(e) => updateTokenBudget('avg_tokens_per_round', parseInt(e.target.value) || 0)}
+            title="单轮对话平均 Token 数"
+            placeholder="200"
           />
         </div>
       </div>
@@ -428,8 +484,9 @@ export default function AdvancedSettings() {
           <label>
             <input
               type="checkbox"
-              checked={config.memory.enabled}
+              checked={config.memory?.enabled || false}
               onChange={(e) => updateMemory('enabled', e.target.checked)}
+              title="启用记忆"
             />
             {t('advanced.enableMemory')}
           </label>
@@ -439,8 +496,10 @@ export default function AdvancedSettings() {
           <label>{t('advanced.summaryModel')}</label>
           <input
             type="text"
-            value={config.memory.summary_model}
+            value={config.memory?.summary_model || ''}
             onChange={(e) => updateMemory('summary_model', e.target.value)}
+            title="摘要模型"
+            placeholder="qwen3:0.6b"
           />
         </div>
 
@@ -448,8 +507,10 @@ export default function AdvancedSettings() {
           <label>{t('advanced.keywordModel')}</label>
           <input
             type="text"
-            value={config.memory.keyword_model}
+            value={config.memory?.keyword_model || ''}
             onChange={(e) => updateMemory('keyword_model', e.target.value)}
+            title="关键词模型"
+            placeholder="qwen3:0.6b"
           />
         </div>
 
@@ -457,8 +518,10 @@ export default function AdvancedSettings() {
           <label>{t('advanced.schedule')}</label>
           <input
             type="text"
-            value={config.memory.schedule}
+            value={config.memory?.schedule || ''}
             onChange={(e) => updateMemory('schedule', e.target.value)}
+            title="调度时间"
+            placeholder="0 2 * * *"
           />
           <small>{t('advanced.scheduleDesc')}</small>
         </div>
@@ -471,6 +534,7 @@ export default function AdvancedSettings() {
           <select
             value={config.vector_store.type}
             onChange={(e) => updateVectorStore('type', e.target.value)}
+            title="向量存储类型"
           >
             <option value="memory">{t('advanced.vectorStoreMemory')}</option>
             <option value="badger">{t('advanced.vectorStoreBadger')}</option>
@@ -482,6 +546,8 @@ export default function AdvancedSettings() {
             type="text"
             value={config.vector_store.data_path}
             onChange={(e) => updateVectorStore('data_path', e.target.value)}
+            title="数据路径"
+            placeholder="数据存储路径"
           />
         </div>
       </div>

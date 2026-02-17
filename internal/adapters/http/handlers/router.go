@@ -100,6 +100,17 @@ func RegisterRoutes(router *gin.Engine, tokenUsageRepo core.TokenUsageRepository
 		api.GET("/config/advanced", advancedConfig.GetAdvancedConfig)
 		api.POST("/config/advanced", advancedConfig.SaveAdvancedConfig)
 
+		// 配置管理
+		configHandler := NewConfigHandler()
+		api.GET("/config/general", configHandler.GetGeneralConfig)
+		api.POST("/config/general", configHandler.SaveGeneralConfig)
+		api.GET("/config/server", configHandler.GetServerConfig)
+		api.POST("/config/server", configHandler.SaveServerConfig)
+		api.GET("/config/models", configHandler.GetModelsConfig)
+		api.POST("/config/models", configHandler.SaveModelsConfig)
+		api.GET("/config/capabilities", configHandler.GetCapabilitiesConfig)
+		api.POST("/config/capabilities", configHandler.SaveCapabilitiesConfig)
+
 		// 监控日志
 		monitor := NewMonitorHandler()
 		api.GET("/monitor", monitor.getLogs)

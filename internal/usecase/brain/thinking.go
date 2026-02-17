@@ -184,7 +184,7 @@ func (t *Thinking) Think(question string, history []*core.DialogueMessage, refer
 	if err != nil {
 		t.logger.Error(i18n.T("brain.think_failed"), logging.Err(err))
 		t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-		return nil, fmt.Errorf(i18n.T("brain.think_failed")+": %w", err)
+		return nil, fmt.Errorf("think failed: %w", err)
 	}
 	defer stream.Close()
 
@@ -202,7 +202,7 @@ func (t *Thinking) Think(question string, history []*core.DialogueMessage, refer
 			}
 			t.logger.Error(i18n.T("brain.stream_recv_failed"), logging.Err(err))
 			t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-			return nil, fmt.Errorf(i18n.T("brain.stream_recv_failed")+": %w", err)
+			return nil, fmt.Errorf("stream receive failed: %w", err)
 		}
 
 		if response.Usage != nil && response.Usage.TotalTokens > 0 {
@@ -397,7 +397,7 @@ func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessa
 	if err != nil {
 		t.logger.Error(i18n.T("brain.right_skill_call_failed"), logging.Err(err))
 		t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-		return nil, fmt.Errorf(i18n.T("brain.skill_call_failed")+": %w", err)
+		return nil, fmt.Errorf("skill call failed: %w", err)
 	}
 
 	if t.tokenUsageRepo != nil {
@@ -420,7 +420,7 @@ func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessa
 	}
 
 	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("%s", i18n.T("brain.no_think_result"))
+		return nil, fmt.Errorf("no think result")
 	}
 
 	choice := resp.Choices[0]
@@ -441,7 +441,7 @@ func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessa
 		if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
 			t.logger.Error(i18n.T("brain.parse_func_params_failed"), logging.Err(err))
 			t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-			return nil, fmt.Errorf(i18n.T("brain.parse_func_params_failed")+": %w", err)
+			return nil, fmt.Errorf("parse func params failed: %w", err)
 		}
 
 		t.sendEvent(NewToolCallEvent(toolCall.Function.Name, args))
@@ -466,7 +466,7 @@ func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessa
 		if err := json.Unmarshal([]byte(funcCall.Arguments), &args); err != nil {
 			t.logger.Error(i18n.T("brain.parse_func_params_failed"), logging.Err(err))
 			t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-			return nil, fmt.Errorf(i18n.T("brain.parse_func_params_failed")+": %w", err)
+			return nil, fmt.Errorf("parse func params failed: %w", err)
 		}
 
 		t.sendEvent(NewToolCallEvent(funcCall.Name, args))
@@ -547,7 +547,7 @@ func (t *Thinking) ReturnFuncResult(toolCallID string, name string, result strin
 	argsBytes, err := json.Marshal(originalArgs)
 	if err != nil {
 		t.logger.Error(i18n.T("brain.serialize_params_failed"), logging.Err(err))
-		return "", fmt.Errorf(i18n.T("brain.serialize_params_failed")+": %w", err)
+		return "", fmt.Errorf("serialize params failed: %w", err)
 	}
 
 	toolCalls := []openai.ToolCall{
@@ -587,7 +587,7 @@ func (t *Thinking) ReturnFuncResult(toolCallID string, name string, result strin
 	if err != nil {
 		t.logger.Error(i18n.T("brain.return_func_result_failed"), logging.Err(err))
 		t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-		return "", fmt.Errorf(i18n.T("brain.return_func_result_failed")+": %w", err)
+		return "", fmt.Errorf("return func result failed: %w", err)
 	}
 
 	if t.tokenUsageRepo != nil {
@@ -603,7 +603,7 @@ func (t *Thinking) ReturnFuncResult(toolCallID string, name string, result strin
 	}
 
 	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("%s", i18n.T("brain.no_response_result"))
+		return "", fmt.Errorf("no response result")
 	}
 
 	content := strings.TrimSpace(resp.Choices[0].Message.Content)

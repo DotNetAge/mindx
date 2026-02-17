@@ -101,10 +101,21 @@ export default function Channels() {
   const fetchChannels = async () => {
     try {
       const response = await fetch('/api/channels');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const data = await response.json();
-      setChannels(data);
+      console.log('Channels API response:', data);
+      if (data && data.channels) {
+        setChannels(data);
+      } else {
+        console.error('Invalid channels data structure:', data);
+        setChannels({ enabled_channels: [], channels: {} });
+        setMessage('通道数据格式错误');
+      }
     } catch (error) {
       console.error('Failed to fetch channels:', error);
+      setChannels({ enabled_channels: [], channels: {} });
       setMessage('加载通道配置失败');
     }
   };
@@ -379,7 +390,13 @@ export default function Channels() {
       )}
 
       <div className="channels-list">
-        {Object.entries(channels.channels).map(([channelId, channel]) => (
+        {Object.keys(channels.channels).length === 0 ? (
+          <div className="empty-state">
+            <p>暂无通道配置</p>
+            <p className="empty-hint">请检查后端服务是否正常运行，或配置文件中是否有通道定义</p>
+          </div>
+        ) : (
+          Object.entries(channels.channels).map(([channelId, channel]) => (
           <div key={channelId} className={`channel-card ${channel.enabled ? 'enabled' : 'disabled'}`}>
             <div className="channel-header">
               <div className="channel-info">
@@ -426,7 +443,8 @@ export default function Channels() {
 
             {editingChannel === channelId && renderConfigFields(channelId)}
           </div>
-        ))}
+        ))
+      )}
       </div>
     </div>
   );

@@ -3,7 +3,6 @@ package builtins
 import (
 	"encoding/json"
 	"fmt"
-	"mindx/pkg/i18n"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,12 +11,12 @@ import (
 func WriteFile(params map[string]any) (string, error) {
 	filename, ok := params["filename"].(string)
 	if !ok {
-		return "", fmt.Errorf(i18n.TWithData("skill.params_invalid", map[string]interface{}{"Param": "filename"}))
+		return "", fmt.Errorf("invalid param: filename")
 	}
 
 	content, ok := params["content"].(string)
 	if !ok {
-		return "", fmt.Errorf(i18n.TWithData("skill.params_invalid", map[string]interface{}{"Param": "content"}))
+		return "", fmt.Errorf("invalid param: content")
 	}
 
 	startTime := time.Now()
@@ -36,11 +35,11 @@ func WriteFile(params map[string]any) (string, error) {
 
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", fmt.Errorf(i18n.TWithData("file.create_dir_failed", map[string]interface{}{"Dir": dir, "Error": err.Error()}))
+		return "", fmt.Errorf("failed to create dir %s: %w", dir, err)
 	}
 
 	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-		return "", fmt.Errorf(i18n.TWithData("file.write_failed", map[string]interface{}{"Path": filePath, "Error": err.Error()}))
+		return "", fmt.Errorf("failed to write file %s: %w", filePath, err)
 	}
 
 	elapsed := time.Since(startTime)
@@ -62,7 +61,7 @@ func getJSONWriteResult(filePath string, contentLength int, elapsed time.Duratio
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, i18n.TWithData("skill.json_serialize_failed", map[string]interface{}{"Error": err.Error()})+"\n")
+		fmt.Fprintf(os.Stderr, "json serialize failed: %v\n", err)
 		os.Exit(1)
 	}
 	return string(data)

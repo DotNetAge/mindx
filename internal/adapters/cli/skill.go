@@ -262,13 +262,32 @@ func createSkillManager() (*skills.SkillMgr, error) {
 		return nil, err
 	}
 
-	srvCfg, _, _ := config.InitVippers()
+	_, _, _, _ = config.InitVippers()
+	modelsMgr := config.GetModelsManager()
 
 	embeddingSvc := embedding.NewEmbeddingService(nil)
 
-	ollamaSvc := llama.NewOllamaService(srvCfg.Brain.LeftbrainModel.Name)
-	if srvCfg.OllamaURL != "" {
-		baseURL := srvCfg.OllamaURL
+	brainModels := modelsMgr.GetBrainModels()
+	defaultModelName := modelsMgr.GetDefaultModel()
+	indexModelName := brainModels.IndexModel
+	if indexModelName == "" {
+		indexModelName = defaultModelName
+	}
+	if indexModelName == "" {
+		indexModelName = brainModels.SubconsciousModel
+	}
+
+	indexModel, err := modelsMgr.GetModel(indexModelName)
+	if err != nil {
+		indexModel = &config.ModelConfig{
+			Name:    "qwen3:0.6b",
+			BaseURL: "http://localhost:11434/v1",
+		}
+	}
+
+	ollamaSvc := llama.NewOllamaService(indexModel.Name)
+	if indexModel.BaseURL != "" {
+		baseURL := indexModel.BaseURL
 		if len(baseURL) > 3 && baseURL[len(baseURL)-3:] == "/v1" {
 			baseURL = baseURL[:len(baseURL)-3]
 		}

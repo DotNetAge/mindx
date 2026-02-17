@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"flag"
+	"fmt"
+	"log"
 	"mindx/internal/config"
 	infraEmbedding "mindx/internal/infrastructure/embedding"
 	"mindx/internal/infrastructure/persistence"
@@ -9,9 +12,6 @@ import (
 	"mindx/internal/usecase/training"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
-	"flag"
-	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -71,8 +71,8 @@ var trainCmd = &cobra.Command{
 			*workspace, _ = os.Getwd()
 		}
 
-		srvCfg, _, _ := config.InitVippers()
-		
+		srvCfg, _, _, _ := config.InitVippers()
+
 		dataPath, err := config.GetWorkspaceDataPath()
 		if err != nil {
 			log.Fatal(err)
@@ -98,8 +98,22 @@ var trainCmd = &cobra.Command{
 			embeddingSvc = embedding.NewEmbeddingService(embeddingProvider)
 		}
 
-		openaiCfg := openai.DefaultConfig("")
-		openaiCfg.BaseURL = srvCfg.OllamaURL
+		modelsMgr := config.GetModelsManager()
+		brainModels := modelsMgr.GetBrainModels()
+		defaultModelName := modelsMgr.GetDefaultModel()
+		if defaultModelName == "" {
+			defaultModelName = brainModels.SubconsciousModel
+		}
+		defaultModel, err := modelsMgr.GetModel(defaultModelName)
+		if err != nil {
+			defaultModel = &config.ModelConfig{
+				Name:    "qwen3:0.6b",
+				BaseURL: "http://localhost:11434/v1",
+			}
+		}
+
+		openaiCfg := openai.DefaultConfig(defaultModel.APIKey)
+		openaiCfg.BaseURL = defaultModel.BaseURL
 		memLLMClient := openai.NewClientWithConfig(openaiCfg)
 
 		mem, err := memory.NewMemory(srvCfg, memLLMClient, logger, store, embeddingSvc)

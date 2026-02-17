@@ -14,10 +14,10 @@ import (
 )
 
 type SkillMgr struct {
-	skillsDir     string
-	workspaceDir  string
-	logger        logging.Logger
-	mu            sync.RWMutex
+	skillsDir    string
+	workspaceDir string
+	logger       logging.Logger
+	mu           sync.RWMutex
 
 	loader    *SkillLoader
 	executor  *SkillExecutor
@@ -42,16 +42,16 @@ func NewSkillMgrWithStore(skillsDir string, workspaceDir string, embeddingSvc *e
 	converter := NewSkillConverter(skillsDir, logger)
 
 	mgr := &SkillMgr{
-		skillsDir:     skillsDir,
-		workspaceDir:  workspaceDir,
-		logger:        logger.Named("SkillMgr"),
-		loader:        loader,
-		executor:      executor,
-		searcher:      searcher,
-		indexer:       indexer,
-		converter:     converter,
-		installer:     installer,
-		envMgr:        envMgr,
+		skillsDir:    skillsDir,
+		workspaceDir: workspaceDir,
+		logger:       logger.Named("SkillMgr"),
+		loader:       loader,
+		executor:     executor,
+		searcher:     searcher,
+		indexer:      indexer,
+		converter:    converter,
+		installer:    installer,
+		envMgr:       envMgr,
 	}
 
 	if err := envMgr.LoadEnv(); err != nil {
@@ -59,7 +59,7 @@ func NewSkillMgrWithStore(skillsDir string, workspaceDir string, embeddingSvc *e
 	}
 
 	if err := loader.LoadAll(); err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("skill.load_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to load skills: %w", err)
 	}
 
 	mgr.syncComponents()
@@ -147,7 +147,7 @@ func (m *SkillMgr) Enable(name string) error {
 
 	_, info, exists := m.loader.GetSkill(name)
 	if !exists {
-		return fmt.Errorf(i18n.TWithData("skill.not_found", map[string]interface{}{"Name": name}))
+		return fmt.Errorf("skill not found: %s", name)
 	}
 
 	info.Def.Enabled = true
@@ -164,7 +164,7 @@ func (m *SkillMgr) Disable(name string) error {
 
 	_, info, exists := m.loader.GetSkill(name)
 	if !exists {
-		return fmt.Errorf(i18n.TWithData("skill.not_found", map[string]interface{}{"Name": name}))
+		return fmt.Errorf("skill not found: %s", name)
 	}
 
 	info.Def.Enabled = false
@@ -181,13 +181,13 @@ func (m *SkillMgr) InstallDependency(name string, method entity.InstallMethod) e
 
 func (m *SkillMgr) Execute(skill *core.Skill, params map[string]any) error {
 	if skill == nil || skill.Execute == nil {
-		return fmt.Errorf(i18n.T("skill.or_execute_empty"))
+		return fmt.Errorf("skill or execute is empty")
 	}
 
 	name := skill.GetName()
 	_, info, exists := m.loader.GetSkill(name)
 	if !exists {
-		return fmt.Errorf(i18n.TWithData("skill.not_found", map[string]interface{}{"Name": name}))
+		return fmt.Errorf("skill not found: %s", name)
 	}
 
 	_, err := m.executor.Execute(name, info.Def, params)
@@ -197,7 +197,7 @@ func (m *SkillMgr) Execute(skill *core.Skill, params map[string]any) error {
 func (m *SkillMgr) ExecuteByName(name string, params map[string]any) (string, error) {
 	_, info, exists := m.loader.GetSkill(name)
 	if !exists {
-		return "", fmt.Errorf(i18n.TWithData("skill.not_found", map[string]interface{}{"Name": name}))
+		return "", fmt.Errorf("skill not found: %s", name)
 	}
 
 	return m.executor.Execute(name, info.Def, params)
@@ -262,11 +262,11 @@ func (m *SkillMgr) ConvertSkill(name string) error {
 func (m *SkillMgr) InstallRuntime(name string) error {
 	_, info, exists := m.loader.GetSkill(name)
 	if !exists {
-		return fmt.Errorf(i18n.TWithData("skill.not_found", map[string]interface{}{"Name": name}))
+		return fmt.Errorf("skill not found: %s", name)
 	}
 
 	if info.Def == nil || len(info.Def.Install) == 0 {
-		return fmt.Errorf(i18n.T("skill.no_install_method"))
+		return fmt.Errorf("no install method for skill")
 	}
 
 	m.logger.Info(i18n.T("skill.start_install"), logging.String(i18n.T("skill.name"), name))
@@ -289,7 +289,7 @@ func (m *SkillMgr) InstallRuntime(name string) error {
 	}
 
 	if lastErr != nil {
-		return fmt.Errorf(i18n.TWithData("skill.all_install_failed", map[string]interface{}{"Error": lastErr.Error()}))
+		return fmt.Errorf("all install methods failed: %w", lastErr)
 	}
 
 	return nil
@@ -320,7 +320,7 @@ func (m *SkillMgr) BatchInstall(names []string) (success []string, failed map[st
 func (m *SkillMgr) GetMissingDependencies(name string) ([]string, []string, error) {
 	_, info, exists := m.loader.GetSkill(name)
 	if !exists {
-		return nil, nil, fmt.Errorf(i18n.TWithData("skill.not_found", map[string]interface{}{"Name": name}))
+		return nil, nil, fmt.Errorf("skill not found: %s", name)
 	}
 
 	return info.MissingBins, info.MissingEnv, nil

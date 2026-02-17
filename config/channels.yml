@@ -1,0 +1,61 @@
+enabled_channels: []
+channels:
+    dingtalk:
+        enabled: false
+        name: 钉钉
+        icon: dingtalk
+        config:
+            agent_id: ""
+            app_key: ""
+            app_secret: ""
+            description: 钉钉机器人接入
+            encrypt_key: ""
+            path: /dingtalk/webhook
+            port: 6064
+            webhook_secret: ""
+    feishu:
+        enabled: false
+        name: 飞书
+        icon: feishu
+        config:
+            app_id: test123
+            app_secret: secret123
+            path: /feishu/webhook
+            port: 6060
+    qq:
+        enabled: false
+        name: QQ
+        icon: qq
+        config:
+            app_id: ""
+            app_secret: ""
+            description: QQ机器人接入(支持OneBot、Go-CQHTTP等)
+            path: /qq/webhook
+            port: 6062
+            sandbox: false
+            token: ""
+    telegram:
+        enabled: false
+        name: Telegram
+        icon: telegram
+        config:
+            bot_token: ""
+            description: Telegram Bot API 接入
+            path: /telegram/webhook
+            port: 6067
+            secret_token: ""
+            use_webhook: true
+            webhook_url: ""
+    wechat:
+        enabled: false
+        name: 微信
+        icon: wechat
+        config:
+            app_id: ""
+            app_secret: ""
+            description: 微信公众号/企业微信接入
+            encoding_aes_key: ""
+            path: /wechat/webhook
+            port: 6061
+            token: ""
+            type: mp

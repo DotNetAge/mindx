@@ -9,26 +9,38 @@ interface Capability {
   icon: string;
   description: string;
   model: string;
-  base_url: string;
-  api_key: string;
   system_prompt: string;
   tools: string[];
-  temperature: number;
-  max_tokens: number;
   modality?: string[];
   enabled: boolean;
 }
 
-interface CapabilitiesResponse {
+interface ModelConfig {
+  name: string;
+  description?: string;
+  base_url: string;
+  api_key: string;
+  temperature: number;
+  max_tokens: number;
+}
+
+interface CapabilitiesConfig {
   capabilities: Capability[];
   default_capability: string;
   fallback_to_local: boolean;
-  description: string;
+}
+
+interface CapabilitiesResponse {
+  capabilities: CapabilitiesConfig;
+  models: {
+    models: ModelConfig[];
+  };
 }
 
 export default function Capabilities() {
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
-  const [config, setConfig] = useState({ default_capability: '', fallback_to_local: false, description: '' });
+  const [models, setModels] = useState<ModelConfig[]>([]);
+  const [config, setConfig] = useState({ default_capability: '', fallback_to_local: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [editingCapability, setEditingCapability] = useState<Capability | null>(null);
@@ -43,15 +55,15 @@ export default function Capabilities() {
   const fetchCapabilities = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/capabilities');
+      const response = await fetch('/api/config/capabilities');
       if (!response.ok) throw new Error('获取能力配置失败');
       const data: CapabilitiesResponse = await response.json();
-      setCapabilities(data.capabilities || []);
+      setCapabilities(data.capabilities?.capabilities || []);
       setConfig({
-        default_capability: data.default_capability || '',
-        fallback_to_local: data.fallback_to_local || false,
-        description: data.description || ''
+        default_capability: data.capabilities?.default_capability || '',
+        fallback_to_local: data.capabilities?.fallback_to_local || false,
       });
+      setModels(data.models?.models || []);
     } catch (error) {
       console.error('Failed to fetch capabilities:', error);
       setError(error instanceof Error ? error.message : '加载失败');
@@ -60,72 +72,21 @@ export default function Capabilities() {
     }
   };
 
-  const handleToggle = async (name: string) => {
-    const capability = capabilities.find(c => c.name === name);
-    if (!capability) return;
-
-    const updated = { ...capability, enabled: !capability.enabled };
-    try {
-      const response = await fetch(`/api/capabilities?name=${name}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      });
-      if (!response.ok) throw new Error('切换状态失败');
-      await fetchCapabilities();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '操作失败');
-    }
-  };
-
-  const handleDelete = async (name: string) => {
-    if (!window.confirm(`确定要删除能力 "${name}" 吗？`)) return;
-    
-    setCapabilities(prev => prev.filter(c => c.name !== name));
-    
-    try {
-      const response = await fetch(`/api/capabilities?name=${name}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        fetchCapabilities();
-        throw new Error('删除失败');
-      }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '删除失败');
-    }
-  };
-
-  const handleUpdate = async (name: string, updates: Partial<Capability>) => {
+  const saveCapabilities = async (newCapabilities: Capability[]) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/capabilities?name=${name}`, {
-        method: 'PUT',
+      const response = await fetch('/api/config/capabilities', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      if (!response.ok) throw new Error('更新失败');
-      setEditingCapability(null);
-      await fetchCapabilities();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '更新失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSavePrompt = async () => {
-    if (!editingPrompt) return;
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/capabilities?name=${editingPrompt.name}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system_prompt: promptText }),
+        body: JSON.stringify({
+          capabilities: {
+            capabilities: newCapabilities,
+            default_capability: config.default_capability,
+            fallback_to_local: config.fallback_to_local
+          }
+        }),
       });
       if (!response.ok) throw new Error('保存失败');
-      setEditingPrompt(null);
-      setPromptText('');
       await fetchCapabilities();
     } catch (error) {
       setError(error instanceof Error ? error.message : '保存失败');
@@ -134,22 +95,38 @@ export default function Capabilities() {
     }
   };
 
+  const handleToggle = async (name: string) => {
+    const newCapabilities = capabilities.map(cap => 
+      cap.name === name ? { ...cap, enabled: !cap.enabled } : cap
+    );
+    await saveCapabilities(newCapabilities);
+  };
+
+  const handleDelete = async (name: string) => {
+    if (!window.confirm(`确定要删除能力 "${name}" 吗？`)) return;
+    const newCapabilities = capabilities.filter(c => c.name !== name);
+    await saveCapabilities(newCapabilities);
+  };
+
+  const handleUpdate = async (name: string, updates: Partial<Capability>) => {
+    const newCapabilities = capabilities.map(cap => 
+      cap.name === name ? { ...cap, ...updates } : cap
+    );
+    await saveCapabilities(newCapabilities);
+    setEditingCapability(null);
+  };
+
+  const handleSavePrompt = async () => {
+    if (!editingPrompt) return;
+    await handleUpdate(editingPrompt.name, { system_prompt: promptText });
+    setEditingPrompt(null);
+    setPromptText('');
+  };
+
   const handleAdd = async (capability: Capability) => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/capabilities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(capability),
-      });
-      if (!response.ok) throw new Error('添加失败');
-      setShowAddDialog(false);
-      await fetchCapabilities();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : '添加失败');
-    } finally {
-      setLoading(false);
-    }
+    const newCapabilities = [...capabilities, capability];
+    await saveCapabilities(newCapabilities);
+    setShowAddDialog(false);
   };
 
   return (
@@ -213,18 +190,6 @@ export default function Capabilities() {
                     <span className="info-label">模型:</span>
                     <span className="info-value">{capability.model}</span>
                   </div>
-                  <div className="info-item">
-                    <span className="info-label">API地址:</span>
-                    <span className="info-value">{capability.base_url || '默认'}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">温度:</span>
-                    <span className="info-value">{capability.temperature}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">最大tokens:</span>
-                    <span className="info-value">{capability.max_tokens}</span>
-                  </div>
                 </div>
 
                 <div className="capability-actions">
@@ -266,6 +231,7 @@ export default function Capabilities() {
       {editingCapability && (
         <EditDialog
           capability={editingCapability}
+          models={models}
           onSave={(updates) => handleUpdate(editingCapability.name, updates)}
           onCancel={() => setEditingCapability(null)}
           loading={loading}
@@ -290,6 +256,7 @@ export default function Capabilities() {
       {/* 添加能力弹窗 */}
       {showAddDialog && (
         <AddDialog
+          models={models}
           onSave={handleAdd}
           onCancel={() => setShowAddDialog(false)}
           loading={loading}
@@ -299,8 +266,9 @@ export default function Capabilities() {
   );
 }
 
-function EditDialog({ capability, onSave, onCancel, loading }: {
+function EditDialog({ capability, models, onSave, onCancel, loading }: {
   capability: Capability;
+  models: ModelConfig[];
   onSave: (updates: Partial<Capability>) => void;
   onCancel: () => void;
   loading: boolean;
@@ -310,10 +278,6 @@ function EditDialog({ capability, onSave, onCancel, loading }: {
     icon: capability.icon,
     description: capability.description,
     model: capability.model,
-    base_url: capability.base_url,
-    api_key: capability.api_key,
-    temperature: capability.temperature,
-    max_tokens: capability.max_tokens,
   });
 
   return (
@@ -337,7 +301,7 @@ function EditDialog({ capability, onSave, onCancel, loading }: {
               type="text"
               value={formData.icon}
               onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-              placeholder="例如: ✍️"
+              placeholder="例如: EditIcon"
             />
           </div>
           <div className="form-group">
@@ -350,49 +314,16 @@ function EditDialog({ capability, onSave, onCancel, loading }: {
           </div>
           <div className="form-group">
             <label>模型名称</label>
-            <input
-              type="text"
+            <select
               value={formData.model}
               onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-            />
-          </div>
-          <div className="form-group">
-            <label>API地址</label>
-            <input
-              type="text"
-              value={formData.base_url}
-              onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
-              placeholder="https://api.openai.com/v1"
-            />
-          </div>
-          <div className="form-group">
-            <label>API Key</label>
-            <input
-              type="password"
-              value={formData.api_key}
-              onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-            />
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label>温度</label>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                max="2"
-                value={formData.temperature}
-                onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
-              />
-            </div>
-            <div className="form-group">
-              <label>最大tokens</label>
-              <input
-                type="number"
-                value={formData.max_tokens}
-                onChange={(e) => setFormData({ ...formData, max_tokens: parseInt(e.target.value) })}
-              />
-            </div>
+            >
+              {models.map(model => (
+                <option key={model.name} value={model.name}>
+                  {model.name} {model.description ? `(${model.description})` : ''}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         <div className="dialog-footer">
@@ -446,7 +377,8 @@ function PromptDialog({ name, prompt, onChange, onSave, onCancel, loading }: {
   );
 }
 
-function AddDialog({ onSave, onCancel, loading }: {
+function AddDialog({ models, onSave, onCancel, loading }: {
+  models: ModelConfig[];
   onSave: (capability: Capability) => void;
   onCancel: () => void;
   loading: boolean;
@@ -456,12 +388,9 @@ function AddDialog({ onSave, onCancel, loading }: {
     title: '',
     icon: '',
     description: '',
-    model: '',
-    base_url: '',
-    api_key: '',
+    model: models[0]?.name || '',
     system_prompt: '',
-    temperature: 0.7,
-    max_tokens: 4096,
+    tools: [] as string[],
     enabled: true,
   });
 
@@ -486,7 +415,7 @@ function AddDialog({ onSave, onCancel, loading }: {
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="例如: gpt-4-capability"
+              placeholder="例如: writing"
             />
           </div>
           <div className="form-group">
@@ -495,7 +424,7 @@ function AddDialog({ onSave, onCancel, loading }: {
               type="text"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder="例如: GPT-4 智能助手"
+              placeholder="例如: 网络爆文"
             />
           </div>
           <div className="form-group">
@@ -504,7 +433,7 @@ function AddDialog({ onSave, onCancel, loading }: {
               type="text"
               value={formData.icon}
               onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-              placeholder="例如: ✍️"
+              placeholder="例如: EditIcon"
             />
           </div>
           <div className="form-group">
@@ -527,51 +456,16 @@ function AddDialog({ onSave, onCancel, loading }: {
           </div>
           <div className="form-group">
             <label>模型名称 *</label>
-            <input
-              type="text"
+            <select
               value={formData.model}
               onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-              placeholder="例如: gpt-4o"
-            />
-          </div>
-          <div className="form-group">
-            <label>API地址</label>
-            <input
-              type="text"
-              value={formData.base_url}
-              onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
-              placeholder="https://api.openai.com/v1"
-            />
-          </div>
-          <div className="form-group">
-            <label>API Key</label>
-            <input
-              type="password"
-              value={formData.api_key}
-              onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-              placeholder="sk-..."
-            />
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label>温度</label>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                max="2"
-                value={formData.temperature}
-                onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
-              />
-            </div>
-            <div className="form-group">
-              <label>最大tokens</label>
-              <input
-                type="number"
-                value={formData.max_tokens}
-                onChange={(e) => setFormData({ ...formData, max_tokens: parseInt(e.target.value) })}
-              />
-            </div>
+            >
+              {models.map(model => (
+                <option key={model.name} value={model.name}>
+                  {model.name} {model.description ? `(${model.description})` : ''}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="form-group">
             <label className="checkbox-label">

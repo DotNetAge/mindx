@@ -1,0 +1,91 @@
+models:
+  - name: qwen3:0.6b
+    description: "本地快速模型，用于潜意识、左脑等快速响应"
+    base_url: "http://localhost:11434/v1"
+    api_key: ""
+    temperature: 0.3
+    max_tokens: 40960
+  - name: qwen3:1.7b
+    description: "本地思考模型，用于右脑、主意识等思考任务"
+    base_url: "http://localhost:11434/v1"
+    api_key: ""
+    temperature: 0.7
+    max_tokens: 40960
+  - name: qwen3:4b
+    description: "本地中等模型，平衡速度和质量"
+    base_url: "http://localhost:11434/v1"
+    api_key: ""
+    temperature: 0.5
+    max_tokens: 40960
+  - name: qwen3.5-plus
+    description: "通义千问3.5 Plus，用于高质量内容创作"
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key: ""
+    temperature: 0.9
+    max_tokens: 1048576
+  - name: GLM-4-0520
+    description: "智谱AI GLM-4，用于编程和技术任务"
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    api_key: ""
+    temperature: 0.3
+    max_tokens: 131072
+  - name: glm4:7b
+    description: "智谱AI GLM-4.7B，本地模型"
+    base_url: "http://localhost:11434/v1"
+    api_key: ""
+    temperature: 0.5
+    max_tokens: 8192
+  - name: GLM-4-7B
+    description: "智谱AI GLM-4.7，云端模型"
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    api_key: ""
+    temperature: 0.5
+    max_tokens: 131072
+  - name: GLM-5
+    description: "智谱AI GLM-5，最新一代云端模型"
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    api_key: ""
+    temperature: 0.3
+    max_tokens: 131072
+  - name: qwen-max
+    description: "通义千问Max，最高质量云端模型"
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key: ""
+    temperature: 0.7
+    max_tokens: 1048576
+  - name: qwen-turbo
+    description: "通义千问Turbo，快速响应云端模型"
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key: ""
+    temperature: 0.3
+    max_tokens: 131072
+  - name: minimax-abab6.5-chat
+    description: "Minimax ABAB 6.5 Chat，最新对话模型"
+    base_url: "https://api.minimax.chat/v1"
+    api_key: ""
+    temperature: 0.7
+    max_tokens: 131072
+  - name: minimax-abab6.5s-chat
+    description: "Minimax ABAB 6.5S Chat，轻量快速模型"
+    base_url: "https://api.minimax.chat/v1"
+    api_key: ""
+    temperature: 0.5
+    max_tokens: 8192
+  - name: deepseek-chat
+    description: "DeepSeek Chat，通用对话模型"
+    base_url: "https://api.deepseek.com/v1"
+    api_key: ""
+    temperature: 0.7
+    max_tokens: 131072
+  - name: deepseek-v3
+    description: "DeepSeek V3，最新版本模型"
+    base_url: "https://api.deepseek.com/v1"
+    api_key: ""
+    temperature: 0.7
+    max_tokens: 131072
+  - name: deepseek-coder
+    description: "DeepSeek Coder，编程专用模型"
+    base_url: "https://api.deepseek.com/v1"
+    api_key: ""
+    temperature: 0.3
+    max_tokens: 131072

@@ -42,7 +42,7 @@ func NewValidator(ollamaURL string, embeddingSvc *embedding.EmbeddingService, lo
 
 func (v *Validator) ValidateModel(modelName string, testCases []TestCase) (float64, error) {
 	if len(testCases) == 0 {
-		return 0, fmt.Errorf(i18n.T("validator.no_testcases"))
+		return 0, fmt.Errorf("no test cases")
 	}
 
 	var correctCount int
@@ -99,17 +99,17 @@ func (v *Validator) generateResponse(modelName, prompt string) (string, error) {
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf(i18n.TWithData("validator.serialize_failed", map[string]interface{}{"Error": err.Error()}))
+		return "", fmt.Errorf("failed to serialize request: %w", err)
 	}
 
 	resp, err := v.client.Post(v.ollamaURL+"/api/chat", "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return "", fmt.Errorf(i18n.TWithData("validator.api_request_failed", map[string]interface{}{"Error": err.Error()}))
+		return "", fmt.Errorf("api request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf(i18n.TWithData("validator.api_error", map[string]interface{}{"Code": resp.StatusCode}))
+		return "", fmt.Errorf("api error: %d", resp.StatusCode)
 	}
 
 	var result struct {
@@ -119,11 +119,11 @@ func (v *Validator) generateResponse(modelName, prompt string) (string, error) {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf(i18n.TWithData("validator.parse_response_failed", map[string]interface{}{"Error": err.Error()}))
+		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if result.Message.Content == "" {
-		return "", fmt.Errorf(i18n.T("validator.empty_response"))
+		return "", fmt.Errorf("empty response")
 	}
 
 	return strings.TrimSpace(result.Message.Content), nil
@@ -216,7 +216,7 @@ func (v *Validator) QuickValidate(modelName string, prompts []string) (map[strin
 	for _, prompt := range prompts {
 		response, err := v.generateResponse(modelName, prompt)
 		if err != nil {
-			results[prompt] = fmt.Sprintf("%s: %v", i18n.T("validator.error_prefix"), err)
+			results[prompt] = fmt.Sprintf("Error: %v", err)
 			continue
 		}
 		results[prompt] = response

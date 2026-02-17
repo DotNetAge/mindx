@@ -1,11 +1,11 @@
 package brain
 
 import (
+	"fmt"
 	"mindx/internal/core"
 	"mindx/internal/usecase/skills"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
-	"fmt"
 )
 
 const maxToolCalls = 10
@@ -42,7 +42,7 @@ func (tc *ToolCaller) ExecuteToolCall(
 
 		toolCallResult, err := thinking.ThinkWithTools(question, currentHistory, tools)
 		if err != nil {
-			return "", fmt.Errorf(i18n.T("brain.tool_call_decision_failed")+": %w", err)
+			return "", fmt.Errorf("tool call decision failed: %w", err)
 		}
 
 		if toolCallResult.NoCall {
@@ -63,7 +63,7 @@ func (tc *ToolCaller) ExecuteToolCall(
 
 		functionCallResult, err := tc.skillMgr.ExecuteFunc(*toolCallResult.Function)
 		if err != nil {
-			return "", fmt.Errorf(i18n.T("brain.skill_exec_failed")+": %w", err)
+			return "", fmt.Errorf("skill execution failed: %w", err)
 		}
 
 		tc.logger.Info(i18n.T("brain.skill_exec_success"), logging.String(i18n.T("brain.result"), functionCallResult))
@@ -78,7 +78,7 @@ func (tc *ToolCaller) ExecuteToolCall(
 			question,
 		)
 		if err != nil {
-			return "", fmt.Errorf(i18n.T("brain.return_func_result_failed")+": %w", err)
+			return "", fmt.Errorf("return func result failed: %w", err)
 		}
 
 		finalAnswer = answer

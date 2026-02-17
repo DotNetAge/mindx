@@ -3,34 +3,55 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 )
 
-// ChannelsConfig 渠道配置
 type ChannelsConfig struct {
-	EnabledChannels []string           `json:"enabled_channels"`
-	Channels        map[string]Channel `json:"channels"`
+	EnabledChannels []string           `yaml:"enabled_channels" json:"enabled_channels"`
+	Channels        map[string]Channel `yaml:"channels" json:"channels"`
 }
 
-// Channel 渠道配置
 type Channel struct {
-	Enabled bool                   `json:"enabled"`
-	Name    string                 `json:"name"`
-	Icon    string                 `json:"icon"`
-	Config  map[string]interface{} `json:"config"`
+	Enabled bool                   `yaml:"enabled" json:"enabled"`
+	Name    string                 `yaml:"name" json:"name"`
+	Icon    string                 `yaml:"icon" json:"icon"`
+	Config  map[string]interface{} `yaml:"config" json:"config"`
 }
 
-// Load 从文件加载配置
 func (c *ChannelsConfig) Load(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(data, c)
+
+	ext := filepath.Ext(path)
+	switch ext {
+	case ".yaml", ".yml":
+		return yaml.Unmarshal(data, c)
+	case ".json":
+		return json.Unmarshal(data, c)
+	default:
+		if err := yaml.Unmarshal(data, c); err == nil {
+			return nil
+		}
+		return json.Unmarshal(data, c)
+	}
 }
 
-// Save 保存配置到文件
 func (c *ChannelsConfig) Save(path string) error {
-	data, err := json.MarshalIndent(c, "", "  ")
+	ext := filepath.Ext(path)
+	var data []byte
+	var err error
+
+	switch ext {
+	case ".json":
+		data, err = json.MarshalIndent(c, "", "  ")
+	default:
+		data, err = yaml.Marshal(c)
+	}
+
 	if err != nil {
 		return err
 	}

@@ -23,10 +23,10 @@ cd "$SCRIPT_DIR"
 # Load environment variables
 if [ -f ".env" ]; then
     source .env
-    MINDX_INSTALL_PATH="${MINDX_INSTALL_PATH:-/usr/local/mindx}"
+    MINDX_PATH="${MINDX_PATH:-/usr/local/mindx}"
     MINDX_WORKSPACE="${MINDX_WORKSPACE:-~/.mindx}"
 else
-    MINDX_INSTALL_PATH="${MINDX_INSTALL_PATH:-/usr/local/mindx}"
+    MINDX_PATH="${MINDX_PATH:-/usr/local/mindx}"
     MINDX_WORKSPACE="${MINDX_WORKSPACE:-~/.mindx}"
 fi
 
@@ -44,7 +44,7 @@ elif [ -f "cmd/main.go" ]; then
     fi
 fi
 
-echo -e "${BLUE}Install path: ${MINDX_INSTALL_PATH}${NC}"
+echo -e "${BLUE}Install path: ${MINDX_PATH}${NC}"
 echo -e "${BLUE}Workspace: ${MINDX_WORKSPACE}${NC}"
 echo ""
 
@@ -52,7 +52,7 @@ echo ""
 echo -e "${YELLOW}This will uninstall MindX from your system.${NC}"
 echo -e "${YELLOW}The following will be removed:${NC}"
 echo "  - Symlink from /usr/local/bin/mindx"
-echo "  - MindX installation from ${MINDX_INSTALL_PATH}"
+echo "  - MindX installation from ${MINDX_PATH}"
 echo "  - System services (if installed)"
 echo "  - Workspace directory (optional)"
 echo ""
@@ -170,13 +170,13 @@ echo ""
 # Remove installation directory
 echo -e "${YELLOW}[4/7] Removing installation directory...${NC}"
 
-if [ -d "$MINDX_INSTALL_PATH" ]; then
-    echo "  Removing $MINDX_INSTALL_PATH..."
-    if [ -w "$MINDX_INSTALL_PATH" ]; then
-        rm -rf "$MINDX_INSTALL_PATH"
+if [ -d "$MINDX_PATH" ]; then
+    echo "  Removing $MINDX_PATH..."
+    if [ -w "$MINDX_PATH" ]; then
+        rm -rf "$MINDX_PATH"
         echo -e "${GREEN}✓ Removed installation directory${NC}"
     else
-        sudo rm -rf "$MINDX_INSTALL_PATH"
+        sudo rm -rf "$MINDX_PATH"
         echo -e "${GREEN}✓ Removed installation directory (with sudo)${NC}"
     fi
 else

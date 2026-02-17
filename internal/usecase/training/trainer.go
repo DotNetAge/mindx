@@ -79,12 +79,12 @@ func NewTrainer(
 func (t *Trainer) checkOllamaHealth() error {
 	resp, err := http.Get(t.ollamaURL + "/api/tags")
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("training.ollama.unavailable", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("ollama unavailable: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf(i18n.TWithData("training.ollama.status_error", map[string]interface{}{"Code": resp.StatusCode}))
+		return fmt.Errorf("ollama status error: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -98,14 +98,14 @@ func (t *Trainer) RunTraining() (*TrainingReport, error) {
 	t.logger.Info(i18n.T("training.base_model"), logging.String("model", t.baseModel))
 
 	if err := t.checkOllamaHealth(); err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("training.ollama.health_check_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("ollama health check failed: %w", err)
 	}
 	t.logger.Info(i18n.T("training.ollama_healthy"))
 
 	t.logger.Info(i18n.T("training.step1_collect"))
 	memoryPoints, err := t.collector.CollectMemoryPoints()
 	if err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("training.collect_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to collect: %w", err)
 	}
 	t.logger.Info(i18n.T("training.collected_points"), logging.Int("count", len(memoryPoints)))
 
@@ -129,7 +129,7 @@ func (t *Trainer) RunTraining() (*TrainingReport, error) {
 	t.logger.Info(i18n.T("training.step2_filter"))
 	filteredPairs, err := t.filter.FilterCorpus(pairs)
 	if err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("training.filter_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to filter: %w", err)
 	}
 	t.logger.Info(i18n.T("training.filtered_pairs"), logging.Int("count", len(filteredPairs)))
 
@@ -151,7 +151,7 @@ func (t *Trainer) RunTraining() (*TrainingReport, error) {
 	timestamp := time.Now().Format("20060102_150405")
 	trainDataPath := filepath.Join(t.dataDir, "training", fmt.Sprintf("train_data_%s.jsonl", timestamp))
 	if err := t.generator.GenerateJSONL(filteredPairs, trainDataPath); err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("training.generate_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to generate: %w", err)
 	}
 	t.logger.Info(i18n.T("training.generated_dataset"), logging.String("path", trainDataPath))
 
@@ -256,7 +256,7 @@ func (t *Trainer) createOllamaModel(modelName, modelfilePath string) error {
 	cmd := exec.Command("ollama", "create", modelName, "-f", modelfilePath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("training.ollama_create_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("ollama create failed: %w", err)
 	}
 
 	t.logger.Debug("ollama create output", logging.String("output", string(output)))
@@ -266,7 +266,7 @@ func (t *Trainer) createOllamaModel(modelName, modelfilePath string) error {
 func (t *Trainer) createOllamaModelViaAPI(modelName, modelfilePath string) error {
 	modelfileContent, err := os.ReadFile(modelfilePath)
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("training.read_modelfile_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to read modelfile: %w", err)
 	}
 
 	reqBody := map[string]string{
@@ -276,17 +276,17 @@ func (t *Trainer) createOllamaModelViaAPI(modelName, modelfilePath string) error
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("training.serialize_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to serialize: %w", err)
 	}
 
 	resp, err := http.Post(t.ollamaURL+"/api/create", "application/json", bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("training.api_request_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("api request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf(i18n.TWithData("training.api_error", map[string]interface{}{"Code": resp.StatusCode}))
+		return fmt.Errorf("api error: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -295,12 +295,12 @@ func (t *Trainer) createOllamaModelViaAPI(modelName, modelfilePath string) error
 func (t *Trainer) createMessageModel(pairs []TrainingPair, modelName, timestamp string) error {
 	modelfilePath := filepath.Join(t.dataDir, "training", fmt.Sprintf("Modelfile_%s", timestamp))
 	if err := t.generator.GenerateModelfileWithMessages(t.baseModel, pairs, modelfilePath); err != nil {
-		return fmt.Errorf(i18n.TWithData("training.modelfile_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("modelfile failed: %w", err)
 	}
 	t.logger.Info(i18n.T("training.modelfile_generated"), logging.String("path", modelfilePath))
 
 	if err := t.createOllamaModel(modelName, modelfilePath); err != nil {
-		return fmt.Errorf(i18n.TWithData("training.create_model_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to create model: %w", err)
 	}
 	return nil
 }
@@ -308,12 +308,12 @@ func (t *Trainer) createMessageModel(pairs []TrainingPair, modelName, timestamp 
 func (t *Trainer) runLoRAFinetune(dataPath, modelName string) error {
 	venvPython := filepath.Join(t.trainingDir, ".venv", "bin", "python")
 	if _, err := os.Stat(venvPython); os.IsNotExist(err) {
-		return fmt.Errorf(i18n.TWithData("training.venv_not_found", map[string]interface{}{"Dir": t.trainingDir}))
+		return fmt.Errorf("venv not found: %s", t.trainingDir)
 	}
 
 	finetuneScript := filepath.Join(t.trainingDir, "finetune.py")
 	if _, err := os.Stat(finetuneScript); os.IsNotExist(err) {
-		return fmt.Errorf(i18n.TWithData("training.script_not_found", map[string]interface{}{"Path": finetuneScript}))
+		return fmt.Errorf("script not found: %s", finetuneScript)
 	}
 
 	outputDir := filepath.Join(t.trainingDir, "output", modelName)
@@ -334,7 +334,7 @@ func (t *Trainer) runLoRAFinetune(dataPath, modelName string) error {
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf(i18n.TWithData("training.lora_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("lora failed: %w", err)
 	}
 
 	t.logger.Info(i18n.T("training.lora_completed"))
@@ -363,11 +363,11 @@ SYSTEM """You are a personalized intelligent assistant."""
 `, ggufPath)
 
 	if err := os.WriteFile(modelfilePath, []byte(modelfileContent), 0644); err != nil {
-		return fmt.Errorf(i18n.TWithData("training.write_modelfile_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to write modelfile: %w", err)
 	}
 
 	if err := t.createOllamaModel(modelName, modelfilePath); err != nil {
-		return fmt.Errorf(i18n.TWithData("training.create_model_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to create model: %w", err)
 	}
 
 	return nil
@@ -376,7 +376,7 @@ SYSTEM """You are a personalized intelligent assistant."""
 func (t *Trainer) ListModels() ([]string, error) {
 	resp, err := http.Get(t.ollamaURL + "/api/tags")
 	if err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("training.get_models_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to get models: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -387,7 +387,7 @@ func (t *Trainer) ListModels() ([]string, error) {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("training.parse_response_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	names := make([]string, 0, len(result.Models))
@@ -400,7 +400,7 @@ func (t *Trainer) ListModels() ([]string, error) {
 
 func (t *Trainer) DeleteModel(modelName string) error {
 	if strings.Contains(modelName, t.baseModel) && !strings.Contains(modelName, "personal") {
-		return fmt.Errorf(i18n.TWithData("training.cannot_delete_base", map[string]interface{}{"Model": modelName}))
+		return fmt.Errorf("cannot delete base model: %s", modelName)
 	}
 
 	reqBody := map[string]string{"name": modelName}
@@ -415,13 +415,13 @@ func (t *Trainer) DeleteModel(modelName string) error {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("training.delete_model_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to delete model: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf(i18n.TWithData("training.delete_model_failed", map[string]interface{}{"Error": fmt.Sprintf("status %d: %s", resp.StatusCode, string(body))}))
+		return fmt.Errorf("failed to delete model: status %d: %s", resp.StatusCode, string(body))
 	}
 
 	t.logger.Info(i18n.T("training.model_deleted"), logging.String("model", modelName))

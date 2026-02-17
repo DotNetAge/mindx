@@ -8,7 +8,9 @@ import {
   ShareIcon,
   ChartIcon,
   TimeFilledIcon,
-  SettingIcon
+  SettingIcon,
+  CloudIcon,
+  PlayCircleIcon
 } from 'tdesign-icons-react';
 import logo from '../assets/logo.png';
 import './styles/Sidebar.css';
@@ -57,11 +59,13 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const menuItems = [
     { id: 'chat', label: t('sidebar.chat'), icon: <ChatIcon /> },
     { id: 'history', label: t('sidebar.history'), icon: <TimeFilledIcon /> },
+    { id: 'models', label: t('sidebar.models'), icon: <CloudIcon /> },
     { id: 'skills', label: t('sidebar.skills'), icon: <ToolsIcon /> },
     { id: 'capabilities', label: t('sidebar.capabilities'), icon: <InfoCircleFilledIcon /> },
     { id: 'channels', label: t('sidebar.channels'), icon: <ShareIcon /> },
     { id: 'usage', label: t('sidebar.usage'), icon: <ChartIcon /> },
     { id: 'monitor', label: t('sidebar.monitor'), icon: <PreciseMonitorIcon /> },
+    { id: 'cron', label: t('sidebar.cron'), icon: <PlayCircleIcon /> },
     { id: 'advanced', label: t('sidebar.advanced'), icon: <SettingIcon /> },
   ];
 

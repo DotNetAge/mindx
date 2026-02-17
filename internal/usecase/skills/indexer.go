@@ -179,10 +179,10 @@ func (i *SkillIndexer) computeSkillHash(info *entity.SkillInfo) string {
 
 func (i *SkillIndexer) ReIndex(skillInfos map[string]*entity.SkillInfo) error {
 	if i.embedding == nil {
-		return fmt.Errorf(i18n.T("skill.embedding_service_not_set"))
+		return fmt.Errorf("embedding service not set")
 	}
 	if i.llama == nil {
-		return fmt.Errorf(i18n.T("skill.llama_service_not_set"))
+		return fmt.Errorf("llama service not set")
 	}
 
 	i.mu.Lock()

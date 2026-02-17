@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"mindx/internal/utils"
-	"mindx/pkg/i18n"
 	"os"
 	"strings"
 	"time"
@@ -13,12 +12,12 @@ import (
 func OpenURL(params map[string]any) (string, error) {
 	url, ok := params["url"].(string)
 	if !ok {
-		return "", fmt.Errorf(i18n.TWithData("skill.params_invalid", map[string]interface{}{"Param": "url"}))
+		return "", fmt.Errorf("invalid param: url")
 	}
 
 	br, err := utils.NewBrowser("")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, i18n.TWithData("browser.create_failed", map[string]interface{}{"Error": err.Error()})+"\n")
+		fmt.Fprintf(os.Stderr, "failed to create browser: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -32,7 +31,7 @@ func OpenURL(params map[string]any) (string, error) {
 	elapsed := time.Since(startTime)
 
 	if err != nil {
-		return "", fmt.Errorf(i18n.TWithData("browser.open_url_failed", map[string]interface{}{"URL": url, "Error": err.Error()}))
+		return "", fmt.Errorf("failed to open url %s: %w", url, err)
 	}
 
 	title := extractTitle(result.Content)
@@ -63,7 +62,7 @@ func getJSONResult(url, title string, result *utils.OpenResult, elapsed time.Dur
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, i18n.TWithData("skill.json_serialize_failed", map[string]interface{}{"Error": err.Error()})+"\n")
+		fmt.Fprintf(os.Stderr, "json serialize failed: %v\n", err)
 		os.Exit(1)
 	}
 	return string(data)

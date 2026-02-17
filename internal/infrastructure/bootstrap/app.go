@@ -82,7 +82,7 @@ func Startup() (*App, error) {
 		return nil, err
 	}
 
-	srvCfg, channelsCfg, capabilitiesCfg := config.InitVippers()
+	srvCfg, channelsCfg, capabilitiesCfg, _ := config.InitVippers()
 
 	ctx := context.Background()
 
@@ -111,13 +111,19 @@ func Startup() (*App, error) {
 		logging.String("version", srvCfg.Version),
 	)
 
+	modelsMgr := config.GetModelsManager()
+
 	systemLogger.Info("初始化向量化服务")
-	ollamaProvider, err := infraEmbedding.NewOllamaEmbedding("http://localhost:11434", srvCfg.Embedding)
+	embeddingModel := modelsMgr.GetEmbeddingModel()
+	if embeddingModel == "" {
+		embeddingModel = "qllama/bge-small-zh-v1.5:latest"
+	}
+	ollamaProvider, err := infraEmbedding.NewOllamaEmbedding("http://localhost:11434", embeddingModel)
 	if err != nil {
 		return nil, fmt.Errorf("构建向量化提供器失败: %w", err)
 	}
 	embeddingSvc := embedding.NewEmbeddingService(ollamaProvider)
-	systemLogger.Info("向量化服务初始化完成", logging.String("provider", "ollama"))
+	systemLogger.Info("向量化服务初始化完成", logging.String("provider", "ollama"), logging.String("model", embeddingModel))
 
 	vectorsPath, err := config.GetWorkspaceVectorsPath()
 	if err != nil {
@@ -135,7 +141,20 @@ func Startup() (*App, error) {
 		return nil, err
 	}
 	sessionStorage := session.NewFileSessionStorage(sessionsPath)
-	maxTokens := srvCfg.Brain.LeftbrainModel.MaxTokens
+
+	brainModels := modelsMgr.GetBrainModels()
+	defaultModelName := modelsMgr.GetDefaultModel()
+	if defaultModelName == "" {
+		defaultModelName = brainModels.SubconsciousModel
+	}
+	defaultModel, err := modelsMgr.GetModel(defaultModelName)
+	if err != nil {
+		return nil, fmt.Errorf("获取默认模型失败: %w", err)
+	}
+	maxTokens := defaultModel.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 40960
+	}
 
 	sessionMgr := session.NewSessionMgr(
 		maxTokens,
@@ -149,15 +168,23 @@ func Startup() (*App, error) {
 
 	systemLogger.Info("初始化记忆系统")
 
-	openaiCfg := openai.DefaultConfig("")
-	openaiCfg.BaseURL = srvCfg.OllamaURL
+	memModelName := brainModels.MemoryModel
+	if memModelName == "" {
+		memModelName = defaultModelName
+	}
+	memModel, err := modelsMgr.GetModel(memModelName)
+	if err != nil {
+		return nil, fmt.Errorf("获取记忆模型失败: %w", err)
+	}
+	openaiCfg := openai.DefaultConfig(memModel.APIKey)
+	openaiCfg.BaseURL = memModel.BaseURL
 	memLLMClient := openai.NewClientWithConfig(openaiCfg)
 
 	mem, err := memory.NewMemory(srvCfg, memLLMClient, systemLogger, store, embeddingSvc)
 	if err != nil {
 		return nil, fmt.Errorf("初始化记忆系统失败: %w", err)
 	}
-	systemLogger.Info("记忆系统初始化完成", logging.String("type", srvCfg.VectorStore.Type))
+	systemLogger.Info("记忆系统初始化完成", logging.String("type", srvCfg.VectorStore.Type), logging.String("model", memModelName))
 
 	systemLogger.Info("初始化 Token 使用记录仓库")
 	tokenUsageDBPath, err := config.GetTokenUsageDBPath()
@@ -191,13 +218,17 @@ func Startup() (*App, error) {
 
 	systemLogger.Info("初始化技能管理器")
 
-	indexModel := srvCfg.IndexModel
-	if indexModel == "" {
-		indexModel = srvCfg.Brain.LeftbrainModel.Name
+	indexModelName := brainModels.IndexModel
+	if indexModelName == "" {
+		indexModelName = defaultModelName
 	}
-	llamaSvc := infraLlama.NewOllamaService(indexModel)
-	if srvCfg.OllamaURL != "" {
-		baseURL := srvCfg.OllamaURL
+	indexModel, err := modelsMgr.GetModel(indexModelName)
+	if err != nil {
+		return nil, fmt.Errorf("获取索引模型失败: %w", err)
+	}
+	llamaSvc := infraLlama.NewOllamaService(indexModelName)
+	if indexModel.BaseURL != "" {
+		baseURL := indexModel.BaseURL
 		if len(baseURL) > 3 && baseURL[len(baseURL)-3:] == "/v1" {
 			baseURL = baseURL[:len(baseURL)-3]
 		}
@@ -241,16 +272,21 @@ func Startup() (*App, error) {
 
 	var builtinCfg *builtins.BuiltinConfig
 	if defaultCap != nil {
-		builtinCfg = &builtins.BuiltinConfig{
-			BaseURL:  defaultCap.BaseURL,
-			Model:    defaultCap.Model,
-			APIKey:   defaultCap.APIKey,
-			LangName: langName,
+		capModel, err := modelsMgr.GetModel(defaultCap.Model)
+		if err == nil {
+			builtinCfg = &builtins.BuiltinConfig{
+				BaseURL:  capModel.BaseURL,
+				Model:    defaultCap.Model,
+				APIKey:   capModel.APIKey,
+				LangName: langName,
+			}
 		}
-	} else {
+	}
+	if builtinCfg == nil {
 		builtinCfg = &builtins.BuiltinConfig{
-			BaseURL:  srvCfg.OllamaURL,
-			Model:    srvCfg.Brain.LeftbrainModel.Name,
+			BaseURL:  defaultModel.BaseURL,
+			Model:    defaultModelName,
+			APIKey:   defaultModel.APIKey,
 			LangName: langName,
 		}
 	}

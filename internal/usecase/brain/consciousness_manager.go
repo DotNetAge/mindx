@@ -41,15 +41,16 @@ func (cm *ConsciousnessManager) Create(capability *entity.Capability) {
 		cm.persona.Name, cm.persona.Gender, cm.persona.Character, cm.persona.UserContent)
 	systemPrompt := capability.SystemPrompt + personaInfo
 
-	modelConfig := &config.ModelConfig{
-		Name:        capability.Model,
-		APIKey:      capability.APIKey,
-		BaseURL:     capability.BaseURL,
-		Temperature: capability.Temperature,
-		MaxTokens:   capability.MaxTokens,
+	modelsMgr := config.GetModelsManager()
+	modelConfig, err := modelsMgr.GetModel(capability.Model)
+	if err != nil {
+		modelConfig = &config.ModelConfig{
+			Name:    capability.Model,
+			BaseURL: "http://localhost:11434/v1",
+		}
 	}
 
-	cm.consciousness = NewThinking(modelConfig, systemPrompt, cm.logger, cm.tokenUsageRepo, &cm.cfg.Brain.TokenBudget)
+	cm.consciousness = NewThinking(modelConfig, systemPrompt, cm.logger, cm.tokenUsageRepo, &cm.cfg.TokenBudget)
 	cm.logger.Info(i18n.T("brain.consciousness_created"))
 }
 

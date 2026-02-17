@@ -102,11 +102,11 @@ echo -e "${YELLOW}[2/9] Loading configuration...${NC}"
 # Read from .env if exists, otherwise use default
 if [ -f ".env" ]; then
     source .env
-    MINDX_INSTALL_PATH="${MINDX_INSTALL_PATH:-/usr/local/mindx}"
+    MINDX_PATH="${MINDX_PATH:-/usr/local/mindx}"
     MINDX_WORKSPACE="${MINDX_WORKSPACE:-~/.mindx}"
     echo -e "${GREEN}✓ Loaded .env file${NC}"
 else
-    MINDX_INSTALL_PATH="${MINDX_INSTALL_PATH:-/usr/local/mindx}"
+    MINDX_PATH="${MINDX_PATH:-/usr/local/mindx}"
     MINDX_WORKSPACE="${MINDX_WORKSPACE:-}"
 fi
 
@@ -143,7 +143,7 @@ else
     echo -e "${BLUE}Using workspace from .env: $MINDX_WORKSPACE${NC}"
 fi
 
-echo -e "${BLUE}Install path: ${MINDX_INSTALL_PATH}${NC}"
+echo -e "${BLUE}Install path: ${MINDX_PATH}${NC}"
 echo -e "${BLUE}Workspace: ${MINDX_WORKSPACE}${NC}"
 echo ""
 
@@ -177,50 +177,50 @@ fi
 
 echo ""
 
-# Install to MINDX_INSTALL_PATH
-echo -e "${YELLOW}[4/9] Installing files to ${MINDX_INSTALL_PATH}...${NC}"
+# Install to MINDX_PATH
+echo -e "${YELLOW}[4/9] Installing files to ${MINDX_PATH}...${NC}"
 
-mkdir -p "$MINDX_INSTALL_PATH"
-mkdir -p "$MINDX_INSTALL_PATH/bin"
+mkdir -p "$MINDX_PATH"
+mkdir -p "$MINDX_PATH/bin"
 
 # Copy binary
-cp bin/mindx "$MINDX_INSTALL_PATH/bin/"
-chmod +x "$MINDX_INSTALL_PATH/bin/mindx"
+cp bin/mindx "$MINDX_PATH/bin/"
+chmod +x "$MINDX_PATH/bin/mindx"
 
 # Also create a symlink for compatibility
-ln -sf "bin/mindx" "$MINDX_INSTALL_PATH/mindx"
+ln -sf "bin/mindx" "$MINDX_PATH/mindx"
 
 # Copy skills
 if [ -d "skills" ]; then
-    mkdir -p "$MINDX_INSTALL_PATH/skills"
-    cp -r skills/* "$MINDX_INSTALL_PATH/skills/" 2>/dev/null || true
+    mkdir -p "$MINDX_PATH/skills"
+    cp -r skills/* "$MINDX_PATH/skills/" 2>/dev/null || true
     echo -e "${GREEN}✓ Copied skills${NC}"
 fi
 
 # Copy static files for dashboard (check Vite's dist first, then build for CRA)
 if [ -d "dashboard/dist" ]; then
-    mkdir -p "$MINDX_INSTALL_PATH/static"
-    cp -r dashboard/dist/* "$MINDX_INSTALL_PATH/static/" 2>/dev/null || true
+    mkdir -p "$MINDX_PATH/static"
+    cp -r dashboard/dist/* "$MINDX_PATH/static/" 2>/dev/null || true
     echo -e "${GREEN}✓ Copied dashboard static files${NC}"
 elif [ -d "dashboard/build" ]; then
-    mkdir -p "$MINDX_INSTALL_PATH/static"
-    cp -r dashboard/build/* "$MINDX_INSTALL_PATH/static/" 2>/dev/null || true
+    mkdir -p "$MINDX_PATH/static"
+    cp -r dashboard/build/* "$MINDX_PATH/static/" 2>/dev/null || true
     echo -e "${GREEN}✓ Copied dashboard static files${NC}"
 elif [ -d "static" ]; then
-    mkdir -p "$MINDX_INSTALL_PATH/static"
-    cp -r static/* "$MINDX_INSTALL_PATH/static/" 2>/dev/null || true
+    mkdir -p "$MINDX_PATH/static"
+    cp -r static/* "$MINDX_PATH/static/" 2>/dev/null || true
     echo -e "${GREEN}✓ Copied static files${NC}"
 fi
 
 # Copy config templates
 if [ -d "config" ]; then
-    mkdir -p "$MINDX_INSTALL_PATH/config"
+    mkdir -p "$MINDX_PATH/config"
     
     # Copy and rename to .template
     for file in config/*; do
         if [ -f "$file" ]; then
             filename=$(basename "$file")
-            cp "$file" "$MINDX_INSTALL_PATH/config/${filename}.template"
+            cp "$file" "$MINDX_PATH/config/${filename}.template"
         fi
     done
     echo -e "${GREEN}✓ Copied config templates${NC}"
@@ -228,24 +228,24 @@ fi
 
 # Copy official docs if available
 if [ -d "official" ]; then
-    mkdir -p "$MINDX_INSTALL_PATH/official"
-    cp -r official/* "$MINDX_INSTALL_PATH/official/" 2>/dev/null || true
+    mkdir -p "$MINDX_PATH/official"
+    cp -r official/* "$MINDX_PATH/official/" 2>/dev/null || true
     echo -e "${GREEN}✓ Copied official documentation${NC}"
 fi
 
 # Copy VERSION file
 if [ -f "VERSION" ]; then
-    cp VERSION "$MINDX_INSTALL_PATH/"
+    cp VERSION "$MINDX_PATH/"
 fi
 
 # Copy uninstall script
 if [ -f "uninstall.sh" ]; then
-    cp uninstall.sh "$MINDX_INSTALL_PATH/"
-    chmod +x "$MINDX_INSTALL_PATH/uninstall.sh"
+    cp uninstall.sh "$MINDX_PATH/"
+    chmod +x "$MINDX_PATH/uninstall.sh"
     echo -e "${GREEN}✓ Copied uninstall script${NC}"
 fi
 
-echo -e "${GREEN}✓ Installed to ${MINDX_INSTALL_PATH}${NC}"
+echo -e "${GREEN}✓ Installed to ${MINDX_PATH}${NC}"
 echo ""
 
 # Create symlink to system path
@@ -254,12 +254,12 @@ echo -e "${YELLOW}[5/9] Creating symlink to system path...${NC}"
 INSTALL_DIR="/usr/local/bin"
 
 if [ -w "$INSTALL_DIR" ]; then
-    ln -sf "$MINDX_INSTALL_PATH/mindx" "$INSTALL_DIR/mindx"
-    echo -e "${GREEN}✓ Created symlink $INSTALL_DIR/mindx -> $MINDX_INSTALL_PATH/mindx${NC}"
+    ln -sf "$MINDX_PATH/mindx" "$INSTALL_DIR/mindx"
+    echo -e "${GREEN}✓ Created symlink $INSTALL_DIR/mindx -> $MINDX_PATH/mindx${NC}"
 else
     echo -e "${YELLOW}⚠ Cannot write to $INSTALL_DIR${NC}"
-    echo -e "${YELLOW}  Please run: sudo ln -sf $MINDX_INSTALL_PATH/mindx $INSTALL_DIR/mindx${NC}"
-    echo -e "${YELLOW}  Or add $MINDX_INSTALL_PATH to your PATH${NC}"
+    echo -e "${YELLOW}  Please run: sudo ln -sf $MINDX_PATH/mindx $INSTALL_DIR/mindx${NC}"
+    echo -e "${YELLOW}  Or add $MINDX_PATH to your PATH${NC}"
 fi
 
 echo ""
@@ -282,8 +282,8 @@ echo ""
 # Copy config templates to workspace
 echo -e "${YELLOW}[7/9] Setting up configuration...${NC}"
 
-if [ -d "$MINDX_INSTALL_PATH/config" ]; then
-    for template in "$MINDX_INSTALL_PATH/config"/*.template; do
+if [ -d "$MINDX_PATH/config" ]; then
+    for template in "$MINDX_PATH/config"/*.template; do
         if [ -f "$template" ]; then
             filename=$(basename "$template" .template)
             dest="$MINDX_WORKSPACE/config/$filename"
@@ -306,12 +306,32 @@ echo -e "${YELLOW}[8/9] Setting up environment...${NC}"
 if [ ! -f "$MINDX_WORKSPACE/.env" ]; then
     cat > "$MINDX_WORKSPACE/.env" << ENV_EOF
 # MindX Environment Configuration
-MINDX_INSTALL_PATH=${MINDX_INSTALL_PATH}
+MINDX_PATH=${MINDX_PATH}
 MINDX_WORKSPACE=${MINDX_WORKSPACE}
 ENV_EOF
     echo -e "${GREEN}✓ Created .env file in workspace${NC}"
 else
     echo -e "${BLUE}ℹ .env file exists in workspace${NC}"
+fi
+
+# Update .env file in source directory (if in source mode)
+if [ "$INSTALL_MODE" = "source" ]; then
+    if [ -f ".env" ]; then
+        # Update MINDX_PATH and MINDX_WORKSPACE in existing .env
+        sed -i.bak "s|^MINDX_PATH=.*|MINDX_PATH=${PROJECT_ROOT}|" .env 2>/dev/null || sed -i '' "s|^MINDX_PATH=.*|MINDX_PATH=${PROJECT_ROOT}|" .env 2>/dev/null || true
+        sed -i.bak "s|^MINDX_WORKSPACE=.*|MINDX_WORKSPACE=${MINDX_WORKSPACE}|" .env 2>/dev/null || sed -i '' "s|^MINDX_WORKSPACE=.*|MINDX_WORKSPACE=${MINDX_WORKSPACE}|" .env 2>/dev/null || true
+        rm -f .env.bak 2>/dev/null || true
+        echo -e "${GREEN}✓ Updated .env file in source directory${NC}"
+    else
+        # Create .env file in source directory
+        cat > ".env" << ENV_EOF
+# Environment variables for Bot application
+MINDX_WORKSPACE=${MINDX_WORKSPACE}
+MINDX_PATH=${PROJECT_ROOT}
+
+ENV_EOF
+        echo -e "${GREEN}✓ Created .env file in source directory${NC}"
+    fi
 fi
 
 echo ""
@@ -355,10 +375,19 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "MindX has been successfully installed!"
 echo ""
-echo "Install path: $MINDX_INSTALL_PATH"
+echo "Install path: $MINDX_PATH"
 echo "Workspace:    $MINDX_WORKSPACE"
-echo "Binary:       $MINDX_INSTALL_PATH/bin/mindx"
-echo "Symlink:      /usr/local/bin/mindx (pointing to $MINDX_INSTALL_PATH/mindx)"
+echo "Binary:       $MINDX_PATH/bin/mindx"
+echo "Symlink:      /usr/local/bin/mindx (pointing to $MINDX_PATH/mindx)"
+echo ""
+echo -e "${YELLOW}Recommended: Set global environment variables${NC}"
+echo "Add the following lines to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
+echo ""
+echo "  export MINDX_PATH=$MINDX_PATH"
+echo "  export MINDX_WORKSPACE=$MINDX_WORKSPACE"
+echo ""
+echo "Then reload your shell profile:"
+echo "  source ~/.zshrc  # or ~/.bashrc"
 echo ""
 echo "Quick start:"
 echo "  1. Start Dashboard: mindx dashboard"
@@ -366,7 +395,7 @@ echo "  2. Start TUI: mindx tui"
 echo "  3. Visit: http://localhost:911"
 echo ""
 echo "To uninstall:"
-echo "  $MINDX_INSTALL_PATH/uninstall.sh"
+echo "  $MINDX_PATH/uninstall.sh"
 echo ""
 echo "Or run from source directory:"
 echo "  ./uninstall.sh"

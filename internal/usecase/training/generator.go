@@ -18,7 +18,7 @@ type Generator struct {
 
 func NewGenerator(outputDir string, logger logging.Logger) (*Generator, error) {
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return nil, fmt.Errorf(i18n.TWithData("generator.create_dir_failed", map[string]interface{}{"Error": err.Error()}))
+		return nil, fmt.Errorf("failed to create dir: %w", err)
 	}
 
 	return &Generator{
@@ -29,7 +29,7 @@ func NewGenerator(outputDir string, logger logging.Logger) (*Generator, error) {
 
 func (g *Generator) GenerateJSONL(pairs []TrainingPair, outputPath string) error {
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
-		return fmt.Errorf(i18n.TWithData("generator.create_dir_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to create dir: %w", err)
 	}
 
 	g.logger.Info(i18n.T("generator.generating_dataset"),
@@ -38,7 +38,7 @@ func (g *Generator) GenerateJSONL(pairs []TrainingPair, outputPath string) error
 
 	file, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("generator.create_file_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to create file: %w", err)
 	}
 	defer file.Close()
 
@@ -51,7 +51,7 @@ func (g *Generator) GenerateJSONL(pairs []TrainingPair, outputPath string) error
 		}
 
 		if err := encoder.Encode(trainData); err != nil {
-			return fmt.Errorf(i18n.TWithData("generator.encode_failed", map[string]interface{}{"Error": err.Error()}))
+			return fmt.Errorf("failed to encode: %w", err)
 		}
 	}
 
@@ -70,7 +70,7 @@ SYSTEM 你是一个智能助手，基于用户的对话数据进行了个性化�
 `, baseModel)
 
 	if err := os.WriteFile(outputPath, []byte(modelfileContent), 0644); err != nil {
-		return fmt.Errorf(i18n.TWithData("generator.write_modelfile_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to write modelfile: %w", err)
 	}
 
 	g.logger.Info(i18n.T("generator.modelfile_generated"), logging.String("path", outputPath))
@@ -126,7 +126,7 @@ func (g *Generator) GenerateModelfileWithMessages(baseModel string, pairs []Trai
 	}
 
 	if err := os.WriteFile(outputPath, []byte(sb.String()), 0644); err != nil {
-		return fmt.Errorf(i18n.TWithData("generator.write_modelfile_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to write modelfile: %w", err)
 	}
 
 	g.logger.Info(i18n.T("generator.modelfile_with_messages"),
@@ -147,11 +147,11 @@ func escapeModelfileString(s string) string {
 func (g *Generator) GenerateTrainingReport(report TrainingReport, outputPath string) error {
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
-		return fmt.Errorf(i18n.TWithData("generator.marshal_report_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to marshal report: %w", err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
-		return fmt.Errorf(i18n.TWithData("generator.create_dir_failed", map[string]interface{}{"Error": err.Error()}))
+		return fmt.Errorf("failed to create dir: %w", err)
 	}
 
 	g.logger.Info(i18n.T("generator.saving_report"), logging.String("path", outputPath))

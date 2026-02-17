@@ -8,6 +8,13 @@ interface Capability {
   title: string;
   icon: string;
   description: string;
+  model: string;
+  base_url: string;
+  api_key: string;
+  system_prompt: string;
+  tools: string[];
+  temperature: number;
+  max_tokens: number;
   enabled: boolean;
 }
 
@@ -65,6 +72,7 @@ export default function MessageInput({
               onRemoveCapability?.();
               setShowMenu(true);
             }}
+            title="移除能力"
           >
             <CloseIcon size={14} />
           </button>

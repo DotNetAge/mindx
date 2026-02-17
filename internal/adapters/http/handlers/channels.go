@@ -22,7 +22,7 @@ type ChannelInfo struct {
 }
 
 func NewChannelsHandler() *ChannelsHandler {
-	configPath := filepath.Join("config", "channels.json")
+	configPath := filepath.Join("config", "channels.yml")
 	return &ChannelsHandler{
 		configPath: configPath,
 	}

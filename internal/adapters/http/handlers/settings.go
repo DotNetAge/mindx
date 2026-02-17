@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"mindx/internal/config"
 	"encoding/json"
+	"mindx/internal/config"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,7 +16,7 @@ type SettingsHandler struct {
 
 type Settings struct {
 	ModelConfig config.ModelConfig `json:"model_config"`
-	AppConfig   AppConfig         `json:"app_config"`
+	AppConfig   AppConfig          `json:"app_config"`
 }
 
 type AppConfig struct {
@@ -94,8 +94,8 @@ func (h *SettingsHandler) getDefaultSettings() *Settings {
 	return &Settings{
 		ModelConfig: config.ModelConfig{
 			Name:        "llama3.2",
-			Provider:    "ollama",
-			Model:       "llama3.2",
+			Description: "",
+			Domain:      "",
 			APIKey:      "",
 			BaseURL:     "http://localhost:11434",
 			Temperature: 0.7,

@@ -24,7 +24,7 @@ func NewDeepSearch(baseUrl string, apiKey string, model string, langName string)
 
 		br, err := utils.NewBrowser("")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, i18n.TWithData("browser.create_failed", map[string]interface{}{"Error": err.Error()})+"\n")
+			fmt.Fprintf(os.Stderr, "browser create failed: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -37,7 +37,7 @@ func NewDeepSearch(baseUrl string, apiKey string, model string, langName string)
 
 		results, err := br.Search(terms, 5)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, i18n.TWithData("search.failed", map[string]interface{}{"Error": err.Error()})+"\n")
+			fmt.Fprintf(os.Stderr, "search failed: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -51,7 +51,7 @@ func NewDeepSearch(baseUrl string, apiKey string, model string, langName string)
 
 		filteredResults, err := filterResultsWithLLM(client, terms, results, model)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, i18n.TWithData("filter.failed", map[string]interface{}{"Error": err.Error()})+"\n")
+			fmt.Fprintf(os.Stderr, "filter failed: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -59,7 +59,7 @@ func NewDeepSearch(baseUrl string, apiKey string, model string, langName string)
 		for _, result := range filteredResults {
 			openResult, err := br.Open(result.Link)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, i18n.TWithData("open_page_failed", map[string]interface{}{"Link": result.Link, "Error": err.Error()})+"\n")
+				fmt.Fprintf(os.Stderr, "open page failed: %s: %v\n", result.Link, err)
 				continue
 			}
 			pageContents = append(pageContents, PageContent{
@@ -76,7 +76,7 @@ func NewDeepSearch(baseUrl string, apiKey string, model string, langName string)
 
 		summary, err := summarizeWithLLM(client, terms, pageContents, model, langName)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, i18n.TWithData("summarize_failed", map[string]interface{}{"Error": err.Error()})+"\n")
+			fmt.Fprintf(os.Stderr, "summarize failed: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -202,7 +202,7 @@ func getJSONSearchResult(summary string, pageContents []PageContent, elapsed tim
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, i18n.TWithData("json.serialize_failed", map[string]interface{}{"Error": err.Error()})+"\n")
+		fmt.Fprintf(os.Stderr, "json serialize failed: %v\n", err)
 		os.Exit(1)
 	}
 	return string(data)

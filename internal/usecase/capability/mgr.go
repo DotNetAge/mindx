@@ -81,12 +81,8 @@ func NewManager(cfg *config.CapabilityConfig, vectorStore persistence.Store, emb
 				Icon:         capConfig.Icon,
 				Description:  capConfig.Description,
 				Model:        capConfig.Model,
-				BaseURL:      capConfig.BaseURL,
-				APIKey:       capConfig.APIKey,
 				SystemPrompt: capConfig.SystemPrompt,
 				Tools:        capConfig.Tools,
-				Temperature:  capConfig.Temperature,
-				MaxTokens:    capConfig.MaxTokens,
 				Modality:     capConfig.Modality,
 				Enabled:      capConfig.Enabled,
 				Vector:       capConfig.Vector,
@@ -113,12 +109,8 @@ func NewManager(cfg *config.CapabilityConfig, vectorStore persistence.Store, emb
 				Icon:         capConfig.Icon,
 				Description:  capConfig.Description,
 				Model:        capConfig.Model,
-				BaseURL:      capConfig.BaseURL,
-				APIKey:       capConfig.APIKey,
 				SystemPrompt: capConfig.SystemPrompt,
 				Tools:        capConfig.Tools,
-				Temperature:  capConfig.Temperature,
-				MaxTokens:    capConfig.MaxTokens,
 				Modality:     capConfig.Modality,
 				Enabled:      capConfig.Enabled,
 				Vector:       capConfig.Vector,
@@ -136,19 +128,21 @@ func NewManager(cfg *config.CapabilityConfig, vectorStore persistence.Store, emb
 // initClients 初始化 OpenAI 客户端
 // 注意：调用者必须持有 m.mu 锁
 func (m *CapabilityManager) initClients() {
+	modelsMgr := config.GetModelsManager()
 	for name, cap := range m.capabilities {
 		if !cap.Enabled {
 			continue
 		}
 
-		var client *openai.Client
-		if cap.BaseURL != "" {
-			config := openai.DefaultConfig(cap.APIKey)
-			config.BaseURL = cap.BaseURL
-			client = openai.NewClientWithConfig(config)
-		} else {
-			client = openai.NewClient(cap.APIKey)
+		modelConfig, err := modelsMgr.GetModel(cap.Model)
+		if err != nil {
+			continue
 		}
+
+		var client *openai.Client
+		config := openai.DefaultConfig(modelConfig.APIKey)
+		config.BaseURL = modelConfig.BaseURL
+		client = openai.NewClientWithConfig(config)
 
 		m.clients[name] = client
 	}
@@ -166,12 +160,8 @@ func (m *CapabilityManager) saveToConfigFile() error {
 			Icon:         cap.Icon,
 			Description:  cap.Description,
 			Model:        cap.Model,
-			BaseURL:      cap.BaseURL,
-			APIKey:       cap.APIKey,
 			SystemPrompt: cap.SystemPrompt,
 			Tools:        cap.Tools,
-			Temperature:  cap.Temperature,
-			MaxTokens:    cap.MaxTokens,
 			Modality:     cap.Modality,
 			Enabled:      cap.Enabled,
 			Vector:       cap.Vector,
@@ -344,20 +334,8 @@ func (m *CapabilityManager) UpdateCapability(name string, updates entity.Capabil
 	if updates.Model != "" {
 		cap.Model = updates.Model
 	}
-	if updates.BaseURL != "" {
-		cap.BaseURL = updates.BaseURL
-	}
-	if updates.APIKey != "" {
-		cap.APIKey = updates.APIKey
-	}
 	if updates.SystemPrompt != "" {
 		cap.SystemPrompt = updates.SystemPrompt
-	}
-	if updates.Temperature > 0 {
-		cap.Temperature = updates.Temperature
-	}
-	if updates.MaxTokens > 0 {
-		cap.MaxTokens = updates.MaxTokens
 	}
 
 	m.initClients()
@@ -404,12 +382,6 @@ func validateConfig(config *config.CapabilityConfig) error {
 		}
 		if cap.SystemPrompt == "" {
 			return fmt.Errorf("能力 %s: 系统提示词为必需字段", cap.Name)
-		}
-		if cap.Temperature < 0 || cap.Temperature > 2 {
-			return fmt.Errorf("能力 %s: 温度值必须在 0 到 2 之间", cap.Name)
-		}
-		if cap.MaxTokens <= 0 {
-			return fmt.Errorf("能力 %s: 最大 token 数必须为正数", cap.Name)
 		}
 	}
 
