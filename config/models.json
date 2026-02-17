@@ -1,0 +1,22 @@
+{
+  "models": [
+    {
+      "name": "qwen3:0.6b",
+      "temperature": 0.7,
+      "max_tokens": 40960,
+      "description": "函数调用专用模型，用于左脑快速行动决策"
+    },
+    {
+      "name": "qwen3:0.6b",
+      "temperature": 0.7,
+      "max_tokens": 40960,
+      "description": "潜意识快速响应模型"
+    },
+    {
+      "name": "qwen3:1.7b",
+      "temperature": 0.7,
+      "max_tokens": 40960,
+      "description": "右脑思考和主意识模型"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+# 微调依赖
+torch>=2.0.0
+transformers>=4.36.0
+peft>=0.7.0
+accelerate>=0.25.0
+bitsandbytes>=0.41.0
+datasets>=2.14.0
+trl>=0.7.0
+sentencepiece>=0.1.99
+safetensors>=0.4.0
+
+# GGUF 导出
+llama-cpp-python>=0.2.0

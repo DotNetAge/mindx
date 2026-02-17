@@ -1,0 +1,114 @@
+{
+  "enabled_channels": [],
+  "channels": {
+    "dingtalk": {
+      "enabled": false,
+      "name": "钉钉",
+      "icon": "dingtalk",
+      "config": {
+        "agent_id": "",
+        "app_key": "",
+        "app_secret": "",
+        "description": "钉钉机器人接入",
+        "encrypt_key": "",
+        "path": "/dingtalk/webhook",
+        "port": 6064,
+        "webhook_secret": ""
+      }
+    },
+    "facebook": {
+      "enabled": false,
+      "name": "Facebook",
+      "icon": "facebook",
+      "config": {
+        "app_secret": "",
+        "description": "Facebook Messenger Platform 接入",
+        "page_access_token": "",
+        "page_id": "",
+        "path": "/facebook/webhook",
+        "port": 6066,
+        "verify_token": ""
+      }
+    },
+    "feishu": {
+      "enabled": false,
+      "name": "飞书",
+      "icon": "feishu",
+      "config": {
+        "app_id": "test123",
+        "app_secret": "secret123",
+        "path": "/feishu/webhook",
+        "port": 6060
+      }
+    },
+    "imessage": {
+      "enabled": false,
+      "name": "iMessage",
+      "icon": "imessage",
+      "config": {
+        "debounce": "250ms",
+        "description": "iMessage 接入仅限MacOS用户。基于 steipete/imsg 实现。使用前请运行 brew install imsg。",
+        "imsg_path": "/usr/local/bin/imsg",
+        "region": "CN",
+        "watch_since": 0
+      }
+    },
+    "qq": {
+      "enabled": false,
+      "name": "QQ",
+      "icon": "qq",
+      "config": {
+        "app_id": "",
+        "app_secret": "",
+        "description": "QQ机器人接入(支持OneBot、Go-CQHTTP等)",
+        "path": "/qq/webhook",
+        "port": 6062,
+        "sandbox": false,
+        "token": ""
+      }
+    },
+    "telegram": {
+      "enabled": false,
+      "name": "Telegram",
+      "icon": "telegram",
+      "config": {
+        "bot_token": "",
+        "description": "Telegram Bot API 接入",
+        "path": "/telegram/webhook",
+        "port": 6067,
+        "secret_token": "",
+        "use_webhook": true,
+        "webhook_url": ""
+      }
+    },
+    "wechat": {
+      "enabled": false,
+      "name": "微信",
+      "icon": "wechat",
+      "config": {
+        "app_id": "",
+        "app_secret": "",
+        "description": "微信公众号/企业微信接入",
+        "encoding_aes_key": "",
+        "path": "/wechat/webhook",
+        "port": 6061,
+        "token": "",
+        "type": "mp"
+      }
+    },
+    "whatsapp": {
+      "enabled": false,
+      "name": "WhatsApp",
+      "icon": "whatsapp",
+      "config": {
+        "access_token": "",
+        "business_id": "",
+        "description": "WhatsApp Business Cloud API 接入",
+        "path": "/whatsapp/webhook",
+        "phone_number_id": "",
+        "port": 6065,
+        "verify_token": ""
+      }
+    }
+  }
+}

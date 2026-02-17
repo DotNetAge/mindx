@@ -1,0 +1,35 @@
+server:
+  version: "0.0.1"
+  host: localhost
+  port: 911
+  ws_port: 1314
+  ollama_url: "http://localhost:11434/v1"
+  vector_store:
+    type: "badger"
+    data_path:  "data/vectors"
+  brain:
+    leftbrain:
+      name: "qwen3:0.6b"
+      domain: ""
+      api_key: ""
+      base_url: "http://localhost:11434/v1"
+      temperature: 0.3
+      max_tokens: 40960
+    rightbrain:
+      name: "qwen3:0.6b"
+      domain: ""
+      api_key: ""
+      base_url: "http://localhost:11434/v1"
+      temperature: 0.3
+      max_tokens: 40960
+    token_budget:
+      reserved_output_tokens: 8192   # 预留给输出的 Token 数
+      min_history_rounds: 5          # 最小历史对话轮数
+      avg_tokens_per_round: 200       # 单轮对话平均 Token 数（用于估算）
+  index_model: "qwen3:0.6b"
+  embedding: "qllama/bge-small-zh-v1.5:latest"
+  memory:
+    enabled: true
+    summary_model: "qwen3:0.6b"
+    keyword_model: "qwen3:0.6b"
+    schedule: "0 0 12 * * *"

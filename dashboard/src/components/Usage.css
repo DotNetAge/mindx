@@ -1,0 +1,250 @@
+.usage-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: #030712;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+/* 页面头部 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  color: #f9fafb;
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: #2563eb;
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 错误横幅 */
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid #ef4444;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  color: #f87171;
+  font-size: 14px;
+}
+
+.retry-btn {
+  padding: 6px 12px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.retry-btn:hover {
+  background: #dc2626;
+}
+
+/* 统计卡片网格 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 20px;
+  transition: all 0.2s;
+}
+
+.stat-card:hover {
+  border-color: #374151;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stat-label {
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.stat-value {
+  color: #f9fafb;
+  font-size: 28px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+}
+
+/* 图表区域 */
+.chart-section {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.chart-section h2 {
+  color: #f9fafb;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.chart-container {
+  min-height: 350px;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 350px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* 表格区域 */
+.table-section {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.table-section h2 {
+  color: #f9fafb;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.table-container {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead {
+  background: #1f2937;
+}
+
+th {
+  padding: 12px 16px;
+  text-align: left;
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #374151;
+}
+
+tbody tr {
+  border-bottom: 1px solid #1f2937;
+  transition: background 0.15s;
+}
+
+tbody tr:hover {
+  background: #1f2937;
+}
+
+tbody tr:last-child {
+  border-bottom: none;
+}
+
+td {
+  padding: 12px 16px;
+  color: #d1d5db;
+  font-size: 14px;
+  font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+}
+
+.model-name {
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.empty-row {
+  text-align: center;
+  color: #6b7280;
+  padding: 40px !important;
+  font-style: italic;
+}
+
+/* 滚动条样式 */
+.usage-page::-webkit-scrollbar {
+  width: 8px;
+}
+
+.usage-page::-webkit-scrollbar-track {
+  background: #030712;
+}
+
+.usage-page::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+.usage-page::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+.table-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: #111827;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}

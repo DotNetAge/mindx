@@ -1,0 +1,466 @@
+package brain
+
+import (
+	"fmt"
+	"mindx/internal/config"
+	"mindx/internal/core"
+	"mindx/internal/usecase/skills"
+	"mindx/pkg/i18n"
+	"mindx/pkg/logging"
+	"time"
+)
+
+type processingContext struct {
+	historyDialogue []*core.DialogueMessage
+	refs            string
+}
+
+type BionicBrain struct {
+	cfg              *config.GlobalConfig
+	leftBrain        core.Thinking
+	rightBrain       core.Thinking
+	contextPreparer  *ContextPreparer
+	toolCaller       *ToolCaller
+	consciousnessMgr *ConsciousnessManager
+	responseBuilder  *ResponseBuilder
+	fallbackHandler  *FallbackHandler
+	memory           core.Memory
+	logger           logging.Logger
+	toolsRequest     core.OnToolsRequest
+	capRequest       core.OnCapabilityRequest
+	historyRequest   core.OnHistoryRequest
+	persona          *core.Persona
+	tokenUsageRepo   core.TokenUsageRepository
+	brain            *core.Brain
+}
+
+func NewBrain(
+	cfg *config.GlobalConfig,
+	persona *core.Persona,
+	memory core.Memory,
+	skillMgr *skills.SkillMgr,
+	toolsRequest core.OnToolsRequest,
+	capRequest core.OnCapabilityRequest,
+	historyRequest core.OnHistoryRequest,
+	logger logging.Logger,
+	tokenUsageRepo core.TokenUsageRepository,
+) (*core.Brain, error) {
+
+	leftBrainPrompt := buildLeftBrainPrompt(persona)
+	lbrain := NewThinking(&cfg.Brain.LeftbrainModel, leftBrainPrompt, logger, tokenUsageRepo, &cfg.Brain.TokenBudget)
+	rbrain := NewThinking(&cfg.Brain.RightbrainModel, "", logger, tokenUsageRepo, &cfg.Brain.TokenBudget)
+
+	contextPreparer := NewContextPreparer(memory, historyRequest, logger)
+	toolCaller := NewToolCaller(skillMgr, logger)
+	consciousnessMgr := NewConsciousnessManager(cfg, persona, tokenUsageRepo, logger)
+	responseBuilder := NewResponseBuilder()
+	fallbackHandler := NewFallbackHandler(rbrain, toolCaller, responseBuilder, logger)
+
+	impl := &BionicBrain{
+		cfg:              cfg,
+		leftBrain:        lbrain,
+		rightBrain:       rbrain,
+		contextPreparer:  contextPreparer,
+		toolCaller:       toolCaller,
+		consciousnessMgr: consciousnessMgr,
+		responseBuilder:  responseBuilder,
+		fallbackHandler:  fallbackHandler,
+		memory:           memory,
+		logger:           logger,
+		toolsRequest:     toolsRequest,
+		capRequest:       capRequest,
+		historyRequest:   historyRequest,
+		persona:          persona,
+		tokenUsageRepo:   tokenUsageRepo,
+	}
+
+	brain := &core.Brain{
+		LeftBrain:     impl.leftBrain,
+		RightBrain:    impl.rightBrain,
+		Consciousness: impl.consciousnessMgr.Get(),
+		GetMemory:     impl.getMemory,
+		Post:          impl.post,
+	}
+
+	impl.brain = brain
+
+	logger.Info(i18n.T("brain.init_success"),
+		logging.String(i18n.T("brain.left_brain"), cfg.Brain.LeftbrainModel.Name),
+		logging.String(i18n.T("brain.right_brain"), cfg.Brain.RightbrainModel.Name),
+		logging.String(i18n.T("brain.persona_name"), persona.Name),
+		logging.String(i18n.T("brain.persona_gender"), persona.Gender),
+		logging.String(i18n.T("brain.persona_character"), persona.Character))
+
+	return brain, nil
+}
+
+func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, error) {
+	b.logger.Info(i18n.T("brain.start_process"), logging.String(i18n.T("brain.question"), req.Question))
+
+	question := req.Question
+	capabilityName, actualQuestion := b.parseCapabilityPrefix(question)
+	if capabilityName != "" {
+		b.logger.Info("检测到能力前缀，使用指定能力",
+			logging.String("capability", capabilityName),
+			logging.String("question", actualQuestion))
+		return b.handleWithConsciousness(req, capabilityName, actualQuestion)
+	}
+
+	ctx, err := b.contextPreparer.Prepare(req.Question, b.leftBrain)
+	if err != nil {
+		return nil, fmt.Errorf(i18n.T("brain.prepare_context_failed")+": %w", err)
+	}
+
+	eventChan := req.EventChan
+
+	b.leftBrain.SetEventChan(eventChan)
+
+	thinkResult, err := b.leftBrain.Think(req.Question, ctx.historyDialogue, ctx.refs, true)
+
+	if err != nil {
+		b.leftBrain.SetEventChan(nil)
+		b.logger.Error(i18n.T("brain.left_think_failed"), logging.Err(err))
+		return nil, fmt.Errorf(i18n.T("brain.left_think_failed")+": %w", err)
+	}
+
+	b.logger.Info(i18n.T("brain.left_think_complete"),
+		logging.String(i18n.T("brain.intent"), thinkResult.Intent),
+		logging.String(i18n.T("brain.keywords"), fmt.Sprintf("%v", thinkResult.Keywords)),
+		logging.String(i18n.T("brain.useless"), fmt.Sprintf("%v", thinkResult.Useless)),
+		logging.String(i18n.T("brain.send_to"), thinkResult.SendTo),
+		logging.String(i18n.T("brain.can_answer"), fmt.Sprintf("%v", thinkResult.CanAnswer)))
+
+	var leftBrainSearchedTools []*core.ToolSchema
+	b.logger.Info("[右脑] 判断是否执行右脑处理",
+		logging.Bool("useless", thinkResult.Useless),
+		logging.String("intent", thinkResult.Intent),
+		logging.Int("keywords_count", len(thinkResult.Keywords)))
+
+	hasValidIntent := thinkResult.Intent != "" && len(thinkResult.Keywords) > 0 // 防止小模型在判断时出现抖动导致useless判断错误
+
+	if !thinkResult.Useless || hasValidIntent {
+		answer, tools, searchedTools := b.tryRightBrainProcess(req.Question, thinkResult, ctx.historyDialogue, req.SessionID, eventChan)
+		if answer != "" {
+			b.leftBrain.SetEventChan(nil)
+			return b.responseBuilder.BuildToolCallResponse(answer, tools, thinkResult.SendTo), nil
+		} else {
+			b.logger.Info(i18n.T("brain.right_no_result"))
+			leftBrainSearchedTools = searchedTools
+		}
+	}
+
+	if !thinkResult.CanAnswer {
+		resp, err := b.activateConsciousness(req.Question, thinkResult, ctx.refs, ctx.historyDialogue, leftBrainSearchedTools, req.SessionID, eventChan)
+		b.leftBrain.SetEventChan(nil)
+		return resp, err
+	}
+
+	b.leftBrain.SetEventChan(nil)
+	return b.responseBuilder.BuildLeftBrainResponse(thinkResult, nil), nil
+}
+
+func (b *BionicBrain) tryRightBrainProcess(question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, sessionID string, eventChan chan<- ThinkingEvent) (string, []*core.ToolSchema, []*core.ToolSchema) {
+	b.logger.Info("[右脑] 开始处理",
+		logging.String("question", question),
+		logging.String("intent", thinkResult.Intent))
+
+	searchKeywords := []string{question}
+
+	if thinkResult.Intent != "" {
+		searchKeywords = append(searchKeywords, thinkResult.Intent)
+	}
+
+	if len(thinkResult.Keywords) > 0 {
+		searchKeywords = append(searchKeywords, thinkResult.Keywords...)
+	}
+
+	b.logger.Info(i18n.T("brain.right_search_keywords"),
+		logging.String(i18n.T("brain.intent"), thinkResult.Intent),
+		logging.String(i18n.T("brain.keywords"), fmt.Sprintf("%v", thinkResult.Keywords)),
+		logging.String("search_keywords", fmt.Sprintf("%v", searchKeywords)))
+
+	tools, err := b.toolsRequest(searchKeywords...)
+	if err != nil {
+		b.logger.Warn("[右脑] 工具搜索失败", logging.Err(err))
+		return "", nil, nil
+	}
+
+	b.logger.Info("[右脑] 工具搜索结果",
+		logging.Int("tools_count", len(tools)),
+		logging.Err(err))
+
+	if len(tools) == 0 {
+		b.logger.Warn("[右脑] 没有找到匹配的工具")
+		return "", nil, nil
+	}
+
+	toolNames := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		toolNames = append(toolNames, tool.Name)
+	}
+
+	if eventChan != nil {
+		eventChan <- ThinkingEvent{
+			Type:     ThinkingEventProgress,
+			Content:  fmt.Sprintf(i18n.T("brain.found_tools"), len(tools)),
+			Progress: 50,
+			Metadata: map[string]any{"tools": toolNames},
+		}
+	}
+
+	b.logger.Info(i18n.T("brain.right_found_skill"),
+		logging.String(i18n.T("brain.question"), question),
+		logging.String(i18n.T("brain.intent"), thinkResult.Intent),
+		logging.String(i18n.T("brain.keywords"), fmt.Sprintf("%v", thinkResult.Keywords)),
+		logging.String(i18n.T("brain.matched_tools"), fmt.Sprintf("%v", toolNames)),
+		logging.Int(i18n.T("brain.tools_count"), len(tools)))
+
+	b.rightBrain.SetEventChan(eventChan)
+	answer, err := b.toolCaller.ExecuteToolCall(b.rightBrain, question, historyDialogue, tools)
+	b.rightBrain.SetEventChan(nil)
+
+	if err != nil {
+		b.logger.Warn(i18n.T("brain.right_tool_call_failed"), logging.Err(err))
+		return "", nil, tools
+	}
+
+	return answer, tools, tools
+}
+
+func (b *BionicBrain) activateConsciousness(question string, thinkResult *core.ThinkingResult, refs string, historyDialogue []*core.DialogueMessage, leftBrainSearchedTools []*core.ToolSchema, sessionID string, eventChan chan<- ThinkingEvent) (*core.ThinkingResponse, error) {
+	b.logger.Info(i18n.T("brain.left_cannot_answer"))
+
+	if eventChan != nil {
+		eventChan <- ThinkingEvent{
+			Type:     ThinkingEventProgress,
+			Content:  i18n.T("brain.activating_consciousness"),
+			Progress: 60,
+		}
+	}
+
+	capability, err := b.capRequest(thinkResult.Intent)
+	if err != nil {
+		b.logger.Warn(i18n.T("brain.get_cap_failed"), logging.Err(err))
+		return b.fallbackHandler.Handle(question, thinkResult, historyDialogue, leftBrainSearchedTools)
+	}
+
+	if b.consciousnessMgr.IsNil() && capability != nil {
+		b.consciousnessMgr.Create(capability)
+	}
+
+	if b.consciousnessMgr.IsNil() {
+		b.logger.Warn(i18n.T("brain.consciousness_create_failed"))
+		return b.fallbackHandler.Handle(question, thinkResult, historyDialogue, leftBrainSearchedTools)
+	}
+
+	var tools []*core.ToolSchema
+	if len(capability.Tools) > 0 {
+		tools, err = b.toolsRequest(capability.Tools...)
+		if err != nil {
+			b.logger.Warn(i18n.T("brain.get_consciousness_tool_failed"), logging.Err(err))
+			tools = make([]*core.ToolSchema, 0)
+		} else {
+			toolNames := make([]string, 0, len(tools))
+			for _, tool := range tools {
+				toolNames = append(toolNames, tool.Name)
+			}
+			b.logger.Info(i18n.T("brain.consciousness_found_tools"),
+				logging.Int(i18n.T("brain.tools_count"), len(tools)),
+				logging.String(i18n.T("brain.matched_tools"), fmt.Sprintf("%v", toolNames)))
+		}
+	}
+
+	if len(leftBrainSearchedTools) > 0 {
+		toolMap := make(map[string]*core.ToolSchema)
+		for _, tool := range tools {
+			toolMap[tool.Name] = tool
+		}
+		for _, tool := range leftBrainSearchedTools {
+			if _, exists := toolMap[tool.Name]; !exists {
+				toolMap[tool.Name] = tool
+			}
+		}
+		tools = make([]*core.ToolSchema, 0, len(toolMap))
+		for _, tool := range toolMap {
+			tools = append(tools, tool)
+		}
+		b.logger.Info(i18n.T("brain.consciousness_merge_left"),
+			logging.Int(i18n.T("brain.left_brain_tools"), len(leftBrainSearchedTools)),
+			logging.Int(i18n.T("brain.total_tools"), len(tools)))
+	}
+
+	if len(tools) > 0 {
+		resp, err := b.consciousnessWithTools(question, thinkResult, historyDialogue, tools, eventChan)
+		if err != nil {
+			b.logger.Warn(i18n.T("brain.consciousness_tool_call_failed"), logging.Err(err))
+			return b.fallbackHandler.Handle(question, thinkResult, historyDialogue, leftBrainSearchedTools)
+		}
+		return resp, nil
+	}
+
+	b.consciousnessMgr.Get().SetEventChan(eventChan)
+	result, err := b.consciousnessMgr.Think(question, historyDialogue, refs)
+	b.consciousnessMgr.Get().SetEventChan(nil)
+
+	if err != nil {
+		b.logger.Warn(i18n.T("brain.consciousness_think_failed"), logging.Err(err))
+		return b.fallbackHandler.Handle(question, thinkResult, historyDialogue, leftBrainSearchedTools)
+	}
+
+	return b.responseBuilder.BuildToolCallResponse(result.Answer, nil, thinkResult.SendTo), nil
+}
+
+func (b *BionicBrain) consciousnessWithTools(question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, tools []*core.ToolSchema, eventChan chan<- ThinkingEvent) (*core.ThinkingResponse, error) {
+	b.logger.Info(i18n.T("brain.consciousness_use_tools"), logging.Int(i18n.T("brain.tools_count"), len(tools)))
+
+	b.consciousnessMgr.Get().SetEventChan(eventChan)
+	answer, err := b.toolCaller.ExecuteToolCall(b.consciousnessMgr.Get(), question, historyDialogue, tools)
+	b.consciousnessMgr.Get().SetEventChan(nil)
+
+	if err != nil {
+		b.logger.Error(i18n.T("brain.consciousness_tool_failed"), logging.Err(err))
+		return nil, fmt.Errorf(i18n.T("brain.consciousness_tool_call_failed")+": %w", err)
+	}
+
+	return b.responseBuilder.BuildToolCallResponse(answer, tools, thinkResult.SendTo), nil
+}
+
+func (b *BionicBrain) getMemory() (core.Memory, error) {
+	return b.memory, nil
+}
+
+func (b *BionicBrain) sendThinkingEvent(sessionID string, event *ThinkingEvent) {
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+
+	b.logger.Info("[思考流] 准备发送思考事件",
+		logging.String("session_id", sessionID),
+		logging.String("type", string(event.Type)),
+		logging.Bool("brain_nil", b.brain == nil),
+		logging.Bool("callback_nil", b.brain == nil || b.brain.OnThinkingEvent == nil))
+
+	if b.brain != nil && b.brain.OnThinkingEvent != nil && sessionID != "" {
+		eventData := map[string]any{
+			"type":      string(event.Type),
+			"content":   event.Content,
+			"progress":  event.Progress,
+			"timestamp": event.Timestamp.Unix(),
+			"metadata":  event.Metadata,
+		}
+		b.logger.Info("[思考流] 发送思考事件到 Channel",
+			logging.String("session_id", sessionID),
+			logging.String("type", string(event.Type)),
+			logging.String("content", event.Content),
+			logging.Float64("progress", event.Progress))
+		b.brain.OnThinkingEvent(sessionID, eventData)
+	} else {
+		if b.brain == nil || b.brain.OnThinkingEvent == nil {
+			b.logger.Warn("[思考流] OnThinkingEvent 回调未设置")
+		}
+		if sessionID == "" {
+			b.logger.Warn("[思考流] sessionID 为空")
+		}
+	}
+}
+
+func buildLeftBrainPrompt(persona *core.Persona) string {
+	ctx := &core.PromptContext{
+		UsePersona:       false,
+		UseThinking:      true,
+		IsLocalModel:     true,
+		PersonaName:      persona.Name,
+		PersonaGender:    persona.Gender,
+		PersonaCharacter: persona.Character,
+		PersonaContent:   persona.UserContent,
+	}
+	return core.BuildLeftBrainPrompt(ctx)
+}
+
+func (b *BionicBrain) parseCapabilityPrefix(question string) (capabilityName, actualQuestion string) {
+	if len(question) == 0 || question[0] != '/' {
+		return "", question
+	}
+
+	spaceIndex := -1
+	for i, c := range question {
+		if c == ' ' {
+			spaceIndex = i
+			break
+		}
+	}
+
+	if spaceIndex == -1 {
+		capabilityName = question[1:]
+		actualQuestion = ""
+	} else {
+		capabilityName = question[1:spaceIndex]
+		actualQuestion = question[spaceIndex+1:]
+	}
+
+	return capabilityName, actualQuestion
+}
+
+func (b *BionicBrain) handleWithConsciousness(req *core.ThinkingRequest, capabilityName, actualQuestion string) (*core.ThinkingResponse, error) {
+	ctx, err := b.contextPreparer.Prepare(actualQuestion, b.leftBrain)
+	if err != nil {
+		return nil, fmt.Errorf("准备上下文失败: %w", err)
+	}
+
+	eventChan := req.EventChan
+
+	capability, err := b.capRequest(capabilityName)
+	if err != nil {
+		b.logger.Warn("获取能力失败", logging.String("capability", capabilityName), logging.Err(err))
+		return b.responseBuilder.BuildToolCallResponse(fmt.Sprintf("抱歉，获取能力 '%s' 时出错。", capabilityName), nil, ""), nil
+	}
+
+	if capability == nil {
+		b.logger.Warn("指定的能力不存在", logging.String("capability", capabilityName))
+		return b.responseBuilder.BuildToolCallResponse(fmt.Sprintf("抱歉，能力 '%s' 不存在。", capabilityName), nil, ""), nil
+	}
+
+	if !capability.Enabled {
+		b.logger.Warn("指定的能力已禁用", logging.String("capability", capabilityName))
+		return b.responseBuilder.BuildToolCallResponse(fmt.Sprintf("抱歉，能力 '%s' 已禁用。", capabilityName), nil, ""), nil
+	}
+
+	b.logger.Info("使用指定能力", logging.String("capability", capability.Name))
+
+	if b.consciousnessMgr.IsNil() {
+		b.consciousnessMgr.Create(capability)
+	}
+
+	var tools []*core.ToolSchema
+	if len(capability.Tools) > 0 {
+		tools, err = b.toolsRequest(capability.Tools...)
+		if err != nil {
+			b.logger.Warn(i18n.T("brain.get_consciousness_tool_failed"), logging.Err(err))
+			tools = make([]*core.ToolSchema, 0)
+		} else {
+			toolNames := make([]string, 0, len(tools))
+			for _, tool := range tools {
+				toolNames = append(toolNames, tool.Name)
+			}
+			b.logger.Info(i18n.T("brain.consciousness_found_tools"),
+				logging.Int(i18n.T("brain.tools_count"), len(tools)),
+				logging.String(i18n.T("brain.matched_tools"), fmt.Sprintf("%v", toolNames)))
+		}
+	}
+
+	if len(tools) > 0 {
+		resp, err := b.consciousnessWithTools(actualQuestion, nil, ctx.historyDialogue, tools, eventChan)
+		return resp, err
+	}
+
+	b.consciousnessMgr.Get().SetEventChan(eventChan)
+	result, err := b.consciousnessMgr.Think(actualQuestion, ctx.historyDialogue, ctx.refs)
+	b.consciousnessMgr.Get().SetEventChan(nil)
+
+	if err != nil {
+		b.logger.Warn(i18n.T("brain.consciousness_think_failed"), logging.Err(err))
+		return b.fallbackHandler.Handle(actualQuestion, nil, ctx.historyDialogue, nil)
+	}
+
+	return b.responseBuilder.BuildToolCallResponse(result.Answer, nil, ""), nil
+}
