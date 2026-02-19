@@ -1,0 +1,10 @@
+.git
+.gitignore
+node_modules
+dist
+bin
+releases
+.dev
+.test
+*.log
+.env

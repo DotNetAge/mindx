@@ -91,13 +91,51 @@ GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # Build for current platform
 echo -e "${BLUE}Building for current platform...${NC}"
 
-CGO_ENABLED=1 \
-    go build \
-    -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
-    -o bin/mindx \
-    ./cmd/main.go
-
-echo -e "${GREEN}✓ Built bin/mindx${NC}"
+# Check if we're on macOS and can build universal binary
+if [ "$(uname -s)" = "Darwin" ]; then
+    echo -e "${CYAN}Detected macOS, building Universal Binary (AMD64 + ARM64)...${NC}"
+    
+    # Build AMD64
+    echo -e "${YELLOW}  Building AMD64...${NC}"
+    CGO_ENABLED=1 \
+        GOOS=darwin GOARCH=amd64 \
+        go build \
+        -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
+        -o bin/mindx-amd64 \
+        ./cmd/main.go
+    
+    # Build ARM64
+    echo -e "${YELLOW}  Building ARM64...${NC}"
+    CGO_ENABLED=1 \
+        GOOS=darwin GOARCH=arm64 \
+        go build \
+        -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
+        -o bin/mindx-arm64 \
+        ./cmd/main.go
+    
+    # Combine into universal binary using lipo
+    echo -e "${YELLOW}  Creating Universal Binary...${NC}"
+    lipo -create -output bin/mindx bin/mindx-amd64 bin/mindx-arm64
+    
+    # Verify
+    if lipo -info bin/mindx | grep -q "Non-fat file"; then
+        echo -e "${RED}✗ Failed to create Universal Binary${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✓ Universal Binary created$(lipo -info bin/mindx)${NC}"
+    
+    # Clean up intermediate files
+    rm -f bin/mindx-amd64 bin/mindx-arm64
+else
+    # Non-macOS platform, build single binary
+    CGO_ENABLED=1 \
+        go build \
+        -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
+        -o bin/mindx \
+        ./cmd/main.go
+    echo -e "${GREEN}✓ Built bin/mindx${NC}"
+fi
 echo ""
 
 # Build dashboard if requested
@@ -139,8 +177,9 @@ echo ""
 # Prepare distribution package
 echo -e "${YELLOW}[5/6] Preparing distribution package...${NC}"
 
-# Copy binary to dist
-cp bin/mindx dist/
+# Copy binary to dist/bin
+mkdir -p dist/bin
+cp bin/mindx dist/bin/
 
 # Copy skills
 if [ -d "skills" ]; then
@@ -195,6 +234,14 @@ echo -e "${YELLOW}[6/6] Creating release archive...${NC}"
 # Determine platform
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
+
+# Check if we built a universal binary on macOS
+if [ "$OS" = "darwin" ] && [ -f "bin/mindx" ]; then
+    if lipo -info bin/mindx 2>/dev/null | grep -q "x86_64.*arm64\|arm64.*x86_64"; then
+        ARCH="universal"
+    fi
+fi
+
 if [ "$ARCH" = "x86_64" ]; then
     ARCH="amd64"
 elif [ "$ARCH" = "aarch64" ]; then

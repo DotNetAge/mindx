@@ -105,19 +105,58 @@ build-frontend:
 build-backend:
 	@echo "$(BLUE)Building backend...$(NC)"
 	@mkdir -p $(BIN_DIR)
-	@CGO_ENABLED=1 go build -o $(BIN_DIR)/mindx $(CMD_DIR)/main.go
-	@echo "$(GREEN)✓ Backend built!$(NC)"
+	@if [ "$(shell uname -s)" = "Darwin" ]; then \
+		echo "$(CYAN)Detected macOS, building Universal Binary...$(NC)"; \
+		echo "$(YELLOW)  Building AMD64...$(NC)"; \
+		CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -o $(BIN_DIR)/mindx-amd64 $(CMD_DIR)/main.go; \
+		echo "$(YELLOW)  Building ARM64...$(NC)"; \
+		CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o $(BIN_DIR)/mindx-arm64 $(CMD_DIR)/main.go; \
+		echo "$(YELLOW)  Creating Universal Binary...$(NC)"; \
+		lipo -create -output $(BIN_DIR)/mindx $(BIN_DIR)/mindx-amd64 $(BIN_DIR)/mindx-arm64; \
+		rm -f $(BIN_DIR)/mindx-amd64 $(BIN_DIR)/mindx-arm64; \
+		echo "$(GREEN)✓ Universal Binary built!$(NC)"; \
+		lipo -info $(BIN_DIR)/mindx; \
+	else \
+		CGO_ENABLED=1 go build -o $(BIN_DIR)/mindx $(CMD_DIR)/main.go; \
+		echo "$(GREEN)✓ Backend built!$(NC)"; \
+	fi
 
 .PHONY: build-all
 build-all:
 	@echo "$(BLUE)Building for all platforms...$(NC)"
 	@mkdir -p $(BIN_DIR)
-	@GOOS=linux GOARCH=amd64 go build -o $(BIN_DIR)/mindx-linux-amd64 $(CMD_DIR)/main.go
-	@GOOS=linux GOARCH=arm64 go build -o $(BIN_DIR)/mindx-linux-arm64 $(CMD_DIR)/main.go
-	@GOOS=darwin GOARCH=amd64 go build -o $(BIN_DIR)/mindx-darwin-amd64 $(CMD_DIR)/main.go
-	@GOOS=darwin GOARCH=arm64 go build -o $(BIN_DIR)/mindx-darwin-arm64 $(CMD_DIR)/main.go
-	@GOOS=windows GOARCH=amd64 go build -o $(BIN_DIR)/mindx-windows-amd64.exe $(CMD_DIR)/main.go
+	@echo "$(YELLOW)Building Linux AMD64...$(NC)"
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $(BIN_DIR)/mindx-linux-amd64 $(CMD_DIR)/main.go
+	@echo "$(GREEN)✓ mindx-linux-amd64$(NC)"
+	@echo "$(YELLOW)Building Linux ARM64...$(NC)"
+	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o $(BIN_DIR)/mindx-linux-arm64 $(CMD_DIR)/main.go
+	@echo "$(GREEN)✓ mindx-linux-arm64$(NC)"
+	@echo "$(YELLOW)Building macOS AMD64...$(NC)"
+	@CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -o $(BIN_DIR)/mindx-darwin-amd64 $(CMD_DIR)/main.go
+	@echo "$(GREEN)✓ mindx-darwin-amd64$(NC)"
+	@echo "$(YELLOW)Building macOS ARM64...$(NC)"
+	@CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o $(BIN_DIR)/mindx-darwin-arm64 $(CMD_DIR)/main.go
+	@echo "$(GREEN)✓ mindx-darwin-arm64$(NC)"
+	@echo "$(YELLOW)Building Windows AMD64...$(NC)"
+	@CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o $(BIN_DIR)/mindx-windows-amd64.exe $(CMD_DIR)/main.go
+	@echo "$(GREEN)✓ mindx-windows-amd64.exe$(NC)"
 	@echo "$(GREEN)✓ Cross-platform builds complete!$(NC)"
+
+.PHONY: build-linux-release
+build-linux-release:
+	@echo "$(BLUE)Building Linux release packages...$(NC)"
+	@bash $(SCRIPTS_DIR)/build-linux.sh
+
+.PHONY: build-windows-release
+build-windows-release:
+	@echo "$(BLUE)Building Windows release packages...$(NC)"
+	@bash $(SCRIPTS_DIR)/build-windows.sh
+
+.PHONY: build-all-releases
+build-all-releases:
+	@echo "$(BLUE)Building all release packages...$(NC)"
+	@bash $(SCRIPTS_DIR)/build-linux.sh
+	@bash $(SCRIPTS_DIR)/build-windows.sh
 
 # ============================================
 # 运行相关
@@ -230,7 +269,10 @@ help:
 	@echo "$(YELLOW)【构建命令】$(NC)"
 	@echo "  $(BLUE)make build-frontend$(NC)  - Build frontend only"
 	@echo "  $(BLUE)make build-backend$(NC)   - Build backend only"
-	@echo "  $(BLUE)make build-all$(NC)       - Build for all platforms"
+	@echo "  $(BLUE)make build-all$(NC)       - Build for all platforms (binaries only)"
+	@echo "  $(BLUE)make build-linux-release$(NC) - Build full Linux release packages (AMD64 + ARM64)"
+	@echo "  $(BLUE)make build-windows-release$(NC) - Build full Windows release packages (AMD64)"
+	@echo "  $(BLUE)make build-all-releases$(NC) - Build ALL release packages (Linux + Windows)"
 	@echo ""
 	@echo "$(YELLOW)【运行命令】$(NC)"
 	@echo "  $(BLUE)make run-dashboard$(NC)   - Start Dashboard"
@@ -251,4 +293,5 @@ help:
 	@echo "  # 完整流程: make build && make install"
 	@echo "  # 开发:     make dev"
 	@echo "  # 运行:     make run"
+	@echo "  # Linux发布: make build-linux-release"
 	@echo ""

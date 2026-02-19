@@ -1,338 +1,163 @@
-# MindX: Self-Evolving AI Digital Twin with Bionic Brain
-
-[简体中文](README_zh.md) | English
-
-<img src="dashboardsrc/assets/logo.png" alt="MindX Logo" /
-
-*An intelligent, self-evolving digital twin with a bionic brain—lightweight, privacy-focused, and optimized for real-world use.*
-
----
-
-## Project Overview
-
-MindX is a lightweight, self-evolving AI personal assistant built entirely with Go. It adopts an innovative **bionic brain architecture** that maximizes efficiency by leveraging local large language models (LLMs) for most daily tasks, and cloud LLMs only when necessary. This design drastically reduces token consumption while ensuring full functionality.
-
-Unlike simple Q&A tools, MindX is a complete intelligent agent with four core capabilities: **Thinking, Memory, Execution, and Evolution**. It supports local model deployment to protect user privacy, and can be customized with various skills to adapt to different scenarios—perfect for both personal and light enterprise use.
-
-## Core Problems We Solve
-
-Current AI agents often fall short in practical use. MindX addresses four key pain points:
-
-1. **Excessive Token Consumption**: Most agents over-rely on cloud LLMs for trivial tasks, leading to high costs. MindX reduces token usage to **less than 10%** of traditional solutions.
-
-2. **Privacy Risks**: All user data runs locally—no sensitive information is uploaded to the cloud, keeping your personal and work data secure.
-
-3. **Poor Localization for Chinese Users**: Full support for China’s mainstream software ecosystem (Feishu, WeChat, DingTalk, Douban, QQ) out of the box.
-
-4. **Lack of Personalization & Persistence**: A built-in long-term memory system and incremental training let MindX evolve with you, eliminating the "amnesia" problem of most AI tools.
-
-## Key Features
-
-### 1. Bionic Brain Architecture (Core Highlight)
-
-Inspired by human brain function, MindX’s architecture splits tasks to optimize resource usage:
-
-- **Left Brain (Subconscious)**: Handles simple tasks, intent recognition, and quick responses using lightweight local models (e.g., Qwen3:0.6b). Fast, low-resource, and no token consumption for trivial work.
-
-- **Right Brain (Behavioral Brain)**: Executes tools, functions, and CLI commands. Fully compatible with OpenClaw skills—just copy and use, no modifications needed.
-
-- **Core Consciousness**: Triggers cloud LLMs only for complex reasoning, deep analysis, or professional tasks. Saves tokens while maintaining high intelligence for tough jobs.
-
-- **Memory Enhancement**: Integrates with the long-term memory system to retrieve relevant information during conversations, ensuring contextual continuity.
-
-### 2. Privacy-First, Local-First Design
-
-- 100% local execution with Ollama integration—no network dependency for basic functions.
-
-- All data (conversations, memories, settings) is stored locally using SQLite and BadgerDB.
-
-- No cloud uploads, no data sharing—total control over your privacy.
-
-### 3. Long-Term Memory System (No More AI Amnesia)
-
-Modeled after human memory mechanisms, MindX’s memory system has three layers:
-
-- **Permanent Memory**: Core capabilities of the AI, never fades.
-
-- **Long-Term Memory**: Frequently mentioned or emphasized information, automatically sorted by weight.
-
-- **Short-Term Memory**: Less relevant information that fades over time (configurable).
-
-Key advantages:
-
-- Automatic memory summarization, deduplication, and organization.
-
-- Vector-based semantic search for fast retrieval (powered by BadgerDB).
-
-- Gets faster with more usage (unlike tools that slow down as data grows).
-
-### 4. Self-Training System (Evolves With You)
-
-MindX gets smarter and more personalized the more you use it, thanks to incremental LoRA training:
-
-- Uses your conversation history and memory as training data.
-
-- Lightweight base models (≈500M parameters)—trains on CPU, no GPU required.
-
-- Automatic nightly training—evolves while you sleep, no manual intervention.
-
-- Evolves to match your language style, work habits, and preferences over time (see timeline below).
-
-*Evolution Timeline*: Week 1 (understands basic preferences) → Month 1 (familiar with your habits) → Month 3 (predicts your needs) → Month 6 (becomes your digital twin).
-
-### 5. Lightweight & Easy to Deploy
-
-- Single binary file after compilation—no complex dependencies.
-
-- Low resource requirements: Works on 8GB RAM machines (no dedicated GPU needed for basic use).
-
-- Cross-platform: Supports macOS and Linux (Windows support coming soon).
-
-### 6. Full Compatibility & Extensibility
-
-- Fully compatible with all OpenClaw skills—copy skills to the directory and use immediately.
-
-- Skill system supports any programming language (CLI-based), easy to develop new skills.
-
-- Customizable models: Choose local models based on your hardware (Qwen3:0.6b for low-end machines, Qwen3:4b for better performance).
-
-## Comparison with Similar Tools
-
-| Feature                   | MindX                                | Traditional AI Agents                 |
-| ------------------------- | ------------------------------------ | ------------------------------------- |
-| Architecture              | Bionic Brain (3-layer design)        | Single LLM dependency                 |
-| Model Support             | Local-first (Ollama), cloud optional | Cloud LLM-dependent                   |
-| Token Consumption         | ≤10% of traditional tools            | High (all tasks use cloud tokens)     |
-| Privacy                   | 100% local data, no cloud uploads    | Partial/full data upload to cloud     |
-| Memory System             | Self-organizing, evolves with use    | Basic context storage (amnesia-prone) |
-| Chinese Ecosystem Support | Feishu, WeChat, DingTalk, etc.       | Limited/no support                    |
-| Self-Training             | Yes (CPU-friendly LoRA training)     | No                                    |
-## System Architecture
-
-```mermaid
-graph TB
-        subgraph User Layer
-            A[User]
-        end
-
-        subgraph Communication Layer
-            B1[Feishu]
-            B2[WeChat]
-            B3[DingTalk]
-            B4[Douban]
-            B5[QQ]
-            B6[Web Dashboard]
-        end
-
-        subgraph Message Gateway
-            C[Message GatewayUnified Routing]
-        end
-
-        subgraph Bionic Brain
-            D1[Left BrainSubconsciousSimple Tasks/Intent Recognition]
-            D2[Right BrainBehavioral BrainTool Execution/CLI Calls]
-            D3[Core ConsciousnessComplex Reasoning/Professional Tasks]
-            D4[Memory EnhancementLong-Term Memory Injection]
-        end
-
-        subgraph Skill System
-            E1[Weather Query]
-            E2[Calendar Management]
-            E3[Clipboard Control]
-            E4[Terminal Execution]
-            E5[...More Skills]
-        end
-
-        subgraph Memory System
-            F1[Memory Acquisition]
-            F2[Memory Consolidation]
-            F3[Memory Forgetting]
-            F4[Memory Retrieval]
-        end
-
-        subgraph Self-Training System
-            G1[Data Collection]
-            G2[Model Training]
-            G3[Model Deployment]
-        end
-
-        A --> B1 & B2 & B3 & B4 & B5 & B6
-        B1 & B2 & B3 & B4 & B5 & B6 --> C
-        C --> D1
-        D1 --> D2
-        D1 --> D3
-        D2 --> E1 & E2 & E3 & E4 & E5
-        D3 --> E1 & E2 & E3 & E4 & E5
-        D1 & D3 --> F1 & F2 & F3 & F4
-        F1 & F2 & F3 & F4 --> D4
-        D4 --> D1 & D2 & D3
-        F1 & F2 & F3 & F4 --> G1
-        G1 --> G2 --> G3
-```
-
-## Quick Start
-
-### Prerequisites
-
-- Operating System: macOS / Linux
-
-- Go Version: 1.25 or higher
-
-- Ollama: Installed and running (for local models)
-
-- Python: 3.8 or higher (optional, for skill training)
-
-### Installation Steps
-
-#### 1. Clone the Repository
+# MindX：更懂你的智能数字分身
+
+> 一个有脑子又能自我演进成长的数字化分身
+
+## 项目简介
+
+MindX 是一款轻量级、具备思考能力且可自主进化的 AI 个人助理。它率先采用创新的**仿生大脑架构**，最大化发挥本地大模型的能力，让绝大多数日常任务无需云端算力即可完成，仅在必要时调用云端大模型，大幅降低 Token 消耗与算力成本。
+
+MindX 绝非简单的问答系统，而是具备「思考、记忆、执行、进化」完整能力的智能体：
+- 🧠 **分层思考**：仿人类大脑的潜意识/主意识分层架构，兼顾响应速度与思考深度
+- 📝 **长效记忆**：自动沉淀、整理记忆，越用越贴合你的使用习惯
+- 🔧 **灵活扩展**：兼容 OpenClaw 技能生态，支持 MCP 协议，能力边界无限延伸
+- 🚀 **自主进化**：基于对话数据训练专属模型，无需复杂操作即可持续适配个人风格
+- 🔒 **隐私安全**：100% 本地运行，数据不上传云端，自主可控更安心
+
+## 核心优势
+
+### 🎯 仿生大脑架构，决策更智能
+复刻人类大脑思考方式，是 MindX 核心差异化优势：
+- **潜意识层**：快速、自动化、低功耗，处理简单交互（如查天气、发消息），极速响应
+- **主意识层**：深度、专注、高质量，处理复杂任务（如编程、写代码、做决策），精准可靠
+- **核心价值**：算力利用率提升 80%+，自动适配任务复杂度，无需人工干预
+
+### 💰 多元成本控制，智能又省钱
+拒绝盲目算力堆砌，聚焦实用价值：
+- 轻量场景（查天气、记备忘等）：本地完成，零 Token 消耗、零云端成本
+- 专业场景（编程、绘画等）：绑定专属最优模型（GLM/千问/Flux 等），低成本匹配强能力
+
+### 📚 长时记忆系统，越用越懂你
+弥补大模型「健忘」短板，仿人类记忆原理打造：
+- 记忆自动沉淀：从对话中提取有用信息，长效留存
+- 智能整理：自动清理无效记忆，检索效率翻倍
+- 本地存储：核心记忆融入本地量化模型，隐私更安全
+
+### 🔄 自我演化能力，持续进化不设限
+无需高端硬件，轻松打造专属数字分身：
+- 500M 轻量级底模，普通 CPU 即可训练
+- 夜间后台自动训练，不占用白天使用时间
+- 1 周理解基础偏好，6 个月成为专属「数字分身」
+
+### 🌐 全场景社交兼容，连接无边界
+打通全球主流社交渠道，多渠道消息统一处理：
+- 覆盖钉钉、微信、QQ、飞书、WhatsApp、Facebook、Telegram 等平台，触达全球 80% 人群常用场景
+
+### 🧰 灵活技能生态 + MCP 协议支持
+能力扩展无门槛，生态无限延伸：
+- 无缝兼容 OpenClaw 技能，零修改即可上线
+- 支持任意编程语言 CLI 开发，技能即插即用
+- 原生支持 MCP 协议，统一体验，本地/外部技能无感切换
+
+### 🛠️ 轻量级架构，部署易如反掌
+企业级设计，全平台适配：
+- Go 语言原生开发，架构稳定、资源占用远低于同类产品
+- 嵌入式 KV 数据库支撑亿级数据处理，响应毫秒级
+- 单一可执行文件，一键启动，适配 macOS/Linux/Windows
+
+### 🇨🇳 自主可控，更懂中国用户
+- 100% 国人自主研发，深度贴合中国用户使用习惯
+- 全开源无套路，核心技术自主可控，数据安全有保障
+
+## 快速开始
+
+### 系统要求
+- 操作系统：macOS / Linux（Windows 支持即将推出）
+- 内存：建议 8GB 以上
+- 硬盘空间：建议 20GB 以上
+- 网络：首次安装需下载模型，后续可离线使用
+
+### 环境准备
+MindX 依赖 Ollama 运行本地大模型，需先安装：
+
+> 注：如果你从发布包中安装，安装脚本会自动帮助你安装 Ollama。
 
 ```bash
+# macOS（Homebrew）
+brew install ollama
+
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 启动 Ollama 服务
+ollama serve
+```
+
+验证安装：
+```bash
+ollama list  # 显示模型列表（空列表也表示安装成功）
+```
+
+### 安装 MindX
+#### 方式 1：预编译包（推荐）
+1. 下载对应系统的发布包（GitHub Releases）：
+   - macOS (Intel): `mindx-v{x.x.x}-darwin-amd64.zip`
+   - macOS (Apple Silicon): `mindx-v{x.x.x}-darwin-arm64.zip`
+   - Linux (x86_64): `mindx-v{x.x.x}-linux-amd64.tar.gz`
+
+2. 解压并安装：
+   ```bash
+   # macOS
+   unzip mindx-v{x.x.x}-darwin-arm64.zip
+   cd mindx-v{x.x.x}
+   ./install.sh
+   
+   # Linux
+   tar -xzf mindx-v{x.x.x}-linux-amd64.tar.gz
+   cd mindx-v{x.x.x}
+   ./install.sh
+   ```
+
+3. 启动服务：
+   ```bash
+   mindx start          # 启动后端服务
+   mindx dashboard      # 打开 Web 界面（默认：http://localhost:911）
+   # 或使用终端界面
+   mindx tui
+   ```
+
+#### 方式 2：从源码编译
+```bash
+# 克隆代码库
 git clone https://github.com/yourusername/mindx.git
 cd mindx
+
+# 安装依赖（Go 1.21+、Node.js 18+）
+# 构建并安装
+make install
+
+# 启动
+mindx start
 ```
 
-#### 2. Install Dependencies
+## 开发与扩展
+- **开发环境运行**：`make dev`（后端+前端热重载，访问 http://localhost:5173）
+- **技能开发**：兼容 OpenClaw 生态，支持任意编程语言 CLI 开发，即插即用
+- **更多功能**：可访问 [MindX](https://mindx.chat) 官方网站查看更多功能
 
-```bash
-# Install Go dependencies
-go mod download
+## 常见问题
+- **Q: 安装提示 Ollama 未安装？**  
+  A: 确保 Ollama 已正确安装并启动服务（验证：`ollama list`）。
+- **Q: 如何更新 MindX？**  
+  A: 下载最新发布包，重新运行 `install.sh` 即可。
+- **Q: 数据存储位置？**  
+  A: 所有数据（对话、记忆、配置）均存储在安装时指定的本地工作目录。
+- **Q: 如何卸载？**  
+  A: 运行安装目录中的 `uninstall.sh` 脚本，可完全卸载。
 
-# Install Python dependencies (optional)
-pip install -r requirements.txt
-```
+## 对比优势（与 OpenClaw）
+| 特性         | MindX                                        | OpenClaw                          |
+| ------------ | -------------------------------------------- | --------------------------------- |
+| 架构设计     | 仿生大脑架构（潜意识+主意识）                | 控制平面架构                      |
+| 模型支持     | 本地模型优先，支持云端 API                   | 主要依赖云端 API（Claude、GPT-4） |
+| 数据隐私     | 完全本地运行，数据不上传云端                 | 部分功能依赖云端                  |
+| 记忆系统     | 自动整理，越用越快                           | 基础存储，越用越慢                |
+| 自助训练     | 支持训练专属模型，持续进化                   | 不支持                            |
+| 部署方式     | 本地部署，无服务器依赖                       | 本地/云端部署                     |
+| 资源消耗     | 轻量级，适合个人电脑                         | 资源消耗更高                      |
+| 社交渠道支持 | 钉钉/微信/QQ/飞书/WhatsApp/Telegram 等全覆盖 | 仅支持 WhatsApp/Telegram 等部分   |
 
-#### 3. Configure Ollama
+## 许可证
+MindX 采用 MIT 许可证开源，核心技术 100% 自主可控，可自由使用、修改和分发。
 
-```bash
-# Pull recommended local models
-ollama pull qwen3:0.6b
-ollama pull qwen3:1.7b
-ollama pull functiongemma:270m
-
-# Verify installation
-ollama list
-```
-
-#### 4. Configure MindX
-
-Edit `config/server.yml` to set your model parameters (default values work for most users):
-
-```yaml
-server:
-  ollama_url: "http://localhost:11434/v1"
-  brain:
-    leftbrain:
-      name: "qwen3:0.6b"
-      base_url: "http://localhost:11434/v1"
-      temperature: 0.7
-      max_tokens: 40960
-    rightbrain:
-      name: "qwen3:0.6b"
-      base_url: "http://localhost:11434/v1"
-      temperature: 0.7
-      max_tokens: 40960
-    token_budget:
-      reserved_output_tokens: 8192
-      min_history_rounds: 5
-      avg_tokens_per_round: 200
-```
-
-#### 5. Start the Service
-
-```bash
-# Start main service
-./start.sh
-
-# Or use Makefile
-make start
-```
-
-#### 6. Access the Dashboard
-
-Open your browser and visit `http://localhost:911` to start using MindX.
-
-### Configure Communication Channels (Optional)
-
-MindX supports Feishu, WeChat, DingTalk, QQ, and Douban. To configure a channel, edit `config/channels.json` with your app credentials (see the Chinese README for detailed steps).
-
-### Install Skills
-
-```bash
-# Copy OpenClaw skills (or custom skills) to the skills directory
-cp -r /path/to/your/skills skills/
-
-# Restart the service to load new skills
-./start.sh
-```
-
-## Tech Stack
-
-### Core Technologies
-
-- Backend: Go 1.25+ (high concurrency, low resource usage, native performance)
-
-- Frontend: React 18 + TypeScript + Vite
-
-- Storage: SQLite (main data), BadgerDB (vector storage for memory)
-
-- LLM Runtime: Ollama
-
-- Communication: WebSocket
-
-- UI: TDesign React + Tailwind CSS
-
-### Why Go?
-
-MindX is built entirely with Go for these key advantages:
-
-- High performance: Native compilation, close to C/C++ speed.
-
-- Low resource usage: Efficient memory management, ideal for personal computers.
-
-- Easy deployment: Single binary file, no dependencies.
-
-- High concurrency: Goroutines handle multiple users/tasks seamlessly.
-
-- Cross-platform: Compile once, run on macOS/Linux (Windows coming soon).
-
-## Join Us: Recruit Core Contributors
-
-I started MindX not for fame or profit, but out of a simple desire — to build an AI assistant that truly belongs to us, that doesn’t drain our wallets with excessive token fees, that keeps our privacy safe, and that grows with us like a real companion.
-
-As a solo developer, I’ve poured countless hours into polishing every detail of the bionic brain architecture, optimizing the memory system, and adapting it to the Chinese ecosystem. But I know deeply: a great open-source project can never be accomplished by one person alone. Its true power comes from the collective passion and wisdom of a group of like-minded people.
-
-If you, like me, are tired of AI agents that prioritize vendor interests over user needs; if you believe that personal AI should be private, affordable, and customizable; if you want to be part of building something meaningful — something that will change how we interact with AI in daily life — then **we sincerely invite you to become a core contributor of MindX**.
-
-You don’t need to be a top expert, and you don’t need to spend all your time. Whether you’re good at Go development, front-end design, skill development, documentation writing, or even just passionate about testing and sharing, your every effort will make MindX better:
-
-- For developers: Collaborate on optimizing the bionic brain, expanding the skill system, or supporting more platforms (like Windows).
-
-- For designers: Help polish the Web Dashboard, make the interaction more user-friendly, and let technology have temperature.
-
-- For testers: Try out every feature, put forward suggestions, and help us find hidden problems to make MindX more stable.
-
-- For writers: Help improve documents, write tutorials, or share your experience with MindX, so more people can know and use it.
-
-This is not just a project, but a gathering of people with the same vision. We will grow together, solve problems together, and witness MindX evolve from a personal idea into a mature tool that benefits thousands of users. Your name will be permanently recorded in the project’s contributor list, and we will build this "digital twin" that belongs to us hand in hand.
-
-If you’re interested, feel free to submit an issue, send a pull request, or just leave a message — let’s start this journey together.
-
-## Contributing
-
-MindX is an open-source project dedicated to building a privacy-first, cost-effective, and user-centric AI assistant. We believe in the power of community collaboration—whether you’re a developer, designer, or user, your contributions are welcome!
-
-Feel free to submit issues, pull requests, or share your ideas to help MindX evolve.
-
-MindX is an open-source project dedicated to building a privacy-first, cost-effective, and user-centric AI assistant. We believe in the power of community collaboration—whether you’re a developer, designer, or user, your contributions are welcome!
-
-Feel free to submit issues, pull requests, or share your ideas to help MindX evolve.
-
-## License
-
-MIT License
-
----
-
-**MindX — Your Self-Evolving Digital Twin**
-
-Built with ❤️ for privacy, efficiency, and the Chinese developer ecosystem.
+## 免责声明
+MindX 仅为个人辅助工具，请勿用于违法违规场景，使用过程中请遵守相关法律法规。

@@ -164,13 +164,18 @@ if [ "$INSTALL_MODE" = "source" ]; then
     echo -e "${GREEN}✓ Built mindx binary${NC}"
 else
     # Copy from release package
-    if [ -f "mindx" ]; then
+    # Check bin/ first, then root
+    if [ -f "bin/mindx" ]; then
+        mkdir -p bin
+        chmod +x bin/mindx
+        echo -e "${GREEN}✓ Found mindx binary in bin/${NC}"
+    elif [ -f "mindx" ]; then
         mkdir -p bin
         cp mindx bin/
         chmod +x bin/mindx
-        echo -e "${GREEN}✓ Copied mindx binary${NC}"
+        echo -e "${GREEN}✓ Copied mindx binary to bin/${NC}"
     else
-        echo -e "${RED}✗ mindx binary not found${NC}"
+        echo -e "${RED}✗ mindx binary not found (looked in bin/ and root)${NC}"
         exit 1
     fi
 fi

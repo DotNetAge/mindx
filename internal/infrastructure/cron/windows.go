@@ -11,7 +11,7 @@ import (
 )
 
 type WindowsTaskScheduler struct {
-	store           cron.JobStore
+	store             cron.JobStore
 	skillInfoProvider cron.SkillInfoProvider
 }
 
@@ -21,21 +21,12 @@ func NewWindowsTaskScheduler(skillInfoProvider cron.SkillInfoProvider) (cron.Sch
 		return nil, err
 	}
 	return &WindowsTaskScheduler{
-		store:           store,
+		store:             store,
 		skillInfoProvider: skillInfoProvider,
 	}, nil
 }
 
 func (w *WindowsTaskScheduler) Add(job *cron.Job) (string, error) {
-	if w.skillInfoProvider != nil {
-		isInternal, command, dir, err := w.skillInfoProvider.GetSkillInfo(job.Skill)
-		if err == nil {
-			job.SkillIsInternal = isInternal
-			job.SkillCommand = command
-			job.SkillDir = dir
-		}
-	}
-
 	id, err := w.store.Add(job)
 	if err != nil {
 		return "", err
@@ -95,11 +86,6 @@ func (w *WindowsTaskScheduler) Pause(id string) error {
 
 func (w *WindowsTaskScheduler) Resume(id string) error {
 	if err := w.store.Resume(id); err != nil {
-		return err
-	}
-
-	job, err := w.store.Get(id)
-	if err != nil {
 		return err
 	}
 
