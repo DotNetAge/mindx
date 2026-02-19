@@ -318,7 +318,7 @@ func (b *BionicBrain) activateConsciousnessWithCapability(question string, think
 	}
 
 	if len(tools) > 0 {
-		resp, err := b.consciousnessWithTools(question, thinkResult, historyDialogue, tools, eventChan)
+		resp, err := b.consciousnessWithTools(question, thinkResult, historyDialogue, tools, eventChan, capability.SystemPrompt)
 		if err != nil {
 			b.logger.Warn(i18n.T("brain.consciousness_tool_call_failed"), logging.Err(err))
 			return b.fallbackHandler.Handle(question, thinkResult, historyDialogue, leftBrainSearchedTools)
@@ -458,11 +458,11 @@ func (b *BionicBrain) tryConsciousnessRightBrainProcess(question string, thinkRe
 	return answer, tools, tools
 }
 
-func (b *BionicBrain) consciousnessWithTools(question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, tools []*core.ToolSchema, eventChan chan<- ThinkingEvent) (*core.ThinkingResponse, error) {
+func (b *BionicBrain) consciousnessWithTools(question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, tools []*core.ToolSchema, eventChan chan<- ThinkingEvent, customSystemPrompt ...string) (*core.ThinkingResponse, error) {
 	b.logger.Info(i18n.T("brain.consciousness_use_tools"), logging.Int(i18n.T("brain.tools_count"), len(tools)))
 
 	b.consciousnessMgr.Get().SetEventChan(eventChan)
-	answer, err := b.toolCaller.ExecuteToolCall(b.consciousnessMgr.Get(), question, historyDialogue, tools)
+	answer, err := b.toolCaller.ExecuteToolCall(b.consciousnessMgr.Get(), question, historyDialogue, tools, customSystemPrompt...)
 	b.consciousnessMgr.Get().SetEventChan(nil)
 
 	if err != nil {
@@ -598,7 +598,7 @@ func (b *BionicBrain) handleWithConsciousness(req *core.ThinkingRequest, capabil
 	}
 
 	if len(tools) > 0 {
-		resp, err := b.consciousnessWithTools(actualQuestion, nil, ctx.historyDialogue, tools, eventChan)
+		resp, err := b.consciousnessWithTools(actualQuestion, nil, ctx.historyDialogue, tools, eventChan, capability.SystemPrompt)
 		return resp, err
 	}
 

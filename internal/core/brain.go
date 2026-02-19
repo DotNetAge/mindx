@@ -55,7 +55,7 @@ type Thinking interface {
 	// jsonResult: 是否返回JSON格式结果
 	Think(question string, history []*DialogueMessage, references string, jsonResult bool) (*ThinkingResult, error)
 	// ThinkWithTools 使用工具思考并返回结果
-	ThinkWithTools(question string, history []*DialogueMessage, tools []*ToolSchema) (*ToolCallResult, error)
+	ThinkWithTools(question string, history []*DialogueMessage, tools []*ToolSchema, customSystemPrompt ...string) (*ToolCallResult, error)
 	// ReturnFuncResult 向大模型回传函数调用结果
 	// 当调用FunctionCall时，大模型会返回一个JSON格式的结果，当外部完成调用后使用此方法回传结果
 	// toolCallID: 工具调用ID（用于回传结果匹配）
@@ -71,6 +71,8 @@ type Thinking interface {
 	CalculateMaxHistoryCount() int
 	// SetEventChan 设置事件 channel（用于实时推送思考过程）
 	SetEventChan(ch chan<- ThinkingEvent)
+	// GetSystemPrompt 获取系统提示
+	GetSystemPrompt() string
 }
 
 type ThinkingRequest struct {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { RefreshIcon, EditIcon, DeleteIcon} from 'tdesign-icons-react';
 import CapabilityIcon from './CapabilityIcon';
+import IconPicker from './IconPicker';
 import './Capabilities.css';
 
 interface Capability {
@@ -297,12 +298,15 @@ function EditDialog({ capability, models, onSave, onCancel, loading }: {
           </div>
           <div className="form-group">
             <label>能力图标</label>
-            <input
-              type="text"
+            <IconPicker 
               value={formData.icon}
-              onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-              placeholder="例如: EditIcon"
+              onChange={(icon) => setFormData({ ...formData, icon })}
+              placeholder="选择图标"
             />
+            <div className="form-hint">
+              支持从下拉列表选择 Ant Design 图标，或手动输入其他图标（格式：图标集:图标名，如 mdi:home, lucide:code）。<br/>
+              更多图标请访问: <a href="https://icon-sets.iconify.design/" target="_blank" rel="noopener noreferrer">icon-sets.iconify.design</a>
+            </div>
           </div>
           <div className="form-group">
             <label>能力说明</label>
@@ -429,12 +433,15 @@ function AddDialog({ models, onSave, onCancel, loading }: {
           </div>
           <div className="form-group">
             <label>能力图标</label>
-            <input
-              type="text"
+            <IconPicker 
               value={formData.icon}
-              onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-              placeholder="例如: EditIcon"
+              onChange={(icon) => setFormData({ ...formData, icon })}
+              placeholder="选择图标"
             />
+            <div className="form-hint">
+              支持从下拉列表选择 Ant Design 图标，或手动输入其他图标（格式：图标集:图标名，如 mdi:home, lucide:code）。<br/>
+              更多图标请访问: <a href="https://icon-sets.iconify.design/" target="_blank" rel="noopener noreferrer">icon-sets.iconify.design</a>
+            </div>
           </div>
           <div className="form-group">
             <label>能力说明 *</label>

@@ -26,6 +26,15 @@ interface VectorStoreConfig {
   data_path: string;
 }
 
+interface ModelConfig {
+  name: string;
+  description?: string;
+  base_url: string;
+  api_key: string;
+  temperature: number;
+  max_tokens: number;
+}
+
 interface ServerConfig {
   version: string;
   host: string;
@@ -80,10 +89,12 @@ export default function AdvancedSettings() {
   const [testingModel, setTestingModel] = useState('');
   const [message, setMessage] = useState('');
   const [loadError, setLoadError] = useState(false);
+  const [models, setModels] = useState<ModelConfig[]>([]);
   const { t } = useTranslation();
 
   useEffect(() => {
     fetchConfig();
+    fetchModels();
     checkOllama();
   }, []);
 
@@ -113,6 +124,18 @@ export default function AdvancedSettings() {
       setOllamaStatus(data);
     } catch (error) {
       console.error('Failed to check Ollama:', error);
+    }
+  };
+
+  const fetchModels = async () => {
+    try {
+      const response = await fetch('/api/config/capabilities');
+      if (response.ok) {
+        const data = await response.json();
+        setModels(data.models?.models || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch models:', error);
     }
   };
 
@@ -306,13 +329,17 @@ export default function AdvancedSettings() {
         <div className="config-item">
           <label>默认模型</label>
           <div className="model-input-group">
-            <input
-              type="text"
+            <select
               value={config.default_model}
               onChange={(e) => setConfig({ ...config, default_model: e.target.value })}
               title="默认模型"
-              placeholder="qwen3:0.6b"
-            />
+            >
+              {models.map(model => (
+                <option key={model.name} value={model.name}>
+                  {model.name} {model.description ? `(${model.description})` : ''}
+                </option>
+              ))}
+            </select>
             <button
               className="test-button"
               onClick={() => handleTestModel(config.default_model)}
@@ -324,33 +351,45 @@ export default function AdvancedSettings() {
         </div>
         <div className="config-item">
           <label>{t('advanced.indexModel')}</label>
-          <input
-            type="text"
+          <select
             value={config.index_model}
             onChange={(e) => setConfig({ ...config, index_model: e.target.value })}
             title="索引模型"
-            placeholder="qwen3:0.6b"
-          />
+          >
+            {models.map(model => (
+              <option key={model.name} value={model.name}>
+                {model.name} {model.description ? `(${model.description})` : ''}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="config-item">
           <label>{t('advanced.embeddingModel')}</label>
-          <input
-            type="text"
+          <select
             value={config.embedding_model}
             onChange={(e) => setConfig({ ...config, embedding_model: e.target.value })}
             title="嵌入模型"
-            placeholder="qllama/bge-small-zh-v1.5:latest"
-          />
+          >
+            {models.map(model => (
+              <option key={model.name} value={model.name}>
+                {model.name} {model.description ? `(${model.description})` : ''}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="config-item">
           <label>记忆模型</label>
-          <input
-            type="text"
+          <select
             value={config.memory_model}
             onChange={(e) => setConfig({ ...config, memory_model: e.target.value })}
             title="记忆模型"
-            placeholder="qwen3:0.6b"
-          />
+          >
+            {models.map(model => (
+              <option key={model.name} value={model.name}>
+                {model.name} {model.description ? `(${model.description})` : ''}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -360,13 +399,17 @@ export default function AdvancedSettings() {
         <div className="config-item">
           <label>默认模型</label>
           <div className="model-input-group">
-            <input
-              type="text"
+            <select
               value={config.subconscious.default}
               onChange={(e) => updateSubconscious('default', e.target.value)}
               title="潜意识默认模型"
-              placeholder="qwen3:0.6b"
-            />
+            >
+              {models.map(model => (
+                <option key={model.name} value={model.name}>
+                  {model.name} {model.description ? `(${model.description})` : ''}
+                </option>
+              ))}
+            </select>
             <button
               className="test-button"
               onClick={() => handleTestModel(config.subconscious.default)}
@@ -378,23 +421,31 @@ export default function AdvancedSettings() {
         </div>
         <div className="config-item">
           <label>左脑模型</label>
-          <input
-            type="text"
+          <select
             value={config.subconscious.left}
             onChange={(e) => updateSubconscious('left', e.target.value)}
             title="潜意识左脑模型"
-            placeholder="qwen3:0.6b"
-          />
+          >
+            {models.map(model => (
+              <option key={model.name} value={model.name}>
+                {model.name} {model.description ? `(${model.description})` : ''}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="config-item">
           <label>右脑模型</label>
-          <input
-            type="text"
+          <select
             value={config.subconscious.right}
             onChange={(e) => updateSubconscious('right', e.target.value)}
             title="潜意识右脑模型"
-            placeholder="qwen3:0.6b"
-          />
+          >
+            {models.map(model => (
+              <option key={model.name} value={model.name}>
+                {model.name} {model.description ? `(${model.description})` : ''}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -404,13 +455,17 @@ export default function AdvancedSettings() {
         <div className="config-item">
           <label>默认模型</label>
           <div className="model-input-group">
-            <input
-              type="text"
+            <select
               value={config.consciousness.default}
               onChange={(e) => updateConsciousness('default', e.target.value)}
               title="意识默认模型"
-              placeholder="qwen3:1.7b"
-            />
+            >
+              {models.map(model => (
+                <option key={model.name} value={model.name}>
+                  {model.name} {model.description ? `(${model.description})` : ''}
+                </option>
+              ))}
+            </select>
             <button
               className="test-button"
               onClick={() => handleTestModel(config.consciousness.default)}
@@ -423,23 +478,31 @@ export default function AdvancedSettings() {
         </div>
         <div className="config-item">
           <label>左脑模型</label>
-          <input
-            type="text"
+          <select
             value={config.consciousness.left}
             onChange={(e) => updateConsciousness('left', e.target.value)}
             title="意识左脑模型"
-            placeholder="qwen3:0.6b"
-          />
+          >
+            {models.map(model => (
+              <option key={model.name} value={model.name}>
+                {model.name} {model.description ? `(${model.description})` : ''}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="config-item">
           <label>右脑模型</label>
-          <input
-            type="text"
+          <select
             value={config.consciousness.right}
             onChange={(e) => updateConsciousness('right', e.target.value)}
             title="意识右脑模型"
-            placeholder="qwen3:1.7b"
-          />
+          >
+            {models.map(model => (
+              <option key={model.name} value={model.name}>
+                {model.name} {model.description ? `(${model.description})` : ''}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

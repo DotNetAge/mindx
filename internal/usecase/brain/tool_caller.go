@@ -27,6 +27,7 @@ func (tc *ToolCaller) ExecuteToolCall(
 	question string,
 	historyDialogue []*core.DialogueMessage,
 	tools []*core.ToolSchema,
+	customSystemPrompt ...string,
 ) (string, error) {
 	tc.logger.Info(i18n.T("brain.use_tool_decision"), logging.Int(i18n.T("brain.tools_count"), len(tools)))
 
@@ -40,7 +41,7 @@ func (tc *ToolCaller) ExecuteToolCall(
 		callCount++
 		tc.logger.Info("工具调用", logging.Int("round", callCount))
 
-		toolCallResult, err := thinking.ThinkWithTools(question, currentHistory, tools)
+		toolCallResult, err := thinking.ThinkWithTools(question, currentHistory, tools, customSystemPrompt...)
 		if err != nil {
 			return "", fmt.Errorf("tool call decision failed: %w", err)
 		}

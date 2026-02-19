@@ -307,7 +307,14 @@ func (t *Thinking) Think(question string, history []*core.DialogueMessage, refer
 	return &result, nil
 }
 
-func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessage, tools []*core.ToolSchema) (*core.ToolCallResult, error) {
+func (t *Thinking) GetSystemPrompt() string {
+	if t.prompt != "" {
+		return t.prompt
+	}
+	return t.systemPrompt
+}
+
+func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessage, tools []*core.ToolSchema, customSystemPrompt ...string) (*core.ToolCallResult, error) {
 	t.logger.Info(i18n.T("brain.right_prepare_skill"),
 		logging.String(i18n.T("brain.question"), question),
 		logging.Int(i18n.T("brain.tools_count"), len(tools)))
@@ -353,7 +360,11 @@ func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessa
 
 	ctx := context.Background()
 
-	systemPrompt := `你是一个工具调用助手。你的职责是根据用户的请求，从可用的工具中选择合适的工具并调用。
+	var systemPrompt string
+	if len(customSystemPrompt) > 0 && customSystemPrompt[0] != "" {
+		systemPrompt = customSystemPrompt[0] + `
+
+## 工具调用指南
 
 重要规则：
 1. 如果用户的请求可以通过现有工具满足，请调用相应的工具
@@ -361,6 +372,16 @@ func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessa
 3. 调用工具时，确保传递正确的参数
 4. 不要编造工具，只能使用提供的工具
 5. 仔细阅读每个工具的使用指南和输出格式说明`
+	} else {
+		systemPrompt = `你是一个工具调用助手。你的职责是根据用户的请求，从可用的工具中选择合适的工具并调用。
+
+重要规则：
+1. 如果用户的请求可以通过现有工具满足，请调用相应的工具
+2. 如果用户的请求无法通过现有工具满足，请直接回答用户，不要调用工具
+3. 调用工具时，确保传递正确的参数
+4. 不要编造工具，只能使用提供的工具
+5. 仔细阅读每个工具的使用指南和输出格式说明`
+	}
 
 	messages := []openai.ChatCompletionMessage{
 		{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
