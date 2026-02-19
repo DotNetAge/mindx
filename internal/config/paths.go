@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -25,6 +26,7 @@ const (
 	ServerFile       = "server"
 	TopicsFile       = "topics"
 	SkillsConfigFile = "skills"
+	VersionFile      = "VERSION"
 
 	SystemLogFile    = "system.log"
 	TokenUsageDBFile = "token_usage.db"
@@ -33,7 +35,27 @@ const (
 var (
 	ErrMINDXPathNotSet      = errors.New("MINDX_PATH environment variable not set")
 	ErrMINDXWorkspaceNotSet = errors.New("MINDX_WORKSPACE environment variable not set")
+
+	buildVersion   string = "dev"
+	buildTime      string
+	buildGitCommit string
 )
+
+func SetBuildInfo(version, time, commit string) {
+	if version != "" {
+		buildVersion = version
+	}
+	if time != "" {
+		buildTime = time
+	}
+	if commit != "" {
+		buildGitCommit = commit
+	}
+}
+
+func GetBuildInfo() (version, time, commit string) {
+	return buildVersion, buildTime, buildGitCommit
+}
 
 func GetInstallPath() (string, error) {
 	path := os.Getenv("MINDX_PATH")
@@ -240,4 +262,23 @@ func EnsureWorkspace() error {
 	}
 
 	return nil
+}
+
+func GetVersion() (string, error) {
+	if buildVersion != "" && buildVersion != "dev" {
+		return buildVersion, nil
+	}
+
+	installPath, err := GetInstallPath()
+	if err != nil {
+		return "", err
+	}
+
+	versionPath := filepath.Join(installPath, VersionFile)
+	data, err := os.ReadFile(versionPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read version file: %w", err)
+	}
+
+	return strings.TrimSpace(string(data)), nil
 }

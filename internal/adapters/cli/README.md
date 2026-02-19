@@ -11,12 +11,35 @@ mindx [command] [subcommand] [flags]
 | 命令              | 说明             |
 | ----------------- | ---------------- |
 | `mindx`           | 显示帮助信息     |
+| `mindx version`   | 显示版本信息     |
 | `mindx dashboard` | 打开 Web 控制台  |
 | `mindx tui`       | 启动终端聊天界面 |
 | `mindx kernel`    | 服务控制命令     |
 | `mindx model`     | 模型管理和测试   |
 | `mindx skill`     | 技能管理         |
 | `mindx train`     | 模型训练         |
+
+---
+
+## mindx version
+
+显示 MindX 版本信息。
+
+```bash
+mindx version
+```
+
+**输出示例**：
+
+```
+MindX version: 1.0.0
+Build time:   2024-01-15T10:30:00Z
+Git commit:   abc1234
+```
+
+**说明**：
+- 显示当前安装的 MindX 版本号
+- 显示构建时间和 Git 提交哈希（如果可用）
 
 ---
 

@@ -33,6 +33,13 @@ interface SkillMetadata {
   command?: string;
 }
 
+function isMCPSkill(skill: SkillInfo): boolean {
+  const metadata = skill.def.metadata;
+  if (!metadata || !metadata.mcp) return false;
+  const mcp = metadata.mcp as { server?: string; tool?: string };
+  return !!(mcp.server && mcp.tool);
+}
+
 interface SkillInfo {
   def: {
     name: string;
@@ -50,8 +57,9 @@ interface SkillInfo {
       env?: string[];
     };
     install?: InstallMethod[];
+    metadata?: Record<string, any>;
   };
-  format: 'standard' | 'external';
+  format: 'standard' | 'external' | 'mcp';
   status: 'installed' | 'ready' | 'running' | 'stopped' | 'disabled' | 'error';
   content: string;
   directory: string;
@@ -103,7 +111,7 @@ export default function Skills() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<'all' | 'ready' | 'installed' | 'error'>('all');
-  const [formatFilter, setFormatFilter] = useState<'all' | 'standard' | 'external'>('all');
+  const [formatFilter, setFormatFilter] = useState<'all' | 'standard' | 'external' | 'mcp'>('all');
   const [isReIndexing, setIsReIndexing] = useState(false);
   const [reIndexError, setReIndexError] = useState('');
 
@@ -315,7 +323,13 @@ export default function Skills() {
 
   const filteredSkills = skills.filter((skill) => {
     if (filter !== 'all' && skill.status !== filter) return false;
-    if (formatFilter !== 'all' && skill.format !== formatFilter) return false;
+    if (formatFilter !== 'all') {
+      if (formatFilter === 'mcp') {
+        if (!isMCPSkill(skill)) return false;
+      } else if (skill.format !== formatFilter) {
+        return false;
+      }
+    }
     return true;
   });
 
@@ -330,8 +344,9 @@ export default function Skills() {
     }
   };
 
-  const getFormatTag = (format: string) => {
-    switch (format) {
+  const getFormatTag = (skill: SkillInfo) => {
+    if (isMCPSkill(skill)) return '[MCP]';
+    switch (skill.format) {
       case 'standard': return '[std]';
       case 'external': return '[ext]';
       default: return '[?]';
@@ -411,10 +426,11 @@ export default function Skills() {
         </div>
         <div className="filter-group">
           <label>格式:</label>
-          <select value={formatFilter} onChange={(e) => setFormatFilter(e.target.value as 'all' | 'standard' | 'external')} title="按格式筛选">
+          <select value={formatFilter} onChange={(e) => setFormatFilter(e.target.value as 'all' | 'standard' | 'external' | 'mcp')} title="按格式筛选">
             <option value="all">全部</option>
             <option value="standard">[std] 标准</option>
             <option value="external">[ext] 外部</option>
+            <option value="mcp">[MCP] MCP 技能</option>
           </select>
         </div>
       </div>
@@ -442,8 +458,8 @@ export default function Skills() {
                     <span className="skill-version">{skill.def.version || 'N/A'}</span>
                   </div>
                   <div className="skill-badges">
-                    <span className={`badge format-${skill.format}`}>
-                      {getFormatTag(skill.format)}
+                    <span className={`badge ${isMCPSkill(skill) ? 'format-mcp' : 'format-' + skill.format}`}>
+                      {getFormatTag(skill)}
                     </span>
                     <span className={`badge status-${skill.status}`}>
                       {getStatusIcon(skill.status)} {skill.status}

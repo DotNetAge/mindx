@@ -171,6 +171,12 @@
   border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
+.settings-container .badge.format-mcp {
+  background: rgba(236, 72, 153, 0.15);
+  color: #ec4899;
+  border: 1px solid rgba(236, 72, 153, 0.3);
+}
+
 .settings-container .badge.format-legacy {
   background: rgba(107, 114, 128, 0.15);
   color: #9ca3af;

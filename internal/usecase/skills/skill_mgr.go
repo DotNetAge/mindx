@@ -26,6 +26,7 @@ type SkillMgr struct {
 	converter *SkillConverter
 	installer *Installer
 	envMgr    *EnvManager
+	mcpMgr    *MCPManager
 }
 
 func NewSkillMgr(skillsDir string, workspaceDir string, embeddingSvc *embedding.EmbeddingService, llamaSvc *infraLlama.OllamaService, logger logging.Logger) (*SkillMgr, error) {
@@ -36,7 +37,8 @@ func NewSkillMgrWithStore(skillsDir string, workspaceDir string, embeddingSvc *e
 	envMgr := NewEnvManager(workspaceDir, logger)
 	installer := NewInstaller(logger)
 	loader := NewSkillLoader(skillsDir, logger)
-	executor := NewSkillExecutor(skillsDir, envMgr, store, logger)
+	mcpMgr := NewMCPManager(logger)
+	executor := NewSkillExecutor(skillsDir, envMgr, store, mcpMgr, logger)
 	searcher := NewSkillSearcher(embeddingSvc, logger)
 	indexer := NewSkillIndexer(embeddingSvc, llamaSvc, store, logger)
 	converter := NewSkillConverter(skillsDir, logger)
@@ -52,6 +54,7 @@ func NewSkillMgrWithStore(skillsDir string, workspaceDir string, embeddingSvc *e
 		converter:    converter,
 		installer:    installer,
 		envMgr:       envMgr,
+		mcpMgr:       mcpMgr,
 	}
 
 	if err := envMgr.LoadEnv(); err != nil {
@@ -335,6 +338,17 @@ func (m *SkillMgr) Close() error {
 	defer m.mu.Unlock()
 
 	m.indexer.StopWorker()
+	if m.mcpMgr != nil {
+		_ = m.mcpMgr.Close()
+	}
 
 	return nil
+}
+
+func (m *SkillMgr) RegisterMCPServer(config MCPServerConfig) error {
+	return m.mcpMgr.RegisterServer(config)
+}
+
+func (m *SkillMgr) ListMCPServers() []string {
+	return m.mcpMgr.ListServers()
 }

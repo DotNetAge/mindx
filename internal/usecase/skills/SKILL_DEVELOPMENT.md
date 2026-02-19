@@ -362,6 +362,80 @@ echo '{"city": "北京"}' | ./my-skill_cli.sh | jq .
 sed -n '/^---$/,/^---$/p' SKILL.md | head -n -1 | tail -n +2
 ```
 
+## MCP 技能开发
+
+除了传统的本地脚本技能外，系统还支持通过 MCP (Model Context Protocol) 协议连接外部工具和服务。
+
+### MCP 技能特点
+
+- **零学习成本**：SKILL.md 格式完全不变，仅通过 metadata 标记
+- **统一体验**：MCP 技能在前端显示、搜索、执行等方面与普通技能完全一致
+- **强大扩展**：可以连接任何支持 MCP 协议的服务和工具
+
+### MCP 技能定义
+
+MCP 技能通过 `metadata.mcp` 字段标记：
+
+```yaml
+---
+name: mcp-filesystem
+description: 通过 MCP 协议访问文件系统，支持文件读写和目录操作
+version: 1.0.0
+category: system
+tags:
+  - mcp
+  - filesystem
+  - file
+os:
+  - darwin
+  - linux
+enabled: true
+timeout: 30
+parameters:
+  path:
+    type: string
+    description: 文件或目录路径
+    required: true
+  action:
+    type: string
+    description: 操作类型：read, write, list
+    required: true
+  content:
+    type: string
+    description: 文件内容（write 操作时必需）
+    required: false
+metadata:
+  mcp:
+    server: "filesystem"
+    tool: "filesystem_operation"
+---
+
+# MCP 文件系统技能
+
+通过 MCP 协议提供文件系统操作能力。
+```
+
+### metadata.mcp 字段说明
+
+| 字段     | 类型   | 必需 | 说明           |
+| -------- | ------ | ---- | -------------- |
+| `server` | string | ✅    | MCP 服务器名称 |
+| `tool`   | string | ✅    | MCP 工具名称   |
+
+### MCP 技能 vs 本地技能
+
+| 特性          | 本地技能       | MCP 技能     |
+| ------------- | -------------- | ------------ |
+| SKILL.md 格式 | 完全相同       | 完全相同     |
+| 执行方式      | 本地命令行脚本 | MCP 协议调用 |
+| 前端显示      | [std] 标记     | [MCP] 标记   |
+| 搜索索引      | 支持           | 支持         |
+| 统计记录      | 支持           | 支持         |
+
+### 前端显示
+
+MCP 技能在技能管理页面会显示 `[MCP]` 粉色标签，便于识别。格式筛选器也支持专门筛选 MCP 技能。
+
 ## 发布清单
 
 在发布技能前，请确认：
@@ -370,7 +444,8 @@ sed -n '/^---$/,/^---$/p' SKILL.md | head -n -1 | tail -n +2
 - [ ] description 清晰描述技能功能
 - [ ] tags 和 category 正确分类
 - [ ] 参数定义完整且描述清晰
-- [ ] 命令行脚本可执行
-- [ ] 错误处理完善
+- [ ] （本地技能）命令行脚本可执行
+- [ ] （本地技能）错误处理完善
+- [ ] （MCP 技能）metadata.mcp.server 和 metadata.mcp.tool 正确配置
 - [ ] 本地测试通过
 - [ ] 跨平台兼容性已考虑

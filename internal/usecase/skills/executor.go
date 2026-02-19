@@ -25,11 +25,12 @@ type SkillExecutor struct {
 	mu             sync.RWMutex
 	skillInfos     map[string]*entity.SkillInfo
 	internalSkills map[string]InternalSkillFunc
+	mcpMgr         *MCPManager
 }
 
 type InternalSkillFunc func(params map[string]any) (string, error)
 
-func NewSkillExecutor(skillsDir string, envMgr *EnvManager, store persistence.Store, logger logging.Logger) *SkillExecutor {
+func NewSkillExecutor(skillsDir string, envMgr *EnvManager, store persistence.Store, mcpMgr *MCPManager, logger logging.Logger) *SkillExecutor {
 	return &SkillExecutor{
 		skillsDir:      skillsDir,
 		envMgr:         envMgr,
@@ -37,6 +38,7 @@ func NewSkillExecutor(skillsDir string, envMgr *EnvManager, store persistence.St
 		logger:         logger.Named("SkillExecutor"),
 		skillInfos:     make(map[string]*entity.SkillInfo),
 		internalSkills: make(map[string]InternalSkillFunc),
+		mcpMgr:         mcpMgr,
 	}
 }
 
@@ -70,6 +72,10 @@ func (e *SkillExecutor) Execute(name string, def *entity.SkillDef, params map[st
 		return e.executeInternal(name, params, startTime)
 	}
 
+	if IsMCPSkill(def) {
+		return e.executeMCP(name, def, params, startTime)
+	}
+
 	return e.executeExternal(name, def, params, startTime)
 }
 
@@ -84,6 +90,32 @@ func (e *SkillExecutor) executeInternal(name string, params map[string]any, star
 	}
 
 	result, err := fn(params)
+	duration := time.Since(startTime).Milliseconds()
+
+	if err != nil {
+		e.UpdateStats(name, false, duration)
+		e.logger.Error(i18n.T("skill.execute_failed"), logging.String(i18n.T("skill.output"), result), logging.Err(err))
+		return result, err
+	}
+
+	e.UpdateStats(name, true, duration)
+	e.logger.Info(i18n.T("skill.execute_success"), logging.String(i18n.T("skill.output"), result))
+	return result, nil
+}
+
+func (e *SkillExecutor) executeMCP(name string, def *entity.SkillDef, params map[string]any, startTime time.Time) (string, error) {
+	if e.mcpMgr == nil {
+		e.UpdateStats(name, false, time.Since(startTime).Milliseconds())
+		return "", fmt.Errorf("mcp manager not initialized")
+	}
+
+	mcpMeta, ok := GetMCPSkillMetadata(def)
+	if !ok {
+		e.UpdateStats(name, false, time.Since(startTime).Milliseconds())
+		return "", fmt.Errorf("invalid mcp skill metadata")
+	}
+
+	result, err := e.mcpMgr.CallTool(mcpMeta.Server, mcpMeta.Tool, params)
 	duration := time.Since(startTime).Milliseconds()
 
 	if err != nil {

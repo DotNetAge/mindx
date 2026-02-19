@@ -23,10 +23,16 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 
 # Read version
-if [ -f "VERSION" ]; then
+# Priority: git tag > VERSION file > dev-YYYYMMDD
+if git describe --tags --exact-match HEAD >/dev/null 2>&1; then
+    VERSION=$(git describe --tags --exact-match HEAD)
+    echo -e "${CYAN}✓ Using git tag: ${VERSION}${NC}"
+elif [ -f "VERSION" ]; then
     VERSION=$(cat VERSION | tr -d '[:space:]')
+    echo -e "${CYAN}✓ Using VERSION file: ${VERSION}${NC}"
 else
     VERSION="dev-$(date +%Y%m%d)"
+    echo -e "${YELLOW}⚠ No git tag or VERSION file found, using: ${VERSION}${NC}"
 fi
 
 echo -e "${BLUE}Version: ${VERSION}${NC}"
