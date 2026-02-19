@@ -1,7 +1,6 @@
 package capability
 
 import (
-	"encoding/json"
 	"fmt"
 	"mindx/internal/config"
 	"mindx/internal/entity"
@@ -34,7 +33,7 @@ func NewManager(cfg *config.CapabilityConfig, vectorStore persistence.Store, emb
 	if err != nil {
 		return nil, err
 	}
-	configPath = filepath.Join(configPath, "capabilities.json")
+	configPath = filepath.Join(configPath, "capabilities.yml")
 
 	mgr := &CapabilityManager{
 		capabilities: make(map[string]*entity.Capability),
@@ -55,17 +54,12 @@ func NewManager(cfg *config.CapabilityConfig, vectorStore persistence.Store, emb
 	var finalCfg *config.CapabilityConfig
 	if _, err := os.Stat(configPath); err == nil {
 		// 工作区配置文件存在，从工作区加载
-		data, err := os.ReadFile(configPath)
+		workspaceCfg, err := config.LoadCapabilitiesConfig()
 		if err != nil {
 			return nil, fmt.Errorf("读取工作区配置文件失败: %w", err)
 		}
 
-		var workspaceCfg config.CapabilityConfig
-		if err := json.Unmarshal(data, &workspaceCfg); err != nil {
-			return nil, fmt.Errorf("解析工作区配置文件失败: %w", err)
-		}
-
-		finalCfg = &workspaceCfg
+		finalCfg = workspaceCfg
 		mgr.defaultName = workspaceCfg.DefaultCapability
 		mgr.fallback = workspaceCfg.FallbackToLocal
 	} else {
@@ -168,28 +162,13 @@ func (m *CapabilityManager) saveToConfigFile() error {
 		})
 	}
 
-	cfg := config.CapabilityConfig{
+	cfg := &config.CapabilityConfig{
 		Capabilities:      caps,
 		DefaultCapability: m.defaultName,
 		FallbackToLocal:   m.fallback,
 	}
 
-	// 创建目录
-	if err := os.MkdirAll(filepath.Dir(m.configPath), 0755); err != nil {
-		return fmt.Errorf("创建配置目录失败: %w", err)
-	}
-
-	// 序列化并保存
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("序列化配置失败: %w", err)
-	}
-
-	if err := os.WriteFile(m.configPath, data, 0644); err != nil {
-		return fmt.Errorf("写入配置文件失败: %w", err)
-	}
-
-	return nil
+	return config.SaveCapabilitiesConfig(cfg)
 }
 
 // GetCapability 获取能力配置

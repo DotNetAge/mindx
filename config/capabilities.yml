@@ -17,7 +17,7 @@ capabilities:
     enabled: false
   - name: translate
     title: 翻译
-    icon: LanguagesIcon
+    icon: "lsicon:translate-filled"
     description: "翻译能力，进行语言翻译、文本翻译、专业翻译、多语言互译"
     model: "qwen3:1.7b"
     system_prompt: "你是一个专业的翻译助手，请提供准确、流畅的翻译服务。"

@@ -13,6 +13,18 @@ channels:
             path: /dingtalk/webhook
             port: 6064
             webhook_secret: ""
+    facebook:
+        enabled: false
+        name: Facebook
+        icon: facebook
+        config:
+            app_secret: ""
+            description: Facebook Messenger Platform 接入
+            page_access_token: ""
+            page_id: ""
+            path: /facebook/webhook
+            port: 8086
+            verify_token: ""
     feishu:
         enabled: false
         name: 飞书
@@ -22,6 +34,16 @@ channels:
             app_secret: secret123
             path: /feishu/webhook
             port: 6060
+    imessage:
+        enabled: false
+        name: iMessage
+        icon: imessage
+        config:
+            debounce: 250ms
+            description: iMessage 接入(使用 steipete/imsg)
+            imsg_path: /usr/local/bin/imsg
+            region: CN
+            watch_since: 0
     qq:
         enabled: false
         name: QQ
@@ -59,3 +81,15 @@ channels:
             port: 6061
             token: ""
             type: mp
+    whatsapp:
+        enabled: false
+        name: WhatsApp
+        icon: whatsapp
+        config:
+            access_token: ""
+            business_id: ""
+            description: WhatsApp Business Cloud API 接入
+            path: /whatsapp/webhook
+            phone_number_id: ""
+            port: 8085
+            verify_token: ""

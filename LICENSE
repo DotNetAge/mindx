@@ -1,50 +1,21 @@
-仅限个人使用许可证
+MIT License
 
 Copyright (c) 2025 Ray
 
-本软件仅供个人学习、研究和非商业用途使用。
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-许可范围
---------
-本许可证授予您以下权利：
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-1. 个人使用
-   - 您可以在个人设备上安装、运行和使用本软件
-   - 您可以为了个人学习目的查看、研究源代码
-   - 您可以为了个人使用目的修改源代码
-
-2. 分享
-   - 您可以以非商业方式向他人分享本软件
-   - 分享时必须包含此许可证和版权声明
-
-限制条件
---------
-未经作者明确书面许可，禁止以下行为：
-
-1. 商业用途
-   - 禁止将本软件用于任何商业目的
-   - 禁止在商业环境中使用本软件
-   - 禁止将本软件集成到商业产品或服务中
-   - 禁止使用本软件提供商业服务
-
-2. 商业分发
-   - 禁止出售、租赁或以其他方式从本软件获利
-   - 禁止将本软件作为商业产品的一部分进行分发
-   - 禁止将本软件用于商业推广或营销
-
-3. 移除许可
-   - 禁止移除、修改或隐藏本软件中的任何许可声明
-   - 禁止移除、修改或隐藏本软件中的任何版权声明
-
-免责声明
---------
-本软件按"原样"提供，不提供任何明示或暗示的保证，包括但不限于对适销性、特定用途适用性和非侵权性的保证。
-
-在任何情况下，作者或版权持有人都不对任何索赔、损害或其他责任负责，无论是合同、侵权或其他方面的责任，由本软件或本软件的使用或其他交易引起、产生或与之相关。
-
-联系方式
---------
-如需商业使用许可，请联系：ray@rayainfo.cn
-
-版本：1.0
-日期：2025年2月11日
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
