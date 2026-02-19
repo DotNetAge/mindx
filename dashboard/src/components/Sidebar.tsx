@@ -72,10 +72,12 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <div className="logo">
-          <img src={logo} alt="MindX Logo" className="logo-img" />
-          <span className="logo-text">心智 | MindX</span>
-        </div>
+        <a href="http://mindx.chat" target="_blank" rel="noopener noreferrer" className="logo-link">
+          <div className="logo">
+            <img src={logo} alt="MindX Logo" className="logo-img" />
+            <span className="logo-text">心智 | MindX</span>
+          </div>
+        </a>
         <button
           className={`service-toggle ${healthy ? 'healthy' : 'unhealthy'}`}
           onClick={toggleService}

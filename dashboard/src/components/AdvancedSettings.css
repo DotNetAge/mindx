@@ -166,7 +166,7 @@
   gap: 8px;
 }
 
-.model-input-group input {
+.model-input-group select {
   flex: 1;
 }
 

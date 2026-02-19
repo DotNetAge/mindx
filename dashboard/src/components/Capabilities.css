@@ -533,6 +533,21 @@
   height: 16px;
 }
 
+.form-hint {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.form-hint a {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.form-hint a:hover {
+  color: #93c5fd;
+}
+
 /* 按钮 */
 .btn-primary {
   padding: 10px 24px;

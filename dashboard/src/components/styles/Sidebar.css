@@ -16,6 +16,17 @@
   gap: 12px;
 }
 
+.logo-link {
+  display: block;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.logo-link:hover {
+  opacity: 0.8;
+}
+
 .logo {
   display: flex;
   align-items: center;

@@ -10,6 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@iconify/json": "^2.2.441",
+    "@iconify/react": "^6.0.2",
+    "@iconify/utils": "^3.1.0",
     "autoprefixer": "^10.4.20",
     "less": "^4.3.0",
     "lucide-react": "^0.563.0",
