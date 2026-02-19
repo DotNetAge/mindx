@@ -443,21 +443,21 @@ func (m *CapabilityManager) PrecomputeVectors() error {
 // RouteCapability 基于查询文本路由到最匹配的能力
 func (m *CapabilityManager) RouteCapability(query string, topN int) ([]*entity.Capability, error) {
 	if m.embeddingSvc == nil {
-		return m.routeByDefault(topN), nil
+		return nil, nil
 	}
 
 	queryVec, err := m.embeddingSvc.GenerateEmbedding(query)
 	if err != nil {
-		return m.routeByDefault(topN), nil
+		return nil, nil
 	}
 
 	entries, err := m.vectorStore.Search(queryVec, topN)
 	if err != nil {
-		return m.routeByDefault(topN), nil
+		return nil, nil
 	}
 
 	if len(entries) == 0 {
-		return m.routeByDefault(topN), nil
+		return nil, nil
 	}
 
 	caps := make([]*entity.Capability, 0, len(entries))
@@ -472,7 +472,7 @@ func (m *CapabilityManager) RouteCapability(query string, topN int) ([]*entity.C
 	}
 
 	if len(caps) == 0 {
-		return m.routeByDefault(topN), nil
+		return nil, nil
 	}
 
 	return caps, nil

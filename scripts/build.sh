@@ -205,7 +205,17 @@ else
     tar -czf "../${RELEASE_NAME}.tar.gz" .
     echo -e "${GREEN}✓ Created ${RELEASE_NAME}.tar.gz${NC}"
 fi
-cd "$SCRIPT_DIR"
+cd "$PROJECT_ROOT"
+
+# Create releases directory and copy archive
+mkdir -p releases
+if [ -f "${RELEASE_NAME}.zip" ]; then
+    mv "${RELEASE_NAME}.zip" releases/
+    echo -e "${GREEN}✓ Copied to releases/${RELEASE_NAME}.zip${NC}"
+elif [ -f "${RELEASE_NAME}.tar.gz" ]; then
+    mv "${RELEASE_NAME}.tar.gz" releases/
+    echo -e "${GREEN}✓ Copied to releases/${RELEASE_NAME}.tar.gz${NC}"
+fi
 
 echo ""
 
@@ -217,10 +227,10 @@ echo ""
 echo "Build artifacts:"
 echo "  - bin/mindx (Go binary)"
 echo "  - dist/ (Full distribution package)"
-if [ -f "${RELEASE_NAME}.zip" ]; then
-    echo "  - ${RELEASE_NAME}.zip (Release archive)"
-elif [ -f "${RELEASE_NAME}.tar.gz" ]; then
-    echo "  - ${RELEASE_NAME}.tar.gz (Release archive)"
+if [ -f "releases/${RELEASE_NAME}.zip" ]; then
+    echo "  - releases/${RELEASE_NAME}.zip (Release archive)"
+elif [ -f "releases/${RELEASE_NAME}.tar.gz" ]; then
+    echo "  - releases/${RELEASE_NAME}.tar.gz (Release archive)"
 fi
 echo ""
 echo "To install:"

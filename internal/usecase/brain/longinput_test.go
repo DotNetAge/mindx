@@ -1,9 +1,9 @@
 package brain
 
 import (
+	"fmt"
 	"mindx/internal/core"
 	"mindx/pkg/logging"
-	"fmt"
 	"strings"
 )
 
@@ -16,7 +16,6 @@ type LongInputSuite struct {
 // TestLongInput_SingleMessage 测试：单条超长消息
 // 验证：模型能处理超长输入并返回合理的响应
 func (s *LongInputSuite) TestLongInput_SingleMessage() {
-	s.brain = s.createTestBrain()
 
 	// 生成超长文本（约 10000 字符）
 	longText := generateLongText(10000)
@@ -26,7 +25,7 @@ func (s *LongInputSuite) TestLongInput_SingleMessage() {
 
 	resp, err := s.brain.Post(&core.ThinkingRequest{
 		Question: q,
-		Timeout: 60, // 增加超时时间
+		Timeout:  60, // 增加超时时间
 	})
 	s.Require().NoError(err)
 	s.NotEmpty(resp.Answer, "回答不能为空")
@@ -43,14 +42,13 @@ func (s *LongInputSuite) TestLongInput_SingleMessage() {
 		"超长输入应该返回有效的总结，实际回答长度: %d", len(answer))
 
 	s.logger.Info("响应",
-		logging.String("answer", resp.Answer[:min(100, len(resp.Answer))] + "..."),
+		logging.String("answer", resp.Answer[:min(100, len(resp.Answer))]+"..."),
 		logging.Int("answer_length", len(resp.Answer)))
 }
 
 // TestLongInput_MultipleMessages 测试：多条长消息
 // 验证：模型能处理连续的长消息
 func (s *LongInputSuite) TestLongInput_MultipleMessages() {
-	s.brain = s.createTestBrain()
 
 	// 连续发送3条长消息
 	longTexts := []string{
@@ -66,7 +64,7 @@ func (s *LongInputSuite) TestLongInput_MultipleMessages() {
 
 		resp, err := s.brain.Post(&core.ThinkingRequest{
 			Question: q,
-			Timeout: 45,
+			Timeout:  45,
 		})
 		s.Require().NoError(err)
 		s.NotEmpty(resp.Answer, "回答不能为空")
@@ -84,7 +82,6 @@ func (s *LongInputSuite) TestLongInput_MultipleMessages() {
 // TestLongInput_CodeBlock 测试：超长代码块
 // 验证：模型能处理超长代码块
 func (s *LongInputSuite) TestLongInput_CodeBlock() {
-	s.brain = s.createTestBrain()
 
 	// 生成超长代码块（约 5000 行）
 	longCode := generateLongCode(5000)
@@ -95,7 +92,7 @@ func (s *LongInputSuite) TestLongInput_CodeBlock() {
 
 	resp, err := s.brain.Post(&core.ThinkingRequest{
 		Question: q,
-		Timeout: 60,
+		Timeout:  60,
 	})
 	s.Require().NoError(err)
 	s.NotEmpty(resp.Answer, "回答不能为空")
@@ -111,13 +108,12 @@ func (s *LongInputSuite) TestLongInput_CodeBlock() {
 	s.True(hasExplanation,
 		"超长代码块应该得到解释，实际回答长度: %d", len(answer))
 
-	s.logger.Info("响应", logging.String("answer", resp.Answer[:min(150, len(resp.Answer))] + "..."))
+	s.logger.Info("响应", logging.String("answer", resp.Answer[:min(150, len(resp.Answer))]+"..."))
 }
 
 // TestLongInput_ContextOverflow 测试：上下文溢出
 // 验证：当输入超过模型上下文限制时，模型仍能处理
 func (s *LongInputSuite) TestLongInput_ContextOverflow() {
-	s.brain = s.createTestBrain()
 
 	// 构造超过模型上下文限制的输入
 	// 假设模型上下文约 8k tokens，每字符约 0.5 token
@@ -130,7 +126,7 @@ func (s *LongInputSuite) TestLongInput_ContextOverflow() {
 
 	resp, err := s.brain.Post(&core.ThinkingRequest{
 		Question: q,
-		Timeout: 90,
+		Timeout:  90,
 	})
 
 	// 验证：即使超长，也不应该崩溃
@@ -156,7 +152,7 @@ func (s *LongInputSuite) TestLongInput_ContextOverflow() {
 	s.False(isError,
 		"超长输入应该至少返回部分响应，而不是纯错误消息")
 
-	s.logger.Info("响应", logging.String("answer", resp.Answer[:min(100, len(resp.Answer))] + "..."))
+	s.logger.Info("响应", logging.String("answer", resp.Answer[:min(100, len(resp.Answer))]+"..."))
 }
 
 // generateLongText 生成长文本用于测试

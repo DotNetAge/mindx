@@ -1,11 +1,10 @@
 package cli
 
 import (
+	"context"
+	"fmt"
 	"mindx/internal/config"
 	"mindx/pkg/i18n"
-	"context"
-	"encoding/json"
-	"fmt"
 	"os"
 	"time"
 
@@ -40,22 +39,20 @@ var testCmd = &cobra.Command{
 }
 
 func testModelTools(modelName string) error {
-	configPath := "config/models.json"
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return fmt.Errorf("config read error: %w", err)
+	if err := config.EnsureWorkspace(); err != nil {
+		return err
 	}
 
-	var config struct {
-		Models []config.ModelConfig `json:"models"`
+	_, _, _, _ = config.InitVippers()
+	modelsMgr := config.GetModelsManager()
+	allModels := modelsMgr.ListModels()
+
+	if len(allModels) == 0 {
+		return fmt.Errorf("no models configured")
 	}
 
-	if err := json.Unmarshal(data, &config); err != nil {
-		return fmt.Errorf("config parse error: %w", err)
-	}
-
-	baseURL := ""
-	for _, m := range config.Models {
+	var baseURL string
+	for _, m := range allModels {
 		if m.BaseURL != "" {
 			baseURL = m.BaseURL
 			break
@@ -63,7 +60,7 @@ func testModelTools(modelName string) error {
 	}
 
 	if baseURL == "" {
-		return fmt.Errorf("no ollama config")
+		return fmt.Errorf("no ollama config found")
 	}
 
 	if modelName == "" {
@@ -72,7 +69,7 @@ func testModelTools(modelName string) error {
 		fmt.Println("")
 
 		successCount := 0
-		for _, model := range config.Models {
+		for _, model := range allModels {
 			if err := testSingleModel(model, baseURL); err == nil {
 				successCount++
 			}
@@ -80,13 +77,13 @@ func testModelTools(modelName string) error {
 		}
 
 		fmt.Println(i18n.T("cli.model.test.result_header"))
-		fmt.Println(i18n.TWithData("cli.model.test.total", map[string]interface{}{"Count": len(config.Models)}))
+		fmt.Println(i18n.TWithData("cli.model.test.total", map[string]interface{}{"Count": len(allModels)}))
 		fmt.Println(i18n.TWithData("cli.model.test.supported", map[string]interface{}{"Count": successCount}))
-		fmt.Println(i18n.TWithData("cli.model.test.unsupported", map[string]interface{}{"Count": len(config.Models) - successCount}))
+		fmt.Println(i18n.TWithData("cli.model.test.unsupported", map[string]interface{}{"Count": len(allModels) - successCount}))
 		return nil
 	}
 
-	for _, model := range config.Models {
+	for _, model := range allModels {
 		if model.Name == modelName {
 			return testSingleModel(model, baseURL)
 		}

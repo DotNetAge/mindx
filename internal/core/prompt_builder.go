@@ -86,6 +86,55 @@ func (b *PromptBuilder) Build(ctx *PromptContext) string {
 	return result
 }
 
+func (b *PromptBuilder) BuildCloudModel(ctx *PromptContext) string {
+	var parts []string
+
+	if ctx.UseThinking {
+		parts = append(parts, b.getCloudThinkingSegment())
+	}
+
+	parts = append(parts, b.getCloudTaskSegment())
+	parts = append(parts, b.getUselessRulesSegment())
+	parts = append(parts, b.getCloudOutputFormatSegment())
+
+	if ctx.UsePersona {
+		parts = append([]string{b.getPersonaSegment(ctx)}, parts...)
+	}
+
+	result := ""
+	for i, part := range parts {
+		if i > 0 {
+			result += "\n\n"
+		}
+		result += part
+	}
+	return result
+}
+
+func (b *PromptBuilder) getCloudThinkingSegment() string {
+	return `## 思考步骤
+
+1. 理解问题：用户真正想要什么？
+2. 识别意图和关键词
+3. 确定是否需要调用工具`
+}
+
+func (b *PromptBuilder) getCloudTaskSegment() string {
+	return `## 任务
+
+1. 识别意图和关键词
+2. 判断是否为无意义闲聊
+3. 如果可以直接回答就给出答案
+4. 如果需要调用工具就识别需要什么工具`
+}
+
+func (b *PromptBuilder) getCloudOutputFormatSegment() string {
+	return `## 输出格式
+
+输出纯JSON，不要markdown。示例：
+{"answer":"回复","intent":"意图","useless":false,"keywords":["关键词"],"send_to":""}`
+}
+
 func (b *PromptBuilder) getPersonaSegment(ctx *PromptContext) string {
 	return fmt.Sprintf(`## 人设
 
@@ -155,4 +204,8 @@ func SetSkillKeywords(keywords []string) {
 
 func BuildLeftBrainPrompt(ctx *PromptContext) string {
 	return DefaultPromptBuilder.Build(ctx)
+}
+
+func BuildCloudModelPrompt(ctx *PromptContext) string {
+	return DefaultPromptBuilder.BuildCloudModel(ctx)
 }

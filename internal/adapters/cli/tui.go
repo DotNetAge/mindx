@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"mindx/pkg/i18n"
@@ -38,15 +39,21 @@ type (
 	connectedMsg struct {
 		conn *websocket.Conn
 	}
-	wsMsg    string
+	wsMsg struct {
+		msgType string
+		content string
+	}
 	errorMsg error
 )
 
 type chatMessage struct {
-	sender    string
-	content   string
-	timestamp time.Time
-	isUser    bool
+	sender      string
+	content     string
+	timestamp   time.Time
+	isUser      bool
+	isThinking  bool
+	isThought   bool
+	thoughtType string
 }
 
 type model struct {
@@ -62,7 +69,20 @@ type model struct {
 	sessionID    string
 	scrollOffset int
 	msgChan      chan tea.Msg
+	thinking     bool
+	thinkingStep int
+	animFrame    int
 }
+
+var (
+	spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	thinkingSteps = []string{
+		"激活潜意识...",
+		"分析问题中...",
+		"调用工具处理...",
+		"生成响应中...",
+	}
+)
 
 func initialModel(port int, sessionID string) model {
 	return model{
@@ -72,6 +92,9 @@ func initialModel(port int, sessionID string) model {
 		connecting:   true,
 		scrollOffset: 0,
 		msgChan:      make(chan tea.Msg, 10),
+		thinking:     false,
+		thinkingStep: 0,
+		animFrame:    0,
 	}
 }
 
@@ -80,6 +103,7 @@ func (m model) Init() tea.Cmd {
 		tickCmd(),
 		connectWebSocket(m.port, m.sessionID, m.msgChan),
 		listenToMsgChan(m.msgChan),
+		animateCmd(),
 	)
 }
 
@@ -111,6 +135,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					isUser:    true,
 				})
 				m.input = ""
+				m.thinking = true
+				m.thinkingStep = 0
 				m.scrollToBottom()
 			}
 
@@ -131,13 +157,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scrollToBottom()
 
 	case wsMsg:
-		m.messages = append(m.messages, chatMessage{
-			sender:    "MindX",
-			content:   string(msg),
-			timestamp: time.Now(),
-			isUser:    false,
-		})
-		m.scrollToBottom()
+		if msg.msgType == "message" {
+			m.thinking = false
+			m.messages = append(m.messages, chatMessage{
+				sender:    "MindX",
+				content:   msg.content,
+				timestamp: time.Now(),
+				isUser:    false,
+			})
+			m.scrollToBottom()
+		} else if msg.msgType == "thinking" {
+			m.messages = append(m.messages, chatMessage{
+				sender:      "MindX",
+				content:     msg.content,
+				timestamp:   time.Now(),
+				isUser:      false,
+				isThought:   true,
+				thoughtType: "thinking",
+			})
+			m.scrollToBottom()
+		}
 		cmd = listenToMsgChan(m.msgChan)
 
 	case connectedMsg:
@@ -155,6 +194,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case errorMsg:
 		m.connecting = false
+		m.thinking = false
 		m.err = msg
 		m.messages = append(m.messages, chatMessage{
 			sender:    i18n.T("cli.tui.sender.error"),
@@ -165,14 +205,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scrollToBottom()
 
 	case tickMsg:
+		if m.thinking {
+			m.thinkingStep = (m.thinkingStep + 1) % len(thinkingSteps)
+		}
 		if !m.connected && !m.connecting && m.err == nil {
 			m.connecting = true
 			return m, connectWebSocket(m.port, m.sessionID, m.msgChan)
 		}
-		return m, tickCmd()
+		return m, tea.Batch(tickCmd(), animateCmd())
+
+	case struct{}:
+		m.animFrame = (m.animFrame + 1) % len(spinnerFrames)
+		return m, animateCmd()
 	}
 
 	return m, cmd
+}
+
+func animateCmd() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(t time.Time) tea.Msg {
+		return struct{}{}
+	})
 }
 
 func (m model) View() string {
@@ -182,42 +235,91 @@ func (m model) View() string {
 
 	styles := setupStyles()
 
-	header := styles.header.Render(i18n.TWithData("cli.tui.header", map[string]interface{}{
-		"Port":    m.port,
-		"Session": m.sessionID,
-	}))
+	header := styles.header.Render(
+		lipgloss.JoinHorizontal(lipgloss.Center,
+			styles.logo.Render("🧠 MindX"),
+			styles.divider.Render(" │ "),
+			styles.headerInfo.Render(fmt.Sprintf("Port: %d", m.port)),
+		),
+	)
 
 	var status string
 	if m.connecting {
-		status = styles.statusConnecting.Render(i18n.T("cli.tui.connecting"))
+		spinner := spinnerFrames[m.animFrame]
+		status = styles.statusConnecting.Render(fmt.Sprintf("%s %s", spinner, i18n.T("cli.tui.connecting")))
 	} else if m.connected {
-		status = styles.statusConnected.Render(i18n.T("cli.tui.connected"))
+		status = styles.statusConnected.Render(fmt.Sprintf("✓ %s", i18n.T("cli.tui.connected")))
 	} else if m.err != nil {
-		status = styles.statusError.Render(i18n.T("cli.tui.connection_failed"))
+		status = styles.statusError.Render(fmt.Sprintf("✗ %s", i18n.T("cli.tui.connection_failed")))
 	}
 
-	contentArea := styles.contentBox.Width(m.width - 4).Height(m.height - 6)
+	contentArea := styles.contentBox.Width(m.width - 4).Height(m.height - 8)
 
 	messages := m.getVisibleMessages()
 	messagesView := ""
 	for _, msg := range messages {
 		timestamp := msg.timestamp.Format("15:04:05")
-		senderStyle := styles.userSender
-		if !msg.isUser {
-			senderStyle = styles.botSender
+
+		if msg.isThought {
+			messagesView += fmt.Sprintf("%s\n", styles.thoughtBox.Render(
+				fmt.Sprintf("%s %s", styles.thoughtIcon.Render("💭"), msg.content),
+			))
+			continue
 		}
-		messagesView += fmt.Sprintf("%s %s: %s\n",
-			styles.timestamp.Render(timestamp),
-			senderStyle.Render(msg.sender),
-			styles.message.Render(msg.content))
+
+		if msg.isUser {
+			msgContent := wrapText(msg.content, m.width-30)
+			userBubble := styles.userBubble.Padding(1, 2).Render(msgContent)
+			senderLine := lipgloss.JoinHorizontal(lipgloss.Right,
+				styles.timestamp.Render(timestamp),
+				" ",
+				styles.userSender.Render(msg.sender),
+				" ",
+				styles.userAvatar.Render("👤"),
+			)
+			messagesView += lipgloss.JoinVertical(lipgloss.Right, senderLine, userBubble) + "\n\n"
+		} else {
+			msgContent := wrapText(msg.content, m.width-30)
+			botBubble := styles.botBubble.Padding(1, 2).Render(msgContent)
+			senderLine := lipgloss.JoinHorizontal(lipgloss.Left,
+				styles.botAvatar.Render("🤖"),
+				" ",
+				styles.botSender.Render(msg.sender),
+				" ",
+				styles.timestamp.Render(timestamp),
+			)
+			messagesView += lipgloss.JoinVertical(lipgloss.Left, senderLine, botBubble) + "\n\n"
+		}
+	}
+
+	if m.thinking {
+		spinner := spinnerFrames[m.animFrame]
+		thinkingText := thinkingSteps[m.thinkingStep]
+		thinkingBox := styles.thinkingBox.Render(
+			fmt.Sprintf("%s %s %s",
+				spinner,
+				styles.thinkingText.Render("思考中..."),
+				styles.thinkingStep.Render(thinkingText),
+			),
+		)
+		messagesView += thinkingBox + "\n"
 	}
 
 	content := contentArea.Render(messagesView)
 
-	inputPrompt := styles.inputPrompt.Render(i18n.T("cli.tui.input_prompt"))
-	inputLine := styles.inputBox.Render(inputPrompt + m.input)
+	inputPrompt := styles.inputPrompt.Render("> ")
+	inputLine := styles.inputBox.Render(inputPrompt + m.input + styles.cursor.Render("▊"))
 
-	footer := styles.footer.Render(i18n.T("cli.tui.footer"))
+	footer := styles.footer.Render(
+		lipgloss.JoinHorizontal(lipgloss.Center,
+			styles.footerKey.Render("ESC/Ctrl+C"),
+			" ",
+			styles.footerText.Render("退出  "),
+			styles.footerKey.Render("Enter"),
+			" ",
+			styles.footerText.Render("发送"),
+		),
+	)
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		header,
@@ -228,8 +330,34 @@ func (m model) View() string {
 	)
 }
 
+func wrapText(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+	var lines []string
+	words := strings.Fields(text)
+	var currentLine string
+	for _, word := range words {
+		if len(currentLine)+len(word)+1 > width {
+			if currentLine != "" {
+				lines = append(lines, currentLine)
+			}
+			currentLine = word
+		} else {
+			if currentLine != "" {
+				currentLine += " "
+			}
+			currentLine += word
+		}
+	}
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (m model) getVisibleMessages() []chatMessage {
-	maxLines := m.height - 8
+	maxLines := m.height - 10
 	if maxLines <= 0 {
 		return m.messages
 	}
@@ -239,10 +367,7 @@ func (m model) getVisibleMessages() []chatMessage {
 
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		msg := m.messages[i]
-		lines := (len(msg.content) + len(msg.sender) + 20) / (m.width - 10)
-		if lines < 1 {
-			lines = 1
-		}
+		lines := strings.Count(msg.content, "\n") + 3
 		visibleCount += lines
 		if visibleCount >= maxLines {
 			startIdx = i
@@ -262,7 +387,7 @@ func (m *model) scrollToBottom() {
 }
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -295,7 +420,21 @@ func connectWebSocket(port int, sessionID string, msgChan chan tea.Msg) tea.Cmd 
 				switch msgType {
 				case "message":
 					if content, ok := msg["content"].(string); ok {
-						msgChan <- wsMsg(content)
+						msgChan <- wsMsg{msgType: "message", content: content}
+					}
+				case "thinking":
+					if event, ok := msg["event"].(map[string]any); ok {
+						content, _ := event["content"].(string)
+						eventType, _ := event["type"].(string)
+						if eventType == "chunk" {
+							msgChan <- wsMsg{msgType: "thinking", content: content}
+						} else if content != "" {
+							displayContent := content
+							if eventType != "" {
+								displayContent = fmt.Sprintf("[%s] %s", eventType, content)
+							}
+							msgChan <- wsMsg{msgType: "thinking", content: displayContent}
+						}
 					}
 				case "connected":
 					msgChan <- connectedMsg{conn: conn}
@@ -328,6 +467,9 @@ func sendMessage(conn *websocket.Conn, content string) tea.Cmd {
 
 type styles struct {
 	header           lipgloss.Style
+	logo             lipgloss.Style
+	headerInfo       lipgloss.Style
+	divider          lipgloss.Style
 	statusConnected  lipgloss.Style
 	statusConnecting lipgloss.Style
 	statusError      lipgloss.Style
@@ -335,67 +477,148 @@ type styles struct {
 	timestamp        lipgloss.Style
 	userSender       lipgloss.Style
 	botSender        lipgloss.Style
+	userAvatar       lipgloss.Style
+	botAvatar        lipgloss.Style
+	userBubble       lipgloss.Style
+	botBubble        lipgloss.Style
+	thinkingBox      lipgloss.Style
+	thinkingText     lipgloss.Style
+	thinkingStep     lipgloss.Style
+	thoughtBox       lipgloss.Style
+	thoughtIcon      lipgloss.Style
 	message          lipgloss.Style
 	inputPrompt      lipgloss.Style
 	inputBox         lipgloss.Style
+	cursor           lipgloss.Style
 	footer           lipgloss.Style
+	footerKey        lipgloss.Style
+	footerText       lipgloss.Style
 }
 
 func setupStyles() styles {
 	return styles{
 		header: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#86BBD8")).
-			Background(lipgloss.Color("#2D3748")).
-			Padding(0, 1).
+			Foreground(lipgloss.Color("#E0E7FF")).
+			Background(lipgloss.Color("#1E1B4B")).
+			Padding(0, 2).
+			Bold(true).
+			Height(1),
+
+		logo: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#A78BFA")).
 			Bold(true),
 
+		headerInfo: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#C4B5FD")),
+
+		divider: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6D28D9")),
+
 		statusConnected: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#98FB98")).
-			Background(lipgloss.Color("#1D1F21")).
-			Padding(0, 1),
+			Foreground(lipgloss.Color("#34D399")).
+			Background(lipgloss.Color("#064E3B")).
+			Padding(0, 2).
+			Bold(true),
 
 		statusConnecting: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFD700")).
-			Background(lipgloss.Color("#1D1F21")).
-			Padding(0, 1),
+			Foreground(lipgloss.Color("#FBBF24")).
+			Background(lipgloss.Color("#451A03")).
+			Padding(0, 2),
 
 		statusError: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF6B6B")).
-			Background(lipgloss.Color("#1D1F21")).
-			Padding(0, 1),
+			Foreground(lipgloss.Color("#F87171")).
+			Background(lipgloss.Color("#450A0A")).
+			Padding(0, 2).
+			Bold(true),
 
 		contentBox: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#4A5568")).
-			Padding(0, 1),
+			BorderForeground(lipgloss.Color("#4C1D95")).
+			BorderBackground(lipgloss.Color("#0F0A1E")).
+			Background(lipgloss.Color("#0F0A1E")).
+			Padding(1, 1),
 
 		timestamp: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#718096")).
+			Foreground(lipgloss.Color("#6D28D9")).
 			Faint(true),
 
 		userSender: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#86BBD8")).
+			Foreground(lipgloss.Color("#C4B5FD")).
 			Bold(true),
 
 		botSender: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#F6AD55")).
+			Foreground(lipgloss.Color("#A78BFA")).
 			Bold(true),
+
+		userAvatar: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#34D399")),
+
+		botAvatar: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#8B5CF6")),
+
+		userBubble: lipgloss.NewStyle().
+			Background(lipgloss.Color("#1E1B4B")).
+			Foreground(lipgloss.Color("#E0E7FF")).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#4C1D95")),
+
+		botBubble: lipgloss.NewStyle().
+			Background(lipgloss.Color("#1F2937")).
+			Foreground(lipgloss.Color("#E5E7EB")).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#4B5563")),
+
+		thinkingBox: lipgloss.NewStyle().
+			Background(lipgloss.Color("#1E1B4B")).
+			Foreground(lipgloss.Color("#C4B5FD")).
+			Padding(1, 2).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#6D28D9")),
+
+		thinkingText: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#A78BFA")).
+			Bold(true),
+
+		thinkingStep: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#E0E7FF")),
+
+		thoughtBox: lipgloss.NewStyle().
+			Background(lipgloss.Color("#1F2937")).
+			Foreground(lipgloss.Color("#9CA3AF")).
+			Padding(0, 2).
+			Italic(true),
+
+		thoughtIcon: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6B7280")),
 
 		message: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#E2E8F0")),
 
 		inputPrompt: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#86BBD8")).
+			Foreground(lipgloss.Color("#A78BFA")).
 			Bold(true),
 
 		inputBox: lipgloss.NewStyle().
-			Background(lipgloss.Color("#2D3748")).
-			Padding(0, 1).
-			Width(80),
+			Background(lipgloss.Color("#1E1B4B")).
+			Foreground(lipgloss.Color("#E0E7FF")).
+			Padding(1, 2).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#4C1D95")),
+
+		cursor: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#A78BFA")).
+			Blink(true),
 
 		footer: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#718096")).
-			Faint(true).
-			Padding(0, 1),
+			Foreground(lipgloss.Color("#6D28D9")).
+			Background(lipgloss.Color("#0F0A1E")).
+			Padding(0, 2),
+
+		footerKey: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#A78BFA")).
+			Bold(true),
+
+		footerText: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6D28D9")),
 	}
 }

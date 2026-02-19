@@ -64,8 +64,16 @@ var kernelCtrlStartCmd = &cobra.Command{
 	Short: i18n.T("cli.kernel.start.short"),
 	Long:  i18n.T("cli.kernel.start.long"),
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(i18n.T("cli.kernel.start.not_implemented"))
-		fmt.Println(i18n.T("cli.kernel.start.todo"))
+		switch runtime.GOOS {
+		case "darwin":
+			startServiceMacOS()
+		case "linux":
+			startServiceLinux()
+		case "windows":
+			startServiceWindows()
+		default:
+			fmt.Println(i18n.TWithData("cli.kernel.status.unsupported_os", map[string]interface{}{"OS": runtime.GOOS}))
+		}
 	},
 }
 
@@ -133,7 +141,7 @@ func checkStatusMacOS() {
 
 	lines := strings.Split(string(output), "\n")
 	found := false
- 	for _, line := range lines {
+	for _, line := range lines {
 		if strings.Contains(line, "com.mindx.service") {
 			found = true
 			parts := strings.Fields(line)
@@ -377,4 +385,42 @@ func ensurePlistLoaded() error {
 		fmt.Println(i18n.T("cli.kernel.plist.loaded"))
 	}
 	return nil
+}
+
+func startServiceMacOS() {
+	if err := ensurePlistLoaded(); err != nil {
+		fmt.Println(i18n.TWithData("cli.kernel.start.plist_failed", map[string]interface{}{"Error": err.Error()}))
+		return
+	}
+
+	cmd := exec.Command("launchctl", "start", "com.mindx.service")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println(i18n.TWithData("cli.kernel.start.failed", map[string]interface{}{"Error": fmt.Sprintf("%v\n%s", err, string(output))}))
+		return
+	}
+
+	fmt.Println(i18n.T("cli.kernel.start.success"))
+}
+
+func startServiceLinux() {
+	cmd := exec.Command("systemctl", "start", "mindx")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println(i18n.TWithData("cli.kernel.start.failed", map[string]interface{}{"Error": fmt.Sprintf("%v\n%s", err, string(output))}))
+		return
+	}
+
+	fmt.Println(i18n.T("cli.kernel.start.success"))
+}
+
+func startServiceWindows() {
+	cmd := exec.Command("sc", "start", "MindX")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println(i18n.TWithData("cli.kernel.start.failed", map[string]interface{}{"Error": fmt.Sprintf("%v\n%s", err, string(output))}))
+		return
+	}
+
+	fmt.Println(i18n.T("cli.kernel.start.success"))
 }

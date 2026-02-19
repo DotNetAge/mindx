@@ -1,6 +1,6 @@
 import { ReactNode, useMemo, useEffect, useRef, useState } from 'react';
 import { UserIcon, WrenchIcon, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
-import logo from '../assets/logo.png';
+import logo from '../assets/logo.svg';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';

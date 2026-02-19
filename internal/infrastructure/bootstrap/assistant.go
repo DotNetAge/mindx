@@ -408,10 +408,3 @@ func (a *Assistant) Summarize() error {
 	a.logger.Info(i18n.T("infra.memory_reorg_complete"))
 	return nil
 }
-
-// getSystemPrompt 生成真正的智能体定义
-// 已废弃：systemPrompt 的格式化由 Brain 负责处理
-func (a *Assistant) getSystemPrompt() string {
-	prompt := fmt.Sprintf(core.AssistantPrompt, a.name, a.gender, a.character, a.userContent)
-	return prompt
-}

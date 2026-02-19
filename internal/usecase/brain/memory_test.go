@@ -17,7 +17,6 @@ type MemoryReferenceSuite struct {
 // 预置记忆：用户喜欢用 Go 编程
 // 验证：问"我喜欢用什么语言编程"时能回答正确
 func (s *MemoryReferenceSuite) TestMemory_ProgrammingPreference() {
-	s.brain = s.createTestBrain()
 
 	// 验证记忆已经记录（在 SetupSuite 中）
 	memories, err := s.memory.Search("编程")
@@ -49,7 +48,6 @@ func (s *MemoryReferenceSuite) TestMemory_ProgrammingPreference() {
 // 预置记忆：用户住在上海浦东
 // 验证：问"我住在哪里"时能回答正确
 func (s *MemoryReferenceSuite) TestMemory_LocationMemory() {
-	s.brain = s.createTestBrain()
 
 	// 提问关于居住地点
 	q := "我住在哪里？"
@@ -76,7 +74,6 @@ func (s *MemoryReferenceSuite) TestMemory_LocationMemory() {
 // 预置记忆：用户住在上海，喜欢编程
 // 验证：问"作为一个住在上海的程序员，我可以做什么"时能结合两个记忆
 func (s *MemoryReferenceSuite) TestMemory_CombinedMemory() {
-	s.brain = s.createTestBrain()
 
 	// 先添加地点记忆
 	locationMem := core.MemoryPoint{
@@ -115,7 +112,6 @@ func (s *MemoryReferenceSuite) TestMemory_CombinedMemory() {
 // TestMemory_UnknownQuestion 测试：未知问题
 // 验证：当问题没有相关记忆时，模型能合理回答
 func (s *MemoryReferenceSuite) TestMemory_UnknownQuestion() {
-	s.brain = s.createTestBrain()
 
 	// 提问预置记忆中没有的问题
 	q := "今天天气怎么样？"

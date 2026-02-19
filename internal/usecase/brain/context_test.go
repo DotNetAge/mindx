@@ -15,7 +15,6 @@ type ContextConsistencySuite struct {
 // TestContext_UserName 测试：用户能否被记住
 // 场景：第一轮告诉名字，第二轮询问名字
 func (s *ContextConsistencySuite) TestContext_UserName() {
-	s.brain = s.createTestBrain()
 
 	// 第一轮：告诉名字
 	q1 := "我叫张三"
@@ -51,7 +50,6 @@ func (s *ContextConsistencySuite) TestContext_UserName() {
 // TestContext_TopicContinuity 测试：话题连续性
 // 场景：第一轮介绍主题，第二轮追问相关问题
 func (s *ContextConsistencySuite) TestContext_TopicContinuity() {
-	s.brain = s.createTestBrain()
 
 	// 第一轮：介绍主题
 	q1 := "我想学编程，推荐一门语言"
@@ -86,7 +84,6 @@ func (s *ContextConsistencySuite) TestContext_TopicContinuity() {
 // TestContext_MultiRoundConversation 测试：多轮对话
 // 场景：连续5轮对话，测试上下文保持
 func (s *ContextConsistencySuite) TestContext_MultiRoundConversation() {
-	s.brain = s.createTestBrain()
 
 	questions := []string{
 		"我喜欢吃苹果",

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"mindx/internal/config"
 	"mindx/internal/core"
+	"mindx/internal/entity"
 	"mindx/internal/usecase/skills"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
@@ -261,12 +262,17 @@ func (b *BionicBrain) activateConsciousness(question string, thinkResult *core.T
 	}
 
 	capability, err := b.capRequest(thinkResult.Intent)
-	if err != nil {
-		b.logger.Warn(i18n.T("brain.get_cap_failed"), logging.Err(err))
-		return b.fallbackHandler.Handle(question, thinkResult, historyDialogue, leftBrainSearchedTools)
+	if err == nil && capability != nil {
+		b.logger.Info(i18n.T("brain.found_capability"), logging.String("capability", capability.Name))
+		return b.activateConsciousnessWithCapability(question, thinkResult, refs, historyDialogue, leftBrainSearchedTools, sessionID, eventChan, capability)
 	}
 
-	if b.consciousnessMgr.IsNil() && capability != nil {
+	b.logger.Info(i18n.T("brain.no_capability_found"), logging.String("intent", thinkResult.Intent))
+	return b.activateConsciousnessDualBrain(question, refs, historyDialogue, eventChan)
+}
+
+func (b *BionicBrain) activateConsciousnessWithCapability(question string, thinkResult *core.ThinkingResult, refs string, historyDialogue []*core.DialogueMessage, leftBrainSearchedTools []*core.ToolSchema, sessionID string, eventChan chan<- ThinkingEvent, capability *entity.Capability) (*core.ThinkingResponse, error) {
+	if b.consciousnessMgr.IsNil() {
 		b.consciousnessMgr.Create(capability)
 	}
 
@@ -277,7 +283,7 @@ func (b *BionicBrain) activateConsciousness(question string, thinkResult *core.T
 
 	var tools []*core.ToolSchema
 	if len(capability.Tools) > 0 {
-		tools, err = b.toolsRequest(capability.Tools...)
+		tools, err := b.toolsRequest(capability.Tools...)
 		if err != nil {
 			b.logger.Warn(i18n.T("brain.get_consciousness_tool_failed"), logging.Err(err))
 			tools = make([]*core.ToolSchema, 0)
@@ -330,6 +336,126 @@ func (b *BionicBrain) activateConsciousness(question string, thinkResult *core.T
 	}
 
 	return b.responseBuilder.BuildToolCallResponse(result.Answer, nil, thinkResult.SendTo), nil
+}
+
+func (b *BionicBrain) activateConsciousnessDualBrain(question string, refs string, historyDialogue []*core.DialogueMessage, eventChan chan<- ThinkingEvent) (*core.ThinkingResponse, error) {
+	b.logger.Info(i18n.T("brain.activating_consciousness_dual_brain"))
+
+	if !b.consciousnessMgr.HasDualBrain() {
+		err := b.consciousnessMgr.CreateDualBrain()
+		if err != nil {
+			b.logger.Warn(i18n.T("brain.consciousness_dual_brain_failed"), logging.Err(err))
+			return nil, fmt.Errorf("failed to create consciousness dual brain: %w", err)
+		}
+	}
+
+	leftBrain := b.consciousnessMgr.GetLeftBrain()
+	rightBrain := b.consciousnessMgr.GetRightBrain()
+
+	leftBrain.SetEventChan(eventChan)
+
+	thinkResult, err := leftBrain.Think(question, historyDialogue, refs, true)
+	if err != nil {
+		leftBrain.SetEventChan(nil)
+		b.logger.Error(i18n.T("brain.consciousness_left_think_failed"), logging.Err(err))
+		return nil, fmt.Errorf("consciousness left brain think failed: %w", err)
+	}
+
+	b.logger.Info(i18n.T("brain.consciousness_left_think_complete"),
+		logging.String(i18n.T("brain.intent"), thinkResult.Intent),
+		logging.String(i18n.T("brain.keywords"), fmt.Sprintf("%v", thinkResult.Keywords)),
+		logging.String(i18n.T("brain.useless"), fmt.Sprintf("%v", thinkResult.Useless)),
+		logging.String(i18n.T("brain.send_to"), thinkResult.SendTo))
+
+	if thinkResult.Useless || thinkResult.Answer != "" {
+		leftBrain.SetEventChan(nil)
+		return b.responseBuilder.BuildLeftBrainResponse(thinkResult, nil), nil
+	}
+
+	hasValidIntent := thinkResult.Intent != "" && len(thinkResult.Keywords) > 0
+	if !hasValidIntent {
+		leftBrain.SetEventChan(nil)
+		return b.responseBuilder.BuildLeftBrainResponse(thinkResult, nil), nil
+	}
+
+	b.logger.Info("[主意识右脑] 判断是否执行右脑处理",
+		logging.String("intent", thinkResult.Intent),
+		logging.Int("keywords_count", len(thinkResult.Keywords)))
+
+	answer, tools, _ := b.tryConsciousnessRightBrainProcess(question, thinkResult, historyDialogue, eventChan, rightBrain)
+	if answer != "" {
+		leftBrain.SetEventChan(nil)
+		return b.responseBuilder.BuildToolCallResponse(answer, tools, thinkResult.SendTo), nil
+	}
+
+	leftBrain.SetEventChan(nil)
+	return b.responseBuilder.BuildLeftBrainResponse(thinkResult, nil), nil
+}
+
+func (b *BionicBrain) tryConsciousnessRightBrainProcess(question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, eventChan chan<- ThinkingEvent, rightBrain core.Thinking) (string, []*core.ToolSchema, []*core.ToolSchema) {
+	b.logger.Info("[主意识右脑] 开始处理",
+		logging.String("question", question),
+		logging.String("intent", thinkResult.Intent))
+
+	searchKeywords := []string{question}
+	if thinkResult.Intent != "" {
+		searchKeywords = append(searchKeywords, thinkResult.Intent)
+	}
+	if len(thinkResult.Keywords) > 0 {
+		searchKeywords = append(searchKeywords, thinkResult.Keywords...)
+	}
+
+	b.logger.Info(i18n.T("brain.right_search_keywords"),
+		logging.String(i18n.T("brain.intent"), thinkResult.Intent),
+		logging.String(i18n.T("brain.keywords"), fmt.Sprintf("%v", thinkResult.Keywords)),
+		logging.String("search_keywords", fmt.Sprintf("%v", searchKeywords)))
+
+	tools, err := b.toolsRequest(searchKeywords...)
+	if err != nil {
+		b.logger.Warn("[主意识右脑] 工具搜索失败", logging.Err(err))
+		return "", nil, nil
+	}
+
+	b.logger.Info("[主意识右脑] 工具搜索结果",
+		logging.Int("tools_count", len(tools)),
+		logging.Err(err))
+
+	if len(tools) == 0 {
+		b.logger.Warn("[主意识右脑] 没有找到匹配的工具")
+		return "", nil, nil
+	}
+
+	toolNames := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		toolNames = append(toolNames, tool.Name)
+	}
+
+	if eventChan != nil {
+		eventChan <- ThinkingEvent{
+			Type:     ThinkingEventProgress,
+			Content:  fmt.Sprintf(i18n.T("brain.found_tools"), len(tools)),
+			Progress: 70,
+			Metadata: map[string]any{"tools": toolNames},
+		}
+	}
+
+	b.logger.Info(i18n.T("brain.right_found_skill"),
+		logging.String(i18n.T("brain.question"), question),
+		logging.String(i18n.T("brain.intent"), thinkResult.Intent),
+		logging.String(i18n.T("brain.keywords"), fmt.Sprintf("%v", thinkResult.Keywords)),
+		logging.String(i18n.T("brain.matched_tools"), fmt.Sprintf("%v", toolNames)),
+		logging.Int(i18n.T("brain.tools_count"), len(tools)))
+
+	rightBrain.SetEventChan(eventChan)
+	answer, err := b.toolCaller.ExecuteToolCall(rightBrain, question, historyDialogue, tools)
+	rightBrain.SetEventChan(nil)
+
+	if err != nil {
+		b.logger.Warn(i18n.T("brain.right_tool_call_failed"), logging.Err(err))
+		return "", nil, tools
+	}
+
+	return answer, tools, tools
 }
 
 func (b *BionicBrain) consciousnessWithTools(question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, tools []*core.ToolSchema, eventChan chan<- ThinkingEvent) (*core.ThinkingResponse, error) {

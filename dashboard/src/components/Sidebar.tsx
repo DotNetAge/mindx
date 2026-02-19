@@ -12,7 +12,7 @@ import {
   CloudIcon,
   PlayCircleIcon
 } from 'tdesign-icons-react';
-import logo from '../assets/logo.png';
+import logo from '../assets/logo.svg';
 import './styles/Sidebar.css';
 import { useTranslation } from '../i18n';
 

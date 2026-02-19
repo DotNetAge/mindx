@@ -226,18 +226,6 @@ if [ -d "config" ]; then
     echo -e "${GREEN}✓ Copied config templates${NC}"
 fi
 
-# Copy official docs if available
-if [ -d "official" ]; then
-    mkdir -p "$MINDX_PATH/official"
-    cp -r official/* "$MINDX_PATH/official/" 2>/dev/null || true
-    echo -e "${GREEN}✓ Copied official documentation${NC}"
-fi
-
-# Copy VERSION file
-if [ -f "VERSION" ]; then
-    cp VERSION "$MINDX_PATH/"
-fi
-
 # Copy uninstall script
 if [ -f "uninstall.sh" ]; then
     cp uninstall.sh "$MINDX_PATH/"
@@ -254,12 +242,12 @@ echo -e "${YELLOW}[5/9] Creating symlink to system path...${NC}"
 INSTALL_DIR="/usr/local/bin"
 
 if [ -w "$INSTALL_DIR" ]; then
-    ln -sf "$MINDX_PATH/mindx" "$INSTALL_DIR/mindx"
-    echo -e "${GREEN}✓ Created symlink $INSTALL_DIR/mindx -> $MINDX_PATH/mindx${NC}"
+    ln -sf "$MINDX_PATH/bin/mindx" "$INSTALL_DIR/mindx"
+    echo -e "${GREEN}✓ Created symlink $INSTALL_DIR/mindx -> $MINDX_PATH/bin/mindx${NC}"
 else
     echo -e "${YELLOW}⚠ Cannot write to $INSTALL_DIR${NC}"
-    echo -e "${YELLOW}  Please run: sudo ln -sf $MINDX_PATH/mindx $INSTALL_DIR/mindx${NC}"
-    echo -e "${YELLOW}  Or add $MINDX_PATH to your PATH${NC}"
+    echo -e "${YELLOW}  Please run: sudo ln -sf $MINDX_PATH/bin/mindx $INSTALL_DIR/mindx${NC}"
+    echo -e "${YELLOW}  Or add $MINDX_PATH/bin to your PATH${NC}"
 fi
 
 echo ""
@@ -314,24 +302,35 @@ else
     echo -e "${BLUE}ℹ .env file exists in workspace${NC}"
 fi
 
-# Update .env file in source directory (if in source mode)
-if [ "$INSTALL_MODE" = "source" ]; then
-    if [ -f ".env" ]; then
-        # Update MINDX_PATH and MINDX_WORKSPACE in existing .env
+# Create/update .env file in current directory (both source and release mode)
+CURRENT_DIR=$(pwd)
+if [ -f ".env" ]; then
+    # Update MINDX_PATH and MINDX_WORKSPACE in existing .env
+    if [ "$INSTALL_MODE" = "source" ]; then
         sed -i.bak "s|^MINDX_PATH=.*|MINDX_PATH=${PROJECT_ROOT}|" .env 2>/dev/null || sed -i '' "s|^MINDX_PATH=.*|MINDX_PATH=${PROJECT_ROOT}|" .env 2>/dev/null || true
-        sed -i.bak "s|^MINDX_WORKSPACE=.*|MINDX_WORKSPACE=${MINDX_WORKSPACE}|" .env 2>/dev/null || sed -i '' "s|^MINDX_WORKSPACE=.*|MINDX_WORKSPACE=${MINDX_WORKSPACE}|" .env 2>/dev/null || true
-        rm -f .env.bak 2>/dev/null || true
-        echo -e "${GREEN}✓ Updated .env file in source directory${NC}"
     else
-        # Create .env file in source directory
+        sed -i.bak "s|^MINDX_PATH=.*|MINDX_PATH=${MINDX_PATH}|" .env 2>/dev/null || sed -i '' "s|^MINDX_PATH=.*|MINDX_PATH=${MINDX_PATH}|" .env 2>/dev/null || true
+    fi
+    sed -i.bak "s|^MINDX_WORKSPACE=.*|MINDX_WORKSPACE=${MINDX_WORKSPACE}|" .env 2>/dev/null || sed -i '' "s|^MINDX_WORKSPACE=.*|MINDX_WORKSPACE=${MINDX_WORKSPACE}|" .env 2>/dev/null || true
+    rm -f .env.bak 2>/dev/null || true
+    echo -e "${GREEN}✓ Updated .env file in current directory${NC}"
+else
+    # Create .env file in current directory
+    if [ "$INSTALL_MODE" = "source" ]; then
         cat > ".env" << ENV_EOF
 # Environment variables for Bot application
 MINDX_WORKSPACE=${MINDX_WORKSPACE}
 MINDX_PATH=${PROJECT_ROOT}
 
 ENV_EOF
-        echo -e "${GREEN}✓ Created .env file in source directory${NC}"
+    else
+        cat > ".env" << ENV_EOF
+# MindX Environment Configuration
+MINDX_PATH=${MINDX_PATH}
+MINDX_WORKSPACE=${MINDX_WORKSPACE}
+ENV_EOF
     fi
+    echo -e "${GREEN}✓ Created .env file in current directory${NC}"
 fi
 
 echo ""
@@ -390,8 +389,8 @@ echo "Then reload your shell profile:"
 echo "  source ~/.zshrc  # or ~/.bashrc"
 echo ""
 echo "Quick start:"
-echo "  1. Start Dashboard: mindx dashboard"
-echo "  2. Start TUI: mindx tui"
+echo "  1. Start MindX service: mindx start"
+echo "  2. Open Dashboard WebUI: mindx dashboard"
 echo "  3. Visit: http://localhost:911"
 echo ""
 echo "To uninstall:"

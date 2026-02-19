@@ -8,37 +8,45 @@ import (
 )
 
 const (
-	ConfigDir          = "config"
-	SkillsDir          = "skills"
-	LogsDir            = "logs"
-	DataDir            = "data"
-	DocumentsDir       = "documents"
-	ImagesDir          = "images"
-	SessionsDir        = "sessions"
-	VectorsDir         = "vectors"
-	MemoryDir          = "memory"
-	ModelsDir          = "models"
+	ConfigDir    = "config"
+	SkillsDir    = "skills"
+	LogsDir      = "logs"
+	DataDir      = "data"
+	DocumentsDir = "documents"
+	ImagesDir    = "images"
+	SessionsDir  = "sessions"
+	VectorsDir   = "vectors"
+	MemoryDir    = "memory"
+	ModelsDir    = "models"
 
-	CapabilitiesFile   = "capabilities"
-	ChannelsFile       = "channels"
-	ModelsFile         = "models"
-	ServerFile         = "server"
-	TopicsFile         = "topics"
-	SkillsConfigFile   = "skills"
+	CapabilitiesFile = "capabilities"
+	ChannelsFile     = "channels"
+	ModelsFile       = "models"
+	ServerFile       = "server"
+	TopicsFile       = "topics"
+	SkillsConfigFile = "skills"
 
-	SystemLogFile      = "system.log"
-	TokenUsageDBFile   = "token_usage.db"
+	SystemLogFile    = "system.log"
+	TokenUsageDBFile = "token_usage.db"
 )
 
 var (
-	ErrMINDXPathNotSet    = errors.New("MINDX_PATH environment variable not set")
+	ErrMINDXPathNotSet      = errors.New("MINDX_PATH environment variable not set")
 	ErrMINDXWorkspaceNotSet = errors.New("MINDX_WORKSPACE environment variable not set")
 )
 
 func GetInstallPath() (string, error) {
 	path := os.Getenv("MINDX_PATH")
 	if path == "" {
-		return "", ErrMINDXPathNotSet
+		execPath, err := os.Executable()
+		if err == nil {
+			path = filepath.Dir(execPath)
+		} else {
+			path, err = os.Getwd()
+			if err != nil {
+				return "", ErrMINDXPathNotSet
+			}
+		}
 	}
 	return path, nil
 }
@@ -46,7 +54,15 @@ func GetInstallPath() (string, error) {
 func GetWorkspacePath() (string, error) {
 	path := os.Getenv("MINDX_WORKSPACE")
 	if path == "" {
-		return "", ErrMINDXWorkspaceNotSet
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			path, err = os.Getwd()
+			if err != nil {
+				return "", ErrMINDXWorkspaceNotSet
+			}
+		} else {
+			path = filepath.Join(homeDir, ".mindx")
+		}
 	}
 	return path, nil
 }

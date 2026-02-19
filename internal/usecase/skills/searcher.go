@@ -209,10 +209,15 @@ func (s *SkillSearcher) searchByKeywords(keywords []string) ([]*core.Skill, erro
 			info.Def.Description,
 			strings.Join(info.Def.Tags, " "),
 			info.Def.Category)
+		searchTextLower := strings.ToLower(searchText)
 
 		for _, kw := range keywords {
 			kwLower := strings.ToLower(strings.TrimSpace(kw))
+			if kwLower == "" {
+				continue
+			}
 
+			// 正向匹配：技能信息包含关键词
 			if strings.Contains(strings.ToLower(info.Def.Name), kwLower) {
 				score += 3
 			}
@@ -231,8 +236,22 @@ func (s *SkillSearcher) searchByKeywords(keywords []string) ([]*core.Skill, erro
 				score += 1
 			}
 
-			if strings.Contains(strings.ToLower(searchText), kwLower) {
+			if strings.Contains(searchTextLower, kwLower) {
 				score += 1
+			}
+
+			// 反向匹配：关键词包含技能信息中的词
+			// 检查技能名称
+			if strings.Contains(kwLower, strings.ToLower(info.Def.Name)) {
+				score += 3
+			}
+
+			// 检查标签
+			for _, tag := range info.Def.Tags {
+				tagLower := strings.ToLower(tag)
+				if tagLower != "" && strings.Contains(kwLower, tagLower) {
+					score += 2
+				}
 			}
 		}
 

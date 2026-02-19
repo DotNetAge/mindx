@@ -14,7 +14,6 @@ type SkillExecutionSuite struct {
 // TestSkill_WeatherQuery 测试：天气查询技能
 // 验证：模型能识别到天气查询意图，并返回工具 Schema
 func (s *SkillExecutionSuite) TestSkill_WeatherQuery() {
-	s.brain = s.createTestBrain()
 
 	// 验证技能已加载
 	skills, err := s.skillMgr.SearchSkills("天气", "查询")
@@ -58,7 +57,6 @@ func (s *SkillExecutionSuite) TestSkill_WeatherQuery() {
 // TestSkill_TimeQuery 测试：时间查询
 // 验证：模型能处理时间查询（即使没有专门的技能）
 func (s *SkillExecutionSuite) TestSkill_TimeQuery() {
-	s.brain = s.createTestBrain()
 
 	q := "现在几点了？"
 	s.logger.Info("提问", logging.String("question", q))
@@ -81,7 +79,6 @@ func (s *SkillExecutionSuite) TestSkill_TimeQuery() {
 // TestSkill_MultipleSkills 测试：多个技能识别
 // 验证：在一次对话中识别多个技能意图
 func (s *SkillExecutionSuite) TestSkill_MultipleSkills() {
-	s.brain = s.createTestBrain()
 
 	// 提问涉及多个技能的问题
 	q := "查一下北京天气，还有现在几点了"
@@ -110,7 +107,6 @@ func (s *SkillExecutionSuite) TestSkill_MultipleSkills() {
 // TestSkill_NoIntent 测试：无技能意图
 // 验证：当问题不需要技能时，不返回工具
 func (s *SkillExecutionSuite) TestSkill_NoIntent() {
-	s.brain = s.createTestBrain()
 
 	// 纯闲聊问题
 	q := "你今天心情怎么样？"

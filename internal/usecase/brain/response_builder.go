@@ -2,7 +2,6 @@ package brain
 
 import (
 	"mindx/internal/core"
-	"fmt"
 )
 
 type ResponseBuilder struct{}
@@ -31,8 +30,4 @@ func (rb *ResponseBuilder) BuildToolCallResponse(answer string, tools []*core.To
 		Tools:  tools,
 		SendTo: sendTo,
 	}
-}
-
-func (rb *ResponseBuilder) BuildLeftBrainPrompt(persona *core.Persona) string {
-	return fmt.Sprintf(core.AssistantPrompt, persona.Name, persona.Gender, persona.Character, persona.UserContent)
 }
