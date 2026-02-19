@@ -20,6 +20,7 @@ vendor/
 # Build directories
 build/
 dist/
+releases/
 
 # IDE specific files
 .vscode/

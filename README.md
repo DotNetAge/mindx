@@ -61,7 +61,7 @@ MindX 绝非简单的问答系统，而是具备「思考、记忆、执行、�
 ## 快速开始
 
 ### 系统要求
-- 操作系统：macOS / Linux（Windows 支持即将推出）
+- 操作系统：macOS / Linux / Windows
 - 内存：建议 8GB 以上
 - 硬盘空间：建议 20GB 以上
 - 网络：首次安装需下载模型，后续可离线使用
@@ -89,22 +89,27 @@ ollama list  # 显示模型列表（空列表也表示安装成功）
 
 ### 安装 MindX
 #### 方式 1：预编译包（推荐）
-1. 下载对应系统的发布包（GitHub Releases）：
-   - macOS (Intel): `mindx-v{x.x.x}-darwin-amd64.zip`
-   - macOS (Apple Silicon): `mindx-v{x.x.x}-darwin-arm64.zip`
-   - Linux (x86_64): `mindx-v{x.x.x}-linux-amd64.tar.gz`
+1. 下载对应系统的发布包（GitHub Releases / Gitee Releases）：
+   - **macOS (Universal)**: `mindx-v1.0.0-darwin-universal.zip` (同时支持 Intel 和 Apple Silicon)
+   - **Linux (x86_64)**: `mindx-1.0.0-linux-amd64.tar.gz`
+   - **Linux (ARM64)**: `mindx-1.0.0-linux-arm64.tar.gz`
+   - **Windows (x86_64)**: `mindx-1.0.0-windows-amd64.zip`
+   - **Windows (ARM64)**: `mindx-1.0.0-windows-arm64.zip`
 
 2. 解压并安装：
    ```bash
    # macOS
-   unzip mindx-v{x.x.x}-darwin-arm64.zip
-   cd mindx-v{x.x.x}
+   unzip mindx-v1.0.0-darwin-universal.zip
+   cd mindx-v1.0.0-darwin-universal
    ./install.sh
    
    # Linux
-   tar -xzf mindx-v{x.x.x}-linux-amd64.tar.gz
-   cd mindx-v{x.x.x}
+   tar -xzf mindx-1.0.0-linux-amd64.tar.gz
+   cd mindx-1.0.0-linux-amd64
    ./install.sh
+   
+   # Windows
+   # 解压 mindx-1.0.0-windows-amd64.zip，然后运行安装脚本
    ```
 
 3. 启动服务：
