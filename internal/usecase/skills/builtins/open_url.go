@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"mindx/internal/utils"
-	"os"
 	"strings"
 	"time"
 )
@@ -17,8 +16,7 @@ func OpenURL(params map[string]any) (string, error) {
 
 	br, err := utils.NewBrowser("")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create browser: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("failed to create browser: %w", err)
 	}
 
 	defer func() {
@@ -36,7 +34,7 @@ func OpenURL(params map[string]any) (string, error) {
 
 	title := extractTitle(result.Content)
 
-	return getJSONResult(url, title, result, elapsed), nil
+	return getJSONResult(url, title, result, elapsed)
 }
 
 func extractTitle(content string) string {
@@ -50,8 +48,7 @@ func extractTitle(content string) string {
 	return ""
 }
 
-func getJSONResult(url, title string, result *utils.OpenResult, elapsed time.Duration) string {
-
+func getJSONResult(url, title string, result *utils.OpenResult, elapsed time.Duration) (string, error) {
 	output := map[string]interface{}{
 		"title":      title,
 		"url":        url,
@@ -62,8 +59,7 @@ func getJSONResult(url, title string, result *utils.OpenResult, elapsed time.Dur
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "json serialize failed: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("json serialize failed: %w", err)
 	}
-	return string(data)
+	return string(data), nil
 }

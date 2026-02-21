@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"mindx/internal/utils"
 	"mindx/pkg/i18n"
-	"os"
 	"strings"
 	"time"
 
@@ -24,8 +23,7 @@ func NewDeepSearch(baseUrl string, apiKey string, model string, langName string)
 
 		br, err := utils.NewBrowser("")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "browser create failed: %v\n", err)
-			os.Exit(1)
+			return "", fmt.Errorf("browser create failed: %w", err)
 		}
 
 		defer func() {
@@ -37,8 +35,7 @@ func NewDeepSearch(baseUrl string, apiKey string, model string, langName string)
 
 		results, err := br.Search(terms, 5)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "search failed: %v\n", err)
-			os.Exit(1)
+			return "", fmt.Errorf("search failed: %w", err)
 		}
 
 		if len(results) > 20 {
@@ -51,15 +48,13 @@ func NewDeepSearch(baseUrl string, apiKey string, model string, langName string)
 
 		filteredResults, err := filterResultsWithLLM(client, terms, results, model)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "filter failed: %v\n", err)
-			os.Exit(1)
+			return "", fmt.Errorf("filter failed: %w", err)
 		}
 
 		var pageContents []PageContent
 		for _, result := range filteredResults {
 			openResult, err := br.Open(result.Link)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "open page failed: %s: %v\n", result.Link, err)
 				continue
 			}
 			pageContents = append(pageContents, PageContent{
@@ -70,18 +65,16 @@ func NewDeepSearch(baseUrl string, apiKey string, model string, langName string)
 		}
 
 		if len(pageContents) == 0 {
-			fmt.Fprintln(os.Stderr, i18n.T("no_page_opened"))
-			os.Exit(1)
+			return "", fmt.Errorf(i18n.T("no_page_opened"))
 		}
 
 		summary, err := summarizeWithLLM(client, terms, pageContents, model, langName)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "summarize failed: %v\n", err)
-			os.Exit(1)
+			return "", fmt.Errorf("summarize failed: %w", err)
 		}
 
 		elapsed := time.Since(startTime)
-		return getJSONSearchResult(summary, pageContents, elapsed), nil
+		return getJSONSearchResult(summary, pageContents, elapsed)
 	}
 }
 
@@ -192,7 +185,7 @@ Content: %s
 	return resp.Choices[0].Message.Content, nil
 }
 
-func getJSONSearchResult(summary string, pageContents []PageContent, elapsed time.Duration) string {
+func getJSONSearchResult(summary string, pageContents []PageContent, elapsed time.Duration) (string, error) {
 	output := DeepSearchResult{
 		Summary:      summary,
 		PageContents: pageContents,
@@ -202,10 +195,9 @@ func getJSONSearchResult(summary string, pageContents []PageContent, elapsed tim
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "json serialize failed: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("json serialize failed: %w", err)
 	}
-	return string(data)
+	return string(data), nil
 }
 
 func getSummarizePromptEnd(langName string) string {
