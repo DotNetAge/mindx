@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"mindx/internal/core"
+	"mindx/internal/entity"
 	"mindx/internal/usecase/capability"
 	"mindx/internal/usecase/cron"
 	"mindx/internal/usecase/session"
@@ -10,8 +11,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Assistant interface {
+	Ask(question string, sessionID string, eventChan chan<- entity.ThinkingEvent) (string, string, error)
+}
+
 // RegisterRoutes 注册所有路由
-func RegisterRoutes(router *gin.Engine, tokenUsageRepo core.TokenUsageRepository, skillMgr *skills.SkillMgr, capMgr *capability.CapabilityManager, sessionMgr *session.SessionMgr, cronScheduler cron.Scheduler) {
+func RegisterRoutes(router *gin.Engine, tokenUsageRepo core.TokenUsageRepository, skillMgr *skills.SkillMgr, capMgr *capability.CapabilityManager, sessionMgr *session.SessionMgr, cronScheduler cron.Scheduler, assistant Assistant) {
 	api := router.Group("/api")
 	{
 		// 健康检查
@@ -27,12 +32,13 @@ func RegisterRoutes(router *gin.Engine, tokenUsageRepo core.TokenUsageRepository
 		api.POST("/service/model-test", service.ModelTest)
 
 		// 会话管理
-		conversations := NewConversationsHandler(sessionMgr)
+		conversations := NewConversationsHandler(sessionMgr, assistant)
 		conversationsGroup := api.Group("/conversations")
 		{
 			conversationsGroup.GET("", conversations.listConversations)
 			conversationsGroup.POST("", conversations.createNewConversation)
 			conversationsGroup.GET("/current", conversations.getCurrentSession)
+			conversationsGroup.POST("/current/message", conversations.sendMessage)
 			conversationsGroup.GET("/:id", conversations.getConversation)
 			conversationsGroup.POST("/:id/switch", conversations.switchConversation)
 			conversationsGroup.DELETE("/:id", conversations.deleteConversation)

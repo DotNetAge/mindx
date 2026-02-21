@@ -11,8 +11,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type SendMessageRequest struct {
+	Type    string `json:"type"`
+	Content string `json:"content"`
+}
+
 type ConversationsHandler struct {
 	sessionMgr *sessionMgr.SessionMgr
+	assistant  Assistant
 }
 
 type CurrentSessionResponse struct {
@@ -38,10 +44,38 @@ type ConversationMsgDetail struct {
 	Content string `json:"content"`
 }
 
-func NewConversationsHandler(sessionMgr *sessionMgr.SessionMgr) *ConversationsHandler {
+func NewConversationsHandler(sessionMgr *sessionMgr.SessionMgr, assistant Assistant) *ConversationsHandler {
 	return &ConversationsHandler{
 		sessionMgr: sessionMgr,
+		assistant:  assistant,
 	}
+}
+
+func (h *ConversationsHandler) sendMessage(c *gin.Context) {
+	var req SendMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	currentSession, exists := h.sessionMgr.GetCurrentSession()
+	if !exists || currentSession == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No current session"})
+		return
+	}
+
+	eventChan := make(chan entity.ThinkingEvent, 100)
+	defer close(eventChan)
+
+	answer, _, err := h.assistant.Ask(req.Content, currentSession.ID, eventChan)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"content": answer,
+	})
 }
 
 func (h *ConversationsHandler) listConversations(c *gin.Context) {

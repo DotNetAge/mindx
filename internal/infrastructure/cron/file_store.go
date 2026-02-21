@@ -104,11 +104,8 @@ func (s *FileJobStore) Update(id string, job *cron.Job) error {
 	if job.Cron != "" {
 		existing.Cron = job.Cron
 	}
-	if job.Skill != "" {
-		existing.Skill = job.Skill
-	}
-	if job.Params != nil {
-		existing.Params = job.Params
+	if job.Message != "" {
+		existing.Message = job.Message
 	}
 
 	return s.save()

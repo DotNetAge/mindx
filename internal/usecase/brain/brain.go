@@ -5,6 +5,7 @@ import (
 	"mindx/internal/config"
 	"mindx/internal/core"
 	"mindx/internal/entity"
+	"mindx/internal/usecase/cron"
 	"mindx/internal/usecase/skills"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
@@ -32,6 +33,7 @@ type BionicBrain struct {
 	historyRequest   core.OnHistoryRequest
 	persona          *core.Persona
 	tokenUsageRepo   core.TokenUsageRepository
+	cronScheduler    cron.Scheduler
 	brain            *core.Brain
 }
 
@@ -45,6 +47,7 @@ func NewBrain(
 	historyRequest core.OnHistoryRequest,
 	logger logging.Logger,
 	tokenUsageRepo core.TokenUsageRepository,
+	cronScheduler cron.Scheduler,
 ) (*core.Brain, error) {
 
 	modelsMgr := config.GetModelsManager()
@@ -95,6 +98,7 @@ func NewBrain(
 		historyRequest:   historyRequest,
 		persona:          persona,
 		tokenUsageRepo:   tokenUsageRepo,
+		cronScheduler:    cronScheduler,
 	}
 
 	brain := &core.Brain{
@@ -152,6 +156,36 @@ func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, e
 		logging.String(i18n.T("brain.useless"), fmt.Sprintf("%v", thinkResult.Useless)),
 		logging.String(i18n.T("brain.send_to"), thinkResult.SendTo),
 		logging.String(i18n.T("brain.can_answer"), fmt.Sprintf("%v", thinkResult.CanAnswer)))
+
+	if thinkResult.HasSchedule {
+		b.logger.Info("[Cron] 检测到定时意图",
+			logging.String("name", thinkResult.ScheduleName),
+			logging.String("cron", thinkResult.ScheduleCron),
+			logging.String("message", thinkResult.ScheduleMessage))
+
+		if b.cronScheduler != nil {
+			job := &cron.Job{
+				Name:    thinkResult.ScheduleName,
+				Cron:    thinkResult.ScheduleCron,
+				Message: thinkResult.ScheduleMessage,
+			}
+
+			id, err := b.cronScheduler.Add(job)
+			if err != nil {
+				b.logger.Warn("[Cron] 创建任务失败", logging.Err(err))
+				thinkResult.Answer = fmt.Sprintf("抱歉，创建定时任务失败：%v", err)
+			} else {
+				b.logger.Info("[Cron] 任务创建成功", logging.String("id", id))
+				thinkResult.Answer = fmt.Sprintf("好的，我已经为你创建了定时任务「%s」，会在 %s 执行。",
+					thinkResult.ScheduleName, thinkResult.ScheduleCron)
+			}
+		} else {
+			thinkResult.Answer = "抱歉，当前系统不支持定时任务功能。"
+		}
+
+		b.leftBrain.SetEventChan(nil)
+		return b.responseBuilder.BuildLeftBrainResponse(thinkResult, nil), nil
+	}
 
 	var leftBrainSearchedTools []*core.ToolSchema
 	b.logger.Info("[右脑] 判断是否执行右脑处理",

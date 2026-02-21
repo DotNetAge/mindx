@@ -7,6 +7,7 @@ import (
 	"mindx/internal/entity"
 	"mindx/internal/infrastructure/persistence"
 	"mindx/internal/usecase/capability"
+	"mindx/internal/usecase/cron"
 	"mindx/internal/usecase/memory"
 	"mindx/internal/usecase/session"
 	"mindx/internal/usecase/skills"
@@ -18,6 +19,60 @@ import (
 
 	"github.com/stretchr/testify/suite"
 )
+
+type mockScheduler struct {
+	jobs map[string]*cron.Job
+}
+
+func (m *mockScheduler) Add(job *cron.Job) (string, error) {
+	id := fmt.Sprintf("mock-job-%d", time.Now().UnixNano())
+	m.jobs[id] = job
+	return id, nil
+}
+
+func (m *mockScheduler) Delete(id string) error {
+	delete(m.jobs, id)
+	return nil
+}
+
+func (m *mockScheduler) List() ([]*cron.Job, error) {
+	jobs := make([]*cron.Job, 0, len(m.jobs))
+	for _, job := range m.jobs {
+		jobs = append(jobs, job)
+	}
+	return jobs, nil
+}
+
+func (m *mockScheduler) Get(id string) (*cron.Job, error) {
+	return m.jobs[id], nil
+}
+
+func (m *mockScheduler) Pause(id string) error {
+	return nil
+}
+
+func (m *mockScheduler) Resume(id string) error {
+	return nil
+}
+
+func (m *mockScheduler) Update(id string, job *cron.Job) error {
+	m.jobs[id] = job
+	return nil
+}
+
+func (m *mockScheduler) RunJob(id string) error {
+	return nil
+}
+
+func (m *mockScheduler) UpdateLastRun(id string, status cron.JobStatus, errMsg *string) error {
+	return nil
+}
+
+func newMockScheduler() *mockScheduler {
+	return &mockScheduler{
+		jobs: make(map[string]*cron.Job),
+	}
+}
 
 // BrainIntegrationSuite Brain 集成测试套件
 // 使用真实组件（Memory、SkillMgr），不使用 Mock
@@ -105,6 +160,7 @@ func (s *BrainIntegrationSuite) SetupSuite() {
 	}
 
 	persona := &core.Persona{Name: "小柔", Gender: "女", Character: "温柔"}
+	mockSched := newMockScheduler()
 	s.brain, err = NewBrain(
 		s.srvCfg,
 		persona,
@@ -115,6 +171,7 @@ func (s *BrainIntegrationSuite) SetupSuite() {
 		historyRequest,
 		s.logger,
 		tokenUsageRepo,
+		mockSched,
 	)
 	s.Require().NoError(err)
 

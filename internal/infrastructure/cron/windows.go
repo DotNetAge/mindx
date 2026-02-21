@@ -11,18 +11,16 @@ import (
 )
 
 type WindowsTaskScheduler struct {
-	store             cron.JobStore
-	skillInfoProvider cron.SkillInfoProvider
+	store cron.JobStore
 }
 
-func NewWindowsTaskScheduler(skillInfoProvider cron.SkillInfoProvider) (cron.Scheduler, error) {
+func NewWindowsTaskScheduler() (cron.Scheduler, error) {
 	store, err := NewFileJobStore()
 	if err != nil {
 		return nil, err
 	}
 	return &WindowsTaskScheduler{
-		store:             store,
-		skillInfoProvider: skillInfoProvider,
+		store: store,
 	}, nil
 }
 

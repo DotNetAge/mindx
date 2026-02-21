@@ -697,3 +697,157 @@ func (s *ThinkingTestSuite) TestCalculateMaxHistoryCount() {
 		})
 	}
 }
+
+// TestLeftBrain_ScheduleIntent 测试左脑识别定时意图
+func (s *ThinkingTestSuite) TestLeftBrain_ScheduleIntent() {
+	testCases := []struct {
+		name          string
+		question      string
+		expectSchedule bool
+		description   string
+	}{
+		{
+			name:          "每周六写日报",
+			question:      "每周六帮我写日报",
+			expectSchedule: true,
+			description:   "应该识别到定时意图并设置 has_schedule 字段",
+		},
+		{
+			name:          "明天早上8点提醒",
+			question:      "明天早上8点提醒我开会",
+			expectSchedule: true,
+			description:   "应该识别到定时意图并设置 has_schedule 字段",
+		},
+		{
+			name:          "每天早上9点",
+			question:      "每天早上9点提醒我起床",
+			expectSchedule: true,
+			description:   "应该识别到定时意图并设置 has_schedule 字段",
+		},
+		{
+			name:          "普通问题",
+			question:      "今天天气怎么样",
+			expectSchedule: false,
+			description:   "普通问题不应该设置 has_schedule 字段",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			maxRetries := 3
+			var lastResult *core.ThinkingResult
+			var lastErr error
+
+			for i := 0; i < maxRetries; i++ {
+				result, err := s.leftBrain.Think(tc.question, nil, "", true)
+				lastResult = result
+				lastErr = err
+
+				if err == nil {
+					if tc.expectSchedule && result.HasSchedule {
+						break
+					}
+					if !tc.expectSchedule && !result.HasSchedule {
+						break
+					}
+				}
+
+				if i < maxRetries-1 {
+					s.T().Logf("重试第%d次...", i+2)
+				}
+			}
+
+			if !assert.NoError(s.T(), lastErr, tc.description) {
+				s.T().FailNow()
+			}
+
+			if tc.expectSchedule {
+				assert.True(s.T(), lastResult.HasSchedule, tc.description+"，期望有 has_schedule")
+				s.logger.Info("左脑测试 - 定时意图",
+					logging.String("test_case", tc.name),
+					logging.String("question", tc.question),
+					logging.String("schedule_name", lastResult.ScheduleName),
+					logging.String("schedule_cron", lastResult.ScheduleCron),
+					logging.String("schedule_message", lastResult.ScheduleMessage))
+			} else {
+				assert.False(s.T(), lastResult.HasSchedule, tc.description+"，期望无 has_schedule")
+				s.logger.Info("左脑测试 - 无定时意图",
+					logging.String("test_case", tc.name),
+					logging.String("question", tc.question))
+			}
+		})
+	}
+}
+
+// TestLeftBrain_SendToIntent 测试左脑识别转发意图
+func (s *ThinkingTestSuite) TestLeftBrain_SendToIntent() {
+	testCases := []struct {
+		name          string
+		question      string
+		expectSendTo  string
+		description   string
+	}{
+		{
+			name:          "转发给微信",
+			question:      "把这个消息发给微信",
+			expectSendTo:  "微信",
+			description:   "应该识别到转发意图并设置 send_to 为微信",
+		},
+		{
+			name:          "转发给QQ",
+			question:      "转发给QQ",
+			expectSendTo:  "QQ",
+			description:   "应该识别到转发意图并设置 send_to 为QQ",
+		},
+		{
+			name:          "普通问题",
+			question:      "今天天气怎么样",
+			expectSendTo:  "",
+			description:   "普通问题不应该设置 send_to 字段",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			maxRetries := 3
+			var lastResult *core.ThinkingResult
+			var lastErr error
+
+			for i := 0; i < maxRetries; i++ {
+				result, err := s.leftBrain.Think(tc.question, nil, "", true)
+				lastResult = result
+				lastErr = err
+
+				if err == nil {
+					if tc.expectSendTo != "" && lastResult.SendTo != "" {
+						break
+					}
+					if tc.expectSendTo == "" && lastResult.SendTo == "" {
+						break
+					}
+				}
+
+				if i < maxRetries-1 {
+					s.T().Logf("重试第%d次...", i+2)
+				}
+			}
+
+			if !assert.NoError(s.T(), lastErr, tc.description) {
+				s.T().FailNow()
+			}
+
+			if tc.expectSendTo != "" {
+				assert.NotEmpty(s.T(), lastResult.SendTo, tc.description+"，期望 send_to 不为空")
+				s.logger.Info("左脑测试 - 转发意图",
+					logging.String("test_case", tc.name),
+					logging.String("question", tc.question),
+					logging.String("send_to", lastResult.SendTo))
+			} else {
+				assert.Empty(s.T(), lastResult.SendTo, tc.description+"，期望 send_to 为空")
+				s.logger.Info("左脑测试 - 无转发意图",
+					logging.String("test_case", tc.name),
+					logging.String("question", tc.question))
+			}
+		})
+	}
+}

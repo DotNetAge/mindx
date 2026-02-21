@@ -19,11 +19,7 @@ func RegisterBuiltins(mgr *skills.SkillMgr, cfg *BuiltinConfig, cronScheduler cr
 
 	if cronScheduler != nil {
 		cronProvider := NewCronSkillProvider(cronScheduler)
-		mgr.RegisterInternalSkill("cron_add", cronProvider.CronAdd)
-		mgr.RegisterInternalSkill("cron_list", cronProvider.CronList)
-		mgr.RegisterInternalSkill("cron_delete", cronProvider.CronDelete)
-		mgr.RegisterInternalSkill("cron_pause", cronProvider.CronPause)
-		mgr.RegisterInternalSkill("cron_resume", cronProvider.CronResume)
+		mgr.RegisterInternalSkill("cron", cronProvider.Cron)
 	}
 
 	if cfg != nil {

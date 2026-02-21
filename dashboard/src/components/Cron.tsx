@@ -6,8 +6,7 @@ interface Job {
   id: string;
   name: string;
   cron: string;
-  skill: string;
-  params: Record<string, any>;
+  message: string;
   command: string;
   enabled: boolean;
   created_at: string;
@@ -29,8 +28,7 @@ export default function Cron() {
   const [formData, setFormData] = useState<Partial<Job>>({
     name: '',
     cron: '',
-    skill: '',
-    params: {},
+    message: '',
     command: '',
     enabled: true,
   });
@@ -64,8 +62,7 @@ export default function Cron() {
     setFormData({
       name: '',
       cron: '',
-      skill: '',
-      params: {},
+      message: '',
       command: '',
       enabled: true,
     });
@@ -231,10 +228,10 @@ export default function Cron() {
                     <label>Cron 表达式:</label>
                     <span>{job.cron}</span>
                   </div>
-                  {job.skill && (
+                  {job.message && (
                     <div className="detail-item">
-                      <label>技能:</label>
-                      <span>{job.skill}</span>
+                      <label>消息:</label>
+                      <span>{job.message}</span>
                     </div>
                   )}
                   {job.command && (
@@ -312,28 +309,29 @@ export default function Cron() {
                   type="text"
                   value={formData.cron || ''}
                   onChange={(e) => setFormData({ ...formData, cron: e.target.value })}
-                  placeholder="例如: 0 0 12 * * *"
+                  placeholder="例如: 0 9 * * 6"
                 />
-                <small>格式：秒 分 时 日 月 周</small>
+                <small>格式：分 时 日 月 周</small>
               </div>
 
               <div className="form-item">
-                <label>技能名称</label>
+                <label>消息 *</label>
                 <input
                   type="text"
-                  value={formData.skill || ''}
-                  onChange={(e) => setFormData({ ...formData, skill: e.target.value })}
-                  placeholder="输入要执行的技能名称"
+                  value={formData.message || ''}
+                  onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                  placeholder="例如: 帮我写日报"
                 />
+                <small>定时执行时会发送这条消息</small>
               </div>
 
               <div className="form-item">
-                <label>命令</label>
+                <label>命令（可选）</label>
                 <input
                   type="text"
                   value={formData.command || ''}
                   onChange={(e) => setFormData({ ...formData, command: e.target.value })}
-                  placeholder="输入要执行的命令"
+                  placeholder="输入要执行的命令（可选）"
                 />
               </div>
 

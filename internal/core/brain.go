@@ -25,12 +25,16 @@ type DialogueMessage struct {
 
 // ThinkingResult 思考结果
 type ThinkingResult struct {
-	Answer    string   `json:"answer"`     // Answer 回答的内容（返回给用户)
-	Intent    string   `json:"intent"`     // Intent 意图 判断用户的意图
-	Keywords  []string `json:"keywords"`   // Keywords 关键词 判断用户的意图
-	SendTo    string   `json:"send_to"`    // 发送信息给其它的通信软件
-	Useless   bool     `json:"useless"`    // Useless 标记用户的提问是否无意义
-	CanAnswer bool     `json:"can_answer"` // CanAnswer 是否能回答用户的问题
+	Answer          string   `json:"answer"`           // Answer 回答的内容（返回给用户)
+	Intent          string   `json:"intent"`           // Intent 意图 判断用户的意图
+	Keywords        []string `json:"keywords"`         // Keywords 关键词 判断用户的意图
+	SendTo          string   `json:"send_to"`          // 发送信息给其它的通信软件
+	HasSchedule     bool     `json:"has_schedule"`     // 是否有定时意图
+	ScheduleName    string   `json:"schedule_name"`    // 定时任务名称
+	ScheduleCron    string   `json:"schedule_cron"`    // Cron 表达式
+	ScheduleMessage string   `json:"schedule_message"` // 定时要发送的消息
+	Useless         bool     `json:"useless"`          // Useless 标记用户的提问是否无意义
+	CanAnswer       bool     `json:"can_answer"`       // CanAnswer 是否能回答用户的问题
 }
 
 type ToolCallResult struct {
@@ -84,9 +88,13 @@ type ThinkingRequest struct {
 
 // ThinkingResponse 思考响应(大脑专用)
 type ThinkingResponse struct {
-	Answer string        `json:"answer"`
-	Tools  []*ToolSchema `json:"tools"`
-	SendTo string        `json:"send_to"` // 目标 Channel，用于消息转发
+	Answer          string        `json:"answer"`
+	Tools           []*ToolSchema `json:"tools"`
+	SendTo          string        `json:"send_to"`          // 目标 Channel，用于消息转发
+	HasSchedule     bool          `json:"has_schedule"`     // 是否有定时意图
+	ScheduleName    string        `json:"schedule_name"`    // 定时任务名称
+	ScheduleCron    string        `json:"schedule_cron"`    // Cron 表达式
+	ScheduleMessage string        `json:"schedule_message"` // 定时要发送的消息
 }
 
 // ToolSchema 发起FunctionCall使用的工具Schema

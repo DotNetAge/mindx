@@ -245,14 +245,12 @@ func Startup() (*App, error) {
 		return nil, fmt.Errorf("初始化技能管理器失败: %w", err)
 	}
 
-	skillInfoProvider := &bootstrapSkillInfoProvider{skillMgr: skillMgr}
-
 	var cronScheduler cron.Scheduler
 	switch runtime.GOOS {
 	case "linux", "darwin":
-		cronScheduler, err = infra_cron.NewCrontabScheduler(skillInfoProvider)
+		cronScheduler, err = infra_cron.NewCrontabScheduler()
 	case "windows":
-		cronScheduler, err = infra_cron.NewWindowsTaskScheduler(skillInfoProvider)
+		cronScheduler, err = infra_cron.NewWindowsTaskScheduler()
 	default:
 		systemLogger.Warn("Unsupported platform for cron scheduler")
 	}
@@ -311,6 +309,7 @@ func Startup() (*App, error) {
 		mem,
 		systemLogger,
 		tokenUsageRepo,
+		cronScheduler,
 	)
 	systemLogger.Info("Assistant 初始化完成",
 		logging.String("name", assistant.GetName()),
@@ -393,7 +392,7 @@ func Startup() (*App, error) {
 	}
 	systemLogger.Info("HTTP API 服务器创建完成", logging.Int("port", srvCfg.Port))
 
-	handlers.RegisterRoutes(srv.GetEngine(), tokenUsageRepo, skillMgr, capMgr, sessionMgr, cronScheduler)
+	handlers.RegisterRoutes(srv.GetEngine(), tokenUsageRepo, skillMgr, capMgr, sessionMgr, cronScheduler, assistant)
 
 	a = &App{
 		Server:         srv,

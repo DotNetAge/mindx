@@ -1,10 +1,9 @@
 package cron
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"mindx/internal/usecase/cron"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -12,40 +11,25 @@ import (
 const cronJobPrefix = "# MINDX_CRON_JOB:"
 
 type CrontabScheduler struct {
-	store             cron.JobStore
-	skillInfoProvider cron.SkillInfoProvider
+	store cron.JobStore
 }
 
-func NewCrontabScheduler(skillInfoProvider cron.SkillInfoProvider) (cron.Scheduler, error) {
+func NewCrontabScheduler() (cron.Scheduler, error) {
 	store, err := NewFileJobStore()
 	if err != nil {
 		return nil, err
 	}
 	return &CrontabScheduler{
-		store:             store,
-		skillInfoProvider: skillInfoProvider,
+		store: store,
 	}, nil
 }
 
 func (c *CrontabScheduler) Add(job *cron.Job) (string, error) {
-	if c.skillInfoProvider == nil {
-		return "", fmt.Errorf("skill info provider not available")
+	if job.Message == "" {
+		return "", fmt.Errorf("message is required")
 	}
 
-	isInternal, command, dir, err := c.skillInfoProvider.GetSkillInfo(job.Skill)
-	if err != nil {
-		return "", err
-	}
-
-	if isInternal {
-		return "", fmt.Errorf("internal skills are not supported for cron jobs")
-	}
-
-	if command == "" {
-		return "", fmt.Errorf("skill command not found")
-	}
-
-	fullCommand := c.buildFullCommand(command, dir, job.Params)
+	fullCommand := c.buildSendCommand(job.Message)
 	job.Command = fullCommand
 
 	id, err := c.store.Add(job)
@@ -63,26 +47,17 @@ func (c *CrontabScheduler) Add(job *cron.Job) (string, error) {
 	return id, nil
 }
 
-func (c *CrontabScheduler) buildFullCommand(command string, dir string, params map[string]any) string {
-	if params == nil || len(params) == 0 {
-		return command
+func (c *CrontabScheduler) buildSendCommand(message string) string {
+	execPath, err := os.Executable()
+	if err != nil {
+		execPath = "mindx"
 	}
 
-	jsonParams, _ := json.Marshal(params)
-	escapedParams := strings.ReplaceAll(string(jsonParams), "\"", "\\\"")
+	escapedMessage := strings.ReplaceAll(message, "\"", "\\\"")
+	escapedMessage = strings.ReplaceAll(escapedMessage, "$", "\\$")
+	escapedMessage = strings.ReplaceAll(escapedMessage, "`", "\\`")
 
-	parts := parseCommand(command)
-	if len(parts) == 0 {
-		return command
-	}
-
-	var buf bytes.Buffer
-	if dir != "" {
-		buf.WriteString(fmt.Sprintf("cd %s && ", shellEscape(dir)))
-	}
-	buf.WriteString(command)
-	buf.WriteString(fmt.Sprintf(" << '%s'\n%s\n%s", "END_PARAMS", escapedParams, "END_PARAMS"))
-	return buf.String()
+	return fmt.Sprintf("%s send -m \"%s\"", execPath, escapedMessage)
 }
 
 func (c *CrontabScheduler) Delete(id string) error {

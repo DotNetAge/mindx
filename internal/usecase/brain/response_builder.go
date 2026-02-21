@@ -15,9 +15,13 @@ func (rb *ResponseBuilder) BuildLeftBrainResponse(thinkResult *core.ThinkingResu
 		tools = make([]*core.ToolSchema, 0)
 	}
 	return &core.ThinkingResponse{
-		Answer: thinkResult.Answer,
-		Tools:  tools,
-		SendTo: thinkResult.SendTo,
+		Answer:          thinkResult.Answer,
+		Tools:           tools,
+		SendTo:          thinkResult.SendTo,
+		HasSchedule:     thinkResult.HasSchedule,
+		ScheduleName:    thinkResult.ScheduleName,
+		ScheduleCron:    thinkResult.ScheduleCron,
+		ScheduleMessage: thinkResult.ScheduleMessage,
 	}
 }
 
@@ -26,8 +30,12 @@ func (rb *ResponseBuilder) BuildToolCallResponse(answer string, tools []*core.To
 		tools = make([]*core.ToolSchema, 0)
 	}
 	return &core.ThinkingResponse{
-		Answer: answer,
-		Tools:  tools,
-		SendTo: sendTo,
+		Answer:          answer,
+		Tools:           tools,
+		SendTo:          sendTo,
+		HasSchedule:     false,
+		ScheduleName:    "",
+		ScheduleCron:    "",
+		ScheduleMessage: "",
 	}
 }

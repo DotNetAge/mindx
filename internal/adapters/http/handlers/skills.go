@@ -33,6 +33,9 @@ func (h *SkillsHandler) listSkills(c *gin.Context) {
 	skillInfos := h.skillMgr.GetSkillInfos()
 	skillsArray := make([]*entity.SkillInfo, 0, len(skillInfos))
 	for _, info := range skillInfos {
+		if info.Def != nil && info.Def.IsInternal {
+			continue
+		}
 		skillsArray = append(skillsArray, info)
 	}
 

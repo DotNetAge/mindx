@@ -7,6 +7,7 @@ import (
 	"mindx/internal/entity"
 	"mindx/internal/usecase/brain"
 	"mindx/internal/usecase/capability"
+	"mindx/internal/usecase/cron"
 	"mindx/internal/usecase/memory"
 	"mindx/internal/usecase/session"
 	"mindx/internal/usecase/skills"
@@ -32,6 +33,7 @@ type Assistant struct {
 	skillMgr       *skills.SkillMgr
 	logger         logging.Logger
 	tokenUsageRepo core.TokenUsageRepository
+	cronScheduler  cron.Scheduler
 }
 
 // NewAssistant 创建智能助理
@@ -43,6 +45,7 @@ func NewAssistant(
 	mem *memory.Memory,
 	logger logging.Logger,
 	tokenUsageRepo core.TokenUsageRepository,
+	cronScheduler cron.Scheduler,
 ) *Assistant {
 
 	// 构建人设
@@ -165,6 +168,7 @@ func NewAssistant(
 		historyRequest,
 		logger,
 		tokenUsageRepo,
+		cronScheduler, // cron scheduler
 	)
 	if err != nil {
 		logger.Error(i18n.T("infra.create_brain_failed"), logging.Err(err))
@@ -184,6 +188,7 @@ func NewAssistant(
 		skillMgr:       skillMgr,
 		logger:         logger,
 		tokenUsageRepo: tokenUsageRepo,
+		cronScheduler:  cronScheduler,
 	}
 }
 
