@@ -358,7 +358,8 @@ func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessa
 		})
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
 
 	var systemPrompt string
 	if len(customSystemPrompt) > 0 && customSystemPrompt[0] != "" {
@@ -539,7 +540,8 @@ func (t *Thinking) ReturnFuncResult(toolCallID string, name string, result strin
 
 	t.sendEvent(NewToolResultEvent(name, result))
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
+	defer cancel()
 
 	systemPrompt := `你是一个工具调用助手。你的职责是根据用户的请求，从可用的工具中选择合适的工具并调用。
 
