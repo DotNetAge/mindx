@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"mindx/internal/utils"
-	"os"
 	"time"
 )
 
@@ -16,8 +15,7 @@ func Search(params map[string]any) (string, error) {
 
 	br, err := utils.NewBrowser("")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "browser create failed: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("browser create failed: %w", err)
 	}
 
 	defer func() {
@@ -33,11 +31,10 @@ func Search(params map[string]any) (string, error) {
 		return "", fmt.Errorf("search failed: %w", err)
 	}
 
-	return getJSONOutput(results, elapsed), nil
+	return getJSONOutput(results, elapsed)
 }
 
-func getJSONOutput(results []utils.SearchResult, elapsed time.Duration) string {
-
+func getJSONOutput(results []utils.SearchResult, elapsed time.Duration) (string, error) {
 	output := map[string]interface{}{
 		"count":      len(results),
 		"elapsed_ms": elapsed.Milliseconds(),
@@ -46,8 +43,7 @@ func getJSONOutput(results []utils.SearchResult, elapsed time.Duration) string {
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "json serialize failed: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("json serialize failed: %w", err)
 	}
-	return string(data)
+	return string(data), nil
 }

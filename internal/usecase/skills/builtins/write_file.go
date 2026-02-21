@@ -49,10 +49,10 @@ func WriteFile(params map[string]any) (string, error) {
 		absPath = filePath
 	}
 
-	return getJSONWriteResult(absPath, len(content), elapsed), nil
+	return getJSONWriteResult(absPath, len(content), elapsed)
 }
 
-func getJSONWriteResult(filePath string, contentLength int, elapsed time.Duration) string {
+func getJSONWriteResult(filePath string, contentLength int, elapsed time.Duration) (string, error) {
 	output := map[string]interface{}{
 		"file_path":      filePath,
 		"content_length": contentLength,
@@ -61,8 +61,7 @@ func getJSONWriteResult(filePath string, contentLength int, elapsed time.Duratio
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "json serialize failed: %v\n", err)
-		os.Exit(1)
+		return "", fmt.Errorf("json serialize failed: %w", err)
 	}
-	return string(data)
+	return string(data), nil
 }
