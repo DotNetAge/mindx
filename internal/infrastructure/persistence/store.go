@@ -23,7 +23,7 @@ func createDirectoryIfNotExists(dbPath string) error {
 }
 
 // NewStore 创建向量存储
-func NewStore(storeType string, dbPath string, provider core.EmbeddingProvider) (Store, error) {
+func NewStore(storeType string, dbPath string, provider core.EmbeddingProvider) (core.Store, error) {
 	switch storeType {
 	case "badger":
 		if dbPath == "" {

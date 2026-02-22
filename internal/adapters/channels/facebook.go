@@ -85,6 +85,12 @@ func (c *FacebookChannel) Start(ctx context.Context) error {
 }
 
 func (c *FacebookChannel) SendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
+	return getBreaker("facebook").Execute(func() error {
+		return c.doSendMessage(ctx, msg)
+	})
+}
+
+func (c *FacebookChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("FacebookChannel is not running")
 	}
@@ -205,7 +211,7 @@ func (c *FacebookChannel) handleVerification(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	c.logger.Warn(i18n.T("adapter.facebook_verify_failed"), logging.String("mode", mode), logging.String("token", token))
+	c.logger.Warn(i18n.T("adapter.facebook_verify_failed"), logging.String("mode", mode), logging.String("token", "***"))
 	http.Error(w, "Forbidden", http.StatusForbidden)
 }
 

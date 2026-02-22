@@ -129,6 +129,12 @@ func (c *IMessageChannel) SetOnMessage(handler func(ctx context.Context, msg *en
 }
 
 func (c *IMessageChannel) SendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
+	return getBreaker("imessage").Execute(func() error {
+		return c.doSendMessage(ctx, msg)
+	})
+}
+
+func (c *IMessageChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("iMessage channel is not running")
 	}

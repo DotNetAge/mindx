@@ -102,6 +102,11 @@ func (s *BadgerStore) Delete(key string) error {
 
 // Search 搜索最相似的向量
 func (s *BadgerStore) Search(queryVec []float64, topN int) ([]entity.VectorEntry, error) {
+	return s.SearchWithThreshold(queryVec, topN, 0)
+}
+
+// SearchWithThreshold 搜索最相似的向量，过滤低于 minScore 的结果
+func (s *BadgerStore) SearchWithThreshold(queryVec []float64, topN int, minScore float64) ([]entity.VectorEntry, error) {
 	var candidates []entity.VectorEntry
 
 	err := s.db.View(func(txn *badger.Txn) error {
@@ -139,9 +144,13 @@ func (s *BadgerStore) Search(queryVec []float64, topN int) ([]entity.VectorEntry
 
 	similarityResults := make([]entity.SimilarityResult, 0, len(candidates))
 	for _, candidate := range candidates {
+		score := utils.CalculateCosineSimilarity(queryVec, candidate.Vector)
+		if score < minScore {
+			continue
+		}
 		similarityResults = append(similarityResults, entity.SimilarityResult{
 			Target: candidate.Key,
-			Score:  utils.CalculateCosineSimilarity(queryVec, candidate.Vector),
+			Score:  score,
 			Metadata: map[string]interface{}{
 				"vector": candidate.Vector,
 				"entry":  candidate,
@@ -195,13 +204,9 @@ func (s *BadgerStore) Scan(prefix string) ([]entity.VectorEntry, error) {
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
-		for it.Rewind(); it.Valid(); it.Next() {
+		prefixBytes := []byte(prefix)
+		for it.Seek(prefixBytes); it.ValidForPrefix(prefixBytes); it.Next() {
 			item := it.Item()
-			key := string(item.Key())
-
-			if prefix != "" && len(key) < len(prefix) || (prefix != "" && key[:len(prefix)] != prefix) {
-				continue
-			}
 
 			var entry entity.VectorEntry
 			err := item.Value(func(val []byte) error {

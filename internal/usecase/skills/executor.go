@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"mindx/internal/core"
 	"mindx/internal/entity"
-	"mindx/internal/infrastructure/persistence"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
 	"os/exec"
@@ -20,7 +19,7 @@ import (
 type SkillExecutor struct {
 	skillsDir      string
 	envMgr         *EnvManager
-	store          persistence.Store
+	store          core.Store
 	logger         logging.Logger
 	mu             sync.RWMutex
 	skillInfos     map[string]*entity.SkillInfo
@@ -30,7 +29,7 @@ type SkillExecutor struct {
 
 type InternalSkillFunc func(params map[string]any) (string, error)
 
-func NewSkillExecutor(skillsDir string, envMgr *EnvManager, store persistence.Store, mcpMgr *MCPManager, logger logging.Logger) *SkillExecutor {
+func NewSkillExecutor(skillsDir string, envMgr *EnvManager, store core.Store, mcpMgr *MCPManager, logger logging.Logger) *SkillExecutor {
 	return &SkillExecutor{
 		skillsDir:      skillsDir,
 		envMgr:         envMgr,

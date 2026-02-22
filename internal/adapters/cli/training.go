@@ -71,7 +71,10 @@ var trainCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		srvCfg, _, _, _ := config.InitVippers()
+		srvCfg, _, _, _, err := config.InitVippers()
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		dataPath, err := config.GetWorkspaceDataPath()
 		if err != nil {

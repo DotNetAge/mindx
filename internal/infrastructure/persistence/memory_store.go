@@ -77,6 +77,11 @@ func (s *MemoryStore) Delete(key string) error {
 
 // Search 搜索最相似的向量
 func (s *MemoryStore) Search(queryVec []float64, topN int) ([]entity.VectorEntry, error) {
+	return s.SearchWithThreshold(queryVec, topN, 0)
+}
+
+// SearchWithThreshold 搜索最相似的向量，过滤低于 minScore 的结果
+func (s *MemoryStore) SearchWithThreshold(queryVec []float64, topN int, minScore float64) ([]entity.VectorEntry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -87,9 +92,13 @@ func (s *MemoryStore) Search(queryVec []float64, topN int) ([]entity.VectorEntry
 	similarityResults := make([]entity.SimilarityResult, 0, len(s.vectors))
 	for key, vector := range s.vectors {
 		if vector != nil && len(vector) > 0 {
+			score := utils.CalculateCosineSimilarity(queryVec, vector)
+			if score < minScore {
+				continue
+			}
 			similarityResults = append(similarityResults, entity.SimilarityResult{
 				Target: key,
-				Score:  utils.CalculateCosineSimilarity(queryVec, vector),
+				Score:  score,
 				Metadata: map[string]interface{}{
 					"vector": vector,
 					"entry": entity.VectorEntry{

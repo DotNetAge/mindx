@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"context"
 	"mindx/internal/core"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
@@ -28,6 +29,7 @@ func NewFallbackHandler(
 }
 
 func (fh *FallbackHandler) Handle(
+	ctx context.Context,
 	question string,
 	thinkResult *core.ThinkingResult,
 	historyDialogue []*core.DialogueMessage,
@@ -37,6 +39,7 @@ func (fh *FallbackHandler) Handle(
 
 	if len(leftBrainSearchedTools) > 0 {
 		answer, err := fh.toolCaller.ExecuteToolCall(
+			ctx,
 			fh.rightBrain,
 			question,
 			historyDialogue,

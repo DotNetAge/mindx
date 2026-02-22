@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"context"
 	"fmt"
 	"mindx/internal/config"
 	"mindx/internal/core"
@@ -124,16 +125,19 @@ func NewBrain(
 func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, error) {
 	b.logger.Info(i18n.T("brain.start_process"), logging.String(i18n.T("brain.question"), req.Question))
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
 	question := req.Question
 	capabilityName, actualQuestion := b.parseCapabilityPrefix(question)
 	if capabilityName != "" {
 		b.logger.Info("检测到能力前缀，使用指定能力",
 			logging.String("capability", capabilityName),
 			logging.String("question", actualQuestion))
-		return b.handleWithConsciousness(req, capabilityName, actualQuestion)
+		return b.handleWithConsciousness(ctx, req, capabilityName, actualQuestion)
 	}
 
-	ctx, err := b.contextPreparer.Prepare(req.Question, b.leftBrain)
+	pctx, err := b.contextPreparer.Prepare(req.Question, b.leftBrain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare context: %w", err)
 	}
@@ -142,7 +146,7 @@ func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, e
 
 	b.leftBrain.SetEventChan(eventChan)
 
-	thinkResult, err := b.leftBrain.Think(req.Question, ctx.historyDialogue, ctx.refs, true)
+	thinkResult, err := b.leftBrain.Think(ctx, req.Question, pctx.historyDialogue, pctx.refs, true)
 
 	if err != nil {
 		b.leftBrain.SetEventChan(nil)
@@ -196,7 +200,7 @@ func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, e
 	hasValidIntent := thinkResult.Intent != "" && len(thinkResult.Keywords) > 0 // 防止小模型在判断时出现抖动导致useless判断错误
 
 	if !thinkResult.Useless || hasValidIntent {
-		answer, tools, searchedTools := b.tryRightBrainProcess(req.Question, thinkResult, ctx.historyDialogue, req.SessionID, eventChan)
+		answer, tools, searchedTools := b.tryRightBrainProcess(ctx, req.Question, thinkResult, pctx.historyDialogue, req.SessionID, eventChan)
 		if answer != "" {
 			b.leftBrain.SetEventChan(nil)
 			return b.responseBuilder.BuildToolCallResponse(answer, tools, thinkResult.SendTo), nil
@@ -207,7 +211,7 @@ func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, e
 	}
 
 	if !thinkResult.CanAnswer {
-		resp, err := b.activateConsciousness(req.Question, thinkResult, ctx.refs, ctx.historyDialogue, leftBrainSearchedTools, req.SessionID, eventChan)
+		resp, err := b.activateConsciousness(ctx, req.Question, thinkResult, pctx.refs, pctx.historyDialogue, leftBrainSearchedTools, req.SessionID, eventChan)
 		b.leftBrain.SetEventChan(nil)
 		return resp, err
 	}
@@ -216,7 +220,7 @@ func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, e
 	return b.responseBuilder.BuildLeftBrainResponse(thinkResult, nil), nil
 }
 
-func (b *BionicBrain) tryRightBrainProcess(question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, sessionID string, eventChan chan<- ThinkingEvent) (string, []*core.ToolSchema, []*core.ToolSchema) {
+func (b *BionicBrain) tryRightBrainProcess(ctx context.Context, question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, sessionID string, eventChan chan<- ThinkingEvent) (string, []*core.ToolSchema, []*core.ToolSchema) {
 	b.logger.Info("[右脑] 开始处理",
 		logging.String("question", question),
 		logging.String("intent", thinkResult.Intent))
@@ -273,7 +277,7 @@ func (b *BionicBrain) tryRightBrainProcess(question string, thinkResult *core.Th
 		logging.Int(i18n.T("brain.tools_count"), len(tools)))
 
 	b.rightBrain.SetEventChan(eventChan)
-	answer, err := b.toolCaller.ExecuteToolCall(b.rightBrain, question, historyDialogue, tools)
+	answer, err := b.toolCaller.ExecuteToolCall(ctx, b.rightBrain, question, historyDialogue, tools)
 	b.rightBrain.SetEventChan(nil)
 
 	if err != nil {
@@ -284,7 +288,7 @@ func (b *BionicBrain) tryRightBrainProcess(question string, thinkResult *core.Th
 	return answer, tools, tools
 }
 
-func (b *BionicBrain) activateConsciousness(question string, thinkResult *core.ThinkingResult, refs string, historyDialogue []*core.DialogueMessage, leftBrainSearchedTools []*core.ToolSchema, sessionID string, eventChan chan<- ThinkingEvent) (*core.ThinkingResponse, error) {
+func (b *BionicBrain) activateConsciousness(ctx context.Context, question string, thinkResult *core.ThinkingResult, refs string, historyDialogue []*core.DialogueMessage, leftBrainSearchedTools []*core.ToolSchema, sessionID string, eventChan chan<- ThinkingEvent) (*core.ThinkingResponse, error) {
 	b.logger.Info(i18n.T("brain.left_cannot_answer"))
 
 	if eventChan != nil {
@@ -298,21 +302,21 @@ func (b *BionicBrain) activateConsciousness(question string, thinkResult *core.T
 	capability, err := b.capRequest(thinkResult.Intent)
 	if err == nil && capability != nil {
 		b.logger.Info(i18n.T("brain.found_capability"), logging.String("capability", capability.Name))
-		return b.activateConsciousnessWithCapability(question, thinkResult, refs, historyDialogue, leftBrainSearchedTools, sessionID, eventChan, capability)
+		return b.activateConsciousnessWithCapability(ctx, question, thinkResult, refs, historyDialogue, leftBrainSearchedTools, sessionID, eventChan, capability)
 	}
 
 	b.logger.Info(i18n.T("brain.no_capability_found"), logging.String("intent", thinkResult.Intent))
-	return b.activateConsciousnessDualBrain(question, refs, historyDialogue, eventChan)
+	return b.activateConsciousnessDualBrain(ctx, question, refs, historyDialogue, eventChan)
 }
 
-func (b *BionicBrain) activateConsciousnessWithCapability(question string, thinkResult *core.ThinkingResult, refs string, historyDialogue []*core.DialogueMessage, leftBrainSearchedTools []*core.ToolSchema, sessionID string, eventChan chan<- ThinkingEvent, capability *entity.Capability) (*core.ThinkingResponse, error) {
+func (b *BionicBrain) activateConsciousnessWithCapability(ctx context.Context, question string, thinkResult *core.ThinkingResult, refs string, historyDialogue []*core.DialogueMessage, leftBrainSearchedTools []*core.ToolSchema, sessionID string, eventChan chan<- ThinkingEvent, capability *entity.Capability) (*core.ThinkingResponse, error) {
 	if b.consciousnessMgr.IsNil() {
 		b.consciousnessMgr.Create(capability)
 	}
 
 	if b.consciousnessMgr.IsNil() {
 		b.logger.Warn(i18n.T("brain.consciousness_create_failed"))
-		return b.fallbackHandler.Handle(question, thinkResult, historyDialogue, leftBrainSearchedTools)
+		return b.fallbackHandler.Handle(ctx, question, thinkResult, historyDialogue, leftBrainSearchedTools)
 	}
 
 	var tools []*core.ToolSchema
@@ -352,27 +356,27 @@ func (b *BionicBrain) activateConsciousnessWithCapability(question string, think
 	}
 
 	if len(tools) > 0 {
-		resp, err := b.consciousnessWithTools(question, thinkResult, historyDialogue, tools, eventChan, capability.SystemPrompt)
+		resp, err := b.consciousnessWithTools(ctx, question, thinkResult, historyDialogue, tools, eventChan, capability.SystemPrompt)
 		if err != nil {
 			b.logger.Warn(i18n.T("brain.consciousness_tool_call_failed"), logging.Err(err))
-			return b.fallbackHandler.Handle(question, thinkResult, historyDialogue, leftBrainSearchedTools)
+			return b.fallbackHandler.Handle(ctx, question, thinkResult, historyDialogue, leftBrainSearchedTools)
 		}
 		return resp, nil
 	}
 
 	b.consciousnessMgr.Get().SetEventChan(eventChan)
-	result, err := b.consciousnessMgr.Think(question, historyDialogue, refs)
+	result, err := b.consciousnessMgr.Think(ctx, question, historyDialogue, refs)
 	b.consciousnessMgr.Get().SetEventChan(nil)
 
 	if err != nil {
 		b.logger.Warn(i18n.T("brain.consciousness_think_failed"), logging.Err(err))
-		return b.fallbackHandler.Handle(question, thinkResult, historyDialogue, leftBrainSearchedTools)
+		return b.fallbackHandler.Handle(ctx, question, thinkResult, historyDialogue, leftBrainSearchedTools)
 	}
 
 	return b.responseBuilder.BuildToolCallResponse(result.Answer, nil, thinkResult.SendTo), nil
 }
 
-func (b *BionicBrain) activateConsciousnessDualBrain(question string, refs string, historyDialogue []*core.DialogueMessage, eventChan chan<- ThinkingEvent) (*core.ThinkingResponse, error) {
+func (b *BionicBrain) activateConsciousnessDualBrain(ctx context.Context, question string, refs string, historyDialogue []*core.DialogueMessage, eventChan chan<- ThinkingEvent) (*core.ThinkingResponse, error) {
 	b.logger.Info(i18n.T("brain.activating_consciousness_dual_brain"))
 
 	if !b.consciousnessMgr.HasDualBrain() {
@@ -388,7 +392,7 @@ func (b *BionicBrain) activateConsciousnessDualBrain(question string, refs strin
 
 	leftBrain.SetEventChan(eventChan)
 
-	thinkResult, err := leftBrain.Think(question, historyDialogue, refs, true)
+	thinkResult, err := leftBrain.Think(ctx, question, historyDialogue, refs, true)
 	if err != nil {
 		leftBrain.SetEventChan(nil)
 		b.logger.Error(i18n.T("brain.consciousness_left_think_failed"), logging.Err(err))
@@ -416,7 +420,7 @@ func (b *BionicBrain) activateConsciousnessDualBrain(question string, refs strin
 		logging.String("intent", thinkResult.Intent),
 		logging.Int("keywords_count", len(thinkResult.Keywords)))
 
-	answer, tools, _ := b.tryConsciousnessRightBrainProcess(question, thinkResult, historyDialogue, eventChan, rightBrain)
+	answer, tools, _ := b.tryConsciousnessRightBrainProcess(ctx, question, thinkResult, historyDialogue, eventChan, rightBrain)
 	if answer != "" {
 		leftBrain.SetEventChan(nil)
 		return b.responseBuilder.BuildToolCallResponse(answer, tools, thinkResult.SendTo), nil
@@ -426,7 +430,7 @@ func (b *BionicBrain) activateConsciousnessDualBrain(question string, refs strin
 	return b.responseBuilder.BuildLeftBrainResponse(thinkResult, nil), nil
 }
 
-func (b *BionicBrain) tryConsciousnessRightBrainProcess(question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, eventChan chan<- ThinkingEvent, rightBrain core.Thinking) (string, []*core.ToolSchema, []*core.ToolSchema) {
+func (b *BionicBrain) tryConsciousnessRightBrainProcess(ctx context.Context, question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, eventChan chan<- ThinkingEvent, rightBrain core.Thinking) (string, []*core.ToolSchema, []*core.ToolSchema) {
 	b.logger.Info("[主意识右脑] 开始处理",
 		logging.String("question", question),
 		logging.String("intent", thinkResult.Intent))
@@ -481,7 +485,7 @@ func (b *BionicBrain) tryConsciousnessRightBrainProcess(question string, thinkRe
 		logging.Int(i18n.T("brain.tools_count"), len(tools)))
 
 	rightBrain.SetEventChan(eventChan)
-	answer, err := b.toolCaller.ExecuteToolCall(rightBrain, question, historyDialogue, tools)
+	answer, err := b.toolCaller.ExecuteToolCall(ctx, rightBrain, question, historyDialogue, tools)
 	rightBrain.SetEventChan(nil)
 
 	if err != nil {
@@ -492,11 +496,11 @@ func (b *BionicBrain) tryConsciousnessRightBrainProcess(question string, thinkRe
 	return answer, tools, tools
 }
 
-func (b *BionicBrain) consciousnessWithTools(question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, tools []*core.ToolSchema, eventChan chan<- ThinkingEvent, customSystemPrompt ...string) (*core.ThinkingResponse, error) {
+func (b *BionicBrain) consciousnessWithTools(ctx context.Context, question string, thinkResult *core.ThinkingResult, historyDialogue []*core.DialogueMessage, tools []*core.ToolSchema, eventChan chan<- ThinkingEvent, customSystemPrompt ...string) (*core.ThinkingResponse, error) {
 	b.logger.Info(i18n.T("brain.consciousness_use_tools"), logging.Int(i18n.T("brain.tools_count"), len(tools)))
 
 	b.consciousnessMgr.Get().SetEventChan(eventChan)
-	answer, err := b.toolCaller.ExecuteToolCall(b.consciousnessMgr.Get(), question, historyDialogue, tools, customSystemPrompt...)
+	answer, err := b.toolCaller.ExecuteToolCall(ctx, b.consciousnessMgr.Get(), question, historyDialogue, tools, customSystemPrompt...)
 	b.consciousnessMgr.Get().SetEventChan(nil)
 
 	if err != nil {
@@ -584,8 +588,8 @@ func (b *BionicBrain) parseCapabilityPrefix(question string) (capabilityName, ac
 }
 
 // TODO: 需要在 SystemPrompt中补充的对技能的使用引导
-func (b *BionicBrain) handleWithConsciousness(req *core.ThinkingRequest, capabilityName, actualQuestion string) (*core.ThinkingResponse, error) {
-	ctx, err := b.contextPreparer.Prepare(actualQuestion, b.leftBrain)
+func (b *BionicBrain) handleWithConsciousness(ctx context.Context, req *core.ThinkingRequest, capabilityName, actualQuestion string) (*core.ThinkingResponse, error) {
+	pctx, err := b.contextPreparer.Prepare(actualQuestion, b.leftBrain)
 	if err != nil {
 		return nil, fmt.Errorf("准备上下文失败: %w", err)
 	}
@@ -632,17 +636,17 @@ func (b *BionicBrain) handleWithConsciousness(req *core.ThinkingRequest, capabil
 	}
 
 	if len(tools) > 0 {
-		resp, err := b.consciousnessWithTools(actualQuestion, nil, ctx.historyDialogue, tools, eventChan, capability.SystemPrompt)
+		resp, err := b.consciousnessWithTools(ctx, actualQuestion, nil, pctx.historyDialogue, tools, eventChan, capability.SystemPrompt)
 		return resp, err
 	}
 
 	b.consciousnessMgr.Get().SetEventChan(eventChan)
-	result, err := b.consciousnessMgr.Think(actualQuestion, ctx.historyDialogue, ctx.refs)
+	result, err := b.consciousnessMgr.Think(ctx, actualQuestion, pctx.historyDialogue, pctx.refs)
 	b.consciousnessMgr.Get().SetEventChan(nil)
 
 	if err != nil {
 		b.logger.Warn(i18n.T("brain.consciousness_think_failed"), logging.Err(err))
-		return b.fallbackHandler.Handle(actualQuestion, nil, ctx.historyDialogue, nil)
+		return b.fallbackHandler.Handle(ctx, actualQuestion, nil, pctx.historyDialogue, nil)
 	}
 
 	return b.responseBuilder.BuildToolCallResponse(result.Answer, nil, ""), nil

@@ -3,8 +3,8 @@ package capability
 import (
 	"fmt"
 	"mindx/internal/config"
+	"mindx/internal/core"
 	"mindx/internal/entity"
-	"mindx/internal/infrastructure/persistence"
 	"mindx/internal/usecase/embedding"
 	"os"
 	"path/filepath"
@@ -18,7 +18,7 @@ type CapabilityManager struct {
 	capabilities map[string]*entity.Capability
 	clients      map[string]*openai.Client
 	embeddingSvc *embedding.EmbeddingService
-	vectorStore  persistence.Store
+	vectorStore  core.Store
 	configPath   string
 	defaultName  string
 	fallback     bool
@@ -28,7 +28,7 @@ type CapabilityManager struct {
 }
 
 // NewManager 创建能力管理器
-func NewManager(cfg *config.CapabilityConfig, vectorStore persistence.Store, embeddingSvc *embedding.EmbeddingService, workspace string) (*CapabilityManager, error) {
+func NewManager(cfg *config.CapabilityConfig, vectorStore core.Store, embeddingSvc *embedding.EmbeddingService, workspace string) (*CapabilityManager, error) {
 	configPath, err := config.GetWorkspaceConfigPath()
 	if err != nil {
 		return nil, err

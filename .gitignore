@@ -34,7 +34,7 @@ releases/
 Thumbs.db
 
 # Environment variables (keep .env.example)
-# .env
+.env
 
 # Log files
 *.log
