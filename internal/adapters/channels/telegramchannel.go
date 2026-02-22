@@ -150,6 +150,12 @@ func (c *TelegramChannel) setWebhook() error {
 }
 
 func (c *TelegramChannel) SendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
+	return getBreaker("telegram").Execute(func() error {
+		return c.doSendMessage(ctx, msg)
+	})
+}
+
+func (c *TelegramChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("TelegramChannel is not running")
 	}

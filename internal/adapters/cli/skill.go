@@ -262,7 +262,10 @@ func createSkillManager() (*skills.SkillMgr, error) {
 		return nil, err
 	}
 
-	_, _, _, _ = config.InitVippers()
+	_, _, _, _, err = config.InitVippers()
+	if err != nil {
+		return nil, fmt.Errorf("初始化配置失败: %w", err)
+	}
 	modelsMgr := config.GetModelsManager()
 
 	embeddingSvc := embedding.NewEmbeddingService(nil)

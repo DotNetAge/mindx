@@ -4,7 +4,6 @@ import (
 	"mindx/internal/config"
 	"mindx/internal/core"
 	"mindx/internal/entity"
-	"mindx/internal/infrastructure/persistence"
 	"mindx/internal/usecase/embedding"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
@@ -24,7 +23,7 @@ import (
 )
 
 type Memory struct {
-	store            persistence.Store
+	store            core.Store
 	llmClient        *openai.Client
 	summaryModel     string
 	keywordModel     string
@@ -37,7 +36,7 @@ func NewMemory(
 	cfg *config.GlobalConfig,
 	llmClient *openai.Client,
 	logger logging.Logger,
-	store persistence.Store,
+	store core.Store,
 	embeddingService *embedding.EmbeddingService,
 ) (*Memory, error) {
 	if cfg.VectorStore.Type == "" {

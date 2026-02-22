@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"context"
 	"fmt"
 	"mindx/internal/core"
 	"mindx/internal/usecase/skills"
@@ -23,6 +24,7 @@ func NewToolCaller(skillMgr *skills.SkillMgr, logger logging.Logger) *ToolCaller
 }
 
 func (tc *ToolCaller) ExecuteToolCall(
+	ctx context.Context,
 	thinking core.Thinking,
 	question string,
 	historyDialogue []*core.DialogueMessage,
@@ -41,7 +43,7 @@ func (tc *ToolCaller) ExecuteToolCall(
 		callCount++
 		tc.logger.Info("工具调用", logging.Int("round", callCount))
 
-		toolCallResult, err := thinking.ThinkWithTools(question, currentHistory, tools, customSystemPrompt...)
+		toolCallResult, err := thinking.ThinkWithTools(ctx, question, currentHistory, tools, customSystemPrompt...)
 		if err != nil {
 			return "", fmt.Errorf("tool call decision failed: %w", err)
 		}
@@ -70,6 +72,7 @@ func (tc *ToolCaller) ExecuteToolCall(
 		tc.logger.Info(i18n.T("brain.skill_exec_success"), logging.String(i18n.T("brain.result"), functionCallResult))
 
 		answer, err := thinking.ReturnFuncResult(
+			ctx,
 			toolCallResult.ToolCallID,
 			toolCallResult.Function.Name,
 			functionCallResult,

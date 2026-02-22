@@ -5,7 +5,6 @@ import (
 	"mindx/internal/core"
 	"mindx/internal/entity"
 	infraLlama "mindx/internal/infrastructure/llama"
-	"mindx/internal/infrastructure/persistence"
 	"mindx/internal/usecase/embedding"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
@@ -33,7 +32,7 @@ func NewSkillMgr(skillsDir string, workspaceDir string, embeddingSvc *embedding.
 	return NewSkillMgrWithStore(skillsDir, workspaceDir, embeddingSvc, llamaSvc, nil, logger)
 }
 
-func NewSkillMgrWithStore(skillsDir string, workspaceDir string, embeddingSvc *embedding.EmbeddingService, llamaSvc *infraLlama.OllamaService, store persistence.Store, logger logging.Logger) (*SkillMgr, error) {
+func NewSkillMgrWithStore(skillsDir string, workspaceDir string, embeddingSvc *embedding.EmbeddingService, llamaSvc *infraLlama.OllamaService, store core.Store, logger logging.Logger) (*SkillMgr, error) {
 	envMgr := NewEnvManager(workspaceDir, logger)
 	installer := NewInstaller(logger)
 	loader := NewSkillLoader(skillsDir, logger)

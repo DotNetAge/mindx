@@ -100,6 +100,12 @@ func (c *FeishuChannel) Start(ctx context.Context) error {
 
 // SendMessage 发送消息到飞书 Channel
 func (c *FeishuChannel) SendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
+	return getBreaker("feishu").Execute(func() error {
+		return c.doSendMessage(ctx, msg)
+	})
+}
+
+func (c *FeishuChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("FeishuChannel is not running")
 	}

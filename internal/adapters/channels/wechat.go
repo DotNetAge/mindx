@@ -118,6 +118,12 @@ func (c *WeChatChannel) Start(ctx context.Context) error {
 
 // SendMessage 发送消息到微信 Channel
 func (c *WeChatChannel) SendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
+	return getBreaker("wechat").Execute(func() error {
+		return c.doSendMessage(ctx, msg)
+	})
+}
+
+func (c *WeChatChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("WeChatChannel is not running")
 	}

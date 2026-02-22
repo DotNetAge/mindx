@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"mindx/internal/core"
 	"mindx/internal/entity"
 	"encoding/json"
@@ -49,7 +50,7 @@ func (e *LLMExtractor) Extract(session entity.Session) bool {
 	prompt := e.buildPrompt(conversation)
 
 	// 3. 调用LLM进行记忆提取
-	thinkResult, err := e.brain.Think(prompt, nil, "", false)
+	thinkResult, err := e.brain.Think(context.Background(), prompt, nil, "", false)
 	if err != nil || thinkResult == nil {
 		return false
 	}

@@ -9,6 +9,7 @@ import (
 	"mindx/internal/entity"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
+	"mindx/pkg/retry"
 	"strings"
 	"time"
 
@@ -115,16 +116,20 @@ func (t *Thinking) calculateStaticMaxHistoryCount() int {
 	return maxRounds
 }
 
-func (t *Thinking) Think(question string, history []*core.DialogueMessage, references string, jsonResult bool) (*core.ThinkingResult, error) {
+func (t *Thinking) Think(ctx context.Context, question string, history []*core.DialogueMessage, references string, jsonResult bool) (*core.ThinkingResult, error) {
 	t.logger.Debug(i18n.T("brain.start_think"),
 		logging.String(i18n.T("brain.model"), t.modelConfig.Name),
 		logging.String(i18n.T("brain.domain"), t.modelConfig.Domain))
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
-	defer cancel()
 
 	systemPrompt := t.prompt
 	if references != "" {
 		systemPrompt += "\n" + references
+	}
+
+	// 估算系统提示词 Token 数（字符数/4 近似）
+	if t.tokenBudgetManager != nil {
+		estimatedTokens := len(systemPrompt) / 4
+		t.tokenBudgetManager.SetSystemPromptTokens(estimatedTokens)
 	}
 
 	messages := []openai.ChatCompletionMessage{
@@ -180,7 +185,10 @@ func (t *Thinking) Think(question string, history []*core.DialogueMessage, refer
 
 	t.sendEvent(NewThinkingEvent(ThinkingEventStart, i18n.T("brain.start_thinking")))
 
-	stream, err := t.client.CreateChatCompletionStream(ctx, req)
+	retryCfg := retry.DefaultConfig()
+	stream, err := retry.DoWithResult(ctx, retryCfg, func() (*openai.ChatCompletionStream, error) {
+		return t.client.CreateChatCompletionStream(ctx, req)
+	})
 	if err != nil {
 		t.logger.Error(i18n.T("brain.think_failed"), logging.Err(err))
 		t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
@@ -314,7 +322,7 @@ func (t *Thinking) GetSystemPrompt() string {
 	return t.systemPrompt
 }
 
-func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessage, tools []*core.ToolSchema, customSystemPrompt ...string) (*core.ToolCallResult, error) {
+func (t *Thinking) ThinkWithTools(ctx context.Context, question string, history []*core.DialogueMessage, tools []*core.ToolSchema, customSystemPrompt ...string) (*core.ToolCallResult, error) {
 	t.logger.Info(i18n.T("brain.right_prepare_skill"),
 		logging.String(i18n.T("brain.question"), question),
 		logging.Int(i18n.T("brain.tools_count"), len(tools)))
@@ -357,9 +365,6 @@ func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessa
 			},
 		})
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
-	defer cancel()
 
 	var systemPrompt string
 	if len(customSystemPrompt) > 0 && customSystemPrompt[0] != "" {
@@ -413,7 +418,10 @@ func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessa
 		logging.Int("tools_count", len(ollamaTools)),
 		logging.Any("tools", ollamaTools))
 
-	resp, err := t.client.CreateChatCompletion(ctx, req)
+	retryCfg := retry.DefaultConfig()
+	resp, err := retry.DoWithResult(ctx, retryCfg, func() (openai.ChatCompletionResponse, error) {
+		return t.client.CreateChatCompletion(ctx, req)
+	})
 	duration := time.Since(startTime).Milliseconds()
 
 	if err != nil {
@@ -532,16 +540,13 @@ func (t *Thinking) ThinkWithTools(question string, history []*core.DialogueMessa
 	}, nil
 }
 
-func (t *Thinking) ReturnFuncResult(toolCallID string, name string, result string, originalArgs map[string]interface{}, history []*core.DialogueMessage, tools []*core.ToolSchema, question string) (string, error) {
+func (t *Thinking) ReturnFuncResult(ctx context.Context, toolCallID string, name string, result string, originalArgs map[string]interface{}, history []*core.DialogueMessage, tools []*core.ToolSchema, question string) (string, error) {
 	t.logger.Debug(i18n.T("brain.return_func_result"),
 		logging.String(i18n.T("brain.function"), name),
 		logging.String(i18n.T("brain.result"), result),
 		logging.String("tool_call_id", toolCallID))
 
 	t.sendEvent(NewToolResultEvent(name, result))
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
-	defer cancel()
 
 	systemPrompt := `你是一个工具调用助手。你的职责是根据用户的请求，从可用的工具中选择合适的工具并调用。
 
@@ -604,7 +609,10 @@ func (t *Thinking) ReturnFuncResult(toolCallID string, name string, result strin
 		"enable_thinking": true,
 	}
 
-	resp, err := t.client.CreateChatCompletion(ctx, req)
+	retryCfg2 := retry.DefaultConfig()
+	resp, err := retry.DoWithResult(ctx, retryCfg2, func() (openai.ChatCompletionResponse, error) {
+		return t.client.CreateChatCompletion(ctx, req)
+	})
 	duration := time.Since(startTime).Milliseconds()
 
 	if err != nil {

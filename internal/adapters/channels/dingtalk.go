@@ -103,6 +103,12 @@ func (c *DingTalkChannel) Start(ctx context.Context) error {
 
 // SendMessage 发送消息到钉钉 Channel
 func (c *DingTalkChannel) SendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
+	return getBreaker("dingtalk").Execute(func() error {
+		return c.doSendMessage(ctx, msg)
+	})
+}
+
+func (c *DingTalkChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("DingTalkChannel is not running")
 	}

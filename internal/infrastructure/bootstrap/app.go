@@ -82,7 +82,10 @@ func Startup() (*App, error) {
 		return nil, err
 	}
 
-	srvCfg, channelsCfg, capabilitiesCfg, _ := config.InitVippers()
+	srvCfg, channelsCfg, capabilitiesCfg, _, err := config.InitVippers()
+	if err != nil {
+		return nil, fmt.Errorf("初始化配置失败: %w", err)
+	}
 
 	ctx := context.Background()
 

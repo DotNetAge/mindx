@@ -106,7 +106,8 @@ func (s *BrainIntegrationSuite) SetupSuite() {
 	if err := config.EnsureWorkspace(); err != nil {
 		s.Require().NoError(err)
 	}
-	srvCfg, _, _, _ := config.InitVippers()
+	srvCfg, _, _, _, err := config.InitVippers()
+	s.Require().NoError(err)
 	s.srvCfg = srvCfg
 
 	sessionStorage := session.NewFileSessionStorage(filepath.Join(s.testData, "sessions"))

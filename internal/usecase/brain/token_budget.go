@@ -14,6 +14,7 @@ type TokenBudgetManager struct {
 	reservedOutputTokens int // 预留给输出的 Token 数
 	minHistoryRounds     int // 最小历史对话轮数
 	avgTokensPerRound    int // 单轮平均 Token 数（初始化估算值）
+	systemPromptTokens   int // 系统提示词占用的 Token 数
 
 	// 运行时统计
 	totalInputTokens  int64        // 累计输入 Token（历史对话 + 系统提示）
@@ -38,6 +39,13 @@ func NewTokenBudgetManager(
 		avgTokensPerRound:    avgTokensPerRound,
 		logger:               logger.Named("token_budget"),
 	}
+}
+
+// SetSystemPromptTokens 设置系统提示词占用的 Token 数
+func (m *TokenBudgetManager) SetSystemPromptTokens(tokens int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.systemPromptTokens = tokens
 }
 
 // RecordUsage 记录 Token 使用情况
@@ -97,7 +105,7 @@ func (m *TokenBudgetManager) CalculateDynamicMaxHistoryCount() int {
 
 	// 如果还没有统计数据，使用初始估算值
 	if m.totalRounds == 0 {
-		maxRounds := (m.modelMaxTokens - m.reservedOutputTokens) / m.avgTokensPerRound
+		maxRounds := (m.modelMaxTokens - m.reservedOutputTokens - m.systemPromptTokens) / m.avgTokensPerRound
 		if maxRounds < m.minHistoryRounds {
 			return m.minHistoryRounds
 		}
@@ -105,7 +113,7 @@ func (m *TokenBudgetManager) CalculateDynamicMaxHistoryCount() int {
 	}
 
 	// 计算可用 Token 预算
-	availableTokens := m.modelMaxTokens - m.reservedOutputTokens
+	availableTokens := m.modelMaxTokens - m.reservedOutputTokens - m.systemPromptTokens
 	if availableTokens <= 0 {
 		return m.minHistoryRounds
 	}

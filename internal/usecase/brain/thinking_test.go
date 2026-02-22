@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"context"
 	"mindx/internal/config"
 	"mindx/internal/core"
 	"mindx/pkg/logging"
@@ -92,7 +93,7 @@ func TestThinkingSuite(t *testing.T) {
 func (s *ThinkingTestSuite) TestLeftBrain_SimpleQuestion() {
 	question := "你好，今天天气怎么样？"
 
-	result, err := s.leftBrain.Think(question, nil, "", true)
+	result, err := s.leftBrain.Think(context.Background(),question, nil, "", true)
 
 	if !assert.NoError(s.T(), err, "左脑思考应该成功") {
 		s.T().FailNow()
@@ -150,7 +151,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_CanAnswer() {
 			var lastErr error
 
 			for i := 0; i < maxRetries; i++ {
-				result, err := s.leftBrain.Think(tc.question, nil, "", true)
+				result, err := s.leftBrain.Think(context.Background(),tc.question, nil, "", true)
 				lastResult = result
 				lastErr = err
 
@@ -205,7 +206,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_WithHistory() {
 		},
 	}
 
-	result, err := s.leftBrain.Think(question, history, "", true)
+	result, err := s.leftBrain.Think(context.Background(),question, history, "", true)
 
 	if !assert.NoError(s.T(), err, "左脑带历史对话应该成功") {
 		s.T().FailNow()
@@ -254,7 +255,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_IntentExtraction() {
 			var lastErr error
 
 			for i := 0; i < maxRetries; i++ {
-				result, err := s.leftBrain.Think(tc.question, nil, "", true)
+				result, err := s.leftBrain.Think(context.Background(),tc.question, nil, "", true)
 				lastResult = result
 				lastErr = err
 
@@ -310,7 +311,7 @@ func (s *ThinkingTestSuite) TestRightBrain_FunctionCall() {
 	question := "帮我播放周杰伦的《稻香》"
 
 	// 右脑使用工具思考（添加 history 参数）
-	result, err := s.rightBrain.ThinkWithTools(question, nil, tools)
+	result, err := s.rightBrain.ThinkWithTools(context.Background(),question, nil, tools)
 
 	if !assert.NoError(s.T(), err, "右脑工具思考应该成功") {
 		s.T().FailNow()
@@ -345,7 +346,7 @@ func (s *ThinkingTestSuite) TestThinking_WithEnhancedPrompt() {
 	// 构建增强 prompt
 	references := "# 参考记忆\n- 用户的生日是6月15日\n- 用户喜欢红色"
 
-	result, err := s.leftBrain.Think(question, nil, references, true)
+	result, err := s.leftBrain.Think(context.Background(),question, nil, references, true)
 
 	if !assert.NoError(s.T(), err, "带记忆的思考应该成功") {
 		s.T().FailNow()
@@ -374,7 +375,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_LongHistory() {
 	}
 
 	question := "这是第几次对话？"
-	result, err := s.leftBrain.Think(question, history, "", true)
+	result, err := s.leftBrain.Think(context.Background(),question, history, "", true)
 
 	if !assert.NoError(s.T(), err, "左脑应该能处理8轮历史对话") {
 		s.T().FailNow()
@@ -411,7 +412,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_8RoundLimit() {
 	}
 
 	s.logger.Info("测试最大轮数边界情况", logging.Int("history_count", len(historyWithinLimit)))
-	_, err := s.leftBrain.Think("第一个用户是谁？", historyWithinLimit, "", true)
+	_, err := s.leftBrain.Think(context.Background(),"第一个用户是谁？", historyWithinLimit, "", true)
 	if !assert.NoError(s.T(), err, "最大轮数内应该能处理") {
 		s.T().FailNow()
 	}
@@ -431,7 +432,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_8RoundLimit() {
 	}
 
 	s.logger.Info("测试超过最大轮数的情况", logging.Int("history_count", len(historyOverLimit)))
-	result, err := s.leftBrain.Think("最后一个用户是谁？", historyOverLimit, "", true)
+	result, err := s.leftBrain.Think(context.Background(),"最后一个用户是谁？", historyOverLimit, "", true)
 	// 注意：这里不应该断言出错，因为即使历史太长，模型也应该能处理
 	if err != nil {
 		s.logger.Warn("超过最大轮数处理失败", logging.Err(err))
@@ -559,7 +560,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_MultiRoundContext() {
 				logging.String("final_question", tc.finalQuestion))
 
 			// 执行思考
-			result, err := s.leftBrain.Think(tc.finalQuestion, history, "", true)
+			result, err := s.leftBrain.Think(context.Background(),tc.finalQuestion, history, "", true)
 
 			if !assert.NoError(s.T(), err, tc.description) {
 				s.T().FailNow()
@@ -739,7 +740,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_ScheduleIntent() {
 			var lastErr error
 
 			for i := 0; i < maxRetries; i++ {
-				result, err := s.leftBrain.Think(tc.question, nil, "", true)
+				result, err := s.leftBrain.Think(context.Background(),tc.question, nil, "", true)
 				lastResult = result
 				lastErr = err
 
@@ -814,7 +815,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_SendToIntent() {
 			var lastErr error
 
 			for i := 0; i < maxRetries; i++ {
-				result, err := s.leftBrain.Think(tc.question, nil, "", true)
+				result, err := s.leftBrain.Think(context.Background(),tc.question, nil, "", true)
 				lastResult = result
 				lastErr = err
 

@@ -4,9 +4,9 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"mindx/internal/core"
 	"mindx/internal/entity"
 	infraLlama "mindx/internal/infrastructure/llama"
-	"mindx/internal/infrastructure/persistence"
 	"mindx/internal/usecase/embedding"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
@@ -31,7 +31,7 @@ type indexTask struct {
 type SkillIndexer struct {
 	embedding *embedding.EmbeddingService
 	llama     *infraLlama.OllamaService
-	store     persistence.Store
+	store     core.Store
 	logger    logging.Logger
 	dataPath  string
 	mu        sync.RWMutex
@@ -48,7 +48,7 @@ type SkillIndexer struct {
 	workerWg  sync.WaitGroup
 }
 
-func NewSkillIndexer(embedding *embedding.EmbeddingService, llama *infraLlama.OllamaService, store persistence.Store, logger logging.Logger) *SkillIndexer {
+func NewSkillIndexer(embedding *embedding.EmbeddingService, llama *infraLlama.OllamaService, store core.Store, logger logging.Logger) *SkillIndexer {
 	dataPath := "data"
 	if store != nil {
 		dataPath = "data"

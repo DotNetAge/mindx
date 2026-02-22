@@ -43,7 +43,10 @@ func testModelTools(modelName string) error {
 		return err
 	}
 
-	_, _, _, _ = config.InitVippers()
+	_, _, _, _, err := config.InitVippers()
+	if err != nil {
+		return fmt.Errorf("初始化配置失败: %w", err)
+	}
 	modelsMgr := config.GetModelsManager()
 	allModels := modelsMgr.ListModels()
 

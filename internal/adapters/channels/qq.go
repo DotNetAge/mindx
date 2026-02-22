@@ -359,6 +359,12 @@ func (c *QQChannel) SetOnMessage(callback func(context.Context, *entity.Incoming
 }
 
 func (c *QQChannel) SendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
+	return getBreaker("qq").Execute(func() error {
+		return c.doSendMessage(ctx, msg)
+	})
+}
+
+func (c *QQChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("QQ Channel is not running")
 	}

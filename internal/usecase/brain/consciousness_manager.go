@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"context"
 	"mindx/internal/config"
 	"mindx/internal/core"
 	"mindx/internal/entity"
@@ -123,12 +124,12 @@ func (cm *ConsciousnessManager) HasDualBrain() bool {
 	return cm.leftBrain != nil && cm.rightBrain != nil
 }
 
-func (cm *ConsciousnessManager) Think(question string, historyDialogue []*core.DialogueMessage, refs string) (*core.ThinkingResult, error) {
+func (cm *ConsciousnessManager) Think(ctx context.Context, question string, historyDialogue []*core.DialogueMessage, refs string) (*core.ThinkingResult, error) {
 	if cm.consciousness != nil {
-		return cm.consciousness.Think(question, historyDialogue, refs, false)
+		return cm.consciousness.Think(ctx, question, historyDialogue, refs, false)
 	}
 	if cm.leftBrain != nil {
-		return cm.leftBrain.Think(question, historyDialogue, refs, true)
+		return cm.leftBrain.Think(ctx, question, historyDialogue, refs, true)
 	}
 	return nil, fmt.Errorf("consciousness not initialized")
 }

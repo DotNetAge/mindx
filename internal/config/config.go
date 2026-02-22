@@ -1,38 +1,38 @@
 package config
 
 import (
+	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/viper"
 )
 
-func InitVippers() (srvCfg *GlobalConfig, channelsCfg *ChannelsConfig, capabilitiesCfg *CapabilityConfig, modelsCfg *ModelsConfig) {
-	srvCfg, err := LoadServerConfig()
+func InitVippers() (srvCfg *GlobalConfig, channelsCfg *ChannelsConfig, capabilitiesCfg *CapabilityConfig, modelsCfg *ModelsConfig, err error) {
+	srvCfg, err = LoadServerConfig()
 	if err != nil {
-		log.Fatal("加载server配置失败：", err)
+		return nil, nil, nil, nil, fmt.Errorf("加载server配置失败：%w", err)
 	}
 
 	channelsCfg, err = LoadChannelsConfig()
 	if err != nil {
-		log.Fatal("加载channels配置失败：", err)
+		return nil, nil, nil, nil, fmt.Errorf("加载channels配置失败：%w", err)
 	}
 
 	capabilitiesCfg, err = LoadCapabilitiesConfig()
 	if err != nil {
-		log.Fatal("加载capabilities配置失败：", err)
+		return nil, nil, nil, nil, fmt.Errorf("加载capabilities配置失败：%w", err)
 	}
 
 	modelsCfg, err = LoadModelsConfig()
 	if err != nil {
-		log.Fatal("加载models配置失败：", err)
+		return nil, nil, nil, nil, fmt.Errorf("加载models配置失败：%w", err)
 	}
 
 	SetModelsManager(NewModelsManager(modelsCfg, srvCfg))
 
-	return srvCfg, channelsCfg, capabilitiesCfg, modelsCfg
+	return srvCfg, channelsCfg, capabilitiesCfg, modelsCfg, nil
 }
 
 func LoadServerConfig() (*GlobalConfig, error) {

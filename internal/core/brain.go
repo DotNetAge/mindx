@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"mindx/internal/entity"
 )
 
@@ -53,25 +54,12 @@ type ToolCallFunction struct {
 // 大脑的本质是思考
 type Thinking interface {
 	// Think 根据提示思考并返回结果
-	// question: 用户的问题
-	// history: 历史对话记录
-	// references: 参考资料
-	// jsonResult: 是否返回JSON格式结果
-	Think(question string, history []*DialogueMessage, references string, jsonResult bool) (*ThinkingResult, error)
+	Think(ctx context.Context, question string, history []*DialogueMessage, references string, jsonResult bool) (*ThinkingResult, error)
 	// ThinkWithTools 使用工具思考并返回结果
-	ThinkWithTools(question string, history []*DialogueMessage, tools []*ToolSchema, customSystemPrompt ...string) (*ToolCallResult, error)
+	ThinkWithTools(ctx context.Context, question string, history []*DialogueMessage, tools []*ToolSchema, customSystemPrompt ...string) (*ToolCallResult, error)
 	// ReturnFuncResult 向大模型回传函数调用结果
-	// 当调用FunctionCall时，大模型会返回一个JSON格式的结果，当外部完成调用后使用此方法回传结果
-	// toolCallID: 工具调用ID（用于回传结果匹配）
-	// name: 函数名称
-	// result: 函数调用的结果
-	// originalArgs: 原始函数调用的参数（用于构建 ToolCall 消息）
-	// history: 历史对话记录
-	// tools: 可用的工具列表
-	// question: 用户的原始问题
-	ReturnFuncResult(toolCallID string, name string, result string, originalArgs map[string]interface{}, history []*DialogueMessage, tools []*ToolSchema, question string) (string, error)
+	ReturnFuncResult(ctx context.Context, toolCallID string, name string, result string, originalArgs map[string]interface{}, history []*DialogueMessage, tools []*ToolSchema, question string) (string, error)
 	// CalculateMaxHistoryCount 计算最大历史对话轮数
-	// 根据模型 Token 容量动态计算，公式: (MaxTokens - ReservedOutputTokens) ÷ AvgTokensPerRound
 	CalculateMaxHistoryCount() int
 	// SetEventChan 设置事件 channel（用于实时推送思考过程）
 	SetEventChan(ch chan<- ThinkingEvent)

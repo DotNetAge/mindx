@@ -86,6 +86,12 @@ func (c *WhatsAppChannel) Start(ctx context.Context) error {
 }
 
 func (c *WhatsAppChannel) SendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
+	return getBreaker("whatsapp").Execute(func() error {
+		return c.doSendMessage(ctx, msg)
+	})
+}
+
+func (c *WhatsAppChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("WhatsAppChannel is not running")
 	}
@@ -208,7 +214,7 @@ func (c *WhatsAppChannel) handleVerification(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	c.logger.Warn(i18n.T("adapter.whatsapp_verify_failed"), logging.String("mode", mode), logging.String("token", token))
+	c.logger.Warn(i18n.T("adapter.whatsapp_verify_failed"), logging.String("mode", mode), logging.String("token", "***"))
 	http.Error(w, "Forbidden", http.StatusForbidden)
 }
 
