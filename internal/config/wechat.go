@@ -9,3 +9,6 @@ type WeChatConfig struct {
 	Path           string `mapstructure:"path" json:"path" yaml:"path"`
 	Type           string `mapstructure:"type" json:"type" yaml:"type"`
 }
+
+func (c *WeChatConfig) GetPort() int  { return c.Port }
+func (c *WeChatConfig) GetPath() string { return c.Path }

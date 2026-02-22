@@ -4,6 +4,7 @@ import (
 	"mindx/internal/config"
 	"mindx/internal/core"
 	"mindx/internal/entity"
+	apperrors "mindx/internal/errors"
 	"mindx/internal/usecase/embedding"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
@@ -47,7 +48,7 @@ func NewMemory(
 	}
 
 	if err := os.MkdirAll(cfg.VectorStore.DataPath, 0755); err != nil {
-		return nil, fmt.Errorf("创建记忆存储目录失败: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeMemory, "创建记忆存储目录失败")
 	}
 
 	memory := &Memory{
@@ -89,9 +90,15 @@ func (m *Memory) Record(point core.MemoryPoint) error {
 		}
 	}
 
+	// 语义去重：检查是否有高度相似的已有记忆
+	mergedPoint, wasMerged := m.DeduplicateMemory(&point)
+	if wasMerged {
+		point = *mergedPoint
+	}
+
 	if err := m.storeMemory(point); err != nil {
 		m.logger.Error(i18n.T("memory.store_failed"), logging.Err(err))
-		return fmt.Errorf("存储记忆失败: %w", err)
+		return apperrors.Wrap(err, apperrors.ErrTypeMemory, "存储记忆失败")
 	}
 
 	m.logger.Info(i18n.T("memory.record_success"),
@@ -124,7 +131,7 @@ func (m *Memory) Search(terms string) ([]core.MemoryPoint, error) {
 		entries, err := m.store.Search(nil, 10)
 		if err != nil {
 			m.logger.Error(i18n.T("memory.vector_search_failed"), logging.Err(err))
-			return nil, fmt.Errorf("向量搜索失败: %w", err)
+			return nil, apperrors.Wrap(err, apperrors.ErrTypeMemory, "向量搜索失败")
 		}
 		filtered := m.filterByKeywords(entries, terms)
 		sorted := m.sortByWeight(filtered, 3)
@@ -134,7 +141,7 @@ func (m *Memory) Search(terms string) ([]core.MemoryPoint, error) {
 	allMemories, err := m.getAllMemories()
 	if err != nil {
 		m.logger.Error(i18n.T("memory.get_memories_failed"), logging.Err(err))
-		return nil, fmt.Errorf("获取记忆点失败: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeMemory, "获取记忆点失败")
 	}
 
 	var candidatePoints []core.MemoryPoint
@@ -463,7 +470,7 @@ func (m *Memory) CleanupExpiredMemories() error {
 	allMemories, err := m.getAllMemories()
 	if err != nil {
 		m.logger.Error(i18n.T("memory.get_memories_failed"), logging.Err(err))
-		return fmt.Errorf("获取记忆点失败: %w", err)
+		return apperrors.Wrap(err, apperrors.ErrTypeMemory, "获取记忆点失败")
 	}
 
 	deletedCount := 0
@@ -499,7 +506,7 @@ func (m *Memory) AdjustMemoryWeight(id int, multiple float64) error {
 	allMemories, err := m.getAllMemories()
 	if err != nil {
 		m.logger.Error(i18n.T("memory.get_memories_failed"), logging.Err(err))
-		return fmt.Errorf("获取记忆点失败: %w", err)
+		return apperrors.Wrap(err, apperrors.ErrTypeMemory, "获取记忆点失败")
 	}
 
 	var targetPoint core.MemoryPoint
@@ -515,7 +522,7 @@ func (m *Memory) AdjustMemoryWeight(id int, multiple float64) error {
 
 	if !found {
 		m.logger.Error(i18n.T("memory.target_not_found"), logging.Int(i18n.T("memory.id"), id))
-		return fmt.Errorf("未找到ID为%d的记忆点", id)
+		return apperrors.New(apperrors.ErrTypeMemory, fmt.Sprintf("未找到ID为%d的记忆点", id))
 	}
 
 	targetPoint.TotalWeight = targetPoint.TotalWeight * multiple
@@ -528,7 +535,7 @@ func (m *Memory) AdjustMemoryWeight(id int, multiple float64) error {
 
 	if err := m.storeMemory(targetPoint); err != nil {
 		m.logger.Error(i18n.T("memory.update_weight_failed"), logging.Err(err), logging.Int(i18n.T("memory.id"), id))
-		return fmt.Errorf("更新记忆权重失败: %w", err)
+		return apperrors.Wrap(err, apperrors.ErrTypeMemory, "更新记忆权重失败")
 	}
 
 	m.logger.Info(i18n.T("memory.adjust_weight_success"), logging.Int(i18n.T("memory.id"), id), logging.Float64(i18n.T("memory.new_weight"), targetPoint.TotalWeight))
@@ -540,7 +547,7 @@ func (m *Memory) Optimize() error {
 
 	if err := m.CleanupExpiredMemories(); err != nil {
 		m.logger.Error(i18n.T("memory.cleanup_failed"), logging.Err(err))
-		return fmt.Errorf("清理过期记忆失败: %w", err)
+		return apperrors.Wrap(err, apperrors.ErrTypeMemory, "清理过期记忆失败")
 	}
 
 	m.logger.Info(i18n.T("memory.optimize_complete"))
@@ -737,7 +744,7 @@ func (m *Memory) ClusterConversations(conversations []entity.ConversationLog) er
 	} else if len(memoryPoints) == 1 {
 		if err := m.Record(memoryPoints[0]); err != nil {
 			m.logger.Error(i18n.T("memory.store_failed"), logging.Err(err))
-			return fmt.Errorf("存储记忆点失败: %w", err)
+			return apperrors.Wrap(err, apperrors.ErrTypeMemory, "存储记忆点失败")
 		}
 		m.logger.Info(i18n.T("memory.single_mem_store_complete"))
 	}
@@ -782,7 +789,7 @@ func (m *Memory) determineOptimalK(pointCount int) int {
 
 func (m *Memory) generateCombinedMemoryPoint(points []core.MemoryPoint, clusterID int) (core.MemoryPoint, error) {
 	if len(points) == 0 {
-		return core.MemoryPoint{}, fmt.Errorf("no memory points provided")
+		return core.MemoryPoint{}, apperrors.New(apperrors.ErrTypeMemory, "no memory points provided")
 	}
 
 	var contentBuilder strings.Builder
@@ -891,7 +898,7 @@ func (m *Memory) getAllMemories() ([]core.MemoryPoint, error) {
 
 	allMemories, err := m.store.Search(nil, 1000)
 	if err != nil {
-		return nil, fmt.Errorf("获取记忆点失败: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeMemory, "获取记忆点失败")
 	}
 
 	memoryPoints := make([]core.MemoryPoint, 0, len(allMemories))
@@ -922,4 +929,75 @@ func (m *Memory) generateMemoryKey(t time.Time) string {
 
 func (m *Memory) Close() error {
 	return m.store.Close()
+}
+
+// DecayWeights 定期权重衰减
+// 扫描所有记忆点，重新计算 TimeWeight，删除 TotalWeight < 0.05 的记忆
+func (m *Memory) DecayWeights() error {
+	m.logger.Info("开始记忆权重衰减")
+
+	allMemories, err := m.getAllMemories()
+	if err != nil {
+		return err
+	}
+
+	decayedCount := 0
+	deletedCount := 0
+	now := time.Now()
+
+	for _, mem := range allMemories {
+		daysSinceCreation := now.Sub(mem.CreatedAt).Hours() / 24
+		// 时间衰减：使用指数衰减函数
+		newTimeWeight := 1.0 / (1.0 + daysSinceCreation/30.0)
+		mem.TimeWeight = newTimeWeight
+		mem.TotalWeight = (mem.TimeWeight + mem.RepeatWeight + mem.EmphasisWeight) / 3.0
+		mem.UpdatedAt = now
+
+		if mem.TotalWeight < 0.05 {
+			key := m.generateMemoryKey(mem.CreatedAt)
+			if err := m.store.Delete(key); err != nil {
+				m.logger.Warn("删除低权重记忆失败", logging.Err(err))
+				continue
+			}
+			deletedCount++
+			continue
+		}
+
+		if err := m.storeMemory(mem); err != nil {
+			m.logger.Warn("更新记忆权重失败", logging.Err(err))
+			continue
+		}
+		decayedCount++
+	}
+
+	m.logger.Info("记忆权重衰减完成",
+		logging.Int("decayed", decayedCount),
+		logging.Int("deleted", deletedCount))
+	return nil
+}
+
+// StartPeriodicMaintenance 启动定期维护任务
+func (m *Memory) StartPeriodicMaintenance(interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		consolidateCounter := 0
+		for range ticker.C {
+			// 每次 tick 执行权重衰减
+			if err := m.DecayWeights(); err != nil {
+				m.logger.Error("定期权重衰减失败", logging.Err(err))
+			}
+
+			// 每 3 次 tick（即 72 小时，如果 interval=24h）执行一次聚类整理
+			consolidateCounter++
+			if consolidateCounter >= 3 {
+				consolidateCounter = 0
+				if err := m.Optimize(); err != nil {
+					m.logger.Error("定期记忆整理失败", logging.Err(err))
+				}
+			}
+		}
+	}()
+	m.logger.Info("记忆定期维护已启动", logging.String("interval", interval.String()))
 }

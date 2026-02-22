@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"mindx/internal/adapters/http/middleware"
 )
 
 // Server HTTP API 服务器
@@ -38,6 +41,8 @@ func NewServer(port int, staticDir string) (*Server, error) {
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 	engine.Use(gin.Logger())
+	engine.Use(middleware.RequestID())
+	engine.Use(middleware.MetricsMiddleware())
 
 	return &Server{
 		engine:         engine,
@@ -58,6 +63,9 @@ func (s *Server) Start() error {
 	// 注册健康检查路由
 	s.engine.GET("/health", s.handleHealthCheck)
 	s.engine.GET("/ready", s.handleReadyCheck)
+
+	// 注册 Prometheus 指标端点
+	s.engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// 创建 HTTP 服务器
 	s.httpServer = &http.Server{

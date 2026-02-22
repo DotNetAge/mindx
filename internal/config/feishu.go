@@ -8,3 +8,6 @@ type FeishuConfig struct {
 	Port              int    `mapstructure:"port" json:"port" yaml:"port"`
 	Path              string `mapstructure:"path" json:"path" yaml:"path"`
 }
+
+func (c *FeishuConfig) GetPort() int  { return c.Port }
+func (c *FeishuConfig) GetPath() string { return c.Path }

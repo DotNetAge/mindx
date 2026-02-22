@@ -15,6 +15,14 @@ type GlobalConfig struct {
 	DefaultModel   string            `mapstructure:"default_model" yaml:"default_model"`
 	Memory         MemoryConfig      `mapstructure:"memory,omitempty" yaml:"memory,omitempty"`
 	VectorStore    VectorStoreConfig `mapstructure:"vector_store" yaml:"vector_store"`
+	WebSocket      WebSocketConfig   `mapstructure:"websocket,omitempty" yaml:"websocket,omitempty"`
+}
+
+type WebSocketConfig struct {
+	MaxConnections int      `mapstructure:"max_connections" json:"max_connections" yaml:"max_connections"`
+	PingInterval   int      `mapstructure:"ping_interval" json:"ping_interval" yaml:"ping_interval"`             // 秒
+	AllowedOrigins []string `mapstructure:"allowed_origins" json:"allowed_origins" yaml:"allowed_origins"`
+	Token          string   `mapstructure:"token" json:"token" yaml:"token"`
 }
 
 type BrainHalfConfig struct {

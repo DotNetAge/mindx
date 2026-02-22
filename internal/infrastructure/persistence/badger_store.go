@@ -2,12 +2,12 @@ package persistence
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/dgraph-io/badger/v4"
 
 	"mindx/internal/core"
 	"mindx/internal/entity"
+	apperrors "mindx/internal/errors"
 	"mindx/internal/utils"
 )
 
@@ -25,7 +25,7 @@ func NewBadgerStore(dbPath string, provider core.EmbeddingProvider) (*BadgerStor
 
 	db, err := badger.Open(opts)
 	if err != nil {
-		return nil, fmt.Errorf("打开 Badger 数据库失败: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeStorage, "打开 Badger 数据库失败")
 	}
 
 	return &BadgerStore{
@@ -38,7 +38,7 @@ func NewBadgerStore(dbPath string, provider core.EmbeddingProvider) (*BadgerStor
 // Put 存储向量
 func (s *BadgerStore) Put(key string, vector []float64, metadata interface{}) error {
 	if vector == nil {
-		return fmt.Errorf("vector cannot be nil")
+		return apperrors.New(apperrors.ErrTypeStorage, "vector cannot be nil")
 	}
 
 	entry := entity.VectorEntry{
@@ -55,7 +55,7 @@ func (s *BadgerStore) Put(key string, vector []float64, metadata interface{}) er
 		default:
 			metadataBytes, err := json.Marshal(metadata)
 			if err != nil {
-				return fmt.Errorf("failed to marshal metadata: %w", err)
+				return apperrors.Wrap(err, apperrors.ErrTypeStorage, "failed to marshal metadata")
 			}
 			entry.Metadata = metadataBytes
 		}
@@ -63,7 +63,7 @@ func (s *BadgerStore) Put(key string, vector []float64, metadata interface{}) er
 
 	entryBytes, err := json.Marshal(entry)
 	if err != nil {
-		return fmt.Errorf("failed to marshal entry: %w", err)
+		return apperrors.Wrap(err, apperrors.ErrTypeStorage, "failed to marshal entry")
 	}
 
 	return s.db.Update(func(txn *badger.Txn) error {

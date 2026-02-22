@@ -3,10 +3,12 @@ package channels
 import (
 	"context"
 	"fmt"
+	"mindx/internal/config"
 	"mindx/internal/entity"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -28,21 +30,50 @@ type RealTimeChannel struct {
 	startTime       *time.Time
 	logger          logging.Logger
 	onThinkingEvent func(sessionID string, event map[string]any) // 思考流事件回调
+	maxConnections  int
+	wsCfg           config.WebSocketConfig
 }
 
 // NewRealTimeChannel 创建 RealTimeChannel
-func NewRealTimeChannel(port int) *RealTimeChannel {
-	return &RealTimeChannel{
-		port:   port,
-		server: http.NewServeMux(),
-		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool {
-				return true // 允许所有来源
-			},
-		},
-		clients: make(map[*websocket.Conn]*entity.WebClient),
-		logger:  logging.GetSystemLogger().Named("channel.realtime"),
+func NewRealTimeChannel(port int, wsCfg ...config.WebSocketConfig) *RealTimeChannel {
+	var cfg config.WebSocketConfig
+	if len(wsCfg) > 0 {
+		cfg = wsCfg[0]
 	}
+	if cfg.MaxConnections <= 0 {
+		cfg.MaxConnections = 100
+	}
+	if cfg.PingInterval <= 0 {
+		cfg.PingInterval = 30
+	}
+
+	devMode := os.Getenv("MINDX_DEV_MODE") != ""
+
+	ch := &RealTimeChannel{
+		port:           port,
+		server:         http.NewServeMux(),
+		clients:        make(map[*websocket.Conn]*entity.WebClient),
+		logger:         logging.GetSystemLogger().Named("channel.realtime"),
+		maxConnections: cfg.MaxConnections,
+		wsCfg:          cfg,
+	}
+
+	ch.upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			if devMode || len(cfg.AllowedOrigins) == 0 {
+				return true
+			}
+			origin := r.Header.Get("Origin")
+			for _, allowed := range cfg.AllowedOrigins {
+				if origin == allowed {
+					return true
+				}
+			}
+			return false
+		},
+	}
+
+	return ch
 }
 
 // Name 返回 Channel 名称
@@ -307,6 +338,24 @@ func (w *RealTimeChannel) GetStatus() *entity.ChannelStatus {
 
 // handleConnection 处理 WebSocket 连接
 func (w *RealTimeChannel) handleConnection(connResp http.ResponseWriter, r *http.Request) {
+	// Token 认证
+	if w.wsCfg.Token != "" {
+		token := r.URL.Query().Get("token")
+		if token != w.wsCfg.Token {
+			http.Error(connResp, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
+
+	// 连接数限制
+	w.mutex.RLock()
+	connCount := len(w.clients)
+	w.mutex.RUnlock()
+	if connCount >= w.maxConnections {
+		http.Error(connResp, "Too many connections", http.StatusServiceUnavailable)
+		return
+	}
+
 	// 升级 HTTP 连接为 WebSocket 连接
 	conn, err := w.upgrader.Upgrade(connResp, r, nil)
 	if err != nil {
@@ -324,7 +373,7 @@ func (w *RealTimeChannel) handleConnection(connResp http.ResponseWriter, r *http
 	client := &entity.WebClient{
 		Conn:           conn,
 		SessionID:      sessionID,
-		ChannelID:      w.Name(), // 使用实际的 channel 名称 "realtime"
+		ChannelID:      w.Name(),
 		ClientID:       fmt.Sprintf("client_%d", time.Now().UnixNano()),
 		SenderID:       fmt.Sprintf("user_%d", time.Now().UnixNano()),
 		SenderName:     "用户",
@@ -374,6 +423,42 @@ func (w *RealTimeChannel) handleMessages(client *entity.WebClient) {
 		delete(w.clients, client.Conn)
 		w.mutex.Unlock()
 		w.logger.Info(i18n.T("adapter.ws_conn_closed"), logging.String(i18n.T("adapter.session_id"), client.SessionID))
+	}()
+
+	conn := client.Conn
+	pingInterval := time.Duration(w.wsCfg.PingInterval) * time.Second
+	readDeadline := pingInterval * 2
+
+	// 设置 Pong handler 重置读超时
+	conn.SetPongHandler(func(appData string) error {
+		return conn.SetReadDeadline(time.Now().Add(readDeadline))
+	})
+	// 初始读超时
+	_ = conn.SetReadDeadline(time.Now().Add(readDeadline))
+
+	// 启动心跳 goroutine
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		ticker := time.NewTicker(pingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				w.mutex.RLock()
+				_, exists := w.clients[conn]
+				w.mutex.RUnlock()
+				if !exists {
+					return
+				}
+				if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+					w.logger.Debug("发送 ping 失败", logging.Err(err))
+					return
+				}
+			case <-done:
+				return
+			}
+		}
 	}()
 
 	for {

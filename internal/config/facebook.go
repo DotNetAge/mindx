@@ -8,3 +8,6 @@ type FacebookConfig struct {
 	Port           int    `mapstructure:"port" json:"port" yaml:"port"`
 	Path           string `mapstructure:"path" json:"path" yaml:"path"`
 }
+
+func (c *FacebookConfig) GetPort() int  { return c.Port }
+func (c *FacebookConfig) GetPath() string { return c.Path }

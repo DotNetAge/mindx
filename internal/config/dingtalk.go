@@ -9,3 +9,6 @@ type DingTalkConfig struct {
 	Port          int    `mapstructure:"port" json:"port" yaml:"port"`
 	Path          string `mapstructure:"path" json:"path" yaml:"path"`
 }
+
+func (c *DingTalkConfig) GetPort() int  { return c.Port }
+func (c *DingTalkConfig) GetPath() string { return c.Path }

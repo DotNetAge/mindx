@@ -6,6 +6,7 @@ import (
 	"mindx/internal/config"
 	"mindx/internal/core"
 	"mindx/internal/entity"
+	apperrors "mindx/internal/errors"
 	"mindx/internal/usecase/cron"
 	"mindx/internal/usecase/skills"
 	"mindx/pkg/i18n"
@@ -16,6 +17,20 @@ import (
 type processingContext struct {
 	historyDialogue []*core.DialogueMessage
 	refs            string
+}
+
+// BrainDeps 封装 BionicBrain 构造所需的全部依赖
+type BrainDeps struct {
+	Cfg            *config.GlobalConfig
+	Persona        *core.Persona
+	Memory         core.Memory
+	SkillMgr       *skills.SkillMgr
+	ToolsRequest   core.OnToolsRequest
+	CapRequest     core.OnCapabilityRequest
+	HistoryRequest core.OnHistoryRequest
+	Logger         logging.Logger
+	TokenUsageRepo core.TokenUsageRepository
+	CronScheduler  cron.Scheduler
 }
 
 type BionicBrain struct {
@@ -38,18 +53,17 @@ type BionicBrain struct {
 	brain            *core.Brain
 }
 
-func NewBrain(
-	cfg *config.GlobalConfig,
-	persona *core.Persona,
-	memory core.Memory,
-	skillMgr *skills.SkillMgr,
-	toolsRequest core.OnToolsRequest,
-	capRequest core.OnCapabilityRequest,
-	historyRequest core.OnHistoryRequest,
-	logger logging.Logger,
-	tokenUsageRepo core.TokenUsageRepository,
-	cronScheduler cron.Scheduler,
-) (*core.Brain, error) {
+func NewBrain(deps BrainDeps) (*core.Brain, error) {
+	cfg := deps.Cfg
+	persona := deps.Persona
+	memory := deps.Memory
+	skillMgr := deps.SkillMgr
+	toolsRequest := deps.ToolsRequest
+	capRequest := deps.CapRequest
+	historyRequest := deps.HistoryRequest
+	logger := deps.Logger
+	tokenUsageRepo := deps.TokenUsageRepo
+	cronScheduler := deps.CronScheduler
 
 	modelsMgr := config.GetModelsManager()
 	brainModels := modelsMgr.GetBrainModels()
@@ -139,7 +153,7 @@ func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, e
 
 	pctx, err := b.contextPreparer.Prepare(req.Question, b.leftBrain)
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare context: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "failed to prepare context")
 	}
 
 	eventChan := req.EventChan
@@ -151,7 +165,7 @@ func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, e
 	if err != nil {
 		b.leftBrain.SetEventChan(nil)
 		b.logger.Error(i18n.T("brain.left_think_failed"), logging.Err(err))
-		return nil, fmt.Errorf("left brain think failed: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "left brain think failed")
 	}
 
 	b.logger.Info(i18n.T("brain.left_think_complete"),
@@ -383,7 +397,7 @@ func (b *BionicBrain) activateConsciousnessDualBrain(ctx context.Context, questi
 		err := b.consciousnessMgr.CreateDualBrain()
 		if err != nil {
 			b.logger.Warn(i18n.T("brain.consciousness_dual_brain_failed"), logging.Err(err))
-			return nil, fmt.Errorf("failed to create consciousness dual brain: %w", err)
+			return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "failed to create consciousness dual brain")
 		}
 	}
 
@@ -396,7 +410,7 @@ func (b *BionicBrain) activateConsciousnessDualBrain(ctx context.Context, questi
 	if err != nil {
 		leftBrain.SetEventChan(nil)
 		b.logger.Error(i18n.T("brain.consciousness_left_think_failed"), logging.Err(err))
-		return nil, fmt.Errorf("consciousness left brain think failed: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "consciousness left brain think failed")
 	}
 
 	b.logger.Info(i18n.T("brain.consciousness_left_think_complete"),
@@ -505,7 +519,7 @@ func (b *BionicBrain) consciousnessWithTools(ctx context.Context, question strin
 
 	if err != nil {
 		b.logger.Error(i18n.T("brain.consciousness_tool_failed"), logging.Err(err))
-		return nil, fmt.Errorf("consciousness tool call failed: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "consciousness tool call failed")
 	}
 
 	return b.responseBuilder.BuildToolCallResponse(answer, tools, thinkResult.SendTo), nil
@@ -591,7 +605,7 @@ func (b *BionicBrain) parseCapabilityPrefix(question string) (capabilityName, ac
 func (b *BionicBrain) handleWithConsciousness(ctx context.Context, req *core.ThinkingRequest, capabilityName, actualQuestion string) (*core.ThinkingResponse, error) {
 	pctx, err := b.contextPreparer.Prepare(actualQuestion, b.leftBrain)
 	if err != nil {
-		return nil, fmt.Errorf("准备上下文失败: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "准备上下文失败")
 	}
 
 	eventChan := req.EventChan

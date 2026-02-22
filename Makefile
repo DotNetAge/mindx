@@ -64,7 +64,8 @@ clean:
 test:
 	@echo "$(BLUE)Running tests...$(NC)"
 	@echo "$(BLUE)Test workspace: $(PWD)/.test$(NC)"
-	@mkdir -p $(PWD)/.test
+	@mkdir -p $(PWD)/.test/config
+	@cp -n $(PWD)/config/*.yml $(PWD)/.test/config/ 2>/dev/null || true
 	@MINDX_WORKSPACE=$(PWD)/.test go test ./...
 	@echo "$(GREEN)✓ Tests complete!$(NC)"
 

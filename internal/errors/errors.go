@@ -28,6 +28,8 @@ const (
 	ErrTypeSession
 	// ErrTypeWebSocket WebSocket错误
 	ErrTypeWebSocket
+	// ErrTypeChannel 渠道错误
+	ErrTypeChannel
 )
 
 // AppError 应用错误
@@ -71,6 +73,8 @@ func (t ErrorType) String() string {
 		return "SESSION"
 	case ErrTypeWebSocket:
 		return "WEBSOCKET"
+	case ErrTypeChannel:
+		return "CHANNEL"
 	default:
 		return "UNKNOWN"
 	}
@@ -216,4 +220,14 @@ func WebSocketError(message string) *AppError {
 // WrapWebSocketError 包装WebSocket错误
 func WrapWebSocketError(err error, message string) *AppError {
 	return Wrap(err, ErrTypeWebSocket, message)
+}
+
+// ChannelError 创建渠道错误
+func ChannelError(message string) *AppError {
+	return New(ErrTypeChannel, message)
+}
+
+// WrapChannelError 包装渠道错误
+func WrapChannelError(err error, message string) *AppError {
+	return Wrap(err, ErrTypeChannel, message)
 }
