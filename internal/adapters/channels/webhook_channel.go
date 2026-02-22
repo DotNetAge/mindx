@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	apperrors "mindx/internal/errors"
 	"mindx/internal/entity"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
@@ -11,6 +12,19 @@ import (
 	"sync"
 	"time"
 )
+
+// WebhookChannelConfig 渠道配置统一接口
+type WebhookChannelConfig interface {
+	GetPort() int
+	GetPath() string
+}
+
+// WebhookParser Webhook 消息解析接口
+// 各渠道实现此接口以提供平台特定的消息解析逻辑
+type WebhookParser interface {
+	ParseWebhook(body []byte, r *http.Request) (*entity.IncomingMessage, error)
+	HandleVerification(w http.ResponseWriter, r *http.Request) bool // GET 验证，返回 true 表示已处理
+}
 
 // WebhookChannel 基于 Webhook 的 Channel
 // 适用于通过 HTTP Webhook 接收消息的平台(微信、飞书、钉钉等)
@@ -28,6 +42,7 @@ type WebhookChannel struct {
 	lastMsgTime  time.Time
 	status       *entity.ChannelStatus
 	logger       logging.Logger
+	parser       WebhookParser
 }
 
 // NewWebhookChannel 创建 Webhook Channel
@@ -43,6 +58,78 @@ func NewWebhookChannel(platformName string, platformType entity.ChannelType, web
 			Running: false,
 		},
 		logger: logging.GetSystemLogger().Named("channel." + platformName),
+	}
+}
+
+// SetParser 设置 Webhook 消息解析器
+func (c *WebhookChannel) SetParser(parser WebhookParser) {
+	c.parser = parser
+}
+
+// StartWithHandler 使用自定义 handler 启动 Channel
+// 子类可以调用此方法，传入自己的 handler 和端口，避免覆盖 Start()
+func (c *WebhookChannel) StartWithHandler(ctx context.Context, port int, handler http.HandlerFunc) error {
+	c.server = &http.Server{
+		Addr:         fmt.Sprintf(":%d", port),
+		Handler:      http.HandlerFunc(handler),
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+	return c.Start(ctx)
+}
+
+// dispatchWebhook 统一的 webhook 分发处理
+// 使用已设置的 WebhookParser 进行消息解析
+func (c *WebhookChannel) dispatchWebhook(w http.ResponseWriter, r *http.Request) {
+	if c.parser == nil {
+		c.handleWebhook(w, r)
+		return
+	}
+
+	// 处理验证请求
+	if c.parser.HandleVerification(w, r) {
+		return
+	}
+
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		c.logger.Error(i18n.T("adapter.read_body_failed"), logging.Err(err))
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	msg, err := c.parser.ParseWebhook(body, r)
+	if err != nil {
+		c.logger.Error(i18n.T("adapter.parse_webhook_failed"), logging.Err(err))
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if msg == nil {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// 更新统计
+	c.mu.Lock()
+	c.totalMsg++
+	c.lastMsgTime = time.Now()
+	c.mu.Unlock()
+
+	// 调用消息回调
+	if c.onMessage != nil {
+		c.onMessage(context.Background(), msg)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte("success")); err != nil {
+		c.logger.Warn(i18n.T("adapter.return_response_failed"), logging.Err(err))
 	}
 }
 
@@ -67,7 +154,7 @@ func (c *WebhookChannel) Start(ctx context.Context) error {
 	defer c.mu.Unlock()
 
 	if c.isRunning {
-		return fmt.Errorf("%s channel is already running", c.platformName)
+		return apperrors.New(apperrors.ErrTypeChannel, fmt.Sprintf("%s channel is already running", c.platformName))
 	}
 
 	// 如果 server 已经被子类设置，使用子类设置的 server
@@ -148,7 +235,7 @@ func (c *WebhookChannel) SetOnMessage(callback func(context.Context, *entity.Inc
 func (c *WebhookChannel) SendMessage(ctx context.Context, msg *entity.OutgoingMessage) error {
 	// 大多数 Webhook Channel 不支持直接发送消息
 	// 需要通过平台 API 发送,这应该由专门的 Channel 实现
-	return fmt.Errorf("%s Webhook channel does not support direct message sending", c.platformName)
+	return apperrors.New(apperrors.ErrTypeChannel, fmt.Sprintf("%s Webhook channel does not support direct message sending", c.platformName))
 }
 
 // GetStatus 获取 Channel 状态
@@ -211,5 +298,5 @@ func (c *WebhookChannel) handleWebhook(w http.ResponseWriter, r *http.Request) {
 func (c *WebhookChannel) parseWebhookMessage(body []byte, r *http.Request) (*entity.IncomingMessage, error) {
 	// 这里应该是平台特定的解析逻辑
 	// 例如: 微信 XML 解析、飞书 JSON 解析等
-	return nil, fmt.Errorf("parseWebhookMessage not implemented for platform %s", c.platformName)
+	return nil, apperrors.New(apperrors.ErrTypeChannel, fmt.Sprintf("parseWebhookMessage not implemented for platform %s", c.platformName))
 }

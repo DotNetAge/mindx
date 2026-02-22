@@ -2,12 +2,14 @@ package memory
 
 import (
 	"context"
-	"mindx/internal/core"
-	"mindx/internal/entity"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
+
+	"mindx/internal/core"
+	"mindx/internal/entity"
+	"mindx/pkg/logging"
 )
 
 // LLMExtractor 基于LLM的记忆提取器
@@ -73,7 +75,7 @@ func (e *LLMExtractor) Extract(session entity.Session) bool {
 		}
 		if err := e.memory.Record(memoryPoint); err != nil {
 			// 记录失败但继续处理其他记忆点
-			fmt.Printf("存储记忆点失败: %v\n", err)
+			logging.GetSystemLogger().Warn("存储记忆点失败", logging.Err(err))
 		}
 	}
 

@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -52,11 +51,9 @@ type WeChatMessage struct {
 // WeChatChannel 微信公众号/企业微信 Channel
 type WeChatChannel struct {
 	*WebhookChannel
-	config       *config.WeChatConfig
-	accessToken  string
-	tokenExpires time.Time
-	tokenMutex   sync.RWMutex
-	httpClient   *http.Client
+	config         *config.WeChatConfig
+	tokenRefresher *TokenRefresher
+	httpClient     *http.Client
 }
 
 // NewWeChatChannel 创建微信 Channel
@@ -70,14 +67,58 @@ func NewWeChatChannel(cfg *config.WeChatConfig) *WeChatChannel {
 	}
 
 	baseChannel := NewWebhookChannel("wechat", entity.ChannelTypeWeChat, cfg.Path, cfg)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
 
-	return &WeChatChannel{
+	ch := &WeChatChannel{
 		WebhookChannel: baseChannel,
 		config:         cfg,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		httpClient:     httpClient,
 	}
+
+	ch.tokenRefresher = NewTokenRefresher(ch.refreshToken, baseChannel.logger)
+	return ch
+}
+
+// refreshToken 微信 token 刷新函数
+func (c *WeChatChannel) refreshToken(ctx context.Context) (string, int, error) {
+	apiURL := fmt.Sprintf(
+		"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s",
+		url.QueryEscape(c.config.AppID),
+		url.QueryEscape(c.config.AppSecret),
+	)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to get access token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var result struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+		ErrCode     int    `json:"errcode"`
+		ErrMsg      string `json:"errmsg"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", 0, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if result.ErrCode != 0 {
+		return "", 0, fmt.Errorf("WeChat API error: %d - %s", result.ErrCode, result.ErrMsg)
+	}
+
+	return result.AccessToken, result.ExpiresIn - 300, nil
 }
 
 // Description 返回 Channel 描述
@@ -132,7 +173,7 @@ func (c *WeChatChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingM
 		return fmt.Errorf("WeChat AppID or AppSecret not configured")
 	}
 
-	accessToken, err := c.getAccessToken(ctx)
+	accessToken, err := c.tokenRefresher.GetToken(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get access token: %w", err)
 	}
@@ -187,70 +228,6 @@ func (c *WeChatChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingM
 	)
 
 	return nil
-}
-
-// getAccessToken 获取微信 access_token
-func (c *WeChatChannel) getAccessToken(ctx context.Context) (string, error) {
-	c.tokenMutex.RLock()
-	if c.accessToken != "" && time.Now().Before(c.tokenExpires) {
-		token := c.accessToken
-		c.tokenMutex.RUnlock()
-		return token, nil
-	}
-	c.tokenMutex.RUnlock()
-
-	c.tokenMutex.Lock()
-	defer c.tokenMutex.Unlock()
-
-	if c.accessToken != "" && time.Now().Before(c.tokenExpires) {
-		return c.accessToken, nil
-	}
-
-	apiURL := fmt.Sprintf(
-		"https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s",
-		url.QueryEscape(c.config.AppID),
-		url.QueryEscape(c.config.AppSecret),
-	)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to get access token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var result struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-		ErrCode     int    `json:"errcode"`
-		ErrMsg      string `json:"errmsg"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if result.ErrCode != 0 {
-		return "", fmt.Errorf("WeChat API error: %d - %s", result.ErrCode, result.ErrMsg)
-	}
-
-	c.accessToken = result.AccessToken
-	c.tokenExpires = time.Now().Add(time.Duration(result.ExpiresIn-300) * time.Second)
-
-	c.logger.Info(i18n.T("adapter.get_access_token_success"),
-		logging.Int("expires_in", result.ExpiresIn),
-	)
-
-	return c.accessToken, nil
 }
 
 // parseWebhookMessage 解析微信 Webhook 消息

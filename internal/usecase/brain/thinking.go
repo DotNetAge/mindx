@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"mindx/internal/adapters/http/middleware"
 	"mindx/internal/config"
 	"mindx/internal/core"
 	"mindx/internal/entity"
+	apperrors "mindx/internal/errors"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
 	"mindx/pkg/retry"
@@ -190,9 +192,11 @@ func (t *Thinking) Think(ctx context.Context, question string, history []*core.D
 		return t.client.CreateChatCompletionStream(ctx, req)
 	})
 	if err != nil {
+		middleware.LlmCallsTotal.WithLabelValues(t.modelConfig.Name, "error").Inc()
+		middleware.LlmCallDuration.WithLabelValues(t.modelConfig.Name).Observe(time.Since(startTime).Seconds())
 		t.logger.Error(i18n.T("brain.think_failed"), logging.Err(err))
 		t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-		return nil, fmt.Errorf("think failed: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "think failed")
 	}
 	defer stream.Close()
 
@@ -208,9 +212,11 @@ func (t *Thinking) Think(ctx context.Context, question string, history []*core.D
 			if err.Error() == "EOF" {
 				break
 			}
+			middleware.LlmCallsTotal.WithLabelValues(t.modelConfig.Name, "error").Inc()
+			middleware.LlmCallDuration.WithLabelValues(t.modelConfig.Name).Observe(time.Since(startTime).Seconds())
 			t.logger.Error(i18n.T("brain.stream_recv_failed"), logging.Err(err))
 			t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-			return nil, fmt.Errorf("stream receive failed: %w", err)
+			return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "stream receive failed")
 		}
 
 		if response.Usage != nil && response.Usage.TotalTokens > 0 {
@@ -246,6 +252,13 @@ func (t *Thinking) Think(ctx context.Context, question string, history []*core.D
 	}
 
 	duration := time.Since(startTime).Milliseconds()
+	durationSec := time.Since(startTime).Seconds()
+
+	// Prometheus 指标埋点
+	middleware.LlmCallsTotal.WithLabelValues(t.modelConfig.Name, "success").Inc()
+	middleware.LlmCallDuration.WithLabelValues(t.modelConfig.Name).Observe(durationSec)
+	middleware.TokenUsageTotal.WithLabelValues(t.modelConfig.Name, "prompt").Add(float64(usage.PromptTokens))
+	middleware.TokenUsageTotal.WithLabelValues(t.modelConfig.Name, "completion").Add(float64(usage.CompletionTokens))
 
 	content := strings.TrimSpace(fullContent.String())
 
@@ -424,11 +437,20 @@ func (t *Thinking) ThinkWithTools(ctx context.Context, question string, history 
 	})
 	duration := time.Since(startTime).Milliseconds()
 
+	// 记录 LLM 调用指标
+	durationSec := float64(duration) / 1000.0
 	if err != nil {
+		middleware.LlmCallsTotal.WithLabelValues(t.modelConfig.Name, "error").Inc()
+		middleware.LlmCallDuration.WithLabelValues(t.modelConfig.Name).Observe(durationSec)
 		t.logger.Error(i18n.T("brain.right_skill_call_failed"), logging.Err(err))
 		t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-		return nil, fmt.Errorf("skill call failed: %w", err)
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeSkill, "skill call failed")
 	}
+
+	middleware.LlmCallsTotal.WithLabelValues(t.modelConfig.Name, "success").Inc()
+	middleware.LlmCallDuration.WithLabelValues(t.modelConfig.Name).Observe(durationSec)
+	middleware.TokenUsageTotal.WithLabelValues(t.modelConfig.Name, "prompt").Add(float64(resp.Usage.PromptTokens))
+	middleware.TokenUsageTotal.WithLabelValues(t.modelConfig.Name, "completion").Add(float64(resp.Usage.CompletionTokens))
 
 	if t.tokenUsageRepo != nil {
 		usage := &entity.TokenUsage{
@@ -439,7 +461,9 @@ func (t *Thinking) ThinkWithTools(ctx context.Context, question string, history 
 			PromptTokens:     int(resp.Usage.PromptTokens),
 			CreatedAt:        time.Now(),
 		}
-		_ = t.tokenUsageRepo.Save(usage)
+		if err := t.tokenUsageRepo.Save(usage); err != nil {
+			t.logger.Warn("保存 token 用量失败", logging.Err(err))
+		}
 	}
 
 	if t.tokenBudgetManager != nil {
@@ -450,7 +474,7 @@ func (t *Thinking) ThinkWithTools(ctx context.Context, question string, history 
 	}
 
 	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("no think result")
+		return nil, apperrors.New(apperrors.ErrTypeModel, "no think result")
 	}
 
 	choice := resp.Choices[0]
@@ -471,7 +495,7 @@ func (t *Thinking) ThinkWithTools(ctx context.Context, question string, history 
 		if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
 			t.logger.Error(i18n.T("brain.parse_func_params_failed"), logging.Err(err))
 			t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-			return nil, fmt.Errorf("parse func params failed: %w", err)
+			return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "parse func params failed")
 		}
 
 		t.sendEvent(NewToolCallEvent(toolCall.Function.Name, args))
@@ -496,7 +520,7 @@ func (t *Thinking) ThinkWithTools(ctx context.Context, question string, history 
 		if err := json.Unmarshal([]byte(funcCall.Arguments), &args); err != nil {
 			t.logger.Error(i18n.T("brain.parse_func_params_failed"), logging.Err(err))
 			t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-			return nil, fmt.Errorf("parse func params failed: %w", err)
+			return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "parse func params failed")
 		}
 
 		t.sendEvent(NewToolCallEvent(funcCall.Name, args))
@@ -575,7 +599,7 @@ func (t *Thinking) ReturnFuncResult(ctx context.Context, toolCallID string, name
 	argsBytes, err := json.Marshal(originalArgs)
 	if err != nil {
 		t.logger.Error(i18n.T("brain.serialize_params_failed"), logging.Err(err))
-		return "", fmt.Errorf("serialize params failed: %w", err)
+		return "", apperrors.Wrap(err, apperrors.ErrTypeModel, "serialize params failed")
 	}
 
 	toolCalls := []openai.ToolCall{
@@ -614,12 +638,20 @@ func (t *Thinking) ReturnFuncResult(ctx context.Context, toolCallID string, name
 		return t.client.CreateChatCompletion(ctx, req)
 	})
 	duration := time.Since(startTime).Milliseconds()
+	durationSec2 := float64(duration) / 1000.0
 
 	if err != nil {
+		middleware.LlmCallsTotal.WithLabelValues(t.modelConfig.Name, "error").Inc()
+		middleware.LlmCallDuration.WithLabelValues(t.modelConfig.Name).Observe(durationSec2)
 		t.logger.Error(i18n.T("brain.return_func_result_failed"), logging.Err(err))
 		t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-		return "", fmt.Errorf("return func result failed: %w", err)
+		return "", apperrors.Wrap(err, apperrors.ErrTypeModel, "return func result failed")
 	}
+
+	middleware.LlmCallsTotal.WithLabelValues(t.modelConfig.Name, "success").Inc()
+	middleware.LlmCallDuration.WithLabelValues(t.modelConfig.Name).Observe(durationSec2)
+	middleware.TokenUsageTotal.WithLabelValues(t.modelConfig.Name, "prompt").Add(float64(resp.Usage.PromptTokens))
+	middleware.TokenUsageTotal.WithLabelValues(t.modelConfig.Name, "completion").Add(float64(resp.Usage.CompletionTokens))
 
 	if t.tokenUsageRepo != nil {
 		usage := &entity.TokenUsage{
@@ -630,11 +662,13 @@ func (t *Thinking) ReturnFuncResult(ctx context.Context, toolCallID string, name
 			PromptTokens:     int(resp.Usage.PromptTokens),
 			CreatedAt:        time.Now(),
 		}
-		_ = t.tokenUsageRepo.Save(usage)
+		if err := t.tokenUsageRepo.Save(usage); err != nil {
+			t.logger.Warn("保存 token 用量失败", logging.Err(err))
+		}
 	}
 
 	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no response result")
+		return "", apperrors.New(apperrors.ErrTypeModel, "no response result")
 	}
 
 	content := strings.TrimSpace(resp.Choices[0].Message.Content)

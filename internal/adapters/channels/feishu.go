@@ -15,7 +15,6 @@ import (
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
 	"net/http"
-	"sync"
 	"time"
 )
 
@@ -36,11 +35,9 @@ func init() {
 // FeishuChannel 飞书机器人 Channel
 type FeishuChannel struct {
 	*WebhookChannel
-	config       *config.FeishuConfig
-	accessToken  string
-	tokenExpires time.Time
-	tokenMutex   sync.RWMutex
-	httpClient   *http.Client
+	config         *config.FeishuConfig
+	tokenRefresher *TokenRefresher
+	httpClient     *http.Client
 }
 
 // NewFeishuChannel 创建飞书 Channel
@@ -53,14 +50,65 @@ func NewFeishuChannel(cfg *config.FeishuConfig) *FeishuChannel {
 	}
 
 	baseChannel := NewWebhookChannel("feishu", entity.ChannelTypeFeishu, cfg.Path, cfg)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
 
-	return &FeishuChannel{
+	ch := &FeishuChannel{
 		WebhookChannel: baseChannel,
 		config:         cfg,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		httpClient:     httpClient,
 	}
+
+	ch.tokenRefresher = NewTokenRefresher(ch.refreshToken, baseChannel.logger)
+	return ch
+}
+
+// refreshToken 飞书 token 刷新函数
+func (c *FeishuChannel) refreshToken(ctx context.Context) (string, int, error) {
+	apiURL := "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
+
+	payload := map[string]string{
+		"app_id":     c.config.AppID,
+		"app_secret": c.config.AppSecret,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to get access token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var result struct {
+		AccessToken string `json:"tenant_access_token"`
+		Expire      int    `json:"expire"`
+		Code        int    `json:"code"`
+		Msg         string `json:"msg"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", 0, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if result.Code != 0 {
+		return "", 0, fmt.Errorf("Feishu API error: %d - %s", result.Code, result.Msg)
+	}
+
+	return result.AccessToken, result.Expire - 300, nil
 }
 
 // Description 返回 Channel 描述
@@ -114,7 +162,7 @@ func (c *FeishuChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingM
 		return fmt.Errorf("Feishu AppID or AppSecret not configured")
 	}
 
-	accessToken, err := c.getAccessToken(ctx)
+	accessToken, err := c.tokenRefresher.GetToken(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get access token: %w", err)
 	}
@@ -180,77 +228,6 @@ func (c *FeishuChannel) doSendMessage(ctx context.Context, msg *entity.OutgoingM
 	)
 
 	return nil
-}
-
-// getAccessToken 获取飞书 access_token
-func (c *FeishuChannel) getAccessToken(ctx context.Context) (string, error) {
-	c.tokenMutex.RLock()
-	if c.accessToken != "" && time.Now().Before(c.tokenExpires) {
-		token := c.accessToken
-		c.tokenMutex.RUnlock()
-		return token, nil
-	}
-	c.tokenMutex.RUnlock()
-
-	c.tokenMutex.Lock()
-	defer c.tokenMutex.Unlock()
-
-	if c.accessToken != "" && time.Now().Before(c.tokenExpires) {
-		return c.accessToken, nil
-	}
-
-	apiURL := "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
-
-	payload := map[string]string{
-		"app_id":     c.config.AppID,
-		"app_secret": c.config.AppSecret,
-	}
-
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to get access token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var result struct {
-		AccessToken string `json:"tenant_access_token"`
-		Expire      int    `json:"expire"`
-		Code        int    `json:"code"`
-		Msg         string `json:"msg"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if result.Code != 0 {
-		return "", fmt.Errorf("Feishu API error: %d - %s", result.Code, result.Msg)
-	}
-
-	c.accessToken = result.AccessToken
-	c.tokenExpires = time.Now().Add(time.Duration(result.Expire-300) * time.Second)
-
-	c.logger.Info(i18n.T("adapter.get_access_token_success"),
-		logging.Int("expire", result.Expire),
-	)
-
-	return c.accessToken, nil
 }
 
 // parseWebhookMessage 解析飞书 Webhook 消息

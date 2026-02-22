@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"mindx/internal/core"
+	apperrors "mindx/internal/errors"
 	"mindx/internal/usecase/skills"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
@@ -45,7 +46,7 @@ func (tc *ToolCaller) ExecuteToolCall(
 
 		toolCallResult, err := thinking.ThinkWithTools(ctx, question, currentHistory, tools, customSystemPrompt...)
 		if err != nil {
-			return "", fmt.Errorf("tool call decision failed: %w", err)
+			return "", apperrors.Wrap(err, apperrors.ErrTypeModel, "tool call decision failed")
 		}
 
 		if toolCallResult.NoCall {
@@ -66,7 +67,7 @@ func (tc *ToolCaller) ExecuteToolCall(
 
 		functionCallResult, err := tc.skillMgr.ExecuteFunc(*toolCallResult.Function)
 		if err != nil {
-			return "", fmt.Errorf("skill execution failed: %w", err)
+			return "", apperrors.Wrap(err, apperrors.ErrTypeSkill, "skill execution failed")
 		}
 
 		tc.logger.Info(i18n.T("brain.skill_exec_success"), logging.String(i18n.T("brain.result"), functionCallResult))
@@ -82,7 +83,7 @@ func (tc *ToolCaller) ExecuteToolCall(
 			question,
 		)
 		if err != nil {
-			return "", fmt.Errorf("return func result failed: %w", err)
+			return "", apperrors.Wrap(err, apperrors.ErrTypeModel, "return func result failed")
 		}
 
 		finalAnswer = answer

@@ -17,7 +17,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -39,11 +38,9 @@ func init() {
 // DingTalkChannel 钉钉机器人 Channel
 type DingTalkChannel struct {
 	*WebhookChannel
-	config       *config.DingTalkConfig
-	accessToken  string
-	tokenExpires time.Time
-	tokenMutex   sync.RWMutex
-	httpClient   *http.Client
+	config         *config.DingTalkConfig
+	tokenRefresher *TokenRefresher
+	httpClient     *http.Client
 }
 
 // NewDingTalkChannel 创建钉钉 Channel
@@ -56,14 +53,58 @@ func NewDingTalkChannel(cfg *config.DingTalkConfig) *DingTalkChannel {
 	}
 
 	baseChannel := NewWebhookChannel("dingtalk", entity.ChannelTypeDingTalk, cfg.Path, cfg)
+	httpClient := &http.Client{Timeout: 10 * time.Second}
 
-	return &DingTalkChannel{
+	ch := &DingTalkChannel{
 		WebhookChannel: baseChannel,
 		config:         cfg,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		httpClient:     httpClient,
 	}
+
+	ch.tokenRefresher = NewTokenRefresher(ch.refreshToken, baseChannel.logger)
+	return ch
+}
+
+// refreshToken 钉钉 token 刷新函数
+func (c *DingTalkChannel) refreshToken(ctx context.Context) (string, int, error) {
+	apiURL := fmt.Sprintf(
+		"https://oapi.dingtalk.com/gettoken?appkey=%s&appsecret=%s",
+		url.QueryEscape(c.config.AppKey),
+		url.QueryEscape(c.config.AppSecret),
+	)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to get access token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var result struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+		ErrCode     int    `json:"errcode"`
+		ErrMsg      string `json:"errmsg"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", 0, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if result.ErrCode != 0 {
+		return "", 0, fmt.Errorf("DingTalk API error: %d - %s", result.ErrCode, result.ErrMsg)
+	}
+
+	return result.AccessToken, result.ExpiresIn - 300, nil
 }
 
 // Description 返回 Channel 描述
@@ -199,7 +240,7 @@ func (c *DingTalkChannel) sendViaWebhook(ctx context.Context, msg *entity.Outgoi
 
 // sendViaAPI 通过API发送消息
 func (c *DingTalkChannel) sendViaAPI(ctx context.Context, msg *entity.OutgoingMessage) error {
-	accessToken, err := c.getAccessToken(ctx)
+	accessToken, err := c.tokenRefresher.GetToken(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get access token: %w", err)
 	}
@@ -257,70 +298,6 @@ func (c *DingTalkChannel) sendViaAPI(ctx context.Context, msg *entity.OutgoingMe
 	)
 
 	return nil
-}
-
-// getAccessToken 获取钉钉 access_token
-func (c *DingTalkChannel) getAccessToken(ctx context.Context) (string, error) {
-	c.tokenMutex.RLock()
-	if c.accessToken != "" && time.Now().Before(c.tokenExpires) {
-		token := c.accessToken
-		c.tokenMutex.RUnlock()
-		return token, nil
-	}
-	c.tokenMutex.RUnlock()
-
-	c.tokenMutex.Lock()
-	defer c.tokenMutex.Unlock()
-
-	if c.accessToken != "" && time.Now().Before(c.tokenExpires) {
-		return c.accessToken, nil
-	}
-
-	apiURL := fmt.Sprintf(
-		"https://oapi.dingtalk.com/gettoken?appkey=%s&appsecret=%s",
-		url.QueryEscape(c.config.AppKey),
-		url.QueryEscape(c.config.AppSecret),
-	)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to get access token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var result struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-		ErrCode     int    `json:"errcode"`
-		ErrMsg      string `json:"errmsg"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if result.ErrCode != 0 {
-		return "", fmt.Errorf("DingTalk API error: %d - %s", result.ErrCode, result.ErrMsg)
-	}
-
-	c.accessToken = result.AccessToken
-	c.tokenExpires = time.Now().Add(time.Duration(result.ExpiresIn-300) * time.Second)
-
-	c.logger.Info(i18n.T("adapter.get_access_token_success"),
-		logging.Int("expires_in", result.ExpiresIn),
-	)
-
-	return c.accessToken, nil
 }
 
 // parseWebhookMessage 解析钉钉 Webhook 消息

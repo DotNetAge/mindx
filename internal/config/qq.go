@@ -11,3 +11,6 @@ type QQConfig struct {
 	WebSocketURL string `mapstructure:"websocket_url" json:"websocket_url" yaml:"websocket_url"`
 	AccessToken  string `mapstructure:"access_token" json:"access_token" yaml:"access_token"`
 }
+
+func (c *QQConfig) GetPort() int  { return c.Port }
+func (c *QQConfig) GetPath() string { return c.Path }

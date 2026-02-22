@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"mindx/internal/core"
 	"mindx/internal/entity"
 	"testing"
@@ -13,18 +14,18 @@ type MockThinking struct {
 	stream    any
 }
 
-func (m *MockThinking) Think(question string, history []*core.DialogueMessage, references string, jsonResult bool) (*core.ThinkingResult, error) {
+func (m *MockThinking) Think(ctx context.Context, question string, history []*core.DialogueMessage, references string, jsonResult bool) (*core.ThinkingResult, error) {
 	if m.thinkFunc != nil {
 		return m.thinkFunc(question, history, references, jsonResult)
 	}
 	return nil, nil
 }
 
-func (m *MockThinking) ThinkWithTools(question string, history []*core.DialogueMessage, tools []*core.ToolSchema) (*core.ToolCallResult, error) {
+func (m *MockThinking) ThinkWithTools(ctx context.Context, question string, history []*core.DialogueMessage, tools []*core.ToolSchema, customSystemPrompt ...string) (*core.ToolCallResult, error) {
 	return nil, nil
 }
 
-func (m *MockThinking) ReturnFuncResult(toolCallID string, name string, result string, originalArgs map[string]interface{}, history []*core.DialogueMessage, tools []*core.ToolSchema, question string) (string, error) {
+func (m *MockThinking) ReturnFuncResult(ctx context.Context, toolCallID string, name string, result string, originalArgs map[string]interface{}, history []*core.DialogueMessage, tools []*core.ToolSchema, question string) (string, error) {
 	return "", nil
 }
 
@@ -37,6 +38,10 @@ func (m *MockThinking) SetStream(stream any) {
 }
 
 func (m *MockThinking) SetEventChan(ch chan<- core.ThinkingEvent) {}
+
+func (m *MockThinking) GetSystemPrompt() string {
+	return ""
+}
 
 // MockMemory Mock 的 Memory 接口实现
 type MockMemory struct {

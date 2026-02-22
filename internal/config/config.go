@@ -1,33 +1,34 @@
 package config
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/viper"
+
+	apperrors "mindx/internal/errors"
 )
 
 func InitVippers() (srvCfg *GlobalConfig, channelsCfg *ChannelsConfig, capabilitiesCfg *CapabilityConfig, modelsCfg *ModelsConfig, err error) {
 	srvCfg, err = LoadServerConfig()
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("加载server配置失败：%w", err)
+		return nil, nil, nil, nil, apperrors.Wrap(err, apperrors.ErrTypeConfig, "加载server配置失败")
 	}
 
 	channelsCfg, err = LoadChannelsConfig()
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("加载channels配置失败：%w", err)
+		return nil, nil, nil, nil, apperrors.Wrap(err, apperrors.ErrTypeConfig, "加载channels配置失败")
 	}
 
 	capabilitiesCfg, err = LoadCapabilitiesConfig()
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("加载capabilities配置失败：%w", err)
+		return nil, nil, nil, nil, apperrors.Wrap(err, apperrors.ErrTypeConfig, "加载capabilities配置失败")
 	}
 
 	modelsCfg, err = LoadModelsConfig()
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("加载models配置失败：%w", err)
+		return nil, nil, nil, nil, apperrors.Wrap(err, apperrors.ErrTypeConfig, "加载models配置失败")
 	}
 
 	SetModelsManager(NewModelsManager(modelsCfg, srvCfg))

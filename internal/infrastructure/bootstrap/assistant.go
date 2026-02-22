@@ -158,18 +158,18 @@ func NewAssistant(
 	}
 
 	// 创建大脑（传入人设）
-	brain, err := brain.NewBrain(
-		cfg,
-		persona,
-		mem,      // memory
-		skillMgr, // skillMgr
-		toolsRequest,
-		capRequest,
-		historyRequest,
-		logger,
-		tokenUsageRepo,
-		cronScheduler, // cron scheduler
-	)
+	brain, err := brain.NewBrain(brain.BrainDeps{
+		Cfg:            cfg,
+		Persona:        persona,
+		Memory:         mem,
+		SkillMgr:       skillMgr,
+		ToolsRequest:   toolsRequest,
+		CapRequest:     capRequest,
+		HistoryRequest: historyRequest,
+		Logger:         logger,
+		TokenUsageRepo: tokenUsageRepo,
+		CronScheduler:  cronScheduler,
+	})
 	if err != nil {
 		logger.Error(i18n.T("infra.create_brain_failed"), logging.Err(err))
 		return nil

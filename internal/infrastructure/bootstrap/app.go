@@ -338,7 +338,7 @@ func Startup() (*App, error) {
 	systemLogger.Info("初始化消息网关")
 	channelRouter := channels.NewGateway("realtime", embeddingSvc)
 
-	realtimeChannel := channels.NewRealTimeChannel(srvCfg.WsPort)
+	realtimeChannel := channels.NewRealTimeChannel(srvCfg.WsPort, srvCfg.WebSocket)
 
 	assistant.SetOnThinkingEvent(func(sessionID string, event map[string]any) {
 		if err := realtimeChannel.SendThinkingEvent(sessionID, event); err != nil {

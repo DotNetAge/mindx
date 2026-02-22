@@ -1,11 +1,18 @@
 package core
 
 import (
+	"bytes"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
+	"text/template"
+
+	"mindx/prompts"
 )
+
+const promptVersion = "v2.0"
 
 type PromptContext struct {
 	UsePersona       bool
@@ -17,23 +24,60 @@ type PromptContext struct {
 	PersonaContent   string
 }
 
+// promptTemplateData 模板渲染数据
+type promptTemplateData struct {
+	UsePersona       bool
+	UseThinking      bool
+	PersonaName      string
+	PersonaGender    string
+	PersonaCharacter string
+	PersonaContent   string
+	SkillKeywords    string
+}
+
 type PromptBuilder struct {
-	segments      map[string]string
-	skillKeywords []string
-	keywordsMu    sync.RWMutex
+	segments       map[string]string
+	skillKeywords  []string
+	keywordsMu     sync.RWMutex
+	localTemplate  *template.Template
+	cloudTemplate  *template.Template
 }
 
 func NewPromptBuilder() *PromptBuilder {
-	return &PromptBuilder{
+	pb := &PromptBuilder{
 		segments:      make(map[string]string),
 		skillKeywords: []string{},
 	}
+
+	// 加载嵌入的模板文件
+	localTmpl, err := template.ParseFS(prompts.FS, "left_brain_local.tmpl")
+	if err != nil {
+		log.Printf("警告: 加载本地模型 prompt 模板失败: %v, 使用内置 prompt", err)
+	} else {
+		pb.localTemplate = localTmpl
+	}
+
+	cloudTmpl, err := template.ParseFS(prompts.FS, "left_brain_cloud.tmpl")
+	if err != nil {
+		log.Printf("警告: 加载云模型 prompt 模板失败: %v, 使用内置 prompt", err)
+	} else {
+		pb.cloudTemplate = cloudTmpl
+	}
+
+	return pb
+}
+
+// Version 返回当前 prompt 版本号
+func (b *PromptBuilder) Version() string {
+	return promptVersion
 }
 
 func (b *PromptBuilder) AddSegment(name, content string) *PromptBuilder {
 	b.segments[name] = content
 	return b
 }
+
+// PLACEHOLDER_REST_OF_FILE
 
 func (b *PromptBuilder) SetSkillKeywords(keywords []string) {
 	b.keywordsMu.Lock()
@@ -60,185 +104,151 @@ func (b *PromptBuilder) GetSkillKeywords() []string {
 	return b.skillKeywords
 }
 
+func (b *PromptBuilder) getSkillKeywordsStr() string {
+	b.keywordsMu.RLock()
+	defer b.keywordsMu.RUnlock()
+	kw := strings.Join(b.skillKeywords, "、")
+	if kw == "" {
+		kw = "天气、新闻、股价、系统、CPU、内存、邮件、发送、截图"
+	}
+	return kw
+}
+
+// PLACEHOLDER_BUILD_METHODS
+
 func (b *PromptBuilder) Build(ctx *PromptContext) string {
-	var parts []string
-
-	if ctx.UseThinking {
-		parts = append(parts, b.getThinkingSegment())
-	}
-
-	parts = append(parts, b.getTaskSegment())
-	parts = append(parts, b.getUselessRulesSegment())
-	parts = append(parts, b.getCanAnswerRulesSegment(ctx.IsLocalModel))
-	parts = append(parts, b.getScheduleRulesSegment())
-	parts = append(parts, b.getSendToRulesSegment())
-	parts = append(parts, b.getOutputFormatSegment())
-
-	if ctx.UsePersona {
-		parts = append([]string{b.getPersonaSegment(ctx)}, parts...)
-	}
-
-	result := ""
-	for i, part := range parts {
-		if i > 0 {
-			result += "\n\n"
+	// 优先使用模板
+	if b.localTemplate != nil {
+		data := promptTemplateData{
+			UsePersona:       ctx.UsePersona,
+			UseThinking:      ctx.UseThinking,
+			PersonaName:      ctx.PersonaName,
+			PersonaGender:    ctx.PersonaGender,
+			PersonaCharacter: ctx.PersonaCharacter,
+			PersonaContent:   ctx.PersonaContent,
+			SkillKeywords:    b.getSkillKeywordsStr(),
 		}
-		result += part
+		var buf bytes.Buffer
+		if err := b.localTemplate.Execute(&buf, data); err == nil {
+			return buf.String()
+		}
 	}
-	return result
+
+	// 回退到硬编码 prompt
+	return b.buildFallback(ctx)
 }
 
 func (b *PromptBuilder) BuildCloudModel(ctx *PromptContext) string {
+	// 优先使用模板
+	if b.cloudTemplate != nil {
+		data := promptTemplateData{
+			UsePersona:       ctx.UsePersona,
+			UseThinking:      ctx.UseThinking,
+			PersonaName:      ctx.PersonaName,
+			PersonaGender:    ctx.PersonaGender,
+			PersonaCharacter: ctx.PersonaCharacter,
+			PersonaContent:   ctx.PersonaContent,
+			SkillKeywords:    b.getSkillKeywordsStr(),
+		}
+		var buf bytes.Buffer
+		if err := b.cloudTemplate.Execute(&buf, data); err == nil {
+			return buf.String()
+		}
+	}
+
+	// 回退到硬编码 prompt
+	return b.buildCloudFallback(ctx)
+}
+
+// PLACEHOLDER_FALLBACK_METHODS
+
+// buildFallback 使用硬编码 prompt（模板加载失败时的回退）
+func (b *PromptBuilder) buildFallback(ctx *PromptContext) string {
 	var parts []string
 
 	if ctx.UseThinking {
-		parts = append(parts, b.getCloudThinkingSegment())
-	}
-
-	parts = append(parts, b.getCloudTaskSegment())
-	parts = append(parts, b.getUselessRulesSegment())
-	parts = append(parts, b.getScheduleRulesSegment())
-	parts = append(parts, b.getSendToRulesSegment())
-	parts = append(parts, b.getCloudOutputFormatSegment())
-
-	if ctx.UsePersona {
-		parts = append([]string{b.getPersonaSegment(ctx)}, parts...)
-	}
-
-	result := ""
-	for i, part := range parts {
-		if i > 0 {
-			result += "\n\n"
-		}
-		result += part
-	}
-	return result
-}
-
-func (b *PromptBuilder) getCloudThinkingSegment() string {
-	return `## 思考步骤
-
-1. 理解问题：用户真正想要什么？
-2. 识别意图和关键词
-3. 确定是否需要调用工具
-4. 判断是否为定时意图：用户是否要求在特定时间执行某些任务？
-5. 判断是否为转发意图：用户是否要求将消息发送到其他渠道？`
-}
-
-func (b *PromptBuilder) getCloudTaskSegment() string {
-	return `## 任务
-
-1. 识别意图和关键词
-2. 判断是否为无意义闲聊
-3. 如果可以直接回答就给出答案
-4. 如果需要调用工具就识别需要什么工具
-5. 识别是否为定时意图（如"每周六帮我写日报"、"明天早上8点提醒我开会"等），如果是则在 has_schedule、schedule_name、schedule_cron、schedule_message 字段中填写信息
-6. 识别是否为转发意图（如"把这个消息发给微信"等），如果是则在 send_to 字段中填写目标渠道`
-}
-
-func (b *PromptBuilder) getCloudOutputFormatSegment() string {
-	return `## 输出格式
-
-输出纯JSON，不要markdown。示例：
-{"answer":"回复","intent":"意图","useless":false,"keywords":["关键词"],"send_to":"","has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":""}`
-}
-
-func (b *PromptBuilder) getPersonaSegment(ctx *PromptContext) string {
-	return fmt.Sprintf(`## 人设
-
-- 姓名: %s
-- 性别: %s
-- 性格: %s
-
-%s`, ctx.PersonaName, ctx.PersonaGender, ctx.PersonaCharacter, ctx.PersonaContent)
-}
-
-func (b *PromptBuilder) getThinkingSegment() string {
-	return `## 思考步骤
+		parts = append(parts, `## 思考步骤
 
 1. 理解问题：用户真正想要什么？
 2. 判断意图：需要实时数据还是常识就能回答？
 3. 确定能力：我能否直接回答？
 4. 判断是否为定时意图：用户是否要求在特定时间执行某些任务？
-5. 判断是否为转发意图：用户是否要求将消息发送到其他渠道？`
-}
+5. 判断是否为转发意图：用户是否要求将消息发送到其他渠道？`)
+	}
 
-func (b *PromptBuilder) getTaskSegment() string {
-	return `## 任务
+	parts = append(parts, `## 任务
 
 1. 识别意图和关键词
 2. 判断是否为无意义闲聊
 3. 判断能否直接回答
-4. 识别是否为定时意图（如"每周六帮我写日报"、"明天早上8点提醒我开会"等），如果是则在 has_schedule、schedule_name、schedule_cron、schedule_message 字段中填写信息
-5. 识别是否为转发意图（如"把这个消息发给微信"等），如果是则在 send_to 字段中填写目标渠道`
-}
+4. 识别是否为定时意图
+5. 识别是否为转发意图`)
 
-func (b *PromptBuilder) getUselessRulesSegment() string {
-	return `## useless 规则
+	parts = append(parts, `## useless 规则
 
 useless=true 仅当用户只说"你好"、"在吗"等闲聊。
-useless=false 当用户有具体问题或需求。`
-}
+useless=false 当用户有具体问题或需求。`)
 
-func (b *PromptBuilder) getCanAnswerRulesSegment(isLocalModel bool) string {
-	b.keywordsMu.RLock()
-	keywords := b.skillKeywords
-	b.keywordsMu.RUnlock()
-
-	if isLocalModel {
-		keywordStr := strings.Join(keywords, "、")
-		if keywordStr == "" {
-			keywordStr = "天气、新闻、股价、系统、CPU、内存、邮件、发送、截图"
-		}
-		return fmt.Sprintf(`## can_answer 规则
+	parts = append(parts, fmt.Sprintf(`## can_answer 规则
 
 can_answer=false 当问题含以下关键词：%s。
-can_answer=true 当闲聊或常识问题。`, keywordStr)
+can_answer=true 当闲聊或常识问题。`, b.getSkillKeywordsStr()))
+
+	parts = append(parts, `## 输出格式
+
+输出纯JSON，不要markdown。
+{"answer":"","intent":"","useless":false,"keywords":[],"can_answer":false,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","send_to":""}`)
+
+	if ctx.UsePersona {
+		persona := fmt.Sprintf("## 人设\n\n- 姓名: %s\n- 性别: %s\n- 性格: %s\n\n%s",
+			ctx.PersonaName, ctx.PersonaGender, ctx.PersonaCharacter, ctx.PersonaContent)
+		parts = append([]string{persona}, parts...)
 	}
-	return `## can_answer 规则
 
-can_answer=true：闲聊、常识问题、已有知识可回答。
-can_answer=false：需要实时数据、外部工具、用户数据、专业知识。`
+	return strings.Join(parts, "\n\n")
 }
 
-func (b *PromptBuilder) getScheduleRulesSegment() string {
-	return `## schedule 规则
+// PLACEHOLDER_CLOUD_FALLBACK
 
-当用户表达定时意图时（例如"每周六帮我写日报"、"明天早上8点提醒我开会"），请设置：
-- has_schedule: true
-- schedule_name: 任务名称（例如"每周写日报"）
-- schedule_cron: Cron 表达式（例如"0 9 * * 6"表示每周六早上9点）
-- schedule_message: 定时要发送的消息（例如"帮我写日报"）
+func (b *PromptBuilder) buildCloudFallback(ctx *PromptContext) string {
+	var parts []string
 
-如果没有定时意图，请设置：
-- has_schedule: false
+	if ctx.UseThinking {
+		parts = append(parts, `## 思考步骤
 
-Cron 表达式格式：分 时 日 月 周
-- 分：0-59
-- 时：0-23
-- 日：1-31
-- 月：1-12
-- 周：0-7（0或7都表示周日）
+1. 理解问题：用户真正想要什么？
+2. 识别意图和关键词
+3. 确定是否需要调用工具
+4. 判断是否为定时意图
+5. 判断是否为转发意图`)
+	}
 
-示例：
-- 每天早上9点："0 9 * * *"
-- 每周一早上8点："0 8 * * 1"
-- 每月1号下午3点："0 15 1 * *"
-- 每周六早上9点："0 9 * * 6"`
-}
+	parts = append(parts, `## 任务
 
-func (b *PromptBuilder) getSendToRulesSegment() string {
-	return `## send_to 规则
+1. 识别意图和关键词
+2. 判断是否为无意义闲聊
+3. 如果可以直接回答就给出答案
+4. 如果需要调用工具就识别需要什么工具
+5. 识别是否为定时意图
+6. 识别是否为转发意图`)
 
-当用户表达转发意图时（例如"把这个消息发给微信"、"转发给QQ"），请在 send_to 字段中填写目标渠道名称。
-如果没有转发意图，send_to 字段为空字符串""。`
-}
+	parts = append(parts, `## useless 规则
 
-func (b *PromptBuilder) getOutputFormatSegment() string {
-	return `## 输出格式
+useless=true 仅当用户只说"你好"、"在吗"等闲聊。
+useless=false 当用户有具体问题或需求。`)
 
-输出纯JSON，不要markdown。示例：
-{"answer":"回复","intent":"意图","useless":false,"keywords":["关键词"],"can_answer":false,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","send_to":""}`
+	parts = append(parts, `## 输出格式
+
+输出纯JSON，不要markdown。
+{"answer":"","intent":"","useless":false,"keywords":[],"send_to":"","has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":""}`)
+
+	if ctx.UsePersona {
+		persona := fmt.Sprintf("## 人设\n\n- 姓名: %s\n- 性别: %s\n- 性格: %s\n\n%s",
+			ctx.PersonaName, ctx.PersonaGender, ctx.PersonaCharacter, ctx.PersonaContent)
+		parts = append([]string{persona}, parts...)
+	}
+
+	return strings.Join(parts, "\n\n")
 }
 
 var DefaultPromptBuilder = NewPromptBuilder()
@@ -253,4 +263,8 @@ func BuildLeftBrainPrompt(ctx *PromptContext) string {
 
 func BuildCloudModelPrompt(ctx *PromptContext) string {
 	return DefaultPromptBuilder.BuildCloudModel(ctx)
+}
+
+func PromptVersion() string {
+	return DefaultPromptBuilder.Version()
 }

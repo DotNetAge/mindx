@@ -8,3 +8,6 @@ type TelegramConfig struct {
 	Path        string `mapstructure:"path" json:"path" yaml:"path"`
 	UseWebhook  bool   `mapstructure:"use_webhook" json:"use_webhook" yaml:"use_webhook"`
 }
+
+func (c *TelegramConfig) GetPort() int  { return c.Port }
+func (c *TelegramConfig) GetPath() string { return c.Path }

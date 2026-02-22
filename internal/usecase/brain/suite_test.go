@@ -127,6 +127,8 @@ func (s *BrainIntegrationSuite) SetupSuite() {
 
 	installSkillsPath, err := config.GetInstallSkillsPath()
 	s.Require().NoError(err)
+	// 确保 skills 目录存在（测试环境下可能不存在）
+	_ = os.MkdirAll(installSkillsPath, 0755)
 	workspacePath, err := config.GetWorkspacePath()
 	s.Require().NoError(err)
 
@@ -162,18 +164,18 @@ func (s *BrainIntegrationSuite) SetupSuite() {
 
 	persona := &core.Persona{Name: "小柔", Gender: "女", Character: "温柔"}
 	mockSched := newMockScheduler()
-	s.brain, err = NewBrain(
-		s.srvCfg,
-		persona,
-		s.memory,
-		s.skillMgr,
-		toolsRequest,
-		capRequest,
-		historyRequest,
-		s.logger,
-		tokenUsageRepo,
-		mockSched,
-	)
+	s.brain, err = NewBrain(BrainDeps{
+		Cfg:            s.srvCfg,
+		Persona:        persona,
+		Memory:         s.memory,
+		SkillMgr:       s.skillMgr,
+		ToolsRequest:   toolsRequest,
+		CapRequest:     capRequest,
+		HistoryRequest: historyRequest,
+		Logger:         s.logger,
+		TokenUsageRepo: tokenUsageRepo,
+		CronScheduler:  mockSched,
+	})
 	s.Require().NoError(err)
 
 	s.recordTestMemories()
