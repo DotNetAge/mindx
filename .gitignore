@@ -4,8 +4,6 @@
 *.dll
 *.so
 *.dylib
-bot
-/bot
 
 # Test binary, built with `go test -c`
 *.test
@@ -42,9 +40,8 @@ logs/
 *.db
 
 # Workspace data
-~/.bot/
 data/
 
-# Dev and test temporary directories
 .dev/
 .test/
+bin/
