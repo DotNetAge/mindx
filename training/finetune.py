@@ -18,6 +18,7 @@ from transformers import (
     AutoTokenizer,
     TrainingArguments,
     BitsAndBytesConfig,
+    EarlyStoppingCallback,
 )
 from peft import LoraConfig, get_peft_model, TaskType
 from trl import SFTTrainer
@@ -54,6 +55,12 @@ def parse_args():
     )
     parser.add_argument(
         "--gguf-output", type=str, default=None, help="GGUF 输出路径"
+    )
+    parser.add_argument(
+        "--lr-scheduler", type=str, default="cosine", help="学习率调度器类型"
+    )
+    parser.add_argument(
+        "--early-stopping-patience", type=int, default=3, help="Early stopping 耐心轮数"
     )
     return parser.parse_args()
 
@@ -139,6 +146,13 @@ def setup_lora(model, lora_r: int):
 
 def train(model, tokenizer, dataset, args, output_dir: str):
     """执行训练"""
+    # 数据集 > 20 条时划分验证集
+    eval_dataset = None
+    if len(dataset) > 20:
+        split = dataset.train_test_split(test_size=0.1, seed=42)
+        dataset = split["train"]
+        eval_dataset = split["test"]
+
     training_args = TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=args.epochs,
@@ -147,6 +161,7 @@ def train(model, tokenizer, dataset, args, output_dir: str):
         learning_rate=args.learning_rate,
         weight_decay=0.01,
         warmup_ratio=0.1,
+        lr_scheduler_type=args.lr_scheduler,
         logging_steps=10,
         save_steps=100,
         save_total_limit=2,
@@ -156,27 +171,42 @@ def train(model, tokenizer, dataset, args, output_dir: str):
         optim="adamw_torch",
         report_to="none",
         remove_unused_columns=False,
+        **({"eval_strategy": "steps", "eval_steps": 50, "load_best_model_at_end": True} if eval_dataset else {}),
     )
-    
+
+    callbacks = []
+    if eval_dataset:
+        callbacks.append(EarlyStoppingCallback(early_stopping_patience=args.early_stopping_patience))
+
     trainer = SFTTrainer(
         model=model,
         args=training_args,
         train_dataset=dataset,
+        eval_dataset=eval_dataset,
         tokenizer=tokenizer,
         max_seq_length=args.max_length,
         dataset_text_field="text",
         packing=False,
+        callbacks=callbacks if callbacks else None,
     )
-    
+
     print("\n开始训练...")
     print(f"轮数: {args.epochs}")
     print(f"批次大小: {args.batch_size}")
     print(f"学习率: {args.learning_rate}")
-    print(f"数据量: {len(dataset)}")
+    print(f"LR 调度器: {args.lr_scheduler}")
+    print(f"训练数据量: {len(dataset)}")
+    if eval_dataset:
+        print(f"验证数据量: {len(eval_dataset)}")
     print()
-    
-    trainer.train()
-    
+
+    result = trainer.train()
+
+    print(f"\n最终训练 loss: {result.training_loss:.4f}")
+    if eval_dataset:
+        eval_result = trainer.evaluate()
+        print(f"最终验证 loss: {eval_result['eval_loss']:.4f}")
+
     return trainer
 
 

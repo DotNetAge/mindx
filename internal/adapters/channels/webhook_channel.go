@@ -43,6 +43,7 @@ type WebhookChannel struct {
 	status       *entity.ChannelStatus
 	logger       logging.Logger
 	parser       WebhookParser
+	lifecycleCtx context.Context // 渠道生命周期 context
 }
 
 // NewWebhookChannel 创建 Webhook Channel
@@ -124,7 +125,7 @@ func (c *WebhookChannel) dispatchWebhook(w http.ResponseWriter, r *http.Request)
 
 	// 调用消息回调
 	if c.onMessage != nil {
-		c.onMessage(context.Background(), msg)
+		c.onMessage(c.lifecycleCtx, msg)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -156,6 +157,8 @@ func (c *WebhookChannel) Start(ctx context.Context) error {
 	if c.isRunning {
 		return apperrors.New(apperrors.ErrTypeChannel, fmt.Sprintf("%s channel is already running", c.platformName))
 	}
+
+	c.lifecycleCtx = ctx
 
 	// 如果 server 已经被子类设置，使用子类设置的 server
 	if c.server == nil {

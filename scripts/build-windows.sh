@@ -75,12 +75,10 @@ for file in config/*; do
 done
 echo -e "${GREEN}  ✓ Config templates copied${NC}"
 
-# Copy scripts
-cp scripts/install.sh dist/windows-amd64/ 2>/dev/null || true
-cp scripts/uninstall.sh dist/windows-amd64/ 2>/dev/null || true
-chmod +x dist/windows-amd64/install.sh 2>/dev/null || true
-chmod +x dist/windows-amd64/uninstall.sh 2>/dev/null || true
-echo -e "${GREEN}  ✓ Scripts copied${NC}"
+# Copy scripts (Windows batch files)
+cp scripts/install.bat dist/windows-amd64/ 2>/dev/null || true
+cp scripts/uninstall.bat dist/windows-amd64/ 2>/dev/null || true
+echo -e "${GREEN}  ✓ Windows scripts copied${NC}"
 
 # Copy frontend
 if [ -d "dashboard/dist" ]; then
@@ -117,8 +115,8 @@ if go tool dist list | grep -q "windows/arm64"; then
             cp "$file" "dist/windows-arm64/config/${filename}.template"
         fi
     done
-    cp scripts/install.sh dist/windows-arm64/ 2>/dev/null || true
-    cp scripts/uninstall.sh dist/windows-arm64/ 2>/dev/null || true
+    cp scripts/install.bat dist/windows-arm64/ 2>/dev/null || true
+    cp scripts/uninstall.bat dist/windows-arm64/ 2>/dev/null || true
     if [ -d "dashboard/dist" ]; then
         cp -r dashboard/dist dist/windows-arm64/static
     fi

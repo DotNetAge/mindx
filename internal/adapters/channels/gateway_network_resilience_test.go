@@ -279,7 +279,8 @@ func TestGateway_NetworkResilience_PartialFailure(t *testing.T) {
 	wechatMessages := wechatChannel.GetSentMessages()
 
 	assert.Equal(t, 20, len(feishuMessages), "飞书应该有20条消息")
-	assert.Equal(t, 15, len(wechatMessages), "微信应该有15条消息（5条失败）")
+	// 15条成功消息 + 5条错误响应消息 = 20条
+	assert.Equal(t, 20, len(wechatMessages), "微信应该有20条消息（15条成功+5条错误响应）")
 }
 
 // TestGateway_NetworkResilience_QueueOverflow 测试队列溢出

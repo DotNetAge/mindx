@@ -215,5 +215,5 @@ func TestGateway_Stability_WithMemoryLeakCheck(t *testing.T) {
 	sentMessages := channel.GetSentMessages()
 	assert.Equal(t, messageCount, len(sentMessages), "所有消息都应该被处理")
 
-	assert.Less(t, memIncrease, int64(50*1024*1024), "内存增长应该小于 50MB")
+	assert.Less(t, memIncrease, uint64(50*1024*1024), "内存增长应该小于 50MB")
 }

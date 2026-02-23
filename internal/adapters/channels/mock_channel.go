@@ -23,6 +23,7 @@ type MockChannel struct {
 	startedChan  chan struct{} // 用于通知 Channel 已启动
 	stoppedChan  chan struct{} // 用于通知 Channel 已停止
 	messageChan  chan *entity.IncomingMessage
+	stopCh       chan struct{} // 用于通知 receiveLoop 退出
 	mu           sync.RWMutex
 }
 
@@ -75,6 +76,9 @@ func (m *MockChannel) Start(ctx context.Context) error {
 	default:
 	}
 
+	// 创建新的 stopCh
+	m.stopCh = make(chan struct{})
+
 	// 模拟启动
 	select {
 	case m.startedChan <- struct{}{}:
@@ -82,24 +86,29 @@ func (m *MockChannel) Start(ctx context.Context) error {
 	}
 
 	// 启动消息接收循环
-	go m.receiveLoop(ctx)
+	go m.receiveLoop(ctx, m.stopCh)
 
 	return m.startErr
 }
 
 // receiveLoop 模拟接收消息的循环
-func (m *MockChannel) receiveLoop(ctx context.Context) {
+func (m *MockChannel) receiveLoop(ctx context.Context, stopCh chan struct{}) {
 	for {
 		select {
 		case msg := <-m.messageChan:
 			if m.onMessage != nil {
 				m.onMessage(ctx, msg)
 			}
+		case <-stopCh:
+			return
 		case <-ctx.Done():
 			m.mu.Lock()
 			m.running = false
 			m.mu.Unlock()
-			close(m.stoppedChan)
+			select {
+			case m.stoppedChan <- struct{}{}:
+			default:
+			}
 			return
 		}
 	}
@@ -118,6 +127,18 @@ func (m *MockChannel) Stop() error {
 	m.running = false
 	m.startErr = nil
 	m.stopErr = nil
+
+	// 通知 receiveLoop 退出
+	if m.stopCh != nil {
+		close(m.stopCh)
+		m.stopCh = nil
+	}
+
+	// 通知已停止
+	select {
+	case m.stoppedChan <- struct{}{}:
+	default:
+	}
 
 	return m.stopErr
 }

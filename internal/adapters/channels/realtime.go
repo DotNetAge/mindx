@@ -32,6 +32,7 @@ type RealTimeChannel struct {
 	onThinkingEvent func(sessionID string, event map[string]any) // 思考流事件回调
 	maxConnections  int
 	wsCfg           config.WebSocketConfig
+	lifecycleCtx    context.Context // 渠道生命周期 context
 }
 
 // NewRealTimeChannel 创建 RealTimeChannel
@@ -99,6 +100,8 @@ func (w *RealTimeChannel) Start(ctx context.Context) error {
 	if w.running {
 		return fmt.Errorf("RealTimeChannel is already running")
 	}
+
+	w.lifecycleCtx = ctx
 
 	// 注册 WebSocket 处理函数
 	w.server.HandleFunc("/ws", w.handleConnection)
@@ -405,11 +408,34 @@ func (w *RealTimeChannel) handleConnection(connResp http.ResponseWriter, r *http
 		)
 	}
 
+	// 设置 pong 超时和心跳
+	pingInterval := time.Duration(w.wsCfg.PingInterval) * time.Second
+	pongWait := pingInterval * 2
+	conn.SetReadDeadline(time.Now().Add(pongWait))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
+
+	go w.pingLoop(conn, pingInterval)
+
 	// 处理消息
 	go w.handleMessages(client)
 }
 
 // handleMessages 处理客户端消息
+// pingLoop 定期发送 ping 帧保持连接活跃
+func (w *RealTimeChannel) pingLoop(conn *websocket.Conn, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+			return // 连接已关闭
+		}
+	}
+}
+
 func (w *RealTimeChannel) handleMessages(client *entity.WebClient) {
 	defer func() {
 		// 清理连接
@@ -523,7 +549,7 @@ func (w *RealTimeChannel) handleMessages(client *entity.WebClient) {
 
 			// 调用消息回调
 			if w.onMessage != nil {
-				w.onMessage(context.Background(), msg)
+				w.onMessage(w.lifecycleCtx, msg)
 			}
 
 		default:

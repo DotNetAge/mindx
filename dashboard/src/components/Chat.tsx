@@ -113,7 +113,8 @@ export default function Chat() {
 
           case 'thinking':
             if (data.event) {
-              setThinkingEvents((prev) => [...prev, data.event]);
+              const event: ThinkingEvent = data.event;
+              setThinkingEvents((prev) => [...prev, event]);
               if (data.event.type === 'complete' || data.event.type === 'error') {
                 setTimeout(() => {
                   setThinkingEvents([]);

@@ -357,8 +357,7 @@ func (c *WeChatChannel) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// 调用消息回调
 	if c.WebhookChannel.onMessage != nil {
-		ctx := context.Background()
-		c.WebhookChannel.onMessage(ctx, msg)
+		c.WebhookChannel.onMessage(c.WebhookChannel.lifecycleCtx, msg)
 	}
 
 	// 返回成功响应

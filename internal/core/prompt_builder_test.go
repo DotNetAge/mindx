@@ -113,3 +113,62 @@ func TestPromptBuilder_EmptyKeywords(t *testing.T) {
 
 	t.Logf("空关键词 prompt:\n%s", prompt)
 }
+
+func TestPromptBuilder_V3CoTThinking(t *testing.T) {
+	ctx := &PromptContext{
+		UseThinking: true,
+	}
+
+	prompt := BuildLeftBrainPrompt(ctx)
+
+	if !strings.Contains(prompt, "逐步推理") {
+		t.Error("v3.0 思考步骤应包含 CoT 引导语")
+	}
+	if !strings.Contains(prompt, "提取核心诉求") {
+		t.Error("v3.0 思考步骤应包含推理链引导")
+	}
+}
+
+func TestPromptBuilder_V3FewShotExamples(t *testing.T) {
+	ctx := &PromptContext{
+		UseThinking: false,
+	}
+
+	prompt := BuildLeftBrainPrompt(ctx)
+
+	// 边界 case 示例
+	if !strings.Contains(prompt, "算了不用了") {
+		t.Error("v3.0 应包含否定/取消示例")
+	}
+	if !strings.Contains(prompt, "心情不太好") {
+		t.Error("v3.0 应包含情绪表达示例")
+	}
+	if !strings.Contains(prompt, "What's the weather") {
+		t.Error("v3.0 应包含英文输入示例")
+	}
+	if !strings.Contains(prompt, "123 乘以 456") {
+		t.Error("v3.0 应包含工具调用示例")
+	}
+}
+
+func TestPromptBuilder_CloudModelHasCanAnswer(t *testing.T) {
+	ctx := &PromptContext{
+		UseThinking: true,
+	}
+
+	prompt := BuildCloudModelPrompt(ctx)
+
+	if !strings.Contains(prompt, "can_answer") {
+		t.Error("v3.0 云模型 prompt 应包含 can_answer 规则")
+	}
+	if !strings.Contains(prompt, "逐步推理") {
+		t.Error("v3.0 云模型 prompt 应包含 CoT 引导")
+	}
+}
+
+func TestPromptBuilder_Version(t *testing.T) {
+	v := PromptVersion()
+	if v != "v3.0" {
+		t.Errorf("expected v3.0, got %s", v)
+	}
+}

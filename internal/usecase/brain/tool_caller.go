@@ -40,60 +40,95 @@ func (tc *ToolCaller) ExecuteToolCall(
 	var finalAnswer string
 	var callCount int
 
-	for callCount < maxToolCalls {
-		callCount++
-		tc.logger.Info("工具调用", logging.Int("round", callCount))
+	// 第一步：让 LLM 决定调用哪些工具
+	toolCallResult, err := thinking.ThinkWithTools(ctx, question, currentHistory, tools, customSystemPrompt...)
+	if err != nil {
+		return "", apperrors.Wrap(err, apperrors.ErrTypeModel, "tool call decision failed")
+	}
 
-		toolCallResult, err := thinking.ThinkWithTools(ctx, question, currentHistory, tools, customSystemPrompt...)
-		if err != nil {
-			return "", apperrors.Wrap(err, apperrors.ErrTypeModel, "tool call decision failed")
+	if toolCallResult.NoCall {
+		tc.logger.Debug(i18n.T("brain.no_tool_call_decision"))
+		return toolCallResult.Answer, nil
+	}
+	if toolCallResult.Function == nil {
+		tc.logger.Debug("没有函数调用")
+		return toolCallResult.Answer, nil
+	}
+
+	// 将首次结果转为待执行队列
+	pendingCalls := toolCallResult.ToolCalls
+	if len(pendingCalls) == 0 {
+		// 兼容旧路径（FunctionCall / Ollama JSON 格式）
+		pendingCalls = []core.ToolCallItem{{
+			ToolCallID: toolCallResult.ToolCallID,
+			Function:   toolCallResult.Function,
+		}}
+	}
+
+	// 循环：执行 → 回传 → 如果模型要求继续则再执行
+	for len(pendingCalls) > 0 && callCount < maxToolCalls {
+		tc.logger.Info("批量执行工具",
+			logging.Int("count", len(pendingCalls)),
+			logging.Int("round_call_count", callCount))
+
+		execResults := make([]core.ToolExecResult, 0, len(pendingCalls))
+		for _, item := range pendingCalls {
+			if callCount >= maxToolCalls {
+				tc.logger.Warn("达到最大工具调用次数，跳过剩余工具")
+				break
+			}
+			callCount++
+
+			tc.logger.Info(i18n.T("brain.execute_skill"),
+				logging.String(i18n.T("brain.function"), item.Function.Name),
+				logging.String(i18n.T("brain.arguments"), fmt.Sprintf("%v", item.Function.Arguments)))
+
+			funcResult, execErr := tc.skillMgr.ExecuteFunc(core.ToolCallFunction{
+				Name:      item.Function.Name,
+				Arguments: item.Function.Arguments,
+			})
+
+			er := core.ToolExecResult{
+				ToolCallID:   item.ToolCallID,
+				FunctionName: item.Function.Name,
+				Arguments:    item.Function.Arguments,
+			}
+			if execErr != nil {
+				tc.logger.Warn("工具执行失败",
+					logging.String("function", item.Function.Name),
+					logging.Err(execErr))
+				er.Error = execErr.Error()
+				er.Result = fmt.Sprintf("执行失败: %s", execErr.Error())
+			} else {
+				tc.logger.Info(i18n.T("brain.skill_exec_success"),
+					logging.String(i18n.T("brain.result"), funcResult))
+				er.Result = funcResult
+			}
+			execResults = append(execResults, er)
 		}
 
-		if toolCallResult.NoCall {
-			tc.logger.Debug(i18n.T("brain.no_tool_call_decision"))
-			finalAnswer = toolCallResult.Answer
+		// 批量回传所有结果给 LLM
+		batchResult, err := thinking.ReturnFuncResults(ctx, execResults, currentHistory, tools, question)
+		if err != nil {
+			return "", apperrors.Wrap(err, apperrors.ErrTypeModel, "return func results failed")
+		}
+
+		if batchResult.NoCall {
+			finalAnswer = batchResult.Answer
+			tc.logger.Info("工具调用完成", logging.String("answer", finalAnswer))
 			break
 		}
 
-		if toolCallResult.Function == nil {
-			tc.logger.Debug("没有函数调用")
-			finalAnswer = toolCallResult.Answer
-			break
+		// 模型要求继续调用 — 直接进入下一轮执行，不再调 ThinkWithTools
+		pendingCalls = batchResult.ToolCalls
+		if len(pendingCalls) == 0 && batchResult.Function != nil {
+			pendingCalls = []core.ToolCallItem{{
+				ToolCallID: batchResult.ToolCallID,
+				Function:   batchResult.Function,
+			}}
 		}
 
-		tc.logger.Info(i18n.T("brain.execute_skill"),
-			logging.String(i18n.T("brain.function"), toolCallResult.Function.Name),
-			logging.String(i18n.T("brain.arguments"), fmt.Sprintf("%v", toolCallResult.Function.Arguments)))
-
-		functionCallResult, err := tc.skillMgr.ExecuteFunc(*toolCallResult.Function)
-		if err != nil {
-			return "", apperrors.Wrap(err, apperrors.ErrTypeSkill, "skill execution failed")
-		}
-
-		tc.logger.Info(i18n.T("brain.skill_exec_success"), logging.String(i18n.T("brain.result"), functionCallResult))
-
-		answer, err := thinking.ReturnFuncResult(
-			ctx,
-			toolCallResult.ToolCallID,
-			toolCallResult.Function.Name,
-			functionCallResult,
-			toolCallResult.Function.Arguments,
-			currentHistory,
-			tools,
-			question,
-		)
-		if err != nil {
-			return "", apperrors.Wrap(err, apperrors.ErrTypeModel, "return func result failed")
-		}
-
-		finalAnswer = answer
-
-		currentHistory = append(currentHistory, &core.DialogueMessage{
-			Role:    "assistant",
-			Content: answer,
-		})
-
-		tc.logger.Info("工具调用完成", logging.String("answer", answer))
+		tc.logger.Info("模型要求继续调用工具", logging.Int("new_calls", len(pendingCalls)))
 	}
 
 	if callCount >= maxToolCalls {

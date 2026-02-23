@@ -2,6 +2,8 @@ package persistence
 
 import (
 	"encoding/json"
+	"io"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 
@@ -16,23 +18,48 @@ type BadgerStore struct {
 	db       *badger.DB
 	svc      *VectorService
 	provider core.EmbeddingProvider
+	stopCh   chan struct{}
 }
 
 // NewBadgerStore 创建Badger向量存储
 func NewBadgerStore(dbPath string, provider core.EmbeddingProvider) (*BadgerStore, error) {
 	opts := badger.DefaultOptions(dbPath)
 	opts.Logger = nil
+	opts.CompactL0OnClose = true
+	opts.NumCompactors = 2
 
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, apperrors.Wrap(err, apperrors.ErrTypeStorage, "打开 Badger 数据库失败")
 	}
 
-	return &BadgerStore{
-		db:      db,
-		svc:     NewVectorService(),
+	store := &BadgerStore{
+		db:       db,
+		svc:      NewVectorService(),
 		provider: provider,
-	}, nil
+		stopCh:   make(chan struct{}),
+	}
+	go store.runGC()
+
+	return store, nil
+}
+
+// runGC 后台定期执行 Value Log GC
+func (s *BadgerStore) runGC() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.stopCh:
+			return
+		case <-ticker.C:
+			for {
+				if s.db.RunValueLogGC(0.5) != nil {
+					break
+				}
+			}
+		}
+	}
 }
 
 // Put 存储向量
@@ -172,7 +199,13 @@ func (s *BadgerStore) SearchWithThreshold(queryVec []float64, topN int, minScore
 
 // Close 关闭数据库
 func (s *BadgerStore) Close() error {
+	close(s.stopCh)
 	return s.db.Close()
+}
+
+// Backup 将数据库备份写入 w
+func (s *BadgerStore) Backup(w io.Writer) (uint64, error) {
+	return s.db.Backup(w, 0)
 }
 
 // BatchPut 批量存储向量

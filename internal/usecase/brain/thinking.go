@@ -485,28 +485,39 @@ func (t *Thinking) ThinkWithTools(ctx context.Context, question string, history 
 		logging.Bool("has_function_call", choice.Message.FunctionCall != nil))
 
 	if len(choice.Message.ToolCalls) > 0 {
-		toolCall := choice.Message.ToolCalls[0]
-		t.logger.Info(i18n.T("brain.right_will_call_tool"),
-			logging.String(i18n.T("brain.function"), toolCall.Function.Name),
-			logging.String(i18n.T("brain.arguments"), toolCall.Function.Arguments),
-			logging.String("tool_call_id", toolCall.ID))
+		// 解析所有 tool calls，不再只取第一个
+		items := make([]core.ToolCallItem, 0, len(choice.Message.ToolCalls))
+		for _, toolCall := range choice.Message.ToolCalls {
+			t.logger.Info(i18n.T("brain.right_will_call_tool"),
+				logging.String(i18n.T("brain.function"), toolCall.Function.Name),
+				logging.String(i18n.T("brain.arguments"), toolCall.Function.Arguments),
+				logging.String("tool_call_id", toolCall.ID))
 
-		var args map[string]interface{}
-		if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
-			t.logger.Error(i18n.T("brain.parse_func_params_failed"), logging.Err(err))
-			t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
-			return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "parse func params failed")
+			var args map[string]interface{}
+			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+				t.logger.Error(i18n.T("brain.parse_func_params_failed"), logging.Err(err),
+					logging.String("tool_call_id", toolCall.ID))
+				t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
+				return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "parse func params failed")
+			}
+
+			t.sendEvent(NewToolCallEvent(toolCall.Function.Name, args))
+
+			items = append(items, core.ToolCallItem{
+				ToolCallID: toolCall.ID,
+				Function: &core.ToolCallFunction{
+					Name:      toolCall.Function.Name,
+					Arguments: args,
+				},
+			})
 		}
 
-		t.sendEvent(NewToolCallEvent(toolCall.Function.Name, args))
-
+		// 兼容：第一个 tool call 同时填充旧字段
 		return &core.ToolCallResult{
-			Function: &core.ToolCallFunction{
-				Name:      toolCall.Function.Name,
-				Arguments: args,
-			},
-			ToolCallID: toolCall.ID,
+			Function: items[0].Function,
+			ToolCallID: items[0].ToolCallID,
 			NoCall:     false,
+			ToolCalls:  items,
 		}, nil
 	}
 
@@ -677,6 +688,170 @@ func (t *Thinking) ReturnFuncResult(ctx context.Context, toolCallID string, name
 	t.sendEvent(NewThinkingEventWithProgress(ThinkingEventComplete, content, 100))
 
 	return content, nil
+}
+
+// ReturnFuncResults 批量回传多个工具调用结果给 LLM，让模型基于所有结果做出最终回答或继续调用
+func (t *Thinking) ReturnFuncResults(ctx context.Context, results []core.ToolExecResult, history []*core.DialogueMessage, tools []*core.ToolSchema, question string) (*core.ToolCallResult, error) {
+	t.logger.Info("批量回传工具结果", logging.Int("count", len(results)))
+
+	for _, r := range results {
+		t.sendEvent(NewToolResultEvent(r.FunctionName, r.Result))
+	}
+
+	systemPrompt := `你是一个工具调用助手。你的职责是根据用户的请求，从可用的工具中选择合适的工具并调用。
+
+重要规则：
+1. 如果用户的请求可以通过现有工具满足，请调用相应的工具
+2. 如果用户的请求无法通过现有工具满足，请直接回答用户，不要调用工具
+3. 调用工具时，确保传递正确的参数
+4. 不要编造工具，只能使用提供的工具`
+
+	messages := []openai.ChatCompletionMessage{
+		{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
+	}
+
+	for _, msg := range history {
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    msg.Role,
+			Content: msg.Content,
+		})
+	}
+
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    openai.ChatMessageRoleUser,
+		Content: question,
+	})
+
+	// 构造 assistant 消息中的 tool_calls
+	assistantToolCalls := make([]openai.ToolCall, 0, len(results))
+	for _, r := range results {
+		argsBytes, _ := json.Marshal(r.Arguments)
+		assistantToolCalls = append(assistantToolCalls, openai.ToolCall{
+			ID:   r.ToolCallID,
+			Type: openai.ToolTypeFunction,
+			Function: openai.FunctionCall{
+				Name:      r.FunctionName,
+				Arguments: string(argsBytes),
+			},
+		})
+	}
+
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:      openai.ChatMessageRoleAssistant,
+		ToolCalls: assistantToolCalls,
+	})
+
+	// 每个 tool result 作为独立的 tool message
+	for _, r := range results {
+		content := r.Result
+		if r.Error != "" {
+			content = fmt.Sprintf("Error: %s", r.Error)
+		}
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:       openai.ChatMessageRoleTool,
+			ToolCallID: r.ToolCallID,
+			Content:    content,
+		})
+	}
+
+	// 构造 tools 参数
+	ollamaTools := make([]openai.Tool, 0, len(tools))
+	for _, tool := range tools {
+		ollamaTools = append(ollamaTools, openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: &openai.FunctionDefinition{
+				Name:        tool.Name,
+				Description: tool.Description,
+				Parameters:  tool.Params,
+			},
+		})
+	}
+
+	startTime := time.Now()
+	req := openai.ChatCompletionRequest{
+		Model:    t.modelConfig.Name,
+		Messages: messages,
+		Tools:    ollamaTools,
+		ToolChoice: "auto",
+	}
+
+	req.ChatTemplateKwargs = map[string]any{
+		"enable_thinking": true,
+	}
+
+	retryCfg := retry.DefaultConfig()
+	resp, err := retry.DoWithResult(ctx, retryCfg, func() (openai.ChatCompletionResponse, error) {
+		return t.client.CreateChatCompletion(ctx, req)
+	})
+	duration := time.Since(startTime).Milliseconds()
+	durationSec := float64(duration) / 1000.0
+
+	if err != nil {
+		middleware.LlmCallsTotal.WithLabelValues(t.modelConfig.Name, "error").Inc()
+		middleware.LlmCallDuration.WithLabelValues(t.modelConfig.Name).Observe(durationSec)
+		t.logger.Error("批量回传结果失败", logging.Err(err))
+		t.sendEvent(NewThinkingEvent(ThinkingEventError, err.Error()))
+		return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "return func results failed")
+	}
+
+	middleware.LlmCallsTotal.WithLabelValues(t.modelConfig.Name, "success").Inc()
+	middleware.LlmCallDuration.WithLabelValues(t.modelConfig.Name).Observe(durationSec)
+	middleware.TokenUsageTotal.WithLabelValues(t.modelConfig.Name, "prompt").Add(float64(resp.Usage.PromptTokens))
+	middleware.TokenUsageTotal.WithLabelValues(t.modelConfig.Name, "completion").Add(float64(resp.Usage.CompletionTokens))
+
+	if t.tokenUsageRepo != nil {
+		usage := &entity.TokenUsage{
+			Model:            t.modelConfig.Name,
+			Duration:         duration,
+			CompletionTokens: int(resp.Usage.CompletionTokens),
+			TotalTokens:      int(resp.Usage.TotalTokens),
+			PromptTokens:     int(resp.Usage.PromptTokens),
+			CreatedAt:        time.Now(),
+		}
+		if err := t.tokenUsageRepo.Save(usage); err != nil {
+			t.logger.Warn("保存 token 用量失败", logging.Err(err))
+		}
+	}
+
+	if len(resp.Choices) == 0 {
+		return nil, apperrors.New(apperrors.ErrTypeModel, "no response result")
+	}
+
+	choice := resp.Choices[0]
+
+	// 模型可能继续调用工具（链式调用）
+	if len(choice.Message.ToolCalls) > 0 {
+		items := make([]core.ToolCallItem, 0, len(choice.Message.ToolCalls))
+		for _, toolCall := range choice.Message.ToolCalls {
+			var args map[string]interface{}
+			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+				return nil, apperrors.Wrap(err, apperrors.ErrTypeModel, "parse func params failed")
+			}
+			t.sendEvent(NewToolCallEvent(toolCall.Function.Name, args))
+			items = append(items, core.ToolCallItem{
+				ToolCallID: toolCall.ID,
+				Function: &core.ToolCallFunction{
+					Name:      toolCall.Function.Name,
+					Arguments: args,
+				},
+			})
+		}
+		return &core.ToolCallResult{
+			Function:   items[0].Function,
+			ToolCallID: items[0].ToolCallID,
+			NoCall:     false,
+			ToolCalls:  items,
+		}, nil
+	}
+
+	content := strings.TrimSpace(choice.Message.Content)
+	t.logger.Info(i18n.T("brain.get_final_response"), logging.String(i18n.T("brain.content"), content))
+	t.sendEvent(NewThinkingEventWithProgress(ThinkingEventComplete, content, 100))
+
+	return &core.ToolCallResult{
+		Answer: content,
+		NoCall: true,
+	}, nil
 }
 
 func extractJSON(content string) string {

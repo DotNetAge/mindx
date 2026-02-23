@@ -14,8 +14,10 @@ import (
 	"mindx/internal/entity"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -363,6 +365,15 @@ func (c *DingTalkChannel) handleDingTalkWebhook(w http.ResponseWriter, r *http.R
 func (c *DingTalkChannel) verifyDingTalkSignature(timestamp, sign string) bool {
 	if c.config.EncryptKey == "" {
 		return true
+	}
+
+	// 校验时间戳新鲜度，防止重放攻击
+	ts, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil {
+		return false
+	}
+	if math.Abs(float64(time.Now().UnixMilli()-ts)) > float64(time.Hour.Milliseconds()) {
+		return false
 	}
 
 	stringToSign := fmt.Sprintf("%s\n%s", timestamp, c.config.EncryptKey)

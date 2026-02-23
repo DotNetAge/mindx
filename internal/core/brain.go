@@ -40,9 +40,25 @@ type ThinkingResult struct {
 
 type ToolCallResult struct {
 	Answer     string            `json:"answer"`       // 回答内容
-	Function   *ToolCallFunction `json:"function"`     // 模型决定调用的函数
+	Function   *ToolCallFunction `json:"function"`     // 模型决定调用的函数（兼容单个调用）
 	ToolCallID string            `json:"tool_call_id"` // 工具调用ID，用于回传结果
 	NoCall     bool              `json:"no_call"`      // 是否决定不调用任何工具
+	ToolCalls  []ToolCallItem    `json:"tool_calls"`   // 批量工具调用列表
+}
+
+// ToolCallItem 单个工具调用项
+type ToolCallItem struct {
+	ToolCallID string            `json:"tool_call_id"`
+	Function   *ToolCallFunction `json:"function"`
+}
+
+// ToolExecResult 单个工具执行结果
+type ToolExecResult struct {
+	ToolCallID   string                 `json:"tool_call_id"`
+	FunctionName string                 `json:"function_name"`
+	Arguments    map[string]interface{} `json:"arguments"`
+	Result       string                 `json:"result"`
+	Error        string                 `json:"error,omitempty"`
 }
 
 type ToolCallFunction struct {
@@ -59,6 +75,8 @@ type Thinking interface {
 	ThinkWithTools(ctx context.Context, question string, history []*DialogueMessage, tools []*ToolSchema, customSystemPrompt ...string) (*ToolCallResult, error)
 	// ReturnFuncResult 向大模型回传函数调用结果
 	ReturnFuncResult(ctx context.Context, toolCallID string, name string, result string, originalArgs map[string]interface{}, history []*DialogueMessage, tools []*ToolSchema, question string) (string, error)
+	// ReturnFuncResults 向大模型批量回传多个函数调用结果
+	ReturnFuncResults(ctx context.Context, results []ToolExecResult, history []*DialogueMessage, tools []*ToolSchema, question string) (*ToolCallResult, error)
 	// CalculateMaxHistoryCount 计算最大历史对话轮数
 	CalculateMaxHistoryCount() int
 	// SetEventChan 设置事件 channel（用于实时推送思考过程）

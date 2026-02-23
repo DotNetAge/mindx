@@ -74,11 +74,17 @@ func (s *SkillMgrIntegrationTestSuite) TearDownSuite() {
 func (s *SkillMgrIntegrationTestSuite) SetupTest() {
 	llamaSvc := infraLlama.NewOllamaService("qwen3:0.6b")
 	workspaceDir, err := config.GetWorkspacePath()
-	assert.NoError(s.T(), err)
+	if !assert.NoError(s.T(), err) {
+		return
+	}
 	installSkillsDir, err := config.GetInstallSkillsPath()
-	assert.NoError(s.T(), err)
+	if !assert.NoError(s.T(), err) {
+		return
+	}
 	mgr, err := NewSkillMgr(installSkillsDir, workspaceDir, nil, llamaSvc, s.logger)
-	assert.NoError(s.T(), err, "创建技能管理器应该成功")
+	if !assert.NoError(s.T(), err, "创建技能管理器应该成功") {
+		return
+	}
 	s.mgr = mgr
 }
 
@@ -544,11 +550,15 @@ func (s *SkillMgrIntegrationTestSuite) TestIntegrationScenario() {
 // TestConcurrentAccess 测试并发访问
 func (s *SkillMgrIntegrationTestSuite) TestConcurrentAccess() {
 	s.Run("并发获取技能", func() {
+		mgr := s.mgr
+		if mgr == nil {
+			s.T().Skip("SkillMgr 初始化失败，跳过并发测试")
+		}
 		done := make(chan bool, 10)
 
 		for i := 0; i < 10; i++ {
 			go func() {
-				_, err := s.mgr.GetSkills()
+				_, err := mgr.GetSkills()
 				assert.NoError(s.T(), err)
 				done <- true
 			}()
@@ -560,12 +570,16 @@ func (s *SkillMgrIntegrationTestSuite) TestConcurrentAccess() {
 	})
 
 	s.Run("并发搜索技能", func() {
+		mgr := s.mgr
+		if mgr == nil {
+			s.T().Skip("SkillMgr 初始化失败，跳过并发测试")
+		}
 		done := make(chan bool, 10)
 
 		for i := 0; i < 10; i++ {
 			go func(idx int) {
 				keywords := []string{"weather", "calculator", "sysinfo"}
-				_, err := s.mgr.SearchSkills(keywords[idx%3])
+				_, err := mgr.SearchSkills(keywords[idx%3])
 				assert.NoError(s.T(), err)
 				done <- true
 			}(i)
@@ -577,12 +591,16 @@ func (s *SkillMgrIntegrationTestSuite) TestConcurrentAccess() {
 	})
 
 	s.Run("并发执行技能", func() {
+		mgr := s.mgr
+		if mgr == nil {
+			s.T().Skip("SkillMgr 初始化失败，跳过并发测试")
+		}
 		done := make(chan bool, 5)
 		successCount := 0
 
 		for i := 0; i < 5; i++ {
 			go func() {
-				_, err := s.mgr.ExecuteByName("weather", map[string]any{})
+				_, err := mgr.ExecuteByName("weather", map[string]any{})
 				if err == nil {
 					successCount++
 				}
@@ -595,7 +613,7 @@ func (s *SkillMgrIntegrationTestSuite) TestConcurrentAccess() {
 		}
 
 		if successCount > 0 {
-			info, _ := s.mgr.GetSkillInfo("weather")
+			info, _ := mgr.GetSkillInfo("weather")
 			assert.Equal(s.T(), successCount, info.SuccessCount, "成功次数应该匹配")
 		} else {
 			s.logger.Warn("所有并发执行都失败（可能是脚本路径问题）")

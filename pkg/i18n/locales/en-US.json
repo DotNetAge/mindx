@@ -24,6 +24,13 @@
   "cli.tui.input_prompt": "You: ",
   "cli.tui.not_connected": "Not connected to server",
   "cli.tui.send_failed": "Send failed",
+  "cli.tui.thinking.step1": "Activating subconscious...",
+  "cli.tui.thinking.step2": "Analyzing problem...",
+  "cli.tui.thinking.step3": "Calling tools...",
+  "cli.tui.thinking.step4": "Generating response...",
+  "cli.tui.thinking.label": "Thinking...",
+  "cli.tui.footer.quit": "Quit  ",
+  "cli.tui.footer.send": "Send",
 
   "cli.kernel.short": "Service control commands",
   "cli.kernel.long": "Manage mindx kernel start, stop and restart",

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -57,32 +58,38 @@ type chatMessage struct {
 }
 
 type model struct {
-	conn         *websocket.Conn
-	messages     []chatMessage
-	input        string
-	width        int
-	height       int
-	connected    bool
-	connecting   bool
-	err          error
-	port         int
-	sessionID    string
-	scrollOffset int
-	msgChan      chan tea.Msg
-	thinking     bool
-	thinkingStep int
-	animFrame    int
+	conn              *websocket.Conn
+	messages          []chatMessage
+	input             string
+	width             int
+	height            int
+	connected         bool
+	connecting        bool
+	err               error
+	port              int
+	sessionID         string
+	scrollOffset      int
+	msgChan           chan tea.Msg
+	thinking          bool
+	thinkingStep      int
+	animFrame         int
+	reconnectAttempts int
+	inputHistory      []string
+	historyIndex      int
 }
 
 var (
 	spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-	thinkingSteps = []string{
-		"激活潜意识...",
-		"分析问题中...",
-		"调用工具处理...",
-		"生成响应中...",
-	}
 )
+
+func getThinkingSteps() []string {
+	return []string{
+		i18n.T("cli.tui.thinking.step1"),
+		i18n.T("cli.tui.thinking.step2"),
+		i18n.T("cli.tui.thinking.step3"),
+		i18n.T("cli.tui.thinking.step4"),
+	}
+}
 
 func initialModel(port int, sessionID string) model {
 	return model{
@@ -134,10 +141,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					timestamp: time.Now(),
 					isUser:    true,
 				})
+				m.inputHistory = append(m.inputHistory, m.input)
+				m.historyIndex = len(m.inputHistory)
 				m.input = ""
 				m.thinking = true
 				m.thinkingStep = 0
 				m.scrollToBottom()
+			}
+
+		case tea.KeyUp:
+			if m.historyIndex > 0 {
+				m.historyIndex--
+				m.input = m.inputHistory[m.historyIndex]
+			}
+
+		case tea.KeyDown:
+			if m.historyIndex < len(m.inputHistory) {
+				m.historyIndex++
+				if m.historyIndex == len(m.inputHistory) {
+					m.input = ""
+				} else {
+					m.input = m.inputHistory[m.historyIndex]
+				}
 			}
 
 		case tea.KeyBackspace:
@@ -183,6 +208,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.conn = msg.conn
 		m.connected = true
 		m.connecting = false
+		m.reconnectAttempts = 0
 		m.messages = append(m.messages, chatMessage{
 			sender:    i18n.T("cli.tui.sender.system"),
 			content:   i18n.T("cli.tui.server_connected"),
@@ -206,11 +232,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		if m.thinking {
-			m.thinkingStep = (m.thinkingStep + 1) % len(thinkingSteps)
+			m.thinkingStep = (m.thinkingStep + 1) % len(getThinkingSteps())
 		}
 		if !m.connected && !m.connecting && m.err == nil {
+			backoff := time.Duration(math.Min(float64(500*time.Millisecond)*math.Pow(2, float64(m.reconnectAttempts)), float64(30*time.Second)))
+			m.reconnectAttempts++
 			m.connecting = true
-			return m, connectWebSocket(m.port, m.sessionID, m.msgChan)
+			return m, tea.Batch(
+				tea.Tick(backoff, func(t time.Time) tea.Msg {
+					return nil
+				}),
+				connectWebSocket(m.port, m.sessionID, m.msgChan),
+			)
 		}
 		return m, tea.Batch(tickCmd(), animateCmd())
 
@@ -294,11 +327,11 @@ func (m model) View() string {
 
 	if m.thinking {
 		spinner := spinnerFrames[m.animFrame]
-		thinkingText := thinkingSteps[m.thinkingStep]
+		thinkingText := getThinkingSteps()[m.thinkingStep]
 		thinkingBox := styles.thinkingBox.Render(
 			fmt.Sprintf("%s %s %s",
 				spinner,
-				styles.thinkingText.Render("思考中..."),
+				styles.thinkingText.Render(i18n.T("cli.tui.thinking.label")),
 				styles.thinkingStep.Render(thinkingText),
 			),
 		)
@@ -314,10 +347,10 @@ func (m model) View() string {
 		lipgloss.JoinHorizontal(lipgloss.Center,
 			styles.footerKey.Render("ESC/Ctrl+C"),
 			" ",
-			styles.footerText.Render("退出  "),
+			styles.footerText.Render(i18n.T("cli.tui.footer.quit")),
 			styles.footerKey.Render("Enter"),
 			" ",
-			styles.footerText.Render("发送"),
+			styles.footerText.Render(i18n.T("cli.tui.footer.send")),
 		),
 	)
 

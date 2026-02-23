@@ -249,7 +249,7 @@ func (c *QQChannel) handleOneBotMessage(data []byte) {
 	c.mu.Unlock()
 
 	if c.onMessage != nil {
-		c.onMessage(context.Background(), msg)
+		c.onMessage(c.ctx, msg)
 	}
 }
 
@@ -312,7 +312,7 @@ func (c *QQChannel) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	c.mu.Unlock()
 
 	if c.onMessage != nil {
-		c.onMessage(context.Background(), msg)
+		c.onMessage(c.ctx, msg)
 	}
 
 	w.WriteHeader(http.StatusOK)

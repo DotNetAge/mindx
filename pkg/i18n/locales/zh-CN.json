@@ -24,6 +24,13 @@
   "cli.tui.input_prompt": "你: ",
   "cli.tui.not_connected": "未连接到服务器",
   "cli.tui.send_failed": "发送失败",
+  "cli.tui.thinking.step1": "激活潜意识...",
+  "cli.tui.thinking.step2": "分析问题中...",
+  "cli.tui.thinking.step3": "调用工具处理...",
+  "cli.tui.thinking.step4": "生成响应中...",
+  "cli.tui.thinking.label": "思考中...",
+  "cli.tui.footer.quit": "退出  ",
+  "cli.tui.footer.send": "发送",
 
   "cli.kernel.short": "服务控制命令",
   "cli.kernel.long": "mindx kernel 的启动、停止和重启管理",

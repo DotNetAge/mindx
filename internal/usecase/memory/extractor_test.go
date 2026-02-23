@@ -29,6 +29,10 @@ func (m *MockThinking) ReturnFuncResult(ctx context.Context, toolCallID string, 
 	return "", nil
 }
 
+func (m *MockThinking) ReturnFuncResults(ctx context.Context, results []core.ToolExecResult, history []*core.DialogueMessage, tools []*core.ToolSchema, question string) (*core.ToolCallResult, error) {
+	return &core.ToolCallResult{NoCall: true}, nil
+}
+
 func (m *MockThinking) CalculateMaxHistoryCount() int {
 	return 10
 }

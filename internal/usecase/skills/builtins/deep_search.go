@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"mindx/internal/utils"
-	"mindx/pkg/i18n"
 	"strings"
 	"time"
 
@@ -65,7 +64,7 @@ func NewDeepSearch(baseUrl string, apiKey string, model string, langName string)
 		}
 
 		if len(pageContents) == 0 {
-			return "", fmt.Errorf(i18n.T("no_page_opened"))
+			return "", fmt.Errorf("no page content found")
 		}
 
 		summary, err := summarizeWithLLM(client, terms, pageContents, model, langName)
