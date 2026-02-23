@@ -90,26 +90,26 @@ ollama list  # 显示模型列表（空列表也表示安装成功）
 ### 安装 MindX
 #### 方式 1：预编译包（推荐）
 1. 下载对应系统的发布包（GitHub Releases / Gitee Releases）：
-   - **macOS (Universal)**: `mindx-v1.0.1-darwin-universal.zip` (同时支持 Intel 和 Apple Silicon)
-   - **Linux (x86_64)**: `mindx-1.0.1-linux-amd64.tar.gz`
-   - **Linux (ARM64)**: `mindx-1.0.1-linux-arm64.tar.gz`
-   - **Windows (x86_64)**: `mindx-1.0.1-windows-amd64.zip`
-   - **Windows (ARM64)**: `mindx-1.0.1-windows-arm64.zip`
+   - **macOS (Universal)**: `mindx-v1.0.2-darwin-universal.zip` (同时支持 Intel 和 Apple Silicon)
+   - **Linux (x86_64)**: `mindx-1.0.2-linux-amd64.tar.gz`
+   - **Linux (ARM64)**: `mindx-1.0.2-linux-arm64.tar.gz`
+   - **Windows (x86_64)**: `mindx-1.0.2-windows-amd64.zip`
+   - **Windows (ARM64)**: `mindx-1.0.2-windows-arm64.zip`
 
 2. 解压并安装：
    ```bash
    # macOS
-   unzip mindx-v1.0.1-darwin-universal.zip
-   cd mindx-v1.0.1-darwin-universal
+   unzip mindx-v1.0.2-darwin-universal.zip
+   cd mindx-v1.0.2-darwin-universal
    ./install.sh
    
    # Linux
-   tar -xzf mindx-1.0.1-linux-amd64.tar.gz
-   cd mindx-1.0.1-linux-amd64
+   tar -xzf mindx-1.0.2-linux-amd64.tar.gz
+   cd mindx-1.0.2-linux-amd64
    ./install.sh
    
    # Windows
-   # 解压 mindx-1.0.1-windows-amd64.zip，然后运行安装脚本
+   # 解压 mindx-1.0.2-windows-amd64.zip，然后运行安装脚本
    ```
 
 3. 启动服务：
