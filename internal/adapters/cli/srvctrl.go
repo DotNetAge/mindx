@@ -46,7 +46,8 @@ var kernelMainCmd = &cobra.Command{
 		}
 
 		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		notifyExtraSignals(sigCh)
 
 		sig := <-sigCh
 		logger.Info(i18n.T("cli.kernel.run.shutdown_signal"), logging.String("signal", sig.String()))
@@ -165,39 +166,39 @@ func checkStatusMacOS() {
 func checkStatusLinux() {
 	cmd := exec.Command("systemctl", "is-active", "mindx")
 	output, err := cmd.CombinedOutput()
+	status := strings.TrimSpace(string(output))
+
 	if err != nil {
-		fmt.Printf("%s", strings.TrimSpace(string(output)))
+		if status == "inactive" || status == "dead" {
+			fmt.Println(i18n.T("cli.kernel.status.stopped"))
+		} else if status == "unknown" || status == "" {
+			fmt.Println(i18n.T("cli.kernel.status.not_installed"))
+		} else {
+			fmt.Printf("%s\n", status)
+		}
 		return
 	}
 
-	fmt.Printf("%s", strings.TrimSpace(string(output)))
+	if status == "active" {
+		fmt.Println(i18n.T("cli.kernel.status.running"))
+	} else {
+		fmt.Printf("%s\n", status)
+	}
 }
 
 func checkStatusWindows() {
-	cmd := exec.Command("sc", "query", "MindX")
+	// 通过 tasklist 检查 mindx.exe 进程是否在运行
+	cmd := exec.Command("tasklist", "/FI", "IMAGENAME eq mindx.exe", "/FO", "CSV", "/NH")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Println(i18n.TWithData("cli.kernel.status.query_failed", map[string]interface{}{"Error": err.Error()}))
 		return
 	}
 
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "STATE") {
-			parts := strings.Fields(line)
-			if len(parts) >= 4 {
-				state := parts[3]
-				switch state {
-				case "RUNNING":
-					fmt.Println(i18n.T("cli.kernel.status.running"))
-				case "STOPPED":
-					fmt.Println(i18n.T("cli.kernel.status.stopped"))
-				default:
-					fmt.Printf("%s: %s\n", i18n.T("cli.kernel.status.label"), state)
-				}
-			}
-			break
-		}
+	if strings.Contains(string(output), "mindx.exe") {
+		fmt.Println(i18n.T("cli.kernel.status.running"))
+	} else {
+		fmt.Println(i18n.T("cli.kernel.status.stopped"))
 	}
 }
 
@@ -213,7 +214,7 @@ func stopServiceMacOS() {
 }
 
 func stopServiceLinux() {
-	cmd := exec.Command("systemctl", "stop", "mindx")
+	cmd := exec.Command("sudo", "systemctl", "stop", "mindx")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Println(i18n.TWithData("cli.kernel.stop.failed", map[string]interface{}{"Error": fmt.Sprintf("%v\n%s", err, string(output))}))
@@ -224,14 +225,19 @@ func stopServiceLinux() {
 }
 
 func stopServiceWindows() {
-	cmd := exec.Command("sc", "stop", "MindX")
+	// 通过 taskkill 终止 mindx.exe 进程
+	cmd := exec.Command("taskkill", "/IM", "mindx.exe", "/F")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if strings.Contains(string(output), "not found") {
+			fmt.Println(i18n.T("cli.kernel.status.stopped"))
+			return
+		}
 		fmt.Println(i18n.TWithData("cli.kernel.stop.failed", map[string]interface{}{"Error": fmt.Sprintf("%v\n%s", err, string(output))}))
 		return
 	}
 
-	fmt.Println(i18n.T("cli.kernel.stop.command_sent"))
+	fmt.Println(i18n.T("cli.kernel.stop.stopped"))
 }
 
 func restartServiceMacOS() {
@@ -252,7 +258,7 @@ func restartServiceMacOS() {
 }
 
 func restartServiceLinux() {
-	cmd := exec.Command("systemctl", "restart", "mindx")
+	cmd := exec.Command("sudo", "systemctl", "restart", "mindx")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Println(i18n.TWithData("cli.kernel.restart.failed", map[string]interface{}{"Error": fmt.Sprintf("%v\n%s", err, string(output))}))
@@ -269,14 +275,7 @@ func restartServiceWindows() {
 	fmt.Println(i18n.T("cli.kernel.restart.waiting"))
 
 	fmt.Println(i18n.T("cli.kernel.restart.starting"))
-	cmd := exec.Command("sc", "start", "MindX")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Println(i18n.TWithData("cli.kernel.restart.failed", map[string]interface{}{"Error": fmt.Sprintf("%v\n%s", err, string(output))}))
-		return
-	}
-
-	fmt.Println(i18n.T("cli.kernel.restart.restarted"))
+	startServiceWindows()
 }
 
 func getPlistPath() string {
@@ -404,7 +403,12 @@ func startServiceMacOS() {
 }
 
 func startServiceLinux() {
-	cmd := exec.Command("systemctl", "start", "mindx")
+	if err := ensureSystemdService(); err != nil {
+		fmt.Println(i18n.TWithData("cli.kernel.start.failed", map[string]interface{}{"Error": err.Error()}))
+		return
+	}
+
+	cmd := exec.Command("sudo", "systemctl", "start", "mindx")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Println(i18n.TWithData("cli.kernel.start.failed", map[string]interface{}{"Error": fmt.Sprintf("%v\n%s", err, string(output))}))
@@ -415,7 +419,16 @@ func startServiceLinux() {
 }
 
 func startServiceWindows() {
-	cmd := exec.Command("sc", "start", "MindX")
+	// 获取当前可执行文件路径
+	exePath, err := os.Executable()
+	if err != nil {
+		fmt.Println(i18n.TWithData("cli.kernel.start.failed", map[string]interface{}{"Error": err.Error()}))
+		return
+	}
+
+	// 使用 PowerShell 后台启动进程（隐藏窗口）
+	cmd := exec.Command("powershell", "-NoProfile", "-Command",
+		fmt.Sprintf(`Start-Process -FilePath '%s' -ArgumentList 'kernel','run' -WindowStyle Hidden`, exePath))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Println(i18n.TWithData("cli.kernel.start.failed", map[string]interface{}{"Error": fmt.Sprintf("%v\n%s", err, string(output))}))
@@ -423,4 +436,77 @@ func startServiceWindows() {
 	}
 
 	fmt.Println(i18n.T("cli.kernel.start.success"))
+}
+
+// --- Linux systemd helpers ---
+
+func generateSystemdUnit() string {
+	execPath, err := os.Executable()
+	if err != nil {
+		execPath = "/usr/local/mindx/bin/mindx"
+	}
+
+	homeDir, _ := os.UserHomeDir()
+	workspace := os.Getenv("MINDX_WORKSPACE")
+	if workspace == "" {
+		workspace = homeDir + "/.mindx"
+	}
+
+	currentUser := os.Getenv("USER")
+	if currentUser == "" {
+		currentUser = "root"
+	}
+
+	return fmt.Sprintf(`[Unit]
+Description=MindX AI Personal Assistant
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+User=%s
+ExecStart=%s kernel run
+WorkingDirectory=%s
+Environment=MINDX_WORKSPACE=%s
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+`, currentUser, execPath, workspace, workspace)
+}
+
+func ensureSystemdService() error {
+	const servicePath = "/etc/systemd/system/mindx.service"
+
+	if _, err := os.Stat(servicePath); err == nil {
+		return nil // already exists
+	}
+
+	fmt.Println(i18n.T("cli.kernel.systemd.not_exists"))
+
+	content := generateSystemdUnit()
+
+	// Write via sudo tee
+	cmd := exec.Command("sudo", "tee", servicePath)
+	cmd.Stdin = strings.NewReader(content)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to create systemd service: %w\n%s", err, string(output))
+	}
+
+	// Reload systemd and enable
+	cmd = exec.Command("sudo", "systemctl", "daemon-reload")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to reload systemd: %w\n%s", err, string(output))
+	}
+
+	cmd = exec.Command("sudo", "systemctl", "enable", "mindx")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to enable service: %w\n%s", err, string(output))
+	}
+
+	fmt.Println(i18n.T("cli.kernel.systemd.created"))
+	return nil
 }

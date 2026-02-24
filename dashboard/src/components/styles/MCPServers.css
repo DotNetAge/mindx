@@ -1,0 +1,603 @@
+.mcp-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 20px;
+  background-color: #030712;
+}
+
+.mcp-container .mcp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.mcp-container .mcp-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #f9fafb;
+  margin: 0;
+}
+
+/* Tabs */
+.mcp-container .mcp-tabs {
+  display: flex;
+  gap: 4px;
+  background-color: #111827;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.mcp-container .mcp-tab {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #9ca3af;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mcp-container .mcp-tab.active {
+  background-color: #374151;
+  color: #f9fafb;
+}
+
+.mcp-container .mcp-tab:hover:not(.active) {
+  color: #d1d5db;
+}
+
+/* Custom add section */
+.mcp-container .custom-add-section {
+  margin-bottom: 16px;
+}
+
+/* Catalog */
+.catalog-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.catalog-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.catalog-search {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 12px;
+  background-color: #111827;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  color: #f9fafb;
+  font-size: 14px;
+}
+
+.catalog-search:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.catalog-categories {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.cat-btn {
+  padding: 4px 12px;
+  border: 1px solid #374151;
+  border-radius: 14px;
+  background: none;
+  color: #9ca3af;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cat-btn.active {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+
+.cat-btn:hover:not(.active) {
+  border-color: #6b7280;
+  color: #d1d5db;
+}
+
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.catalog-card {
+  background-color: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 20px;
+  transition: border-color 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.catalog-card:hover {
+  border-color: #374151;
+}
+
+.catalog-card.installed {
+  border-color: #065f46;
+}
+
+.catalog-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.catalog-icon {
+  font-size: 20px;
+}
+
+.catalog-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #f9fafb;
+  flex: 1;
+}
+
+.installed-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  background-color: #065f46;
+  color: #6ee7b7;
+}
+
+.catalog-desc {
+  color: #9ca3af;
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.catalog-tools-preview {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tool-tag {
+  padding: 2px 8px;
+  background-color: #1f2937;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #60a5fa;
+  font-family: monospace;
+}
+
+.tool-tag.more {
+  color: #6b7280;
+}
+
+.catalog-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid #1f2937;
+}
+
+.catalog-meta {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+/* Install dialog extras */
+.dialog-desc {
+  color: #9ca3af;
+  font-size: 13px;
+  margin: 0 0 16px 0;
+}
+
+.required-mark {
+  color: #ef4444;
+}
+
+.var-hint {
+  color: #6b7280;
+  font-size: 12px;
+  margin: 0 0 4px 0;
+}
+
+.mcp-container .action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mcp-container .action-btn.primary {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.mcp-container .action-btn.primary:hover {
+  background-color: #2563eb;
+}
+
+.mcp-container .action-btn.secondary {
+  background-color: #374151;
+  color: #f9fafb;
+}
+
+.mcp-container .action-btn.secondary:hover {
+  background-color: #4b5563;
+}
+
+.mcp-container .action-btn.danger {
+  background-color: #dc2626;
+  color: white;
+}
+
+.mcp-container .action-btn.danger:hover {
+  background-color: #b91c1c;
+}
+
+.mcp-container .message {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  background-color: #065f46;
+  color: #d1fae5;
+  border: 1px solid #047857;
+}
+
+.mcp-container .message.error {
+  background-color: #7f1d1d;
+  color: #fecaca;
+  border-color: #991b1b;
+}
+
+.mcp-container .servers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 16px;
+}
+
+.mcp-container .server-card {
+  background-color: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 20px;
+  transition: border-color 0.2s ease;
+}
+
+.mcp-container .server-card:hover {
+  border-color: #374151;
+}
+
+.mcp-container .server-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.mcp-container .server-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f9fafb;
+}
+
+.mcp-container .status-badge {
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.mcp-container .status-badge.connected {
+  background-color: #065f46;
+  color: #6ee7b7;
+}
+
+.mcp-container .status-badge.disconnected {
+  background-color: #374151;
+  color: #9ca3af;
+}
+
+.mcp-container .status-badge.error {
+  background-color: #7f1d1d;
+  color: #fca5a5;
+}
+
+.mcp-container .server-info {
+  margin-bottom: 12px;
+}
+
+.mcp-container .server-info .info-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.mcp-container .server-info .info-label {
+  color: #6b7280;
+  min-width: 50px;
+}
+
+.mcp-container .server-info .info-value {
+  color: #d1d5db;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.mcp-container .server-error {
+  padding: 8px 12px;
+  background-color: #7f1d1d;
+  border-radius: 6px;
+  color: #fca5a5;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.mcp-container .tools-section {
+  margin-bottom: 12px;
+}
+
+.mcp-container .tools-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: #60a5fa;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.mcp-container .tools-toggle:hover {
+  color: #93bbfd;
+}
+
+.mcp-container .tools-list {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: #1f2937;
+  border-radius: 6px;
+}
+
+.mcp-container .tool-item {
+  padding: 6px 0;
+  border-bottom: 1px solid #374151;
+  font-size: 13px;
+}
+
+.mcp-container .tool-item:last-child {
+  border-bottom: none;
+}
+
+.mcp-container .tool-name {
+  color: #f9fafb;
+  font-weight: 500;
+  font-family: monospace;
+}
+
+.mcp-container .tool-desc {
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+.mcp-container .server-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #1f2937;
+}
+
+.mcp-container .server-actions .action-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.mcp-container .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  background-color: #111827;
+  border-radius: 12px;
+  border: 1px dashed #374151;
+}
+
+.mcp-container .empty-state p {
+  margin: 0;
+  color: #9ca3af;
+  font-size: 16px;
+}
+
+/* Add Server Dialog */
+.mcp-container .dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.mcp-container .dialog {
+  background-color: #1f2937;
+  border-radius: 12px;
+  padding: 24px;
+  width: 480px;
+  max-width: 90vw;
+}
+
+.mcp-container .dialog h2 {
+  color: #f9fafb;
+  font-size: 18px;
+  margin: 0 0 20px 0;
+}
+
+.mcp-container .form-group {
+  margin-bottom: 16px;
+}
+
+.mcp-container .form-group label {
+  display: block;
+  color: #d1d5db;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.mcp-container .form-group input,
+.mcp-container .form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  background-color: #111827;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  color: #f9fafb;
+  font-size: 14px;
+  font-family: monospace;
+  box-sizing: border-box;
+}
+
+.mcp-container .form-group textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+
+.mcp-container .form-group input:focus,
+.mcp-container .form-group textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.mcp-container .dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* Type toggle */
+.mcp-container .type-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mcp-container .type-btn {
+  flex: 1;
+  padding: 6px 16px;
+  background-color: #111827;
+  color: #9ca3af;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mcp-container .type-btn.active {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.mcp-container .type-btn:hover:not(.active) {
+  background-color: #1f2937;
+}
+
+/* KV Editor */
+.kv-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kv-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kv-row .kv-key,
+.kv-row .kv-value {
+  flex: 1;
+  padding: 6px 10px;
+  background-color: #111827;
+  border: 1px solid #374151;
+  border-radius: 4px;
+  color: #f9fafb;
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.kv-row .kv-key:focus,
+.kv-row .kv-value:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.kv-row .kv-sep {
+  color: #6b7280;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.kv-row .kv-remove {
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.kv-row .kv-remove:hover {
+  color: #ef4444;
+}
+
+.kv-add {
+  background: none;
+  border: 1px dashed #374151;
+  border-radius: 4px;
+  color: #60a5fa;
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+  text-align: left;
+  width: fit-content;
+}
+
+.kv-add:hover {
+  border-color: #60a5fa;
+}

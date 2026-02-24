@@ -114,7 +114,14 @@ func (e *SkillExecutor) executeMCP(name string, def *entity.SkillDef, params map
 		return "", fmt.Errorf("invalid mcp skill metadata")
 	}
 
-	result, err := e.mcpMgr.CallTool(mcpMeta.Server, mcpMeta.Tool, params)
+	timeout := time.Duration(def.Timeout) * time.Second
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	result, err := e.mcpMgr.CallTool(ctx, mcpMeta.Server, mcpMeta.Tool, params)
 	duration := time.Since(startTime).Milliseconds()
 
 	if err != nil {

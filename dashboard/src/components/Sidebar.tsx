@@ -10,7 +10,8 @@ import {
   TimeFilledIcon,
   SettingIcon,
   CloudIcon,
-  PlayCircleIcon
+  PlayCircleIcon,
+  LinkIcon
 } from 'tdesign-icons-react';
 import logo from '../assets/logo.svg';
 import './styles/Sidebar.css';
@@ -63,6 +64,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     { id: 'skills', label: t('sidebar.skills'), icon: <ToolsIcon /> },
     { id: 'capabilities', label: t('sidebar.capabilities'), icon: <InfoCircleFilledIcon /> },
     { id: 'channels', label: t('sidebar.channels'), icon: <ShareIcon /> },
+    { id: 'mcp', label: t('sidebar.mcp'), icon: <LinkIcon /> },
     { id: 'usage', label: t('sidebar.usage'), icon: <ChartIcon /> },
     { id: 'monitor', label: t('sidebar.monitor'), icon: <PreciseMonitorIcon /> },
     { id: 'cron', label: t('sidebar.cron'), icon: <PlayCircleIcon /> },

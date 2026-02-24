@@ -155,7 +155,7 @@ if [ "$INSTALL_MODE" = "source" ]; then
     BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-    CGO_ENABLED=1 \
+    CGO_ENABLED=0 \
         go build \
         -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
         -o bin/mindx \
@@ -340,8 +340,60 @@ fi
 
 echo ""
 
+# Setup systemd service on Linux
+if [[ "$(uname -s)" == "Linux" ]]; then
+    echo -e "${YELLOW}[9/10] Setting up systemd service...${NC}"
+
+    SYSTEMD_SERVICE="/etc/systemd/system/mindx.service"
+    CURRENT_USER=$(whoami)
+    CURRENT_UID=$(id -u)
+    CURRENT_GID=$(id -g)
+
+    SERVICE_CONTENT="[Unit]
+Description=MindX AI Personal Assistant
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+User=${CURRENT_USER}
+Group=$(id -gn)
+ExecStart=${MINDX_PATH}/bin/mindx kernel run
+WorkingDirectory=${MINDX_WORKSPACE}
+Environment=MINDX_WORKSPACE=${MINDX_WORKSPACE}
+Environment=MINDX_PATH=${MINDX_PATH}
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target"
+
+    if [ -w "/etc/systemd/system" ] || [ "$(id -u)" -eq 0 ]; then
+        echo "$SERVICE_CONTENT" > "$SYSTEMD_SERVICE"
+        systemctl daemon-reload
+        systemctl enable mindx
+        echo -e "${GREEN}✓ Created and enabled systemd service${NC}"
+    else
+        echo -e "${YELLOW}⚠ Cannot write to /etc/systemd/system (need sudo)${NC}"
+        echo -e "${YELLOW}  Run the following to set up the service:${NC}"
+        echo ""
+        echo "  sudo tee $SYSTEMD_SERVICE << 'EOF'"
+        echo "$SERVICE_CONTENT"
+        echo "EOF"
+        echo "  sudo systemctl daemon-reload"
+        echo "  sudo systemctl enable mindx"
+        echo ""
+    fi
+else
+    echo -e "${YELLOW}[9/10] Skipping systemd setup (not Linux)${NC}"
+fi
+
+echo ""
+
 # Pull required Ollama models
-echo -e "${YELLOW}[9/9] Pulling Ollama models...${NC}"
+echo -e "${YELLOW}[10/10] Pulling Ollama models...${NC}"
 
 # Models to pull
 REQUIRED_MODELS=(
