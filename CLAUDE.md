@@ -6,6 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MindX is a lightweight, self-evolving AI personal assistant with a bionic brain architecture. It's written in Go (backend) and React/TypeScript (frontend dashboard), designed to run primarily on local models via Ollama with optional cloud model fallback.
 
+## Project Structure
+
+```
+mindx/
+├── cmd/                 # Application entry points
+├── internal/            # Private application code
+│   ├── adapters/        # External interfaces (CLI, HTTP, channels)
+│   ├── usecase/         # Business logic layer
+│   ├── core/            # Domain interfaces
+│   ├── entity/          # Domain entities
+│   ├── infrastructure/  # Technical implementations
+│   └── config/          # Configuration management
+├── pkg/                 # Public reusable packages
+├── dashboard/           # React frontend
+├── skills/              # Built-in skills
+├── training/            # Training scripts
+├── scripts/             # Build and install scripts
+└── config/              # Default configuration templates
+```
+
 ## Core Architecture
 
 ### Bionic Brain System (仿生大脑架构)
@@ -44,9 +64,16 @@ Long-term memory with automatic consolidation:
 
 Extensible tool/skill framework compatible with OpenClaw ecosystem:
 - `skills/`: Built-in skills (calculator, calendar, file_search, etc.)
-- `internal/usecase/skills/`: Skill manager and execution
+- `internal/usecase/skills/`: Skill manager and execution using Facade pattern
 - Supports MCP (Model Context Protocol)
 - Skills can be written in any language as CLI tools
+
+Key components:
+- `SkillMgr`: Facade providing unified interface for all skill operations
+- `SkillLoader`: Loads and parses SKILL.md files with YAML frontmatter
+- `SkillExecutor`: Executes skill commands in isolated environments
+- `SkillSearcher`: Semantic search using vector embeddings and keyword matching
+- `SkillIndexer`: Pre-computes vector indices for efficient searching
 
 ### Training System
 
@@ -88,7 +115,15 @@ make test
 
 # Test specific package
 MINDX_WORKSPACE=$(PWD)/.test go test ./internal/usecase/brain/...
+
+# Run tests with verbose output
+MINDX_WORKSPACE=$(PWD)/.test go test -v ./...
+
+# Run specific test function
+MINDX_WORKSPACE=$(PWD)/.test go test -v ./internal/usecase/brain/ -run TestSpecificFunction
 ```
+
+**Note**: Test files are located alongside source files with `_test.go` suffix. Integration tests are in `internal/tests/`.
 
 ### Code Quality
 
@@ -149,6 +184,30 @@ Configuration files are located in `$MINDX_WORKSPACE/config/` (default: `~/.mind
 
 ## Key Technical Details
 
+### Three-Brain Collaboration
+
+The bionic brain implements a three-tier processing system:
+
+1. **Left Brain (LeftBrain)**: Fast intent recognition using lightweight models
+   - Extracts keywords, identifies user intent
+   - Determines if the query can be answered directly
+   - Recognizes target channels for responses
+   - Located in: `internal/usecase/brain/left_brain.go`
+
+2. **Right Brain (RightBrain)**: Tool invocation using standard models
+   - Selects appropriate tools/skills from available options
+   - Decides tool call parameters
+   - Integrates tool execution results
+   - Same Thinking engine but with tool-calling capabilities
+
+3. **Consciousness (Consciousness)**: Deep thinking for complex problems
+   - Created on-demand (lazy initialization)
+   - Can use different, more powerful models
+   - Handles complex queries beyond left/right brain capabilities
+   - Managed by: `internal/usecase/brain/consciousness_manager.go`
+
+The flow: User → ContextPreparer → LeftBrain → [Direct Answer | RightBrain | Consciousness] → Response
+
 ### Model Integration
 
 - Primary: Ollama for local models (via `pkg/llama/`)
@@ -194,6 +253,8 @@ Configuration files are located in `$MINDX_WORKSPACE/config/` (default: `~/.mind
 - Skills are discovered automatically from `$MINDX_WORKSPACE/skills/` and `$MINDX_INSTALL_PATH/skills/`
 - Memory consolidation runs automatically in the background
 - Training data is exported to `$MINDX_WORKSPACE/data/training/`
+- Go version: 1.25.1+ required
+- Frontend requires Node.js 18+ and uses Vite for development/build
 
 ## CLI Command Reference
 

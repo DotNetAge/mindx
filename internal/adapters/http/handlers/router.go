@@ -7,6 +7,8 @@ import (
 	"mindx/internal/usecase/cron"
 	"mindx/internal/usecase/session"
 	"mindx/internal/usecase/skills"
+	httpMiddleware "mindx/internal/adapters/http/middleware"
+	"mindx/pkg/logging"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,13 +18,36 @@ type Assistant interface {
 }
 
 // RegisterRoutes 注册所有路由
-func RegisterRoutes(router *gin.Engine, tokenUsageRepo core.TokenUsageRepository, skillMgr *skills.SkillMgr, capMgr *capability.CapabilityManager, sessionMgr *session.SessionMgr, cronScheduler cron.Scheduler, assistant Assistant) {
-	api := router.Group("/api")
-	{
-		// 健康检查
-		ctrl := NewControlHandler()
-		api.GET("/health", ctrl.handleHealth)
+func RegisterRoutes(
+	router *gin.Engine,
+	tokenUsageRepo core.TokenUsageRepository,
+	skillMgr *skills.SkillMgr,
+	capMgr *capability.CapabilityManager,
+	sessionMgr *session.SessionMgr,
+	cronScheduler cron.Scheduler,
+	assistant Assistant,
+	authService core.AuthenticationService,
+	logger logging.Logger,
+) {
+	// Apply CORS middleware
+	router.Use(httpMiddleware.CORS())
 
+	// Public routes (no authentication required)
+	public := router.Group("/api")
+	{
+		// Health check
+		ctrl := NewControlHandler()
+		public.GET("/health", ctrl.handleHealth)
+
+		// Authentication
+		authHandler := NewAuthHandler(authService, logger)
+		public.POST("/auth/login", authHandler.Login)
+	}
+
+	// Protected routes (authentication required)
+	api := router.Group("/api")
+	api.Use(httpMiddleware.AuthMiddleware(authService, logger))
+	{
 		// 服务控制
 		service := NewServiceHandler()
 		api.POST("/service/start", service.Start)

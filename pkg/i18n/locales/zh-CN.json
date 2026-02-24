@@ -788,5 +788,21 @@
   "memory.stored_points": "stored_points",
   "memory.no_valid_vector": "无有效向量，直接存储所有记忆点",
   "memory.single_mem_store_complete": "单个记忆点存储完成",
-  "memory.gen_combined_summary_failed": "生成综合摘要失败，使用第一个记忆点的摘要"
+  "memory.gen_combined_summary_failed": "生成综合摘要失败，使用第一个记忆点的摘要",
+
+  "auth.unauthorized": "未授权访问",
+  "auth.invalid_credentials": "用户名或密码错误",
+  "auth.account_inactive": "账户已被禁用",
+  "auth.user_not_found": "用户不存在",
+  "auth.user_exists": "用户已存在",
+  "auth.invalid_request": "请求参数无效",
+  "auth.invalid_old_password": "原密码错误",
+  "auth.apikey_not_found": "API密钥不存在",
+  "auth.login_success": "用户登录成功",
+  "auth.user_created": "用户创建成功",
+  "auth.password_changed": "密码修改成功",
+  "auth.apikey_generated": "API密钥生成成功",
+  "auth.apikey_revoked": "API密钥已吊销",
+  "auth.username": "用户名",
+  "auth.password": "密码"
 }

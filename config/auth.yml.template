@@ -1,0 +1,52 @@
+# MindX Authentication Configuration
+# Copy this file to ~/.mindx/config/auth.yml and configure
+
+auth:
+  # Enable/disable authentication
+  enabled: true
+
+  # Authentication mode: "jwt", "apikey", or "both"
+  mode: both
+
+  # JWT Configuration
+  jwt:
+    # Secret key for signing JWT tokens (REQUIRED, min 32 characters)
+    # Use environment variable: JWT_SECRET
+    # Generate with: openssl rand -base64 32
+    secret: "${JWT_SECRET}"
+
+    # Token expiration time
+    expiration: 24h
+
+    # Refresh token expiration time
+    refresh_expiration: 168h  # 7 days
+
+  # API Key Configuration
+  apikey:
+    # Enable API key authentication
+    enabled: true
+
+    # HTTP header name for API key
+    header: "X-API-Key"
+
+    # API key prefix
+    prefix: "sk-mindx-"
+
+  # Password Policy
+  password_policy:
+    min_length: 12
+    require_uppercase: true
+    require_lowercase: true
+    require_numbers: true
+    require_special: true
+
+  # Session Management
+  session:
+    # Maximum active sessions per user
+    max_active: 10
+
+  # Rate Limiting (future feature)
+  rate_limit:
+    enabled: false
+    requests_per_minute: 60
+    burst: 10

@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// WriteFile writes content to a file with security validation
 func WriteFile(params map[string]any) (string, error) {
 	filename, ok := params["filename"].(string)
 	if !ok {
@@ -26,11 +27,19 @@ func WriteFile(params map[string]any) (string, error) {
 		return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
 	}
 
+	baseDir := filepath.Join(workDir, "documents")
+
 	var filePath string
 	if path, ok := params["path"].(string); ok && path != "" {
-		filePath = filepath.Join(workDir, "documents", path, filename)
+		// SECURITY: Validate path to prevent traversal
+		validatedPath, err := validateAndSanitizePath(baseDir, path, filename)
+		if err != nil {
+			return "", err
+		}
+		filePath = validatedPath
 	} else {
-		filePath = filepath.Join(workDir, "documents", filename)
+		// No path specified, use base directory
+		filePath = filepath.Join(baseDir, filename)
 	}
 
 	dir := filepath.Dir(filePath)
@@ -50,6 +59,44 @@ func WriteFile(params map[string]any) (string, error) {
 	}
 
 	return getJSONWriteResult(absPath, len(content), elapsed)
+}
+
+// validateAndSanitizePath validates and sanitizes a file path to prevent path traversal attacks
+func validateAndSanitizePath(baseDir, userPath, filename string) (string, error) {
+	// Clean all paths
+	cleanBase := filepath.Clean(baseDir)
+	cleanUserPath := filepath.Clean(userPath)
+	cleanFilename := filepath.Clean(filename)
+
+	// Reject absolute paths in user input
+	if filepath.IsAbs(cleanUserPath) {
+		return "", fmt.Errorf("absolute paths not allowed in user path")
+	}
+
+	// Reject paths containing ..
+	if filepath.HasPrefix(cleanFilename, "..") {
+		return "", fmt.Errorf("path traversal detected: .. not allowed in filename")
+	}
+
+	if filepath.HasPrefix(cleanUserPath, "..") {
+		return "", fmt.Errorf("path traversal detected: .. not allowed in path")
+	}
+
+	// Join paths
+	fullPath := filepath.Join(cleanBase, cleanUserPath, cleanFilename)
+	cleanFull := filepath.Clean(fullPath)
+
+	// Ensure the result is still within base directory
+	rel, err := filepath.Rel(cleanBase, cleanFull)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+
+	if filepath.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("path traversal detected: result outside base directory")
+	}
+
+	return cleanFull, nil
 }
 
 func getJSONWriteResult(filePath string, contentLength int, elapsed time.Duration) (string, error) {

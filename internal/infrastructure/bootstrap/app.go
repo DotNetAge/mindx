@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"time"
 	"mindx/internal/adapters/channels"
 	"mindx/internal/adapters/http/handlers"
 	"mindx/internal/config"
@@ -12,6 +13,7 @@ import (
 	infraEmbedding "mindx/internal/infrastructure/embedding"
 	infraLlama "mindx/internal/infrastructure/llama"
 	"mindx/internal/infrastructure/persistence"
+	"mindx/internal/usecase/auth"
 	"mindx/internal/usecase/capability"
 	"mindx/internal/usecase/cron"
 	"mindx/internal/usecase/embedding"
@@ -59,6 +61,7 @@ type App struct {
 	Capabilities   *capability.CapabilityManager
 	CronScheduler  cron.Scheduler
 	TokenUsageRepo core.TokenUsageRepository
+	AuthService    core.AuthenticationService
 }
 
 var a *App
@@ -215,6 +218,34 @@ func Startup() (*App, error) {
 	}
 
 	systemLogger.Info("能力管理器初始化完成", logging.Int("capabilities_count", len(capMgr.ListCapabilities())))
+
+	// Initialize authentication service
+	systemLogger.Info("初始化认证服务")
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		// Generate a temporary secret for development
+		jwtSecret = "development-secret-key-please-change-in-production-32chars"
+		systemLogger.Warn("使用开发模式JWT密钥，生产环境请设置JWT_SECRET环境变量")
+	}
+
+	authConfig := auth.Config{
+		JWTSecret:        jwtSecret,
+		TokenExpiration:  24 * time.Hour,
+		RefreshExpiration: 7 * 24 * time.Hour,
+		PasswordPolicy: auth.PasswordPolicy{
+			MinLength:       8,
+			RequireUppercase: false,
+			RequireLowercase: false,
+			RequireNumbers:   false,
+			RequireSpecial:   false,
+		},
+	}
+
+	authService, err := auth.NewService(authConfig, systemLogger)
+	if err != nil {
+		return nil, fmt.Errorf("初始化认证服务失败: %w", err)
+	}
+	systemLogger.Info("认证服务初始化完成")
 
 	systemLogger.Info("初始化技能管理器")
 
@@ -392,7 +423,7 @@ func Startup() (*App, error) {
 	}
 	systemLogger.Info("HTTP API 服务器创建完成", logging.Int("port", srvCfg.Port))
 
-	handlers.RegisterRoutes(srv.GetEngine(), tokenUsageRepo, skillMgr, capMgr, sessionMgr, cronScheduler, assistant)
+	handlers.RegisterRoutes(srv.GetEngine(), tokenUsageRepo, skillMgr, capMgr, sessionMgr, cronScheduler, assistant, authService, systemLogger)
 
 	a = &App{
 		Server:         srv,
@@ -404,6 +435,7 @@ func Startup() (*App, error) {
 		Capabilities:   capMgr,
 		CronScheduler:  cronScheduler,
 		TokenUsageRepo: tokenUsageRepo,
+		AuthService:    authService,
 	}
 
 	if err := srv.Start(); err != nil {

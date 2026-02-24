@@ -8,11 +8,32 @@ set -e
 PARAMS=$(cat)
 COMMAND=$(echo "$PARAMS" | jq -r '.command // empty')
 TIMEOUT=$(echo "$PARAMS" | jq -r '.timeout // "30"')
+DANGEROUS=$(echo "$PARAMS" | jq -r '.dangerous // "false"')
 
 if [ -z "$COMMAND" ] || [ "$COMMAND" = "null" ]; then
     echo '{"error": "Missing required parameter: command"}' >&2
     exit 1
 fi
+
+# SECURITY: 基本验证 - 阻止明显的注入模式
+if echo "$COMMAND" | grep -qE '[;&|`$()]'; then
+    echo '{"error": "Command contains dangerous characters (;&|`$())"}' >&2
+    exit 1
+fi
+
+# SECURITY: 检查危险命令
+BASE_CMD=$(echo "$COMMAND" | awk '{print $1}')
+case "$BASE_CMD" in
+    rm|dd|mkfs|format|shutdown|reboot|init|kill|killall|pkill|fdisk|parted|chmod|chown)
+        if [ "$DANGEROUS" != "true" ]; then
+            echo '{"error": "Dangerous command requires dangerous=true parameter"}' >&2
+            exit 1
+        fi
+        ;;
+    *)
+        # Safe command, continue
+        ;;
+esac
 
 # 执行命令并设置超时（macOS兼容）
 if [ "$TIMEOUT" != "0" ] && [ "$TIMEOUT" != "null" ]; then

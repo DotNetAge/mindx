@@ -768,5 +768,21 @@
   "memory.stored_points": "stored_points",
   "memory.no_valid_vector": "No valid vectors, storing all memory points directly",
   "memory.single_mem_store_complete": "Single memory point stored successfully",
-  "memory.gen_combined_summary_failed": "Failed to generate combined summary, using first memory point's summary"
+  "memory.gen_combined_summary_failed": "Failed to generate combined summary, using first memory point's summary",
+
+  "auth.unauthorized": "Unauthorized access",
+  "auth.invalid_credentials": "Invalid username or password",
+  "auth.account_inactive": "Account is inactive",
+  "auth.user_not_found": "User not found",
+  "auth.user_exists": "User already exists",
+  "auth.invalid_request": "Invalid request parameters",
+  "auth.invalid_old_password": "Invalid old password",
+  "auth.apikey_not_found": "API key not found",
+  "auth.login_success": "User logged in successfully",
+  "auth.user_created": "User created successfully",
+  "auth.password_changed": "Password changed successfully",
+  "auth.apikey_generated": "API key generated successfully",
+  "auth.apikey_revoked": "API key revoked successfully",
+  "auth.username": "Username",
+  "auth.password": "Password"
 }
