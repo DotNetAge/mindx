@@ -78,6 +78,11 @@
   "cli.kernel.plist.loading": "正在加载 plist 文件...",
   "cli.kernel.plist.loaded": "plist 文件已加载",
 
+  "cli.kernel.systemd.not_exists": "检测到 systemd 服务文件不存在，正在创建...",
+  "cli.kernel.systemd.created": "systemd 服务已创建并启用",
+
+  "cli.dashboard.visit": "请在浏览器中访问: {{.URL}}",
+
   "cli.model.short": "模型管理和测试",
 
   "cli.model.test.short": "测试模型是否支持函数工具",

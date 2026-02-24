@@ -202,3 +202,47 @@ func CheckDependencies(def *entity.SkillDef) ([]string, []string) {
 
 	return missingBins, missingEnv
 }
+
+// RegisterMCPSkills 将 MCP server 发现的工具注册为 skill
+func (l *SkillLoader) RegisterMCPSkills(serverName string, defs []*entity.SkillDef) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	for _, def := range defs {
+		skillName := def.Name
+		skill := &core.Skill{
+			GetName: func() string { return skillName },
+			Execute: func(name string, params map[string]any) error { return nil },
+		}
+
+		info := &entity.SkillInfo{
+			Def:    def,
+			CanRun: true,
+			Format: "mcp",
+			Status: "ready",
+		}
+
+		l.skills[skillName] = skill
+		l.skillInfos[skillName] = info
+		l.logger.Info("注册 MCP 工具",
+			logging.String("skill", skillName),
+			logging.String("server", serverName))
+	}
+}
+
+// UnregisterMCPSkills 移除某 MCP server 的所有 skill
+func (l *SkillLoader) UnregisterMCPSkills(serverName string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	prefix := fmt.Sprintf("mcp_%s_", serverName)
+	for name := range l.skills {
+		if strings.HasPrefix(name, prefix) {
+			delete(l.skills, name)
+			delete(l.skillInfos, name)
+			l.logger.Info("注销 MCP 工具",
+				logging.String("skill", name),
+				logging.String("server", serverName))
+		}
+	}
+}

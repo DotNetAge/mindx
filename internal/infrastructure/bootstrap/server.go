@@ -135,7 +135,32 @@ func (s *Server) setupStaticFiles() error {
 
 	// 提供静态文件服务（使用 /static 路径避免与 /api 冲突）
 	s.engine.Static("/static", staticDir)
-	s.engine.StaticFile("/favicon.ico", filepath.Join(staticDir, "favicon.ico"))
+	s.engine.Static("/assets", filepath.Join(staticDir, "assets"))
+	s.engine.Static("/icons", filepath.Join(staticDir, "icons"))
+
+	// PWA 根级文件
+	for _, f := range []string{"favicon.ico", "manifest.webmanifest", "sw.js", "registerSW.js"} {
+		path := filepath.Join(staticDir, f)
+		if _, err := os.Stat(path); err == nil {
+			s.engine.StaticFile("/"+f, path)
+		}
+	}
+	// workbox runtime（文件名含 hash，用通配路由）
+	s.engine.GET("/workbox-:hash", func(c *gin.Context) {
+		c.File(filepath.Join(staticDir, "workbox-"+c.Param("hash")))
+	})
+
+	// SPA fallback: 非 API/WS 路径返回 index.html
+	s.engine.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+		// 跳过 API 和 WebSocket 路径
+		if len(path) >= 4 && path[:4] == "/api" || len(path) >= 3 && path[:3] == "/ws" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		c.File(filepath.Join(staticDir, "index.html"))
+	})
+
 	return nil
 }
 

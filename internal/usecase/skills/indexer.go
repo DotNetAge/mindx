@@ -85,11 +85,12 @@ func (i *SkillIndexer) StopWorker() {
 func (i *SkillIndexer) worker() {
 	defer i.workerWg.Done()
 
-	systemPrompt := `用户会提供一份大模型调用工具的详细描述，你要从用户的输入内容中精炼出这个工具是用来做什么；
-例如：["查询天气","询问天气"]、["查询系统信息"]、["发送短信"]，关键字一定是[动词+名词]的形式；
+	systemPrompt := `用户会提供一份大模型调用工具的详细描述（可能是中文或英文），你要从用户的输入内容中精炼出这个工具是用来做什么；
+无论输入是什么语言，关键字必须全部用中文输出。
+例如：["查询天气","询问天气"]、["查询系统信息"]、["发送短信"]、["读取文件","搜索文件"]，关键字一定是[动词+名词]的形式；
 最后只输出一个json，格式如下：
 {
-	"keywords": ["关键字1","关键字2"]
+	"keywords": ["中文关键字1","中文关键字2"]
 }
 关键字可以有多个，也可以只有一个，关键是要精准。
 `
@@ -265,6 +266,14 @@ func (i *SkillIndexer) extractKeywords(systemPrompt, text string) ([]string, err
 	var keywords []string
 
 	if err := json.Unmarshal([]byte(jsonStr), &keywords); err == nil {
+		return keywords, nil
+	}
+
+	var nested [][]string
+	if err := json.Unmarshal([]byte(jsonStr), &nested); err == nil {
+		for _, inner := range nested {
+			keywords = append(keywords, inner...)
+		}
 		return keywords, nil
 	}
 

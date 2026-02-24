@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os/exec"
+	"runtime"
 
 	"mindx/pkg/i18n"
 
@@ -15,10 +16,21 @@ var dashboardCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		serverPort := 911
 		dashboardUrl := fmt.Sprintf("http://localhost:%d", serverPort)
-		openCmd := exec.Command("open", dashboardUrl)
+
+		var openCmd *exec.Cmd
+		switch runtime.GOOS {
+		case "windows":
+			openCmd = exec.Command("cmd", "/c", "start", dashboardUrl)
+		case "linux":
+			openCmd = exec.Command("xdg-open", dashboardUrl)
+		default:
+			openCmd = exec.Command("open", dashboardUrl)
+		}
+
 		err := openCmd.Run()
 		if err != nil {
-			fmt.Println(i18n.TWithData("cli.dashboard.failed", map[string]interface{}{"Error": err.Error()}))
+			// On headless Linux or missing xdg-open, just print the URL
+			fmt.Println(i18n.TWithData("cli.dashboard.visit", map[string]interface{}{"URL": dashboardUrl}))
 		} else {
 			fmt.Println(i18n.T("cli.dashboard.success"))
 		}

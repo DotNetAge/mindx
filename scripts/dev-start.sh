@@ -85,7 +85,14 @@ start_server() {
     
     echo -e "${BLUE}[后端]${NC} 服务器已启动 (PID: $SERVER_PID)"
     echo -e "${BLUE}[后端]${NC} 等待服务器启动..."
-    sleep 10
+
+    # 等待端口就绪（最多60秒），而非固定 sleep
+    for i in $(seq 1 60); do
+        if check_server; then
+            break
+        fi
+        sleep 1
+    done
     
     if check_server; then
         echo -e "${GREEN}[后端]${NC} ✓ 服务器运行正常"

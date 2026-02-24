@@ -1,7 +1,9 @@
 package skills
 
 import (
+	"context"
 	"fmt"
+	"mindx/internal/config"
 	"mindx/internal/core"
 	"mindx/internal/entity"
 	infraLlama "mindx/internal/infrastructure/llama"
@@ -10,6 +12,9 @@ import (
 	"mindx/pkg/logging"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type SkillMgr struct {
@@ -233,6 +238,25 @@ func (m *SkillMgr) ReIndex() error {
 	return nil
 }
 
+// indexMCPSkills 将 MCP 工具增量送入索引队列
+// 只索引新注册的 MCP skill，不触发全量 ReIndex
+func (m *SkillMgr) indexMCPSkills(defs []*entity.SkillDef) {
+	allInfos := m.loader.GetSkillInfos()
+	mcpInfos := make(map[string]*entity.SkillInfo, len(defs))
+	for _, def := range defs {
+		if info, ok := allInfos[def.Name]; ok {
+			mcpInfos[def.Name] = info
+		}
+	}
+	if len(mcpInfos) == 0 {
+		return
+	}
+	// 送入 indexer 队列（异步处理，不阻塞连接流程）
+	if err := m.indexer.ReIndex(mcpInfos); err != nil {
+		m.logger.Warn("MCP 工具索引失败", logging.Err(err))
+	}
+}
+
 func (m *SkillMgr) IsReIndexing() bool {
 	return m.indexer.IsReIndexing()
 }
@@ -344,10 +368,119 @@ func (m *SkillMgr) Close() error {
 	return nil
 }
 
-func (m *SkillMgr) RegisterMCPServer(config MCPServerConfig) error {
-	return m.mcpMgr.RegisterServer(config)
+// InitMCPServers 初始化所有配置的 MCP server（并发，每个 server 有独立超时）
+func (m *SkillMgr) InitMCPServers(ctx context.Context, cfg *config.MCPServersConfig) {
+	if cfg == nil || len(cfg.MCPServers) == 0 {
+		return
+	}
+
+	var wg sync.WaitGroup
+	for name, entry := range cfg.MCPServers {
+		if !entry.Enabled {
+			m.logger.Info("MCP server 已禁用，跳过", logging.String("server", name))
+			continue
+		}
+
+		wg.Add(1)
+		go func(n string, e config.MCPServerEntry) {
+			defer wg.Done()
+
+			connCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+
+			if err := m.connectAndRegisterMCP(connCtx, n, e); err != nil {
+				m.logger.Warn("MCP server 初始化失败（跳过）",
+					logging.String("server", n),
+					logging.Err(err))
+			}
+		}(name, entry)
+	}
+	wg.Wait()
 }
 
-func (m *SkillMgr) ListMCPServers() []string {
+// connectAndRegisterMCP 连接 MCP server 并注册发现的工具
+func (m *SkillMgr) connectAndRegisterMCP(ctx context.Context, name string, entry config.MCPServerEntry) error {
+	if err := m.mcpMgr.ConnectServer(ctx, name, entry); err != nil {
+		return err
+	}
+
+	tools, err := m.mcpMgr.GetDiscoveredTools(name)
+	if err != nil {
+		return err
+	}
+
+	// 从 catalog 获取中文工具描述，用于覆盖 MCP server 返回的英文描述
+	zhDescriptions := config.GetCatalogToolDescriptions(name, "zh")
+
+	defs := make([]*entity.SkillDef, 0, len(tools))
+	for _, tool := range tools {
+		def := MCPToolToSkillDef(name, tool)
+		// 如果 catalog 中有中文描述，用中文覆盖（提升向量索引的中文匹配能力）
+		if zhDesc, ok := zhDescriptions[tool.Name]; ok && zhDesc != "" {
+			def.Description = zhDesc
+		}
+		defs = append(defs, def)
+	}
+
+	m.loader.RegisterMCPSkills(name, defs)
+	m.syncComponents()
+
+	// 将新注册的 MCP 工具送入索引队列，生成向量索引
+	m.indexMCPSkills(defs)
+
+	m.logger.Info("MCP server 初始化完成",
+		logging.String("server", name),
+		logging.Int("tools", len(defs)))
+	return nil
+}
+
+// AddMCPServer 运行时添加 MCP server
+func (m *SkillMgr) AddMCPServer(ctx context.Context, name string, entry config.MCPServerEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.connectAndRegisterMCP(ctx, name, entry)
+}
+
+// RemoveMCPServer 运行时移除 MCP server
+func (m *SkillMgr) RemoveMCPServer(name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.loader.UnregisterMCPSkills(name)
+	if err := m.mcpMgr.RemoveServer(name); err != nil {
+		return err
+	}
+	m.syncComponents()
+	return nil
+}
+
+// RestartMCPServer 重启 MCP server
+func (m *SkillMgr) RestartMCPServer(ctx context.Context, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	state, ok := m.mcpMgr.GetServerState(name)
+	if !ok {
+		return fmt.Errorf("MCP server not found: %s", name)
+	}
+
+	// 先注销旧工具
+	m.loader.UnregisterMCPSkills(name)
+
+	// 重新连接并注册
+	if err := m.connectAndRegisterMCP(ctx, name, state.Config); err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetMCPServers 获取所有 MCP server 状态
+func (m *SkillMgr) GetMCPServers() []*MCPServerState {
 	return m.mcpMgr.ListServers()
+}
+
+// GetMCPServerTools 获取某 MCP server 的工具列表
+func (m *SkillMgr) GetMCPServerTools(name string) ([]*mcp.Tool, error) {
+	return m.mcpMgr.GetDiscoveredTools(name)
 }

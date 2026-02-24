@@ -129,5 +129,20 @@ func RegisterRoutes(router *gin.Engine, tokenUsageRepo core.TokenUsageRepository
 			tokenUsageGroup.GET("/by-model", tokenUsage.GetByModelSummary)
 			tokenUsageGroup.GET("/summary", tokenUsage.GetSummary)
 		}
+
+		// MCP 服务器管理
+		mcpHandler := NewMCPHandler(skillMgr)
+		mcpGroup := api.Group("/mcp/servers")
+		{
+			mcpGroup.GET("", mcpHandler.listServers)
+			mcpGroup.POST("", mcpHandler.addServer)
+			mcpGroup.DELETE("/:name", mcpHandler.removeServer)
+			mcpGroup.POST("/:name/restart", mcpHandler.restartServer)
+			mcpGroup.GET("/:name/tools", mcpHandler.getServerTools)
+		}
+
+		// MCP 目录市场
+		api.GET("/mcp/catalog", mcpHandler.getCatalog)
+		api.POST("/mcp/catalog/install", mcpHandler.installFromCatalog)
 	}
 }

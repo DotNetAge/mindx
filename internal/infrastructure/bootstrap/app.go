@@ -294,6 +294,18 @@ func Startup() (*App, error) {
 
 	builtins.RegisterBuiltins(skillMgr, builtinCfg, cronScheduler)
 
+	// 初始化 MCP servers（异步，不阻塞服务启动）
+	mcpCfg, mcpErr := config.LoadMCPServersConfig()
+	if mcpErr != nil {
+		systemLogger.Warn("加载 MCP 配置失败", logging.Err(mcpErr))
+	} else if len(mcpCfg.MCPServers) > 0 {
+		systemLogger.Info("后台初始化 MCP servers", logging.Int("count", len(mcpCfg.MCPServers)))
+		go func() {
+			skillMgr.InitMCPServers(ctx, mcpCfg)
+			systemLogger.Info("MCP servers 初始化完成")
+		}()
+	}
+
 	if embeddingSvc != nil && llamaSvc != nil && skillMgr.IsVectorTableEmpty() {
 		systemLogger.Info("开始建立技能索引（后台运行）")
 		skillMgr.StartReIndexInBackground()

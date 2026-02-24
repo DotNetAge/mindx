@@ -78,6 +78,11 @@
   "cli.kernel.plist.loading": "Loading plist file...",
   "cli.kernel.plist.loaded": "plist file loaded",
 
+  "cli.kernel.systemd.not_exists": "systemd service file not found, creating...",
+  "cli.kernel.systemd.created": "systemd service created and enabled",
+
+  "cli.dashboard.visit": "Please visit in your browser: {{.URL}}",
+
   "cli.model.short": "Model management and testing",
 
   "cli.model.test.short": "Test if model supports function tools",

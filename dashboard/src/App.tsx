@@ -12,6 +12,7 @@ import Channels from './components/Channels';
 import Usage from './components/Usage';
 import History from './components/History';
 import Cron from './components/Cron';
+import MCPServers from './components/MCPServers';
 import { SessionProvider } from './contexts/SessionContext';
 import './App.css';
 
@@ -42,6 +43,8 @@ function App() {
         return <Usage />;
       case 'cron':
         return <Cron />;
+      case 'mcp':
+        return <MCPServers />;
       default:
         return <Settings />;
     }

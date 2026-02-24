@@ -68,7 +68,7 @@ fi
 # Copy config templates
 mkdir -p dist/windows-amd64/config
 for file in config/*; do
-    if [ -f "$file" ]; then
+    if [ -f "$file" ] && [[ "$file" != *.template ]]; then
         filename=$(basename "$file")
         cp "$file" "dist/windows-amd64/config/${filename}.template"
     fi
@@ -110,7 +110,7 @@ if go tool dist list | grep -q "windows/arm64"; then
     fi
     mkdir -p dist/windows-arm64/config
     for file in config/*; do
-        if [ -f "$file" ]; then
+        if [ -f "$file" ] && [[ "$file" != *.template ]]; then
             filename=$(basename "$file")
             cp "$file" "dist/windows-arm64/config/${filename}.template"
         fi
