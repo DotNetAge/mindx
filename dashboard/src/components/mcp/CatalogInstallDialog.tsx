@@ -18,10 +18,13 @@ export default function CatalogInstallDialog({ entry, onClose, onInstall }: Prop
     return init;
   });
 
+  const [isInstalling, setIsInstalling] = useState(false);
+
   const handleSubmit = () => {
     for (const v of entry.variables) {
       if (v.required && !values[v.key]) return;
     }
+    setIsInstalling(true);
     onInstall(values);
   };
 
@@ -49,7 +52,9 @@ export default function CatalogInstallDialog({ entry, onClose, onInstall }: Prop
 
         <div className="dialog-actions">
           <button className="action-btn secondary" onClick={onClose}>{t("common.cancel")}</button>
-          <button className="action-btn primary" onClick={handleSubmit}>{t("mcp.catalog.install")}</button>
+          <button className="action-btn primary" onClick={handleSubmit} disabled={isInstalling}>
+            {isInstalling ? t("mcp.catalog.installing") : t("mcp.catalog.install")}
+          </button>
         </div>
       </div>
     </div>

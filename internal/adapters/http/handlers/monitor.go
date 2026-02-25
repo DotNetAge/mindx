@@ -3,6 +3,7 @@ package handlers
 import (
 	"bufio"
 	"encoding/json"
+	"mindx/internal/config"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,8 +36,12 @@ type ZapLogEntry struct {
 }
 
 func NewMonitorHandler() *MonitorHandler {
+	logsDir, err := config.GetWorkspaceLogsPath()
+	if err != nil {
+		logsDir = "logs"
+	}
 	return &MonitorHandler{
-		logsDir: "logs",
+		logsDir: logsDir,
 	}
 }
 
