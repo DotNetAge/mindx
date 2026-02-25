@@ -57,6 +57,7 @@ export default function CatalogGrid({ catalog, installed, onInstalled }: Props) 
       alert("Install failed");
     } finally {
       setInstallingId(null);
+      setInstalling(null); // Close the dialog when installation is complete
     }
   };
 
@@ -127,7 +128,11 @@ export default function CatalogGrid({ catalog, installed, onInstalled }: Props) 
         <CatalogInstallDialog
           entry={installing}
           onClose={() => setInstalling(null)}
-          onInstall={(vars) => { doInstall(installing, vars); setInstalling(null); }}
+          onInstall={(vars) => {
+            doInstall(installing, vars);
+            // Don't close the dialog immediately - let it show the loading state
+            // The dialog will be closed when the installation is complete
+          }}
         />
       )}
     </div>
