@@ -38,6 +38,12 @@ func GetModelsManager() *ModelsManager {
 	return modelsManager
 }
 
+// OverrideModelsManager 强制覆盖 ModelsManager（仅用于测试）
+func OverrideModelsManager(mgr *ModelsManager) {
+	modelsOnce = sync.Once{}
+	modelsManager = mgr
+}
+
 func (m *ModelsManager) GetModel(name string) (*ModelConfig, error) {
 	if model, ok := m.modelMap[name]; ok {
 		return model, nil
@@ -59,14 +65,10 @@ func (m *ModelsManager) ListModels() []ModelConfig {
 
 func (m *ModelsManager) GetBrainModels() BrainModelsConfig {
 	return BrainModelsConfig{
-		SubconsciousModel:       m.globalConfig.Subconscious.Default,
 		SubconsciousLeftModel:   m.globalConfig.Subconscious.Left,
 		SubconsciousRightModel:  m.globalConfig.Subconscious.Right,
-		ConsciousnessModel:      m.globalConfig.Consciousness.Default,
 		ConsciousnessLeftModel:  m.globalConfig.Consciousness.Left,
 		ConsciousnessRightModel: m.globalConfig.Consciousness.Right,
-		MemoryModel:             m.globalConfig.MemoryModel,
-		IndexModel:              m.globalConfig.IndexModel,
 	}
 }
 

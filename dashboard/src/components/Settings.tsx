@@ -264,16 +264,6 @@ export default function Settings() {
             <h2>潜意识模型 (Subconscious)</h2>
             <p className="section-desc">用于快速响应和直觉处理的模型</p>
             <div className="form-group">
-              <label>默认模型</label>
-              <input
-                type="text"
-                value={serverConfig.subconscious.default}
-                onChange={(e) => updateSubconscious('default', e.target.value)}
-                title="潜意识默认模型"
-                placeholder="qwen3:0.6b"
-              />
-            </div>
-            <div className="form-group">
               <label>左脑模型</label>
               <input
                 type="text"
@@ -296,16 +286,6 @@ export default function Settings() {
 
             <h2>意识模型 (Consciousness)</h2>
             <p className="section-desc">用于深度思考和复杂推理的模型</p>
-            <div className="form-group">
-              <label>默认模型</label>
-              <input
-                type="text"
-                value={serverConfig.consciousness.default}
-                onChange={(e) => updateConsciousness('default', e.target.value)}
-                title="意识默认模型"
-                placeholder="qwen3:1.7b"
-              />
-            </div>
             <div className="form-group">
               <label>左脑模型</label>
               <input

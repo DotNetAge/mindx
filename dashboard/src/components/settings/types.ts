@@ -5,7 +5,6 @@ export interface TokenBudgetConfig {
 }
 
 export interface BrainHalfConfig {
-  default: string;
   left: string;
   right: string;
 }
@@ -32,18 +31,9 @@ export interface ModelConfig {
 }
 
 export interface ServerConfig {
-  version: string;
-  host: string;
-  port: number;
-  ws_port: number;
-  ollama_url?: string;
-  token_budget: TokenBudgetConfig;
   subconscious: BrainHalfConfig;
   consciousness: BrainHalfConfig;
-  memory_model: string;
-  index_model: string;
   embedding_model: string;
   default_model: string;
-  memory?: MemoryConfig;
-  vector_store: VectorStoreConfig;
+  ollama_url?: string;
 }

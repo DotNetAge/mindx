@@ -493,7 +493,7 @@
       },
       "variables": [],
       "tools": [
-        { "name": "get_stock_quote", "description": { "zh": "获取股票实时行情", "en": "Get real-time stock quote" } }
+        { "name": "get-quote", "description": { "zh": "获取股票实时行情。symbol 格式：A股上证=sh开头(如sh600000)，A股深证=sz开头(如sz000001)，上证指数=sh000001，深证成指=sz399001，创业板指=sz399006；港股=hk开头(如hk00700)；美股直接用代码(如AAPL)。查大盘行情用 sh000001", "en": "Get real-time stock quote" } }
       ]
     }
   ]

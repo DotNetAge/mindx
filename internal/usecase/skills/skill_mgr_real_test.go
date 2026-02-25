@@ -5,11 +5,42 @@ import (
 	"mindx/internal/config"
 	infraLlama "mindx/internal/infrastructure/llama"
 	"mindx/pkg/logging"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func getProjectRootSkillsDir(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("获取工作目录失败: %v", err)
+	}
+	// 从 internal/usecase/skills 回溯到项目根目录
+	root := filepath.Join(wd, "..", "..", "..")
+	dir := filepath.Join(root, "skills")
+	if _, err := os.Stat(dir); err == nil {
+		return dir
+	}
+	// fallback: 当前目录
+	dir = filepath.Join(wd, "skills")
+	if _, err := os.Stat(dir); err == nil {
+		return dir
+	}
+	t.Fatalf("找不到 skills 目录，wd=%s", wd)
+	return ""
+}
+
+// getTestModelName 从环境变量获取测试用模型名，避免硬编码
+func getTestModelName() string {
+	if m := os.Getenv("MINDX_TEST_MODEL"); m != "" {
+		return m
+	}
+	return "qwen3:0.6b"
+}
 
 // TestAllSkillsRealExecution 对所有已装载的技能进行真实的运行测试
 func TestAllSkillsRealExecution(t *testing.T) {
@@ -30,11 +61,10 @@ func TestAllSkillsRealExecution(t *testing.T) {
 	_ = logging.Init(logConfig)
 	logger := logging.GetSystemLogger().Named("skills_real_test")
 
-	testSkillsDir, err := config.GetInstallSkillsPath()
-	assert.NoError(t, err)
+	testSkillsDir := getProjectRootSkillsDir(t)
 	workspaceDir, err := config.GetWorkspacePath()
 	assert.NoError(t, err)
-	llamaSvc := infraLlama.NewOllamaService("qwen2.5:7b")
+	llamaSvc := infraLlama.NewOllamaService(getTestModelName())
 	mgr, err := NewSkillMgr(testSkillsDir, workspaceDir, nil, llamaSvc, logger)
 	if err != nil {
 		t.Skipf("创建技能管理器失败（可能缺少 skills 目录）: %v", err)
@@ -239,83 +269,3 @@ func printTestSummary(logger logging.Logger, results map[string]*SkillTestResult
 	}
 }
 
-// TestSkillExecutionWithDetailedLogging 详细日志测试
-func TestSkillExecutionWithDetailedLogging(t *testing.T) {
-	logConfig := &config.LoggingConfig{
-		SystemLogConfig: &config.SystemLogConfig{
-			Level:      config.LevelDebug,
-			OutputPath: "/tmp/skills_detailed_test.log",
-			MaxSize:    10,
-			MaxBackups: 3,
-			MaxAge:     7,
-			Compress:   false,
-		},
-		ConversationLogConfig: &config.ConversationLogConfig{
-			Enable:     false,
-			OutputPath: "/tmp/conversation.log",
-		},
-	}
-	_ = logging.Init(logConfig)
-	logger := logging.GetSystemLogger().Named("skills_detailed_test")
-
-	testSkillsDir, err := config.GetInstallSkillsPath()
-	assert.NoError(t, err)
-	workspaceDir, err := config.GetWorkspacePath()
-	assert.NoError(t, err)
-	llamaSvc := infraLlama.NewOllamaService("qwen2.5:7b")
-	mgr, err := NewSkillMgr(testSkillsDir, workspaceDir, nil, llamaSvc, logger)
-	if err != nil {
-		t.Skipf("创建技能管理器失败（可能缺少 skills 目录）: %v", err)
-	}
-
-	skills, err := mgr.GetSkills()
-	assert.NoError(t, err, "获取技能应该成功")
-
-	logger.Info("开始详细日志测试", logging.Int("total_skills", len(skills)))
-
-	for _, skill := range skills {
-		skillName := skill.GetName()
-
-		t.Run(fmt.Sprintf("详细测试: %s", skillName), func(t *testing.T) {
-			logger.Info("========================================")
-			logger.Info("开始详细测试", logging.String("skill", skillName))
-
-			info, exists := mgr.GetSkillInfo(skillName)
-			if exists {
-				logger.Info("技能信息",
-					logging.String("name", info.Def.Name),
-					logging.String("description", info.Def.Description),
-					logging.String("category", info.Def.Category),
-					logging.Bool("enabled", info.Def.Enabled),
-					logging.Bool("can_run", info.CanRun))
-				if len(info.MissingBins) > 0 {
-					logger.Warn("缺少的可执行文件", logging.Any("missing_bins", info.MissingBins))
-				}
-				if len(info.MissingEnv) > 0 {
-					logger.Warn("缺少的环境变量", logging.Any("missing_env", info.MissingEnv))
-				}
-			}
-
-			testParams := getTestParamsForSkill(skillName)
-			logger.Info("测试参数", logging.String("params", fmt.Sprintf("%v", testParams)))
-
-			err := mgr.Execute(skill, testParams)
-			if err != nil {
-				logger.Error("执行失败", logging.String("skill", skillName), logging.Err(err))
-			} else {
-				logger.Info("执行成功", logging.String("skill", skillName))
-
-				info, exists := mgr.GetSkillInfo(skillName)
-				if exists {
-					logger.Info("执行统计",
-						logging.Int("success_count", info.SuccessCount),
-						logging.Int("error_count", info.ErrorCount),
-						logging.Int64("avg_execution_ms", info.AvgExecutionMs),
-						logging.Any("last_run_time", info.LastRunTime))
-				}
-			}
-
-			logger.Info("========================================")
-		})
-	}
-}

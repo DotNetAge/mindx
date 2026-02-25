@@ -384,18 +384,85 @@ func (m *SkillMgr) InitMCPServers(ctx context.Context, cfg *config.MCPServersCon
 		wg.Add(1)
 		go func(n string, e config.MCPServerEntry) {
 			defer wg.Done()
-
-			connCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			defer cancel()
-
-			if err := m.connectAndRegisterMCP(connCtx, n, e); err != nil {
-				m.logger.Warn("MCP server 初始化失败（跳过）",
-					logging.String("server", n),
-					logging.Err(err))
-			}
+			m.initMCPServerWithRetry(ctx, n, e)
 		}(name, entry)
 	}
 	wg.Wait()
+}
+
+// mcpConnectTimeout 根据传输类型返回连接超时时间
+// stdio 类型使用 npx，冷启动需要下载+安装+启动，需要更长超时
+func mcpConnectTimeout(entry config.MCPServerEntry) time.Duration {
+	if entry.GetType() == "sse" {
+		return 30 * time.Second
+	}
+	return 120 * time.Second // stdio: npx 冷启动可能很慢
+}
+
+// initMCPServerWithRetry 带重试的 MCP server 初始化
+// 仅对超时类错误重试，协议错误/进程崩溃等不可恢复错误直接放弃
+func (m *SkillMgr) initMCPServerWithRetry(ctx context.Context, name string, entry config.MCPServerEntry) {
+	const maxAttempts = 3
+	timeout := mcpConnectTimeout(entry)
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		connCtx, cancel := context.WithTimeout(ctx, timeout)
+		err := m.connectAndRegisterMCP(connCtx, name, entry)
+		cancel()
+
+		if err == nil {
+			return
+		}
+
+		// 判断是否值得重试：只有超时/临时网络错误才重试
+		if !isMCPRetryableError(err) {
+			m.logger.Warn("MCP server 初始化失败（不可重试，跳过）",
+				logging.String("server", name),
+				logging.Err(err))
+			return
+		}
+
+		if attempt < maxAttempts {
+			delay := time.Duration(attempt) * 5 * time.Second
+			m.logger.Warn("MCP server 连接超时，准备重试",
+				logging.String("server", name),
+				logging.Int("attempt", attempt),
+				logging.Int("max_attempts", maxAttempts),
+				logging.Err(err))
+
+			select {
+			case <-ctx.Done():
+				m.logger.Warn("MCP server 初始化被取消",
+					logging.String("server", name))
+				return
+			case <-time.After(delay):
+			}
+		} else {
+			m.logger.Warn("MCP server 初始化失败（已达最大重试次数，跳过）",
+				logging.String("server", name),
+				logging.Int("attempts", maxAttempts),
+				logging.Err(err))
+		}
+	}
+}
+
+// isMCPRetryableError 判断 MCP 连接错误是否值得重试
+// 超时、临时网络错误 → 重试
+// EOF（进程崩溃）、405（协议不兼容）等 → 不重试
+func isMCPRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	// 超时：值得重试（npx 冷启动慢）
+	if strings.Contains(msg, "context deadline exceeded") ||
+		strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "connection refused") {
+		return true
+	}
+	// EOF：子进程启动后立刻崩溃，重试无意义
+	// Method Not Allowed：协议不兼容，重试无意义
+	return false
 }
 
 // connectAndRegisterMCP 连接 MCP server 并注册发现的工具
@@ -411,12 +478,14 @@ func (m *SkillMgr) connectAndRegisterMCP(ctx context.Context, name string, entry
 
 	// 从 catalog 获取中文工具描述，用于覆盖 MCP server 返回的英文描述
 	zhDescriptions := config.GetCatalogToolDescriptions(name, "zh")
+	// 从 catalog 获取 tags，注入到 skill keywords 中提升意图识别准确性
+	catalogTags := config.GetCatalogTags(name)
 
 	defs := make([]*entity.SkillDef, 0, len(tools))
 	for _, tool := range tools {
-		def := MCPToolToSkillDef(name, tool)
+		def := MCPToolToSkillDef(name, tool, catalogTags)
 		// 如果 catalog 中有中文描述，用中文覆盖（提升向量索引的中文匹配能力）
-		if zhDesc, ok := zhDescriptions[tool.Name]; ok && zhDesc != "" {
+		if zhDesc, ok := config.MatchCatalogToolDescription(zhDescriptions, tool.Name); ok && zhDesc != "" {
 			def.Description = zhDesc
 		}
 		defs = append(defs, def)

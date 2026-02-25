@@ -102,11 +102,7 @@ var trainCmd = &cobra.Command{
 		}
 
 		modelsMgr := config.GetModelsManager()
-		brainModels := modelsMgr.GetBrainModels()
 		defaultModelName := modelsMgr.GetDefaultModel()
-		if defaultModelName == "" {
-			defaultModelName = brainModels.SubconsciousModel
-		}
 		defaultModel, err := modelsMgr.GetModel(defaultModelName)
 		if err != nil {
 			defaultModel = &config.ModelConfig{

@@ -54,7 +54,8 @@ func GetMCPSkillMetadata(def *entity.SkillDef) (*MCPSkillMetadata, bool) {
 }
 
 // MCPToolToSkillDef 将 MCP Tool 转换为 MindX SkillDef
-func MCPToolToSkillDef(serverName string, tool *mcp.Tool) *entity.SkillDef {
+// catalogTags 为可选的 catalog 中定义的标签，会合并到 skill tags 中
+func MCPToolToSkillDef(serverName string, tool *mcp.Tool, catalogTags ...[]string) *entity.SkillDef {
 	skillName := fmt.Sprintf("mcp_%s_%s", serverName, tool.Name)
 
 	params := make(map[string]entity.ParameterDef)
@@ -73,11 +74,16 @@ func MCPToolToSkillDef(serverName string, tool *mcp.Tool) *entity.SkillDef {
 		}
 	}
 
+	tags := []string{"mcp", serverName}
+	if len(catalogTags) > 0 && len(catalogTags[0]) > 0 {
+		tags = append(tags, catalogTags[0]...)
+	}
+
 	return &entity.SkillDef{
 		Name:        skillName,
 		Description: tool.Description,
 		Category:    "mcp",
-		Tags:        []string{"mcp", serverName},
+		Tags:        tags,
 		Enabled:     true,
 		Timeout:     30,
 		Parameters:  params,

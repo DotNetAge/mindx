@@ -121,12 +121,19 @@ func Startup() (*App, error) {
 	if embeddingModel == "" {
 		embeddingModel = "qllama/bge-small-zh-v1.5:latest"
 	}
-	ollamaProvider, err := infraEmbedding.NewOllamaEmbedding("http://localhost:11434", embeddingModel)
+
+	// 尝试从模型配置中获取 Ollama 服务器地址
+	ollamaURL := "http://localhost:11434"
+	if modelConfig, err := modelsMgr.GetModel(embeddingModel); err == nil && modelConfig.BaseURL != "" {
+		ollamaURL = modelConfig.BaseURL
+	}
+
+	ollamaProvider, err := infraEmbedding.NewOllamaEmbedding(ollamaURL, embeddingModel)
 	if err != nil {
 		return nil, fmt.Errorf("构建向量化提供器失败: %w", err)
 	}
 	embeddingSvc := embedding.NewEmbeddingService(ollamaProvider)
-	systemLogger.Info("向量化服务初始化完成", logging.String("provider", "ollama"), logging.String("model", embeddingModel))
+	systemLogger.Info("向量化服务初始化完成", logging.String("provider", "ollama"), logging.String("model", embeddingModel), logging.String("base_url", ollamaURL))
 
 	vectorsPath, err := config.GetWorkspaceVectorsPath()
 	if err != nil {
@@ -145,11 +152,7 @@ func Startup() (*App, error) {
 	}
 	sessionStorage := session.NewFileSessionStorage(sessionsPath)
 
-	brainModels := modelsMgr.GetBrainModels()
 	defaultModelName := modelsMgr.GetDefaultModel()
-	if defaultModelName == "" {
-		defaultModelName = brainModels.SubconsciousModel
-	}
 	defaultModel, err := modelsMgr.GetModel(defaultModelName)
 	if err != nil {
 		return nil, fmt.Errorf("获取默认模型失败: %w", err)
@@ -171,10 +174,7 @@ func Startup() (*App, error) {
 
 	systemLogger.Info("初始化记忆系统")
 
-	memModelName := brainModels.MemoryModel
-	if memModelName == "" {
-		memModelName = defaultModelName
-	}
+	memModelName := defaultModelName
 	memModel, err := modelsMgr.GetModel(memModelName)
 	if err != nil {
 		return nil, fmt.Errorf("获取记忆模型失败: %w", err)
@@ -221,10 +221,7 @@ func Startup() (*App, error) {
 
 	systemLogger.Info("初始化技能管理器")
 
-	indexModelName := brainModels.IndexModel
-	if indexModelName == "" {
-		indexModelName = defaultModelName
-	}
+	indexModelName := defaultModelName
 	indexModel, err := modelsMgr.GetModel(indexModelName)
 	if err != nil {
 		return nil, fmt.Errorf("获取索引模型失败: %w", err)

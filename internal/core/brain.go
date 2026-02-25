@@ -34,6 +34,7 @@ type ThinkingResult struct {
 	ScheduleName    string   `json:"schedule_name"`    // 定时任务名称
 	ScheduleCron    string   `json:"schedule_cron"`    // Cron 表达式
 	ScheduleMessage string   `json:"schedule_message"` // 定时要发送的消息
+	CancelSchedule  string   `json:"cancel_schedule"`  // 要取消的定时任务名称（非空表示取消意图）
 	Useless         bool     `json:"useless"`          // Useless 标记用户的提问是否无意义
 	CanAnswer       bool     `json:"can_answer"`       // CanAnswer 是否能回答用户的问题
 }

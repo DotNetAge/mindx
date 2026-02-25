@@ -133,6 +133,8 @@
   color: #f9fafb;
   font-size: 14px;
   transition: all 0.3s;
+  max-width: 100%;
+  width: 100%;
 }
 
 .config-item input:focus,
@@ -258,4 +260,36 @@
   padding: 40px;
   text-align: center;
   color: #9ca3af;
+}
+
+.brain-models-container {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.brain-models-container .config-section {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.brain-hemispheres-container {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.brain-hemispheres-container .config-item {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .brain-models-container {
+    flex-direction: column;
+  }
+  
+  .brain-hemispheres-container {
+    flex-direction: column;
+  }
 }

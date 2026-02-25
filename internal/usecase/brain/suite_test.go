@@ -14,6 +14,7 @@ import (
 	"mindx/pkg/logging"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,21 +22,29 @@ import (
 )
 
 type mockScheduler struct {
+	mu   sync.Mutex
 	jobs map[string]*cron.Job
 }
 
 func (m *mockScheduler) Add(job *cron.Job) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	id := fmt.Sprintf("mock-job-%d", time.Now().UnixNano())
+	job.ID = id
 	m.jobs[id] = job
 	return id, nil
 }
 
 func (m *mockScheduler) Delete(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.jobs, id)
 	return nil
 }
 
 func (m *mockScheduler) List() ([]*cron.Job, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	jobs := make([]*cron.Job, 0, len(m.jobs))
 	for _, job := range m.jobs {
 		jobs = append(jobs, job)
@@ -44,28 +53,41 @@ func (m *mockScheduler) List() ([]*cron.Job, error) {
 }
 
 func (m *mockScheduler) Get(id string) (*cron.Job, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.jobs[id], nil
 }
 
-func (m *mockScheduler) Pause(id string) error {
-	return nil
-}
-
-func (m *mockScheduler) Resume(id string) error {
-	return nil
-}
+func (m *mockScheduler) Pause(id string) error  { return nil }
+func (m *mockScheduler) Resume(id string) error { return nil }
 
 func (m *mockScheduler) Update(id string, job *cron.Job) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.jobs[id] = job
 	return nil
 }
 
-func (m *mockScheduler) RunJob(id string) error {
-	return nil
-}
+func (m *mockScheduler) RunJob(id string) error { return nil }
 
 func (m *mockScheduler) UpdateLastRun(id string, status cron.JobStatus, errMsg *string) error {
 	return nil
+}
+
+func (m *mockScheduler) getJobs() []*cron.Job {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	jobs := make([]*cron.Job, 0, len(m.jobs))
+	for _, job := range m.jobs {
+		jobs = append(jobs, job)
+	}
+	return jobs
+}
+
+func (m *mockScheduler) reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.jobs = make(map[string]*cron.Job)
 }
 
 func newMockScheduler() *mockScheduler {
@@ -84,6 +106,7 @@ type BrainIntegrationSuite struct {
 	skillMgr   *skills.SkillMgr
 	capMgr     *capability.CapabilityManager
 	sessionMgr *session.SessionMgr
+	cronMock   *mockScheduler
 	srvCfg     *config.GlobalConfig
 	testData   string
 	testLogs   string
@@ -154,8 +177,17 @@ func (s *BrainIntegrationSuite) SetupSuite() {
 		return dialogueMessages, nil
 	}
 
+	toolCaller := NewToolCaller(s.skillMgr, s.logger)
 	toolsRequest := func(keywords ...string) ([]*core.ToolSchema, error) {
-		return []*core.ToolSchema{}, nil
+		schemas, err := toolCaller.SearchTools(keywords)
+		if err != nil {
+			return nil, err
+		}
+		ptrs := make([]*core.ToolSchema, len(schemas))
+		for i := range schemas {
+			ptrs[i] = &schemas[i]
+		}
+		return ptrs, nil
 	}
 
 	capRequest := func(keywords ...string) (*entity.Capability, error) {
@@ -163,7 +195,7 @@ func (s *BrainIntegrationSuite) SetupSuite() {
 	}
 
 	persona := &core.Persona{Name: "小柔", Gender: "女", Character: "温柔"}
-	mockSched := newMockScheduler()
+	s.cronMock = newMockScheduler()
 	s.brain, err = NewBrain(BrainDeps{
 		Cfg:            s.srvCfg,
 		Persona:        persona,
@@ -174,7 +206,7 @@ func (s *BrainIntegrationSuite) SetupSuite() {
 		HistoryRequest: historyRequest,
 		Logger:         s.logger,
 		TokenUsageRepo: tokenUsageRepo,
-		CronScheduler:  mockSched,
+		CronScheduler:  s.cronMock,
 	})
 	s.Require().NoError(err)
 

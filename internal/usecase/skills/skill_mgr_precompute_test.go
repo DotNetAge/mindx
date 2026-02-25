@@ -39,11 +39,10 @@ func TestPrecomputeVectors(t *testing.T) {
 	embeddingSvc := embedding.NewEmbeddingService(provider)
 
 	// 创建 llama service
-	llamaSvc := infraLlama.NewOllamaService("qwen2.5:7b")
+	llamaSvc := infraLlama.NewOllamaService(getTestModelName())
 
 	// 创建 SkillMgr
-	installSkillsPath, err := config.GetInstallSkillsPath()
-	require.NoError(t, err)
+	installSkillsPath := getProjectRootSkillsDir(t)
 	workspacePath, err := config.GetWorkspacePath()
 	require.NoError(t, err)
 	mgr, err := NewSkillMgr(installSkillsPath, workspacePath, embeddingSvc, llamaSvc, logger)
