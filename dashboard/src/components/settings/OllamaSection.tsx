@@ -3,9 +3,10 @@ import { useTranslation } from '../../i18n';
 interface OllamaSectionProps {
   ollamaStatus: any;
   onInstall: () => void;
+  onSync?: () => void;
 }
 
-export default function OllamaSection({ ollamaStatus, onInstall }: OllamaSectionProps) {
+export default function OllamaSection({ ollamaStatus, onInstall, onSync }: OllamaSectionProps) {
   const { t } = useTranslation();
 
   return (
@@ -38,6 +39,12 @@ export default function OllamaSection({ ollamaStatus, onInstall }: OllamaSection
         {!ollamaStatus?.installed && (
           <button className="install-button" onClick={onInstall}>
             {t('advanced.installOllama')}
+          </button>
+        )}
+
+        {ollamaStatus?.installed && ollamaStatus?.running && onSync && (
+          <button className="install-button" onClick={onSync}>
+            {t('advanced.syncOllamaModels')}
           </button>
         )}
       </div>

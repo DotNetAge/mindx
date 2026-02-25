@@ -73,6 +73,80 @@ func TestResolveCatalogEntry_SSE(t *testing.T) {
 	assert.Equal(t, "Bearer my-token", result.Headers["Authorization"])
 }
 
+func TestMatchCatalogToolDescription(t *testing.T) {
+	descriptions := map[string]string{
+		"get_stock_quote": "获取股票实时行情",
+		"list_orders":     "查看订单列表",
+		"create-event":    "创建日程",
+	}
+
+	tests := []struct {
+		name       string
+		actualName string
+		wantDesc   string
+		wantOK     bool
+	}{
+		{"精确匹配", "get_stock_quote", "获取股票实时行情", true},
+		{"标准化匹配: - vs _", "get-stock-quote", "获取股票实时行情", true},
+		{"标准化匹配: _ vs -", "create_event", "创建日程", true},
+		{"大小写不敏感", "Get_Stock_Quote", "获取股票实时行情", true},
+		{"子串匹配: actual 包含 catalog", "get-quote", "获取股票实时行情", true},
+		{"完全不匹配", "send_message", "", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			desc, ok := MatchCatalogToolDescription(descriptions, tc.actualName)
+			assert.Equal(t, tc.wantOK, ok)
+			if tc.wantOK {
+				assert.Equal(t, tc.wantDesc, desc)
+			}
+		})
+	}
+
+	t.Run("nil map", func(t *testing.T) {
+		_, ok := MatchCatalogToolDescription(nil, "anything")
+		assert.False(t, ok)
+	})
+}
+
+func TestMatchCatalogToolDescription_EdgeCases(t *testing.T) {
+	descriptions := map[string]string{
+		"get_stock_quote": "获取股票实时行情",
+		"list_orders":     "查看订单列表",
+		"create-event":    "创建日程",
+		"send_message":    "发送消息",
+	}
+
+	tests := []struct {
+		name       string
+		actualName string
+		wantDesc   string
+		wantOK     bool
+	}{
+		{"空actualToolName", "", "", false},
+		{"全大写", "GET_STOCK_QUOTE", "获取股票实时行情", true},
+		{"混合分隔符get_stock-quote", "get_stock-quote", "获取股票实时行情", true},
+		{"多个候选只匹配一个", "orders", "查看订单列表", true},
+		{"完全无关", "delete_user", "", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			desc, ok := MatchCatalogToolDescription(descriptions, tc.actualName)
+			assert.Equal(t, tc.wantOK, ok)
+			if tc.wantOK {
+				assert.Equal(t, tc.wantDesc, desc)
+			}
+		})
+	}
+
+	t.Run("空descriptions", func(t *testing.T) {
+		_, ok := MatchCatalogToolDescription(map[string]string{}, "anything")
+		assert.False(t, ok)
+	})
+}
+
 func TestMergeCatalogs(t *testing.T) {
 	builtin := &MCPCatalog{
 		Version: 1,

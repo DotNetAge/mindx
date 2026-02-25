@@ -29,7 +29,6 @@ func getConfigPath() string {
 type AdvancedConfigResponse struct {
 	OllamaURL   string               `json:"ollama_url"`
 	Brain       BrainConfigResponse  `json:"brain"`
-	IndexModel  string               `json:"index_model"`
 	Embedding   string               `json:"embedding"`
 	Memory      MemoryConfigResponse `json:"memory"`
 	VectorStore VectorStoreResponse  `json:"vector_store"`

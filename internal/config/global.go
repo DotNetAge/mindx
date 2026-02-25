@@ -9,8 +9,6 @@ type GlobalConfig struct {
 	TokenBudget    TokenBudgetConfig `mapstructure:"token_budget" yaml:"token_budget"`
 	Subconscious   BrainHalfConfig   `mapstructure:"subconscious" yaml:"subconscious"`
 	Consciousness  BrainHalfConfig   `mapstructure:"consciousness" yaml:"consciousness"`
-	MemoryModel    string            `mapstructure:"memory_model" yaml:"memory_model"`
-	IndexModel     string            `mapstructure:"index_model" yaml:"index_model"`
 	EmbeddingModel string            `mapstructure:"embedding_model" yaml:"embedding_model"`
 	DefaultModel   string            `mapstructure:"default_model" yaml:"default_model"`
 	Memory         MemoryConfig      `mapstructure:"memory,omitempty" yaml:"memory,omitempty"`
@@ -26,7 +24,6 @@ type WebSocketConfig struct {
 }
 
 type BrainHalfConfig struct {
-	Default string `mapstructure:"default" yaml:"default"`
 	Left    string `mapstructure:"left" yaml:"left"`
 	Right   string `mapstructure:"right" yaml:"right"`
 }

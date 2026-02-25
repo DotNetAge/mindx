@@ -2,12 +2,12 @@ package brain
 
 import (
 	"context"
+	"fmt"
 	"mindx/internal/config"
 	"mindx/internal/core"
 	"mindx/internal/entity"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
-	"fmt"
 )
 
 type ConsciousnessManager struct {
@@ -78,17 +78,11 @@ func (cm *ConsciousnessManager) CreateDualBrain() error {
 
 	leftModelName := brainModels.ConsciousnessLeftModel
 	if leftModelName == "" {
-		leftModelName = brainModels.ConsciousnessModel
-	}
-	if leftModelName == "" {
 		leftModelName = modelsMgr.GetDefaultModel()
 	}
 	leftModel := modelsMgr.MustGetModel(leftModelName)
 
 	rightModelName := brainModels.ConsciousnessRightModel
-	if rightModelName == "" {
-		rightModelName = brainModels.ConsciousnessModel
-	}
 	if rightModelName == "" {
 		rightModelName = modelsMgr.GetDefaultModel()
 	}

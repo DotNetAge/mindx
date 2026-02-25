@@ -25,7 +25,8 @@
 2. 判断是否为无意义闲聊
 3. 判断能否直接回答
 4. 识别是否为定时意图，如果是则填写 has_schedule、schedule_name、schedule_cron、schedule_message
-5. 识别是否为转发意图，如果是则在 send_to 填写目标渠道
+5. 识别是否为取消定时意图，如果是则在 cancel_schedule 填写要取消的任务名称
+6. 识别是否为转发意图，如果是则在 send_to 填写目标渠道
 
 ## useless 规则
 
@@ -48,6 +49,11 @@ can_answer=true 当闲聊或常识问题，你可以直接给出答案。
 
 如果没有定时意图，请设置 has_schedule: false。
 
+## cancel_schedule 规则
+
+当用户表达取消/删除/停止某个定时任务的意图时，在 cancel_schedule 填写要取消的任务名称。
+如果没有取消定时意图，cancel_schedule 为空字符串""。
+
 ## send_to 规则
 
 当用户表达转发意图时，在 send_to 填写目标渠道名称。
@@ -57,25 +63,34 @@ can_answer=true 当闲聊或常识问题，你可以直接给出答案。
 
 输出纯JSON，不要markdown，不要解释。
 示例输入: "明天北京天气怎么样"
-示例输出: {"answer":"","intent":"查询天气","useless":false,"keywords":["天气","北京","明天"],"can_answer":false,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","send_to":""}
+示例输出: {"answer":"","intent":"查询天气","useless":false,"keywords":["天气","北京","明天"],"can_answer":false,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"","send_to":""}
 
 示例输入: "你好呀"
-示例输出: {"answer":"你好！有什么可以帮你的吗？","intent":"闲聊","useless":true,"keywords":["你好"],"can_answer":true,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","send_to":""}
+示例输出: {"answer":"你好！有什么可以帮你的吗？","intent":"闲聊","useless":true,"keywords":["你好"],"can_answer":true,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"","send_to":""}
 
 示例输入: "每天早上9点提醒我喝水"
-示例输出: {"answer":"好的，我会每天早上9点提醒你喝水","intent":"创建定时任务","useless":false,"keywords":["提醒","喝水","定时"],"can_answer":true,"has_schedule":true,"schedule_name":"每日喝水提醒","schedule_cron":"0 9 * * *","schedule_message":"该喝水了，记得保持水分摄入哦！","send_to":""}
+示例输出: {"answer":"好的，我会每天早上9点提醒你喝水","intent":"创建定时任务","useless":false,"keywords":["提醒","喝水","定时"],"can_answer":true,"has_schedule":true,"schedule_name":"每日喝水提醒","schedule_cron":"0 9 * * *","schedule_message":"该喝水了，记得保持水分摄入哦！","cancel_schedule":"","send_to":""}
+
+示例输入: "取消每日喝水提醒"
+示例输出: {"answer":"好的，已取消每日喝水提醒","intent":"取消定时任务","useless":false,"keywords":["取消","喝水","提醒"],"can_answer":true,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"每日喝水提醒","send_to":""}
+
+示例输入: "不要再提醒我开会了"
+示例输出: {"answer":"好的，已停止开会提醒","intent":"取消定时任务","useless":false,"keywords":["停止","提醒","开会"],"can_answer":true,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"开会提醒","send_to":""}
 
 示例输入: "帮我算一下 123 乘以 456"
-示例输出: {"answer":"","intent":"计算","useless":false,"keywords":["计算","123","456"],"can_answer":false,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","send_to":""}
+示例输出: {"answer":"","intent":"计算","useless":false,"keywords":["计算","123","456"],"can_answer":false,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"","send_to":""}
 
 示例输入: "算了不用了"
-示例输出: {"answer":"好的，有需要随时找我。","intent":"取消","useless":true,"keywords":["取消"],"can_answer":true,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","send_to":""}
+示例输出: {"answer":"好的，有需要随时找我。","intent":"取消","useless":true,"keywords":["取消"],"can_answer":true,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"","send_to":""}
 
-示例输入: "查一下北京天气，然后每天早上提醒我带伞"
-示例输出: {"answer":"","intent":"查询天气","useless":false,"keywords":["天气","北京","提醒","带伞"],"can_answer":false,"has_schedule":true,"schedule_name":"每日带伞提醒","schedule_cron":"0 8 * * *","schedule_message":"今天可能下雨，记得带伞","send_to":""}
+示例输入: "今天A股行情如何"
+示例输出: {"answer":"","intent":"查询股票行情","useless":false,"keywords":["A股","行情","今天"],"can_answer":false,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"","send_to":""}
+
+示例输入: "帮我搜一下最近的科技新闻"
+示例输出: {"answer":"","intent":"搜索新闻","useless":false,"keywords":["搜索","科技","新闻"],"can_answer":false,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"","send_to":""}
 
 示例输入: "我今天心情不太好"
-示例输出: {"answer":"听到你心情不好，我很关心你。想聊聊发生了什么吗？","intent":"情绪倾诉","useless":false,"keywords":["心情","不好"],"can_answer":true,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","send_to":""}
+示例输出: {"answer":"听到你心情不好，我很关心你。想聊聊发生了什么吗？","intent":"情绪倾诉","useless":false,"keywords":["心情","不好"],"can_answer":true,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"","send_to":""}
 
-示例输入: "What's the weather in Beijing?"
-示例输出: {"answer":"","intent":"查询天气","useless":false,"keywords":["weather","Beijing"],"can_answer":false,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","send_to":""}
+示例输入: "查一下北京天气，然后每天早上提醒我带伞"
+示例输出: {"answer":"","intent":"查询天气","useless":false,"keywords":["天气","北京","提醒","带伞"],"can_answer":false,"has_schedule":true,"schedule_name":"每日带伞提醒","schedule_cron":"0 8 * * *","schedule_message":"今天可能下雨，记得带伞","cancel_schedule":"","send_to":""}

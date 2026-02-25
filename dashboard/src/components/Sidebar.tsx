@@ -13,6 +13,7 @@ import {
   PlayCircleIcon,
   LinkIcon
 } from 'tdesign-icons-react';
+import { SiGitee } from 'react-icons/si';
 import logo from '../assets/logo.svg';
 import './styles/Sidebar.css';
 import { useTranslation } from '../i18n';
@@ -114,6 +115,10 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         <a href="https://github.com/DotNetAge/mindx.git" target="_blank" rel="noopener noreferrer" className="footer-link">
           <LogoGithubIcon size="20" style={{ marginRight: '5px' }} />
           <span>GitHub</span>
+        </a>
+        <a href="https://gitee.com/ray_liang/mindx" target="_blank" rel="noopener noreferrer" className="footer-link">
+          <SiGitee size="20" style={{ marginRight: '5px' }} />
+          <span>Gitee</span>
         </a>
       </div>
     </aside>

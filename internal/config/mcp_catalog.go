@@ -160,8 +160,31 @@ func ResolveCatalogEntry(entry *CatalogEntry, vars map[string]string) MCPServerE
 	return result
 }
 
-// GetCatalogToolDescriptions 返回指定 server 的工具中文描述映射 (toolName → zhDescription)
+// GetCatalogTags 返回指定 server 在 catalog 中定义的 tags
+func GetCatalogTags(serverID string) []string {
+	catalog, err := LoadBuiltinCatalog()
+	if err != nil {
+		return nil
+	}
+
+	for _, s := range catalog.Servers {
+		if s.ID == serverID {
+			return s.Tags
+		}
+	}
+	return nil
+}
+
+// normalizeMCPToolName 标准化工具名用于匹配
+// MCP server 返回的工具名和 catalog 中人工填写的名字可能用不同的分隔符
+// 例如 server 返回 "get-quote"，catalog 写的 "get_quote" 或 "get_stock_quote"
+func normalizeMCPToolName(name string) string {
+	return strings.ReplaceAll(strings.ToLower(name), "-", "_")
+}
+
+// GetCatalogToolDescriptions 返回指定 server 的工具描述映射 (toolName → description)
 // lang 为首选语言（如 "zh"），如果没有则回退到 "en"
+// 匹配时会标准化工具名（统一分隔符），并支持 catalog 名是实际名的子串匹配
 func GetCatalogToolDescriptions(serverID string, lang string) map[string]string {
 	catalog, err := LoadBuiltinCatalog()
 	if err != nil {
@@ -184,4 +207,45 @@ func GetCatalogToolDescriptions(serverID string, lang string) map[string]string 
 		}
 	}
 	return nil
+}
+
+// MatchCatalogToolDescription 根据 MCP server 返回的实际工具名，从 catalog 描述中查找匹配
+// 优先精确匹配，其次标准化匹配（忽略 -/_ 差异），最后子串匹配
+func MatchCatalogToolDescription(descriptions map[string]string, actualToolName string) (string, bool) {
+	if descriptions == nil || actualToolName == "" {
+		return "", false
+	}
+
+	// 1. 精确匹配
+	if desc, ok := descriptions[actualToolName]; ok {
+		return desc, true
+	}
+
+	normalizedActual := normalizeMCPToolName(actualToolName)
+
+	// 2. 标准化匹配（忽略 -/_ 差异）
+	for catalogName, desc := range descriptions {
+		if normalizeMCPToolName(catalogName) == normalizedActual {
+			return desc, true
+		}
+	}
+
+	// 3. 分词包含匹配：actual 的所有词段都出现在 catalog 名中
+	// 例如 catalog="get_stock_quote", actual="get-quote" → actual 词段 [get, quote] 都在 catalog 中
+	actualParts := strings.Split(normalizedActual, "_")
+	for catalogName, desc := range descriptions {
+		nc := normalizeMCPToolName(catalogName)
+		allFound := true
+		for _, part := range actualParts {
+			if part != "" && !strings.Contains(nc, part) {
+				allFound = false
+				break
+			}
+		}
+		if allFound {
+			return desc, true
+		}
+	}
+
+	return "", false
 }

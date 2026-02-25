@@ -72,17 +72,11 @@ func NewBrain(deps BrainDeps) (*core.Brain, error) {
 
 	leftModelName := brainModels.SubconsciousLeftModel
 	if leftModelName == "" {
-		leftModelName = brainModels.SubconsciousModel
-	}
-	if leftModelName == "" {
 		leftModelName = modelsMgr.GetDefaultModel()
 	}
 	leftModel := modelsMgr.MustGetModel(leftModelName)
 
 	rightModelName := brainModels.SubconsciousRightModel
-	if rightModelName == "" {
-		rightModelName = brainModels.SubconsciousModel
-	}
 	if rightModelName == "" {
 		rightModelName = modelsMgr.GetDefaultModel()
 	}

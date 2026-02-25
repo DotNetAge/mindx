@@ -5,14 +5,10 @@ type ModelsConfig struct {
 }
 
 type BrainModelsConfig struct {
-	SubconsciousModel      string `mapstructure:"subconscious" json:"subconscious,omitempty" yaml:"subconscious"`
 	SubconsciousLeftModel  string `mapstructure:"subconscious_left" json:"subconscious_left,omitempty" yaml:"subconscious_left"`
 	SubconsciousRightModel string `mapstructure:"subconscious_right" json:"subconscious_right,omitempty" yaml:"subconscious_right"`
-	ConsciousnessModel     string `mapstructure:"consciousness" json:"consciousness,omitempty" yaml:"consciousness"`
 	ConsciousnessLeftModel string `mapstructure:"consciousness_left" json:"consciousness_left,omitempty" yaml:"consciousness_left"`
 	ConsciousnessRightModel string `mapstructure:"consciousness_right" json:"consciousness_right,omitempty" yaml:"consciousness_right"`
-	MemoryModel            string `mapstructure:"memory" json:"memory,omitempty" yaml:"memory"`
-	IndexModel             string `mapstructure:"index" json:"index,omitempty" yaml:"index"`
 }
 
 type ModelConfig struct {

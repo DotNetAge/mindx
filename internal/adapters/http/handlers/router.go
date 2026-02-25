@@ -116,6 +116,7 @@ func RegisterRoutes(router *gin.Engine, tokenUsageRepo core.TokenUsageRepository
 		api.POST("/config/models", configHandler.SaveModelsConfig)
 		api.GET("/config/capabilities", configHandler.GetCapabilitiesConfig)
 		api.POST("/config/capabilities", configHandler.SaveCapabilitiesConfig)
+		api.POST("/config/ollama-sync", configHandler.OllamaSyncModels)
 
 		// 监控日志
 		monitor := NewMonitorHandler()

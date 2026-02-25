@@ -270,15 +270,9 @@ func createSkillManager() (*skills.SkillMgr, error) {
 
 	embeddingSvc := embedding.NewEmbeddingService(nil)
 
-	brainModels := modelsMgr.GetBrainModels()
+	// brainModels := modelsMgr.GetBrainModels()
 	defaultModelName := modelsMgr.GetDefaultModel()
-	indexModelName := brainModels.IndexModel
-	if indexModelName == "" {
-		indexModelName = defaultModelName
-	}
-	if indexModelName == "" {
-		indexModelName = brainModels.SubconsciousModel
-	}
+	indexModelName := defaultModelName
 
 	indexModel, err := modelsMgr.GetModel(indexModelName)
 	if err != nil {

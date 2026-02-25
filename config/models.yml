@@ -89,3 +89,9 @@ models:
     api_key: ""
     temperature: 0.3
     max_tokens: 131072
+  - name: qllama/bge-small-zh-v1.5:latest
+    description: "BGE Small 中文嵌入模型，用于向量计算除了地址其它参数不建议修改"
+    base_url: "http://localhost:11434"
+    api_key: ""
+    temperature: 0.0
+    max_tokens: 8192

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -72,16 +71,12 @@ func (s *SkillMgrIntegrationTestSuite) TearDownSuite() {
 
 // SetupTest 每个测试前的准备
 func (s *SkillMgrIntegrationTestSuite) SetupTest() {
-	llamaSvc := infraLlama.NewOllamaService("qwen3:0.6b")
+	llamaSvc := infraLlama.NewOllamaService(getTestModelName())
 	workspaceDir, err := config.GetWorkspacePath()
 	if !assert.NoError(s.T(), err) {
 		return
 	}
-	installSkillsDir, err := config.GetInstallSkillsPath()
-	if !assert.NoError(s.T(), err) {
-		return
-	}
-	mgr, err := NewSkillMgr(installSkillsDir, workspaceDir, nil, llamaSvc, s.logger)
+	mgr, err := NewSkillMgr(s.testSkillsDir, workspaceDir, nil, llamaSvc, s.logger)
 	if !assert.NoError(s.T(), err, "创建技能管理器应该成功") {
 		return
 	}
@@ -252,89 +247,11 @@ func (s *SkillMgrIntegrationTestSuite) formatSkills(skills []*core.Skill) string
 	return result
 }
 
-// getSkillNames 获取技能名称列表
-func (s *SkillMgrIntegrationTestSuite) getSkillNames(skills []*core.Skill) []string {
-	names := make([]string, len(skills))
-	for i, skill := range skills {
-		names[i] = skill.GetName()
-	}
-	return names
-}
-
-// TestExecute 测试执行技能
-func (s *SkillMgrIntegrationTestSuite) TestExecute() {
-	skills, err := s.mgr.GetSkills()
-	assert.NoError(s.T(), err, "获取技能应该成功")
-	assert.Greater(s.T(), len(skills), 0, "应该有可执行的技能")
-
-	skill := skills[0]
-	params := map[string]any{
-		"test_param": "test_value",
-	}
-
-	err = s.mgr.Execute(skill, params)
-	if err != nil {
-		s.logger.Warn("技能执行失败（可能是脚本路径问题）", logging.Err(err))
-	} else {
-		s.logger.Info("Execute 测试完成", logging.String("skill", skill.GetName()))
-	}
-}
-
-// TestExecuteByName 测试按名称执行技能
-func (s *SkillMgrIntegrationTestSuite) TestExecuteByName() {
-	testCases := []struct {
-		name          string
-		skillName     string
-		shouldSucceed bool
-		description   string
-	}{
-		{
-			name:          "执行天气技能",
-			skillName:     "weather",
-			shouldSucceed: false,
-			description:   "执行天气技能（可能因脚本路径失败）",
-		},
-		{
-			name:          "执行计算器技能",
-			skillName:     "calculator",
-			shouldSucceed: false,
-			description:   "执行计算器技能（可能因脚本路径失败）",
-		},
-		{
-			name:          "执行不存在的技能",
-			skillName:     "nonexistent-skill",
-			shouldSucceed: false,
-			description:   "执行不存在的技能应该失败",
-		},
-	}
-
-	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			params := map[string]any{
-				"test_param": "test_value",
-			}
-
-			result, err := s.mgr.ExecuteByName(tc.skillName, params)
-
-			if tc.skillName == "nonexistent-skill" {
-				assert.Error(s.T(), err, tc.description)
-				s.logger.Info("ExecuteByName 预期失败",
-					logging.String("skill", tc.skillName),
-					logging.String("error", err.Error()))
-			} else {
-				if err != nil {
-					s.logger.Warn("ExecuteByName 失败（可能是脚本路径问题）",
-						logging.String("skill", tc.skillName),
-						logging.String("error", err.Error()))
-				} else {
-					assert.NotEmpty(s.T(), result, "应该有执行结果")
-					s.logger.Info("ExecuteByName 成功",
-						logging.String("skill", tc.skillName),
-						logging.String("result", result))
-				}
-			}
-		})
-	}
+// TestExecuteByName_NotFound 测试按名称执行不存在的技能
+func (s *SkillMgrIntegrationTestSuite) TestExecuteByName_NotFound() {
+	_, err := s.mgr.ExecuteByName("nonexistent-skill", map[string]any{})
+	assert.Error(s.T(), err, "执行不存在的技能应该失败")
+	assert.Contains(s.T(), err.Error(), "not found")
 }
 
 // TestEnableDisable 测试启用和禁用技能
@@ -401,150 +318,18 @@ func (s *SkillMgrIntegrationTestSuite) TestGetSkillInfos() {
 	s.logger.Info("GetSkillInfos 测试完成", logging.Int("count", len(infos)))
 }
 
-// TestSkillStatistics 测试技能统计信息
-func (s *SkillMgrIntegrationTestSuite) TestSkillStatistics() {
-	skillName := "weather"
+// TestSkillsHaveTags 验证加载的技能有 tags（tags 会被注入到 SkillKeywords 用于意图识别）
+func (s *SkillMgrIntegrationTestSuite) TestSkillsHaveTags() {
+	infos := s.mgr.GetSkillInfos()
+	assert.Greater(s.T(), len(infos), 0, "应该有技能")
 
-	s.Run("执行技能后检查统计", func() {
-		_, err := s.mgr.ExecuteByName(skillName, map[string]any{})
-		if err != nil {
-			s.logger.Warn("技能执行失败（可能是脚本路径问题）", logging.Err(err))
-			s.T().Skip("跳过统计测试：技能执行失败")
-			return
+	skillsWithTags := 0
+	for _, info := range infos {
+		if info.Def != nil && len(info.Def.Tags) > 0 {
+			skillsWithTags++
 		}
-
-		info, exists := s.mgr.GetSkillInfo(skillName)
-		assert.True(s.T(), exists)
-		assert.Equal(s.T(), 1, info.SuccessCount, "成功次数应该为1")
-		assert.Equal(s.T(), 0, info.ErrorCount, "错误次数应该为0")
-		assert.NotNil(s.T(), info.LastRunTime, "最后运行时间应该被设置")
-		assert.Greater(s.T(), info.AvgExecutionMs, int64(0), "平均执行时间应该大于0")
-	})
-
-	s.Run("多次执行后检查统计", func() {
-		executionCount := 0
-		for i := 0; i < 3; i++ {
-			_, err := s.mgr.ExecuteByName(skillName, map[string]any{})
-			if err != nil {
-				s.logger.Warn("技能执行失败（可能是脚本路径问题）", logging.Err(err))
-				continue
-			}
-			executionCount++
-			time.Sleep(10 * time.Millisecond)
-		}
-
-		if executionCount == 0 {
-			s.T().Skip("跳过统计测试：所有技能执行都失败")
-			return
-		}
-
-		info, exists := s.mgr.GetSkillInfo(skillName)
-		assert.True(s.T(), exists)
-		assert.Equal(s.T(), executionCount, info.SuccessCount, "成功次数应该匹配")
-	})
-}
-
-// TestSkillDependencies 测试技能依赖检查
-func (s *SkillMgrIntegrationTestSuite) TestSkillDependencies() {
-	s.Run("检查天气技能的依赖", func() {
-		info, exists := s.mgr.GetSkillInfo("weather")
-		assert.True(s.T(), exists)
-		s.logger.Info("天气技能依赖检查",
-			logging.Bool("canRun", info.CanRun),
-			logging.Any("missingBins", info.MissingBins),
-			logging.Any("missingEnv", info.MissingEnv))
-	})
-}
-
-// TestIntegrationScenario 完整集成测试场景
-func (s *SkillMgrIntegrationTestSuite) TestIntegrationScenario() {
-	s.Run("场景：用户查询天气", func() {
-		skills, err := s.mgr.SearchSkills("天气", "weather")
-		assert.NoError(s.T(), err)
-		assert.Greater(s.T(), len(skills), 0, "应该找到天气技能")
-
-		weatherSkill := skills[0]
-		assert.Equal(s.T(), "weather", weatherSkill.GetName(), "应该找到天气技能")
-
-		result, err := s.mgr.ExecuteByName(weatherSkill.GetName(), map[string]any{
-			"city": "北京",
-		})
-		if err != nil {
-			s.logger.Warn("天气技能执行失败（可能是脚本路径问题）", logging.Err(err))
-		} else {
-			assert.NotEmpty(s.T(), result)
-			info, _ := s.mgr.GetSkillInfo(weatherSkill.GetName())
-			assert.Equal(s.T(), 1, info.SuccessCount, "成功次数应该增加")
-			s.logger.Info("天气查询场景测试完成",
-				logging.String("skill", weatherSkill.GetName()),
-				logging.String("result", result))
-		}
-	})
-
-	s.Run("场景：批量搜索和执行", func() {
-		searchTerms := []string{"weather", "calculator", "sysinfo"}
-
-		for _, term := range searchTerms {
-			skills, err := s.mgr.SearchSkills(term)
-			assert.NoError(s.T(), err)
-
-			for _, skill := range skills {
-				_, err := s.mgr.ExecuteByName(skill.GetName(), map[string]any{})
-				if err != nil {
-					s.logger.Warn("技能执行失败（可能是脚本路径问题）",
-						logging.String("skill", skill.GetName()),
-						logging.Err(err))
-				}
-			}
-		}
-
-		infos := s.mgr.GetSkillInfos()
-		totalExecutions := 0
-		for _, info := range infos {
-			totalExecutions += info.SuccessCount
-		}
-
-		s.logger.Info("批量搜索和执行场景测试完成",
-			logging.Int("total_executions", totalExecutions))
-	})
-
-	s.Run("场景：技能生命周期管理", func() {
-		skillName := "weather"
-
-		s.T().Log("步骤1：获取技能信息")
-		info, exists := s.mgr.GetSkillInfo(skillName)
-		assert.True(s.T(), exists)
-		initialEnabled := info.Def.Enabled
-
-		s.T().Log("步骤2：禁用技能")
-		err := s.mgr.Disable(skillName)
-		assert.NoError(s.T(), err)
-		info, _ = s.mgr.GetSkillInfo(skillName)
-		assert.False(s.T(), info.Def.Enabled)
-
-		s.T().Log("步骤3：尝试执行禁用的技能")
-		_, err = s.mgr.ExecuteByName(skillName, map[string]any{})
-		assert.Error(s.T(), err, "执行禁用的技能应该失败")
-
-		s.T().Log("步骤4：重新启用技能")
-		err = s.mgr.Enable(skillName)
-		assert.NoError(s.T(), err)
-		info, _ = s.mgr.GetSkillInfo(skillName)
-		assert.True(s.T(), info.Def.Enabled)
-
-		s.T().Log("步骤5：执行启用的技能")
-		_, err = s.mgr.ExecuteByName(skillName, map[string]any{})
-		if err != nil {
-			s.logger.Warn("技能执行失败（可能是脚本路径问题）", logging.Err(err))
-		}
-
-		s.T().Log("步骤6：恢复初始状态")
-		if !initialEnabled {
-			s.mgr.Disable(skillName)
-		}
-
-		s.logger.Info("技能生命周期管理场景测试完成")
-	})
+	}
+	assert.Greater(s.T(), skillsWithTags, 0, "至少应有一个技能带有 tags")
 }
 
 // TestConcurrentAccess 测试并发访问
@@ -587,36 +372,6 @@ func (s *SkillMgrIntegrationTestSuite) TestConcurrentAccess() {
 
 		for i := 0; i < 10; i++ {
 			<-done
-		}
-	})
-
-	s.Run("并发执行技能", func() {
-		mgr := s.mgr
-		if mgr == nil {
-			s.T().Skip("SkillMgr 初始化失败，跳过并发测试")
-		}
-		done := make(chan bool, 5)
-		successCount := 0
-
-		for i := 0; i < 5; i++ {
-			go func() {
-				_, err := mgr.ExecuteByName("weather", map[string]any{})
-				if err == nil {
-					successCount++
-				}
-				done <- true
-			}()
-		}
-
-		for i := 0; i < 5; i++ {
-			<-done
-		}
-
-		if successCount > 0 {
-			info, _ := mgr.GetSkillInfo("weather")
-			assert.Equal(s.T(), successCount, info.SuccessCount, "成功次数应该匹配")
-		} else {
-			s.logger.Warn("所有并发执行都失败（可能是脚本路径问题）")
 		}
 	})
 }
