@@ -234,6 +234,8 @@ func (m *SkillMgr) ReIndex() error {
 	if err := m.indexer.ReIndex(skillInfos); err != nil {
 		return err
 	}
+	// 等待异步索引队列处理完成，再同步向量到 searcher
+	m.indexer.WaitForCompletion(5 * time.Minute)
 	m.syncComponents()
 	return nil
 }
