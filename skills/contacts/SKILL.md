@@ -28,12 +28,16 @@ parameters:
     required: false
   phone:
     type: string
-    description: 电话号码
+    description: 电话号码（仅添加联系人时使用）
     required: false
   email:
     type: string
-    description: 邮箱地址
+    description: 邮箱地址（仅添加联系人时使用）
     required: false
+guidance: |
+  搜索联系人时只需提供 action 和 name 两个参数，不需要 phone 和 email。
+  示例：{"action":"search","name":"张三"}
+  添加联系人时才需要提供 phone 或 email。
 ---
 
 # 联系人技能
