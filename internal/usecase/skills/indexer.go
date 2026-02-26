@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -42,10 +43,11 @@ type SkillIndexer struct {
 	toolKeywordVectors map[string][][]float64
 	skillHashes        map[string]string
 
-	taskQueue chan *indexTask
-	queueFile string
-	stopChan  chan struct{}
-	workerWg  sync.WaitGroup
+	taskQueue    chan *indexTask
+	queueFile    string
+	stopChan     chan struct{}
+	workerWg     sync.WaitGroup
+	pendingCount int64 // 正在队列中或正在处理的任务数
 }
 
 func NewSkillIndexer(embedding *embedding.EmbeddingService, llama *infraLlama.OllamaService, store core.Store, logger logging.Logger) *SkillIndexer {
@@ -105,6 +107,7 @@ func (i *SkillIndexer) worker() {
 				return
 			}
 			i.processTask(task, systemPrompt)
+			atomic.AddInt64(&i.pendingCount, -1)
 			i.saveQueueToFile()
 		}
 	}
@@ -228,6 +231,7 @@ func (i *SkillIndexer) ReIndex(skillInfos map[string]*entity.SkillInfo) error {
 			Info:      info,
 			Hash:      newHash,
 		}:
+			atomic.AddInt64(&i.pendingCount, 1)
 			queuedCount++
 		default:
 			i.logger.Warn(i18n.T("skill.queue_full"), logging.String("skill", name))
@@ -247,7 +251,7 @@ func (i *SkillIndexer) ReIndex(skillInfos map[string]*entity.SkillInfo) error {
 func (i *SkillIndexer) WaitForCompletion(timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if len(i.taskQueue) == 0 {
+		if atomic.LoadInt64(&i.pendingCount) == 0 {
 			return true
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -302,7 +306,7 @@ func (i *SkillIndexer) GetVectors() map[string][][]float64 {
 func (i *SkillIndexer) IsReIndexing() bool {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
-	return i.isReIndexing || len(i.taskQueue) > 0
+	return i.isReIndexing || atomic.LoadInt64(&i.pendingCount) > 0
 }
 
 func (i *SkillIndexer) GetReIndexError() error {
@@ -318,7 +322,7 @@ func (i *SkillIndexer) IsVectorTableEmpty() bool {
 }
 
 func (i *SkillIndexer) GetQueueSize() int {
-	return len(i.taskQueue)
+	return int(atomic.LoadInt64(&i.pendingCount))
 }
 
 func (i *SkillIndexer) LoadFromStore() error {
@@ -487,6 +491,7 @@ func (i *SkillIndexer) loadQueueFromFile() {
 	for _, task := range pendingTasks {
 		select {
 		case i.taskQueue <- task:
+			atomic.AddInt64(&i.pendingCount, 1)
 		default:
 			i.logger.Warn("索引队列已满，无法恢复任务", logging.String("skill", task.SkillName))
 		}

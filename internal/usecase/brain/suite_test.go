@@ -5,9 +5,12 @@ import (
 	"mindx/internal/config"
 	"mindx/internal/core"
 	"mindx/internal/entity"
+	infraEmbedding "mindx/internal/infrastructure/embedding"
+	infraLlama "mindx/internal/infrastructure/llama"
 	"mindx/internal/infrastructure/persistence"
 	"mindx/internal/usecase/capability"
 	"mindx/internal/usecase/cron"
+	"mindx/internal/usecase/embedding"
 	"mindx/internal/usecase/memory"
 	"mindx/internal/usecase/session"
 	"mindx/internal/usecase/skills"
@@ -148,15 +151,43 @@ func (s *BrainIntegrationSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.logger.Info("Memory 初始化成功")
 
-	installSkillsPath, err := config.GetInstallSkillsPath()
-	s.Require().NoError(err)
-	// 确保 skills 目录存在（测试环境下可能不存在）
-	_ = os.MkdirAll(installSkillsPath, 0755)
+	installSkillsPath := getProjectRootSkillsDir(s.T())
 	workspacePath, err := config.GetWorkspacePath()
 	s.Require().NoError(err)
 
-	s.skillMgr, err = skills.NewSkillMgr(installSkillsPath, workspacePath, nil, nil, s.logger)
+	// 初始化 embedding 和 llama 服务，支持向量搜索
+	embeddingModel := os.Getenv("MINDX_TEST_EMBEDDING_MODEL")
+	if embeddingModel == "" {
+		embeddingModel = "qllama/bge-small-zh-v1.5:latest"
+	}
+	var embeddingSvc *embedding.EmbeddingService
+	provider, embErr := infraEmbedding.NewOllamaEmbedding("http://localhost:11434", embeddingModel)
+	if embErr == nil {
+		embeddingSvc = embedding.NewEmbeddingService(provider)
+	} else {
+		s.logger.Warn("embedding 模型不可用，向量搜索将退化为关键字搜索", logging.Err(embErr))
+	}
+
+	testModel := os.Getenv("MINDX_TEST_MODEL")
+	if testModel == "" {
+		testModel = "qwen3:0.6b"
+	}
+	llamaSvc := infraLlama.NewOllamaService(testModel)
+
+	skillStore, err := persistence.NewStore("badger", filepath.Join(s.testData, "skill_vectors"), nil)
 	s.Require().NoError(err)
+
+	s.skillMgr, err = skills.NewSkillMgrWithStore(installSkillsPath, workspacePath, embeddingSvc, llamaSvc, skillStore, s.logger)
+	s.Require().NoError(err)
+
+	// 建立向量索引
+	if embeddingSvc != nil {
+		if reindexErr := s.skillMgr.ReIndex(); reindexErr != nil {
+			s.logger.Warn("向量索引建立失败", logging.Err(reindexErr))
+		} else {
+			s.logger.Info("向量索引建立成功")
+		}
+	}
 	s.logger.Info("SkillMgr 初始化成功")
 
 	tokenUsageRepo, err := persistence.NewSQLiteTokenUsageRepository(filepath.Join(s.testData, "token_usage.db"))
@@ -292,3 +323,4 @@ func TestSkillExecutionSuite(t *testing.T) {
 func TestLongInputSuite(t *testing.T) {
 	suite.Run(t, new(LongInputSuite))
 }
+
