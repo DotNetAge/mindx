@@ -166,12 +166,25 @@ func (tc *ToolCaller) SearchTools(keywords []string) ([]core.ToolSchema, error) 
 
 		params := make(map[string]interface{})
 		if info.Def != nil && info.Def.Parameters != nil {
+			properties := make(map[string]interface{})
+			required := []string{}
 			for paramName, paramDef := range info.Def.Parameters {
-				params[paramName] = map[string]interface{}{
-					"type":        paramDef.Type,
-					"description": paramDef.Description,
-					"required":    paramDef.Required,
+				desc := paramDef.Description
+				if !paramDef.Required {
+					desc += "（可选）"
 				}
+				properties[paramName] = map[string]interface{}{
+					"type":        paramDef.Type,
+					"description": desc,
+				}
+				if paramDef.Required {
+					required = append(required, paramName)
+				}
+			}
+			params = map[string]interface{}{
+				"type":       "object",
+				"properties": properties,
+				"required":   required,
 			}
 		}
 

@@ -116,9 +116,13 @@ func NewAssistant(
 				properties := map[string]interface{}{}
 				required := []string{}
 				for paramName, paramDef := range info.Def.Parameters {
+					desc := paramDef.Description
+					if !paramDef.Required {
+						desc += "（可选）"
+					}
 					properties[paramName] = map[string]interface{}{
 						"type":        paramDef.Type,
-						"description": paramDef.Description,
+						"description": desc,
 					}
 					if paramDef.Required {
 						required = append(required, paramName)
