@@ -1,15 +1,38 @@
 import { useState, useEffect } from 'react';
 import './AdvancedSettings.css';
 import { useTranslation } from '../i18n';
-import type { ServerConfig, ModelConfig, BrainHalfConfig } from './settings/types';
+import type { ServerConfig, ModelConfig, BrainHalfConfig, OllamaStatus } from './settings/types';
 import OllamaSection from './settings/OllamaSection';
 import BasicConfigSection from './settings/BasicConfigSection';
 import BrainModelSection from './settings/BrainModelSection';
+
+function deepMergeConfig(defaults: ServerConfig, loaded: Partial<ServerConfig>): ServerConfig {
+  return {
+    ...defaults,
+    ...loaded,
+    token_budget: { ...defaults.token_budget, ...loaded.token_budget },
+    subconscious: { ...defaults.subconscious, ...loaded.subconscious },
+    consciousness: { ...defaults.consciousness, ...loaded.consciousness },
+    memory: { ...defaults.memory, ...loaded.memory },
+    vector_store: { ...defaults.vector_store, ...loaded.vector_store },
+    websocket: { ...defaults.websocket, ...loaded.websocket },
+  };
+}
 
 
 
 
 const defaultConfig: ServerConfig = {
+  version: '0.0.1',
+  host: 'localhost',
+  port: 911,
+  ws_port: 1314,
+  ollama_url: 'http://localhost:11434',
+  token_budget: {
+    reserved_output_tokens: 8192,
+    min_history_rounds: 5,
+    avg_tokens_per_round: 200,
+  },
   subconscious: {
     left: '',
     right: '',
@@ -20,13 +43,28 @@ const defaultConfig: ServerConfig = {
   },
   embedding_model: '',
   default_model: '',
-  ollama_url: 'http://localhost:11434',
+  memory: {
+    enabled: false,
+    summary_model: '',
+    keyword_model: '',
+    schedule: '',
+  },
+  vector_store: {
+    type: 'badger',
+    data_path: '',
+  },
+  websocket: {
+    max_connections: 100,
+    ping_interval: 30,
+    allowed_origins: [],
+    token: '',
+  },
 };
 
 export default function AdvancedSettings() {
   const [config, setConfig] = useState<ServerConfig>(defaultConfig);
   const [loading, setLoading] = useState(false);
-  const [ollamaStatus, setOllamaStatus] = useState<any>(null);
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [message, setMessage] = useState('');
   const [loadError, setLoadError] = useState(false);
   const [models, setModels] = useState<ModelConfig[]>([]);
@@ -43,7 +81,7 @@ export default function AdvancedSettings() {
       const response = await fetch('/api/config/server');
       if (response.ok) {
         const data = await response.json();
-        setConfig({ ...defaultConfig, ...data.server });
+        setConfig(deepMergeConfig(defaultConfig, data.server || {}));
         setLoadError(false);
       } else {
         console.error('API returned status:', response.status);
@@ -169,7 +207,13 @@ export default function AdvancedSettings() {
         </div>
       )}
 
-      <OllamaSection ollamaStatus={ollamaStatus} onInstall={handleInstallOllama} onSync={handleSyncOllamaModels} />
+      <OllamaSection 
+        ollamaStatus={ollamaStatus} 
+        config={config}
+        onConfigChange={updateConfig}
+        onInstall={handleInstallOllama} 
+        onSync={handleSyncOllamaModels} 
+      />
 
       <BasicConfigSection
         config={config}

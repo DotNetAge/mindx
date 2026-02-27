@@ -21,6 +21,13 @@ export interface VectorStoreConfig {
   data_path: string;
 }
 
+export interface WebSocketConfig {
+  max_connections: number;
+  ping_interval: number;
+  allowed_origins: string[];
+  token: string;
+}
+
 export interface ModelConfig {
   name: string;
   description?: string;
@@ -31,9 +38,23 @@ export interface ModelConfig {
 }
 
 export interface ServerConfig {
+  version: string;
+  host: string;
+  port: number;
+  ws_port: number;
+  ollama_url: string;
+  token_budget: TokenBudgetConfig;
   subconscious: BrainHalfConfig;
   consciousness: BrainHalfConfig;
   embedding_model: string;
   default_model: string;
-  ollama_url?: string;
+  memory: MemoryConfig;
+  vector_store: VectorStoreConfig;
+  websocket: WebSocketConfig;
+}
+
+export interface OllamaStatus {
+  installed: boolean;
+  running: boolean;
+  models: string;
 }

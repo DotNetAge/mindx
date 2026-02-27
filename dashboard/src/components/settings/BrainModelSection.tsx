@@ -10,8 +10,15 @@ interface BrainModelSectionProps {
   onUpdate: (field: keyof BrainHalfConfig, value: string) => void;
 }
 
+function formatModelOption(model: ModelConfig): string {
+  if (model.description) {
+    return `${model.description} (${model.name})`;
+  }
+  return model.name;
+}
+
 export default function BrainModelSection({
-  title, description, config, models, showFCNote,
+  title, description, config, models,
   onUpdate,
 }: BrainModelSectionProps) {
   const { t } = useTranslation();
@@ -29,9 +36,10 @@ export default function BrainModelSection({
             onChange={(e) => onUpdate('left', e.target.value)}
             title={`${title} ${t('advanced.leftBrainModel')}`}
           >
+            <option value="">{t('advanced.selectModel')}</option>
             {models.map(model => (
               <option key={model.name} value={model.name}>
-                {model.name} {model.description ? `(${model.description})` : ''}
+                {formatModelOption(model)}
               </option>
             ))}
           </select>
@@ -43,9 +51,10 @@ export default function BrainModelSection({
             onChange={(e) => onUpdate('right', e.target.value)}
             title={`${title} ${t('advanced.rightBrainModel')}`}
           >
+            <option value="">{t('advanced.selectModel')}</option>
             {models.map(model => (
               <option key={model.name} value={model.name}>
-                {model.name} {model.description ? `(${model.description})` : ''}
+                {formatModelOption(model)}
               </option>
             ))}
           </select>

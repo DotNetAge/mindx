@@ -157,6 +157,7 @@ const translations = {
       ollamaNotInstalled: '✗ Ollama 未安装',
       ollamaRunning: '✓ Ollama 运行中',
       ollamaNotRunning: '⚠ Ollama 未运行',
+      ollamaInstalledNotRunning: '⚠ Ollama 已安装但未运行',
       installedModels: '已安装模型：',
       checking: '检查中...',
       installOllama: '安装 Ollama',
@@ -218,6 +219,7 @@ const translations = {
       defaultModel: '默认模型',
       leftBrainModel: '左脑模型',
       rightBrainModel: '右脑模型',
+      selectModel: '请选择模型',
     },
   },
   'en-US': {
@@ -374,6 +376,7 @@ const translations = {
       ollamaNotInstalled: '✗ Ollama Not Installed',
       ollamaRunning: '✓ Ollama Running',
       ollamaNotRunning: '⚠ Ollama Not Running',
+      ollamaInstalledNotRunning: '⚠ Ollama Installed but Not Running',
       installedModels: 'Installed Models:',
       checking: 'Checking...',
       installOllama: 'Install Ollama',
@@ -435,6 +438,7 @@ const translations = {
       defaultModel: 'Default Model',
       leftBrainModel: 'Left Brain Model',
       rightBrainModel: 'Right Brain Model',
+      selectModel: 'Select a model',
     },
   },
 };
