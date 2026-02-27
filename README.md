@@ -1,4 +1,7 @@
 # MindX：更懂你的智能数字分身
+<!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
+[![All Contributors](https://img.shields.io/badge/all_contributors-1-orange.svg?style=flat-square)](#contributors-)
+<!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 > 一个有脑子又能自我演进成长的数字化分身
 
@@ -172,18 +175,39 @@ MindX 正处于高速迭代期，诚邀前 100 名开发者加入核心贡献者
 - 📈 参与产品路线规划，决定 MindX 进化方向
 👉 只需提交首个 PR（文档优化/功能修复/建议都可），即可加入：[贡献指南](./CONTRIBUTING.md)
 
-### Contributors
-感谢以下贡献者:
-<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
-<!-- prettier-ignore-start -->
-<!-- markdownlint-disable -->
-[![EricConnect](https://avatars.githubusercontent.com/u/XXX?v=4?s=100)](https://github.com/EricConnect)
-[![XXY-CH](https://avatars.githubusercontent.com/u/XXX?v=4?s=100)](https://github.com/XXY-CH)
-<!-- markdownlint-restore -->
-<!-- prettier-ignore-end -->
-<!-- ALL-CONTRIBUTORS-LIST:END -->
+
 ## 许可证
 MindX 采用 MIT 许可证开源，核心技术 100% 自主可控，可自由使用、修改和分发。
 
 ## 免责声明
 MindX 仅为个人辅助工具，请勿用于违法违规场景，使用过程中请遵守相关法律法规。
+## Contributors ✨
+
+Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/EricConnect"><img src="https://avatars.githubusercontent.com/u/33584289?v=4?s=100" width="100px;" alt="EricConnect"/><br /><sub><b>EricConnect</b></sub></a><br /><a href="https://github.com/DotNetAge/mindx/commits?author=EricConnect" title="Documentation">📖</a></td>
+    </tr>
+  </tbody>
+  <tfoot>
+    <tr>
+      <td align="center" size="13px" colspan="7">
+        <img src="https://raw.githubusercontent.com/all-contributors/all-contributors-cli/1b8533af435da9854653492b1327a23a4dbd0a10/assets/logo-small.svg">
+          <a href="https://all-contributors.js.org/docs/en/bot/usage">Add your contributions</a>
+        </img>
+      </td>
+    </tr>
+  </tfoot>
+</table>
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!

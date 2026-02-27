@@ -1,0 +1,25 @@
+{
+  "projectName": "mindx",
+  "projectOwner": "DotNetAge",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": true,
+  "commitConvention": "angular",
+  "contributors": [
+    {
+      "login": "EricConnect",
+      "name": "EricConnect",
+      "avatar_url": "https://avatars.githubusercontent.com/u/33584289?v=4",
+      "profile": "https://github.com/EricConnect",
+      "contributions": [
+        "doc"
+      ]
+    }
+  ],
+  "contributorsPerLine": 7,
+  "linkToUsage": true
+}
