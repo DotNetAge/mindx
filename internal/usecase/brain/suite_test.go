@@ -174,18 +174,25 @@ func (s *BrainIntegrationSuite) SetupSuite() {
 	}
 	llamaSvc := infraLlama.NewOllamaService(testModel)
 
-	skillStore, err := persistence.NewStore("badger", filepath.Join(s.testData, "skill_vectors"), nil)
+	// skill_vectors 使用项目 .test 目录下的固定路径，避免每次重建索引
+	skillVectorPath := filepath.Join(workspacePath, "skill_vectors")
+	skillStore, err := persistence.NewStore("badger", skillVectorPath, nil)
 	s.Require().NoError(err)
 
 	s.skillMgr, err = skills.NewSkillMgrWithStore(installSkillsPath, workspacePath, embeddingSvc, llamaSvc, skillStore, s.logger)
 	s.Require().NoError(err)
 
-	// 建立向量索引
+	// 建立向量索引（同步等待完成，避免 worker 与测试竞争 Ollama）
 	if embeddingSvc != nil {
 		if reindexErr := s.skillMgr.ReIndex(); reindexErr != nil {
 			s.logger.Warn("向量索引建立失败", logging.Err(reindexErr))
 		} else {
 			s.logger.Info("向量索引建立成功")
+		}
+		// ReIndex 内部 WaitForCompletion 可能超时，再次确认 worker 队列已清空
+		for s.skillMgr.IsReIndexing() {
+			s.logger.Info("等待索引 worker 完成...")
+			time.Sleep(2 * time.Second)
 		}
 	}
 	s.logger.Info("SkillMgr 初始化成功")
