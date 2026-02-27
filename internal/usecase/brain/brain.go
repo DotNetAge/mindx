@@ -218,7 +218,11 @@ func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, e
 		}
 	}
 
-	if !thinkResult.CanAnswer {
+	if !thinkResult.CanAnswer || len(leftBrainSearchedTools) > 0 {
+		if len(leftBrainSearchedTools) > 0 {
+			b.logger.Info("右脑找到工具但调用失败，不信任左脑回答，激活主意识重试",
+				logging.Int("searched_tools", len(leftBrainSearchedTools)))
+		}
 		resp, err := b.activateConsciousness(ctx, req.Question, thinkResult, pctx.refs, pctx.historyDialogue, leftBrainSearchedTools, req.SessionID, eventChan)
 		b.leftBrain.SetEventChan(nil)
 		return resp, err
