@@ -133,7 +133,7 @@ case "$(uname -s)" in
         echo "  Checking for macOS launchd services..."
         
         # Check for plist files
-        PLIST_PATH="$HOME/Library/LaunchAgents/com.mindx.service.plist"
+        PLIST_PATH="$HOME/Library/LaunchAgents/com.mindx.agent.plist"
         if [ -f "$PLIST_PATH" ]; then
             echo "  Unloading launchd service..."
             launchctl unload "$PLIST_PATH" 2>/dev/null || true
