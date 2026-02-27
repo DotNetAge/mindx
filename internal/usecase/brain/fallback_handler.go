@@ -51,5 +51,9 @@ func (fh *FallbackHandler) Handle(
 	}
 
 	fh.logger.Warn(i18n.T("brain.fallback_right_failed"))
+	// 兜底：确保不返回空答案
+	if thinkResult.Answer == "" {
+		thinkResult.Answer = "抱歉，我暂时无法处理这个请求。"
+	}
 	return fh.responseBuilder.BuildLeftBrainResponse(thinkResult, nil), nil
 }

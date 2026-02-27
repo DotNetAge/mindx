@@ -218,12 +218,16 @@ func (b *BionicBrain) post(req *core.ThinkingRequest) (*core.ThinkingResponse, e
 		}
 	}
 
-	if !thinkResult.CanAnswer || len(leftBrainSearchedTools) > 0 {
-		if len(leftBrainSearchedTools) > 0 {
-			b.logger.Info("右脑找到工具但调用失败，不信任左脑回答，激活主意识重试",
-				logging.Int("searched_tools", len(leftBrainSearchedTools)))
-		}
-		resp, err := b.activateConsciousness(ctx, req.Question, thinkResult, pctx.refs, pctx.historyDialogue, leftBrainSearchedTools, req.SessionID, eventChan)
+	if len(leftBrainSearchedTools) > 0 {
+		b.logger.Info("右脑找到工具但调用失败，用现有右脑重试",
+			logging.Int("searched_tools", len(leftBrainSearchedTools)))
+		resp, err := b.fallbackHandler.Handle(ctx, req.Question, thinkResult, pctx.historyDialogue, leftBrainSearchedTools)
+		b.leftBrain.SetEventChan(nil)
+		return resp, err
+	}
+
+	if !thinkResult.CanAnswer {
+		resp, err := b.activateConsciousness(ctx, req.Question, thinkResult, pctx.refs, pctx.historyDialogue, nil, req.SessionID, eventChan)
 		b.leftBrain.SetEventChan(nil)
 		return resp, err
 	}
@@ -439,6 +443,10 @@ func (b *BionicBrain) activateConsciousnessDualBrain(ctx context.Context, questi
 	}
 
 	leftBrain.SetEventChan(nil)
+	// 兜底：如果主意识也无法回答，返回友好提示而非空答案
+	if thinkResult.Answer == "" {
+		thinkResult.Answer = "抱歉，我暂时无法处理这个请求。"
+	}
 	return b.responseBuilder.BuildLeftBrainResponse(thinkResult, nil), nil
 }
 
