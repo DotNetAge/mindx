@@ -145,6 +145,10 @@ func (i *SkillIndexer) processTask(task *indexTask, systemPrompt string) {
 
 	var vectors [][]float64
 	for _, word := range keywords {
+		word = strings.TrimSpace(word)
+		if word == "" {
+			continue
+		}
 		vec, err := i.embedding.GenerateEmbedding(word)
 		if err != nil {
 			i.logger.Warn(i18n.T("skill.gen_keyword_vector_failed"), logging.String("skill", task.SkillName), logging.String("word", word), logging.Err(err))
@@ -270,7 +274,7 @@ func (i *SkillIndexer) extractKeywords(systemPrompt, text string) ([]string, err
 	var keywords []string
 
 	if err := json.Unmarshal([]byte(jsonStr), &keywords); err == nil {
-		return keywords, nil
+		return filterEmptyStrings(keywords), nil
 	}
 
 	var nested [][]string
@@ -278,7 +282,7 @@ func (i *SkillIndexer) extractKeywords(systemPrompt, text string) ([]string, err
 		for _, inner := range nested {
 			keywords = append(keywords, inner...)
 		}
-		return keywords, nil
+		return filterEmptyStrings(keywords), nil
 	}
 
 	var result struct {
@@ -289,7 +293,18 @@ func (i *SkillIndexer) extractKeywords(systemPrompt, text string) ([]string, err
 		return nil, fmt.Errorf("%s: %w (response: %s)", i18n.T("skill.parse_keywords_failed"), err, jsonStr)
 	}
 
-	return result.Keywords, nil
+	return filterEmptyStrings(result.Keywords), nil
+}
+
+func filterEmptyStrings(ss []string) []string {
+	result := make([]string, 0, len(ss))
+	for _, s := range ss {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 func (i *SkillIndexer) GetVectors() map[string][][]float64 {
