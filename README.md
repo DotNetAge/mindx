@@ -1,6 +1,6 @@
 # MindX：更懂你的智能数字分身
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-1-orange.svg?style=flat-square)](#contributors-)
+[![All Contributors](https://img.shields.io/badge/all_contributors-2-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 > 一个有脑子又能自我演进成长的数字化分身
@@ -192,6 +192,7 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
   <tbody>
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/EricConnect"><img src="https://avatars.githubusercontent.com/u/33584289?v=4?s=100" width="100px;" alt="EricConnect"/><br /><sub><b>EricConnect</b></sub></a><br /><a href="https://github.com/DotNetAge/mindx/commits?author=EricConnect" title="Documentation">📖</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/XXY-CH"><img src="https://avatars.githubusercontent.com/u/70793154?v=4?s=100" width="100px;" alt="谢星宇"/><br /><sub><b>谢星宇</b></sub></a><br /><a href="https://github.com/DotNetAge/mindx/commits?author=XXY-CH" title="Code">💻</a></td>
     </tr>
   </tbody>
   <tfoot>
