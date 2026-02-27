@@ -4,7 +4,10 @@
     {
       "id": "everything",
       "name": { "zh": "测试服务器", "en": "Everything Test Server" },
-      "description": { "zh": "MCP 官方测试服务器，包含 echo、求和、环境变量查看等工具，适合验证 MCP 连接", "en": "Official MCP test server with echo, sum, env tools. Great for verifying MCP connectivity" },
+      "description": {
+        "zh": "MCP 官方测试服务器，包含 echo、求和、环境变量查看等工具，适合验证 MCP 连接",
+        "en": "Official MCP test server with echo, sum, env tools. Great for verifying MCP connectivity"
+      },
       "icon": "🧪",
       "category": "testing",
       "tags": ["test", "debug", "official"],
@@ -17,15 +20,30 @@
       },
       "variables": [],
       "tools": [
-        { "name": "echo", "description": { "zh": "回显输入内容", "en": "Echo back input" } },
-        { "name": "get-sum", "description": { "zh": "计算两数之和", "en": "Sum two numbers" } },
-        { "name": "get-env", "description": { "zh": "查看环境变量", "en": "View environment variables" } }
+        {
+          "name": "echo",
+          "description": { "zh": "回显输入内容", "en": "Echo back input" }
+        },
+        {
+          "name": "get-sum",
+          "description": { "zh": "计算两数之和", "en": "Sum two numbers" }
+        },
+        {
+          "name": "get-env",
+          "description": {
+            "zh": "查看环境变量",
+            "en": "View environment variables"
+          }
+        }
       ]
     },
     {
       "id": "filesystem",
       "name": { "zh": "文件系统", "en": "Filesystem" },
-      "description": { "zh": "读写和搜索本地文件系统，支持文件内容读取、写入、目录列表和文件搜索", "en": "Read, write and search local filesystem with file content access, directory listing and search" },
+      "description": {
+        "zh": "读写和搜索本地文件系统，支持文件内容读取、写入、目录列表和文件搜索",
+        "en": "Read, write and search local filesystem with file content access, directory listing and search"
+      },
       "icon": "📁",
       "category": "tools",
       "tags": ["files", "filesystem", "local"],
@@ -34,29 +52,54 @@
       "connection": {
         "type": "stdio",
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "${WORKSPACE_PATH}"]
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "${WORKSPACE_PATH}"
+        ]
       },
       "variables": [
         {
           "key": "WORKSPACE_PATH",
           "label": { "zh": "工作目录", "en": "Workspace Path" },
-          "description": { "zh": "服务器可以访问的根目录路径", "en": "Root directory the server can access" },
+          "description": {
+            "zh": "服务器可以访问的根目录路径",
+            "en": "Root directory the server can access"
+          },
           "type": "path",
           "required": true,
           "default": "~"
         }
       ],
       "tools": [
-        { "name": "read_file", "description": { "zh": "读取文件内容", "en": "Read file contents" } },
-        { "name": "write_file", "description": { "zh": "写入文件", "en": "Write to file" } },
-        { "name": "list_directory", "description": { "zh": "列出目录内容", "en": "List directory contents" } },
-        { "name": "search_files", "description": { "zh": "搜索文件", "en": "Search files" } }
+        {
+          "name": "read_file",
+          "description": { "zh": "读取文件内容", "en": "Read file contents" }
+        },
+        {
+          "name": "write_file",
+          "description": { "zh": "写入文件", "en": "Write to file" }
+        },
+        {
+          "name": "list_directory",
+          "description": {
+            "zh": "列出目录内容",
+            "en": "List directory contents"
+          }
+        },
+        {
+          "name": "search_files",
+          "description": { "zh": "搜索文件", "en": "Search files" }
+        }
       ]
     },
     {
       "id": "brave-search",
       "name": { "zh": "Brave 搜索", "en": "Brave Search" },
-      "description": { "zh": "基于 Brave Search API 的网络搜索，支持网页搜索和本地搜索", "en": "Web and local search powered by Brave Search API" },
+      "description": {
+        "zh": "基于 Brave Search API 的网络搜索，支持网页搜索和本地搜索",
+        "en": "Web and local search powered by Brave Search API"
+      },
       "icon": "🔍",
       "category": "search",
       "tags": ["search", "web", "brave"],
@@ -74,20 +117,32 @@
         {
           "key": "BRAVE_API_KEY",
           "label": { "zh": "Brave API 密钥", "en": "Brave API Key" },
-          "description": { "zh": "从 https://brave.com/search/api/ 获取", "en": "Get from https://brave.com/search/api/" },
+          "description": {
+            "zh": "从 https://brave.com/search/api/ 获取",
+            "en": "Get from https://brave.com/search/api/"
+          },
           "type": "secret",
           "required": true
         }
       ],
       "tools": [
-        { "name": "brave_web_search", "description": { "zh": "网络搜索", "en": "Web search" } },
-        { "name": "brave_local_search", "description": { "zh": "本地商户搜索", "en": "Local business search" } }
+        {
+          "name": "brave_web_search",
+          "description": { "zh": "网络搜索", "en": "Web search" }
+        },
+        {
+          "name": "brave_local_search",
+          "description": { "zh": "本地商户搜索", "en": "Local business search" }
+        }
       ]
     },
     {
       "id": "github",
       "name": { "zh": "GitHub", "en": "GitHub" },
-      "description": { "zh": "GitHub API 集成，支持仓库管理、Issue、PR、文件操作等", "en": "GitHub API integration for repos, issues, PRs, and file operations" },
+      "description": {
+        "zh": "GitHub API 集成，支持仓库管理、Issue、PR、文件操作等",
+        "en": "GitHub API integration for repos, issues, PRs, and file operations"
+      },
       "icon": "🐙",
       "category": "developer",
       "tags": ["github", "git", "code"],
@@ -105,21 +160,36 @@
         {
           "key": "GITHUB_TOKEN",
           "label": { "zh": "GitHub Token", "en": "GitHub Token" },
-          "description": { "zh": "GitHub Personal Access Token", "en": "GitHub Personal Access Token" },
+          "description": {
+            "zh": "GitHub Personal Access Token",
+            "en": "GitHub Personal Access Token"
+          },
           "type": "secret",
           "required": true
         }
       ],
       "tools": [
-        { "name": "search_repositories", "description": { "zh": "搜索仓库", "en": "Search repositories" } },
-        { "name": "create_issue", "description": { "zh": "创建 Issue", "en": "Create issue" } },
-        { "name": "create_pull_request", "description": { "zh": "创建 PR", "en": "Create pull request" } }
+        {
+          "name": "search_repositories",
+          "description": { "zh": "搜索仓库", "en": "Search repositories" }
+        },
+        {
+          "name": "create_issue",
+          "description": { "zh": "创建 Issue", "en": "Create issue" }
+        },
+        {
+          "name": "create_pull_request",
+          "description": { "zh": "创建 PR", "en": "Create pull request" }
+        }
       ]
     },
     {
       "id": "fetch",
       "name": { "zh": "网页抓取", "en": "Web Fetch" },
-      "description": { "zh": "抓取网页内容并转换为 Markdown 或纯文本格式", "en": "Fetch web content and convert to Markdown or plain text" },
+      "description": {
+        "zh": "抓取网页内容并转换为 Markdown 或纯文本格式",
+        "en": "Fetch web content and convert to Markdown or plain text"
+      },
       "icon": "🌐",
       "category": "tools",
       "tags": ["web", "fetch", "scrape"],
@@ -132,13 +202,19 @@
       },
       "variables": [],
       "tools": [
-        { "name": "fetch", "description": { "zh": "抓取 URL 内容", "en": "Fetch URL content" } }
+        {
+          "name": "fetch",
+          "description": { "zh": "抓取 URL 内容", "en": "Fetch URL content" }
+        }
       ]
     },
     {
       "id": "memory",
       "name": { "zh": "知识图谱记忆", "en": "Knowledge Graph Memory" },
-      "description": { "zh": "基于本地知识图谱的持久化记忆系统，支持实体和关系的创建、查询和管理", "en": "Persistent memory system based on local knowledge graph with entity and relation management" },
+      "description": {
+        "zh": "基于本地知识图谱的持久化记忆系统，支持实体和关系的创建、查询和管理",
+        "en": "Persistent memory system based on local knowledge graph with entity and relation management"
+      },
       "icon": "🧠",
       "category": "tools",
       "tags": ["memory", "knowledge", "graph"],
@@ -151,15 +227,27 @@
       },
       "variables": [],
       "tools": [
-        { "name": "create_entities", "description": { "zh": "创建实体", "en": "Create entities" } },
-        { "name": "create_relations", "description": { "zh": "创建关系", "en": "Create relations" } },
-        { "name": "search_nodes", "description": { "zh": "搜索节点", "en": "Search nodes" } }
+        {
+          "name": "create_entities",
+          "description": { "zh": "创建实体", "en": "Create entities" }
+        },
+        {
+          "name": "create_relations",
+          "description": { "zh": "创建关系", "en": "Create relations" }
+        },
+        {
+          "name": "search_nodes",
+          "description": { "zh": "搜索节点", "en": "Search nodes" }
+        }
       ]
     },
     {
       "id": "context7",
       "name": { "zh": "Context7 文档检索", "en": "Context7" },
-      "description": { "zh": "面向 AI 的文档检索与上下文注入，实时获取官方文档最新内容和指定版本的代码示例", "en": "Up-to-date, version-specific documentation and code examples for any library, injected directly into your prompt" },
+      "description": {
+        "zh": "面向 AI 的文档检索与上下文注入，实时获取官方文档最新内容和指定版本的代码示例",
+        "en": "Up-to-date, version-specific documentation and code examples for any library, injected directly into your prompt"
+      },
       "icon": "📚",
       "category": "developer",
       "tags": ["docs", "documentation", "context", "code"],
@@ -174,20 +262,38 @@
         {
           "key": "CONTEXT7_API_KEY",
           "label": { "zh": "API 密钥（可选）", "en": "API Key (optional)" },
-          "description": { "zh": "从 context7.com/dashboard 获取，可提高速率限制", "en": "Get from context7.com/dashboard for higher rate limits" },
+          "description": {
+            "zh": "从 context7.com/dashboard 获取，可提高速率限制",
+            "en": "Get from context7.com/dashboard for higher rate limits"
+          },
           "type": "secret",
           "required": false
         }
       ],
       "tools": [
-        { "name": "resolve-library-id", "description": { "zh": "搜索匹配的库", "en": "Search for matching libraries" } },
-        { "name": "get-library-docs", "description": { "zh": "获取库的文档和代码示例", "en": "Get library documentation and code examples" } }
+        {
+          "name": "resolve-library-id",
+          "description": {
+            "zh": "搜索匹配的库",
+            "en": "Search for matching libraries"
+          }
+        },
+        {
+          "name": "get-library-docs",
+          "description": {
+            "zh": "获取库的文档和代码示例",
+            "en": "Get library documentation and code examples"
+          }
+        }
       ]
     },
     {
       "id": "sequential-thinking",
       "name": { "zh": "结构化思维", "en": "Sequential Thinking" },
-      "description": { "zh": "通过结构化的思维流程，为动态且具反思性的问题求解提供工具，支持思维修正和分支探索", "en": "Structured thinking process for dynamic, reflective problem-solving with revision and branching support" },
+      "description": {
+        "zh": "通过结构化的思维流程，为动态且具反思性的问题求解提供工具，支持思维修正和分支探索",
+        "en": "Structured thinking process for dynamic, reflective problem-solving with revision and branching support"
+      },
       "icon": "🧩",
       "category": "tools",
       "tags": ["thinking", "reasoning", "problem-solving"],
@@ -200,13 +306,22 @@
       },
       "variables": [],
       "tools": [
-        { "name": "sequentialthinking", "description": { "zh": "逐步结构化思考与反思", "en": "Step-by-step structured thinking with reflection" } }
+        {
+          "name": "sequentialthinking",
+          "description": {
+            "zh": "逐步结构化思考与反思",
+            "en": "Step-by-step structured thinking with reflection"
+          }
+        }
       ]
     },
     {
       "id": "puppeteer",
       "name": { "zh": "Puppeteer 浏览器", "en": "Puppeteer" },
-      "description": { "zh": "浏览器自动化，使 LLM 能在真实浏览器中与网页交互、截取屏幕截图并执行 JavaScript", "en": "Browser automation enabling LLMs to interact with web pages, take screenshots, and execute JavaScript in a real browser" },
+      "description": {
+        "zh": "浏览器自动化，使 LLM 能在真实浏览器中与网页交互、截取屏幕截图并执行 JavaScript",
+        "en": "Browser automation enabling LLMs to interact with web pages, take screenshots, and execute JavaScript in a real browser"
+      },
       "icon": "🎭",
       "category": "tools",
       "tags": ["browser", "automation", "puppeteer", "web"],
@@ -219,16 +334,31 @@
       },
       "variables": [],
       "tools": [
-        { "name": "puppeteer_navigate", "description": { "zh": "导航到指定 URL", "en": "Navigate to URL" } },
-        { "name": "puppeteer_screenshot", "description": { "zh": "截取页面截图", "en": "Take page screenshot" } },
-        { "name": "puppeteer_click", "description": { "zh": "点击页面元素", "en": "Click page element" } },
-        { "name": "puppeteer_evaluate", "description": { "zh": "执行 JavaScript", "en": "Execute JavaScript" } }
+        {
+          "name": "puppeteer_navigate",
+          "description": { "zh": "导航到指定 URL", "en": "Navigate to URL" }
+        },
+        {
+          "name": "puppeteer_screenshot",
+          "description": { "zh": "截取页面截图", "en": "Take page screenshot" }
+        },
+        {
+          "name": "puppeteer_click",
+          "description": { "zh": "点击页面元素", "en": "Click page element" }
+        },
+        {
+          "name": "puppeteer_evaluate",
+          "description": { "zh": "执行 JavaScript", "en": "Execute JavaScript" }
+        }
       ]
     },
     {
       "id": "playwright",
       "name": { "zh": "Playwright 浏览器", "en": "Playwright" },
-      "description": { "zh": "基于 Playwright 的浏览器自动化，支持网页交互、截图、测试代码生成和网页内容抓取", "en": "Playwright-based browser automation for web interaction, screenshots, test code generation, and web scraping" },
+      "description": {
+        "zh": "基于 Playwright 的浏览器自动化，支持网页交互、截图、测试代码生成和网页内容抓取",
+        "en": "Playwright-based browser automation for web interaction, screenshots, test code generation, and web scraping"
+      },
       "icon": "🎬",
       "category": "tools",
       "tags": ["browser", "automation", "playwright", "testing"],
@@ -241,36 +371,34 @@
       },
       "variables": [],
       "tools": [
-        { "name": "browser_navigate", "description": { "zh": "导航到指定 URL", "en": "Navigate to URL" } },
-        { "name": "browser_screenshot", "description": { "zh": "截取页面截图", "en": "Take page screenshot" } },
-        { "name": "browser_click", "description": { "zh": "点击页面元素", "en": "Click page element" } },
-        { "name": "browser_type", "description": { "zh": "在输入框中输入文本", "en": "Type text into input field" } }
-      ]
-    },
-    {
-      "id": "figma",
-      "name": { "zh": "Figma 设计桥接", "en": "Figma AI Bridge" },
-      "description": { "zh": "查看、分析和提取 Figma 设计数据，帮助 LLM 理解设计结构并辅助精确还原设计稿", "en": "View, analyze and extract Figma design data to help LLMs understand design structure and assist in accurate design-to-code implementation" },
-      "icon": "🎨",
-      "category": "design",
-      "tags": ["figma", "design", "ui", "frontend"],
-      "author": "Figma",
-      "homepage": "https://github.com/figma/mcp-server-guide",
-      "connection": {
-        "type": "sse",
-        "url": "https://mcp.figma.com/mcp"
-      },
-      "variables": [],
-      "tools": [
-        { "name": "get_file", "description": { "zh": "获取 Figma 文件结构", "en": "Get Figma file structure" } },
-        { "name": "get_node", "description": { "zh": "获取指定节点详情", "en": "Get specific node details" } },
-        { "name": "get_styles", "description": { "zh": "获取设计样式", "en": "Get design styles" } }
+        {
+          "name": "browser_navigate",
+          "description": { "zh": "导航到指定 URL", "en": "Navigate to URL" }
+        },
+        {
+          "name": "browser_screenshot",
+          "description": { "zh": "截取页面截图", "en": "Take page screenshot" }
+        },
+        {
+          "name": "browser_click",
+          "description": { "zh": "点击页面元素", "en": "Click page element" }
+        },
+        {
+          "name": "browser_type",
+          "description": {
+            "zh": "在输入框中输入文本",
+            "en": "Type text into input field"
+          }
+        }
       ]
     },
     {
       "id": "chrome-devtools",
       "name": { "zh": "Chrome 开发者工具", "en": "Chrome DevTools" },
-      "description": { "zh": "让 AI 直接控制并检查 Chrome 浏览器，支持网页自动化测试、故障排查及性能分析", "en": "Let AI control and inspect Chrome browser for web automation, debugging, and performance analysis" },
+      "description": {
+        "zh": "让 AI 直接控制并检查 Chrome 浏览器，支持网页自动化测试、故障排查及性能分析",
+        "en": "Let AI control and inspect Chrome browser for web automation, debugging, and performance analysis"
+      },
       "icon": "🔧",
       "category": "developer",
       "tags": ["chrome", "devtools", "debug", "performance"],
@@ -283,16 +411,34 @@
       },
       "variables": [],
       "tools": [
-        { "name": "navigate", "description": { "zh": "导航到指定 URL", "en": "Navigate to URL" } },
-        { "name": "screenshot", "description": { "zh": "截取页面截图", "en": "Take page screenshot" } },
-        { "name": "get_console_logs", "description": { "zh": "获取控制台日志", "en": "Get console logs" } },
-        { "name": "get_network_logs", "description": { "zh": "获取网络请求日志", "en": "Get network request logs" } }
+        {
+          "name": "navigate",
+          "description": { "zh": "导航到指定 URL", "en": "Navigate to URL" }
+        },
+        {
+          "name": "screenshot",
+          "description": { "zh": "截取页面截图", "en": "Take page screenshot" }
+        },
+        {
+          "name": "get_console_logs",
+          "description": { "zh": "获取控制台日志", "en": "Get console logs" }
+        },
+        {
+          "name": "get_network_logs",
+          "description": {
+            "zh": "获取网络请求日志",
+            "en": "Get network request logs"
+          }
+        }
       ]
     },
     {
       "id": "excel",
       "name": { "zh": "Excel 电子表格", "en": "Excel" },
-      "description": { "zh": "读取和写入 Microsoft Excel 文件中的电子表格数据，支持公式、格式和多工作表操作", "en": "Read and write Microsoft Excel spreadsheet data with formula, formatting, and multi-sheet support" },
+      "description": {
+        "zh": "读取和写入 Microsoft Excel 文件中的电子表格数据，支持公式、格式和多工作表操作",
+        "en": "Read and write Microsoft Excel spreadsheet data with formula, formatting, and multi-sheet support"
+      },
       "icon": "📊",
       "category": "tools",
       "tags": ["excel", "spreadsheet", "data", "office"],
@@ -305,16 +451,34 @@
       },
       "variables": [],
       "tools": [
-        { "name": "excel_describe_sheets", "description": { "zh": "描述工作表结构", "en": "Describe sheet structure" } },
-        { "name": "excel_read_sheet", "description": { "zh": "读取工作表数据", "en": "Read sheet data" } },
-        { "name": "excel_write_to_sheet", "description": { "zh": "写入工作表数据", "en": "Write to sheet" } },
-        { "name": "excel_create_table", "description": { "zh": "创建表格", "en": "Create table" } }
+        {
+          "name": "excel_describe_sheets",
+          "description": {
+            "zh": "描述工作表结构",
+            "en": "Describe sheet structure"
+          }
+        },
+        {
+          "name": "excel_read_sheet",
+          "description": { "zh": "读取工作表数据", "en": "Read sheet data" }
+        },
+        {
+          "name": "excel_write_to_sheet",
+          "description": { "zh": "写入工作表数据", "en": "Write to sheet" }
+        },
+        {
+          "name": "excel_create_table",
+          "description": { "zh": "创建表格", "en": "Create table" }
+        }
       ]
     },
     {
       "id": "gezhe-ppt",
       "name": { "zh": "歌者PPT", "en": "Gezhe PPT" },
-      "description": { "zh": "通过话题自动生成 PPT 演示文稿，输入主题即可获得完整 PPT", "en": "Auto-generate PPT presentations from a topic, get a complete slide deck from just a subject" },
+      "description": {
+        "zh": "通过话题自动生成 PPT 演示文稿，输入主题即可获得完整 PPT",
+        "en": "Auto-generate PPT presentations from a topic, get a complete slide deck from just a subject"
+      },
       "icon": "📽️",
       "category": "tools",
       "tags": ["ppt", "presentation", "slides", "office"],
@@ -332,19 +496,31 @@
         {
           "key": "GEZHE_API_KEY",
           "label": { "zh": "歌者 API Key", "en": "Gezhe API Key" },
-          "description": { "zh": "登录 gezhe.com 后在「设置-MCP 服务器」页面获取", "en": "Get from gezhe.com Settings > MCP Server page after login" },
+          "description": {
+            "zh": "登录 gezhe.com 后在「设置-MCP 服务器」页面获取",
+            "en": "Get from gezhe.com Settings > MCP Server page after login"
+          },
           "type": "secret",
           "required": true
         }
       ],
       "tools": [
-        { "name": "generate_ppt_by_topic", "description": { "zh": "根据话题生成 PPT", "en": "Generate PPT from topic" } }
+        {
+          "name": "generate_ppt_by_topic",
+          "description": {
+            "zh": "根据话题生成 PPT",
+            "en": "Generate PPT from topic"
+          }
+        }
       ]
     },
     {
       "id": "yinxiang",
       "name": { "zh": "印象笔记", "en": "Yinxiang (Evernote CN)" },
-      "description": { "zh": "将内容保存到印象笔记，支持 Markdown 格式，让 AI 助手直接创建和管理笔记", "en": "Save content to Yinxiang/Evernote China with Markdown support, let AI assistants create and manage notes" },
+      "description": {
+        "zh": "将内容保存到印象笔记，支持 Markdown 格式，让 AI 助手直接创建和管理笔记",
+        "en": "Save content to Yinxiang/Evernote China with Markdown support, let AI assistants create and manage notes"
+      },
       "icon": "🐘",
       "category": "tools",
       "tags": ["notes", "evernote", "yinxiang", "writing"],
@@ -362,19 +538,31 @@
         {
           "key": "YINXIANG_AUTH_TOKEN",
           "label": { "zh": "印象笔记 Token", "en": "Yinxiang Auth Token" },
-          "description": { "zh": "印象笔记开发者 Token", "en": "Yinxiang developer auth token" },
+          "description": {
+            "zh": "印象笔记开发者 Token",
+            "en": "Yinxiang developer auth token"
+          },
           "type": "secret",
           "required": true
         }
       ],
       "tools": [
-        { "name": "save_note", "description": { "zh": "保存笔记到印象笔记", "en": "Save note to Yinxiang" } }
+        {
+          "name": "save_note",
+          "description": {
+            "zh": "保存笔记到印象笔记",
+            "en": "Save note to Yinxiang"
+          }
+        }
       ]
     },
     {
       "id": "amap",
       "name": { "zh": "高德地图", "en": "Amap (Gaode Maps)" },
-      "description": { "zh": "高德地图服务，支持地理编码、天气查询、路线规划、POI 搜索和 IP 定位", "en": "Amap map services including geocoding, weather, route planning, POI search and IP location" },
+      "description": {
+        "zh": "高德地图服务，支持地理编码、天气查询、路线规划、POI 搜索和 IP 定位",
+        "en": "Amap map services including geocoding, weather, route planning, POI search and IP location"
+      },
       "icon": "🗺️",
       "category": "tools",
       "tags": ["map", "amap", "gaode", "location", "weather"],
@@ -392,23 +580,47 @@
         {
           "key": "AMAP_API_KEY",
           "label": { "zh": "高德 API Key", "en": "Amap API Key" },
-          "description": { "zh": "从高德开放平台 lbs.amap.com 获取 Web 服务 API Key", "en": "Get Web Service API Key from lbs.amap.com" },
+          "description": {
+            "zh": "从高德开放平台 lbs.amap.com 获取 Web 服务 API Key",
+            "en": "Get Web Service API Key from lbs.amap.com"
+          },
           "type": "secret",
           "required": true
         }
       ],
       "tools": [
-        { "name": "maps_geo", "description": { "zh": "地址转坐标", "en": "Address to coordinates" } },
-        { "name": "maps_weather", "description": { "zh": "天气查询", "en": "Weather query" } },
-        { "name": "maps_direction_driving_by_address", "description": { "zh": "驾车路线规划", "en": "Driving route planning" } },
-        { "name": "maps_text_search", "description": { "zh": "POI 关键字搜索", "en": "POI keyword search" } },
-        { "name": "maps_ip_location", "description": { "zh": "IP 定位", "en": "IP location" } }
+        {
+          "name": "maps_geo",
+          "description": { "zh": "地址转坐标", "en": "Address to coordinates" }
+        },
+        {
+          "name": "maps_weather",
+          "description": { "zh": "天气查询", "en": "Weather query" }
+        },
+        {
+          "name": "maps_direction_driving_by_address",
+          "description": {
+            "zh": "驾车路线规划",
+            "en": "Driving route planning"
+          }
+        },
+        {
+          "name": "maps_text_search",
+          "description": { "zh": "POI 关键字搜索", "en": "POI keyword search" }
+        },
+        {
+          "name": "maps_ip_location",
+          "description": { "zh": "IP 定位", "en": "IP location" }
+        }
       ]
     },
     {
       "id": "kuaidi100",
       "name": { "zh": "快递100", "en": "Kuaidi100" },
-      "description": { "zh": "快递物流查询服务，支持物流轨迹查询、运费预估和时效预估", "en": "Express logistics query service with tracking, freight estimation and delivery time estimation" },
+      "description": {
+        "zh": "快递物流查询服务，支持物流轨迹查询、运费预估和时效预估",
+        "en": "Express logistics query service with tracking, freight estimation and delivery time estimation"
+      },
       "icon": "📦",
       "category": "tools",
       "tags": ["express", "logistics", "delivery", "tracking"],
@@ -426,21 +638,39 @@
         {
           "key": "KUAIDI100_API_KEY",
           "label": { "zh": "快递100 API Key", "en": "Kuaidi100 API Key" },
-          "description": { "zh": "从 api.kuaidi100.com 注册获取", "en": "Register at api.kuaidi100.com to get API key" },
+          "description": {
+            "zh": "从 api.kuaidi100.com 注册获取",
+            "en": "Register at api.kuaidi100.com to get API key"
+          },
           "type": "secret",
           "required": true
         }
       ],
       "tools": [
-        { "name": "queryTrace", "description": { "zh": "物流轨迹查询", "en": "Track shipment" } },
-        { "name": "estimateTime", "description": { "zh": "预估送达时效", "en": "Estimate delivery time" } },
-        { "name": "estimatePrice", "description": { "zh": "预估运费", "en": "Estimate shipping cost" } }
+        {
+          "name": "queryTrace",
+          "description": { "zh": "物流轨迹查询", "en": "Track shipment" }
+        },
+        {
+          "name": "estimateTime",
+          "description": {
+            "zh": "预估送达时效",
+            "en": "Estimate delivery time"
+          }
+        },
+        {
+          "name": "estimatePrice",
+          "description": { "zh": "预估运费", "en": "Estimate shipping cost" }
+        }
       ]
     },
     {
       "id": "lark",
       "name": { "zh": "飞书 Lark", "en": "Lark (Feishu)" },
-      "description": { "zh": "飞书协作平台集成，支持发送消息、查看日历事件和创建日程", "en": "Lark/Feishu collaboration platform integration for messaging, calendar events and scheduling" },
+      "description": {
+        "zh": "飞书协作平台集成，支持发送消息、查看日历事件和创建日程",
+        "en": "Lark/Feishu collaboration platform integration for messaging, calendar events and scheduling"
+      },
       "icon": "💬",
       "category": "tools",
       "tags": ["lark", "feishu", "message", "calendar"],
@@ -459,28 +689,46 @@
         {
           "key": "LARK_APP_ID",
           "label": { "zh": "飞书 App ID", "en": "Lark App ID" },
-          "description": { "zh": "飞书开放平台应用的 App ID", "en": "App ID from Lark Open Platform" },
+          "description": {
+            "zh": "飞书开放平台应用的 App ID",
+            "en": "App ID from Lark Open Platform"
+          },
           "type": "string",
           "required": true
         },
         {
           "key": "LARK_APP_SECRET",
           "label": { "zh": "飞书 App Secret", "en": "Lark App Secret" },
-          "description": { "zh": "飞书开放平台应用的 App Secret", "en": "App Secret from Lark Open Platform" },
+          "description": {
+            "zh": "飞书开放平台应用的 App Secret",
+            "en": "App Secret from Lark Open Platform"
+          },
           "type": "secret",
           "required": true
         }
       ],
       "tools": [
-        { "name": "send_message", "description": { "zh": "发送消息", "en": "Send message" } },
-        { "name": "list_events", "description": { "zh": "查看日历事件", "en": "List calendar events" } },
-        { "name": "create_event", "description": { "zh": "创建日程", "en": "Create calendar event" } }
+        {
+          "name": "send_message",
+          "description": { "zh": "发送消息", "en": "Send message" }
+        },
+        {
+          "name": "list_events",
+          "description": { "zh": "查看日历事件", "en": "List calendar events" }
+        },
+        {
+          "name": "create_event",
+          "description": { "zh": "创建日程", "en": "Create calendar event" }
+        }
       ]
     },
     {
       "id": "sina-finance",
       "name": { "zh": "新浪财经", "en": "Sina Finance" },
-      "description": { "zh": "基于新浪财经 API 的实时股票行情查询，支持 A 股、港股、美股实时报价", "en": "Real-time stock quotes via Sina Finance API, supporting A-shares, HK stocks and US stocks" },
+      "description": {
+        "zh": "基于新浪财经 API 的实时股票行情查询，支持 A 股、港股、美股实时报价",
+        "en": "Real-time stock quotes via Sina Finance API, supporting A-shares, HK stocks and US stocks"
+      },
       "icon": "📈",
       "category": "finance",
       "tags": ["stock", "finance", "sina", "A股", "行情"],
@@ -493,7 +741,13 @@
       },
       "variables": [],
       "tools": [
-        { "name": "get-quote", "description": { "zh": "获取股票实时行情。symbol 格式：A股上证=sh开头(如sh600000)，A股深证=sz开头(如sz000001)，上证指数=sh000001，深证成指=sz399001，创业板指=sz399006；港股=hk开头(如hk00700)；美股直接用代码(如AAPL)。查大盘行情用 sh000001", "en": "Get real-time stock quote" } }
+        {
+          "name": "get-quote",
+          "description": {
+            "zh": "获取股票实时行情。symbol 格式：A股上证=sh开头(如sh600000)，A股深证=sz开头(如sz000001)，上证指数=sh000001，深证成指=sz399001，创业板指=sz399006；港股=hk开头(如hk00700)；美股直接用代码(如AAPL)。查大盘行情用 sh000001",
+            "en": "Get real-time stock quote"
+          }
+        }
       ]
     }
   ]
