@@ -9,14 +9,21 @@ tags:
   - llm
   - summarize
   - deep-search
+  - 搜索
+  - 网上搜索
   - 精准搜索
   - 智能搜索
+  - 查资料
+  - 上网查
 os:
   - darwin
   - linux
 enabled: true
 timeout: 180
 is_internal: true
+guidance: |
+  当用户要求"搜一下"、"查一下"、"上网找"、"帮我搜索"时，使用此工具。
+  只需提供 terms 参数，例如：{"terms":"Go语言如何安装"}
 parameters:
   terms:
     type: string
