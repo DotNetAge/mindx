@@ -40,11 +40,7 @@ func (s *BrainIntegrationSuite) TestPost_ToolExecution_Calculator() {
 	s.NotEmpty(resp.Answer, "计算器流程应返回非空回答")
 	s.T().Logf("回答: %s, 工具数: %d", resp.Answer, len(resp.Tools))
 
-	if len(resp.Tools) > 0 {
-		for _, t := range resp.Tools {
-			s.T().Logf("  工具: %s", t.Name)
-		}
-	}
+	s.toolCallHelper(resp, []string{"calculator"})
 }
 
 // TestPost_ToolExecution_Weather 完整 post() 流程：天气工具
@@ -56,6 +52,8 @@ func (s *BrainIntegrationSuite) TestPost_ToolExecution_Weather() {
 	s.Require().NoError(err)
 	s.NotEmpty(resp.Answer, "天气流程应返回非空回答")
 	s.T().Logf("回答: %s, 工具数: %d", resp.Answer, len(resp.Tools))
+
+	s.toolCallHelper(resp, []string{"weather"})
 }
 
 // TestPost_ToolExecution_Sysinfo 完整 post() 流程：系统信息工具
@@ -67,6 +65,8 @@ func (s *BrainIntegrationSuite) TestPost_ToolExecution_Sysinfo() {
 	s.Require().NoError(err)
 	s.NotEmpty(resp.Answer, "系统信息流程应返回非空回答")
 	s.T().Logf("回答: %s, 工具数: %d", resp.Answer, len(resp.Tools))
+
+	s.toolCallHelper(resp, []string{"sysinfo"})
 }
 
 // TestPost_Schedule_Create 完整 post() 流程：创建定时任务
@@ -121,7 +121,7 @@ func (s *BrainIntegrationSuite) TestPost_SendTo() {
 		s.True(containsAnyCI(resp.SendTo, []string{"wechat", "微信", "weixin"}),
 			"send_to '%s' 应包含微信相关标识", resp.SendTo)
 	} else {
-		s.T().Log("⚠ 小模型未识别出转发意图")
+		s.Fail("模型未识别出转发意图，send_to 为空")
 	}
 }
 
@@ -163,33 +163,8 @@ func (s *BrainIntegrationSuite) TestPost_ToolExecution_Contacts() {
 	s.NotEmpty(resp.Answer, "联系人查询应返回非空回答")
 	s.T().Logf("回答: %s, 工具数: %d", resp.Answer, len(resp.Tools))
 
-	if len(resp.Tools) > 0 {
-		foundContacts := false
-		for _, t := range resp.Tools {
-			s.T().Logf("  工具: %s, 参数: %v", t.Name, t.Params)
-			if t.Name == "contacts" {
-				foundContacts = true
-			}
-		}
-		if foundContacts {
-			s.T().Log("✓ 正确调用了 contacts 工具")
-			// 回答应包含查询结果：找到电话号码或告知未找到
-			hasResult := strings.Contains(resp.Answer, "李靖文") ||
-				strings.Contains(resp.Answer, "没有找到") ||
-				strings.Contains(resp.Answer, "未找到") ||
-				strings.Contains(resp.Answer, "找不到") ||
-				strings.Contains(resp.Answer, "不存在") ||
-				strings.Contains(resp.Answer, "电话")
-			s.True(hasResult, "回答应包含查询结果（电话号码或未找到提示），实际: %s", resp.Answer)
-		} else {
-			toolNames := make([]string, 0, len(resp.Tools))
-			for _, t := range resp.Tools {
-				toolNames = append(toolNames, t.Name)
-			}
-			s.T().Logf("⚠ 小模型未匹配到 contacts 工具，实际调用: %v", toolNames)
-		}
-	} else {
-		s.T().Log("⚠ 模型未识别出联系人查询意图")
+	if s.toolCallHelper(resp, []string{"contacts"}) {
+		s.T().Log("✓ 正确调用了 contacts 工具")
 	}
 }
 
@@ -204,12 +179,9 @@ func containsAnyCI(s string, substrs []string) bool {
 }
 
 // toolCallHelper 通用工具调用验证辅助函数
-// 返回是否找到了期望的工具
+// 断言必须找到期望的工具之一，否则测试失败
 func (s *BrainIntegrationSuite) toolCallHelper(resp *core.ThinkingResponse, expectTools []string) bool {
-	if len(resp.Tools) == 0 {
-		s.T().Log("⚠ 模型未识别出工具调用意图")
-		return false
-	}
+	s.Require().NotEmpty(resp.Tools, "应调用工具但未调用任何工具，期望: %v", expectTools)
 
 	toolNames := make([]string, 0, len(resp.Tools))
 	for _, t := range resp.Tools {
