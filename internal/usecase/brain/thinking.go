@@ -555,7 +555,8 @@ func (t *Thinking) ThinkWithTools(ctx context.Context, question string, history 
 		Name      string                 `json:"name"`
 		Arguments map[string]interface{} `json:"arguments"`
 	}
-	if err := json.Unmarshal([]byte(content), &ollamaToolCall); err == nil && ollamaToolCall.Name != "" {
+	cleanedContent := extractJSON(content)
+	if err := json.Unmarshal([]byte(cleanedContent), &ollamaToolCall); err == nil && ollamaToolCall.Name != "" {
 		t.logger.Info("[右脑] Ollama 格式工具调用",
 			logging.String("function", ollamaToolCall.Name),
 			logging.Any("arguments", ollamaToolCall.Arguments))
