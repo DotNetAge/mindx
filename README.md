@@ -140,14 +140,18 @@ mindx start
 - **更多功能**：可访问 [MindX](https://mindx.chat) 官方网站查看更多功能
 
 ## 常见问题
-- **Q: 安装提示 Ollama 未安装？**  
-  A: 确保 Ollama 已正确安装并启动服务（验证：`ollama list`）。
-- **Q: 如何更新 MindX？**  
-  A: 下载最新发布包，重新运行 `install.sh` 即可。
-- **Q: 数据存储位置？**  
-  A: 所有数据（对话、记忆、配置）均存储在安装时指定的本地工作目录。
-- **Q: 如何卸载？**  
-  A: 运行安装目录中的 `uninstall.sh` 脚本，可完全卸载。
+
+**Q: 安装提示 Ollama 未安装？**<br>
+A: 确保 Ollama 已正确安装并启动服务（验证：`ollama list`）。
+
+**Q: 如何更新 MindX？**<br>
+A: 下载最新发布包，重新运行 `install.sh` 即可。
+
+**Q: 数据存储位置？**<br>
+A: 所有数据（对话、记忆、配置）均存储在安装时指定的本地工作目录。
+
+**Q: 如何卸载？**<br>
+A: 运行安装目录中的 `uninstall.sh` 脚本，可完全卸载。
 
 ## 对比优势（与 OpenClaw）
 | 特性         | MindX                                        | OpenClaw                          |
@@ -168,6 +172,16 @@ MindX 正处于高速迭代期，诚邀前 100 名开发者加入核心贡献者
 - 📈 参与产品路线规划，决定 MindX 进化方向
 👉 只需提交首个 PR（文档优化/功能修复/建议都可），即可加入：[贡献指南](./CONTRIBUTING.md)
 
+### Contributors
+感谢以下贡献者:
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+[![EricConnect](https://avatars.githubusercontent.com/u/XXX?v=4?s=100)](https://github.com/EricConnect)
+[![XXY-CH](https://avatars.githubusercontent.com/u/XXX?v=4?s=100)](https://github.com/XXY-CH)
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+<!-- ALL-CONTRIBUTORS-LIST:END -->
 ## 许可证
 MindX 采用 MIT 许可证开源，核心技术 100% 自主可控，可自由使用、修改和分发。
 
