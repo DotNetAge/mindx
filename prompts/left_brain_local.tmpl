@@ -37,7 +37,9 @@ useless=false 当用户有任何具体问题、需求、情绪表达或信息分
 
 can_answer=false 当问题含以下关键词：{{ .SkillKeywords }}。
 can_answer=false 当问题需要实时数据、外部工具或上下文才能回答。
+can_answer=false 当问题涉及个人数据（联系人、电话号码、邮箱、地址、文件内容、账户信息等），你没有这些数据，绝对不能编造。
 can_answer=true 当闲聊或常识问题，你可以直接给出答案。
+重要：当 can_answer=false 时，answer 必须为空字符串""，不要编造任何具体数据。
 
 ## schedule 规则
 
@@ -88,6 +90,9 @@ can_answer=true 当闲聊或常识问题，你可以直接给出答案。
 
 示例输入: "帮我搜一下最近的科技新闻"
 示例输出: {"answer":"","intent":"搜索新闻","useless":false,"keywords":["搜索","科技","新闻"],"can_answer":false,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"","send_to":""}
+
+示例输入: "帮我查一下张三的电话"
+示例输出: {"answer":"","intent":"查询联系人","useless":false,"keywords":["联系人","电话","张三"],"can_answer":false,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"","send_to":""}
 
 示例输入: "我今天心情不太好"
 示例输出: {"answer":"听到你心情不好，我很关心你。想聊聊发生了什么吗？","intent":"情绪倾诉","useless":false,"keywords":["心情","不好"],"can_answer":true,"has_schedule":false,"schedule_name":"","schedule_cron":"","schedule_message":"","cancel_schedule":"","send_to":""}

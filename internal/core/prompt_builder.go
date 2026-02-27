@@ -193,7 +193,9 @@ useless=false 当用户有任何具体问题、需求、情绪表达或信息分
 
 can_answer=false 当问题含以下关键词：%s。
 can_answer=false 当问题需要实时数据、外部工具或上下文才能回答。
-can_answer=true 当闲聊或常识问题，你可以直接给出答案。`, b.getSkillKeywordsStr()))
+can_answer=false 当问题涉及个人数据（联系人、电话号码、邮箱、地址、文件内容、账户信息等），你没有这些数据，绝对不能编造。
+can_answer=true 当闲聊或常识问题，你可以直接给出答案。
+重要：当 can_answer=false 时，answer 必须为空字符串""，不要编造任何具体数据。`, b.getSkillKeywordsStr()))
 
 	parts = append(parts, `## 输出格式
 
@@ -242,7 +244,9 @@ useless=false 当用户有任何具体问题、需求、情绪表达或信息分
 
 can_answer=false 当问题含以下关键词：%s。
 can_answer=false 当问题需要实时数据、外部工具或上下文才能回答。
-can_answer=true 当闲聊或常识问题，你可以直接给出答案。`, b.getSkillKeywordsStr()))
+can_answer=false 当问题涉及个人数据（联系人、电话号码、邮箱、地址、文件内容、账户信息等），你没有这些数据，绝对不能编造。
+can_answer=true 当闲聊或常识问题，你可以直接给出答案。
+重要：当 can_answer=false 时，answer 必须为空字符串""，不要编造任何具体数据。`, b.getSkillKeywordsStr()))
 
 	parts = append(parts, `## 输出格式
 
