@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# MindX Installation Script
+# MindX Installation Script (macOS / Linux)
+# This script ONLY installs pre-built binaries. Run build.sh first.
 
 set -e
 
@@ -9,106 +10,57 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
+# Detect OS
+OS="$(uname -s)"
+case "$OS" in
+    Darwin)  PLATFORM="macos" ;;
+    Linux)   PLATFORM="linux" ;;
+    *)       echo -e "${RED}✗ Unsupported OS: $OS${NC}"; exit 1 ;;
+esac
+
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  MindX Installation Script${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-
-# Check if running from source directory or from release package
-if [ -f "cmd/main.go" ]; then
-    INSTALL_MODE="source"
-    echo -e "${BLUE}Installation mode: Source${NC}"
-else
-    INSTALL_MODE="release"
-    echo -e "${BLUE}Installation mode: Release package${NC}"
-fi
+echo -e "${BLUE}Platform: ${PLATFORM}${NC}"
 
 # Read version
 if [ -f "VERSION" ]; then
     VERSION=$(cat VERSION | tr -d '[:space:]')
 else
-    VERSION="latest"
+    VERSION="dev"
 fi
-
 echo -e "${BLUE}Version: ${VERSION}${NC}"
 echo ""
 
-# Check prerequisites
-echo -e "${YELLOW}[1/9] Checking prerequisites...${NC}"
-
-# Check Go (only for source mode)
-if [ "$INSTALL_MODE" = "source" ]; then
-    if ! command -v go &> /dev/null; then
-        echo -e "${RED}✗ Go is not installed${NC}"
-        echo "Please install Go 1.21 or later"
-        exit 1
-    fi
-    echo -e "${GREEN}✓ Go $(go version | awk '{print $3}')${NC}"
+# Check binary exists
+echo -e "${YELLOW}[1/7] Checking binary...${NC}"
+if [ ! -f "bin/mindx" ]; then
+    echo -e "${RED}✗ Binary not found: bin/mindx${NC}"
+    echo -e "${YELLOW}  Please run build.sh first:${NC}"
+    echo "    ./scripts/build.sh"
+    exit 1
 fi
-
-# Check Node.js (for dashboard - source only)
-if [ "$INSTALL_MODE" = "source" ]; then
-    if ! command -v node &> /dev/null; then
-        echo -e "${YELLOW}⚠ Node.js is not installed (dashboard will not be built)${NC}"
-    else
-        echo -e "${GREEN}✓ Node.js $(node -v)${NC}"
-    fi
-fi
-
-# Check Ollama (required)
-if command -v ollama &> /dev/null; then
-    echo -e "${GREEN}✓ Ollama is installed${NC}"
-    OLLAMA_AVAILABLE=true
-else
-    echo -e "${YELLOW}⚠ Ollama is not installed, installing now...${NC}"
-    
-    # Install Ollama
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS
-        echo -e "${BLUE}  Installing Ollama for macOS...${NC}"
-        curl -fsSL https://ollama.com/install.sh | sh
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        # Linux
-        echo -e "${BLUE}  Installing Ollama for Linux...${NC}"
-        curl -fsSL https://ollama.com/install.sh | sh
-    else
-        echo -e "${RED}✗ Unsupported OS for automatic Ollama installation${NC}"
-        echo "Please install Ollama manually from https://ollama.com"
-        exit 1
-    fi
-    
-    # Verify installation
-    if command -v ollama &> /dev/null; then
-        echo -e "${GREEN}✓ Ollama installed successfully${NC}"
-        OLLAMA_AVAILABLE=true
-    else
-        echo -e "${RED}✗ Ollama installation failed${NC}"
-        exit 1
-    fi
-fi
-
+echo -e "${GREEN}✓ Found bin/mindx${NC}"
 echo ""
 
 # Load environment variables
-echo -e "${YELLOW}[2/9] Loading configuration...${NC}"
+echo -e "${YELLOW}[2/7] Loading configuration...${NC}"
 
-# Read from .env if exists, otherwise use default
 if [ -f ".env" ]; then
     source .env
-    MINDX_PATH="${MINDX_PATH:-/usr/local/mindx}"
-    MINDX_WORKSPACE="${MINDX_WORKSPACE:-~/.mindx}"
     echo -e "${GREEN}✓ Loaded .env file${NC}"
-else
-    MINDX_PATH="${MINDX_PATH:-/usr/local/mindx}"
-    MINDX_WORKSPACE="${MINDX_WORKSPACE:-}"
 fi
+
+MINDX_PATH="${MINDX_PATH:-/usr/local/mindx}"
+MINDX_WORKSPACE="${MINDX_WORKSPACE:-}"
 
 # Interactive workspace selection
 if [ -z "$MINDX_WORKSPACE" ]; then
@@ -129,7 +81,6 @@ if [ -z "$MINDX_WORKSPACE" ]; then
                 ;;
             2)
                 read -p "Enter custom workspace path: " custom_path
-                # Expand ~ if present
                 MINDX_WORKSPACE="${custom_path/#\~/$HOME}"
                 echo -e "${GREEN}✓ Using custom workspace: $MINDX_WORKSPACE${NC}"
                 break
@@ -139,61 +90,21 @@ if [ -z "$MINDX_WORKSPACE" ]; then
                 ;;
         esac
     done
-else
-    echo -e "${BLUE}Using workspace from .env: $MINDX_WORKSPACE${NC}"
 fi
 
 echo -e "${BLUE}Install path: ${MINDX_PATH}${NC}"
 echo -e "${BLUE}Workspace: ${MINDX_WORKSPACE}${NC}"
 echo ""
 
-# Build binary (source mode only)
-echo -e "${YELLOW}[3/9] Preparing binary...${NC}"
+# Install files
+echo -e "${YELLOW}[3/7] Installing files to ${MINDX_PATH}...${NC}"
 
-if [ "$INSTALL_MODE" = "source" ]; then
-    # Build from source
-    BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-
-    CGO_ENABLED=0 \
-        go build \
-        -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
-        -o bin/mindx \
-        ./cmd/main.go
-
-    echo -e "${GREEN}✓ Built mindx binary${NC}"
-else
-    # Copy from release package
-    # Check bin/ first, then root
-    if [ -f "bin/mindx" ]; then
-        mkdir -p bin
-        chmod +x bin/mindx
-        echo -e "${GREEN}✓ Found mindx binary in bin/${NC}"
-    elif [ -f "mindx" ]; then
-        mkdir -p bin
-        cp mindx bin/
-        chmod +x bin/mindx
-        echo -e "${GREEN}✓ Copied mindx binary to bin/${NC}"
-    else
-        echo -e "${RED}✗ mindx binary not found (looked in bin/ and root)${NC}"
-        exit 1
-    fi
-fi
-
-echo ""
-
-# Install to MINDX_PATH
-echo -e "${YELLOW}[4/9] Installing files to ${MINDX_PATH}...${NC}"
-
-mkdir -p "$MINDX_PATH"
 mkdir -p "$MINDX_PATH/bin"
 
 # Copy binary
 cp bin/mindx "$MINDX_PATH/bin/"
 chmod +x "$MINDX_PATH/bin/mindx"
-
-# Also create a symlink for compatibility
-ln -sf "bin/mindx" "$MINDX_PATH/mindx"
+echo -e "${GREEN}✓ Copied binary${NC}"
 
 # Copy skills
 if [ -d "skills" ]; then
@@ -202,15 +113,11 @@ if [ -d "skills" ]; then
     echo -e "${GREEN}✓ Copied skills${NC}"
 fi
 
-# Copy static files for dashboard (check Vite's dist first, then build for CRA)
+# Copy static files
 if [ -d "dashboard/dist" ]; then
     mkdir -p "$MINDX_PATH/static"
     cp -r dashboard/dist/* "$MINDX_PATH/static/" 2>/dev/null || true
-    echo -e "${GREEN}✓ Copied dashboard static files${NC}"
-elif [ -d "dashboard/build" ]; then
-    mkdir -p "$MINDX_PATH/static"
-    cp -r dashboard/build/* "$MINDX_PATH/static/" 2>/dev/null || true
-    echo -e "${GREEN}✓ Copied dashboard static files${NC}"
+    echo -e "${GREEN}✓ Copied dashboard${NC}"
 elif [ -d "static" ]; then
     mkdir -p "$MINDX_PATH/static"
     cp -r static/* "$MINDX_PATH/static/" 2>/dev/null || true
@@ -220,8 +127,6 @@ fi
 # Copy config templates
 if [ -d "config" ]; then
     mkdir -p "$MINDX_PATH/config"
-    
-    # Copy and rename to .template
     for file in config/*; do
         if [ -f "$file" ]; then
             filename=$(basename "$file")
@@ -232,38 +137,35 @@ if [ -d "config" ]; then
 fi
 
 # Copy uninstall script
-if [ -f "uninstall.sh" ]; then
-    cp uninstall.sh "$MINDX_PATH/"
+if [ -f "scripts/uninstall.sh" ]; then
+    cp scripts/uninstall.sh "$MINDX_PATH/"
     chmod +x "$MINDX_PATH/uninstall.sh"
     echo -e "${GREEN}✓ Copied uninstall script${NC}"
 fi
 
-echo -e "${GREEN}✓ Installed to ${MINDX_PATH}${NC}"
 echo ""
 
-# Create symlink to system path
-echo -e "${YELLOW}[5/9] Creating symlink to system path...${NC}"
+# Create symlink
+echo -e "${YELLOW}[4/7] Creating symlink...${NC}"
 
 INSTALL_DIR="/usr/local/bin"
 
 if [ -w "$INSTALL_DIR" ]; then
     ln -sf "$MINDX_PATH/bin/mindx" "$INSTALL_DIR/mindx"
-    echo -e "${GREEN}✓ Created symlink $INSTALL_DIR/mindx -> $MINDX_PATH/bin/mindx${NC}"
+    echo -e "${GREEN}✓ Created symlink: $INSTALL_DIR/mindx${NC}"
 else
-    echo -e "${YELLOW}⚠ Cannot write to $INSTALL_DIR${NC}"
-    echo -e "${YELLOW}  Please run: sudo ln -sf $MINDX_PATH/bin/mindx $INSTALL_DIR/mindx${NC}"
-    echo -e "${YELLOW}  Or add $MINDX_PATH/bin to your PATH${NC}"
+    echo -e "${YELLOW}⚠ Cannot write to $INSTALL_DIR (need sudo)${NC}"
+    echo -e "${YELLOW}  Run: sudo ln -sf $MINDX_PATH/bin/mindx $INSTALL_DIR/mindx${NC}"
 fi
 
 echo ""
 
-# Create workspace directory
-echo -e "${YELLOW}[6/9] Creating workspace directory...${NC}"
+# Create workspace
+echo -e "${YELLOW}[5/7] Creating workspace...${NC}"
 
 mkdir -p "$MINDX_WORKSPACE"
 mkdir -p "$MINDX_WORKSPACE/config"
 mkdir -p "$MINDX_WORKSPACE/logs"
-mkdir -p "$MINDX_WORKSPACE/data"
 mkdir -p "$MINDX_WORKSPACE/data/memory"
 mkdir -p "$MINDX_WORKSPACE/data/sessions"
 mkdir -p "$MINDX_WORKSPACE/data/training"
@@ -272,8 +174,8 @@ mkdir -p "$MINDX_WORKSPACE/data/vectors"
 echo -e "${GREEN}✓ Created workspace: $MINDX_WORKSPACE${NC}"
 echo ""
 
-# Copy config templates to workspace
-echo -e "${YELLOW}[7/9] Setting up configuration...${NC}"
+# Setup config files
+echo -e "${YELLOW}[6/7] Setting up configuration...${NC}"
 
 if [ -d "$MINDX_PATH/config" ]; then
     for template in "$MINDX_PATH/config"/*.template; do
@@ -290,65 +192,74 @@ if [ -d "$MINDX_PATH/config" ]; then
     done
 fi
 
-echo ""
-
-# Setup .env file
-echo -e "${YELLOW}[8/9] Setting up environment...${NC}"
-
-# Create .env file in workspace if not exists
+# Create .env
 if [ ! -f "$MINDX_WORKSPACE/.env" ]; then
     cat > "$MINDX_WORKSPACE/.env" << ENV_EOF
 # MindX Environment Configuration
 MINDX_PATH=${MINDX_PATH}
 MINDX_WORKSPACE=${MINDX_WORKSPACE}
 ENV_EOF
-    echo -e "${GREEN}✓ Created .env file in workspace${NC}"
-else
-    echo -e "${BLUE}ℹ .env file exists in workspace${NC}"
-fi
-
-# Create/update .env file in current directory (both source and release mode)
-CURRENT_DIR=$(pwd)
-if [ -f ".env" ]; then
-    # Update MINDX_PATH and MINDX_WORKSPACE in existing .env
-    if [ "$INSTALL_MODE" = "source" ]; then
-        sed -i.bak "s|^MINDX_PATH=.*|MINDX_PATH=${PROJECT_ROOT}|" .env 2>/dev/null || sed -i '' "s|^MINDX_PATH=.*|MINDX_PATH=${PROJECT_ROOT}|" .env 2>/dev/null || true
-    else
-        sed -i.bak "s|^MINDX_PATH=.*|MINDX_PATH=${MINDX_PATH}|" .env 2>/dev/null || sed -i '' "s|^MINDX_PATH=.*|MINDX_PATH=${MINDX_PATH}|" .env 2>/dev/null || true
-    fi
-    sed -i.bak "s|^MINDX_WORKSPACE=.*|MINDX_WORKSPACE=${MINDX_WORKSPACE}|" .env 2>/dev/null || sed -i '' "s|^MINDX_WORKSPACE=.*|MINDX_WORKSPACE=${MINDX_WORKSPACE}|" .env 2>/dev/null || true
-    rm -f .env.bak 2>/dev/null || true
-    echo -e "${GREEN}✓ Updated .env file in current directory${NC}"
-else
-    # Create .env file in current directory
-    if [ "$INSTALL_MODE" = "source" ]; then
-        cat > ".env" << ENV_EOF
-# Environment variables for Bot application
-MINDX_WORKSPACE=${MINDX_WORKSPACE}
-MINDX_PATH=${PROJECT_ROOT}
-
-ENV_EOF
-    else
-        cat > ".env" << ENV_EOF
-# MindX Environment Configuration
-MINDX_PATH=${MINDX_PATH}
-MINDX_WORKSPACE=${MINDX_WORKSPACE}
-ENV_EOF
-    fi
-    echo -e "${GREEN}✓ Created .env file in current directory${NC}"
+    echo -e "${GREEN}✓ Created .env in workspace${NC}"
 fi
 
 echo ""
 
-# Setup systemd service on Linux
-if [[ "$(uname -s)" == "Linux" ]]; then
-    echo -e "${YELLOW}[9/10] Setting up systemd service...${NC}"
+# Setup daemon
+echo -e "${YELLOW}[7/7] Setting up daemon...${NC}"
 
+CURRENT_USER=$(whoami)
+
+if [ "$PLATFORM" = "macos" ]; then
+    # macOS: launchd
+    LAUNCHD_PLIST="$HOME/Library/LaunchAgents/com.mindx.agent.plist"
+    
+    mkdir -p "$(dirname "$LAUNCHD_PLIST")"
+    
+    cat > "$LAUNCHD_PLIST" << PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.mindx.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${MINDX_PATH}/bin/mindx</string>
+        <string>kernel</string>
+        <string>run</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>${MINDX_WORKSPACE}/logs/mindx.log</string>
+    <key>StandardErrorPath</key>
+    <string>${MINDX_WORKSPACE}/logs/mindx.error.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>MINDX_PATH</key>
+        <string>${MINDX_PATH}</string>
+        <key>MINDX_WORKSPACE</key>
+        <string>${MINDX_WORKSPACE}</string>
+    </dict>
+</dict>
+</plist>
+PLIST_EOF
+
+    echo -e "${GREEN}✓ Created launchd plist${NC}"
+    echo -e "${BLUE}  Location: $LAUNCHD_PLIST${NC}"
+    echo ""
+    echo -e "${YELLOW}To start the service:${NC}"
+    echo "    launchctl load $LAUNCHD_PLIST"
+    echo ""
+    echo -e "${YELLOW}To stop the service:${NC}"
+    echo "    launchctl unload $LAUNCHD_PLIST"
+
+else
+    # Linux: systemd
     SYSTEMD_SERVICE="/etc/systemd/system/mindx.service"
-    CURRENT_USER=$(whoami)
-    CURRENT_UID=$(id -u)
-    CURRENT_GID=$(id -g)
-
+    
     SERVICE_CONTENT="[Unit]
 Description=MindX AI Personal Assistant
 After=network.target ollama.service
@@ -375,52 +286,19 @@ WantedBy=multi-user.target"
         systemctl daemon-reload
         systemctl enable mindx
         echo -e "${GREEN}✓ Created and enabled systemd service${NC}"
+        echo ""
+        echo -e "${YELLOW}To start the service:${NC}"
+        echo "    sudo systemctl start mindx"
     else
         echo -e "${YELLOW}⚠ Cannot write to /etc/systemd/system (need sudo)${NC}"
-        echo -e "${YELLOW}  Run the following to set up the service:${NC}"
         echo ""
         echo "  sudo tee $SYSTEMD_SERVICE << 'EOF'"
         echo "$SERVICE_CONTENT"
         echo "EOF"
         echo "  sudo systemctl daemon-reload"
         echo "  sudo systemctl enable mindx"
-        echo ""
     fi
-else
-    echo -e "${YELLOW}[9/10] Skipping systemd setup (not Linux)${NC}"
 fi
-
-echo ""
-
-# Pull required Ollama models
-echo -e "${YELLOW}[10/10] Pulling Ollama models...${NC}"
-
-# Models to pull
-REQUIRED_MODELS=(
-    "qllama/bge-small-zh-v1.5:latest"
-    "qwen3:1.7b"
-    "qwen3:0.6b"
-)
-
-for model in "${REQUIRED_MODELS[@]}"; do
-    echo ""
-    echo -e "${BLUE}  Checking ${model}...${NC}"
-    
-    # Check if model is already installed
-    if ollama list | grep -q "^${model//:/\\:}"; then
-        echo -e "${GREEN}✓ ${model} is already installed${NC}"
-    else
-        echo -e "${YELLOW}  Pulling ${model}...${NC}"
-        ollama pull "$model" 2>&1 | while IFS= read -r line; do
-            echo "    $line"
-        done
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}✓ Pulled ${model}${NC}"
-        else
-            echo -e "${YELLOW}⚠ Failed to pull ${model} (will try later)${NC}"
-        fi
-    fi
-done
 
 echo ""
 
@@ -429,30 +307,17 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  Installation Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo "MindX has been successfully installed!"
-echo ""
 echo "Install path: $MINDX_PATH"
 echo "Workspace:    $MINDX_WORKSPACE"
 echo "Binary:       $MINDX_PATH/bin/mindx"
-echo "Symlink:      /usr/local/bin/mindx (pointing to $MINDX_PATH/mindx)"
 echo ""
-echo -e "${YELLOW}Recommended: Set global environment variables${NC}"
-echo "Add the following lines to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
-echo ""
+echo -e "${YELLOW}Add to your shell profile (~/.zshrc or ~/.bashrc):${NC}"
 echo "  export MINDX_PATH=$MINDX_PATH"
 echo "  export MINDX_WORKSPACE=$MINDX_WORKSPACE"
 echo ""
-echo "Then reload your shell profile:"
-echo "  source ~/.zshrc  # or ~/.bashrc"
-echo ""
 echo "Quick start:"
-echo "  1. Start MindX service: mindx start"
-echo "  2. Open Dashboard WebUI: mindx dashboard"
-echo "  3. Visit: http://localhost:911"
+echo "  mindx kernel run"
 echo ""
 echo "To uninstall:"
 echo "  $MINDX_PATH/uninstall.sh"
-echo ""
-echo "Or run from source directory:"
-echo "  ./uninstall.sh"
 echo ""
