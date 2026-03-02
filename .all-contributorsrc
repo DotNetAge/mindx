@@ -6,7 +6,7 @@
   "files": [
     "README.md"
   ],
-  "imageSize": 100,
+  "imageSize": 32,
   "commit": true,
   "commitConvention": "angular",
   "contributors": [
@@ -26,6 +26,15 @@
       "profile": "https://github.com/XXY-CH",
       "contributions": [
         "code"
+      ]
+    },
+    {
+      "login": "walt008",
+      "name": "walt",
+      "avatar_url": "https://avatars.githubusercontent.com/u/23328878?v=4",
+      "profile": "http://www.cnvirtue.com/",
+      "contributions": [
+        "doc"
       ]
     }
   ],
