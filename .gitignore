@@ -46,3 +46,4 @@ data/
 .test/
 bin/
 dev-dist/
+.tmp/

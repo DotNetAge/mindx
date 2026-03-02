@@ -1,22 +1,22 @@
 #!/bin/bash
 
-set -e
+# MindX Linux Package Script - Packages Linux builds from dist/
 
-# MindX Linux Build Script - Builds full Linux release packages
+set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  MindX Linux Release Build${NC}"
+echo -e "${BLUE}  MindX Linux Package Build${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
@@ -26,108 +26,47 @@ if [ -f "VERSION" ]; then
 else
     VERSION="dev"
 fi
-
 echo -e "${CYAN}Version: ${VERSION}${NC}"
 echo ""
 
-# Clean previous build
-echo -e "${YELLOW}[1/4] Cleaning previous build...${NC}"
-rm -rf dist bin
-mkdir -p dist bin
-echo -e "${GREEN}✓ Clean complete${NC}"
-echo ""
-
-# Build frontend
-echo -e "${YELLOW}[2/4] Building frontend...${NC}"
-cd dashboard
-if [ ! -d "node_modules" ]; then
-    npm install --silent
+# Check dist exists
+if [ ! -d "dist" ]; then
+    echo "Error: dist/ directory not found. Run build.sh first."
+    exit 1
 fi
-npm run build --silent
-cd "$PROJECT_ROOT"
-echo -e "${GREEN}✓ Frontend built${NC}"
+
+# Clean releases
+echo -e "${YELLOW}[1/2] Cleaning previous releases...${NC}"
+rm -f releases/mindx-*-linux-*.tar.gz
+mkdir -p releases
+echo -e "${GREEN}✓ Ready${NC}"
 echo ""
 
-# Build function
-build_linux() {
-    local ARCH=$1
-    local ARCH_NAME=$2
-    local DIST_DIR="dist/linux-${ARCH_NAME}"
-    local TAR_NAME="mindx-${VERSION}-linux-${ARCH_NAME}.tar.gz"
+# Package Linux builds
+echo -e "${YELLOW}[2/2] Packaging Linux builds...${NC}"
 
-    echo -e "${YELLOW}Building Linux ${ARCH_NAME}...${NC}"
+mkdir -p releases
+
+package_linux() {
+    local DIR="dist/mindx-${VERSION}-linux-$1"
+    local OUTPUT="releases/mindx-${VERSION}-linux-$1.tar.gz"
     
-    rm -rf "${DIST_DIR}"
-    mkdir -p "${DIST_DIR}/bin"
+    echo "  Packaging $DIR -> $OUTPUT"
     
-    # Build binary
-    CGO_ENABLED=0 GOOS=linux GOARCH="${ARCH}" go build -ldflags="-s -w -X main.Version=${VERSION}" -o "${DIST_DIR}/bin/mindx" ./cmd/main.go
-    chmod +x "${DIST_DIR}/bin/mindx"
-    echo -e "${GREEN}  ✓ Binary built${NC}"
-    
-    # Copy skills
-    if [ -d "skills" ]; then
-        cp -r skills "${DIST_DIR}/"
-        echo -e "${GREEN}  ✓ Skills copied${NC}"
+    if [ -d "$DIR" ]; then
+        (cd "$DIR" && tar -czf "$PROJECT_ROOT/$OUTPUT" .)
+        echo -e "${GREEN}  ✓ $OUTPUT${NC}"
+    else
+        echo -e "${YELLOW}  ⚠ $DIR not found${NC}"
     fi
-    
-    # Copy config templates
-    mkdir -p "${DIST_DIR}/config"
-    for file in config/*; do
-        if [ -f "$file" ]; then
-            filename=$(basename "$file")
-            cp "$file" "${DIST_DIR}/config/${filename}.template"
-        fi
-    done
-    echo -e "${GREEN}  ✓ Config templates copied${NC}"
-    
-    # Copy scripts
-    cp scripts/install.sh "${DIST_DIR}/"
-    cp scripts/uninstall.sh "${DIST_DIR}/"
-    chmod +x "${DIST_DIR}/install.sh"
-    chmod +x "${DIST_DIR}/uninstall.sh"
-    echo -e "${GREEN}  ✓ Scripts copied${NC}"
-    
-    # Copy frontend
-    if [ -d "dashboard/dist" ]; then
-        cp -r dashboard/dist "${DIST_DIR}/static"
-        echo -e "${GREEN}  ✓ Frontend copied${NC}"
-    fi
-    
-    # Copy docs
-    if [ -f "README.md" ]; then
-        cp README.md "${DIST_DIR}/"
-    fi
-    if [ -f "README_zh-cn.md" ]; then
-        cp README_zh-cn.md "${DIST_DIR}/"
-    fi
-    if [ -f "VERSION" ]; then
-        cp VERSION "${DIST_DIR}/"
-    fi
-    
-    # Create tarball
-    cd "${DIST_DIR}"
-    tar -czf "../${TAR_NAME}" .
-    cd "$PROJECT_ROOT"
-    echo -e "${GREEN}  ✓ ${TAR_NAME} created${NC}"
 }
 
-# Build both architectures
-echo -e "${YELLOW}[3/4] Building Linux binaries...${NC}"
-build_linux "amd64" "amd64"
-build_linux "arm64" "arm64"
+package_linux "amd64"
+package_linux "arm64"
 echo ""
 
-# Move to releases
-echo -e "${YELLOW}[4/4] Preparing release packages...${NC}"
-mkdir -p releases
-cp dist/mindx-*-linux-*.tar.gz releases/ 2>/dev/null || true
-echo -e "${GREEN}✓ Release packages moved to releases/${NC}"
-echo ""
-
-# Summary
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}  Build Complete!${NC}"
+echo -e "${GREEN}  Package Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Release packages:"

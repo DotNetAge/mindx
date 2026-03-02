@@ -1,21 +1,15 @@
 models:
   - name: qwen3:0.6b
-    description: "本地快速模型，用于潜意识、左脑等快速响应"
+    description: "通义千问3 0.6b，体积小响应快,理解能力弱"
     base_url: "http://localhost:11434/v1"
     api_key: ""
     temperature: 0.3
     max_tokens: 40960
   - name: qwen3:1.7b
-    description: "本地思考模型，用于右脑、主意识等思考任务"
+    description: "通义千问3 1.7b，平衡速度和质量"
     base_url: "http://localhost:11434/v1"
     api_key: ""
     temperature: 0.7
-    max_tokens: 40960
-  - name: qwen3:4b
-    description: "本地中等模型，平衡速度和质量"
-    base_url: "http://localhost:11434/v1"
-    api_key: ""
-    temperature: 0.5
     max_tokens: 40960
   - name: qwen3.5-plus
     description: "通义千问3.5 Plus，用于高质量内容创作"
@@ -89,8 +83,8 @@ models:
     api_key: ""
     temperature: 0.3
     max_tokens: 131072
-  - name: qllama/bge-small-zh-v1.5:latest
-    description: "BGE Small 中文嵌入模型，用于向量计算除了地址其它参数不建议修改"
+  - name: quentinz/bge-small-zh-v1.5:latest
+    description: "BGE Small 中文嵌入模型，用于向量计算无法对话"
     base_url: "http://localhost:11434"
     api_key: ""
     temperature: 0.0
