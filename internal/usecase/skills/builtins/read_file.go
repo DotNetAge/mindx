@@ -37,10 +37,13 @@ func ReadFile(params map[string]any) (string, error) {
 		baseDir = filepath.Join(workDir, "data")
 	}
 
+	cleanBase := filepath.Clean(baseDir)
+
 	if filepath.IsAbs(cleanPath) {
-		// Check if absolute path is within workspace - reject if not
-		cleanBase := filepath.Clean(baseDir)
-		if !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) && cleanPath != cleanBase {
+		// Absolute path: validate it's within workspace via filepath.Rel
+		// filepath.Rel handles cross-platform case sensitivity correctly
+		rel, err := filepath.Rel(cleanBase, cleanPath)
+		if err != nil || strings.HasPrefix(rel, "..") {
 			return "", fmt.Errorf("access denied: absolute path outside workspace directory")
 		}
 	} else {
@@ -48,7 +51,6 @@ func ReadFile(params map[string]any) (string, error) {
 	}
 
 	// Final validation: ensure resolved path is still within base directory
-	cleanBase := filepath.Clean(baseDir)
 	rel, err := filepath.Rel(cleanBase, cleanPath)
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return "", fmt.Errorf("access denied: path outside allowed directory")
