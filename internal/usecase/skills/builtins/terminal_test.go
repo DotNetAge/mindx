@@ -1,22 +1,14 @@
 package builtins
 
 import (
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestTerminal_SafeCommand(t *testing.T) {
-	var expectedCmd string
-	if runtime.GOOS == "windows" {
-		expectedCmd = "echo hello"
-	} else {
-		expectedCmd = "echo hello"
-	}
-
 	params := map[string]any{
-		"command": expectedCmd,
+		"command": "echo hello",
 	}
 
 	result, err := Terminal(params)
@@ -68,6 +60,16 @@ func TestTerminal_MissingParam(t *testing.T) {
 func TestTerminal_PipeCharBlocked(t *testing.T) {
 	params := map[string]any{
 		"command": "ls | grep test",
+	}
+
+	_, err := Terminal(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "dangerous characters")
+}
+
+func TestTerminal_RedirectBlocked(t *testing.T) {
+	params := map[string]any{
+		"command": "echo test > /tmp/hack",
 	}
 
 	_, err := Terminal(params)

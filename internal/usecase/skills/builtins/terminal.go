@@ -13,14 +13,19 @@ import (
 
 // dangerousCommands lists commands that require explicit dangerous=true
 var dangerousCommands = map[string]bool{
+	// Unix destructive commands
 	"rm": true, "dd": true, "mkfs": true, "format": true,
 	"shutdown": true, "reboot": true, "init": true,
 	"kill": true, "killall": true, "pkill": true,
 	"fdisk": true, "parted": true, "chmod": true, "chown": true,
+	"sudo": true, "su": true, "systemctl": true,
+	// Windows destructive commands
+	"del": true, "rd": true, "rmdir": true,
+	"powershell": true,
 }
 
 // dangerousChars lists shell metacharacters that indicate injection
-var dangerousChars = []string{";", "&", "|", "`", "$(", ")"}
+var dangerousChars = []string{";", "&", "|", "`", "$(", ")", ">", ">>", "<"}
 
 // Terminal executes a terminal command with security validation
 func Terminal(params map[string]any) (string, error) {

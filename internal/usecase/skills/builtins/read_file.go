@@ -18,8 +18,9 @@ func ReadFile(params map[string]any) (string, error) {
 
 	startTime := time.Now()
 
-	// SECURITY: Reject path traversal
-	if strings.Contains(path, "..") {
+	// SECURITY: Reject path traversal patterns
+	cleanPath := filepath.Clean(path)
+	if strings.Contains(cleanPath, "..") {
 		return "", fmt.Errorf("path traversal detected: .. not allowed")
 	}
 
@@ -30,16 +31,13 @@ func ReadFile(params map[string]any) (string, error) {
 	}
 
 	// If path is not absolute, resolve relative to workspace documents or data
-	if !filepath.IsAbs(path) {
+	if !filepath.IsAbs(cleanPath) {
 		baseDir := filepath.Join(workDir, "documents")
 		if _, err := os.Stat(baseDir); os.IsNotExist(err) {
 			baseDir = filepath.Join(workDir, "data")
 		}
-		path = filepath.Join(baseDir, path)
+		cleanPath = filepath.Clean(filepath.Join(baseDir, cleanPath))
 	}
-
-	// Clean and validate final path
-	cleanPath := filepath.Clean(path)
 
 	// Check file exists
 	info, err := os.Stat(cleanPath)
