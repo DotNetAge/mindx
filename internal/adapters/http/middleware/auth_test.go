@@ -59,7 +59,13 @@ func (m *mockAuthProvider) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.GetHeader("Authorization")
 		if token != "Bearer test-token" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			// 使用中间件注入的 i18n 消息
+			msg, _ := c.Get("auth.unauthorized_message")
+			errMsg := "unauthorized"
+			if msg != nil && msg.(string) != "" {
+				errMsg = msg.(string)
+			}
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": errMsg})
 			return
 		}
 		c.Next()
@@ -123,4 +129,26 @@ func TestAuth_DisabledProvider(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/api/test", nil)
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestAuth_EnabledProvider_I18nMessageInjected(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	provider := &mockAuthProvider{enabled: true}
+
+	var capturedMsg interface{}
+	router := gin.New()
+	router.Use(Auth(provider))
+	router.GET("/api/protected", func(c *gin.Context) {
+		capturedMsg, _ = c.Get("auth.unauthorized_message")
+		c.String(http.StatusOK, "ok")
+	})
+
+	// With valid token - i18n message should be set in context
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/protected", nil)
+	req.Header.Set("Authorization", "Bearer test-token")
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	// The message key is set in context (falls back to key ID when i18n not initialized)
+	assert.NotNil(t, capturedMsg)
 }

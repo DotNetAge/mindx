@@ -29,6 +29,7 @@ type Server struct {
 
 // NewServer 创建 HTTP API 服务器实例
 // authProvider 为可选的认证插件，传入 nil 或 NoopProvider 则不启用认证
+// 认证模块采用插件化设计，不与核心层耦合，仅在需要保护 Gateway 时启用
 func NewServer(port int, staticDir string, authProvider ...core.AuthProvider) (*Server, error) {
 	// 默认端口 1314
 	if port <= 0 {
