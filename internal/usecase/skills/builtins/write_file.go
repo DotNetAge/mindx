@@ -25,32 +25,31 @@ func WriteFile(params map[string]any) (string, error) {
 
 	// Determine the target file path
 	var filePath string
+	cleanFilename := filepath.Clean(filename)
 
 	if path, ok := params["path"].(string); ok && path != "" {
 		// "path" param provided: treat as directory, append filename
 		cleanPath := filepath.Clean(path)
 		if filepath.IsAbs(cleanPath) {
-			filePath = filepath.Join(cleanPath, filename)
+			filePath = filepath.Join(cleanPath, cleanFilename)
 		} else {
 			workDir := os.Getenv("MINDX_WORKSPACE")
 			if workDir == "" {
 				return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
 			}
-			filePath = filepath.Join(workDir, cleanPath, filename)
+			filePath = filepath.Join(workDir, cleanPath, cleanFilename)
 		}
-	} else if filepath.IsAbs(filepath.Clean(filename)) {
+	} else if filepath.IsAbs(cleanFilename) {
 		// filename itself is an absolute path
-		filePath = filepath.Clean(filename)
+		filePath = cleanFilename
 	} else {
 		// Relative filename: resolve against workspace
 		workDir := os.Getenv("MINDX_WORKSPACE")
 		if workDir == "" {
 			return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
 		}
-		filePath = filepath.Join(workDir, filename)
+		filePath = filepath.Join(workDir, cleanFilename)
 	}
-
-	filePath = filepath.Clean(filePath)
 
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {

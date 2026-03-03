@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestWriteFile_ValidWrite(t *testing.T) {
@@ -129,6 +128,6 @@ func TestWriteFile_DocumentsSubdir(t *testing.T) {
 	assert.Contains(t, result, "note.txt")
 
 	content, err := os.ReadFile(filepath.Join(tmpDir, "documents", "notes", "note.txt"))
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "document content", string(content))
 }
