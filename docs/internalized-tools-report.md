@@ -132,10 +132,10 @@ cmd := exec.CommandContext(ctx, "sh", "-c", command)
 | 攻击向量 | Shell 版本 | Go 版本 |
 |---------|-----------|---------|
 | `;` 命令注入 | ✅ 已拦截 | ✅ 已拦截 |
-| `\|` 管道注入 | ✅ 已拦截 | ✅ 已拦截 |
-| `>` `<` 重定向 | ❌ 未拦截 | ✅ 已拦截 |
-| `\n` 换行注入 | ❌ 未拦截 | ✅ 已拦截 |
-| `\r` 回车注入 | ❌ 未拦截 | ✅ 已拦截 |
+| 管道 `pipe` 注入 | ✅ 已拦截 | ✅ 已拦截 |
+| 重定向 `>` `<` | ❌ 未拦截 | ✅ 已拦截 |
+| 换行符注入 | ❌ 未拦截 | ✅ 已拦截 |
+| 回车符注入 | ❌ 未拦截 | ✅ 已拦截 |
 | `${VAR}` 变量展开 | 部分拦截 | ✅ 已拦截 |
 | `sudo` 提权 | ❌ 未拦截 | ✅ 已拦截 |
 | `systemctl` 服务操控 | ❌ 未拦截 | ✅ 已拦截 |
@@ -209,9 +209,9 @@ func validateAndSanitizePath(baseDir, userPath, filename string) (string, error)
 | `TestTerminal_DangerousCommand` | `rm` 危险命令（拦截） | ✅ PASS |
 | `TestTerminal_DangerousCommandWithFlag` | `dangerous=true` 显式允许 | ✅ PASS |
 | `TestTerminal_MissingParam` | 缺少参数（拦截） | ✅ PASS |
-| `TestTerminal_PipeCharBlocked` | `\|` 管道（拦截） | ✅ PASS |
-| `TestTerminal_RedirectBlocked` | `>` 重定向（拦截） | ✅ PASS |
-| `TestTerminal_NewlineInjectionBlocked` | `\n` 换行注入（拦截） | ✅ PASS |
+| `TestTerminal_PipeCharBlocked` | 管道符（拦截） | ✅ PASS |
+| `TestTerminal_RedirectBlocked` | 重定向符（拦截） | ✅ PASS |
+| `TestTerminal_NewlineInjectionBlocked` | 换行符注入（拦截） | ✅ PASS |
 | `TestTerminal_VariableExpansionBlocked` | `${PATH}` 变量展开（拦截） | ✅ PASS |
 
 ### write_file 测试（8 项）
