@@ -16,6 +16,8 @@ func RegisterBuiltins(mgr *skills.SkillMgr, cfg *BuiltinConfig, cronScheduler cr
 	mgr.RegisterInternalSkill("web_search", Search)
 	mgr.RegisterInternalSkill("open_url", OpenURL)
 	mgr.RegisterInternalSkill("write_file", WriteFile)
+	mgr.RegisterInternalSkill("read_file", ReadFile)
+	mgr.RegisterInternalSkill("terminal", Terminal)
 
 	if cronScheduler != nil {
 		cronProvider := NewCronSkillProvider(cronScheduler)
