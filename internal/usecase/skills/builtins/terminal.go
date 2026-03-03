@@ -25,7 +25,7 @@ var dangerousCommands = map[string]bool{
 }
 
 // dangerousChars lists shell metacharacters that indicate injection
-var dangerousChars = []string{";", "&", "|", "`", "$(", ")", ">", ">>", "<"}
+var dangerousChars = []string{";", "&", "|", "`", "$(", "${", ")", ">", ">>", "<", "\n", "\r"}
 
 // Terminal executes a terminal command with security validation
 func Terminal(params map[string]any) (string, error) {

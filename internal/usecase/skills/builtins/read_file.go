@@ -30,13 +30,28 @@ func ReadFile(params map[string]any) (string, error) {
 		return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
 	}
 
-	// If path is not absolute, resolve relative to workspace documents or data
-	if !filepath.IsAbs(cleanPath) {
-		baseDir := filepath.Join(workDir, "documents")
-		if _, err := os.Stat(baseDir); os.IsNotExist(err) {
-			baseDir = filepath.Join(workDir, "data")
+	// SECURITY: Always resolve paths relative to workspace base directory
+	// Even absolute paths are rejected to prevent arbitrary file reads
+	baseDir := filepath.Join(workDir, "documents")
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		baseDir = filepath.Join(workDir, "data")
+	}
+
+	if filepath.IsAbs(cleanPath) {
+		// Check if absolute path is within workspace - reject if not
+		cleanBase := filepath.Clean(baseDir)
+		if !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) && cleanPath != cleanBase {
+			return "", fmt.Errorf("access denied: absolute path outside workspace directory")
 		}
+	} else {
 		cleanPath = filepath.Clean(filepath.Join(baseDir, cleanPath))
+	}
+
+	// Final validation: ensure resolved path is still within base directory
+	cleanBase := filepath.Clean(baseDir)
+	rel, err := filepath.Rel(cleanBase, cleanPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("access denied: path outside allowed directory")
 	}
 
 	// Check file exists

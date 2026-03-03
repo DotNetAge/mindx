@@ -76,3 +76,23 @@ func TestTerminal_RedirectBlocked(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "dangerous characters")
 }
+
+func TestTerminal_NewlineInjectionBlocked(t *testing.T) {
+	params := map[string]any{
+		"command": "echo hello\nrm -rf /",
+	}
+
+	_, err := Terminal(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "dangerous characters")
+}
+
+func TestTerminal_VariableExpansionBlocked(t *testing.T) {
+	params := map[string]any{
+		"command": "echo ${PATH}",
+	}
+
+	_, err := Terminal(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "dangerous characters")
+}

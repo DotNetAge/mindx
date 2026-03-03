@@ -34,10 +34,13 @@ func TestReadFile_AbsolutePath(t *testing.T) {
 	os.Setenv("MINDX_WORKSPACE", tmpDir)
 	defer os.Unsetenv("MINDX_WORKSPACE")
 
-	// Create a file with absolute path
-	testFile := filepath.Join(tmpDir, "absolute_test.txt")
+	// Create documents dir and file inside it
+	docsDir := filepath.Join(tmpDir, "documents")
+	require.NoError(t, os.MkdirAll(docsDir, 0755))
+	testFile := filepath.Join(docsDir, "absolute_test.txt")
 	require.NoError(t, os.WriteFile(testFile, []byte("absolute content"), 0644))
 
+	// Absolute path within workspace should work
 	params := map[string]any{
 		"path": testFile,
 	}
@@ -45,6 +48,23 @@ func TestReadFile_AbsolutePath(t *testing.T) {
 	result, err := ReadFile(params)
 	assert.NoError(t, err)
 	assert.Contains(t, result, "absolute content")
+}
+
+func TestReadFile_AbsolutePathOutsideWorkspace(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.Setenv("MINDX_WORKSPACE", tmpDir)
+	defer os.Unsetenv("MINDX_WORKSPACE")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "documents"), 0755))
+
+	// Absolute path outside workspace should be blocked
+	params := map[string]any{
+		"path": "/etc/passwd",
+	}
+
+	_, err := ReadFile(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "access denied")
 }
 
 func TestReadFile_PathTraversal(t *testing.T) {
