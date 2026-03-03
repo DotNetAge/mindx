@@ -24,6 +24,7 @@ func TestGateway_Stability(t *testing.T) {
 	channel := NewMockChannel("test", entity.ChannelTypeRealTime, "Test")
 	gateway.Manager().AddChannel(channel)
 	channel.Start(context.Background())
+	defer channel.Stop()
 
 	gateway.SetOnMessage(func(ctx context.Context, msg *entity.IncomingMessage, eventChan chan<- entity.ThinkingEvent) (string, string, error) {
 		return "OK", "", nil
@@ -72,6 +73,7 @@ func TestGateway_Stability_Short(t *testing.T) {
 	channel := NewMockChannel("test", entity.ChannelTypeRealTime, "Test")
 	gateway.Manager().AddChannel(channel)
 	channel.Start(context.Background())
+	defer channel.Stop()
 
 	gateway.SetOnMessage(func(ctx context.Context, msg *entity.IncomingMessage, eventChan chan<- entity.ThinkingEvent) (string, string, error) {
 		return "OK", "", nil
@@ -135,6 +137,11 @@ func TestGateway_Stability_MultipleChannels(t *testing.T) {
 		gateway.Manager().AddChannel(ch)
 		ch.Start(context.Background())
 	}
+	defer func() {
+		for _, ch := range channels {
+			ch.Stop()
+		}
+	}()
 
 	gateway.SetOnMessage(func(ctx context.Context, msg *entity.IncomingMessage, eventChan chan<- entity.ThinkingEvent) (string, string, error) {
 		return "OK", "", nil
@@ -190,6 +197,7 @@ func TestGateway_Stability_WithMemoryLeakCheck(t *testing.T) {
 	channel := NewMockChannel("test", entity.ChannelTypeRealTime, "Test")
 	gateway.Manager().AddChannel(channel)
 	channel.Start(context.Background())
+	defer channel.Stop()
 
 	gateway.SetOnMessage(func(ctx context.Context, msg *entity.IncomingMessage, eventChan chan<- entity.ThinkingEvent) (string, string, error) {
 		return "OK", "", nil
