@@ -30,7 +30,7 @@ REAL_PATH=$(realpath -m "$FULL_PATH" 2>/dev/null)
 REAL_BASE=$(realpath -m "$BASE_DIR" 2>/dev/null)
 
 # 检查规范化后的路径是否仍在基础目录内
-if [[ "$REAL_PATH" != "$REAL_BASE"* ]]; then
+if [[ "$REAL_PATH" != "$REAL_BASE"/* ]] && [[ "$REAL_PATH" != "$REAL_BASE" ]]; then
     echo '{"error": "Access denied: path outside allowed directory"}'
     exit 1
 fi
