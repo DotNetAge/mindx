@@ -59,18 +59,31 @@ func GetBuildInfo() (version, time, commit string) {
 
 func GetInstallPath() (string, error) {
 	path := os.Getenv("MINDX_PATH")
-	if path == "" {
-		execPath, err := os.Executable()
-		if err == nil {
-			path = filepath.Dir(execPath)
-		} else {
-			path, err = os.Getwd()
-			if err != nil {
-				return "", ErrMINDXPathNotSet
-			}
-		}
+	if path != "" {
+		return path, nil
 	}
-	return path, nil
+
+	// Try to get the executable path
+	execPath, err := os.Executable()
+	if err != nil {
+		// Fallback to current working directory
+		path, err = os.Getwd()
+		if err != nil {
+			return "", ErrMINDXPathNotSet
+		}
+		return path, nil
+	}
+
+	// Get the directory containing the executable
+	execDir := filepath.Dir(execPath)
+
+	// If we're in a bin/ directory, go up one level to the project root
+	// This handles the case where the binary is installed in <project>/bin/
+	if filepath.Base(execDir) == "bin" {
+		return filepath.Dir(execDir), nil
+	}
+
+	return execDir, nil
 }
 
 func GetWorkspacePath() (string, error) {
