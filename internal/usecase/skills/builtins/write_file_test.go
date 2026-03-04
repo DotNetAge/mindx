@@ -61,13 +61,9 @@ func TestWriteFile_AbsolutePathInFilename(t *testing.T) {
 		"content":  "absolute write",
 	}
 
-	result, err := WriteFile(params)
-	assert.NoError(t, err)
-	assert.Contains(t, result, "abs_test.txt")
-
-	content, err := os.ReadFile(targetFile)
-	assert.NoError(t, err)
-	assert.Equal(t, "absolute write", string(content))
+	_, err := WriteFile(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "dangerous=true")
 }
 
 func TestWriteFile_AbsolutePathParam(t *testing.T) {
@@ -81,6 +77,25 @@ func TestWriteFile_AbsolutePathParam(t *testing.T) {
 		"filename": "result.txt",
 		"content":  "abs path write",
 		"path":     targetDir,
+	}
+
+	_, err := WriteFile(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "dangerous=true")
+}
+
+func TestWriteFile_AbsolutePathWithDangerousFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.Setenv("MINDX_WORKSPACE", tmpDir)
+	defer os.Unsetenv("MINDX_WORKSPACE")
+
+	targetDir := filepath.Join(tmpDir, "abs_dir")
+
+	params := map[string]any{
+		"filename":  "result.txt",
+		"content":   "abs path write",
+		"path":      targetDir,
+		"dangerous": true,
 	}
 
 	result, err := WriteFile(params)
@@ -130,4 +145,35 @@ func TestWriteFile_DocumentsSubdir(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(tmpDir, "documents", "notes", "note.txt"))
 	assert.NoError(t, err)
 	assert.Equal(t, "document content", string(content))
+}
+
+func TestWriteFile_PathTraversalBlockedByFilename(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.Setenv("MINDX_WORKSPACE", tmpDir)
+	defer os.Unsetenv("MINDX_WORKSPACE")
+
+	params := map[string]any{
+		"filename": "../escape.txt",
+		"content":  "blocked",
+	}
+
+	_, err := WriteFile(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "outside workspace")
+}
+
+func TestWriteFile_PathTraversalBlockedByPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.Setenv("MINDX_WORKSPACE", tmpDir)
+	defer os.Unsetenv("MINDX_WORKSPACE")
+
+	params := map[string]any{
+		"filename": "ok.txt",
+		"content":  "blocked",
+		"path":     "../escape",
+	}
+
+	_, err := WriteFile(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "outside workspace")
 }

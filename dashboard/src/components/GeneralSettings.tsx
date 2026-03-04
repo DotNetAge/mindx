@@ -76,6 +76,16 @@ export default function GeneralSettings() {
     setLoading(false);
   };
 
+  const toggleGatewayProtection = () => {
+    setConfig({
+      ...config,
+      gateway_protection: {
+        ...config.gateway_protection,
+        enabled: !config.gateway_protection.enabled,
+      },
+    });
+  };
+
   return (
     <div className="general-settings">
       <h2>{t('settings.general')}</h2>
@@ -87,13 +97,18 @@ export default function GeneralSettings() {
           <label>{t('settings.gatewayProtection')}</label>
           <div
             className={`toggle-switch ${config.gateway_protection.enabled ? 'active' : ''}`}
-            onClick={() => setConfig({
-              ...config,
-              gateway_protection: {
-                ...config.gateway_protection,
-                enabled: !config.gateway_protection.enabled,
-              },
-            })}
+            onClick={toggleGatewayProtection}
+            role="switch"
+            tabIndex={0}
+            aria-checked={config.gateway_protection.enabled}
+            onKeyDown={(e) => {
+              if (e.key === ' ') {
+                e.preventDefault();
+              }
+              if (e.key === 'Enter' || e.key === ' ') {
+                toggleGatewayProtection();
+              }
+            }}
           >
             <div className="toggle-knob" />
             <span className="toggle-label">

@@ -96,3 +96,13 @@ func TestTerminal_VariableExpansionBlocked(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "dangerous characters")
 }
+
+func TestTerminal_DollarExpansionBlocked(t *testing.T) {
+	params := map[string]any{
+		"command": "echo $SHELL",
+	}
+
+	_, err := Terminal(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "dangerous characters")
+}

@@ -25,7 +25,7 @@ var dangerousCommands = map[string]bool{
 }
 
 // dangerousChars lists shell metacharacters that indicate injection
-var dangerousChars = []string{";", "&", "|", "`", "$(", "${", ">", ">>", "<", "\n", "\r"}
+var dangerousChars = []string{";", "&", "|", "`", "$", "$(", "${", ">", ">>", "<", "\n", "\r"}
 
 // Terminal executes a terminal command with security validation
 func Terminal(params map[string]any) (string, error) {
@@ -46,6 +46,7 @@ func Terminal(params map[string]any) (string, error) {
 	if d, ok := params["dangerous"].(string); ok && d == "true" {
 		dangerous = true
 	}
+	startTime := time.Now()
 
 	// SECURITY: Check for dangerous characters (injection patterns)
 	for _, ch := range dangerousChars {
@@ -83,7 +84,7 @@ func Terminal(params map[string]any) (string, error) {
 	err := cmd.Run()
 
 	if ctx.Err() == context.DeadlineExceeded {
-		return getJSONTerminalResult("", "Command timed out", 124, time.Duration(timeoutSec)*time.Second)
+		return getJSONTerminalResult("", "Command timed out", 124, time.Since(startTime))
 	}
 
 	exitCode := 0
@@ -101,15 +102,16 @@ func Terminal(params map[string]any) (string, error) {
 	}
 
 	if exitCode != 0 {
-		return getJSONTerminalResult(output, fmt.Sprintf("Command failed with exit code %d", exitCode), exitCode, time.Duration(0))
+		return getJSONTerminalResult(output, fmt.Sprintf("Command failed with exit code %d", exitCode), exitCode, time.Since(startTime))
 	}
 
-	return getJSONTerminalResult(output, "", exitCode, time.Duration(0))
+	return getJSONTerminalResult(output, "", exitCode, time.Since(startTime))
 }
 
 func getJSONTerminalResult(output, errMsg string, exitCode int, elapsed time.Duration) (string, error) {
 	result := map[string]interface{}{
-		"exit_code": exitCode,
+		"exit_code":  exitCode,
+		"elapsed_ms": elapsed.Milliseconds(),
 	}
 
 	if errMsg != "" {

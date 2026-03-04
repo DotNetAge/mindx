@@ -133,7 +133,7 @@
   line-height: 1.5;
 }
 
-.toggle-switch {
+.general-settings .toggle-switch {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -147,11 +147,11 @@
   transition: background-color 0.3s;
 }
 
-.toggle-switch.active {
+.general-settings .toggle-switch.active {
   background-color: #10b981;
 }
 
-.toggle-knob {
+.general-settings .toggle-knob {
   width: 20px;
   height: 20px;
   border-radius: 50%;
@@ -161,11 +161,11 @@
   transition: transform 0.3s;
 }
 
-.toggle-switch.active .toggle-knob {
+.general-settings .toggle-switch.active .toggle-knob {
   transform: translateX(24px);
 }
 
-.toggle-label {
+.general-settings .toggle-label {
   position: absolute;
   left: 62px;
   color: #d1d5db;

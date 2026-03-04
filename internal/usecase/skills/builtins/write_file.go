@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -22,38 +23,74 @@ func WriteFile(params map[string]any) (string, error) {
 	}
 
 	startTime := time.Now()
+	dangerous := false
+	if d, ok := params["dangerous"].(bool); ok {
+		dangerous = d
+	}
+	if d, ok := params["dangerous"].(string); ok && d == "true" {
+		dangerous = true
+	}
+	workDir := os.Getenv("MINDX_WORKSPACE")
+	if workDir == "" {
+		return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
+	}
+	absWorkDir, err := filepath.Abs(workDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve workspace path: %w", err)
+	}
+	workDir = absWorkDir
+	resolvedWorkDir, err := filepath.EvalSymlinks(workDir)
+	if err != nil {
+		return "", fmt.Errorf("workspace path contains unresolvable symlinks %s: %w", workDir, err)
+	}
 
 	// Determine the target file path
 	var filePath string
+	needsWorkspaceBoundaryCheck := false
 	cleanFilename := filepath.Clean(filename)
 
 	if path, ok := params["path"].(string); ok && path != "" {
 		// "path" param provided: treat as directory, append filename
 		cleanPath := filepath.Clean(path)
 		if filepath.IsAbs(cleanPath) {
+			if !dangerous {
+				return "", fmt.Errorf("absolute path requires dangerous=true parameter")
+			}
 			filePath = filepath.Join(cleanPath, cleanFilename)
 		} else {
-			workDir := os.Getenv("MINDX_WORKSPACE")
-			if workDir == "" {
-				return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
+			filePath = filepath.Clean(filepath.Join(workDir, cleanPath, cleanFilename))
+			needsWorkspaceBoundaryCheck = true
+			if !isPathWithinWorkspace(workDir, filePath) {
+				return "", fmt.Errorf("path outside workspace is not allowed")
 			}
-			filePath = filepath.Join(workDir, cleanPath, cleanFilename)
 		}
 	} else if filepath.IsAbs(cleanFilename) {
 		// filename itself is an absolute path
+		if !dangerous {
+			return "", fmt.Errorf("absolute path requires dangerous=true parameter")
+		}
 		filePath = cleanFilename
 	} else {
 		// Relative filename: resolve against workspace
-		workDir := os.Getenv("MINDX_WORKSPACE")
-		if workDir == "" {
-			return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
+		filePath = filepath.Clean(filepath.Join(workDir, cleanFilename))
+		needsWorkspaceBoundaryCheck = true
+		if !isPathWithinWorkspace(workDir, filePath) {
+			return "", fmt.Errorf("path outside workspace is not allowed")
 		}
-		filePath = filepath.Join(workDir, cleanFilename)
 	}
 
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create dir %s: %w", dir, err)
+	}
+	resolvedDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path %s: %w", dir, err)
+	}
+	if needsWorkspaceBoundaryCheck {
+		if !isPathWithinWorkspace(resolvedWorkDir, filepath.Join(resolvedDir, filepath.Base(filePath))) {
+			return "", fmt.Errorf("path outside workspace is not allowed")
+		}
 	}
 
 	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
@@ -82,4 +119,16 @@ func getJSONWriteResult(filePath string, contentLength int, elapsed time.Duratio
 		return "", fmt.Errorf("json serialize failed: %w", err)
 	}
 	return string(data), nil
+}
+
+func isPathWithinWorkspace(workDir, targetPath string) bool {
+	relPath, relErr := filepath.Rel(workDir, filepath.Clean(targetPath))
+	if relErr != nil {
+		return false
+	}
+	// Writing directly into workspace root is allowed.
+	if relPath == "." {
+		return true
+	}
+	return relPath != ".." && !strings.HasPrefix(relPath, ".."+string(filepath.Separator))
 }
