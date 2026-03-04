@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -22,6 +23,21 @@ func WriteFile(params map[string]any) (string, error) {
 	}
 
 	startTime := time.Now()
+	dangerous := false
+	if d, ok := params["dangerous"].(bool); ok {
+		dangerous = d
+	}
+	if d, ok := params["dangerous"].(string); ok && d == "true" {
+		dangerous = true
+	}
+	workDir := os.Getenv("MINDX_WORKSPACE")
+	if workDir == "" {
+		return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
+	}
+	workDir, err := filepath.Abs(workDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve workspace path: %w", err)
+	}
 
 	// Determine the target file path
 	var filePath string
@@ -31,24 +47,30 @@ func WriteFile(params map[string]any) (string, error) {
 		// "path" param provided: treat as directory, append filename
 		cleanPath := filepath.Clean(path)
 		if filepath.IsAbs(cleanPath) {
+			if !dangerous {
+				return "", fmt.Errorf("absolute path requires dangerous=true parameter")
+			}
 			filePath = filepath.Join(cleanPath, cleanFilename)
 		} else {
-			workDir := os.Getenv("MINDX_WORKSPACE")
-			if workDir == "" {
-				return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
+			filePath = filepath.Clean(filepath.Join(workDir, cleanPath, cleanFilename))
+			relPath, relErr := filepath.Rel(workDir, filePath)
+			if relErr != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
+				return "", fmt.Errorf("path outside workspace is not allowed")
 			}
-			filePath = filepath.Join(workDir, cleanPath, cleanFilename)
 		}
 	} else if filepath.IsAbs(cleanFilename) {
 		// filename itself is an absolute path
+		if !dangerous {
+			return "", fmt.Errorf("absolute path requires dangerous=true parameter")
+		}
 		filePath = cleanFilename
 	} else {
 		// Relative filename: resolve against workspace
-		workDir := os.Getenv("MINDX_WORKSPACE")
-		if workDir == "" {
-			return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
+		filePath = filepath.Clean(filepath.Join(workDir, cleanFilename))
+		relPath, relErr := filepath.Rel(workDir, filePath)
+		if relErr != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("path outside workspace is not allowed")
 		}
-		filePath = filepath.Join(workDir, cleanFilename)
 	}
 
 	dir := filepath.Dir(filePath)

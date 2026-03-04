@@ -12,7 +12,7 @@ import {
 } from 'tdesign-icons-react';
 
 interface IconProps {
-  size?: number;
+  size?: string | number;
   className?: string;
 }
 
