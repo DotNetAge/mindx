@@ -30,13 +30,16 @@ normalize_path() {
     local input="$1"
     if realpath -m "$input" >/dev/null 2>&1; then
         realpath -m "$input"
-    else
+    elif command -v python3 >/dev/null 2>&1; then
         python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$input"
+    else
+        echo '{"error": "Path normalization failed: realpath -m and python3 are unavailable"}' >&2
+        return 1
     fi
 }
 
-REAL_PATH=$(normalize_path "$FULL_PATH")
-REAL_BASE=$(normalize_path "$BASE_DIR")
+REAL_PATH=$(normalize_path "$FULL_PATH") || exit 1
+REAL_BASE=$(normalize_path "$BASE_DIR") || exit 1
 
 # 检查规范化后的路径是否仍在基础目录内
 if [[ "$REAL_PATH" != "$REAL_BASE"/* ]] && [[ "$REAL_PATH" != "$REAL_BASE" ]]; then

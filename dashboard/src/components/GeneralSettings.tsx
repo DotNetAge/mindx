@@ -102,8 +102,10 @@ export default function GeneralSettings() {
             tabIndex={0}
             aria-checked={config.gateway_protection.enabled}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
+              if (e.key === ' ') {
                 e.preventDefault();
+              }
+              if (e.key === 'Enter' || e.key === ' ') {
                 toggleGatewayProtection();
               }
             }}

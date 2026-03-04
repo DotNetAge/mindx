@@ -34,13 +34,15 @@ func WriteFile(params map[string]any) (string, error) {
 	if workDir == "" {
 		return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
 	}
-	workDir, err := filepath.Abs(workDir)
+	absWorkDir, err := filepath.Abs(workDir)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve workspace path: %w", err)
 	}
+	workDir = absWorkDir
 
 	// Determine the target file path
 	var filePath string
+	needsWorkspaceBoundaryCheck := false
 	cleanFilename := filepath.Clean(filename)
 
 	if path, ok := params["path"].(string); ok && path != "" {
@@ -53,8 +55,8 @@ func WriteFile(params map[string]any) (string, error) {
 			filePath = filepath.Join(cleanPath, cleanFilename)
 		} else {
 			filePath = filepath.Clean(filepath.Join(workDir, cleanPath, cleanFilename))
-			relPath, relErr := filepath.Rel(workDir, filePath)
-			if relErr != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
+			needsWorkspaceBoundaryCheck = true
+			if !isPathWithinWorkspace(workDir, filePath) {
 				return "", fmt.Errorf("path outside workspace is not allowed")
 			}
 		}
@@ -67,8 +69,8 @@ func WriteFile(params map[string]any) (string, error) {
 	} else {
 		// Relative filename: resolve against workspace
 		filePath = filepath.Clean(filepath.Join(workDir, cleanFilename))
-		relPath, relErr := filepath.Rel(workDir, filePath)
-		if relErr != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(filepath.Separator)) {
+		needsWorkspaceBoundaryCheck = true
+		if !isPathWithinWorkspace(workDir, filePath) {
 			return "", fmt.Errorf("path outside workspace is not allowed")
 		}
 	}
@@ -76,6 +78,15 @@ func WriteFile(params map[string]any) (string, error) {
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create dir %s: %w", dir, err)
+	}
+	resolvedDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path %s: %w", dir, err)
+	}
+	if needsWorkspaceBoundaryCheck {
+		if !isPathWithinWorkspace(workDir, filepath.Join(resolvedDir, filepath.Base(filePath))) {
+			return "", fmt.Errorf("path outside workspace is not allowed")
+		}
 	}
 
 	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
@@ -104,4 +115,9 @@ func getJSONWriteResult(filePath string, contentLength int, elapsed time.Duratio
 		return "", fmt.Errorf("json serialize failed: %w", err)
 	}
 	return string(data), nil
+}
+
+func isPathWithinWorkspace(workDir, targetPath string) bool {
+	relPath, relErr := filepath.Rel(workDir, filepath.Clean(targetPath))
+	return relErr == nil && relPath != ".." && !strings.HasPrefix(relPath, ".."+string(filepath.Separator))
 }
