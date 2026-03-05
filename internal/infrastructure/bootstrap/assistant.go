@@ -30,7 +30,7 @@ type Assistant struct {
 	cfg            *config.GlobalConfig
 	sessionMgr     core.SessionMgr // 会话管理器
 	capMgr         *capability.CapabilityManager
-	skillMgr       *skills.SkillMgr
+	skillMgr       *skills.SkillMgr // TODO: Phase 2 - 将被新的 Skill 系统替代
 	logger         logging.Logger
 	tokenUsageRepo core.TokenUsageRepository
 	cronScheduler  cron.Scheduler
