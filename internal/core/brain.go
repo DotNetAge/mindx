@@ -194,7 +194,7 @@ type Assistant interface {
 	GetName() string                             // GetName 获取助理的名字
 	GetGender() string                           // GetGender 获取助理的性别
 	GetCharacter() string                        // GetCharacter 获取助理的性格
-	GetSkillMgr() SkillManager                   // GetSkillMgr 获取技能管理器（负责执行）
+	// GetSkillMgr() SkillManager                // 已废弃 - Phase 2 已移除 SkillManager
 	GetCapabilities() []entity.Capability        // GetCapabilities 获取所有可用的能力
 	GetBrain() Brain                             // GetBrain 获取大脑负责思考
 	GetMemory() Memory                           // GetMemory 获取长时记忆

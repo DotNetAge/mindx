@@ -2,25 +2,29 @@ package processors
 
 import (
 	"context"
-	"mindx/internal/core"
 	"mindx/internal/entity"
+	"mindx/internal/core"
 	"mindx/pkg/logging"
 )
 
 // ToolExecutionProcessor 工具执行处理器
 // 职责：调用 LLM 决定工具调用，并执行工具
-// MVP 版本：完整实现（这是核心功能）
 type ToolExecutionProcessor struct {
 	thinking     core.Thinking
-	skillManager core.SkillManager
+	toolExecutor ToolExecutor // 使用接口而非具体类型
 	logger       logging.Logger
 }
 
+// ToolExecutor 工具执行接口
+type ToolExecutor interface {
+	ExecuteFunc(function core.ToolCallFunction) (string, error)
+}
+
 // NewToolExecutionProcessor 创建工具执行处理器
-func NewToolExecutionProcessor(thinking core.Thinking, skillManager core.SkillManager) *ToolExecutionProcessor {
+func NewToolExecutionProcessor(thinking core.Thinking, toolExecutor ToolExecutor) *ToolExecutionProcessor {
 	return &ToolExecutionProcessor{
 		thinking:     thinking,
-		skillManager: skillManager,
+		toolExecutor: toolExecutor,
 		logger:       logging.GetSystemLogger().Named("tool_processor"),
 	}
 }
@@ -107,7 +111,7 @@ func (p *ToolExecutionProcessor) executeToolCall(ctx context.Context, toolCallID
 	)
 
 	// 执行工具
-	result, err := p.skillManager.ExecuteFunc(*function)
+	result, err := p.toolExecutor.ExecuteFunc(*function)
 	if err != nil {
 		p.logger.Warn("tool execution failed",
 			logging.String("tool_name", function.Name),
