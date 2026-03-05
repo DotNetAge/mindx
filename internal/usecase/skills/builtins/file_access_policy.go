@@ -9,21 +9,26 @@ import (
 )
 
 type fileAccessPolicy struct {
-	enabled      bool
-	workspace    string
-	allowedPaths []string
+	enabled        bool
+	workspace      string
+	allowedEntries []allowedPathEntry
+}
+
+type allowedPathEntry struct {
+	path  string
+	isDir bool
 }
 
 func loadFileAccessPolicy(workspace string) (fileAccessPolicy, error) {
 	policy := fileAccessPolicy{
-		enabled:      false,
-		workspace:    workspace,
-		allowedPaths: nil,
+		enabled:        false,
+		workspace:      workspace,
+		allowedEntries: nil,
 	}
 
 	cfg, err := config.LoadServerConfig()
 	if err != nil {
-		// Fail open for backward compatibility: if config cannot be loaded, keep unrestricted mode.
+		// Default to unrestricted mode for backward compatibility when config cannot be loaded.
 		return policy, nil
 	}
 
@@ -32,7 +37,7 @@ func loadFileAccessPolicy(workspace string) (fileAccessPolicy, error) {
 		return policy, nil
 	}
 
-	normalizedAllowed := make([]string, 0, len(cfg.FileAccess.AllowedPaths))
+	normalizedAllowed := make([]allowedPathEntry, 0, len(cfg.FileAccess.AllowedPaths))
 	for _, p := range cfg.FileAccess.AllowedPaths {
 		p = strings.TrimSpace(p)
 		if p == "" {
@@ -46,9 +51,13 @@ func loadFileAccessPolicy(workspace string) (fileAccessPolicy, error) {
 		if absErr != nil {
 			continue
 		}
-		normalizedAllowed = append(normalizedAllowed, absPath)
+		entry := allowedPathEntry{path: absPath}
+		if info, statErr := os.Stat(absPath); statErr == nil {
+			entry.isDir = info.IsDir()
+		}
+		normalizedAllowed = append(normalizedAllowed, entry)
 	}
-	policy.allowedPaths = normalizedAllowed
+	policy.allowedEntries = normalizedAllowed
 	return policy, nil
 }
 
@@ -62,7 +71,7 @@ func (p fileAccessPolicy) isAllowed(targetPath string) bool {
 		return true
 	}
 
-	for _, allowed := range p.allowedPaths {
+	for _, allowed := range p.allowedEntries {
 		if matchesAllowedPath(allowed, cleanTarget) {
 			return true
 		}
@@ -71,16 +80,15 @@ func (p fileAccessPolicy) isAllowed(targetPath string) bool {
 	return false
 }
 
-func matchesAllowedPath(allowedPath, targetPath string) bool {
-	cleanAllowed := filepath.Clean(allowedPath)
+func matchesAllowedPath(allowed allowedPathEntry, targetPath string) bool {
+	cleanAllowed := filepath.Clean(allowed.path)
 	cleanTarget := filepath.Clean(targetPath)
 
 	if cleanTarget == cleanAllowed {
 		return true
 	}
 
-	info, err := os.Stat(cleanAllowed)
-	if err == nil && info.IsDir() {
+	if allowed.isDir {
 		return strings.HasPrefix(cleanTarget, cleanAllowed+string(filepath.Separator))
 	}
 

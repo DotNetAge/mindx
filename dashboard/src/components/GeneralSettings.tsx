@@ -136,10 +136,8 @@ export default function GeneralSettings() {
             tabIndex={0}
             aria-checked={config.gateway_protection.enabled}
             onKeyDown={(e) => {
-              if (e.key === ' ') {
-                e.preventDefault();
-              }
               if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
                 toggleGatewayProtection();
               }
             }}
@@ -177,10 +175,8 @@ export default function GeneralSettings() {
             tabIndex={0}
             aria-checked={config.file_access.enabled}
             onKeyDown={(e) => {
-              if (e.key === ' ') {
-                e.preventDefault();
-              }
               if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
                 toggleFileAccess();
               }
             }}
