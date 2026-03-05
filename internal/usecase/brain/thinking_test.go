@@ -23,6 +23,13 @@ type ThinkingTestSuite struct {
 
 // SetupTest 测试前准备
 func (s *ThinkingTestSuite) SetupTest() {
+	if testing.Short() {
+		s.T().Skip("short mode: skip thinking suite")
+	}
+	if !isOllamaAvailable() {
+		s.T().Skip("ollama is not available on 127.0.0.1:11434")
+	}
+
 	// 初始化日志
 	logConfig := &config.LoggingConfig{
 		SystemLogConfig: &config.SystemLogConfig{
@@ -69,8 +76,8 @@ func (s *ThinkingTestSuite) SetupTest() {
 	// 创建 Token 预算配置（测试用）
 	tokenBudget := &config.TokenBudgetConfig{
 		ReservedOutputTokens: 4096,
-		MinHistoryRounds:      2,
-		AvgTokensPerRound:     150,
+		MinHistoryRounds:     2,
+		AvgTokensPerRound:    150,
 	}
 
 	s.leftBrain = NewThinking(s.leftBrainCfg, leftBrainPrompt, s.logger, nil, tokenBudget)
@@ -93,7 +100,7 @@ func TestThinkingSuite(t *testing.T) {
 func (s *ThinkingTestSuite) TestLeftBrain_SimpleQuestion() {
 	question := "你好，今天天气怎么样？"
 
-	result, err := s.leftBrain.Think(context.Background(),question, nil, "", true)
+	result, err := s.leftBrain.Think(context.Background(), question, nil, "", true)
 
 	if !assert.NoError(s.T(), err, "左脑思考应该成功") {
 		s.T().FailNow()
@@ -151,7 +158,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_CanAnswer() {
 			var lastErr error
 
 			for i := 0; i < maxRetries; i++ {
-				result, err := s.leftBrain.Think(context.Background(),tc.question, nil, "", true)
+				result, err := s.leftBrain.Think(context.Background(), tc.question, nil, "", true)
 				lastResult = result
 				lastErr = err
 
@@ -206,7 +213,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_WithHistory() {
 		},
 	}
 
-	result, err := s.leftBrain.Think(context.Background(),question, history, "", true)
+	result, err := s.leftBrain.Think(context.Background(), question, history, "", true)
 
 	if !assert.NoError(s.T(), err, "左脑带历史对话应该成功") {
 		s.T().FailNow()
@@ -255,7 +262,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_IntentExtraction() {
 			var lastErr error
 
 			for i := 0; i < maxRetries; i++ {
-				result, err := s.leftBrain.Think(context.Background(),tc.question, nil, "", true)
+				result, err := s.leftBrain.Think(context.Background(), tc.question, nil, "", true)
 				lastResult = result
 				lastErr = err
 
@@ -311,7 +318,7 @@ func (s *ThinkingTestSuite) TestRightBrain_FunctionCall() {
 	question := "帮我播放周杰伦的《稻香》"
 
 	// 右脑使用工具思考（添加 history 参数）
-	result, err := s.rightBrain.ThinkWithTools(context.Background(),question, nil, tools)
+	result, err := s.rightBrain.ThinkWithTools(context.Background(), question, nil, tools)
 
 	if !assert.NoError(s.T(), err, "右脑工具思考应该成功") {
 		s.T().FailNow()
@@ -346,7 +353,7 @@ func (s *ThinkingTestSuite) TestThinking_WithEnhancedPrompt() {
 	// 构建增强 prompt
 	references := "# 参考记忆\n- 用户的生日是6月15日\n- 用户喜欢红色"
 
-	result, err := s.leftBrain.Think(context.Background(),question, nil, references, true)
+	result, err := s.leftBrain.Think(context.Background(), question, nil, references, true)
 
 	if !assert.NoError(s.T(), err, "带记忆的思考应该成功") {
 		s.T().FailNow()
@@ -375,7 +382,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_LongHistory() {
 	}
 
 	question := "这是第几次对话？"
-	result, err := s.leftBrain.Think(context.Background(),question, history, "", true)
+	result, err := s.leftBrain.Think(context.Background(), question, history, "", true)
 
 	if !assert.NoError(s.T(), err, "左脑应该能处理8轮历史对话") {
 		s.T().FailNow()
@@ -412,7 +419,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_8RoundLimit() {
 	}
 
 	s.logger.Info("测试最大轮数边界情况", logging.Int("history_count", len(historyWithinLimit)))
-	_, err := s.leftBrain.Think(context.Background(),"第一个用户是谁？", historyWithinLimit, "", true)
+	_, err := s.leftBrain.Think(context.Background(), "第一个用户是谁？", historyWithinLimit, "", true)
 	if !assert.NoError(s.T(), err, "最大轮数内应该能处理") {
 		s.T().FailNow()
 	}
@@ -432,7 +439,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_8RoundLimit() {
 	}
 
 	s.logger.Info("测试超过最大轮数的情况", logging.Int("history_count", len(historyOverLimit)))
-	result, err := s.leftBrain.Think(context.Background(),"最后一个用户是谁？", historyOverLimit, "", true)
+	result, err := s.leftBrain.Think(context.Background(), "最后一个用户是谁？", historyOverLimit, "", true)
 	// 注意：这里不应该断言出错，因为即使历史太长，模型也应该能处理
 	if err != nil {
 		s.logger.Warn("超过最大轮数处理失败", logging.Err(err))
@@ -560,7 +567,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_MultiRoundContext() {
 				logging.String("final_question", tc.finalQuestion))
 
 			// 执行思考
-			result, err := s.leftBrain.Think(context.Background(),tc.finalQuestion, history, "", true)
+			result, err := s.leftBrain.Think(context.Background(), tc.finalQuestion, history, "", true)
 
 			if !assert.NoError(s.T(), err, tc.description) {
 				s.T().FailNow()
@@ -617,15 +624,15 @@ func containsSubstring(s, substr string) bool {
 // TestCalculateMaxHistoryCount 测试最大历史轮数计算
 func (s *ThinkingTestSuite) TestCalculateMaxHistoryCount() {
 	testCases := []struct {
-		name                    string
-		maxTokens               int
-		reservedOutputTokens    int
-		avgTokensPerRound       int
-		minHistoryRounds        int
-		expectedMaxRounds       int
+		name                 string
+		maxTokens            int
+		reservedOutputTokens int
+		avgTokensPerRound    int
+		minHistoryRounds     int
+		expectedMaxRounds    int
 	}{
 		{
-			name:                  "小模型(800 tokens)",
+			name:                 "小模型(800 tokens)",
 			maxTokens:            800,
 			reservedOutputTokens: 4096,
 			avgTokensPerRound:    150,
@@ -633,7 +640,7 @@ func (s *ThinkingTestSuite) TestCalculateMaxHistoryCount() {
 			expectedMaxRounds:    2, // (800-4096)/150 < 0，返回最小值2
 		},
 		{
-			name:                  "中等模型(4096 tokens)",
+			name:                 "中等模型(4096 tokens)",
 			maxTokens:            4096,
 			reservedOutputTokens: 4096,
 			avgTokensPerRound:    150,
@@ -641,7 +648,7 @@ func (s *ThinkingTestSuite) TestCalculateMaxHistoryCount() {
 			expectedMaxRounds:    2, // (4096-4096)/150 = 0，返回最小值2
 		},
 		{
-			name:                  "大模型(8192 tokens)",
+			name:                 "大模型(8192 tokens)",
 			maxTokens:            8192,
 			reservedOutputTokens: 4096,
 			avgTokensPerRound:    150,
@@ -649,7 +656,7 @@ func (s *ThinkingTestSuite) TestCalculateMaxHistoryCount() {
 			expectedMaxRounds:    27, // (8192-4096)/150 = 27
 		},
 		{
-			name:                  "超大模型(32768 tokens)",
+			name:                 "超大模型(32768 tokens)",
 			maxTokens:            32768,
 			reservedOutputTokens: 4096,
 			avgTokensPerRound:    150,
@@ -657,7 +664,7 @@ func (s *ThinkingTestSuite) TestCalculateMaxHistoryCount() {
 			expectedMaxRounds:    191, // (32768-4096)/150 = 191
 		},
 		{
-			name:                  "自定义配置",
+			name:                 "自定义配置",
 			maxTokens:            10000,
 			reservedOutputTokens: 2000,
 			avgTokensPerRound:    200,
@@ -676,8 +683,8 @@ func (s *ThinkingTestSuite) TestCalculateMaxHistoryCount() {
 
 			tokenBudget := &config.TokenBudgetConfig{
 				ReservedOutputTokens: tc.reservedOutputTokens,
-				MinHistoryRounds:      tc.minHistoryRounds,
-				AvgTokensPerRound:     tc.avgTokensPerRound,
+				MinHistoryRounds:     tc.minHistoryRounds,
+				AvgTokensPerRound:    tc.avgTokensPerRound,
 			}
 
 			// 创建 Thinking 实例
@@ -702,34 +709,34 @@ func (s *ThinkingTestSuite) TestCalculateMaxHistoryCount() {
 // TestLeftBrain_ScheduleIntent 测试左脑识别定时意图
 func (s *ThinkingTestSuite) TestLeftBrain_ScheduleIntent() {
 	testCases := []struct {
-		name          string
-		question      string
+		name           string
+		question       string
 		expectSchedule bool
-		description   string
+		description    string
 	}{
 		{
-			name:          "每周六写日报",
-			question:      "每周六帮我写日报",
+			name:           "每周六写日报",
+			question:       "每周六帮我写日报",
 			expectSchedule: true,
-			description:   "应该识别到定时意图并设置 has_schedule 字段",
+			description:    "应该识别到定时意图并设置 has_schedule 字段",
 		},
 		{
-			name:          "明天早上8点提醒",
-			question:      "明天早上8点提醒我开会",
+			name:           "明天早上8点提醒",
+			question:       "明天早上8点提醒我开会",
 			expectSchedule: true,
-			description:   "应该识别到定时意图并设置 has_schedule 字段",
+			description:    "应该识别到定时意图并设置 has_schedule 字段",
 		},
 		{
-			name:          "每天早上9点",
-			question:      "每天早上9点提醒我起床",
+			name:           "每天早上9点",
+			question:       "每天早上9点提醒我起床",
 			expectSchedule: true,
-			description:   "应该识别到定时意图并设置 has_schedule 字段",
+			description:    "应该识别到定时意图并设置 has_schedule 字段",
 		},
 		{
-			name:          "普通问题",
-			question:      "今天天气怎么样",
+			name:           "普通问题",
+			question:       "今天天气怎么样",
 			expectSchedule: false,
-			description:   "普通问题不应该设置 has_schedule 字段",
+			description:    "普通问题不应该设置 has_schedule 字段",
 		},
 	}
 
@@ -740,7 +747,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_ScheduleIntent() {
 			var lastErr error
 
 			for i := 0; i < maxRetries; i++ {
-				result, err := s.leftBrain.Think(context.Background(),tc.question, nil, "", true)
+				result, err := s.leftBrain.Think(context.Background(), tc.question, nil, "", true)
 				lastResult = result
 				lastErr = err
 
@@ -783,28 +790,28 @@ func (s *ThinkingTestSuite) TestLeftBrain_ScheduleIntent() {
 // TestLeftBrain_SendToIntent 测试左脑识别转发意图
 func (s *ThinkingTestSuite) TestLeftBrain_SendToIntent() {
 	testCases := []struct {
-		name          string
-		question      string
-		expectSendTo  string
-		description   string
+		name         string
+		question     string
+		expectSendTo string
+		description  string
 	}{
 		{
-			name:          "转发给微信",
-			question:      "把这个消息发给微信",
-			expectSendTo:  "微信",
-			description:   "应该识别到转发意图并设置 send_to 为微信",
+			name:         "转发给微信",
+			question:     "把这个消息发给微信",
+			expectSendTo: "微信",
+			description:  "应该识别到转发意图并设置 send_to 为微信",
 		},
 		{
-			name:          "转发给QQ",
-			question:      "转发给QQ",
-			expectSendTo:  "QQ",
-			description:   "应该识别到转发意图并设置 send_to 为QQ",
+			name:         "转发给QQ",
+			question:     "转发给QQ",
+			expectSendTo: "QQ",
+			description:  "应该识别到转发意图并设置 send_to 为QQ",
 		},
 		{
-			name:          "普通问题",
-			question:      "今天天气怎么样",
-			expectSendTo:  "",
-			description:   "普通问题不应该设置 send_to 字段",
+			name:         "普通问题",
+			question:     "今天天气怎么样",
+			expectSendTo: "",
+			description:  "普通问题不应该设置 send_to 字段",
 		},
 	}
 
@@ -815,7 +822,7 @@ func (s *ThinkingTestSuite) TestLeftBrain_SendToIntent() {
 			var lastErr error
 
 			for i := 0; i < maxRetries; i++ {
-				result, err := s.leftBrain.Think(context.Background(),tc.question, nil, "", true)
+				result, err := s.leftBrain.Think(context.Background(), tc.question, nil, "", true)
 				lastResult = result
 				lastErr = err
 

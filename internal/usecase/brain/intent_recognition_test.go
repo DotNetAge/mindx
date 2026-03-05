@@ -7,9 +7,11 @@ import (
 	"mindx/internal/entity"
 	"mindx/internal/usecase/skills"
 	"mindx/pkg/logging"
+	"net"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -32,7 +34,23 @@ type IntentRecognitionSuite struct {
 	logger    logging.Logger
 }
 
+func isOllamaAvailable() bool {
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:11434", 2*time.Second)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
 func (s *IntentRecognitionSuite) SetupSuite() {
+	if testing.Short() {
+		s.T().Skip("short mode: skip intent recognition integration suite")
+	}
+	if !isOllamaAvailable() {
+		s.T().Skip("ollama is not available on 127.0.0.1:11434")
+	}
+
 	logConfig := &config.LoggingConfig{
 		SystemLogConfig: &config.SystemLogConfig{
 			Level:      config.LevelDebug,
@@ -143,7 +161,7 @@ func (s *IntentRecognitionSuite) TestIntent_Classification() {
 	tests := []struct {
 		name            string
 		question        string
-		expectCanAnswer *bool    // nil 表示不检查 can_answer（小模型不稳定）
+		expectCanAnswer *bool // nil 表示不检查 can_answer（小模型不稳定）
 		expectUseless   bool
 		intentContains  []string // intent 应包含其中之一（为空则不检查）
 		keywordContains []string // keywords 应包含其中之一（为空则不检查）
@@ -157,16 +175,16 @@ func (s *IntentRecognitionSuite) TestIntent_Classification() {
 			keywordContains: []string{"A股", "行情"},
 		},
 		{
-			name:          "天气查询",
-			question:      "北京今天天气怎么样",
-			expectUseless: false,
+			name:            "天气查询",
+			question:        "北京今天天气怎么样",
+			expectUseless:   false,
 			intentContains:  []string{"天气", "weather"},
 			keywordContains: []string{"天气", "北京"},
 		},
 		{
-			name:          "计算请求",
-			question:      "帮我算一下 123*456",
-			expectUseless: false,
+			name:            "计算请求",
+			question:        "帮我算一下 123*456",
+			expectUseless:   false,
 			intentContains:  []string{"计算", "算", "calculator", "math"},
 			keywordContains: []string{"计算", "算", "123", "456"},
 		},
@@ -179,9 +197,9 @@ func (s *IntentRecognitionSuite) TestIntent_Classification() {
 			keywordContains: []string{"新闻", "科技", "搜索"},
 		},
 		{
-			name:          "系统信息查询",
-			question:      "帮我查一下系统CPU使用率",
-			expectUseless: false,
+			name:            "系统信息查询",
+			question:        "帮我查一下系统CPU使用率",
+			expectUseless:   false,
 			intentContains:  []string{"系统", "CPU", "sysinfo", "system"},
 			keywordContains: []string{"CPU", "系统", "使用率"},
 		},
@@ -412,10 +430,10 @@ func (s *IntentRecognitionSuite) TestIntent_Schedule_CronValidity() {
 // TestIntent_CancelSchedule 取消定时任务意图识别（端到端，基于 Ollama）
 func (s *IntentRecognitionSuite) TestIntent_CancelSchedule() {
 	tests := []struct {
-		name                string
-		question            string
-		expectCancel        bool   // cancel_schedule 应非空
-		cancelNameContains  string // cancel_schedule 应包含的关键词
+		name               string
+		question           string
+		expectCancel       bool   // cancel_schedule 应非空
+		cancelNameContains string // cancel_schedule 应包含的关键词
 	}{
 		{
 			name:               "取消喝水提醒",
@@ -430,9 +448,9 @@ func (s *IntentRecognitionSuite) TestIntent_CancelSchedule() {
 			cancelNameContains: "开会",
 		},
 		{
-			name:               "删除定时任务",
-			question:           "把那个每天早上的闹钟删掉",
-			expectCancel:       true,
+			name:         "删除定时任务",
+			question:     "把那个每天早上的闹钟删掉",
+			expectCancel: true,
 		},
 		{
 			name:         "创建定时不应触发取消",
@@ -693,10 +711,10 @@ func (s *IntentRecognitionSuite) TestIntent_EndToEnd_ToolSearch() {
 	searcher := buildTestSearcher(s.logger)
 
 	tests := []struct {
-		name           string
-		question       string
-		expectTools    []string // 搜索结果应包含的技能名
-		forbidTools    []string // 搜索结果不应包含的技能名
+		name        string
+		question    string
+		expectTools []string // 搜索结果应包含的技能名
+		forbidTools []string // 搜索结果不应包含的技能名
 	}{
 		{
 			name:        "天气查询应找到weather",
