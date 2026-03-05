@@ -13,7 +13,7 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-func ollamaAvailable(t *testing.T) {
+func isOllamaAvailable(t *testing.T) {
 	t.Helper()
 	conn, err := net.DialTimeout("tcp", "127.0.0.1:11434", 2*time.Second)
 	if err != nil {
@@ -23,7 +23,7 @@ func ollamaAvailable(t *testing.T) {
 }
 
 func TestOllamaToolCall(t *testing.T) {
-	ollamaAvailable(t)
+	isOllamaAvailable(t)
 
 	baseURL := "http://localhost:11434/v1"
 	apiKey := "ollama"
@@ -133,7 +133,7 @@ func TestOllamaToolCall(t *testing.T) {
 }
 
 func TestOllamaDirectAPI(t *testing.T) {
-	ollamaAvailable(t)
+	isOllamaAvailable(t)
 
 	ollamaURL := "http://localhost:11434/api/chat"
 
@@ -182,7 +182,7 @@ func TestOllamaDirectAPI(t *testing.T) {
 }
 
 func TestOllamaViaOpenAIClient(t *testing.T) {
-	ollamaAvailable(t)
+	isOllamaAvailable(t)
 
 	baseURL := "http://localhost:11434/v1"
 
