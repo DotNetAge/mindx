@@ -2,7 +2,14 @@ package entity
 
 import "time"
 
+// TODO: TECH DEBT [TD-001] - SkillDef 是旧的错误实现
+// 当前 SkillDef 将 Skill 等同于可执行工具，违背 agentskills.io 规范
+// 新的 Skill 定义在 skill_new.go 中
+// 这个文件将在 Phase 2 Step 8 删除
+// 参考：docs/v2/TECH-DEBT.md#TD-001
+
 // SkillDef 技能定义（从 SKILL.md 读取）
+// ⚠️ 已废弃：使用 Skill（skill_new.go）替代
 type SkillDef struct {
 	Name         string                 `yaml:"name" json:"name"`
 	Description  string                 `yaml:"description" json:"description"`
