@@ -54,8 +54,9 @@ func TestPortcheckSkill(t *testing.T) {
 	}
 
 	projectRoot := getProjectRootForPortcheckTest()
-	os.Setenv("WORKSPACE", projectRoot)
-	os.Setenv("CONFIG_PATH", filepath.Join(projectRoot, "config"))
+	workspace := prepareTestWorkspace(t, projectRoot)
+	os.Setenv("MINDX_PATH", projectRoot)
+	os.Setenv("MINDX_WORKSPACE", workspace)
 
 	app, err := bootstrap.Startup()
 	if err != nil {

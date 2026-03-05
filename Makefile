@@ -98,7 +98,7 @@ update:
 .PHONY: build-frontend
 build-frontend:
 	@echo "$(BLUE)Building dashboard...$(NC)"
-	@cd $(DASHBOARD_DIR) && npm install --silent
+	@cd $(DASHBOARD_DIR) && (npm install --silent || npm install --silent --registry=https://registry.npmjs.org --package-lock=false)
 	@cd $(DASHBOARD_DIR) && npm run build --silent
 	@echo "$(GREEN)✓ Dashboard built!$(NC)"
 
