@@ -161,8 +161,11 @@ func NewAssistant(
 		return caps[0], nil
 	}
 
-	// 创建大脑（传入人设）
-	brain, err := brain.NewBrain(brain.BrainDeps{
+	// 创建大脑（使用新的 Pipeline 架构）
+	// TODO: TECH DEBT [TD-001] - 当前 SkillMgr 使用错误的 Skill 实现
+	// TODO: TECH DEBT [TD-002] - SkillMatchProcessor 不加载 SOP，不组装 Tools
+	// 参考：docs/v2/TECH-DEBT.md
+	brain, err := brain.NewBrainWithPipeline(brain.BrainDeps{
 		Cfg:            cfg,
 		Persona:        persona,
 		Memory:         mem,
