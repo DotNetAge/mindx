@@ -66,6 +66,8 @@ func NewBrainWithPipeline(deps BrainDeps) (*core.Brain, error) {
 	thinking := NewThinking(model, systemPrompt, logger.Named("thinking"), tokenUsageRepo, &cfg.TokenBudget)
 
 	// 创建处理器管线
+	// TODO: Phase 4 - 需要传入 HybridSearcher 和 ToolAssembler
+	// 当前暂时注释掉 SkillMatchProcessor，等待 Phase 4 完成后集成
 	pipeline := NewPipeline(
 		// 1. 意图识别
 		// IntentProcessor 内部实现降级：本地模型失败 → 云端模型
@@ -77,8 +79,8 @@ func NewBrainWithPipeline(deps BrainDeps) (*core.Brain, error) {
 		processors.NewMemoryRetrievalProcessor(deps.Memory, 5),
 
 		// 3. 技能匹配（关键词匹配）
-		// TODO: TECH DEBT [TD-002, TD-003] - 只是占位符，不加载 SOP，不组装 Tools
-		processors.NewSkillMatchProcessor(deps.SkillMgr, 3),
+		// TODO: Phase 4 - 需要 HybridSearcher 和 ToolAssembler
+		// processors.NewSkillMatchProcessor(searcher, toolAssembler, 3),
 
 		// 4. 工具执行
 		// TODO: TECH DEBT [TD-002] - 因为 SkillMatchProcessor 不组装 Tools，此处理器被跳过

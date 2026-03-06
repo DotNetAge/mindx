@@ -139,15 +139,13 @@ func (tc *ToolCaller) ExecuteToolCall(
 }
 
 func (tc *ToolCaller) SearchTools(keywords []string) ([]core.ToolSchema, error) {
-	skills, err := tc.skillMgr.SearchSkills(keywords...)
+	skillNames, err := tc.skillMgr.SearchSkills(keywords...)
 	if err != nil {
 		return nil, err
 	}
 
-	schemas := make([]core.ToolSchema, 0, len(skills))
-	for _, skill := range skills {
-		name := skill.GetName()
-
+	schemas := make([]core.ToolSchema, 0, len(skillNames))
+	for _, name := range skillNames {
 		info, exists := tc.skillMgr.GetSkillInfo(name)
 		if !exists {
 			tc.logger.Warn(i18n.T("brain.skill_info_not_exist"), logging.String(i18n.T("brain.function"), name))
