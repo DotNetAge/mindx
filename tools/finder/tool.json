@@ -1,0 +1,20 @@
+{
+  "name": "finder",
+  "description": "Finder文件管理技能，浏览目录、查看文件信息、打开文件夹",
+  "version": "1.0.0",
+  "type": "shell",
+  "command": "finder_cli.sh",
+  "parameters": {
+    "action": {
+      "type": "string",
+      "description": "操作类型：\"list\"列出目录、\"open\"打开目录、\"info\"获取文件信息",
+      "required": true
+    },
+    "path": {
+      "type": "string",
+      "description": "文件路径，默认为当前目录（.）",
+      "required": false
+    }
+  },
+  "timeout": 30
+}
