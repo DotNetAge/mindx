@@ -3,9 +3,9 @@ package cli
 import (
 	"fmt"
 	"mindx/internal/config"
-	"mindx/internal/core"
 	"mindx/internal/entity"
 	"mindx/internal/infrastructure/llama"
+	"mindx/internal/infrastructure/persistence"
 	"mindx/internal/usecase/embedding"
 	"mindx/internal/usecase/skills"
 	"mindx/pkg/i18n"
@@ -98,9 +98,9 @@ var skillRunCmd = &cobra.Command{
 			return
 		}
 
-		var targetSkill *core.Skill
+		var targetSkill *entity.Skill
 		for _, skill := range skillList {
-			if skill.GetName() == name {
+			if skill.Name == name {
 				targetSkill = skill
 				break
 			}
@@ -296,7 +296,17 @@ func createSkillManager() (*skills.SkillMgr, error) {
 		return nil, err
 	}
 
-	return skills.NewSkillMgr(installSkillsPath, workspacePath, embeddingSvc, ollamaSvc, logging.GetSystemLogger())
+	// 创建 store（用于向量索引）
+	vectorsPath, err := config.GetWorkspaceVectorsPath()
+	if err != nil {
+		return nil, err
+	}
+	store, err := persistence.NewStore("badger", vectorsPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建向量存储失败: %w", err)
+	}
+
+	return skills.NewSkillMgrWithStore(installSkillsPath, workspacePath, embeddingSvc, ollamaSvc, store, logging.GetSystemLogger())
 }
 
 func getStatusIcon(info *entity.SkillInfo) string {

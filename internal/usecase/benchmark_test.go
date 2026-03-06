@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"fmt"
 	"mindx/internal/usecase/tools"
 	"os"
 	"path/filepath"
@@ -17,16 +18,17 @@ func BenchmarkToolManagerLoad(b *testing.B) {
 
 	// 创建 10 个测试工具
 	for i := 0; i < 10; i++ {
-		toolDir := filepath.Join(toolsDir, "tool"+string(rune(i)))
+		toolName := fmt.Sprintf("tool%d", i)
+		toolDir := filepath.Join(toolsDir, toolName)
 		require.NoError(b, os.MkdirAll(toolDir, 0755))
 
-		toolJSON := `{
-			"name": "tool` + string(rune(i)) + `",
+		toolJSON := fmt.Sprintf(`{
+			"name": "%s",
 			"description": "测试工具",
 			"version": "1.0.0",
 			"type": "shell",
 			"command": "echo"
-		}`
+		}`, toolName)
 
 		require.NoError(b, os.WriteFile(
 			filepath.Join(toolDir, "tool.json"),

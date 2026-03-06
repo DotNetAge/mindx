@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"mindx/internal/core"
 	"mindx/internal/entity"
 	"mindx/internal/usecase/skills"
 	"mindx/pkg/i18n"
@@ -370,9 +369,9 @@ func (h *SkillsHandler) executeSkill(c *gin.Context) {
 		return
 	}
 
-	var targetSkill *core.Skill
+	var targetSkill *entity.Skill
 	for _, skill := range skills {
-		if skill.GetName() == name {
+		if skill.Name == name {
 			targetSkill = skill
 			break
 		}

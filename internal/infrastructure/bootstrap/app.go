@@ -18,7 +18,6 @@ import (
 	"mindx/internal/usecase/memory"
 	"mindx/internal/usecase/session"
 	"mindx/internal/usecase/skills"
-	"mindx/internal/usecase/skills/builtins"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
 	"os"
@@ -259,6 +258,9 @@ func Startup() (*App, error) {
 		cronScheduler = nil
 	}
 
+	// TODO: TECH DEBT - builtins 包已删除，需要在 Phase 4 中重构 SkillMgr
+	// 暂时注释掉，避免编译错误
+	/*
 	currentLang := i18n.GetLanguage()
 	langName := "Chinese"
 	if currentLang == "en-US" {
@@ -288,8 +290,8 @@ func Startup() (*App, error) {
 			LangName: langName,
 		}
 	}
-
 	builtins.RegisterBuiltins(skillMgr, builtinCfg, cronScheduler)
+	*/
 
 	// 初始化 MCP servers（异步，不阻塞服务启动）
 	mcpCfg, mcpErr := config.LoadMCPServersConfig()
