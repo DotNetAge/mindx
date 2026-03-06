@@ -46,6 +46,8 @@ func NewAssistant(
 	logger logging.Logger,
 	tokenUsageRepo core.TokenUsageRepository,
 	cronScheduler cron.Scheduler,
+	hybridSearcher *skills.HybridSearcher,
+	toolAssembler *skills.ToolAssembler,
 ) *Assistant {
 
 	// 构建人设
@@ -160,9 +162,7 @@ func NewAssistant(
 	}
 
 	// 创建大脑（使用新的 Pipeline 架构）
-	// TODO: TECH DEBT [TD-001] - 当前 SkillMgr 使用错误的 Skill 实现
-	// TODO: TECH DEBT [TD-002] - SkillMatchProcessor 不加载 SOP，不组装 Tools
-	// 参考：docs/v2/TECH-DEBT.md
+	// Phase 4 Step 3: 传入 HybridSearcher 和 ToolAssembler
 	brain, err := brain.NewBrainWithPipeline(brain.BrainDeps{
 		Cfg:            cfg,
 		Persona:        persona,
@@ -174,6 +174,8 @@ func NewAssistant(
 		Logger:         logger,
 		TokenUsageRepo: tokenUsageRepo,
 		CronScheduler:  cronScheduler,
+		HybridSearcher: hybridSearcher,
+		ToolAssembler:  toolAssembler,
 	})
 	if err != nil {
 		logger.Error(i18n.T("infra.create_brain_failed"), logging.Err(err))

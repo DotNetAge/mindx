@@ -203,6 +203,12 @@ func (s *BadgerStore) Close() error {
 	return s.db.Close()
 }
 
+// GetDB 获取底层的 BadgerDB 实例
+// 注意：此方法仅用于需要直接访问 BadgerDB 的特殊场景（如 VectorIndex）
+func (s *BadgerStore) GetDB() *badger.DB {
+	return s.db
+}
+
 // Backup 将数据库备份写入 w
 func (s *BadgerStore) Backup(w io.Writer) (uint64, error) {
 	return s.db.Backup(w, 0)

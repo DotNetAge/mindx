@@ -12,21 +12,24 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/dgraph-io/badger/v4"
 )
 
 // SkillManager 技能管理器（Phase 4 重构版）
 // 职责：只负责 UI 管理功能（列表、安装、启用/禁用等）
 // 搜索和执行功能由 HybridSearcher 和 ToolAssembler 负责
 type SkillManager struct {
-	skillsDir    string
-	skills       map[string]*entity.Skill
-	skillInfos   map[string]*entity.SkillInfo
-	parser       *SkillParser
-	indexer      *SkillIndexer
-	isReIndexing bool
-	reIndexError error
-	mu           sync.RWMutex
-	logger       logging.Logger
+	skillsDir      string
+	skills         map[string]*entity.Skill
+	skillInfos     map[string]*entity.SkillInfo
+	parser         *SkillParser
+	indexer        *SkillIndexer
+	hybridSearcher *HybridSearcher // Phase 4: 混合检索器
+	isReIndexing   bool
+	reIndexError   error
+	mu             sync.RWMutex
+	logger         logging.Logger
 }
 
 // NewSkillManager 创建技能管理器
@@ -55,6 +58,31 @@ func NewSkillMgrWithStore(
 
 	// 创建管理器
 	manager := NewSkillManager(skillsPath, indexer)
+
+	// Phase 4 Step 3: 创建 HybridSearcher
+	// 1. 尝试获取 BadgerDB 实例（需要类型断言）
+	type badgerDBGetter interface {
+		GetDB() interface{}
+	}
+
+	if badgerStore, ok := store.(badgerDBGetter); ok {
+		if dbInterface := badgerStore.GetDB(); dbInterface != nil {
+			// 类型断言为 *badger.DB
+			if db, ok := dbInterface.(*badger.DB); ok {
+				// 2. 创建 VectorIndex 和 KeywordIndex
+				vectorIndex := NewVectorIndex(db, embeddingSvc)
+				keywordIndex := NewKeywordIndex()
+
+				// 3. 创建 HybridSearcher
+				manager.hybridSearcher = NewHybridSearcher(vectorIndex, keywordIndex, nil)
+				logger.Info("HybridSearcher created successfully")
+			} else {
+				logger.Warn("GetDB() returned non-BadgerDB type")
+			}
+		}
+	} else {
+		logger.Warn("Store does not support GetDB(), HybridSearcher not created")
+	}
 
 	// 加载技能
 	if err := manager.LoadSkills(); err != nil {
@@ -109,6 +137,11 @@ func (sm *SkillManager) LoadSkills() error {
 		sm.skills[skill.Name] = skill
 		sm.skillInfos[skill.Name] = sm.skillToInfo(skill)
 		loadedCount++
+
+		// Phase 4: 自动索引到 KeywordIndex
+		if sm.hybridSearcher != nil && sm.hybridSearcher.keywordIndex != nil {
+			sm.hybridSearcher.keywordIndex.IndexSkill(sm.skillInfos[skill.Name].Def)
+		}
 
 		sm.logger.Info("skill loaded",
 			logging.String("name", skill.Name),
@@ -396,6 +429,11 @@ func (sm *SkillManager) ExecuteFunc(function core.ToolCallFunction) (string, err
 	// TODO: 实际执行应该通过 ToolAssembler 完成
 	// 这里返回一个简单的成功响应
 	return fmt.Sprintf("Tool %s executed successfully", function.Name), nil
+}
+
+// GetHybridSearcher 获取混合检索器
+func (sm *SkillManager) GetHybridSearcher() *HybridSearcher {
+	return sm.hybridSearcher
 }
 
 // SkillMgr 类型别名（向后兼容）
