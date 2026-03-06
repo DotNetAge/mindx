@@ -65,6 +65,7 @@ func NewSkillMgrWithStore(
 		GetDB() interface{}
 	}
 
+	hybridSearcherCreated := false
 	if badgerStore, ok := store.(badgerDBGetter); ok {
 		if dbInterface := badgerStore.GetDB(); dbInterface != nil {
 			// 类型断言为 *badger.DB
@@ -76,12 +77,20 @@ func NewSkillMgrWithStore(
 				// 3. 创建 HybridSearcher
 				manager.hybridSearcher = NewHybridSearcher(vectorIndex, keywordIndex, nil)
 				logger.Info("HybridSearcher created successfully")
+				hybridSearcherCreated = true
 			} else {
-				logger.Warn("GetDB() returned non-BadgerDB type")
+				logger.Error("GetDB() returned non-BadgerDB type - HybridSearcher will not be available")
 			}
+		} else {
+			logger.Error("GetDB() returned nil - HybridSearcher will not be available")
 		}
 	} else {
-		logger.Warn("Store does not support GetDB(), HybridSearcher not created")
+		logger.Error("Store does not support GetDB() - HybridSearcher will not be available")
+	}
+
+	// 如果 HybridSearcher 创建失败，记录警告
+	if !hybridSearcherCreated {
+		logger.Warn("HybridSearcher not created - skill search will use fallback method")
 	}
 
 	// 加载技能
@@ -407,28 +416,82 @@ func (sm *SkillManager) StartReIndexInBackground() {
 // SearchSkills 搜索技能（兼容旧接口）
 // 返回技能名称列表
 func (sm *SkillManager) SearchSkills(keywords ...string) ([]string, error) {
+	// 如果没有关键词，返回所有技能
+	if len(keywords) == 0 {
+		sm.mu.RLock()
+		defer sm.mu.RUnlock()
+
+		names := make([]string, 0, len(sm.skills))
+		for name := range sm.skills {
+			names = append(names, name)
+		}
+		return names, nil
+	}
+
+	// 如果有 HybridSearcher，使用它进行搜索
+	if sm.hybridSearcher != nil {
+		query := ""
+		if len(keywords) > 0 {
+			query = keywords[0] // 使用第一个关键词作为查询
+		}
+
+		matches, err := sm.hybridSearcher.Search(query, 10) // 返回前 10 个
+		if err != nil {
+			sm.logger.Warn("hybrid search failed, fallback to simple search", logging.Err(err))
+		} else {
+			names := make([]string, 0, len(matches))
+			for _, match := range matches {
+				names = append(names, match.Skill.Name)
+			}
+			return names, nil
+		}
+	}
+
+	// 回退：简单的关键词匹配
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
-	// 简单实现：返回所有技能名称
-	// TODO: 实际搜索应该使用 HybridSearcher
-	names := make([]string, 0, len(sm.skills))
-	for name := range sm.skills {
-		names = append(names, name)
+	names := make([]string, 0)
+	for name, skill := range sm.skills {
+		// 检查技能名称或描述是否包含关键词
+		for _, keyword := range keywords {
+			if containsSubstring(name, keyword) || containsSubstring(skill.Description, keyword) {
+				names = append(names, name)
+				break
+			}
+		}
 	}
 
 	return names, nil
 }
 
+// containsSubstring 检查字符串是否包含子串（简单实现）
+func containsSubstring(s, substr string) bool {
+	if len(substr) == 0 {
+		return true
+	}
+	if len(s) < len(substr) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 // ExecuteFunc 执行工具函数（兼容旧接口）
+// 注意：这是一个兼容方法，实际执行应该通过 ToolAssembler 完成
+// 由于 SkillManager 不再负责执行，这个方法返回错误提示
 func (sm *SkillManager) ExecuteFunc(function core.ToolCallFunction) (string, error) {
-	sm.logger.Info("execute func (delegated to ToolAssembler)",
-		logging.String("name", function.Name),
+	sm.logger.Warn("ExecuteFunc called on SkillManager - this is deprecated",
+		logging.String("function", function.Name),
 	)
 
-	// TODO: 实际执行应该通过 ToolAssembler 完成
-	// 这里返回一个简单的成功响应
-	return fmt.Sprintf("Tool %s executed successfully", function.Name), nil
+	// SkillManager 不再负责工具执行
+	// 调用者应该使用 ToolAssembler 和 ToolExecutor
+	return "", fmt.Errorf("SkillManager.ExecuteFunc is deprecated - use ToolAssembler and ToolExecutor instead")
 }
 
 // GetHybridSearcher 获取混合检索器
