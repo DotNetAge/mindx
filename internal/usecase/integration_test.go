@@ -1,7 +1,6 @@
 package usecase
 
 import (
-	"context"
 	"mindx/internal/entity"
 	"mindx/internal/usecase/mcp"
 	"mindx/internal/usecase/skills"
@@ -72,8 +71,8 @@ func TestToolAssemblerIntegration(t *testing.T) {
 	toolsDir := filepath.Join(tmpDir, "tools")
 
 	// 创建多个测试工具
-	tools := []string{"tool1", "tool2", "tool3"}
-	for _, toolName := range tools {
+	toolNames := []string{"tool1", "tool2", "tool3"}
+	for _, toolName := range toolNames {
 		toolDir := filepath.Join(toolsDir, toolName)
 		require.NoError(t, os.MkdirAll(toolDir, 0755))
 
@@ -113,13 +112,13 @@ func TestToolAssemblerIntegration(t *testing.T) {
 	assert.Len(t, schemas, 3)
 
 	// 验证工具名称
-	toolNames := make([]string, len(schemas))
+	assembledTools := make([]string, len(schemas))
 	for i, schema := range schemas {
-		toolNames[i] = schema.Function.Name
+		assembledTools[i] = schema.Function.Name
 	}
-	assert.Contains(t, toolNames, "tool1")
-	assert.Contains(t, toolNames, "tool2")
-	assert.Contains(t, toolNames, "tool3")
+	assert.Contains(t, assembledTools, "tool1")
+	assert.Contains(t, assembledTools, "tool2")
+	assert.Contains(t, assembledTools, "tool3")
 }
 
 // TestMCPManagerIntegration 测试 MCPManager 集成
@@ -147,17 +146,15 @@ func TestMCPManagerIntegration(t *testing.T) {
 	err := mcpManager.LoadConfig()
 	require.NoError(t, err)
 
-	// 2. 连接服务器
-	ctx := context.Background()
-	err = mcpManager.ConnectServer(ctx, "test_server")
+	// 2. 连接所有服务器（会自动发现工具）
+	err = mcpManager.Connect()
 	require.NoError(t, err)
 
-	// 3. 发现工具
-	err = mcpManager.DiscoverTools(ctx, "test_server")
-	require.NoError(t, err)
-
-	// 4. 验证工具
+	// 3. 验证工具
 	assert.True(t, mcpManager.GetToolCount() > 0)
+
+	// 4. 清理
+	defer mcpManager.Close()
 }
 
 // TestFullPipeline 测试完整流程
@@ -248,13 +245,15 @@ func TestToolPriority(t *testing.T) {
 	// 3. 验证本地工具优先
 	assert.True(t, assembler.HasTool("test_tool"))
 
-	tool, err := assembler.GetTool("test_tool")
-	require.NoError(t, err)
-	assert.NotNil(t, tool)
+	// 4. 通过组装工具来验证本地工具被使用
+	skill := &entity.Skill{
+		Name:          "test_skill",
+		RequiredTools: []string{"test_tool"},
+	}
 
-	// 验证是本地工具
-	localTool, ok := tool.(*tools.Tool)
-	assert.True(t, ok)
-	assert.Equal(t, "test_tool", localTool.Name)
-	assert.Equal(t, "本地工具", localTool.Description)
+	schemas, err := assembler.AssembleTools(skill)
+	require.NoError(t, err)
+	assert.Len(t, schemas, 1)
+	assert.Equal(t, "test_tool", schemas[0].Function.Name)
+	assert.Equal(t, "本地工具", schemas[0].Function.Description)
 }

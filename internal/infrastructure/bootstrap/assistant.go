@@ -95,9 +95,7 @@ func NewAssistant(
 		}
 
 		tools := make([]*core.ToolSchema, 0, len(skillsList))
-		for _, skill := range skillsList {
-			name := skill.GetName()
-
+		for _, name := range skillsList {
 			// 获取完整的技能信息，包括参数定义
 			info, exists := skillMgr.GetSkillInfo(name)
 			if !exists {
@@ -239,10 +237,7 @@ func (a *Assistant) GetCharacter() string {
 }
 
 // GetSkillMgr 获取技能管理器（负责执行）
-func (a *Assistant) GetSkillMgr() core.SkillManager {
-	if a.skillMgr == nil {
-		return nil
-	}
+func (a *Assistant) GetSkillMgr() *skills.SkillMgr {
 	return a.skillMgr
 }
 
