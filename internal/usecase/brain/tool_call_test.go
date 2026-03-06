@@ -4,14 +4,27 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/sashabaranov/go-openai"
 )
 
+func isOllamaAvailable(t *testing.T) {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:11434", 2*time.Second)
+	if err != nil {
+		t.Skip("ollama is not available on 127.0.0.1:11434")
+	}
+	_ = conn.Close()
+}
+
 func TestOllamaToolCall(t *testing.T) {
+	isOllamaAvailable(t)
+
 	baseURL := "http://localhost:11434/v1"
 	apiKey := "ollama"
 	model := "qwen3:0.6b"
@@ -120,6 +133,8 @@ func TestOllamaToolCall(t *testing.T) {
 }
 
 func TestOllamaDirectAPI(t *testing.T) {
+	isOllamaAvailable(t)
+
 	ollamaURL := "http://localhost:11434/api/chat"
 
 	reqBody := map[string]interface{}{
@@ -167,6 +182,8 @@ func TestOllamaDirectAPI(t *testing.T) {
 }
 
 func TestOllamaViaOpenAIClient(t *testing.T) {
+	isOllamaAvailable(t)
+
 	baseURL := "http://localhost:11434/v1"
 
 	parsedURL, err := url.Parse(baseURL)

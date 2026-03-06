@@ -62,6 +62,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     { id: 'chat', label: t('sidebar.chat'), icon: <ChatIcon /> },
     { id: 'history', label: t('sidebar.history'), icon: <TimeFilledIcon /> },
     { id: 'models', label: t('sidebar.models'), icon: <CloudIcon /> },
+    { id: 'settings', label: t('sidebar.settings'), icon: <SettingIcon /> },
     { id: 'skills', label: t('sidebar.skills'), icon: <ToolsIcon /> },
     { id: 'capabilities', label: t('sidebar.capabilities'), icon: <InfoCircleFilledIcon /> },
     { id: 'channels', label: t('sidebar.channels'), icon: <ShareIcon /> },

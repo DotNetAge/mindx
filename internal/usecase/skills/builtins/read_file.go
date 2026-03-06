@@ -21,12 +21,28 @@ func ReadFile(params map[string]any) (string, error) {
 	cleanPath := filepath.Clean(path)
 
 	// Resolve relative paths against workspace root
+	workDir := os.Getenv("MINDX_WORKSPACE")
+	if workDir == "" {
+		return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
+	}
+	absWorkDir, err := filepath.Abs(workDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve workspace path: %w", err)
+	}
+	resolvedWorkDir, err := filepath.EvalSymlinks(absWorkDir)
+	if err != nil {
+		return "", fmt.Errorf("workspace path contains unresolvable symlinks %s: %w", absWorkDir, err)
+	}
+
 	if !filepath.IsAbs(cleanPath) {
-		workDir := os.Getenv("MINDX_WORKSPACE")
-		if workDir == "" {
-			return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
-		}
-		cleanPath = filepath.Clean(filepath.Join(workDir, cleanPath))
+		cleanPath = filepath.Clean(filepath.Join(absWorkDir, cleanPath))
+	}
+	filePolicy, err := loadFileAccessPolicy(resolvedWorkDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to load file access policy: %w", err)
+	}
+	if !filePolicy.isAllowed(cleanPath) {
+		return getJSONReadResult(cleanPath, "", 0, false, "读取路径超出允许范围", time.Since(startTime))
 	}
 
 	// Check file exists
@@ -40,6 +56,14 @@ func ReadFile(params map[string]any) (string, error) {
 
 	if info.IsDir() {
 		return getJSONReadResult(cleanPath, "", 0, false, fmt.Sprintf("路径是目录而非文件: %s", cleanPath), time.Since(startTime))
+	}
+
+	resolvedPath, err := filepath.EvalSymlinks(cleanPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve file path %s: %w", cleanPath, err)
+	}
+	if !filePolicy.isAllowed(resolvedPath) {
+		return getJSONReadResult(cleanPath, "", 0, false, "读取路径超出允许范围", time.Since(startTime))
 	}
 
 	// Read file content

@@ -118,6 +118,13 @@ type BrainIntegrationSuite struct {
 
 // SetupSuite 初始化测试套件
 func (s *BrainIntegrationSuite) SetupSuite() {
+	if testing.Short() {
+		s.T().Skip("short mode: skip brain integration suite")
+	}
+	if !isOllamaAvailable() {
+		s.T().Skip("ollama is not available on 127.0.0.1:11434")
+	}
+
 	s.logger = logging.GetSystemLogger().Named("brain_integration_test")
 	s.testData = filepath.Join(os.TempDir(), fmt.Sprintf("bot_brain_test_%d_%d", time.Now().Unix(), os.Getpid()))
 	s.testLogs = filepath.Join(s.testData, "logs")
@@ -330,4 +337,3 @@ func TestSkillExecutionSuite(t *testing.T) {
 func TestLongInputSuite(t *testing.T) {
 	suite.Run(t, new(LongInputSuite))
 }
-

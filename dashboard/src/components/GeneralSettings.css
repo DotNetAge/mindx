@@ -41,7 +41,8 @@
 }
 
 .config-item input[type="text"],
-.config-item input[type="number"] {
+.config-item input[type="number"],
+.config-item textarea {
   width: 100%;
   max-width: 400px;
   padding: 10px 14px;
@@ -51,6 +52,11 @@
   color: #f9fafb;
   font-size: 14px;
   transition: all 0.3s;
+}
+
+.config-item textarea {
+  min-height: 100px;
+  resize: vertical;
 }
 
 .config-item input:focus {

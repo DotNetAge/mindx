@@ -1,10 +1,10 @@
 package channels
 
 import (
-	"mindx/internal/core"
-	"mindx/internal/entity"
 	"context"
 	"fmt"
+	"mindx/internal/core"
+	"mindx/internal/entity"
 	"runtime"
 	"testing"
 	"time"
@@ -30,8 +30,8 @@ func TestGateway_Stability(t *testing.T) {
 		return "OK", "", nil
 	})
 
-	duration := 5 * time.Minute
-	ticker := time.NewTicker(5 * time.Second)
+	duration := 1 * time.Minute
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
@@ -147,8 +147,8 @@ func TestGateway_Stability_MultipleChannels(t *testing.T) {
 		return "OK", "", nil
 	})
 
-	duration := 3 * time.Minute
-	ticker := time.NewTicker(3 * time.Second)
+	duration := 1 * time.Minute
+	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), duration)

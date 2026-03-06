@@ -23,13 +23,6 @@ func WriteFile(params map[string]any) (string, error) {
 	}
 
 	startTime := time.Now()
-	dangerous := false
-	if d, ok := params["dangerous"].(bool); ok {
-		dangerous = d
-	}
-	if d, ok := params["dangerous"].(string); ok && d == "true" {
-		dangerous = true
-	}
 	workDir := os.Getenv("MINDX_WORKSPACE")
 	if workDir == "" {
 		return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
@@ -43,40 +36,31 @@ func WriteFile(params map[string]any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("workspace path contains unresolvable symlinks %s: %w", workDir, err)
 	}
+	filePolicy, err := loadFileAccessPolicy(resolvedWorkDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to load file access policy: %w", err)
+	}
 
 	// Determine the target file path
 	var filePath string
-	needsWorkspaceBoundaryCheck := false
 	cleanFilename := filepath.Clean(filename)
 
 	if path, ok := params["path"].(string); ok && path != "" {
 		// "path" param provided: treat as directory, append filename
 		cleanPath := filepath.Clean(path)
 		if filepath.IsAbs(cleanPath) {
-			if !dangerous {
-				return "", fmt.Errorf("absolute path requires dangerous=true parameter")
-			}
 			filePath = filepath.Join(cleanPath, cleanFilename)
 		} else {
 			filePath = filepath.Clean(filepath.Join(workDir, cleanPath, cleanFilename))
-			needsWorkspaceBoundaryCheck = true
-			if !isPathWithinWorkspace(workDir, filePath) {
-				return "", fmt.Errorf("path outside workspace is not allowed")
-			}
 		}
 	} else if filepath.IsAbs(cleanFilename) {
-		// filename itself is an absolute path
-		if !dangerous {
-			return "", fmt.Errorf("absolute path requires dangerous=true parameter")
-		}
 		filePath = cleanFilename
 	} else {
-		// Relative filename: resolve against workspace
 		filePath = filepath.Clean(filepath.Join(workDir, cleanFilename))
-		needsWorkspaceBoundaryCheck = true
-		if !isPathWithinWorkspace(workDir, filePath) {
-			return "", fmt.Errorf("path outside workspace is not allowed")
-		}
+	}
+
+	if !filePolicy.isAllowed(filePath) {
+		return "", fmt.Errorf("path outside allowed scope is not allowed")
 	}
 
 	dir := filepath.Dir(filePath)
@@ -87,10 +71,9 @@ func WriteFile(params map[string]any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve path %s: %w", dir, err)
 	}
-	if needsWorkspaceBoundaryCheck {
-		if !isPathWithinWorkspace(resolvedWorkDir, filepath.Join(resolvedDir, filepath.Base(filePath))) {
-			return "", fmt.Errorf("path outside workspace is not allowed")
-		}
+	resolvedTargetPath := filepath.Join(resolvedDir, filepath.Base(filePath))
+	if !filePolicy.isAllowed(resolvedTargetPath) {
+		return "", fmt.Errorf("path outside allowed scope is not allowed")
 	}
 
 	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {

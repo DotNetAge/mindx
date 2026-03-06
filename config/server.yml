@@ -17,4 +17,6 @@ server:
     right: "qwen3:1.7b"
   embedding_model: "qllama/bge-small-zh-v1.5:latest"
   default_model: "qwen3:0.6b"
-
+  file_access:
+    enabled: true
+    allowed_paths: []
