@@ -51,7 +51,7 @@ export default function Cron() {
       setJobs(data.jobs || []);
     } catch (error) {
       console.error('Failed to fetch jobs:', error);
-      setError('加载定时任务失败');
+      setError(t('cron.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -76,13 +76,13 @@ export default function Cron() {
   };
 
   const handleDelete = async (job: Job) => {
-    if (!confirm(`确定要删除定时任务 "${job.name}" 吗？`)) {
+    if (!confirm(t('cron.confirmDelete', { name: job.name }))) {
       return;
     }
 
     try {
       setActionLoading(true);
-      setActionMessage('删除中...');
+      setActionMessage(t('cron.deleting'));
 
       const response = await fetch(`/api/cron/jobs/${job.id}`, {
         method: 'DELETE',
@@ -91,11 +91,11 @@ export default function Cron() {
         throw new Error('Failed to delete job');
       }
 
-      alert('删除成功');
+      alert(t('cron.deleteSuccess'));
       fetchJobs();
     } catch (error) {
       console.error('Failed to delete job:', error);
-      alert('删除失败');
+      alert(t('cron.deleteFailed'));
     } finally {
       setActionLoading(false);
       setActionMessage('');
@@ -106,7 +106,7 @@ export default function Cron() {
     const action = job.enabled ? 'pause' : 'resume';
     try {
       setActionLoading(true);
-      setActionMessage(`${action === 'pause' ? '暂停' : '恢复'}中...`);
+      setActionMessage(action === 'pause' ? t('cron.pauseAction') : t('cron.resumeAction'));
 
       const response = await fetch(`/api/cron/jobs/${job.id}/${action}`, {
         method: 'POST',
@@ -118,7 +118,7 @@ export default function Cron() {
       fetchJobs();
     } catch (error) {
       console.error(`Failed to ${action} job:`, error);
-      alert(`${action === 'pause' ? '暂停' : '恢复'}失败`);
+      alert(action === 'pause' ? t('cron.pauseFailed') : t('cron.resumeFailed'));
     } finally {
       setActionLoading(false);
       setActionMessage('');
@@ -128,7 +128,7 @@ export default function Cron() {
   const handleSave = async () => {
     try {
       setActionLoading(true);
-      setActionMessage('保存中...');
+      setActionMessage(t('cron.saveAction'));
 
       const isEdit = editingJob !== null;
       const url = isEdit ? `/api/cron/jobs/${editingJob.id}` : '/api/cron/jobs';
@@ -143,12 +143,12 @@ export default function Cron() {
         throw new Error('Failed to save job');
       }
 
-      alert('保存成功');
+      alert(t('cron.saveSuccess'));
       setShowDialog(false);
       fetchJobs();
     } catch (error) {
       console.error('Failed to save job:', error);
-      alert('保存失败');
+      alert(t('cron.saveFailed'));
     } finally {
       setActionLoading(false);
       setActionMessage('');
@@ -166,17 +166,17 @@ export default function Cron() {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'success': return '成功';
-      case 'running': return '运行中';
-      case 'error': return '错误';
-      default: return '等待中';
+      case 'success': return t('cron.statusSuccess');
+      case 'running': return t('cron.statusRunning');
+      case 'error': return t('cron.statusError');
+      default: return t('cron.statusPending');
     }
   };
 
   if (loading) {
     return (
       <div className="cron-container">
-        <div className="loading">加载中...</div>
+        <div className="loading">{t('common.loading')}</div>
       </div>
     );
   }
@@ -184,13 +184,13 @@ export default function Cron() {
   return (
     <div className="cron-container">
       <div className="cron-header">
-        <h1>任务</h1>
+        <h1>{t('cron.title')}</h1>
         <div className="header-actions">
           <button className="action-btn secondary" onClick={fetchJobs}>
-            刷新
+            {t('cron.refresh')}
           </button>
           <button className="action-btn primary" onClick={handleAdd}>
-            添加任务
+            {t('cron.addTask')}
           </button>
         </div>
       </div>
@@ -202,8 +202,8 @@ export default function Cron() {
       <div className="cron-content">
         {jobs.length === 0 ? (
           <div className="empty-state">
-            <p>暂无定时任务</p>
-            <small>点击"添加任务"创建第一个定时任务</small>
+            <p>{t('cron.noTasks')}</p>
+            <small>{t('cron.noTasksHint')}</small>
           </div>
         ) : (
           <div className="jobs-list">
@@ -213,7 +213,7 @@ export default function Cron() {
                   <div className="job-title">
                     <h3>{job.name}</h3>
                     <span className={`job-enabled ${job.enabled ? 'enabled' : 'disabled'}`}>
-                      {job.enabled ? '已启用' : '已暂停'}
+                      {job.enabled ? t('cron.enabled') : t('cron.paused')}
                     </span>
                   </div>
                   <div className="job-status">
@@ -225,34 +225,34 @@ export default function Cron() {
 
                 <div className="job-details">
                   <div className="detail-item">
-                    <label>Cron 表达式:</label>
+                    <label>{t('cron.cronExpr')}</label>
                     <span>{job.cron}</span>
                   </div>
                   {job.message && (
                     <div className="detail-item">
-                      <label>消息:</label>
+                      <label>{t('cron.message')}</label>
                       <span>{job.message}</span>
                     </div>
                   )}
                   {job.command && (
                     <div className="detail-item">
-                      <label>命令:</label>
+                      <label>{t('cron.command')}</label>
                       <span>{job.command}</span>
                     </div>
                   )}
                   <div className="detail-item">
-                    <label>创建时间:</label>
+                    <label>{t('cron.createdAt')}</label>
                     <span>{new Date(job.created_at).toLocaleString()}</span>
                   </div>
                   {job.last_run && (
                     <div className="detail-item">
-                      <label>最后运行:</label>
+                      <label>{t('cron.lastRun')}</label>
                       <span>{new Date(job.last_run).toLocaleString()}</span>
                     </div>
                   )}
                   {job.last_error && (
                     <div className="detail-item error">
-                      <label>错误:</label>
+                      <label>{t('cron.errorLabel')}</label>
                       <span>{job.last_error}</span>
                     </div>
                   )}
@@ -264,21 +264,21 @@ export default function Cron() {
                     onClick={() => handleEdit(job)}
                     disabled={actionLoading}
                   >
-                    编辑
+                    {t('cron.edit')}
                   </button>
                   <button
                     className={`action-btn ${job.enabled ? 'warning' : 'success'}`}
                     onClick={() => handleTogglePause(job)}
                     disabled={actionLoading}
                   >
-                    {job.enabled ? '暂停' : '恢复'}
+                    {job.enabled ? t('cron.pause') : t('cron.resume')}
                   </button>
                   <button
                     className="action-btn danger"
                     onClick={() => handleDelete(job)}
                     disabled={actionLoading}
                   >
-                    删除
+                    {t('cron.delete')}
                   </button>
                 </div>
               </div>
@@ -290,48 +290,48 @@ export default function Cron() {
       {showDialog && (
         <div className="dialog-overlay" onClick={() => setShowDialog(false)}>
           <div className="dialog" onClick={(e) => e.stopPropagation()}>
-            <h2>{editingJob ? '编辑定时任务' : '添加定时任务'}</h2>
+            <h2>{editingJob ? t('cron.editTask') : t('cron.addTaskDialog')}</h2>
 
             <div className="dialog-section">
               <div className="form-item">
-                <label>任务名称 *</label>
+                <label>{t('cron.taskName')}</label>
                 <input
                   type="text"
                   value={formData.name || ''}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="输入任务名称"
+                  placeholder={t('cron.taskNamePlaceholder')}
                 />
               </div>
 
               <div className="form-item">
-                <label>Cron 表达式 *</label>
+                <label>{t('cron.cronExprLabel')}</label>
                 <input
                   type="text"
                   value={formData.cron || ''}
                   onChange={(e) => setFormData({ ...formData, cron: e.target.value })}
-                  placeholder="例如: 0 9 * * 6"
+                  placeholder={t('cron.cronExprPlaceholder')}
                 />
-                <small>格式：分 时 日 月 周</small>
+                <small>{t('cron.cronExprHint')}</small>
               </div>
 
               <div className="form-item">
-                <label>消息 *</label>
+                <label>{t('cron.messageLabel')}</label>
                 <input
                   type="text"
                   value={formData.message || ''}
                   onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                  placeholder="例如: 帮我写日报"
+                  placeholder={t('cron.messagePlaceholder')}
                 />
-                <small>定时执行时会发送这条消息</small>
+                <small>{t('cron.messageHint')}</small>
               </div>
 
               <div className="form-item">
-                <label>命令（可选）</label>
+                <label>{t('cron.commandLabel')}</label>
                 <input
                   type="text"
                   value={formData.command || ''}
                   onChange={(e) => setFormData({ ...formData, command: e.target.value })}
-                  placeholder="输入要执行的命令（可选）"
+                  placeholder={t('cron.commandPlaceholder')}
                 />
               </div>
 
@@ -342,7 +342,7 @@ export default function Cron() {
                     checked={formData.enabled || false}
                     onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
                   />
-                  启用任务
+                  {t('cron.enableTask')}
                 </label>
               </div>
             </div>
@@ -353,14 +353,14 @@ export default function Cron() {
                 onClick={() => setShowDialog(false)}
                 disabled={actionLoading}
               >
-                取消
+                {t('cron.cancel')}
               </button>
               <button
                 className="action-btn primary"
                 onClick={handleSave}
                 disabled={actionLoading}
               >
-                {actionLoading ? '保存中...' : '保存'}
+                {actionLoading ? t('cron.saving') : t('cron.save')}
               </button>
             </div>
 
@@ -372,7 +372,7 @@ export default function Cron() {
       {actionLoading && (
         <div className="loading-overlay">
           <div className="loading-spinner"></div>
-          <p>{actionMessage || '处理中...'}</p>
+          <p>{actionMessage || t('cron.processing')}</p>
         </div>
       )}
     </div>

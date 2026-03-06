@@ -41,7 +41,8 @@
 }
 
 .config-item input[type="text"],
-.config-item input[type="number"] {
+.config-item input[type="number"],
+.config-item textarea {
   width: 100%;
   max-width: 400px;
   padding: 10px 14px;
@@ -51,6 +52,11 @@
   color: #f9fafb;
   font-size: 14px;
   transition: all 0.3s;
+}
+
+.config-item textarea {
+  min-height: 100px;
+  resize: vertical;
 }
 
 .config-item input:focus {
@@ -124,4 +130,51 @@
   text-align: center;
   padding: 40px;
   color: #ef4444;
+}
+
+.config-description {
+  margin: 0 0 16px 0;
+  color: #9ca3af;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.general-settings .toggle-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 20px;
+  background-color: #374151;
+  width: 52px;
+  height: 28px;
+  position: relative;
+  transition: background-color 0.3s;
+}
+
+.general-settings .toggle-switch.active {
+  background-color: #10b981;
+}
+
+.general-settings .toggle-knob {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #fff;
+  position: absolute;
+  left: 4px;
+  transition: transform 0.3s;
+}
+
+.general-settings .toggle-switch.active .toggle-knob {
+  transform: translateX(24px);
+}
+
+.general-settings .toggle-label {
+  position: absolute;
+  left: 62px;
+  color: #d1d5db;
+  font-size: 13px;
+  white-space: nowrap;
 }

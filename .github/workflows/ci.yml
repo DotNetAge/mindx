@@ -20,7 +20,9 @@ jobs:
         run: go vet ./...
 
       - name: Prepare test workspace
-        run: cp -r config .test/config
+        run: |
+          mkdir -p .test
+          cp -r config .test/config
         shell: bash
 
       - name: Test

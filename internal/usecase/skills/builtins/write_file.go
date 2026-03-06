@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
+// WriteFile writes content to a file
+// Supports absolute paths directly; relative paths resolve against MINDX_WORKSPACE
 func WriteFile(params map[string]any) (string, error) {
 	filename, ok := params["filename"].(string)
-	if !ok {
+	if !ok || filename == "" {
 		return "", fmt.Errorf("invalid param: filename")
 	}
 
@@ -20,22 +23,57 @@ func WriteFile(params map[string]any) (string, error) {
 	}
 
 	startTime := time.Now()
-
 	workDir := os.Getenv("MINDX_WORKSPACE")
 	if workDir == "" {
 		return "", fmt.Errorf("MINDX_WORKSPACE environment variable is not set")
 	}
+	absWorkDir, err := filepath.Abs(workDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve workspace path: %w", err)
+	}
+	workDir = absWorkDir
+	resolvedWorkDir, err := filepath.EvalSymlinks(workDir)
+	if err != nil {
+		return "", fmt.Errorf("workspace path contains unresolvable symlinks %s: %w", workDir, err)
+	}
+	filePolicy, err := loadFileAccessPolicy(resolvedWorkDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to load file access policy: %w", err)
+	}
 
+	// Determine the target file path
 	var filePath string
+	cleanFilename := filepath.Clean(filename)
+
 	if path, ok := params["path"].(string); ok && path != "" {
-		filePath = filepath.Join(workDir, "documents", path, filename)
+		// "path" param provided: treat as directory, append filename
+		cleanPath := filepath.Clean(path)
+		if filepath.IsAbs(cleanPath) {
+			filePath = filepath.Join(cleanPath, cleanFilename)
+		} else {
+			filePath = filepath.Clean(filepath.Join(workDir, cleanPath, cleanFilename))
+		}
+	} else if filepath.IsAbs(cleanFilename) {
+		filePath = cleanFilename
 	} else {
-		filePath = filepath.Join(workDir, "documents", filename)
+		filePath = filepath.Clean(filepath.Join(workDir, cleanFilename))
+	}
+
+	if !filePolicy.isAllowed(filePath) {
+		return "", fmt.Errorf("path outside allowed scope is not allowed")
 	}
 
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create dir %s: %w", dir, err)
+	}
+	resolvedDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path %s: %w", dir, err)
+	}
+	resolvedTargetPath := filepath.Join(resolvedDir, filepath.Base(filePath))
+	if !filePolicy.isAllowed(resolvedTargetPath) {
+		return "", fmt.Errorf("path outside allowed scope is not allowed")
 	}
 
 	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
@@ -64,4 +102,16 @@ func getJSONWriteResult(filePath string, contentLength int, elapsed time.Duratio
 		return "", fmt.Errorf("json serialize failed: %w", err)
 	}
 	return string(data), nil
+}
+
+func isPathWithinWorkspace(workDir, targetPath string) bool {
+	relPath, relErr := filepath.Rel(workDir, filepath.Clean(targetPath))
+	if relErr != nil {
+		return false
+	}
+	// Writing directly into workspace root is allowed.
+	if relPath == "." {
+		return true
+	}
+	return relPath != ".." && !strings.HasPrefix(relPath, ".."+string(filepath.Separator))
 }

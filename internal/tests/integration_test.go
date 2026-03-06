@@ -32,6 +32,34 @@ func getProjectRootForIntegrationTest() string {
 
 var testApp *bootstrap.App
 
+func prepareTestWorkspace(t *testing.T, projectRoot string) string {
+	t.Helper()
+
+	workspace := t.TempDir()
+	configDir := filepath.Join(workspace, "config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("创建测试配置目录失败: %v", err)
+	}
+
+	pattern := filepath.Join(projectRoot, "config", "*.yml")
+	configFiles, err := filepath.Glob(pattern)
+	if err != nil {
+		t.Fatalf("读取配置模板失败: %v", err)
+	}
+	for _, src := range configFiles {
+		dst := filepath.Join(configDir, filepath.Base(src))
+		data, readErr := os.ReadFile(src)
+		if readErr != nil {
+			t.Fatalf("读取配置文件失败: %v", readErr)
+		}
+		if writeErr := os.WriteFile(dst, data, 0644); writeErr != nil {
+			t.Fatalf("写入测试配置文件失败: %v", writeErr)
+		}
+	}
+
+	return workspace
+}
+
 func setupTestSuite(t *testing.T) *bootstrap.App {
 	if testing.Short() {
 		t.Skip("跳过集成测试")
@@ -61,8 +89,9 @@ func setupTestSuite(t *testing.T) *bootstrap.App {
 	}
 
 	projectRoot := getProjectRootForIntegrationTest()
-	os.Setenv("WORKSPACE", projectRoot)
-	os.Setenv("CONFIG_PATH", filepath.Join(projectRoot, "config"))
+	workspace := prepareTestWorkspace(t, projectRoot)
+	os.Setenv("MINDX_PATH", projectRoot)
+	os.Setenv("MINDX_WORKSPACE", workspace)
 
 	var err error
 	testApp, err = bootstrap.Startup()

@@ -103,6 +103,47 @@ func (h *ConfigHandler) SaveCapabilitiesConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Capabilities config saved successfully"})
 }
 
+func (h *ConfigHandler) GetFileAccessConfig(c *gin.Context) {
+	serverCfg, err := config.LoadServerConfig()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"file_access": gin.H{
+			"enabled":       serverCfg.FileAccess.Enabled,
+			"allowed_paths": serverCfg.FileAccess.AllowedPaths,
+		},
+	})
+}
+
+func (h *ConfigHandler) SaveFileAccessConfig(c *gin.Context) {
+	var req struct {
+		FileAccess config.FileAccessConfig `json:"file_access"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	serverCfg, err := config.LoadServerConfig()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	serverCfg.FileAccess.Enabled = req.FileAccess.Enabled
+	serverCfg.FileAccess.AllowedPaths = req.FileAccess.AllowedPaths
+
+	if err := config.SaveServerConfig(serverCfg); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "File access config saved successfully"})
+}
+
 func (h *ConfigHandler) GetGeneralConfig(c *gin.Context) {
 	serverCfg, err := config.LoadServerConfig()
 	if err != nil {
@@ -121,6 +162,10 @@ func (h *ConfigHandler) GetGeneralConfig(c *gin.Context) {
 			"address": serverCfg.Host,
 			"port":    serverCfg.Port,
 		},
+		"gateway_protection": gin.H{
+			"enabled": serverCfg.GatewayProtection.Enabled,
+			"mode":    serverCfg.GatewayProtection.Mode,
+		},
 	})
 }
 
@@ -131,6 +176,10 @@ func (h *ConfigHandler) SaveGeneralConfig(c *gin.Context) {
 			Address string `json:"address"`
 			Port    int    `json:"port"`
 		} `json:"server"`
+		GatewayProtection struct {
+			Enabled bool   `json:"enabled"`
+			Mode    string `json:"mode"`
+		} `json:"gateway_protection"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -145,6 +194,8 @@ func (h *ConfigHandler) SaveGeneralConfig(c *gin.Context) {
 
 	serverCfg.Host = req.Server.Address
 	serverCfg.Port = req.Server.Port
+	serverCfg.GatewayProtection.Enabled = req.GatewayProtection.Enabled
+	serverCfg.GatewayProtection.Mode = req.GatewayProtection.Mode
 
 	if err := config.SaveServerConfig(serverCfg); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

@@ -47,3 +47,4 @@ data/
 bin/
 dev-dist/
 .tmp/
+*.tsbuildinfo

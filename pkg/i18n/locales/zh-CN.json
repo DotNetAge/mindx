@@ -800,5 +800,10 @@
   "memory.stored_points": "stored_points",
   "memory.no_valid_vector": "无有效向量，直接存储所有记忆点",
   "memory.single_mem_store_complete": "单个记忆点存储完成",
-  "memory.gen_combined_summary_failed": "生成综合摘要失败，使用第一个记忆点的摘要"
+  "memory.gen_combined_summary_failed": "生成综合摘要失败，使用第一个记忆点的摘要",
+
+  "auth.unauthorized": "访问被拒绝",
+  "auth.plugin.noop": "默认 Gateway 防护提供者（未启用防护）",
+  "auth.plugin.enabled": "Gateway 防护插件已启用: {{.Name}}",
+  "auth.plugin.disabled": "Gateway 防护插件未启用，所有请求直接放行"
 }

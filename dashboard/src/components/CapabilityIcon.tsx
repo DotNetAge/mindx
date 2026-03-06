@@ -11,7 +11,12 @@ import {
   DeleteIcon,
 } from 'tdesign-icons-react';
 
-const iconMap: Record<string, React.ComponentType<any>> = {
+interface IconProps {
+  size?: string | number;
+  className?: string;
+}
+
+const iconMap: Record<string, React.ComponentType<IconProps>> = {
   ChatIcon,
   ToolsIcon,
   InfoCircleFilledIcon,

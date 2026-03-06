@@ -40,7 +40,10 @@ echo ""
 echo -e "${YELLOW}[2/5] Building frontend...${NC}"
 cd dashboard
 if [ ! -d "node_modules" ]; then
-    npm install --silent
+    if ! npm install --silent; then
+        echo -e "${YELLOW}npm install failed, retrying with npmjs registry and without lockfile...${NC}"
+        npm install --silent --registry=https://registry.npmjs.org --package-lock=false
+    fi
 fi
 npm run build --silent
 cd "$PROJECT_ROOT"

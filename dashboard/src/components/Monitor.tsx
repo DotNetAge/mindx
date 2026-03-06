@@ -7,7 +7,7 @@ interface LogEntry {
   message: string;
   logger?: string;
   caller?: string;
-  extra?: Record<string, any>;
+  extra?: Record<string, unknown>;
 }
 
 interface LogsResponse {

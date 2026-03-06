@@ -110,6 +110,8 @@ func RegisterRoutes(router *gin.Engine, tokenUsageRepo core.TokenUsageRepository
 		configHandler := NewConfigHandler()
 		api.GET("/config/general", configHandler.GetGeneralConfig)
 		api.POST("/config/general", configHandler.SaveGeneralConfig)
+		api.GET("/config/file-access", configHandler.GetFileAccessConfig)
+		api.POST("/config/file-access", configHandler.SaveFileAccessConfig)
 		api.GET("/config/server", configHandler.GetServerConfig)
 		api.POST("/config/server", configHandler.SaveServerConfig)
 		api.GET("/config/models", configHandler.GetModelsConfig)

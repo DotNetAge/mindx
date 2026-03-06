@@ -11,6 +11,7 @@ import (
 	"mindx/pkg/logging"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -234,7 +235,21 @@ func (e *SkillExecutor) buildCommand(def *entity.SkillDef, params map[string]any
 		cmdPath = filepath.Join(skillDir, cmdPath[2:])
 	}
 
-	cmd := exec.Command(cmdPath, parts[1:]...)
+	var cmd *exec.Cmd
+	// Cross-platform: wrap .sh scripts with bash/sh on Windows
+	if runtime.GOOS == "windows" && strings.HasSuffix(cmdPath, ".sh") {
+		// On Windows, use bash (from Git for Windows, WSL, etc.) to run .sh scripts
+		shellArgs := append([]string{cmdPath}, parts[1:]...)
+		if bashPath, err := exec.LookPath("bash"); err == nil {
+			cmd = exec.Command(bashPath, shellArgs...)
+		} else if shPath, err := exec.LookPath("sh"); err == nil {
+			cmd = exec.Command(shPath, shellArgs...)
+		} else {
+			return nil, fmt.Errorf("cannot execute .sh script on Windows: bash/sh not found in PATH")
+		}
+	} else {
+		cmd = exec.Command(cmdPath, parts[1:]...)
+	}
 	cmd.Dir = skillDir
 
 	env, err := e.envMgr.PrepareExecutionEnv(def.Name, nil)
