@@ -89,18 +89,46 @@ func (mm *MCPManager) Connect() error {
 	}
 	mm.mu.RUnlock()
 
+	if len(servers) == 0 {
+		mm.logger.Info("no MCP servers to connect")
+		return nil
+	}
+
 	mm.logger.Info("connecting to MCP servers", logging.Int("count", len(servers)))
 
-	// 连接每个服务器
+	// 连接每个服务器，记录成功和失败的数量
+	successCount := 0
+	failedServers := make([]string, 0)
+
 	for _, server := range servers {
 		if err := mm.connectServer(server); err != nil {
 			mm.logger.Error("failed to connect to server",
 				logging.String("server", server.Name),
 				logging.Err(err),
 			)
+			failedServers = append(failedServers, server.Name)
 			// 继续连接其他服务器
 			continue
 		}
+		successCount++
+	}
+
+	mm.logger.Info("MCP server connection completed",
+		logging.Int("total", len(servers)),
+		logging.Int("success", successCount),
+		logging.Int("failed", len(failedServers)),
+	)
+
+	// 如果所有服务器都失败，返回错误
+	if successCount == 0 && len(servers) > 0 {
+		return fmt.Errorf("failed to connect to all %d MCP servers: %v", len(servers), failedServers)
+	}
+
+	// 如果部分失败，记录警告但不返回错误
+	if len(failedServers) > 0 {
+		mm.logger.Warn("some MCP servers failed to connect",
+			logging.Int("failed_count", len(failedServers)),
+		)
 	}
 
 	return nil
