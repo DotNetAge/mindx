@@ -3,59 +3,28 @@ package skills
 import (
 	"fmt"
 	"mindx/internal/entity"
+	"mindx/internal/usecase/mcp"
+	"mindx/internal/usecase/tools"
 	"sync"
 )
 
-// ToolAssembler 工具组装器
-// 根据 Skill 的 RequiredTools 和 OptionalTools 动态查找和组装工具
+// ToolAssembler 工具组装器（Phase 3 重构版）
+// 从 ToolManager 和 MCPManager 自动获取工具，不再需要手动注册
 type ToolAssembler struct {
-	localTools map[string]*LocalTool // 本地工具注册表
-	mcpTools   map[string]*MCPTool   // MCP 工具注册表
-	mu         sync.RWMutex
-}
-
-// LocalTool 本地工具
-type LocalTool struct {
-	Name        string
-	Description string
-	Parameters  map[string]interface{}
-	Execute     func(params map[string]interface{}) (string, error)
-}
-
-// MCPTool MCP 工具
-type MCPTool struct {
-	Name        string
-	Description string
-	ServerName  string // MCP 服务器名称
-	Schema      entity.ToolSchema
+	toolManager *tools.ToolManager
+	mcpManager  *mcp.MCPManager
+	mu          sync.RWMutex
 }
 
 // NewToolAssembler 创建工具组装器
-func NewToolAssembler() *ToolAssembler {
+func NewToolAssembler(toolManager *tools.ToolManager, mcpManager *mcp.MCPManager) *ToolAssembler {
 	return &ToolAssembler{
-		localTools: make(map[string]*LocalTool),
-		mcpTools:   make(map[string]*MCPTool),
+		toolManager: toolManager,
+		mcpManager:  mcpManager,
 	}
 }
 
-// RegisterLocalTool 注册本地工具
-func (a *ToolAssembler) RegisterLocalTool(tool *LocalTool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	a.localTools[tool.Name] = tool
-}
-
-// RegisterMCPTool 注册 MCP 工具
-func (a *ToolAssembler) RegisterMCPTool(tool *MCPTool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	a.mcpTools[tool.Name] = tool
-}
-
-// AssembleTools 组装工具
-// 根据 Skill 的 RequiredTools 和 OptionalTools 查找并组装工具
+// AssembleTools 组装工具（根据 Skill 的工具依赖）
 func (a *ToolAssembler) AssembleTools(skill *entity.Skill) ([]entity.ToolSchema, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -63,7 +32,7 @@ func (a *ToolAssembler) AssembleTools(skill *entity.Skill) ([]entity.ToolSchema,
 	var schemas []entity.ToolSchema
 	var missingRequired []string
 
-	// 1. 处理必需工具
+	// 1. 组装必需工具
 	for _, toolName := range skill.RequiredTools {
 		schema, err := a.findTool(toolName)
 		if err != nil {
@@ -73,16 +42,16 @@ func (a *ToolAssembler) AssembleTools(skill *entity.Skill) ([]entity.ToolSchema,
 		schemas = append(schemas, schema)
 	}
 
-	// 2. 如果有必需工具缺失，返回错误
+	// 2. 检查必需工具是否都找到
 	if len(missingRequired) > 0 {
 		return nil, fmt.Errorf("required tools not found: %v", missingRequired)
 	}
 
-	// 3. 处理可选工具（失败不影响）
+	// 3. 组装可选工具（失败不影响）
 	for _, toolName := range skill.OptionalTools {
 		schema, err := a.findTool(toolName)
 		if err != nil {
-			// 可选工具未找到，只记录日志，不影响流程
+			// 可选工具失败只记录，不返回错误
 			continue
 		}
 		schemas = append(schemas, schema)
@@ -91,47 +60,29 @@ func (a *ToolAssembler) AssembleTools(skill *entity.Skill) ([]entity.ToolSchema,
 	return schemas, nil
 }
 
-// AssembleToolsByNames 根据工具名称列表组装工具
-func (a *ToolAssembler) AssembleToolsByNames(toolNames []string) ([]entity.ToolSchema, error) {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	var schemas []entity.ToolSchema
-	var missing []string
-
-	for _, toolName := range toolNames {
-		schema, err := a.findTool(toolName)
-		if err != nil {
-			missing = append(missing, toolName)
-			continue
-		}
-		schemas = append(schemas, schema)
-	}
-
-	if len(missing) > 0 {
-		return schemas, fmt.Errorf("tools not found: %v", missing)
-	}
-
-	return schemas, nil
-}
-
-// findTool 查找工具（本地 + MCP）
+// findTool 查找工具（优先本地工具，回退到 MCP 工具）
 func (a *ToolAssembler) findTool(name string) (entity.ToolSchema, error) {
 	// 1. 优先查找本地工具
-	if tool, ok := a.localTools[name]; ok {
-		return a.localToolToSchema(tool), nil
+	if a.toolManager != nil && a.toolManager.HasTool(name) {
+		tool, err := a.toolManager.GetTool(name)
+		if err == nil {
+			return a.localToolToSchema(tool), nil
+		}
 	}
 
 	// 2. 查找 MCP 工具
-	if tool, ok := a.mcpTools[name]; ok {
-		return tool.Schema, nil
+	if a.mcpManager != nil && a.mcpManager.HasTool(name) {
+		mcpTool, err := a.mcpManager.GetTool(name)
+		if err == nil {
+			return a.mcpToolToSchema(mcpTool), nil
+		}
 	}
 
-	return entity.ToolSchema{}, fmt.Errorf("tool %s not found", name)
+	return entity.ToolSchema{}, fmt.Errorf("tool not found: %s", name)
 }
 
 // localToolToSchema 将本地工具转换为 ToolSchema
-func (a *ToolAssembler) localToolToSchema(tool *LocalTool) entity.ToolSchema {
+func (a *ToolAssembler) localToolToSchema(tool *tools.Tool) entity.ToolSchema {
 	return entity.ToolSchema{
 		Type: "function",
 		Function: entity.ToolFunctionSchema{
@@ -142,22 +93,35 @@ func (a *ToolAssembler) localToolToSchema(tool *LocalTool) entity.ToolSchema {
 	}
 }
 
-// GetTool 获取工具（本地或 MCP）
-func (a *ToolAssembler) GetTool(name string) (interface{}, error) {
+// mcpToolToSchema 将 MCP 工具转换为 ToolSchema
+func (a *ToolAssembler) mcpToolToSchema(tool *mcp.MCPTool) entity.ToolSchema {
+	return entity.ToolSchema{
+		Type: "function",
+		Function: entity.ToolFunctionSchema{
+			Name:        tool.Name,
+			Description: tool.Description,
+			Parameters:  tool.Schema,
+		},
+	}
+}
+
+// AssembleToolsByNames 根据工具名称列表组装工具
+func (a *ToolAssembler) AssembleToolsByNames(toolNames []string) ([]entity.ToolSchema, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	// 查找本地工具
-	if tool, ok := a.localTools[name]; ok {
-		return tool, nil
+	var schemas []entity.ToolSchema
+
+	for _, name := range toolNames {
+		schema, err := a.findTool(name)
+		if err != nil {
+			// 跳过未找到的工具
+			continue
+		}
+		schemas = append(schemas, schema)
 	}
 
-	// 查找 MCP 工具
-	if tool, ok := a.mcpTools[name]; ok {
-		return tool, nil
-	}
-
-	return nil, fmt.Errorf("tool %s not found", name)
+	return schemas, nil
 }
 
 // HasTool 检查工具是否存在
@@ -165,10 +129,7 @@ func (a *ToolAssembler) HasTool(name string) bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	_, hasLocal := a.localTools[name]
-	_, hasMCP := a.mcpTools[name]
-
-	return hasLocal || hasMCP
+	return a.hasToolUnsafe(name)
 }
 
 // ListTools 列出所有工具
@@ -176,68 +137,17 @@ func (a *ToolAssembler) ListTools() []string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	tools := make([]string, 0, len(a.localTools)+len(a.mcpTools))
+	var tools []string
 
-	for name := range a.localTools {
-		tools = append(tools, name)
+	if a.toolManager != nil {
+		tools = append(tools, a.toolManager.ListTools()...)
 	}
 
-	for name := range a.mcpTools {
-		tools = append(tools, name)
-	}
-
-	return tools
-}
-
-// ListLocalTools 列出所有本地工具
-func (a *ToolAssembler) ListLocalTools() []string {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	tools := make([]string, 0, len(a.localTools))
-	for name := range a.localTools {
-		tools = append(tools, name)
+	if a.mcpManager != nil {
+		tools = append(tools, a.mcpManager.ListTools()...)
 	}
 
 	return tools
-}
-
-// ListMCPTools 列出所有 MCP 工具
-func (a *ToolAssembler) ListMCPTools() []string {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	tools := make([]string, 0, len(a.mcpTools))
-	for name := range a.mcpTools {
-		tools = append(tools, name)
-	}
-
-	return tools
-}
-
-// UnregisterLocalTool 注销本地工具
-func (a *ToolAssembler) UnregisterLocalTool(name string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	delete(a.localTools, name)
-}
-
-// UnregisterMCPTool 注销 MCP 工具
-func (a *ToolAssembler) UnregisterMCPTool(name string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	delete(a.mcpTools, name)
-}
-
-// Clear 清空所有工具
-func (a *ToolAssembler) Clear() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	a.localTools = make(map[string]*LocalTool)
-	a.mcpTools = make(map[string]*MCPTool)
 }
 
 // GetToolCount 获取工具数量
@@ -245,10 +155,15 @@ func (a *ToolAssembler) GetToolCount() (local, mcp, total int) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	local = len(a.localTools)
-	mcp = len(a.mcpTools)
-	total = local + mcp
+	if a.toolManager != nil {
+		local = a.toolManager.GetToolCount()
+	}
 
+	if a.mcpManager != nil {
+		mcp = a.mcpManager.GetToolCount()
+	}
+
+	total = local + mcp
 	return
 }
 
@@ -276,7 +191,11 @@ func (a *ToolAssembler) ValidateSkillTools(skill *entity.Skill) (missing []strin
 
 // hasToolUnsafe 检查工具是否存在（不加锁，内部使用）
 func (a *ToolAssembler) hasToolUnsafe(name string) bool {
-	_, hasLocal := a.localTools[name]
-	_, hasMCP := a.mcpTools[name]
-	return hasLocal || hasMCP
+	if a.toolManager != nil && a.toolManager.HasTool(name) {
+		return true
+	}
+	if a.mcpManager != nil && a.mcpManager.HasTool(name) {
+		return true
+	}
+	return false
 }
