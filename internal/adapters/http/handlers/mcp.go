@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"mindx/internal/config"
-	"mindx/internal/usecase/skills"
+	"mindx/internal/usecase/mcp"
 	"mindx/pkg/logging"
 	"net/http"
 
@@ -10,51 +10,104 @@ import (
 )
 
 type MCPHandler struct {
-	skillMgr *skills.SkillMgr
-	logger   logging.Logger
+	mcpManager *mcp.MCPManager
+	logger     logging.Logger
 }
 
-func NewMCPHandler(skillMgr *skills.SkillMgr) *MCPHandler {
+func NewMCPHandler(mcpManager *mcp.MCPManager) *MCPHandler {
 	return &MCPHandler{
-		skillMgr: skillMgr,
-		logger:   logging.GetSystemLogger().Named("mcp_handler"),
+		mcpManager: mcpManager,
+		logger:     logging.GetSystemLogger().Named("mcp_handler"),
 	}
 }
 
-// TODO: Phase 5 - MCP 管理应该由独立的 MCPManager 负责，不应该在 SkillManager 中
-// 临时禁用这些方法，等待 Phase 5 实现 MCPManager
 func (h *MCPHandler) listServers(c *gin.Context) {
-	c.JSON(http.StatusServiceUnavailable, gin.H{
-		"error":   "MCP management is being refactored",
-		"message": "MCP server management will be available in Phase 5",
+	servers := h.mcpManager.GetServers()
+	c.JSON(http.StatusOK, gin.H{
+		"servers": servers,
+		"count":   len(servers),
 	})
 }
 
 func (h *MCPHandler) addServer(c *gin.Context) {
-	c.JSON(http.StatusServiceUnavailable, gin.H{
-		"error":   "MCP management is being refactored",
-		"message": "MCP server management will be available in Phase 5",
+	var req struct {
+		Name    string            `json:"name" binding:"required"`
+		Command string            `json:"command" binding:"required"`
+		Args    []string          `json:"args"`
+		Env     map[string]string `json:"env"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	server := &mcp.MCPServer{
+		Name:    req.Name,
+		Command: req.Command,
+		Args:    req.Args,
+		Env:     req.Env,
+	}
+
+	if err := h.mcpManager.AddServer(c.Request.Context(), req.Name, server); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 持久化到配置文件
+	h.saveServerToConfig(req.Name, config.MCPServerEntry{
+		Type:    "stdio",
+		Command: req.Command,
+		Args:    req.Args,
+		Env:     req.Env,
+		Enabled: true,
 	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "MCP server added", "name": req.Name})
 }
 
 func (h *MCPHandler) removeServer(c *gin.Context) {
-	c.JSON(http.StatusServiceUnavailable, gin.H{
-		"error":   "MCP management is being refactored",
-		"message": "MCP server management will be available in Phase 5",
-	})
+	name := c.Param("name")
+	if err := h.mcpManager.RemoveServer(name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 从配置文件中移除
+	h.removeServerFromConfig(name)
+
+	c.JSON(http.StatusOK, gin.H{"message": "MCP server removed", "name": name})
 }
 
 func (h *MCPHandler) restartServer(c *gin.Context) {
-	c.JSON(http.StatusServiceUnavailable, gin.H{
-		"error":   "MCP management is being refactored",
-		"message": "MCP server management will be available in Phase 5",
-	})
+	name := c.Param("name")
+	if err := h.mcpManager.RestartServer(c.Request.Context(), name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "MCP server restarted", "name": name})
 }
 
 func (h *MCPHandler) getServerTools(c *gin.Context) {
-	c.JSON(http.StatusServiceUnavailable, gin.H{
-		"error":   "MCP management is being refactored",
-		"message": "MCP server management will be available in Phase 5",
+	name := c.Param("name")
+	tools, err := h.mcpManager.GetServerTools(name)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	toolList := make([]gin.H, 0, len(tools))
+	for _, t := range tools {
+		toolList = append(toolList, gin.H{
+			"name":        t.Name,
+			"description": t.Description,
+			"schema":      t.Schema,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"server": name,
+		"tools":  toolList,
+		"count":  len(toolList),
 	})
 }
 
