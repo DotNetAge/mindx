@@ -1,0 +1,25 @@
+{
+  "name": "imessage",
+  "description": "iMessage短信发送技能，发送iMessage或短信到指定联系人",
+  "version": "1.0.0",
+  "type": "shell",
+  "command": "imessage_cli.sh",
+  "parameters": {
+    "to": {
+      "type": "string",
+      "description": "接收者（邮箱地址用于iMessage，电话号码用于SMS）",
+      "required": true
+    },
+    "message": {
+      "type": "string",
+      "description": "消息内容",
+      "required": true
+    },
+    "service": {
+      "type": "string",
+      "description": "服务类型：\"iMessage\"或\"SMS\"，默认自动检测",
+      "required": false
+    }
+  },
+  "timeout": 30
+}
