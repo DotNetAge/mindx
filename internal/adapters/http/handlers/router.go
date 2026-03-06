@@ -5,6 +5,7 @@ import (
 	"mindx/internal/entity"
 	"mindx/internal/usecase/capability"
 	"mindx/internal/usecase/cron"
+	"mindx/internal/usecase/mcp"
 	"mindx/internal/usecase/session"
 	"mindx/internal/usecase/skills"
 
@@ -16,7 +17,7 @@ type Assistant interface {
 }
 
 // RegisterRoutes 注册所有路由
-func RegisterRoutes(router *gin.Engine, tokenUsageRepo core.TokenUsageRepository, skillMgr *skills.SkillMgr, capMgr *capability.CapabilityManager, sessionMgr *session.SessionMgr, cronScheduler cron.Scheduler, assistant Assistant) {
+func RegisterRoutes(router *gin.Engine, tokenUsageRepo core.TokenUsageRepository, skillMgr *skills.SkillMgr, capMgr *capability.CapabilityManager, sessionMgr *session.SessionMgr, cronScheduler cron.Scheduler, assistant Assistant, mcpManager *mcp.MCPManager) {
 	api := router.Group("/api")
 	{
 		// 健康检查
@@ -132,7 +133,7 @@ func RegisterRoutes(router *gin.Engine, tokenUsageRepo core.TokenUsageRepository
 		}
 
 		// MCP 服务器管理
-		mcpHandler := NewMCPHandler(skillMgr)
+		mcpHandler := NewMCPHandler(mcpManager)
 		mcpGroup := api.Group("/mcp/servers")
 		{
 			mcpGroup.GET("", mcpHandler.listServers)

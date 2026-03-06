@@ -439,7 +439,7 @@ func Startup() (*App, error) {
 	}
 	systemLogger.Info("HTTP API 服务器创建完成", logging.Int("port", srvCfg.Port))
 
-	handlers.RegisterRoutes(srv.GetEngine(), tokenUsageRepo, skillMgr, capMgr, sessionMgr, cronScheduler, assistant)
+	handlers.RegisterRoutes(srv.GetEngine(), tokenUsageRepo, skillMgr, capMgr, sessionMgr, cronScheduler, assistant, mcpManager)
 
 	a = &App{
 		Server:         srv,

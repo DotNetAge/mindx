@@ -22,18 +22,6 @@ func (m *MockHybridSearcher) Search(query string, topK int) ([]*entity.SkillMatc
 	return nil, nil
 }
 
-// MockToolAssembler 模拟工具组装器
-type MockToolAssembler struct {
-	AssembleToolsFunc func(skill *entity.Skill) ([]entity.ToolSchema, error)
-}
-
-func (m *MockToolAssembler) AssembleTools(skill *entity.Skill) ([]entity.ToolSchema, error) {
-	if m.AssembleToolsFunc != nil {
-		return m.AssembleToolsFunc(skill)
-	}
-	return []entity.ToolSchema{}, nil
-}
-
 // TestSkillMatchProcessor_Process_Success 测试成功匹配技能
 func TestSkillMatchProcessor_Process_Success(t *testing.T) {
 	searcher := &MockHybridSearcher{
