@@ -344,6 +344,8 @@ func Startup() (*App, error) {
 	var memoryExtractor *memory.LLMExtractor
 
 	systemLogger.Info("初始化 Assistant")
+	// Phase 4 Step 3: 传入 HybridSearcher 和 ToolAssembler
+	hybridSearcher := skillMgr.GetHybridSearcher()
 	assistant := NewAssistant(
 		srvCfg,
 		capMgr,
@@ -353,6 +355,8 @@ func Startup() (*App, error) {
 		systemLogger,
 		tokenUsageRepo,
 		cronScheduler,
+		hybridSearcher,
+		toolAssembler,
 	)
 	systemLogger.Info("Assistant 初始化完成",
 		logging.String("name", assistant.GetName()),

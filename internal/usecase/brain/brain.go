@@ -31,6 +31,9 @@ type BrainDeps struct {
 	Logger         logging.Logger
 	TokenUsageRepo core.TokenUsageRepository
 	CronScheduler  cron.Scheduler
+	// Phase 4 Step 3: 新增组件
+	HybridSearcher *skills.HybridSearcher
+	ToolAssembler  *skills.ToolAssembler
 }
 
 type BionicBrain struct {
