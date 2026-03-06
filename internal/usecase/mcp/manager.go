@@ -251,3 +251,103 @@ func (mm *MCPManager) GetServerCount() int {
 
 	return len(mm.clients)
 }
+
+// GetServers 获取所有服务器信息
+func (mm *MCPManager) GetServers() []*MCPServer {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	servers := make([]*MCPServer, 0, len(mm.servers))
+	for _, server := range mm.servers {
+		servers = append(servers, server)
+	}
+	return servers
+}
+
+// HasServer 检查服务器是否存在
+func (mm *MCPManager) HasServer(name string) bool {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	_, ok := mm.servers[name]
+	return ok
+}
+
+// AddServer 添加并连接新的 MCP 服务器
+func (mm *MCPManager) AddServer(ctx context.Context, name string, server *MCPServer) error {
+	mm.mu.Lock()
+	mm.servers[name] = server
+	mm.mu.Unlock()
+
+	// 连接服务器
+	return mm.connectServer(server)
+}
+
+// RemoveServer 移除 MCP 服务器
+func (mm *MCPManager) RemoveServer(name string) error {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+
+	// 关闭客户端连接
+	if client, ok := mm.clients[name]; ok {
+		if err := client.Close(); err != nil {
+			mm.logger.Warn("failed to close client", logging.String("server", name), logging.Err(err))
+		}
+		delete(mm.clients, name)
+	}
+
+	// 移除服务器配置
+	delete(mm.servers, name)
+
+	// 移除相关工具
+	for toolName, tool := range mm.tools {
+		if tool.ServerName == name {
+			delete(mm.tools, toolName)
+		}
+	}
+
+	mm.logger.Info("server removed", logging.String("server", name))
+	return nil
+}
+
+// RestartServer 重启 MCP 服务器
+func (mm *MCPManager) RestartServer(ctx context.Context, name string) error {
+	mm.mu.RLock()
+	server, ok := mm.servers[name]
+	mm.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("server not found: %s", name)
+	}
+
+	// 先移除
+	if err := mm.RemoveServer(name); err != nil {
+		return fmt.Errorf("failed to remove server: %w", err)
+	}
+
+	// 等待一下
+	time.Sleep(100 * time.Millisecond)
+
+	// 重新添加
+	return mm.AddServer(ctx, name, server)
+}
+
+// GetServerTools 获取指定服务器的工具列表
+func (mm *MCPManager) GetServerTools(name string) ([]*MCPTool, error) {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	if _, ok := mm.servers[name]; !ok {
+		return nil, fmt.Errorf("server not found: %s", name)
+	}
+
+	tools := make([]*MCPTool, 0)
+	for _, tool := range mm.tools {
+		if tool.ServerName == name {
+			tools = append(tools, tool)
+		}
+	}
+
+	return tools, nil
+}
+
