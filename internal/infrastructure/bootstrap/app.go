@@ -15,9 +15,11 @@ import (
 	"mindx/internal/usecase/capability"
 	"mindx/internal/usecase/cron"
 	"mindx/internal/usecase/embedding"
+	"mindx/internal/usecase/mcp"
 	"mindx/internal/usecase/memory"
 	"mindx/internal/usecase/session"
 	"mindx/internal/usecase/skills"
+	"mindx/internal/usecase/tools"
 	"mindx/pkg/i18n"
 	"mindx/pkg/logging"
 	"os"
@@ -243,6 +245,33 @@ func Startup() (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("初始化技能管理器失败: %w", err)
 	}
+
+	// Phase 4 Step 2: 初始化 ToolManager、MCPManager 和 ToolAssembler
+	systemLogger.Info("初始化工具管理器和工具组装器")
+
+	// 1. 创建 ToolManager
+	toolsPath := filepath.Join(workspace, "tools")
+	toolManager := tools.NewToolManager(toolsPath)
+	if err := toolManager.LoadTools(); err != nil {
+		systemLogger.Warn("加载本地工具失败", logging.Err(err))
+	}
+	systemLogger.Info("本地工具加载完成", logging.Int("tools_count", toolManager.GetToolCount()))
+
+	// 2. 创建 MCPManager
+	mcpConfigPath := filepath.Join(workspace, "config", "mcp_servers.json")
+	mcpManager := mcp.NewMCPManager(mcpConfigPath)
+	if err := mcpManager.LoadConfig(); err != nil {
+		systemLogger.Warn("加载 MCP 配置失败", logging.Err(err))
+	}
+
+	// 3. 创建 ToolAssembler
+	toolAssembler := skills.NewToolAssembler(toolManager, mcpManager)
+	localCount, mcpCount, totalCount := toolAssembler.GetToolCount()
+	systemLogger.Info("工具组装器初始化完成",
+		logging.Int("local_tools", localCount),
+		logging.Int("mcp_tools", mcpCount),
+		logging.Int("total_tools", totalCount),
+	)
 
 	var cronScheduler cron.Scheduler
 	switch runtime.GOOS {
