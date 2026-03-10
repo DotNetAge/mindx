@@ -114,8 +114,8 @@ echo ""
 echo -e "${YELLOW}[4/5] Building local binary...${NC}"
 mkdir -p bin
 if [ "$(uname -s)" = "Darwin" ]; then
-    CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o dist/mindx-darwin-amd64 ./cmd/main.go
-    CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o dist/mindx-darwin-arm64 ./cmd/main.go
+    CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o dist/mindx-darwin-amd64 ./cmd/main.go
+    CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${VERSION}" -o dist/mindx-darwin-arm64 ./cmd/main.go
     lipo -create -output bin/mindx dist/mindx-darwin-amd64 dist/mindx-darwin-arm64
     rm -f dist/mindx-darwin-amd64 dist/mindx-darwin-arm64
     echo -e "${GREEN}✓ bin/mindx (Universal Binary)${NC}"

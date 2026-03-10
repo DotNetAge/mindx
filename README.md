@@ -138,7 +138,7 @@ mindx start
 ```
 
 ## 开发与扩展
-- **开发环境运行**：`make dev`（后端+前端热重载，访问 http://localhost:5173）
+- **开发环境运行**：`export MINDX_SKILLS_DIR=./skills make dev`（先指定skills路径，或在根目录下.env里修改后启动，支持后端+前端热重载，访问 http://localhost:5173）
 - **技能开发**：兼容 OpenClaw 生态，支持任意编程语言 CLI 开发，即插即用
 - **更多功能**：可访问 [MindX](https://mindx.chat) 官方网站查看更多功能
 
