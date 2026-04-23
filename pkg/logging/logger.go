@@ -1,401 +1,188 @@
+// Package logging provides structured logging capabilities for the goRAG framework.
+// It offers a simple, flexible logging interface with support for multiple log levels,
+// file and console output, and structured field logging.
+//
+// The API is designed to mirror uber-go/zap's calling convention:
+//
+//	logger.Info("server started", "port", 8080, "host", "localhost")
+//	logger.Warn("slow request", "duration", 2.5*time.Second)
+//	logger.Error("connection failed", err, "addr", "127.0.0.1:3306")
+//	logger.Debug("cache hit", "key", userID)
+//
+// The package provides three main implementations:
+//   - Console logger: Outputs to stdout with minimal formatting
+//   - File logger: Writes to a file with configurable log level
+//   - No-op logger: Discards all log output (useful for testing)
+//   - Zap logger: High-performance logger with log rotation (requires zap dependency)
 package logging
 
 import (
-	"context"
 	"fmt"
+	"log"
 	"os"
-	"path/filepath"
-	"sync"
-
-	"mindx/internal/config"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// LogType 日志类型
-type LogType string
+// Level represents the severity level of a log message.
+// Log levels are ordered from least to most severe: DEBUG < INFO < WARN < ERROR.
+type Level int
 
+// Log level constants define the severity of log messages.
+// Messages with a level below the configured threshold will not be logged.
 const (
-	LogTypeSystem       LogType = "system"       // 系统日志
-	LogTypeConversation LogType = "conversation" // 对话日志
+	// DEBUG level is for detailed debugging information.
+	DEBUG Level = iota
+
+	// INFO level is for general operational information.
+	INFO
+
+	// WARN level is for warning messages that indicate potential issues.
+	WARN
+
+	// ERROR level is for error messages indicating failures.
+	ERROR
 )
 
-// Logger 日志接口
-type Logger interface {
-	// Debug 记录 DEBUG 级别日志
-	Debug(msg string, fields ...Field)
-	// Info 记录 INFO 级别日志
-	Info(msg string, fields ...Field)
-	// Warn 记录 WARN 级别日志
-	Warn(msg string, fields ...Field)
-	// Error 记录 ERROR 级别日志
-	Error(msg string, fields ...Field)
-	// Fatal 记录 FATAL 级别日志
-	Fatal(msg string, fields ...Field)
-
-	// WithContext 添加上下文
-	WithContext(ctx context.Context) Logger
-	// With 添加字段
-	With(fields ...Field) Logger
-	// Named 创建命名子日志器
-	Named(name string) Logger
-}
-
-// Field 日志字段
-type Field struct {
-	Key   string
-	Value interface{}
-}
-
-// zapLogger Zap 日志实现
-type zapLogger struct {
-	logger  *zap.Logger
-	logType LogType
-	fields  []Field
-}
-
-// LogManager 日志管理器
-type LogManager struct {
-	systemLogger       Logger
-	conversationLogger Logger
-	config             *config.LoggingConfig
-}
-
-var (
-	instance *LogManager
-	once     sync.Once
-)
-
-// Init 初始化日志管理器
-func Init(cfg *config.LoggingConfig) error {
-	var initErr error
-	once.Do(func() {
-		systemLogger, err := createSystemLogger(cfg.SystemLogConfig)
-		if err != nil {
-			initErr = fmt.Errorf("创建系统日志失败: %w", err)
-			return
-		}
-
-		conversationLogger, err := createConversationLogger(cfg.ConversationLogConfig)
-		if err != nil {
-			initErr = fmt.Errorf("创建对话日志失败: %w", err)
-			return
-		}
-
-		instance = &LogManager{
-			systemLogger:       systemLogger,
-			conversationLogger: conversationLogger,
-			config:             cfg,
-		}
-	})
-
-	return initErr
-}
-
-// GetSystemLogger 获取系统日志
-func GetSystemLogger() Logger {
-	if instance == nil {
-		return defaultLogger()
-	}
-	return instance.systemLogger
-}
-
-// GetConversationLogger 获取对话日志
-func GetConversationLogger() Logger {
-	if instance == nil {
-		return defaultLogger()
-	}
-	return instance.conversationLogger
-}
-
-// createSystemLogger 创建系统日志器
-func createSystemLogger(cfg *config.SystemLogConfig) (Logger, error) {
-	if cfg == nil {
-		cfg = defaultSystemLogConfig()
-	}
-
-	// 设置日志级别
-	level := parseLevel(string(cfg.Level))
-
-	// 配置文件轮转
-	outputPath := cfg.OutputPath
-	if outputPath == "" {
-		outputPath = "logs/system.log"
-	}
-
-	// 确保目录存在
-	dir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("创建日志目录失败: %w", err)
-	}
-
-	fileWriter := &lumberjack.Logger{
-		Filename:   outputPath,
-		MaxSize:    cfg.MaxSize,
-		MaxBackups: cfg.MaxBackups,
-		MaxAge:     cfg.MaxAge,
-		Compress:   cfg.Compress,
-	}
-
-	// 编码器配置
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:        "time",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "caller",
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.CapitalLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
-
-	// 文件输出 Core
-	fileCore := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderConfig),
-		zapcore.AddSync(fileWriter),
-		level,
-	)
-
-	// 控制台输出 Core（使用更友好的格式）
-	consoleEncoderConfig := zapcore.EncoderConfig{
-		TimeKey:        "time",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "caller",
-		MessageKey:     "msg",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.CapitalColorLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
-	consoleCore := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(consoleEncoderConfig),
-		zapcore.AddSync(os.Stdout),
-		level,
-	)
-
-	// 组合文件和控制台输出
-	core := zapcore.NewTee(fileCore, consoleCore)
-
-	loggerImpl := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
-
-	return &zapLogger{
-		logger:  loggerImpl,
-		logType: LogTypeSystem,
-	}, nil
-}
-
-// createConversationLogger 创建对话日志器
-func createConversationLogger(cfg *config.ConversationLogConfig) (Logger, error) {
-	if cfg == nil {
-		cfg = defaultConversationLogConfig()
-	}
-
-	// 配置编码器
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:    "timestamp",
-		MessageKey: "message",
-		LevelKey:   zapcore.OmitKey,
-	}
-
-	var writer zapcore.WriteSyncer
-
-	if cfg.Enable {
-		// TODO: 实现数据库 Writer
-		// 这里暂时使用文件 Writer
-		outputPath := cfg.OutputPath
-		if outputPath == "" {
-			outputPath = "logs/conversation.log"
-		}
-
-		dir := filepath.Dir(outputPath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, fmt.Errorf("创建日志目录失败: %w", err)
-		}
-
-		file, err := os.OpenFile(outputPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-		if err != nil {
-			return nil, fmt.Errorf("打开对话日志文件失败: %w", err)
-		}
-		writer = zapcore.AddSync(file)
-	} else {
-		writer = zapcore.AddSync(os.Stdout)
-	}
-
-	core := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderConfig),
-		writer,
-		zapcore.InfoLevel,
-	)
-
-	loggerImpl := zap.New(core, zap.AddCallerSkip(1))
-
-	return &zapLogger{
-		logger:  loggerImpl,
-		logType: LogTypeConversation,
-	}, nil
-}
-
-// parseLevel 解析日志级别
-func parseLevel(level string) zapcore.Level {
-	switch level {
-	case "debug":
-		return zapcore.DebugLevel
-	case "info":
-		return zapcore.InfoLevel
-	case "warn":
-		return zapcore.WarnLevel
-	case "error":
-		return zapcore.ErrorLevel
-	case "fatal":
-		return zapcore.FatalLevel
+// String returns the string representation of the log level.
+func (l Level) String() string {
+	switch l {
+	case DEBUG:
+		return "DEBUG"
+	case INFO:
+		return "INFO"
+	case WARN:
+		return "WARN"
+	case ERROR:
+		return "ERROR"
 	default:
-		return zapcore.InfoLevel
+		return "UNKNOWN"
 	}
 }
 
-// defaultSystemLogConfig 默认系统日志配置
-func defaultSystemLogConfig() *config.SystemLogConfig {
-	return &config.SystemLogConfig{
-		Level:      config.LevelInfo,
-		OutputPath: "logs/system.log",
-		MaxSize:    100,
-		MaxBackups: 10,
-		MaxAge:     30,
-		Compress:   true,
+// Logger defines the interface for structured logging.
+// All methods accept optional key-value pairs (alternating string keys and any values),
+// following the same convention as uber-go/zap.
+//
+// Example:
+//
+//	logger.Info("user logged in", "user_id", 123, "ip", "192.168.1.1")
+//	logger.Error("database error", err, "query", sql)
+//	logger.Warn("rate limit approaching", "remaining", 5)
+//	logger.Debug("processing chunk", "chunkID", chunk.ID)
+type Logger interface {
+	// Info logs an informational message with optional key-value pairs.
+	Info(msg string, keyvals ...any)
+
+	// Error logs an error message. The error is automatically included in the output.
+	// Additional key-value pairs can be provided after the error.
+	Error(msg string, err error, keyvals ...any)
+
+	// Debug logs a debug message with optional key-value pairs.
+	Debug(msg string, keyvals ...any)
+
+	// Warn logs a warning message with optional key-value pairs.
+	Warn(msg string, keyvals ...any)
+}
+
+// defaultLogger is the standard implementation of Logger.
+// It supports both console and file output with configurable log levels.
+type defaultLogger struct {
+	filePath string
+	file     *os.File
+	logger   *log.Logger
+	level    Level
+}
+
+// Option is a function that configures a defaultLogger.
+type Option func(*defaultLogger)
+
+// WithLevel returns an Option that sets the minimum log level.
+func WithLevel(level Level) Option {
+	return func(l *defaultLogger) {
+		l.level = level
 	}
 }
 
-// defaultConversationLogConfig 默认对话日志配置
-func defaultConversationLogConfig() *config.ConversationLogConfig {
-	return &config.ConversationLogConfig{
-		Enable:     false,
-		OutputPath: "logs/conversation.log",
+// DefaultConsoleLogger creates a logger that writes to stdout with INFO level.
+func DefaultConsoleLogger() Logger {
+	return &defaultLogger{
+		file:   os.Stdout,
+		logger: log.New(os.Stdout, "", 0),
+		level:  INFO,
 	}
 }
 
-// defaultLogger 默认日志器 (未初始化时使用)
-func defaultLogger() Logger {
-	loggerImpl := zap.NewNop()
-	return &zapLogger{
-		logger:  loggerImpl,
-		logType: LogTypeSystem,
+// DefaultFileLogger creates a logger that writes to a file.
+// The file is created if it doesn't exist, and appended to if it does.
+func DefaultFileLogger(filePath string, opts ...Option) (Logger, error) {
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, err
 	}
-}
 
-// String 返回字段字符串
-func (f Field) String() string {
-	return fmt.Sprintf("%s=%v", f.Key, f.Value)
-}
-
-// Debug 记录 DEBUG 级别日志
-func (l *zapLogger) Debug(msg string, fields ...Field) {
-	zapFields := l.toZapFields(fields)
-	l.logger.Debug(msg, zapFields...)
-}
-
-// Info 记录 INFO 级别日志
-func (l *zapLogger) Info(msg string, fields ...Field) {
-	zapFields := l.toZapFields(fields)
-	l.logger.Info(msg, zapFields...)
-}
-
-// Warn 记录 WARN 级别日志
-func (l *zapLogger) Warn(msg string, fields ...Field) {
-	zapFields := l.toZapFields(fields)
-	l.logger.Warn(msg, zapFields...)
-}
-
-// Error 记录 ERROR 级别日志
-func (l *zapLogger) Error(msg string, fields ...Field) {
-	zapFields := l.toZapFields(fields)
-	l.logger.Error(msg, zapFields...)
-}
-
-// Fatal 记录 FATAL 级别日志
-func (l *zapLogger) Fatal(msg string, fields ...Field) {
-	zapFields := l.toZapFields(fields)
-	l.logger.Fatal(msg, zapFields...)
-}
-
-// WithContext 添加上下文
-func (l *zapLogger) WithContext(ctx context.Context) Logger {
-	return l.With(
-		Field{Key: "trace_id", Value: ctx.Value("trace_id")},
-	)
-}
-
-// With 添加字段
-func (l *zapLogger) With(fields ...Field) Logger {
-	allFields := make([]Field, 0, len(l.fields)+len(fields))
-	allFields = append(allFields, l.fields...)
-	allFields = append(allFields, fields...)
-	return &zapLogger{
-		logger:  l.logger.With(l.toZapFields(fields)...),
-		logType: l.logType,
-		fields:  allFields,
+	l := &defaultLogger{
+		filePath: filePath,
+		file:     file,
+		logger:   log.New(file, "", 0),
+		level:    INFO,
 	}
-}
 
-// Named 创建命名子日志器
-func (l *zapLogger) Named(name string) Logger {
-	return &zapLogger{
-		logger:  l.logger.Named(name),
-		logType: l.logType,
-		fields:  l.fields,
+	for _, opt := range opts {
+		opt(l)
 	}
+
+	return l, nil
 }
 
-// toZapFields 转换为 Zap 字段
-func (l *zapLogger) toZapFields(fields []Field) []zap.Field {
-	zapFields := make([]zap.Field, 0, len(fields))
-	for _, f := range fields {
-		zapFields = append(zapFields, zap.Any(f.Key, f.Value))
+// log writes a formatted log message if the level meets the threshold.
+// keyvals are alternating key-value pairs: "key1", val1, "key2", val2, ...
+func (l *defaultLogger) log(level Level, msg string, keyvals []any) {
+	if level < l.level {
+		return
 	}
-	return zapFields
+
+	var fieldStr string
+	for i := 0; i+1 < len(keyvals); i += 2 {
+		fieldStr += fmt.Sprintf(" %s=%v", keyvals[i], keyvals[i+1])
+	}
+
+	l.logger.Printf("[%s] %s%s", level.String(), msg, fieldStr)
 }
 
-// String 创建字符串字段
-func String(key, value string) Field {
-	return Field{Key: key, Value: value}
+func (l *defaultLogger) Info(msg string, keyvals ...any) {
+	l.log(INFO, msg, keyvals)
 }
 
-// Int 创建整数字段
-func Int(key string, value int) Field {
-	return Field{Key: key, Value: value}
+func (l *defaultLogger) Error(msg string, err error, keyvals ...any) {
+	kvs := make([]any, 0, 2+len(keyvals))
+	if err != nil {
+		kvs = append(kvs, "error", err.Error())
+	}
+	kvs = append(kvs, keyvals...)
+	l.log(ERROR, msg, kvs)
 }
 
-// Int64 创建 int64 字段
-func Int64(key string, value int64) Field {
-	return Field{Key: key, Value: value}
+func (l *defaultLogger) Debug(msg string, keyvals ...any) {
+	l.log(DEBUG, msg, keyvals)
 }
 
-// Float64 创建 float64 字段
-func Float64(key string, value float64) Field {
-	return Field{Key: key, Value: value}
+func (l *defaultLogger) Warn(msg string, keyvals ...any) {
+	l.log(WARN, msg, keyvals)
 }
 
-// Bool 创建布尔字段
-func Bool(key string, value bool) Field {
-	return Field{Key: key, Value: value}
+// Close closes the underlying file if this is a file logger.
+func (l *defaultLogger) Close() error {
+	return l.file.Close()
 }
 
-// Any 创建任意类型字段
-func Any(key string, value interface{}) Field {
-	return Field{Key: key, Value: value}
+// noopLogger is a no-op implementation that discards all log messages.
+type noopLogger struct{}
+
+// DefaultNoopLogger creates a logger that discards all output.
+func DefaultNoopLogger() Logger {
+	return &noopLogger{}
 }
 
-// Err 创建错误字段
-func Err(err error) Field {
-	return Field{Key: "error", Value: err}
-}
-
-// Duration 创建时长字段
-func Duration(key string, value interface{}) Field {
-	return Field{Key: key, Value: value}
-}
+func (l *noopLogger) Info(string, ...any)         {}
+func (l *noopLogger) Error(string, error, ...any) {}
+func (l *noopLogger) Debug(string, ...any)        {}
+func (l *noopLogger) Warn(string, ...any)         {}
