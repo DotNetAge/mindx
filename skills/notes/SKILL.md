@@ -1,6 +1,6 @@
 ---
 name: notes
-description: 笔记管理技能，创建、列出、打开笔记，管理备忘录
+description: "Creates, lists, and opens notes in macOS Notes via AppleScript. Use when the user wants to jot something down, find a note, view their notes, or manage memos."
 version: 1.0.0
 category: productivity
 tags:
@@ -32,7 +32,19 @@ parameters:
 
 # 笔记技能
 
-## 示例
+Manages notes in macOS Notes app. Supports creating, listing, and opening notes.
+
+## Workflow
+
+1. Determine the action: `create`, `list`, or `open`.
+2. For `create`: provide `title` (required) and `content` (optional).
+3. For `open`: provide the exact `title` of the note to open.
+4. For `list`: no extra parameters needed — returns all note titles.
+
+## Examples
+
+Create a note:
+
 ```json
 {
   "name": "notes",
@@ -40,6 +52,29 @@ parameters:
     "action": "create",
     "title": "会议记录",
     "content": "重要要点..."
+  }
+}
+```
+
+List all notes:
+
+```json
+{
+  "name": "notes",
+  "parameters": {
+    "action": "list"
+  }
+}
+```
+
+Open a specific note:
+
+```json
+{
+  "name": "notes",
+  "parameters": {
+    "action": "open",
+    "title": "会议记录"
   }
 }
 ```

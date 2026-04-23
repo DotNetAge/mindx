@@ -1,6 +1,6 @@
 ---
 name: weather
-description: 天气查询技能，查询全球城市天气信息、气温、天气预报
+description: "Queries current weather and multi-day forecasts for any city worldwide. Use when the user asks about weather, temperature, rain, or forecasts for a location."
 version: 1.0.0
 category: general
 tags:
@@ -30,12 +30,35 @@ parameters:
 
 # 天气技能
 
-## 示例
+Retrieves weather data for a given city. Returns current conditions (temperature, sky) and optional multi-day forecast.
+
+## Workflow
+
+1. Identify the city from the user's request (Chinese or English name).
+2. Set `days` for a multi-day forecast (default 1 = today only).
+3. Call the skill and parse the JSON response.
+4. Present temperature, conditions, and forecast to the user.
+
+## Examples
+
+Current weather for Beijing:
+
 ```json
 {
   "name": "weather",
   "parameters": {
-    "city": "北京",
+    "city": "北京"
+  }
+}
+```
+
+3-day forecast for New York:
+
+```json
+{
+  "name": "weather",
+  "parameters": {
+    "city": "New York",
     "days": 3
   }
 }

@@ -1,6 +1,6 @@
 ---
 name: github
-description: GitHub管理技能，管理仓库、Issue、Pull Request和CI工作流
+description: "Manages GitHub repositories, issues, pull requests, and CI workflows via the gh CLI. Use when the user asks about PRs, issues, CI status, repo settings, or any GitHub operation."
 version: 1.0.0
 category: general
 tags:
@@ -26,46 +26,27 @@ homepage: https://cli.github.com
 
 # GitHub 技能
 
-使用 `gh` CLI 与 GitHub 交互。当不在 git 目录中时，请指定 `--repo owner/repo`。
+Uses the `gh` CLI to interact with GitHub. When not inside a git directory, add `--repo owner/repo`.
 
-## Pull Request
+## Workflow: Debug a Failing PR
 
-检查 PR 的 CI 状态:
+1. Check CI status: `gh pr checks <pr-number> --repo owner/repo`
+2. List recent runs: `gh run list --repo owner/repo --limit 10`
+3. Inspect the failed run: `gh run view <run-id> --repo owner/repo`
+4. View only failed logs: `gh run view <run-id> --repo owner/repo --log-failed`
+5. Fix the issue, push, and re-check.
 
-```bash
-gh pr checks 55 --repo owner/repo
-```
-
-列出最近的工作流运行:
-
-```bash
-gh run list --repo owner/repo --limit 10
-```
-
-查看运行和失败的步骤:
-
-```bash
-gh run view <run-id> --repo owner/repo
-```
-
-仅查看失败步骤的日志:
-
-```bash
-gh run view <run-id> --repo owner/repo --log-failed
-```
-
-## API 高级查询
-
-`gh api` 命令用于访问其他子命令不可用的数据:
-
-```bash
-gh api repos/owner/repo/pulls/55 --jq '.title, .state, .user.login'
-```
-
-## JSON 输出
-
-大多数命令支持 `--json` 进行结构化输出，可使用 `--jq` 过滤:
+## Issue and PR Management
 
 ```bash
 gh issue list --repo owner/repo --json number,title --jq '.[] | "\(.number): \(.title)"'
+gh pr create --repo owner/repo --title "fix: resolve bug" --body "Description"
+```
+
+## API Queries
+
+Access data not available through other subcommands:
+
+```bash
+gh api repos/owner/repo/pulls/55 --jq '.title, .state, .user.login'
 ```
