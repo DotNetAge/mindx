@@ -17,4 +17,10 @@ server:
     right: "qwen3:1.7b"
   embedding_model: "qllama/bge-small-zh-v1.5:latest"
   default_model: "qwen3:0.6b"
+  rag:
+    enabled: true
+    index_path: "data/rag_index"
+    chunk_size: 1000
+    chunk_overlap: 100
+    top_k: 3
 
