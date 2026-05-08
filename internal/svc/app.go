@@ -2,32 +2,174 @@ package svc
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log/slog"
-	"strings"
+	"os"
+	"sync"
+	"time"
 
+	"github.com/DotNetAge/gochat"
+	"github.com/DotNetAge/goreact"
+	"github.com/DotNetAge/goreact/core"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/pkg/logging"
+	"github.com/DotNetAge/mindx/pkg/scheduler"
+	"github.com/DotNetAge/mindx/pkg/session"
+	"github.com/joho/godotenv"
 )
 
 // App encapsulates the MindX gateway server lifecycle.
+// The server is stateless regarding agent selection — the client is responsible
+// for tracking which agent the user is currently talking to, and must prefix
+// messages with @<agent-name> to target a specific agent.
 type App struct {
-	gw   *gateway.Server
-	addr string
-	path string
+	gw       *gateway.Server
+	settings *Settings
+	logger   logging.Logger
+	agents   *goreact.AgentRegistry
+	models   *goreact.ModelRegistry
+	master   *goreact.Agent
+	masterMu sync.RWMutex
 
-	// Boot
-	logger logging.Logger
+	rules  core.RuleRegistry
+	sessDB *session.FileSessionStore
+
+	scheduler   *scheduler.Scheduler
+	schedulerDB *scheduler.FileSchedulerStore
+
+	agentCache map[string]*goreact.Agent
+	agentMu    sync.RWMutex
+}
+
+func DefaultApp() (*App, error) {
+
+	logger := logging.DefaultConsoleLogger()
+
+	err := godotenv.Load()
+	if err != nil {
+		logger.Warn("WARNING: failed to load .env file: %v", err)
+	}
+
+	settings := &Settings{
+		Workspace:   os.Getenv("MINDX_WORKSPACE"),
+		Path:        os.Getenv("MINDX_PWD_PATH"),
+		Addr:        os.Getenv("MINDX_WS_ADDR"),
+		WSPath:      os.Getenv("MINDX_WS_PATH"),
+		MasterAgent: os.Getenv("MINDX_MASTER"),
+	}
+	core.SYSTEM_INFO_NAME = "MindX"
+	core.SYSTEM_INFO_VERSION = "2.0.0"
+
+	logger.Info("loading agents", "dir", settings.AgentsDir())
+
+	agents, err := goreact.LoadAgentsFrom(settings.AgentsDir())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load agents: %w", err)
+	}
+
+	// If MasterAgent is not configured, default to the first available agent.
+	if settings.MasterAgent == "" {
+		if list := agents.List(); len(list) > 0 {
+			settings.MasterAgent = list[0].Name
+			logger.Warn("MINDX_MASTER not set, defaulting to first agent", "name", list[0].Name)
+		}
+	}
+
+	logger.Info("Loading models", "dir", settings.ModelsFile())
+	models, err := goreact.LoadModels(settings.ModelsFile())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load models: %w", err)
+	}
+
+	logger.Info("Loading rules", "file", settings.RulesFile())
+	rules, err := core.NewYAMLRuleRegistry(settings.RulesFile())
+	if err != nil {
+		logger.Warn("Failed to load rules", "file", settings.RulesFile(), "error", err)
+	}
+
+	logger.Info("Loading sessions", "dir", settings.SessionsDir())
+	sessDB, err := session.NewFileSessionStore(settings.SessionsDir())
+	if err != nil {
+		logger.Warn("Failed to init session store", "erorr", err)
+	}
+
+	logger.Info("Loading schedules", "dir", settings.SchedulesDir())
+	schedulerDB, err := scheduler.NewFileSchedulerStore(settings.SchedulesDir())
+	if err != nil {
+		logger.Warn("Failed to init scheduler store", "error", err)
+	}
+
+	app := &App{
+		settings:    settings,
+		logger:      logger,
+		agents:      agents,
+		models:      models,
+		rules:       rules,
+		sessDB:      sessDB,
+		schedulerDB: schedulerDB,
+		agentCache:  make(map[string]*goreact.Agent),
+	}
+
+	app.scheduler = scheduler.NewScheduler(schedulerDB, app.executeScheduleCommand, logger)
+
+	return app, nil
 }
 
 // NewApp creates a new App with the given listen address and WebSocket path.
 func NewApp(addr, path string) *App {
+
 	return &App{
-		addr:   addr,
-		path:   path,
+		settings: &Settings{
+			Addr:   addr,
+			WSPath: path,
+		},
 		logger: logging.DefaultConsoleLogger(),
 	}
+}
+
+func (a *App) Settings() *Settings {
+	return a.settings
+}
+
+func (a *App) RuleRegistry() core.RuleRegistry {
+	return a.rules
+}
+
+func (a *App) SessionDB() *session.FileSessionStore {
+	return a.sessDB
+}
+
+func (a *App) SchedulerDB() *scheduler.FileSchedulerStore {
+	return a.schedulerDB
+}
+
+func (a *App) Scheduler() *scheduler.Scheduler {
+	return a.scheduler
+}
+
+func (a *App) executeScheduleCommand(ctx context.Context, agent string, content string) error {
+	resolvedAgent, err := a.resolveAgent(agent)
+	if err != nil {
+		return fmt.Errorf("resolve agent %q: %w", agent, err)
+	}
+	sessionID := fmt.Sprintf("sched_%s_%s", agent, time.Now().Format("20060102"))
+	_, err = resolvedAgent.Ask(sessionID, content)
+	if err != nil {
+		return fmt.Errorf("execute scheduled message for @%s: %w", agent, err)
+	}
+	return nil
+}
+
+func (a *App) Agents() *goreact.AgentRegistry {
+	return a.agents
+}
+
+func (a *App) Models() *goreact.ModelRegistry {
+	return a.models
+}
+
+// GetMaster returns (or creates) the master agent.
+func (a *App) GetMaster() (*goreact.Agent, error) {
+	return a.getMaster()
 }
 
 // SetLogger replaces the default logger.
@@ -35,19 +177,143 @@ func (a *App) SetLogger(l logging.Logger) {
 	a.logger = l
 }
 
-// DefaultHandler returns the default message handler: echo back with JSON encoding.
-func (a *App) defaultHandler(msg *gateway.Message) {
-	data, _ := json.Marshal(msg)
-	a.gw.Send(msg.ClientID, string(data))
-	slog.Info("message sent", "client", msg.ClientID)
+func (a *App) getMaster() (*goreact.Agent, error) {
+	a.masterMu.Lock()
+	defer a.masterMu.Unlock()
+
+	if a.master != nil {
+		return a.master, nil
+	}
+
+	masterAgent := a.Agents().Get(a.settings.MasterAgent)
+	if masterAgent == nil {
+		return nil, fmt.Errorf("Master agent not defined")
+	}
+
+	if masterAgent.Model == "" {
+		return nil, fmt.Errorf("agent %q has no model configured", masterAgent.Name)
+	}
+	masterModel := a.Models().Get(masterAgent.Model)
+	if masterModel == nil {
+		return nil, fmt.Errorf("model %q not found for agent %q", masterAgent.Model, masterAgent.Name)
+	}
+
+	opts := []goreact.AgentOption{
+		goreact.WithSkillDir(a.settings.SkillsDir()),
+		goreact.WithConfig(masterAgent),
+		goreact.WithModel(masterModel),
+	}
+
+	if a.rules != nil {
+		opts = append(opts, goreact.WithRuleRegistry(a.rules))
+	}
+
+	if a.sessDB != nil {
+		opts = append(opts, goreact.WithSessionStore(a.sessDB))
+	}
+
+	m, err := goreact.NewAgent(opts...)
+	if err != nil {
+		return nil, err
+	}
+	a.master = m
+	return a.master, nil
+}
+
+func (a *App) resolveAgent(name string) (*goreact.Agent, error) {
+	if name == "" {
+		return a.getMaster()
+	}
+
+	a.agentMu.RLock()
+	if cached, ok := a.agentCache[name]; ok {
+		a.agentMu.RUnlock()
+		return cached, nil
+	}
+	a.agentMu.RUnlock()
+
+	cfg := a.agents.Get(name)
+	if cfg == nil {
+		return nil, fmt.Errorf("agent %q not found in registry", name)
+	}
+
+	if cfg.Model == "" {
+		return nil, fmt.Errorf("agent %q has no model configured", name)
+	}
+	model := a.Models().Get(cfg.Model)
+	if model == nil {
+		return nil, fmt.Errorf("model %q not found for agent %q", cfg.Model, name)
+	}
+
+	opts := []goreact.AgentOption{
+		goreact.WithSkillDir(a.settings.SkillsDir()),
+		goreact.WithConfig(cfg),
+		goreact.WithModel(model),
+	}
+
+	if a.rules != nil {
+		opts = append(opts, goreact.WithRuleRegistry(a.rules))
+	}
+
+	if a.sessDB != nil {
+		opts = append(opts, goreact.WithSessionStore(a.sessDB))
+	}
+
+	agent, err := goreact.NewAgent(opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	a.agentMu.Lock()
+	a.agentCache[name] = agent
+	a.agentMu.Unlock()
+	return agent, nil
+}
+
+func (a *App) IsModelAvailable(name ...string) bool {
+	n := ""
+	if len(name) == 0 {
+		a.masterMu.RLock()
+		m := a.master
+		a.masterMu.RUnlock()
+		if m == nil || m.Model() == nil {
+			return false
+		}
+		n = m.Model().Name
+	} else {
+		n = name[0]
+	}
+
+	if n == "" {
+		return false
+	}
+
+	m := a.Models().Get(n)
+	if m == nil {
+		return false
+	}
+
+	client := gochat.Client().Config(
+		gochat.WithBaseURL(m.BaseURL),
+		gochat.WithAPIKey(m.APIKey),
+		gochat.WithModel(m.Name),
+		gochat.WithAuthToken(m.AuthToken),
+		gochat.WithTimeout(10*time.Second),
+	)
+
+	llm, err := client.UserMessage("Hello").GetResponse()
+	if err != nil {
+		return false
+	}
+	return llm.Content != ""
 }
 
 // RegisterCommand adds a slash command to the gateway.
-func (a *App) RegisterCommand(name string, handler gateway.CommandHandler, desc string) {
+func (a *App) RegisterCommand(meta gateway.CommandMeta, handler gateway.CommandHandler) {
 	if a.gw == nil {
 		a.initGateway()
 	}
-	a.gw.RegisterCommand(name, handler, desc)
+	a.gw.RegisterCommand(meta, handler)
 }
 
 // RegisterBuiltinCommands registers the default /help, /agents, /skills commands.
@@ -55,35 +321,11 @@ func (a *App) RegisterBuiltinCommands() {
 	if a.gw == nil {
 		a.initGateway()
 	}
-
-	a.gw.RegisterCommand("help", func(ctx *gateway.CommandContext) (interface{}, error) {
-		cmds := a.gw.CommandList()
-		result := make([]string, 0, len(cmds))
-		for name, desc := range cmds {
-			result = append(result, fmt.Sprintf("  /%-12s %s", name, desc))
-		}
-		return fmt.Sprintf("可用命令:\n%s", strings.Join(result, "\n")), nil
-	}, "显示所有可用命令")
-
-	a.gw.RegisterCommand("agents", func(ctx *gateway.CommandContext) (interface{}, error) {
-		// TODO: replace with actual agent listing logic
-		return []map[string]string{
-			{"name": "general", "description": "通用助手"},
-			{"name": "coder", "description": "编程助手"},
-		}, nil
-	}, "列出所有可用 Agent")
-
-	a.gw.RegisterCommand("skills", func(ctx *gateway.CommandContext) (interface{}, error) {
-		// TODO: replace with actual skill listing logic
-		return []map[string]string{
-			{"name": "web-search", "description": "网页搜索"},
-			{"name": "code-exec", "description": "代码执行"},
-		}, nil
-	}, "列出所有可用技能")
+	RegisterBuiltinCommands(a.gw, a)
 }
 
-// GW returns the underlying gateway server for advanced usage.
-func (a *App) GW() *gateway.Server {
+// Server returns the underlying gateway server for advanced usage.
+func (a *App) Server() *gateway.Server {
 	if a.gw == nil {
 		a.initGateway()
 	}
@@ -91,28 +333,82 @@ func (a *App) GW() *gateway.Server {
 }
 
 // Start initializes the gateway (if not yet) and starts listening.
-// It blocks until ctx is cancelled, then performs graceful shutdown.
+// The gateway runs in a background goroutine. This method blocks until
+// the caller cancels ctx, then performs a graceful shutdown.
 func (a *App) Start(ctx context.Context) error {
 	if a.gw == nil {
 		a.initGateway()
 	}
 
-	fmt.Printf("MindX gateway starting on ws://localhost%s%s ...\n", a.addr, a.path)
+	if a.scheduler != nil {
+		if err := a.scheduler.Start(ctx); err != nil {
+			a.logger.Warn("scheduler failed to start", "error", err)
+		}
+	}
+
+	a.logger.Info("MindX gateway starting", "addr", fmt.Sprintf("ws://localhost%s%s", a.settings.Addr, a.settings.WSPath))
 
 	if err := a.gw.Start(); err != nil {
 		return fmt.Errorf("gateway start failed: %w", err)
 	}
 
 	<-ctx.Done()
-	fmt.Println("\nShutting down gateway...")
-	return a.gw.Shutdown(context.Background())
+	a.logger.Info("Shutting down")
+
+	if err := a.gw.StopAllChannels(ctx); err != nil {
+		a.logger.Warn("failed to stop channels", "error", err)
+	}
+
+	if a.scheduler != nil {
+		a.scheduler.Stop()
+	}
+
+	return a.gw.Shutdown(ctx)
+}
+
+// TestStart initializes and starts the gateway server for testing purposes.
+// Unlike Start, this method is non-blocking and returns immediately after
+// the server is ready to accept connections.
+func (a *App) TestStart(ctx context.Context) error {
+	if a.gw == nil {
+		a.initGateway()
+	}
+
+	if a.scheduler != nil {
+		if err := a.scheduler.Start(ctx); err != nil {
+			a.logger.Warn("scheduler failed to start", "error", err)
+		}
+	}
+
+	if err := a.gw.Start(); err != nil {
+		return fmt.Errorf("gateway start failed: %w", err)
+	}
+
+	return nil
+}
+
+// TestStop gracefully shuts down the gateway server for testing purposes.
+func (a *App) TestStop(ctx context.Context) error {
+	if a.gw == nil {
+		return nil
+	}
+
+	if err := a.gw.StopAllChannels(ctx); err != nil {
+		a.logger.Warn("failed to stop channels", "error", err)
+	}
+
+	if a.scheduler != nil {
+		a.scheduler.Stop()
+	}
+
+	return a.gw.Shutdown(ctx)
 }
 
 // initGateway lazily creates the gateway server.
 func (a *App) initGateway() {
 	a.gw = gateway.New(
-		gateway.WithAddr(a.addr),
-		gateway.WithPath(a.path),
+		gateway.WithAddr(a.settings.Addr),
+		gateway.WithPath(a.settings.WSPath),
 		gateway.WithHandler(a.defaultHandler),
 	)
 }
