@@ -31,9 +31,9 @@ type ZapConfig struct {
 }
 
 // DefaultZapLogger creates a high-performance logger using uber-go/zap with lumberjack for log rotation.
-func DefaultZapLogger(cfg ZapConfig) Logger {
+func DefaultZapLogger(cfg *ZapConfig) Logger {
 	if cfg.Filename == "" {
-		cfg.Filename = "logs/gorag.log"
+		cfg.Filename = "logs/mindx.log"
 	}
 	if cfg.MaxSize == 0 {
 		cfg.MaxSize = 100

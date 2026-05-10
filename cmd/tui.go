@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/DotNetAge/mindx/tui"
+	"github.com/DotNetAge/mindx/internal/client"
 	"github.com/spf13/cobra"
 )
 
@@ -12,7 +12,7 @@ var tuiCmd = &cobra.Command{
 }
 
 func runTUI(cmd *cobra.Command, args []string) error {
-	p := tui.NewProgram()
+	p := client.NewProgram()
 	_, err := p.Run()
 	return err
 }

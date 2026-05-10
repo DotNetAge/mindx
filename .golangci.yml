@@ -1,6 +1,17 @@
+version: "2"
+
 linters:
   enable:
     - govet
     - errcheck
     - staticcheck
     - unused
+    - gosec
+    - misspell
+    - gofmt
+    - bodyclose
+    - nilerr
+    - unconvert
+
+run:
+  timeout: 5m

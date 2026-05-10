@@ -34,7 +34,7 @@ func (a *App) defaultHandler(msg *gateway.Message) {
 
 	agent, err := a.resolveAgent(agentName)
 	if err != nil {
-		a.sendEvent(msg.ClientID, gateway.RespError, "错误", err.Error())
+		a.sendEvent(msg.ClientID, msg.SessionID, gateway.RespError, "错误", err.Error())
 		return
 	}
 
@@ -84,7 +84,7 @@ func (a *App) defaultHandler(msg *gateway.Message) {
 			"session_id", sessionID,
 			"agent", resolvedAgentName,
 		)
-		a.sendEvent(msg.ClientID, gateway.RespError, "错误", err.Error())
+		a.sendEvent(msg.ClientID, sessionID, gateway.RespError, "错误", err.Error())
 	}
 
 	<-done
@@ -122,6 +122,7 @@ func (a *App) resolveSessionID(clientProvided string) string {
 }
 
 func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
+	sid := event.SessionID
 	switch event.Type {
 	case core.ThinkingDelta:
 		text, ok := event.Data.(string)
@@ -129,16 +130,16 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			a.logger.Warn("unexpected ThinkingDelta data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		a.gw.SendResponse(clientID, gateway.RespThinkingDelta, "思考中", text)
+		a.gw.SendResponse(clientID, gateway.RespThinkingDelta, "思考中", text, gateway.WithSessionID(sid))
 
 	case core.ThinkingDone:
-		thought, ok := event.Data.(reactor.Thought)
+		thought, ok := event.Data.(*reactor.Thought)
 		if !ok {
 			a.logger.Warn("unexpected ThinkingDone data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		md := buildThinkingDoneMarkdown(thought)
-		a.sendEvent(clientID, gateway.RespThinkingDone, "思考完成", md)
+		md := buildThinkingDoneMarkdown(*thought)
+		a.sendEvent(clientID, sid, gateway.RespThinkingDone, "思考完成", md)
 
 	case core.ActionStart:
 		action, ok := event.Data.(core.ActionStartData)
@@ -146,8 +147,12 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			a.logger.Warn("unexpected ActionStart data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		md := buildActionStartMarkdown(action)
-		a.sendEvent(clientID, gateway.RespActionStart, "开始操作", md)
+		a.gw.SendResponse(clientID, gateway.RespActionStart, "开始操作", map[string]interface{}{
+			"tool_name":        action.ToolName,
+			"params":           action.Params,
+			"predicted_tokens": action.PredictedTokens,
+			"iteration":        action.Iteration,
+		}, gateway.WithSessionID(sid))
 
 	case core.ActionProgress:
 		progress, ok := event.Data.(string)
@@ -155,7 +160,7 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			a.logger.Warn("unexpected ActionProgress data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		a.gw.SendResponse(clientID, gateway.RespActionProgress, "操作进度", progress)
+		a.gw.SendResponse(clientID, gateway.RespActionProgress, "操作进度", progress, gateway.WithSessionID(sid))
 
 	case core.ActionResult:
 		result, ok := event.Data.(core.ActionResultData)
@@ -163,8 +168,13 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			a.logger.Warn("unexpected ActionResult data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		md := buildActionResultMarkdown(result)
-		a.sendEvent(clientID, gateway.RespActionResult, "操作结果", md)
+		a.gw.SendResponse(clientID, gateway.RespActionResult, "操作结果", map[string]interface{}{
+			"tool_name": result.ToolName,
+			"success":   result.Success,
+			"result":    result.Result,
+			"error":     result.Error,
+			"duration":  result.Duration.String(),
+		}, gateway.WithSessionID(sid))
 
 	case core.SubtaskSpawned:
 		info, ok := event.Data.(core.SubtaskInfo)
@@ -173,7 +183,7 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			return
 		}
 		md := buildSubtaskSpawnedMarkdown(info)
-		a.sendEvent(clientID, gateway.RespSubtaskSpawned, "子任务生成", md)
+		a.sendEvent(clientID, sid, gateway.RespSubtaskSpawned, "子任务生成", md)
 
 	case core.SubtaskCompleted:
 		result, ok := event.Data.(core.SubtaskResult)
@@ -182,7 +192,7 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			return
 		}
 		md := buildSubtaskCompletedMarkdown(result)
-		a.sendEvent(clientID, gateway.RespSubtaskCompleted, "子任务完成", md)
+		a.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, "子任务完成", md)
 
 	case core.FinalAnswer:
 		answer, ok := event.Data.(string)
@@ -190,7 +200,7 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			a.logger.Warn("unexpected FinalAnswer data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		a.sendEvent(clientID, gateway.RespFinalAnswer, "最终答案", answer)
+		a.sendEvent(clientID, sid, gateway.RespFinalAnswer, "最终答案", answer)
 
 	case core.ClarifyNeeded:
 		question, ok := event.Data.(string)
@@ -198,7 +208,7 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			a.logger.Warn("unexpected ClarifyNeeded data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		a.sendEvent(clientID, gateway.RespClarifyNeeded, "需要澄清", question)
+		a.sendEvent(clientID, sid, gateway.RespClarifyNeeded, "需要澄清", question)
 
 	case core.PermissionRequest:
 		req, ok := event.Data.(core.PermissionRequestData)
@@ -207,7 +217,7 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			return
 		}
 		md := buildPermissionRequestMarkdown(req)
-		a.sendEvent(clientID, gateway.RespPermissionRequest, "权限请求", md)
+		a.sendEvent(clientID, sid, gateway.RespPermissionRequest, "权限请求", md)
 
 	case core.PermissionDenied:
 		reason, ok := event.Data.(string)
@@ -215,7 +225,7 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			a.logger.Warn("unexpected PermissionDenied data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		a.sendEvent(clientID, gateway.RespPermissionDenied, "权限拒绝", reason)
+		a.sendEvent(clientID, sid, gateway.RespPermissionDenied, "权限拒绝", reason)
 
 	case core.ExecutionSummary:
 		summary, ok := event.Data.(core.ExecutionSummaryData)
@@ -223,7 +233,7 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			a.logger.Warn("unexpected ExecutionSummary data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		a.sendExecutionSummary(clientID, summary)
+		a.sendExecutionSummary(clientID, sid, summary)
 
 	case core.CycleEnd:
 		cycle, ok := event.Data.(core.CycleInfo)
@@ -232,7 +242,7 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			return
 		}
 		md := buildCycleEndMarkdown(cycle)
-		a.sendEvent(clientID, gateway.RespCycleEnd, "循环结束", md)
+		a.sendEvent(clientID, sid, gateway.RespCycleEnd, "循环结束", md)
 
 	case core.TaskSummary:
 		taskSummary, ok := event.Data.(core.TaskSummaryData)
@@ -242,6 +252,7 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 		}
 		md := buildTaskSummaryMarkdown(taskSummary)
 		a.gw.SendResponse(clientID, gateway.RespTaskSummary, "任务总结", md,
+			gateway.WithSessionID(sid),
 			gateway.WithResponseMeta(map[string]interface{}{
 				"input_tokens":  taskSummary.InputTokens,
 				"output_tokens": taskSummary.OutputTokens,
@@ -253,15 +264,15 @@ func (a *App) forwardEvent(clientID string, event core.ReactEvent) {
 			a.logger.Warn("unexpected Error data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		a.sendEvent(clientID, gateway.RespError, "错误", errMsg)
+		a.sendEvent(clientID, sid, gateway.RespError, "错误", errMsg)
 	}
 }
 
-func (a *App) sendEvent(clientID string, respType gateway.ResponseType, title string, data string) {
-	a.gw.SendResponse(clientID, respType, title, data)
+func (a *App) sendEvent(clientID, sessionID string, respType gateway.ResponseType, title string, data string) {
+	a.gw.SendResponse(clientID, respType, title, data, gateway.WithSessionID(sessionID))
 }
 
-func (a *App) sendExecutionSummary(clientID string, summary core.ExecutionSummaryData) {
+func (a *App) sendExecutionSummary(clientID, sessionID string, summary core.ExecutionSummaryData) {
 	tableData := map[string]interface{}{
 		"headers": []string{"Metric", "Value"},
 		"rows": []map[string]string{
@@ -273,7 +284,7 @@ func (a *App) sendExecutionSummary(clientID string, summary core.ExecutionSummar
 			{"metric": "Termination", "value": summary.TerminationReason},
 		},
 	}
-	a.gw.SendResponse(clientID, gateway.RespExecutionSummary, "执行摘要", tableData)
+	a.gw.SendResponse(clientID, gateway.RespExecutionSummary, "执行摘要", tableData, gateway.WithSessionID(sessionID))
 }
 
 func generateSessionID() string {
