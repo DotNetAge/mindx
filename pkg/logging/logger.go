@@ -83,6 +83,31 @@ type Logger interface {
 	Warn(msg string, keyvals ...any)
 }
 
+// ANSI color codes for terminal output.
+const (
+	colorReset  = "\033[0m"
+	colorRed    = "\033[31m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorCyan   = "\033[36m"
+)
+
+// levelColor returns the ANSI color code for the given log level.
+func levelColor(level Level) string {
+	switch level {
+	case DEBUG:
+		return colorCyan
+	case INFO:
+		return colorGreen
+	case WARN:
+		return colorYellow
+	case ERROR:
+		return colorRed
+	default:
+		return colorReset
+	}
+}
+
 // defaultLogger is the standard implementation of Logger.
 // It supports both console and file output with configurable log levels.
 type defaultLogger struct {
@@ -90,6 +115,7 @@ type defaultLogger struct {
 	file     *os.File
 	logger   *log.Logger
 	level    Level
+	colorize bool
 }
 
 // Option is a function that configures a defaultLogger.
@@ -102,12 +128,20 @@ func WithLevel(level Level) Option {
 	}
 }
 
-// DefaultConsoleLogger creates a logger that writes to stdout with INFO level.
+// WithColor returns an Option that enables or disables ANSI color output.
+func WithColor(enabled bool) Option {
+	return func(l *defaultLogger) {
+		l.colorize = enabled
+	}
+}
+
+// DefaultConsoleLogger creates a logger that writes to stdout with INFO level and colored output.
 func DefaultConsoleLogger() Logger {
 	return &defaultLogger{
-		file:   os.Stdout,
-		logger: log.New(os.Stdout, "", 0),
-		level:  INFO,
+		file:     os.Stdout,
+		logger:   log.New(os.Stdout, "", 0),
+		level:    INFO,
+		colorize: true,
 	}
 }
 
@@ -145,7 +179,11 @@ func (l *defaultLogger) log(level Level, msg string, keyvals []any) {
 		fieldStr += fmt.Sprintf(" %s=%v", keyvals[i], keyvals[i+1])
 	}
 
-	l.logger.Printf("[%s] %s%s", level.String(), msg, fieldStr)
+	if l.colorize {
+		l.logger.Printf("%s[%s]%s %s%s", levelColor(level), level.String(), colorReset, msg, fieldStr)
+	} else {
+		l.logger.Printf("[%s] %s%s", level.String(), msg, fieldStr)
+	}
 }
 
 func (l *defaultLogger) Info(msg string, keyvals ...any) {

@@ -60,7 +60,7 @@ func DefaultApp() (*App, error) {
 	core.SYSTEM_INFO_VERSION = "2.0.0"
 
 	logger.Info("loading agents", "dir", settings.AgentsDir())
-
+	logger.Info("Master", "agent", settings.MasterAgent)
 	agents, err := goreact.LoadAgentsFrom(settings.AgentsDir())
 	if err != nil {
 		return nil, fmt.Errorf("failed to load agents: %w", err)
@@ -342,7 +342,7 @@ func (a *App) Start(ctx context.Context) error {
 
 	if a.scheduler != nil {
 		if err := a.scheduler.Start(ctx); err != nil {
-			a.logger.Warn("scheduler failed to start", "error", err)
+			a.logger.Warn("Scheduler failed to start", "error", err)
 		}
 	}
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os/signal"
 	"syscall"
 
@@ -19,7 +20,10 @@ func runStart(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	app := svc.NewApp(":1314", "/ws")
+	app, err := svc.DefaultApp()
+	if err != nil {
+		return fmt.Errorf("failed to create app: %w", err)
+	}
 	app.RegisterBuiltinCommands()
 
 	return app.Start(ctx)
