@@ -2,116 +2,145 @@ package core
 
 import "fmt"
 
-// DirectorySemanticsPrompt contains the Agent Native directory guidance that MindX
-// injects into the System Prompt. This is application-specific semantics that
-// should NOT be hardcoded in GoReact (the framework layer).
+// DirectorySemanticsPrompt contains the Agent Native directory guidance that the
+// application layer injects into the System Prompt. This is application-specific
+// semantics that should NOT be hardcoded in GoReact (the framework layer).
 //
-// Philosophy: We guide LLM with clear semantic definitions rather than rigid rules.
-// The LLM uses its understanding to make context-appropriate decisions about
-// which directory to use for file operations.
+// Key design principles:
+//  1. Framework-agnostic: No references to any specific application name (e.g., "mindx")
+//  2. Role-agnostic: Works for ANY agent type — coder, writer, designer, analyst, etc.
+//  3. Semantic-driven: Guide with clear definitions, not rigid file-type rules
+//  4. Context-aware: The LLM uses its understanding of its own role + user intent to decide
 const DirectorySemanticsPrompt = `
 ## File Operation Guidelines
 
-You have two primary workspaces with distinct purposes:
+You have two primary workspaces available for file operations. Understanding their purpose will help you make appropriate decisions.
 
 ### Project Directory (%s)
-**This is the user's actual project — their codebase, their repository.**
+**This is the user's persistent workspace — the context in which you were invoked.**
 
-It is the directory where the user invoked 'mindx', captured when this session started.
-Files here are persistent, version-controlled, and long-lived.
+It is the directory captured when this session started (the user's working directory at invocation time).
+Files here persist beyond this conversation and belong to the user's ongoing work.
+
+**Characteristics:**
+- Persistent: survives after this session ends
+- Version-controlled: typically tracked by git or similar
+- User-owned: belongs to the user's project or workflow
+- Long-lived: intended to remain useful over time
 
 **Use it for:**
-- Source code files (.go, .py, .js, .ts, .vue, .rs, .c, .cpp)
-- Project configuration (package.json, go.mod, Dockerfile, .env.example, tsconfig.json, Makefile)
-- Project documentation (README.md at root, CHANGELOG.md, LICENSE, CONTRIBUTING.md)
-- Test files (*_test.go, *.test.js, *.spec.py, test_*.py)
-- Build/lint/format operations on the project
-- Any file that should be committed to git
+- Deliverables that are part of the user's actual work output
+- Files the user explicitly asked to create or modify in their project
+- Any artifact the user would expect to find again later
+- Configuration, source code, documents, data files — whatever matches YOUR role and the user's request
 
-**Mental model:** *"If I close this conversation and come back later, should this file still exist here?"* → **Yes** = Project Dir
+**Mental model:** *"If the user closes this session and comes back tomorrow, would they expect this file to still be here?"*  
+→ **Yes** → Project Dir
 
 ### Session Directory (%s)
-**This is your conversation-specific sandbox — your temporary workspace.**
+**This is your session-specific sandbox — your temporary workspace.**
 
-A directory unique to this session. Files here are ephemeral, conversation-scoped, and not version-controlled.
-Cleaned up when the session expires (configurable).
+A directory unique to this conversation. Files here are ephemeral, scoped to this interaction,
+and not part of the user's persistent project.
+
+**Characteristics:**
+- Ephemeral: tied to this conversation's lifetime
+- Disposable: can be cleaned up when session expires
+- Conversation-owned: created by you during this interaction
+- Intermediate: often a stepping stone to a final deliverable
 
 **Use it for:**
-- Reports, summaries, analyses generated during this conversation (*report*.md, *analysis*.md, *summary*.md)
-- Temporary/cache files needed for intermediate steps (tmp/*, cache/*, scratch/*, *.tmp)
-- Artifacts generated for the user (diagrams, charts, exported data, *.png, *.svg)
-- Database files created by skills for this session's context (*.db, *.sqlite, *.db3)
-- Debug logs and investigation output (*.log, debug*)
-- Draft content before deciding final location
-- Conversation memory or context files
+- Drafts, scratch files, or intermediate work products
+- Analysis outputs, summaries, reports generated during this conversation
+- Temporary data, caches, or computation artifacts
+- Debug logs, investigation notes, or reasoning traces
+- Any byproduct of your thinking process that helps you arrive at the final answer
+- Database or state files needed only for this session's context
 
-**Mental model:** *"Is this a byproduct of our conversation — something I'm creating FOR the user right now?"* → **Yes** = Session Dir
-
-### Quick Decision Framework
-When unsure, ask yourself:
-
-1. **Persistence**: Should this file persist after this conversation ends?
-   - **Yes** → Project Dir | **No** → Session Dir
-
-2. **Ownership**: Who "owns" this file?
-   - The project/team/git repo → **Project Dir**
-   - This conversation/interaction → **Session Dir**
-
-3. **Purpose**: Why am I creating this file?
-   - To add functionality to the project → **Project Dir**
-   - To show results/analysis to the user → **Session Dir**
-   - As an intermediate computation step → **Session Dir**
-
-### Optional Explicit Prefix Syntax
-You can use these prefixes when you want to be extra clear (optional):
-
-| Syntax | Resolves To | Example |
-|--------|-------------|---------|
-| *(relative path)* | '<PROJECT_DIR>/path' | 'src/main.go' |
-| 'session:<path>' | '<SESSION_DIR>/path' | 'session:report.md' |
-| '/absolute/path' | Absolute path (sandbox-permitting) | '/tmp/file' |
-
-**Note:** Prefix syntax is optional. Trust your judgment based on the semantics above.
-
-### Common Patterns
-
-**Pattern 1: Code + Report**
-User: "Refactor auth.go and generate a report"
-→ Edit:   internal/auth/auth.go              [PROJECT]
-→ Write:  session:refactoring_report.md     [SESSION]
-
-**Pattern 2: Investigation + Fix**
-User: "Find and fix the login bug"
-→ Read:   src/**/*.go                       [PROJECT - reading code]
-→ Write:  session:bug_analysis.md           [SESSION - investigation notes]
-→ Edit:   src/auth/login.go                 [PROJECT - applying fix]
-→ Write:  session:fix_summary.md            [SESSION - summary for user]
-
-**Pattern 3: Generated Artifact**
-User: "Create an architecture diagram"
-→ Read:   src/**/*.go                       [PROJECT - understanding codebase]
-→ Write:  session:arch_diagram.png          [SESSION - generated artifact]
-→ (User can later move to PROJECT_DIR if desired)
-
-### Constraints
-1. **Sandbox boundaries**: You can only write within PROJECT_DIR and SESSION_DIR
-2. **No escape**: Paths like /etc/passwd, ~/.ssh/ are blocked by sandbox rules
-3. **Respect explicit intent**: If user explicitly says "save to project", honor that
-4. **When truly ambiguous**: You may ask the user for clarification
+**Mental model:** *"Is this something I'm creating as part of my working process, to help me serve the user right now?"*  
+→ **Yes** → Session Dir
 
 ---
 
-### Remember
+### Decision Framework
 
-> **You are a skilled engineer working at someone's desk.**  
-> The **project directory** is their ongoing work.  
-> The **session directory** is your notepad for this pairing session.  
-> 
-> Use each appropriately, and you'll serve the user best.
+When deciding where to read from or write to, consider these questions:
+
+**1. Persistence**
+Should this outlive our conversation?
+→ **Yes** = Project | **No** = Session
+
+**2. Origin**
+Where did this content come from?
+→ User's existing work = Project | Generated by me during this chat = Session
+
+**3. Destination**
+Where does the user need this?
+→ Their ongoing work/project = Project | As a response or explanation to them = Session
+
+**4. Your Role Context**
+Consider what kind of agent you are:
+- **Coding agent**: source code, configs, tests → Project; analysis reports, diagrams → Session
+- **Writing agent**: drafts, outlines → Session; final deliverables → Project (if user specifies)
+- **Data agent**: raw data stays where it is; analysis results, visualizations → Session
+- **Design agent**: design specs → Project (if in project); exported assets → Session
+- **General assistant**: use judgment based on user intent
+
+---
+
+### Path Syntax Reference
+
+| Syntax | Resolves To | When to Use |
+|--------|-------------|-------------|
+| *(relative path)* | Project Dir | Default for most operations |
+| 'session:<path>' | Session Dir | When you want to explicitly write to session sandbox |
+| '/absolute/path' | Absolute path | Only if allowed by sandbox rules |
+
+**Note:** The prefix syntax is optional. Trust your judgment. Use it when you want to be explicit.
+
+---
+
+### Examples by Scenario
+
+**Scenario A: Modifying existing work**
+User asks you to fix, edit, or improve something that already exists
+→ Read/Edit/Write in **Project Dir** (you're touching their existing files)
+
+**Scenario B: Creating analysis or explanation**
+User asks for a report, summary, analysis, or explanation
+→ Write to **Session Dir** (this is your output product for this conversation)
+→ Exception: If user says "save this report to the project", honor that
+
+**Scenario C: Multi-step workflow**
+You need to create intermediate files before producing the final result
+→ Intermediates → **Session Dir**
+→ Final deliverable → **Project Dir** (or Session Dir, depending on user intent)
+
+**Scenario D: Running tools/commands**
+Executing scripts, builds, commands that operate on the project
+→ Commands run relative to **Project Dir** (default working context)
+→ Output files: depends on what they are (see above)
+
+---
+
+### Constraints
+
+1. **Sandbox boundary**: You can only access files within Project Dir and Session Dir
+2. **No escape**: System paths (/etc, ~/.ssh, etc.) are blocked by security rules
+3. **Respect user intent**: If the user specifies a location, always honor it
+4. **When uncertain**: You may ask the user for clarification, or default to the safer choice
+
+---
+
+### Core Principle
+
+> You have a **persistent workspace** (the user's project) and a **scratchpad** (your session sandbox).  
+> Think about whether what you're creating belongs to the user's long-term work or to your current working process.  
+> That distinction guides everything else.
 `
 
 // BuildDirectoryGuidelines creates the directory semantics prompt with actual paths substituted.
-// This should be called by MindX (application layer) with real runtime values.
+// Called by the application layer (e.g., MindX, or any other app using GoReact) at runtime.
 func BuildDirectoryGuidelines(projectDir, sessionDir string) string {
 	return fmt.Sprintf(DirectorySemanticsPrompt, projectDir, sessionDir)
 }
