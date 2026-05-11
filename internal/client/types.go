@@ -93,9 +93,9 @@ type exitMsg struct{}
 // ---- Lip Gloss 样式 ----
 
 var (
+	userQuestionStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#4FC3F7"))
 	thinkingStyle       = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#888888")).
-				Background(lipgloss.Color("#2d2d2d")).
 				Italic(true)
 	agentStyle          = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#9C27B0"))
 	errorStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("#CF6679"))

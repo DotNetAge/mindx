@@ -2,15 +2,12 @@ package svc
 
 import (
 	"github.com/DotNetAge/gort/pkg/gateway"
+	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/commands"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 )
 
-// RegisterBuiltinCommands wires up all commands to the gateway server.
-// This is a thin routing layer — all command definitions and logic live in
-// the internal/commands package.
-func RegisterBuiltinCommands(gw *gateway.Server, app *App) {
-	// 1. Inject dependencies into the commands package
+func RegisterBuiltinCommands(gw *gateway.Server, app *core.App) {
 	commands.SetCatalogDeps(commands.CatalogDeps{
 		ListAgents: func() ([]map[string]string, error) { return listAgents(app) },
 		ListModels: func() ([]map[string]string, error) { return listModels(app) },
@@ -18,23 +15,21 @@ func RegisterBuiltinCommands(gw *gateway.Server, app *App) {
 	})
 
 	commands.SetSchedulerDeps(commands.SchedulerDeps{
-		SchedulerDB: func() *scheduler.FileSchedulerStore { return app.SchedulerDB() },
-		Scheduler:   func() *scheduler.Scheduler { return app.Scheduler() },
+		SchedulerDB: func() *scheduler.FileSchedulerStore { return nil },
+		Scheduler:   func() *scheduler.Scheduler { return nil },
 	})
 
-	// 2. Register all commands to the gateway
 	commands.New().RegisterAll(gw)
 }
 
-// GetCommandMetas returns all command metadata for client sync.
 func GetCommandMetas() []gateway.CommandMeta {
 	return commands.New().Metas()
 }
 
-func listAgents(app *App) ([]map[string]string, error) {
+func listAgents(app *core.App) ([]map[string]string, error) {
 	registry := app.Agents()
 	agents := registry.List()
-	masterName := app.settings.MasterAgent
+	masterName := app.Settings().MasterAgent
 
 	var result []map[string]string
 	for _, agent := range agents {
@@ -52,10 +47,8 @@ func listAgents(app *App) ([]map[string]string, error) {
 	return result, nil
 }
 
-func listSkills(app *App) ([]map[string]string, error) {
-	// Master agent must be initialized before skills are available.
-	// If master is not configured (no MINDX_MASTER), return empty list gracefully.
-	m, err := app.getMaster()
+func listSkills(app *core.App) ([]map[string]string, error) {
+	m, err := app.GetMaster()
 	if err != nil {
 		return []map[string]string{}, nil
 	}
@@ -74,7 +67,7 @@ func listSkills(app *App) ([]map[string]string, error) {
 	return result, nil
 }
 
-func listModels(app *App) ([]map[string]string, error) {
+func listModels(app *core.App) ([]map[string]string, error) {
 	models := app.Models().List()
 	var result []map[string]string
 	for _, model := range models {

@@ -7,6 +7,7 @@ import (
 )
 
 func main() {
+	cmd.RuntimeFS = runtimeFS
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}

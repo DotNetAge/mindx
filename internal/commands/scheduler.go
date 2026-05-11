@@ -30,8 +30,8 @@ func registerSchedulerCommands(r *Registry) {
 		Description: "添加计划任务",
 		Category:    "system",
 		Scope:       gateway.ScopeRemote,
-		Example:     `/job-add @assistant 每日晨会提醒 expr="0 0 9 * * *"`,
-		Params:      `@<agent-name> <content> expr="<cron表达式>"`,
+		Example:     `/job-add @writer sess_abc123 每日博客文章 expr="0 0 9 * * 1"`,
+		Params:      `@<agent-name> <session_id|new> <content> expr="<cron表达式>"`,
 	}, func(ctx *gateway.CommandContext) (any, error) {
 		return handleJobAdd(ctx)
 	})
@@ -63,10 +63,10 @@ func handleJobAdd(ctx *gateway.CommandContext) (any, error) {
 
 	argsStr := strings.TrimSpace(ctx.Args)
 	if argsStr == "" {
-		return nil, fmt.Errorf("用法: /job-add @<agent-name> <content> expr=\"<cron表达式>\"\n示例: /job-add @assistant 每日晨会提醒 expr=\"0 0 9 * * *\"")
+		return nil, fmt.Errorf("用法: /job-add @<agent-name> <session_id|new> <content> expr=\"<cron表达式>\"\n示例: /job-add @writer sess_abc123 每日博客文章 expr=\"0 0 9 * * 1\"")
 	}
 
-	agent, content, cronExpr, err := parseJobAddArgs(argsStr)
+	agent, sessionID, content, cronExpr, err := parseJobAddArgs(argsStr)
 	if err != nil {
 		return nil, err
 	}
@@ -77,19 +77,24 @@ func handleJobAdd(ctx *gateway.CommandContext) (any, error) {
 	}
 
 	entry := &scheduler.ScheduleEntry{
-		ID:       generateID(),
-		Agent:    agent,
-		Content:  content,
-		CronExpr: cronExpr,
-		Enabled:  true,
+		ID:        generateID(),
+		Agent:     agent,
+		SessionID: sessionID,
+		Content:   content,
+		CronExpr:  cronExpr,
+		Enabled:   true,
 	}
 
 	if err := schedulerDeps.SchedulerDB().Save(context.Background(), entry); err != nil {
 		return nil, fmt.Errorf("保存任务失败: %w", err)
 	}
 
-	return fmt.Sprintf("✅ 定时消息已创建:\n  ID: %s\n  目标: @%s\n  内容: %s\n  调度: %s",
-		entry.ID, entry.Agent, truncateString(entry.Content, 50), entry.CronExpr), nil
+	sessInfo := sessionID
+	if sessInfo == "" || sessInfo == "new" {
+		sessInfo = "(auto)"
+	}
+	return fmt.Sprintf("✅ 定时消息已创建:\n  ID: %s\n  目标: @%s\n  Session: %s\n  内容: %s\n  调度: %s",
+		entry.ID, entry.Agent, sessInfo, truncateString(entry.Content, 50), entry.CronExpr), nil
 }
 
 func handleJobList(ctx *gateway.CommandContext) (any, error) {
@@ -106,7 +111,7 @@ func handleJobList(ctx *gateway.CommandContext) (any, error) {
 		return "(暂无定时消息任务)", nil
 	}
 
-	headers := []string{"ID", "目标Agent", "发送内容", "调度规则", "状态", "成功/失败"}
+	headers := []string{"ID", "目标Agent", "Session", "发送内容", "调度规则", "状态", "成功/失败"}
 	rows := make([][]string, 0, len(entries))
 
 	for _, entry := range entries {
@@ -114,9 +119,14 @@ func handleJobList(ctx *gateway.CommandContext) (any, error) {
 		if entry.Enabled {
 			status = "✅ 启用"
 		}
+		sessDisplay := entry.SessionID
+		if sessDisplay == "" || sessDisplay == "new" {
+			sessDisplay = "(auto)"
+		}
 		rows = append(rows, []string{
 			entry.ID,
 			"@" + entry.Agent,
+			sessDisplay,
 			truncateString(entry.Content, 30),
 			entry.CronExpr,
 			status,
@@ -211,7 +221,7 @@ func splitArgs(s string) []string {
 	return parts
 }
 
-func parseJobAddArgs(argsStr string) (agent string, content string, cronExpr string, err error) {
+func parseJobAddArgs(argsStr string) (agent string, sessionID string, content string, cronExpr string, err error) {
 	parts := splitArgs(argsStr)
 	var agentIdx, exprIdx int = -1, -1
 	var exprValue string
@@ -228,11 +238,11 @@ func parseJobAddArgs(argsStr string) (agent string, content string, cronExpr str
 	}
 
 	if agent == "" {
-		return "", "", "", fmt.Errorf("缺少目标智能体: 请使用 @<agent-name> 格式指定\n示例: /job-add @assistant 每日提醒 expr=\"0 0 9 * * *\"")
+		return "", "", "", "", fmt.Errorf("缺少目标智能体: 请使用 @<agent-name> 格式指定\n示例: /job-add @writer sess_abc123 每日提醒 expr=\"0 0 9 * * 1\"")
 	}
 
 	if exprValue == "" {
-		return "", "", "", fmt.Errorf("缺少 cron 表达式: 请使用 expr=\"<cron表达式>\" 指定\n示例: /job-add @assistant 每日提醒 expr=\"0 0 9 * * *\"")
+		return "", "", "", "", fmt.Errorf("缺少 cron 表达式: 请使用 expr=\"<cron表达式>\" 指定\n示例: /job-add @writer sess_abc123 每日提醒 expr=\"0 0 9 * * 1\"")
 	}
 
 	var contentParts []string
@@ -243,12 +253,22 @@ func parseJobAddArgs(argsStr string) (agent string, content string, cronExpr str
 		contentParts = append(contentParts, part)
 	}
 
-	content = strings.Join(contentParts, " ")
-	if content == "" {
-		return "", "", "", fmt.Errorf("缺少发送内容: 请指定要定时发送给 @%s 的消息内容", agent)
+	if len(contentParts) == 0 {
+		return "", "", "", "", fmt.Errorf("缺少发送内容: 请指定要定时发送给 @%s 的消息内容", agent)
 	}
 
-	return agent, content, exprValue, nil
+	sessionID = contentParts[0]
+	content = strings.Join(contentParts[1:], " ")
+	if content == "" {
+		content = sessionID
+		sessionID = "new"
+	}
+
+	if sessionID == "" {
+		sessionID = "new"
+	}
+
+	return agent, sessionID, content, exprValue, nil
 }
 
 func truncateString(s string, maxLen int) string {
