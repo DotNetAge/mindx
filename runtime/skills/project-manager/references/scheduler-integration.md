@@ -11,6 +11,21 @@ This document explains how to register tasks with MindX Scheduler using the WebS
 - Sent to the server via the Gateway's WebSocket channel
 - External code cannot call the Scheduler API directly, but CAN operate on JSON files
 
+## Directory Architecture (4-Layer)
+
+The Scheduler stores data in the **Home Directory (Layer 1)**:
+
+```
+$HOME/.mindx/  (or $MINDX_HOME)
+└── data/
+    └── schedules/     ← Scheduler JSON files stored here
+```
+
+**Path resolution:**
+- `SCHEDULES_DIR` = `$HOME/.mindx/data/schedules/`
+- Resolved internally via `Settings.SchedulesDir()`
+- Auto-created on first task registration
+
 ---
 
 ## Protocol Format

@@ -469,28 +469,48 @@ MindX Scheduler 使用 **6 位 Cron 表达式**（支持秒级精度）：
 
 ### 5.2 数据目录位置
 
+**4-Layer Directory Architecture:**
+
+```
+Layer 1: HOME_DIR (Home Directory)
+└── ~/.mindx/ (or $MINDX_HOME)
+    ├── data/
+    │   └── schedules/    ← Scheduled task data stored here (★ this section)
+    ├── sessions/
+    ├── settings/
+    └── logs/
+
+Layer 2: PROJECT_DIR (Project Directory) — captured at session start
+Layer 3: SESSION_DIR (Session Sandbox) — per-conversation temporary files
+Layer 4: SCRIPT_CWD (Execution Directory) — runtime script execution context
+```
+
 **默认路径：**
 
 ```bash
-<MINDX_WORKSPACE>/schedules/
+$HOME/.mindx/data/schedules/
+# Equivalent to: ~/.mindx/data/schedules/
 ```
 
-**环境变量配置：**
+**路径解析链：**
 
-```bash
-# .env 文件中
-MINDX_WORKSPACE=/path/to/workspace
-# 则 schedules 目录为: /path/to/workspace/schedules/
+```go
+// Internal resolution (in MindX application layer):
+Settings.SchedulesDir()
+  → Settings.DataDir()       // $HOME/.mindx/data/
+    → Settings.UserPreferences() // $HOME/.mindx/
+      → filepath.Join("data", "schedules")
 ```
 
 **检查实际路径：**
 
 ```bash
-# 查看 MindX 进程的工作目录
-ps aux | grep mindx
+# 方法 1: 查看环境变量
+echo $MINDX_HOME   # 或默认值: $HOME/.mindx
+ls -la $HOME/.mindx/data/schedules/
 
-# 或者查看日志中的初始化信息
-grep "scheduler" /var/log/mindx.log
+# 方法 2: 查看日志中的初始化信息
+grep -i "scheduler\|schedule.*dir" $HOME/.mindx/logs/*.log 2>/dev/null || echo "No logs found"
 ```
 
 **目录权限：**
