@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
+	"github.com/DotNetAge/mindx/pkg/session"
 	"github.com/google/uuid"
 )
 
@@ -121,6 +123,34 @@ func (d *Daemon) initGateway() {
 }
 
 func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessionID string, content string) error {
+	originalCWD, _ := os.Getwd()
+
+	meta := d.restoreSessionEnvironment(sessionID)
+	if meta != nil {
+		if err := os.Chdir(meta.ProjectWorkingDir); err != nil {
+			d.logger.Warn("failed to chdir to project dir, using current dir",
+				"project_dir", meta.ProjectWorkingDir,
+				"error", err,
+			)
+		} else {
+			defer func() {
+				if restoreErr := os.Chdir(originalCWD); restoreErr != nil {
+					d.logger.Warn("failed to restore cwd after scheduled task",
+						"original", originalCWD,
+						"error", restoreErr,
+				)
+				}
+			}()
+			os.Setenv("MINDX_PROJECT_DIR", meta.ProjectWorkingDir)
+			os.Setenv("MINDX_SESSION_ID", sessionID)
+			d.logger.Info("restored session environment for scheduled task",
+				"session_id", sessionID,
+				"project_dir", meta.ProjectWorkingDir,
+				"original_cwd", originalCWD,
+			)
+		}
+	}
+
 	resolvedAgent, err := d.app.ResolveAgent(agent)
 	if err != nil {
 		return fmt.Errorf("resolve agent %q: %w", agent, err)
@@ -133,6 +163,23 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		return fmt.Errorf("execute scheduled message for @%s (session: %s): %w", agent, sessionID, err)
 	}
 	return nil
+}
+
+// restoreSessionEnvironment loads session metadata and restores the project working directory.
+// Returns nil if the session metadata cannot be found (e.g., sessions created before this feature).
+func (d *Daemon) restoreSessionEnvironment(sessionID string) *session.SessionMeta {
+	if d.app == nil || d.app.SessDB() == nil {
+		return nil
+	}
+	meta, err := d.app.SessDB().GetSessionMeta(sessionID)
+	if err != nil {
+		d.logger.Debug("could not load session meta for scheduled task",
+			"session_id", sessionID,
+			"error", err,
+		)
+		return nil
+	}
+	return meta
 }
 
 func (d *Daemon) defaultHandler(msg *gateway.Message) {

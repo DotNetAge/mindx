@@ -707,5 +707,11 @@ func (m *rootModel) showWelcome() {
 		workspace = "default"
 	}
 	sessionID := fmt.Sprintf("%x", time.Now().UnixNano())
-	m.contentPanel.ShowWelcome(appTitle, version, workspace, sessionID, "本地模式")
+
+	var projectDir string
+	if m.app != nil && m.app.CurrentSessionMeta() != nil {
+		projectDir = m.app.CurrentSessionMeta().ProjectWorkingDir
+	}
+
+	m.contentPanel.ShowWelcome(appTitle, version, workspace, sessionID, "本地模式", projectDir)
 }
