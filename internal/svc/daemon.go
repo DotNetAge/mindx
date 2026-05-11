@@ -165,7 +165,7 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 	return nil
 }
 
-// restoreSessionEnvironment loads session metadata and restores the project working directory.
+// restoreSessionEnvironment loads session metadata and restores the project directory.
 // Returns nil if the session metadata cannot be found (e.g., sessions created before this feature).
 func (d *Daemon) restoreSessionEnvironment(sessionID string) *session.SessionMeta {
 	if d.app == nil || d.app.SessDB() == nil {

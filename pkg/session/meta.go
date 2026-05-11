@@ -12,13 +12,13 @@ import (
 // This struct is defined and used by MindX (application layer).
 // GoReact (framework layer) does not depend on this type.
 type SessionMeta struct {
-	SessionID         string    `json:"session_id"`
-	AgentName         string    `json:"agent_name"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	SessionID string    `json:"session_id"`
+	AgentName string    `json:"agent_name"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// Directory bindings
-	HomeDir           string `json:"home_dir"`             // Layer 1: ~/.mindx
+	HomeDir           string `json:"home_dir"`            // Layer 1: ~/.mindx
 	ProjectWorkingDir string `json:"project_working_dir"` // Layer 2: captured via os.Getwd()
 
 	// Runtime stats
@@ -26,7 +26,7 @@ type SessionMeta struct {
 	LastActivityAt time.Time `json:"last_activity_at"`
 }
 
-// NewSessionMeta creates a new session metadata instance with the captured project working directory.
+// NewSessionMeta creates a new session metadata instance with the captured project directory.
 func NewSessionMeta(sessionID, agentName, projectDir string) (*SessionMeta, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
