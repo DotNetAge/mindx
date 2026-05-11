@@ -212,6 +212,7 @@ func (m *rootModel) loadOrInitSession() tea.Cmd {
 			m.currentAgent = m.mindxConfig.LastAgent
 			m.currentSessionID = m.mindxConfig.LastSessionID
 			m.chatManager.Update(m.currentAgent, m.currentSessionID)
+			m.loadExistingSessionMeta(m.currentAgent, m.currentSessionID)
 			return sessionLoadedMsg{agentName: m.currentAgent, sessionID: m.currentSessionID}
 		}
 
@@ -221,18 +222,39 @@ func (m *rootModel) loadOrInitSession() tea.Cmd {
 				m.currentAgent = session.AgentName
 				m.currentSessionID = session.SessionID
 				m.statusBar.SetAgent(m.currentAgent, m.currentModel)
+				m.loadExistingSessionMeta(session.AgentName, session.SessionID)
 				return sessionLoadedMsg{agentName: session.AgentName, sessionID: session.SessionID}
 			}
 		}
 
 		if m.app.Settings().MasterAgent != "" {
 			m.currentAgent = m.app.Settings().MasterAgent
-			m.currentSessionID = newSessionID(m.currentAgent)
+
+			meta, err := m.app.CreateSession(m.currentAgent)
+			if err != nil {
+				m.currentSessionID = newSessionID(m.currentAgent)
+			} else {
+				m.currentSessionID = meta.SessionID
+			}
+
 			m.chatManager.Update(m.currentAgent, m.currentSessionID)
 			return sessionLoadedMsg{agentName: m.currentAgent, sessionID: m.currentSessionID}
 		}
 
 		return sessionInitRequiredMsg{}
+	}
+}
+
+// loadExistingSessionMeta attempts to load session metadata for an existing session.
+// This is best-effort: if meta.json doesn't exist (e.g., sessions created before
+// this feature), the app falls back to defaults without error.
+func (m *rootModel) loadExistingSessionMeta(agentName, sessionID string) {
+	if m.app == nil || m.app.SessDB() == nil {
+		return
+	}
+	meta, err := m.app.SessDB().GetSessionMeta(sessionID)
+	if err == nil && meta != nil {
+		m.app.SetCurrentSessionMeta(meta)
 	}
 }
 

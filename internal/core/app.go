@@ -10,6 +10,7 @@ import (
 	"github.com/DotNetAge/gochat"
 	"github.com/DotNetAge/goreact"
 	"github.com/DotNetAge/goreact/core"
+	goreactor "github.com/DotNetAge/goreact/reactor"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/session"
 	"github.com/joho/godotenv"
@@ -122,6 +123,31 @@ func (a *App) CurrentSessionMeta() *session.SessionMeta {
 	return a.currentSessionMeta
 }
 
+// SetCurrentSessionMeta sets the current session metadata (used when loading existing sessions).
+func (a *App) SetCurrentSessionMeta(meta *session.SessionMeta) {
+	a.currentSessionMeta = meta
+}
+
+// SessDB returns the session store for accessing session data.
+func (a *App) SessDB() *session.FileSessionStore {
+	return a.sessDB
+}
+
+// buildDirectoryAddon builds the directory semantics guidance string for injection
+// into the Agent's system prompt. Returns empty string if no session meta is available.
+func (a *App) buildDirectoryAddon() []string {
+	meta := a.currentSessionMeta
+	if meta == nil {
+		return nil
+	}
+	sessionDir := filepath.Join(a.settings.SessionsDir(), meta.AgentName, meta.SessionID)
+	guidelines := BuildDirectoryGuidelines(meta.ProjectWorkingDir, sessionDir)
+	if guidelines == "" {
+		return nil
+	}
+	return []string{guidelines}
+}
+
 // CreateSession creates a new session with metadata including the captured working directory.
 // This captures os.Getwd() at creation time to bind the session to a project directory.
 func (a *App) CreateSession(agentName string) (*session.SessionMeta, error) {
@@ -191,7 +217,7 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 		goreact.WithSkillDir(a.settings.SkillsDir()),
 		goreact.WithConfig(masterAgent),
 		goreact.WithModel(masterModel),
-		goreact.WithLogger(a.logger), // 注入统一日志接口（ZapLogger）
+		goreact.WithLogger(a.logger),
 	}
 
 	if a.rules != nil {
@@ -200,6 +226,17 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 
 	if a.sessDB != nil {
 		opts = append(opts, goreact.WithSessionStore(a.sessDB))
+	}
+
+	if addon := a.buildDirectoryAddon(); len(addon) > 0 {
+		prompt := goreactor.NewDefaultPrompt(
+			masterAgent.Name,
+			masterAgent.Role,
+			masterAgent.Description,
+			masterAgent.Introduction,
+		)
+		prompt.AddonSections = addon
+		opts = append(opts, goreact.WithPrompt(prompt))
 	}
 
 	m, err := goreact.NewAgent(opts...)
@@ -239,7 +276,7 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 		goreact.WithSkillDir(a.settings.SkillsDir()),
 		goreact.WithConfig(cfg),
 		goreact.WithModel(model),
-		goreact.WithLogger(a.logger), // 注入统一日志接口（ZapLogger）
+		goreact.WithLogger(a.logger),
 	}
 
 	if a.rules != nil {
@@ -248,6 +285,17 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 
 	if a.sessDB != nil {
 		opts = append(opts, goreact.WithSessionStore(a.sessDB))
+	}
+
+	if addon := a.buildDirectoryAddon(); len(addon) > 0 {
+		prompt := goreactor.NewDefaultPrompt(
+			cfg.Name,
+			cfg.Role,
+			cfg.Description,
+			cfg.Introduction,
+		)
+		prompt.AddonSections = addon
+		opts = append(opts, goreact.WithPrompt(prompt))
 	}
 
 	agent, err := goreact.NewAgent(opts...)
