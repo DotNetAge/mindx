@@ -17,11 +17,12 @@ type ResultRenderer func(content string, width int) string
 
 // WelcomeData 欢迎面板数据结构。
 type WelcomeData struct {
-	appTitle  string
-	version   string
-	agentName string
-	workspace string
-	sessionID string
+	appTitle   string
+	version     string
+	agentName   string
+	workspace   string
+	sessionID   string
+	projectDir  string
 }
 
 // ContentPanel 管理可滚动内容区，包含 Welcome（一次性）和 AgentAnswer 列表。
@@ -159,13 +160,18 @@ func (p *ContentPanel) ClearAll() {
 }
 
 // ShowWelcome 显示 Welcome 信息，仅在首次启动时调用一次。
-func (p *ContentPanel) ShowWelcome(appTitle, version, workspace, sessionID, agentName string) {
+func (p *ContentPanel) ShowWelcome(appTitle, version, workspace, sessionID, agentName string, projectDir ...string) {
+	pd := ""
+	if len(projectDir) > 0 {
+		pd = projectDir[0]
+	}
 	p.welcome = WelcomeData{
-		appTitle:  appTitle,
-		version:   version,
-		agentName: agentName,
-		workspace: workspace,
-		sessionID: sessionID,
+		appTitle:   appTitle,
+		version:     version,
+		agentName:   agentName,
+		workspace:   workspace,
+		sessionID:   sessionID,
+		projectDir:  pd,
 	}
 
 	var b strings.Builder
@@ -181,6 +187,9 @@ func (p *ContentPanel) ShowWelcome(appTitle, version, workspace, sessionID, agen
 	}
 	if workspace != "" {
 		lines = append(lines, fmt.Sprintf("Workspace: %s", workspace))
+	}
+	if pd != "" {
+		lines = append(lines, fmt.Sprintf("Project Dir: %s", pd))
 	}
 	b.WriteString(strings.Join(lines, "\n"))
 	b.WriteString("\n")
@@ -212,6 +221,9 @@ func (p *ContentPanel) UpdateWelcomeAgent(agentName string) {
 	}
 	if p.welcome.workspace != "" {
 		lines = append(lines, fmt.Sprintf("Workspace: %s", p.welcome.workspace))
+	}
+	if p.welcome.projectDir != "" {
+		lines = append(lines, fmt.Sprintf("Project Dir: %s", p.welcome.projectDir))
 	}
 	b.WriteString(strings.Join(lines, "\n"))
 	b.WriteString("\n")
