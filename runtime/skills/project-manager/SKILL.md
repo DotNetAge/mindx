@@ -189,15 +189,18 @@ cat > ~/Library/LaunchAgents/com.mindx.daemon.plist << 'EOF'
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>~/.mindx/logs/daemon.stdout.log</string>
+    <string>$HOME/.mindx/logs/daemon.stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>~/.mindx/logs/daemon.stderr.log</string>
+    <string>$HOME/.mindx/logs/daemon.stderr.log</string>
 </dict>
 </plist>
 EOF
 
-mkdir -p ~/.mindx/logs && launchctl load ~/Library/LaunchAgents/com.mindx.daemon.plist
+mkdir -p $HOME/.mindx/logs && launchctl load ~/Library/LaunchAgents/com.mindx.daemon.plist
 ```
+
+> **Directory note:** `$HOME/.mindx/` is the **Home Directory (Layer 1)** of the 4-layer directory architecture.
+> Logs are stored under `$HOME/.mindx/logs/`. Scheduled task data is stored under `$HOME/.mindx/data/schedules/`.
 
 Service management: `launchctl list | grep mindx` (status) / `launchctl unload/load` (restart) / `rm plist && launchctl remove` (uninstall)
 
