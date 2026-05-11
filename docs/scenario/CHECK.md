@@ -1,0 +1,3 @@
+- [ ] 创建技能(Skill) -> 执行 skill-development
+- [ ] 创建员工(Agent)
+- [ ] 创建一个项目，并制定项目计划

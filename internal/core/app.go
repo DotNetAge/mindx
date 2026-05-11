@@ -38,13 +38,17 @@ func DefaultApp() (*App, error) {
 	}
 
 	settings := &Settings{
-		Workspace:   os.Getenv("MINDX_WORKSPACE"),
-		Path:        os.Getenv("MINDX_PWD_PATH"),
+		// Path:        os.Getenv("MINDX_PWD_PATH"),
 		MasterAgent: os.Getenv("MINDX_MASTER"),
 	}
 	core.SYSTEM_INFO_NAME = "MindX"
 	core.SYSTEM_INFO_VERSION = "2.0.0"
+	// userPrompt := "- Documents directory : " + filepath.Join(settings.Workspace, "documents")
+	// userPrompt += "\n- Programs directory : " + filepath.Join(settings.Workspace, "programs")
+	userPrompt := "\n- Skills directory: " + settings.SkillsDir()
+	userPrompt += "\n- Agents directory: " + settings.AgentsDir()
 
+	core.SYSTEM_INFO_USERS = userPrompt
 	logger.Info("loading agents", "dir", settings.AgentsDir())
 	agents, err := goreact.LoadAgentsFrom(settings.AgentsDir())
 	if err != nil {
@@ -140,7 +144,7 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 		goreact.WithSkillDir(a.settings.SkillsDir()),
 		goreact.WithConfig(masterAgent),
 		goreact.WithModel(masterModel),
-		goreact.WithLogger(a.logger),  // 注入统一日志接口（ZapLogger）
+		goreact.WithLogger(a.logger), // 注入统一日志接口（ZapLogger）
 	}
 
 	if a.rules != nil {
@@ -188,7 +192,7 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 		goreact.WithSkillDir(a.settings.SkillsDir()),
 		goreact.WithConfig(cfg),
 		goreact.WithModel(model),
-		goreact.WithLogger(a.logger),  // 注入统一日志接口（ZapLogger）
+		goreact.WithLogger(a.logger), // 注入统一日志接口（ZapLogger）
 	}
 
 	if a.rules != nil {

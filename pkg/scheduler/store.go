@@ -14,6 +14,7 @@ import (
 type ScheduleEntry struct {
 	ID        string    `json:"id"`
 	Agent     string    `json:"agent"`
+	SessionID string    `json:"session_id,omitempty"`
 	Content   string    `json:"content"`
 	CronExpr  string    `json:"cron_expr"`
 	Enabled   bool      `json:"enabled"`

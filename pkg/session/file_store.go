@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -75,8 +74,34 @@ func (s *FileSessionStore) agentDir(agentName string) string {
 	return filepath.Join(s.rootDir, agentName)
 }
 
-func (s *FileSessionStore) sessionPath(agentName string, sessionID string) string {
-	return filepath.Join(s.agentDir(agentName), sessionID+".yml")
+func (s *FileSessionStore) sessionDir(agentName, sessionID string) string {
+	return filepath.Join(s.agentDir(agentName), sessionID)
+}
+
+func (s *FileSessionStore) sessionFilePath(agentName, sessionID string) string {
+	return filepath.Join(s.sessionDir(agentName, sessionID), "session.yml")
+}
+
+func (s *FileSessionStore) usageFilePath(agentName, sessionID string) string {
+	return filepath.Join(s.sessionDir(agentName, sessionID), "usages.yml")
+}
+
+func (s *FileSessionStore) findSessionDir(sessionID string) string {
+	var result string
+	_ = filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || !info.IsDir() || info.Name() != sessionID {
+			return nil
+		}
+		sessionFile := filepath.Join(path, "session.yml")
+		if info.IsDir() {
+			if _, statErr := os.Stat(sessionFile); statErr == nil {
+				result = path
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+	return result
 }
 
 func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentName string, msg core.Message) error {
@@ -84,12 +109,18 @@ func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentNa
 		return nil
 	}
 
-	dir := s.agentDir(agentName)
+	timestamp := msg.Timestamp
+	if timestamp == 0 {
+		timestamp = time.Now().UnixMilli()
+	}
+	msg.Timestamp = timestamp
+
+	dir := s.sessionDir(agentName, sessionID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("create agent dir %s: %w", dir, err)
+		return fmt.Errorf("create session dir %s: %w", dir, err)
 	}
 
-	path := s.sessionPath(agentName, sessionID)
+	path := s.sessionFilePath(agentName, sessionID)
 
 	var ymlMsgs []yamlMessage
 	if data, err := os.ReadFile(path); err == nil {
@@ -100,11 +131,6 @@ func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentNa
 		return fmt.Errorf("read session file %s: %w", path, err)
 	}
 
-	timestamp := msg.Timestamp
-	if timestamp == 0 {
-		timestamp = time.Now().UnixMilli()
-	}
-	msg.Timestamp = timestamp
 	ymlMsgs = append(ymlMsgs, newYamlMessage(msg))
 
 	data, err := yaml.Marshal(ymlMsgs)
@@ -123,15 +149,16 @@ func (s *FileSessionStore) Get(ctx context.Context, sessionID string) ([]core.Me
 	var msgs []core.Message
 
 	err := filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
+		if err != nil || info.IsDir() || info.Name() != "session.yml" {
 			return nil
 		}
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ".yml") || info.Name() != sessionID+".yml" {
+		parentDir := filepath.Base(filepath.Dir(path))
+		if parentDir != sessionID {
 			return nil
 		}
 
-		parsed, err := parseMessagesFromFile(path)
-		if err != nil {
+		parsed, parseErr := parseMessagesFromFile(path)
+		if parseErr != nil {
 			return nil
 		}
 		msgs = parsed
@@ -188,8 +215,12 @@ func (s *FileSessionStore) CurrentContext(ctx context.Context, agentName string,
 func (s *FileSessionStore) Delete(ctx context.Context, timestamp int64, sessionID string) error {
 	path := ""
 
-	filepath.Walk(s.rootDir, func(p string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".yml") || info.Name() != sessionID+".yml" {
+	_ = filepath.Walk(s.rootDir, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || info.Name() != "session.yml" {
+			return nil
+		}
+		parentDir := filepath.Base(filepath.Dir(p))
+		if parentDir != sessionID {
 			return nil
 		}
 		path = p
@@ -216,21 +247,13 @@ func (s *FileSessionStore) Delete(ctx context.Context, timestamp int64, sessionI
 }
 
 func (s *FileSessionStore) Clear(ctx context.Context, sessionID string) error {
-	var walkErr error
-	err := filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(info.Name(), ".yml") || info.Name() != sessionID+".yml" {
-			return nil
-		}
-		if removeErr := os.Remove(path); removeErr != nil {
-			walkErr = removeErr
-			return filepath.SkipAll
-		}
-		return filepath.SkipAll
-	})
-	if walkErr != nil {
-		return walkErr
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return nil
 	}
-	return err
+
+	_ = os.RemoveAll(dirPath)
+	return nil
 }
 
 func (s *FileSessionStore) SetSlideHandler(handler core.SlideHandler) {
@@ -243,28 +266,63 @@ func (s *FileSessionStore) Close() error {
 	return nil
 }
 
+type yamlUsage struct {
+	Timestamp    time.Time `yaml:"timestamp"`
+	InputTokens  int       `yaml:"input_tokens"`
+	OutputTokens int       `yaml:"output_tokens"`
+	RemainTokens int       `yaml:"remain_tokens"`
+}
+
+func toYamlUsage(u core.TokenUsage) yamlUsage {
+	return yamlUsage{
+		Timestamp:    u.Timestamp,
+		InputTokens:  u.InputTokens,
+		OutputTokens: u.OutputTokens,
+		RemainTokens: u.RemainTokens,
+	}
+}
+
+func fromYamlUsage(yu yamlUsage) core.TokenUsage {
+	return core.TokenUsage{
+		Timestamp:    yu.Timestamp,
+		InputTokens:  yu.InputTokens,
+		OutputTokens: yu.OutputTokens,
+		RemainTokens: yu.RemainTokens,
+	}
+}
+
 func (s *FileSessionStore) AppendTokenUsage(_ context.Context, sessionID string, usage core.TokenUsage) error {
-	usageDir := filepath.Join(s.rootDir, ".usage")
-	if err := os.MkdirAll(usageDir, 0755); err != nil {
-		return fmt.Errorf("create usage dir: %w", err)
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return fmt.Errorf("session %q not found", sessionID)
 	}
-	path := filepath.Join(usageDir, sessionID+".jsonl")
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+	path := filepath.Join(dirPath, "usages.yml")
+
+	var usages []yamlUsage
+	if data, err := os.ReadFile(path); err == nil {
+		if unmarshalErr := yaml.Unmarshal(data, &usages); unmarshalErr != nil {
+			return fmt.Errorf("parse usages file %s: %w", path, unmarshalErr)
+		}
+	}
+
+	usages = append(usages, toYamlUsage(usage))
+
+	data, err := yaml.Marshal(usages)
 	if err != nil {
-		return fmt.Errorf("open usage file: %w", err)
+		return fmt.Errorf("marshal usages: %w", err)
 	}
-	defer f.Close()
-	data, err := json.Marshal(&usage)
-	if err != nil {
-		return fmt.Errorf("marshal usage: %w", err)
-	}
-	_, err = f.WriteString(string(data) + "\n")
-	return err
+
+	return os.WriteFile(path, data, 0644)
 }
 
 func (s *FileSessionStore) GetTokenUsages(_ context.Context, sessionID string) ([]core.TokenUsage, error) {
-	usageDir := filepath.Join(s.rootDir, ".usage")
-	path := filepath.Join(usageDir, sessionID+".jsonl")
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return nil, nil
+	}
+
+	path := filepath.Join(dirPath, "usages.yml")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -272,18 +330,17 @@ func (s *FileSessionStore) GetTokenUsages(_ context.Context, sessionID string) (
 		}
 		return nil, err
 	}
-	var usages []core.TokenUsage
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var u core.TokenUsage
-		if err := json.Unmarshal([]byte(line), &u); err != nil {
-			continue
-		}
-		usages = append(usages, u)
+
+	var yamlUsages []yamlUsage
+	if err := yaml.Unmarshal(data, &yamlUsages); err != nil {
+		return nil, fmt.Errorf("parse usages file: %w", err)
 	}
+
+	usages := make([]core.TokenUsage, len(yamlUsages))
+	for i, yu := range yamlUsages {
+		usages[i] = fromYamlUsage(yu)
+	}
+
 	return usages, nil
 }
 
@@ -291,27 +348,23 @@ func (s *FileSessionStore) GetByRole(ctx context.Context, agent string) (*core.S
 	var bestInfo *core.SessionInfo
 
 	agentDir := s.agentDir(agent)
-	entries, err := os.ReadDir(agentDir)
-	if err != nil {
-		return nil, core.ErrSessionNotFound
-	}
 
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yml") {
-			continue
+	_ = filepath.Walk(agentDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || info.Name() != "session.yml" {
+			return nil
 		}
 
-		sessionID := strings.TrimSuffix(entry.Name(), ".yml")
-		path := filepath.Join(agentDir, entry.Name())
-		info, err := statSessionInfo(agent, sessionID, path)
-		if err != nil {
-			continue
+		sessionID := filepath.Base(filepath.Dir(path))
+		si, statErr := statSessionInfo(agent, sessionID, path)
+		if statErr != nil {
+			return nil
 		}
 
-		if bestInfo == nil || info.LastActivityAt.After(bestInfo.LastActivityAt) {
-			bestInfo = info
+		if bestInfo == nil || si.LastActivityAt.After(bestInfo.LastActivityAt) {
+			bestInfo = si
 		}
-	}
+		return nil
+	})
 
 	if bestInfo == nil {
 		return nil, core.ErrSessionNotFound
@@ -325,36 +378,30 @@ func (s *FileSessionStore) GetByRole(ctx context.Context, agent string) (*core.S
 func (s *FileSessionStore) ListSessions(ctx context.Context) ([]core.SessionInfo, error) {
 	var infos []core.SessionInfo
 
-	agentDirs, err := os.ReadDir(s.rootDir)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, agentEntry := range agentDirs {
-		if !agentEntry.IsDir() {
-			continue
-		}
-		agentName := agentEntry.Name()
-
-		sessionFiles, err := os.ReadDir(filepath.Join(s.rootDir, agentName))
-		if err != nil {
-			continue
+	_ = filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || info.Name() != "session.yml" {
+			return nil
 		}
 
-		for _, file := range sessionFiles {
-			if file.IsDir() || !strings.HasSuffix(file.Name(), ".yml") {
-				continue
-			}
-
-			sessionID := strings.TrimSuffix(file.Name(), ".yml")
-			path := s.sessionPath(agentName, sessionID)
-			info, err := statSessionInfo(agentName, sessionID, path)
-			if err != nil {
-				continue
-			}
-			infos = append(infos, *info)
+		relPath, relErr := filepath.Rel(s.rootDir, path)
+		if relErr != nil {
+			return nil
 		}
-	}
+
+		parts := strings.Split(filepath.ToSlash(relPath), "/")
+		if len(parts) < 3 {
+			return nil
+		}
+		agentName := parts[0]
+		sessionID := parts[1]
+
+		si, statErr := statSessionInfo(agentName, sessionID, path)
+		if statErr != nil {
+			return nil
+		}
+		infos = append(infos, *si)
+		return nil
+	})
 
 	sort.Slice(infos, func(i, j int) bool {
 		return infos[i].LastActivityAt.After(infos[j].LastActivityAt)
@@ -364,28 +411,21 @@ func (s *FileSessionStore) ListSessions(ctx context.Context) ([]core.SessionInfo
 
 func (s *FileSessionStore) findSessionByAgent(agentName string) (string, error) {
 	agentDir := s.agentDir(agentName)
-	entries, err := os.ReadDir(agentDir)
-	if err != nil {
-		return "", core.ErrSessionNotFound
-	}
 
 	var bestSession string
 	var bestModTime time.Time
 
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yml") {
-			continue
+	_ = filepath.Walk(agentDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || info.Name() != "session.yml" {
+			return nil
 		}
-		fileInfo, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		modTime := fileInfo.ModTime()
+		modTime := info.ModTime()
 		if modTime.After(bestModTime) {
 			bestModTime = modTime
-			bestSession = strings.TrimSuffix(entry.Name(), ".yml")
+			bestSession = filepath.Base(filepath.Dir(path))
 		}
-	}
+		return nil
+	})
 
 	if bestSession == "" {
 		return "", core.ErrSessionNotFound

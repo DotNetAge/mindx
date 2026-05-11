@@ -166,7 +166,7 @@ func TestFileStoreYAMLFormat(t *testing.T) {
 		t.Fatalf("Append failed: %v", err)
 	}
 
-	yamlPath := filepath.Join(tmpDir, agentName, sessionID+".yml")
+	yamlPath := filepath.Join(tmpDir, agentName, sessionID, "session.yml")
 	data, err := os.ReadFile(yamlPath)
 	if err != nil {
 		t.Fatalf("read yaml file failed: %v", err)

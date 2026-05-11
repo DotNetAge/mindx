@@ -18,7 +18,7 @@ require (
 	charm.land/glamour/v2 v2.0.0
 	charm.land/lipgloss/v2 v2.0.3
 	github.com/DotNetAge/gochat v0.2.2
-	github.com/DotNetAge/gorag v1.1.9
+	github.com/DotNetAge/gorag v1.1.10
 	github.com/DotNetAge/goreact v0.0.0-00010101000000-000000000000
 	github.com/DotNetAge/gort v0.1.0
 	github.com/google/uuid v1.6.0
@@ -37,7 +37,7 @@ require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/DotNetAge/gograph v0.2.1 // indirect
-	github.com/DotNetAge/govector v0.1.4 // indirect
+	github.com/DotNetAge/govector v0.1.5 // indirect
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0 // indirect
 	github.com/PuerkitoBio/goquery v1.9.2 // indirect
 	github.com/RoaringBitmap/roaring v0.4.23 // indirect

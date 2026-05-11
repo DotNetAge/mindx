@@ -2,22 +2,20 @@ package client
 
 import (
 	"testing"
-
-	"github.com/DotNetAge/gort/pkg/gateway"
 )
 
 func TestCommandFindCaseSensitive(t *testing.T) {
 	registry := NewSlashCommandRegistry()
 
 	registry.Register(Command{
-		CommandMeta: gateway.CommandMeta{Name: "agent", Description: "Test agent command"},
+		Name: "agent", Description: "Test agent command",
 		Run: func(args string) *CommandResult {
 			return &CommandResult{Message: "agent executed"}
 		},
 	})
 
 	registry.Register(Command{
-		CommandMeta: gateway.CommandMeta{Name: "help", Description: "Test help command"},
+		Name: "help", Description: "Test help command",
 		Run: func(args string) *CommandResult {
 			return &CommandResult{Message: "help executed"}
 		},
@@ -53,10 +51,10 @@ func TestCommandFilterCaseSensitive(t *testing.T) {
 	registry := NewSlashCommandRegistry()
 
 	registry.Register(Command{
-		CommandMeta: gateway.CommandMeta{Name: "agent", Description: "Test agent command"},
+		Name: "agent", Description: "Test agent command",
 	})
 	registry.Register(Command{
-		CommandMeta: gateway.CommandMeta{Name: "help", Description: "Test help command"},
+		Name: "help", Description: "Test help command",
 	})
 
 	tests := []struct {

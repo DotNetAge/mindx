@@ -45,8 +45,8 @@ github.com/BurntSushi/toml v1.2.1/go.mod h1:CxXYINrC8qIiEnFrOxCa7Jy5BFHlXnUU2pbi
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/DataDog/zstd v1.4.5 h1:EndNeuB0l9syBZhut0wns3gV1hL8zX8LIu6ZiVHWLIQ=
 github.com/DataDog/zstd v1.4.5/go.mod h1:1jcaCB/ufaK+sKp1NBhlGmpz41jOoPQ35bpF36t7BBo=
-github.com/DotNetAge/govector v0.1.4 h1:eOzidHX0sQhO6O9zBceVmVWKY7Sgb1VFQDBSnksEQIw=
-github.com/DotNetAge/govector v0.1.4/go.mod h1:0/jnt1Xnghs6V7zr8iZ22QDO0a0ulpkn2cl8orXt6DY=
+github.com/DotNetAge/govector v0.1.5 h1:w67UBeyOQX0KZsxRSXjxeLW2kB9MKJYV45JtjfOpo2g=
+github.com/DotNetAge/govector v0.1.5/go.mod h1:0/jnt1Xnghs6V7zr8iZ22QDO0a0ulpkn2cl8orXt6DY=
 github.com/JohannesKaufmann/html-to-markdown v1.6.0 h1:04VXMiE50YYfCfLboJCLcgqF5x+rHJnb1ssNmqpLH/k=
 github.com/JohannesKaufmann/html-to-markdown v1.6.0/go.mod h1:NUI78lGg/a7vpEJTz/0uOcYMaibytE4BUOQS8k78yPQ=
 github.com/MakeNowJust/heredoc v1.0.0 h1:cXCdzVdstXyiTqTvfqk9SDHpKNjxuom+DOlyEeQ4pzQ=
