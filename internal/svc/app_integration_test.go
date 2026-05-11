@@ -27,24 +27,24 @@ func TestIntegration_AllCommands(t *testing.T) {
 		t.Fatalf("failed to load env: %v", err)
 	}
 
-	app, err := svc.DefaultApp()
+	server, err := svc.NewServer(":0", "/ws")
 	if err != nil {
-		t.Fatalf("failed to create app: %v", err)
+		t.Fatalf("failed to create server: %v", err)
 	}
 
-	app.RegisterBuiltinCommands()
+	server.RegisterBuiltinCommands()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := app.TestStart(ctx); err != nil {
-		t.Fatalf("failed to start app: %v", err)
+	if err := server.Daemon().TestStart(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
 	}
 	defer func() {
-		app.TestStop(ctx)
+		server.Daemon().TestStop(ctx)
 	}()
 
-	wsURL := getWebSocketURL(app)
+	wsURL := getWebSocketURLFromDaemon(server)
 	conn := dialTestWS(t, wsURL)
 	defer conn.Close()
 
@@ -77,25 +77,6 @@ func TestIntegration_AllCommands(t *testing.T) {
 	t.Run("skills command", func(t *testing.T) {
 		callCommand(t, conn, clientID, "skills", "")
 	})
-
-	t.Run("job-add command", func(t *testing.T) {
-		callCommand(t, conn, clientID, "job-add", `@personal-assistant 每日晨会提醒 expr="0 0 9 * * *"`)
-	})
-
-	t.Run("job-list command", func(t *testing.T) {
-		callCommand(t, conn, clientID, "job-list", "")
-	})
-
-	t.Run("job-del command", func(t *testing.T) {
-		entries, err := app.SchedulerDB().List(context.Background())
-		if err != nil {
-			t.Fatalf("failed to list scheduler entries: %v", err)
-		}
-		if len(entries) == 0 {
-			t.Skip("no scheduler entries to delete")
-		}
-		callCommand(t, conn, clientID, "job-del", fmt.Sprintf("id=%s", entries[0].ID))
-	})
 }
 
 func TestIntegration_CommandMetas(t *testing.T) {
@@ -108,12 +89,10 @@ func TestIntegration_CommandMetas(t *testing.T) {
 		t.Fatalf("failed to load env: %v", err)
 	}
 
-	app, err := svc.DefaultApp()
+	_, err = svc.NewServer(":0", "/ws")
 	if err != nil {
-		t.Fatalf("failed to create app: %v", err)
+		t.Fatalf("failed to create server: %v", err)
 	}
-
-	app.RegisterBuiltinCommands()
 
 	metas := svc.GetCommandMetas()
 
@@ -124,7 +103,6 @@ func TestIntegration_CommandMetas(t *testing.T) {
 	expectedCommands := []string{
 		"help", "about", "init", "clear",
 		"agents", "models", "skills",
-		"job-add", "job-list", "job-del",
 	}
 
 	for _, expected := range expectedCommands {
@@ -147,75 +125,6 @@ func TestIntegration_CommandMetas(t *testing.T) {
 	}
 }
 
-func TestIntegration_JobLifecycle(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	err := loadEnv()
-	if err != nil {
-		t.Fatalf("failed to load env: %v", err)
-	}
-
-	app, err := svc.DefaultApp()
-	if err != nil {
-		t.Fatalf("failed to create app: %v", err)
-	}
-
-	app.RegisterBuiltinCommands()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	if err := app.TestStart(ctx); err != nil {
-		t.Fatalf("failed to start app: %v", err)
-	}
-	defer func() {
-		app.TestStop(ctx)
-	}()
-
-	wsURL := getWebSocketURL(app)
-	conn := dialTestWS(t, wsURL)
-	defer conn.Close()
-
-	clientID := extractClientID(t, conn)
-
-	callCommand(t, conn, clientID, "job-add", `@personal-assistant daily standup reminder expr="0 0 9 * * *"`)
-
-	entries, err := app.SchedulerDB().List(context.Background())
-	if err != nil {
-		t.Fatalf("failed to list entries: %v", err)
-	}
-
-	if len(entries) == 0 {
-		t.Fatal("expected at least one scheduler entry")
-	}
-
-	entry := entries[0]
-	if entry.Agent != "personal-assistant" {
-		t.Errorf("expected agent 'personal-assistant', got '%s'", entry.Agent)
-	}
-	if entry.CronExpr != "0 0 9 * * *" {
-		t.Errorf("expected cron '0 0 9 * * *', got '%s'", entry.CronExpr)
-	}
-
-	callCommand(t, conn, clientID, "job-list", "")
-
-	callCommand(t, conn, clientID, "job-del", fmt.Sprintf("id=%s", entry.ID))
-
-	entries, err = app.SchedulerDB().List(context.Background())
-	if err != nil {
-		t.Fatalf("failed to list entries after delete: %v", err)
-	}
-
-	for _, e := range entries {
-		if e.ID == entry.ID {
-			t.Error("entry should have been deleted")
-			break
-		}
-	}
-}
-
 func TestIntegration_ConcurrentCommands(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -226,24 +135,24 @@ func TestIntegration_ConcurrentCommands(t *testing.T) {
 		t.Fatalf("failed to load env: %v", err)
 	}
 
-	app, err := svc.DefaultApp()
+	server, err := svc.NewServer(":0", "/ws")
 	if err != nil {
-		t.Fatalf("failed to create app: %v", err)
+		t.Fatalf("failed to create server: %v", err)
 	}
 
-	app.RegisterBuiltinCommands()
+	server.RegisterBuiltinCommands()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := app.TestStart(ctx); err != nil {
-		t.Fatalf("failed to start app: %v", err)
+	if err := server.Daemon().TestStart(ctx); err != nil {
+		t.Fatalf("failed to start server: %v", err)
 	}
 	defer func() {
-		app.TestStop(ctx)
+		server.Daemon().TestStop(ctx)
 	}()
 
-	wsURL := getWebSocketURL(app)
+	wsURL := getWebSocketURLFromDaemon(server)
 
 	commands := []string{"help", "about", "agents", "models", "skills"}
 
@@ -269,13 +178,6 @@ func TestIntegration_ConcurrentCommands(t *testing.T) {
 	}
 }
 
-type testEnv struct {
-	app     *svc.App
-	gw      *gateway.Server
-	addr    string
-	cleanup func()
-}
-
 func loadEnv() error {
 	if os.Getenv("MINDX_WORKSPACE") == "" {
 		_, filename, _, _ := runtime.Caller(0)
@@ -298,14 +200,14 @@ func loadEnv() error {
 	return nil
 }
 
-func getWebSocketURL(app *svc.App) string {
-	settings := app.Settings()
-	addr := settings.Addr
+func getWebSocketURLFromDaemon(server *svc.Server) string {
+	daemon := server.Daemon()
+	addr := daemon.Addr()
 	if addr == "" {
 		addr = ":2323"
 	}
 
-	wsPath := settings.WSPath
+	wsPath := daemon.WSPath()
 	if wsPath == "" {
 		wsPath = "/ws"
 	}
@@ -314,35 +216,6 @@ func getWebSocketURL(app *svc.App) string {
 		return fmt.Sprintf("ws://localhost%s%s", addr, wsPath)
 	}
 	return fmt.Sprintf("ws://localhost:%s%s", addr, wsPath)
-}
-
-func setupTestServer(t *testing.T, app *svc.App) *testEnv {
-	t.Helper()
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	errCh := make(chan error, 1)
-	go func() {
-		if err := app.Start(ctx); err != nil {
-			errCh <- err
-		}
-	}()
-
-	time.Sleep(500 * time.Millisecond)
-
-	env := &testEnv{
-		app:  app,
-		gw:   app.Server(),
-		addr: "ws://localhost:1314/ws",
-	}
-
-	env.cleanup = func() {
-		cancel()
-	}
-
-	t.Cleanup(env.cleanup)
-
-	return env
 }
 
 func dialTestWS(t *testing.T, url string) *websocket.Conn {

@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/DotNetAge/goreact"
-	"github.com/DotNetAge/goreact/core"
-	"github.com/DotNetAge/mindx/internal/svc"
+	react "github.com/DotNetAge/goreact/core"
+	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/session"
 )
 
@@ -62,7 +62,7 @@ func main() {
 	}))
 	defer server.Close()
 
-	app, err := svc.DefaultApp()
+	app, err := core.DefaultApp()
 	if err != nil {
 		fmt.Printf("Error creating app: %v\n", err)
 		os.Exit(1)
@@ -78,8 +78,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	var agentCfg *core.AgentConfig
-	var modelCfg *core.ModelConfig
+	var agentCfg *react.AgentConfig
+	var modelCfg *react.ModelConfig
 	for _, a := range agentList {
 		modelCfg = app.Models().Get(a.Model)
 		if modelCfg != nil {

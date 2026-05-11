@@ -12,7 +12,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-type CommandExecutor func(ctx context.Context, agent string, content string) error
+type CommandExecutor func(ctx context.Context, agent string, sessionID string, content string) error
 
 type Scheduler struct {
 	cron     *cron.Cron
@@ -143,7 +143,7 @@ func (s *Scheduler) executeJob(entry *ScheduleEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	execErr := s.executor(ctx, entry.Agent, entry.Content)
+	execErr := s.executor(ctx, entry.Agent, entry.SessionID, entry.Content)
 	if storeErr := s.store.UpdateLastRun(entry.ID, runID, execErr); storeErr != nil {
 		s.logger.Warn("failed to update last run", "id", entry.ID, "error", storeErr)
 	}
