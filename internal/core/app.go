@@ -148,7 +148,7 @@ func (a *App) buildDirectoryAddon() []string {
 	return []string{guidelines}
 }
 
-// CreateSession creates a new session with metadata including the captured working directory.
+// CreateSession creates a new session with metadata including the captured project directory (os.Getwd() at invocation time).
 // This captures os.Getwd() at creation time to bind the session to a project directory.
 func (a *App) CreateSession(agentName string) (*session.SessionMeta, error) {
 	projectCWD, err := os.Getwd()
