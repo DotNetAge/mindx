@@ -91,11 +91,11 @@ func TestApp_Accessors(t *testing.T) {
 		t.Error("Settings() returned nil")
 	}
 
-	if app.RuleRegistry() == nil {
+	if app.RuleRegistry() != nil {
 		t.Error("RuleRegistry() should return nil when not initialized")
 	}
 
-	if app.SessionDB() == nil {
+	if app.SessionDB() != nil {
 		t.Error("SessionDB() should return nil when not initialized")
 	}
 }
