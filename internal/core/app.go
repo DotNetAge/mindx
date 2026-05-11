@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -25,8 +26,9 @@ type App struct {
 	rules  core.RuleRegistry
 	sessDB *session.FileSessionStore
 
-	agentCache map[string]*goreact.Agent
-	agentMu    sync.RWMutex
+	agentCache         map[string]*goreact.Agent
+	agentMu            sync.RWMutex
+	currentSessionMeta *session.SessionMeta
 }
 
 func DefaultApp() (*App, error) {
@@ -113,6 +115,51 @@ func (a *App) Models() *goreact.ModelRegistry {
 
 func (a *App) SetLogger(l logging.Logger) {
 	a.logger = l
+}
+
+// CurrentSessionMeta returns the metadata for the current active session.
+func (a *App) CurrentSessionMeta() *session.SessionMeta {
+	return a.currentSessionMeta
+}
+
+// CreateSession creates a new session with metadata including the captured working directory.
+// This captures os.Getwd() at creation time to bind the session to a project directory.
+func (a *App) CreateSession(agentName string) (*session.SessionMeta, error) {
+	projectCWD, err := os.Getwd()
+	if err != nil {
+		a.logger.Warn("failed to get cwd, using home dir as fallback", "error", err)
+		projectCWD = a.settings.UserPreferences()
+	}
+
+	sessionID := generateSessionID()
+
+	meta, err := session.NewSessionMeta(sessionID, agentName, projectCWD)
+	if err != nil {
+		return nil, fmt.Errorf("create session meta: %w", err)
+	}
+
+	sessionBaseDir := a.settings.SessionsDir()
+	sessionDir := filepath.Join(sessionBaseDir, agentName, sessionID)
+	tmpDir := filepath.Join(sessionDir, "tmp")
+
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		return nil, fmt.Errorf("create session dir: %w", err)
+	}
+
+	if err := meta.Save(sessionDir); err != nil {
+		return nil, fmt.Errorf("save session meta: %w", err)
+	}
+
+	a.currentSessionMeta = meta
+
+	a.logger.Info("session created",
+		"session_id", sessionID,
+		"agent", agentName,
+		"project_dir", projectCWD,
+		"session_dir", sessionDir,
+	)
+
+	return meta, nil
 }
 
 func (a *App) GetMaster() (*goreact.Agent, error) {
@@ -250,4 +297,10 @@ func (a *App) IsModelAvailable(name ...string) bool {
 		return false
 	}
 	return llm.Content != ""
+}
+
+// generateSessionID generates a unique session identifier.
+// This is shared across the application to ensure consistent ID format (sess_xxxxxxxx).
+func generateSessionID() string {
+	return fmt.Sprintf("sess_%d", time.Now().UnixNano()%100000000)
 }
