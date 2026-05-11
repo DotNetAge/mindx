@@ -142,6 +142,8 @@ func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentNa
 		return fmt.Errorf("write session file %s: %w", path, err)
 	}
 
+	s.updateSessionMeta(dir)
+
 	return nil
 }
 
@@ -477,4 +479,27 @@ func statSessionInfo(agentName, sessionID, path string) (*core.SessionInfo, erro
 		LastActivityAt: info.ModTime(),
 		CreatedAt:      info.ModTime(),
 	}, nil
+}
+
+// GetSessionMeta loads session metadata for the given session ID.
+// It searches all agent directories to find the session.
+func (s *FileSessionStore) GetSessionMeta(sessionID string) (*SessionMeta, error) {
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return nil, core.ErrSessionNotFound
+	}
+	return LoadSessionMeta(dirPath)
+}
+
+// updateSessionMeta updates the UpdatedAt and LastActivityAt timestamps in meta.json.
+// This is called after each message append to keep metadata current.
+func (s *FileSessionStore) updateSessionMeta(sessionDir string) {
+	meta, err := LoadSessionMeta(sessionDir)
+	if err != nil {
+		return
+	}
+	meta.UpdatedAt = time.Now()
+	meta.LastActivityAt = time.Now()
+	meta.MessageCount++
+	_ = meta.Save(sessionDir)
 }
