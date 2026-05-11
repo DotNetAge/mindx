@@ -19,7 +19,7 @@ You have two primary workspaces available for file operations. Understanding the
 ### Project Directory (%s)
 **This is the user's persistent workspace — the context in which you were invoked.**
 
-It is the directory captured when this session started (the user's working directory at invocation time).
+It is the directory captured when this session started (the user's project directory at invocation time, i.e., os.Getwd()).
 Files here persist beyond this conversation and belong to the user's ongoing work.
 
 **Characteristics:**
