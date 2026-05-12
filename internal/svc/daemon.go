@@ -122,14 +122,21 @@ func (d *Daemon) initGateway() {
 	)
 }
 
-func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessionID string, content string) error {
+func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessionID string, content string, projectDir string) error {
 	originalCWD, _ := os.Getwd()
 
-	meta := d.restoreSessionEnvironment(sessionID)
-	if meta != nil {
-		if err := os.Chdir(meta.ProjectWorkingDir); err != nil {
+	targetDir := projectDir
+	if targetDir == "" {
+		meta := d.restoreSessionEnvironment(sessionID)
+		if meta != nil {
+			targetDir = meta.ProjectWorkingDir
+		}
+	}
+
+	if targetDir != "" {
+		if err := os.Chdir(targetDir); err != nil {
 			d.logger.Warn("failed to chdir to project dir, using current dir",
-				"project_dir", meta.ProjectWorkingDir,
+				"project_dir", targetDir,
 				"error", err,
 			)
 		} else {
@@ -138,14 +145,14 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 					d.logger.Warn("failed to restore cwd after scheduled task",
 						"original", originalCWD,
 						"error", restoreErr,
-				)
+					)
 				}
 			}()
-			os.Setenv("MINDX_PROJECT_DIR", meta.ProjectWorkingDir)
+			os.Setenv("MINDX_PROJECT_DIR", targetDir)
 			os.Setenv("MINDX_SESSION_ID", sessionID)
-			d.logger.Info("restored session environment for scheduled task",
+			d.logger.Info("set execution context for scheduled task",
 				"session_id", sessionID,
-				"project_dir", meta.ProjectWorkingDir,
+				"project_dir", targetDir,
 				"original_cwd", originalCWD,
 			)
 		}

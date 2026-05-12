@@ -8,6 +8,12 @@ import (
 	"time"
 )
 
+// generateSessionID generates a unique session identifier.
+// Format: sess_<nanosecond_timestamp_mod_100000000>
+func generateSessionID() string {
+	return fmt.Sprintf("sess_%d", time.Now().UnixNano()%100000000)
+}
+
 // SessionMeta represents session-level metadata persisted to <session_dir>/meta.json.
 // This struct is defined and used by MindX (application layer).
 // GoReact (framework layer) does not depend on this type.

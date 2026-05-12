@@ -12,20 +12,21 @@ import (
 )
 
 type ScheduleEntry struct {
-	ID        string    `json:"id"`
-	Agent     string    `json:"agent"`
-	SessionID string    `json:"session_id,omitempty"`
-	Content   string    `json:"content"`
-	CronExpr  string    `json:"cron_expr"`
-	Enabled   bool      `json:"enabled"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	LastRunAt time.Time `json:"last_run_at,omitempty"`
-	LastRunID string    `json:"last_run_id,omitempty"`
-	LastStatus string   `json:"last_status,omitempty"`
-	LastError  string   `json:"last_error,omitempty"`
-	SuccessCnt int      `json:"success_count"`
-	FailureCnt int      `json:"failure_count"`
+	ID         string    `json:"id"`
+	Agent      string    `json:"agent"`
+	SessionID  string    `json:"session_id,omitempty"`
+	ProjectDir string    `json:"project_dir,omitempty"`
+	Content    string    `json:"content"`
+	CronExpr   string    `json:"cron_expr"`
+	Enabled    bool      `json:"enabled"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	LastRunAt  time.Time `json:"last_run_at,omitempty"`
+	LastRunID  string    `json:"last_run_id,omitempty"`
+	LastStatus string    `json:"last_status,omitempty"`
+	LastError  string    `json:"last_error,omitempty"`
+	SuccessCnt int       `json:"success_count"`
+	FailureCnt int       `json:"failure_count"`
 }
 
 type FileSchedulerStore struct {

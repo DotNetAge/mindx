@@ -1,16 +1,15 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/DotNetAge/gochat"
 	"github.com/DotNetAge/goreact"
 	"github.com/DotNetAge/goreact/core"
-	goreactor "github.com/DotNetAge/goreact/reactor"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/session"
 	"github.com/joho/godotenv"
@@ -29,7 +28,7 @@ type App struct {
 
 	agentCache         map[string]*goreact.Agent
 	agentMu            sync.RWMutex
-	currentSessionMeta *session.SessionMeta
+	currentSessionMeta *core.SessionInfo // Changed from session.SessionMeta to core.SessionInfo (framework-level)
 }
 
 func DefaultApp() (*App, error) {
@@ -46,9 +45,12 @@ func DefaultApp() (*App, error) {
 	}
 	core.SYSTEM_INFO_NAME = "MindX"
 	core.SYSTEM_INFO_VERSION = "2.0.0"
-	// userPrompt := "- Documents directory : " + filepath.Join(settings.Workspace, "documents")
-	// userPrompt += "\n- Programs directory : " + filepath.Join(settings.Workspace, "programs")
-	userPrompt := "\n- Skills directory: " + settings.SkillsDir()
+
+	// Application-specific directories (injected via SYSTEM_INFO_USERS extension point)
+	// This keeps GoReact framework-agnostic — it doesn't need to know about "Home Dir" concept.
+	// Each application defines its own home/workspace directory semantics.
+	userPrompt := "\n- User preferences directory: " + settings.UserPreferences()
+	userPrompt += "\n- Skills directory: " + settings.SkillsDir()
 	userPrompt += "\n- Agents directory: " + settings.AgentsDir()
 
 	core.SYSTEM_INFO_USERS = userPrompt
@@ -119,12 +121,12 @@ func (a *App) SetLogger(l logging.Logger) {
 }
 
 // CurrentSessionMeta returns the metadata for the current active session.
-func (a *App) CurrentSessionMeta() *session.SessionMeta {
+func (a *App) CurrentSessionMeta() *core.SessionInfo {
 	return a.currentSessionMeta
 }
 
 // SetCurrentSessionMeta sets the current session metadata (used when loading existing sessions).
-func (a *App) SetCurrentSessionMeta(meta *session.SessionMeta) {
+func (a *App) SetCurrentSessionMeta(meta *core.SessionInfo) {
 	a.currentSessionMeta = meta
 }
 
@@ -133,59 +135,25 @@ func (a *App) SessDB() *session.FileSessionStore {
 	return a.sessDB
 }
 
-// buildDirectoryAddon builds the directory semantics guidance string for injection
-// into the Agent's system prompt. Returns empty string if no session meta is available.
-func (a *App) buildDirectoryAddon() []string {
-	meta := a.currentSessionMeta
-	if meta == nil {
-		return nil
-	}
-	sessionDir := filepath.Join(a.settings.SessionsDir(), meta.AgentName, meta.SessionID)
-	guidelines := BuildDirectoryGuidelines(meta.ProjectWorkingDir, sessionDir)
-	if guidelines == "" {
-		return nil
-	}
-	return []string{guidelines}
-}
-
 // CreateSession creates a new session with metadata including the captured project directory (os.Getwd() at invocation time).
 // This captures os.Getwd() at creation time to bind the session to a project directory.
-func (a *App) CreateSession(agentName string) (*session.SessionMeta, error) {
-	projectCWD, err := os.Getwd()
+// Delegates to SessionStore.Create() which handles directory creation and ID generation.
+func (a *App) CreateSession(agentName string) (*core.SessionInfo, error) {
+	sessionInfo, err := a.sessDB.Create(context.Background(), agentName)
 	if err != nil {
-		a.logger.Warn("failed to get cwd, using home dir as fallback", "error", err)
-		projectCWD = a.settings.UserPreferences()
+		return nil, fmt.Errorf("create session: %w", err)
 	}
 
-	sessionID := generateSessionID()
-
-	meta, err := session.NewSessionMeta(sessionID, agentName, projectCWD)
-	if err != nil {
-		return nil, fmt.Errorf("create session meta: %w", err)
-	}
-
-	sessionBaseDir := a.settings.SessionsDir()
-	sessionDir := filepath.Join(sessionBaseDir, agentName, sessionID)
-	tmpDir := filepath.Join(sessionDir, "tmp")
-
-	if err := os.MkdirAll(tmpDir, 0755); err != nil {
-		return nil, fmt.Errorf("create session dir: %w", err)
-	}
-
-	if err := meta.Save(sessionDir); err != nil {
-		return nil, fmt.Errorf("save session meta: %w", err)
-	}
-
-	a.currentSessionMeta = meta
+	a.currentSessionMeta = sessionInfo
 
 	a.logger.Info("session created",
-		"session_id", sessionID,
+		"session_id", sessionInfo.SessionID,
 		"agent", agentName,
-		"project_dir", projectCWD,
-		"session_dir", sessionDir,
+		"project_dir", sessionInfo.GetProjectDir(),
+		"session_dir", sessionInfo.GetSessionDir(),
 	)
 
-	return meta, nil
+	return sessionInfo, nil
 }
 
 func (a *App) GetMaster() (*goreact.Agent, error) {
@@ -228,15 +196,21 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 		opts = append(opts, goreact.WithSessionStore(a.sessDB))
 	}
 
-	if addon := a.buildDirectoryAddon(); len(addon) > 0 {
-		prompt := goreactor.NewDefaultPrompt(
-			masterAgent.Name,
-			masterAgent.Role,
-			masterAgent.Description,
-			masterAgent.Introduction,
-		)
-		prompt.AddonSections = addon
-		opts = append(opts, goreact.WithPrompt(prompt))
+	// Auto-inject directory context from active session (Design-time safety)
+	if a.currentSessionMeta != nil {
+		if a.currentSessionMeta.GetProjectDir() != "" {
+			opts = append(opts, goreact.WithProjectDir(a.currentSessionMeta.GetProjectDir()))
+		}
+		if a.currentSessionMeta.GetSessionDir() != "" {
+			opts = append(opts, goreact.WithSessionDir(a.currentSessionMeta.GetSessionDir()))
+		}
+	}
+
+	// Enable Agent Native sandbox design (4-Layer Architecture)
+	// SessionBaseDir enables SESSION_DIR-based isolation for all sessions
+	sessionBaseDir := a.settings.SessionsDir()
+	if sessionBaseDir != "" {
+		opts = append(opts, goreact.WithSessionBaseDir(sessionBaseDir))
 	}
 
 	m, err := goreact.NewAgent(opts...)
@@ -287,15 +261,20 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 		opts = append(opts, goreact.WithSessionStore(a.sessDB))
 	}
 
-	if addon := a.buildDirectoryAddon(); len(addon) > 0 {
-		prompt := goreactor.NewDefaultPrompt(
-			cfg.Name,
-			cfg.Role,
-			cfg.Description,
-			cfg.Introduction,
-		)
-		prompt.AddonSections = addon
-		opts = append(opts, goreact.WithPrompt(prompt))
+	// Auto-inject directory context from active session (Design-time safety)
+	if a.currentSessionMeta != nil {
+		if a.currentSessionMeta.GetProjectDir() != "" {
+			opts = append(opts, goreact.WithProjectDir(a.currentSessionMeta.GetProjectDir()))
+		}
+		if a.currentSessionMeta.GetSessionDir() != "" {
+			opts = append(opts, goreact.WithSessionDir(a.currentSessionMeta.GetSessionDir()))
+		}
+	}
+
+	// Enable Agent Native sandbox design (4-Layer Architecture)
+	sessionBaseDir := a.settings.SessionsDir()
+	if sessionBaseDir != "" {
+		opts = append(opts, goreact.WithSessionBaseDir(sessionBaseDir))
 	}
 
 	agent, err := goreact.NewAgent(opts...)
@@ -345,10 +324,4 @@ func (a *App) IsModelAvailable(name ...string) bool {
 		return false
 	}
 	return llm.Content != ""
-}
-
-// generateSessionID generates a unique session identifier.
-// This is shared across the application to ensure consistent ID format (sess_xxxxxxxx).
-func generateSessionID() string {
-	return fmt.Sprintf("sess_%d", time.Now().UnixNano()%100000000)
 }
