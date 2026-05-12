@@ -30,8 +30,8 @@ func registerSchedulerCommands(r *Registry) {
 		Description: "添加计划任务",
 		Category:    "system",
 		Scope:       gateway.ScopeRemote,
-		Example:     `/job-add @writer sess_abc123 每日博客文章 expr="0 0 9 * * 1"`,
-		Params:      `@<agent-name> <session_id|new> <content> expr="<cron表达式>"`,
+		Example:     `/job-add @writer sess_abc123 每日博客文章 expr="0 0 9 * * 1" dir="/Users/ray/workspaces/my-project"`,
+		Params:      `@<agent-name> <session_id|new> <content> expr="<cron表达式>" [dir="<项目目录>"]`,
 	}, func(ctx *gateway.CommandContext) (any, error) {
 		return handleJobAdd(ctx)
 	})
@@ -66,7 +66,7 @@ func handleJobAdd(ctx *gateway.CommandContext) (any, error) {
 		return nil, fmt.Errorf("用法: /job-add @<agent-name> <session_id|new> <content> expr=\"<cron表达式>\"\n示例: /job-add @writer sess_abc123 每日博客文章 expr=\"0 0 9 * * 1\"")
 	}
 
-	agent, sessionID, content, cronExpr, err := parseJobAddArgs(argsStr)
+	agent, sessionID, content, cronExpr, projectDir, err := parseJobAddArgs(argsStr)
 	if err != nil {
 		return nil, err
 	}
@@ -77,12 +77,13 @@ func handleJobAdd(ctx *gateway.CommandContext) (any, error) {
 	}
 
 	entry := &scheduler.ScheduleEntry{
-		ID:        generateID(),
-		Agent:     agent,
-		SessionID: sessionID,
-		Content:   content,
-		CronExpr:  cronExpr,
-		Enabled:   true,
+		ID:         generateID(),
+		Agent:      agent,
+		SessionID:  sessionID,
+		ProjectDir: projectDir,
+		Content:    content,
+		CronExpr:   cronExpr,
+		Enabled:    true,
 	}
 
 	if err := schedulerDeps.SchedulerDB().Save(context.Background(), entry); err != nil {
@@ -93,8 +94,12 @@ func handleJobAdd(ctx *gateway.CommandContext) (any, error) {
 	if sessInfo == "" || sessInfo == "new" {
 		sessInfo = "(auto)"
 	}
-	return fmt.Sprintf("✅ 定时消息已创建:\n  ID: %s\n  目标: @%s\n  Session: %s\n  内容: %s\n  调度: %s",
-		entry.ID, entry.Agent, sessInfo, truncateString(entry.Content, 50), entry.CronExpr), nil
+	dirInfo := projectDir
+	if dirInfo == "" {
+		dirInfo = "(daemon default)"
+	}
+	return fmt.Sprintf("✅ 定时消息已创建:\n  ID: %s\n  目标: @%s\n  Session: %s\n  项目目录: %s\n  内容: %s\n  调度: %s",
+		entry.ID, entry.Agent, sessInfo, dirInfo, truncateString(entry.Content, 50), entry.CronExpr), nil
 }
 
 func handleJobList(ctx *gateway.CommandContext) (any, error) {
@@ -111,7 +116,7 @@ func handleJobList(ctx *gateway.CommandContext) (any, error) {
 		return "(暂无定时消息任务)", nil
 	}
 
-	headers := []string{"ID", "目标Agent", "Session", "发送内容", "调度规则", "状态", "成功/失败"}
+	headers := []string{"ID", "目标Agent", "Session", "项目目录", "发送内容", "调度规则", "状态", "成功/失败"}
 	rows := make([][]string, 0, len(entries))
 
 	for _, entry := range entries {
@@ -123,10 +128,15 @@ func handleJobList(ctx *gateway.CommandContext) (any, error) {
 		if sessDisplay == "" || sessDisplay == "new" {
 			sessDisplay = "(auto)"
 		}
+		dirDisplay := entry.ProjectDir
+		if dirDisplay == "" {
+			dirDisplay = "(default)"
+		}
 		rows = append(rows, []string{
 			entry.ID,
 			"@" + entry.Agent,
 			sessDisplay,
+			dirDisplay,
 			truncateString(entry.Content, 30),
 			entry.CronExpr,
 			status,
@@ -221,10 +231,10 @@ func splitArgs(s string) []string {
 	return parts
 }
 
-func parseJobAddArgs(argsStr string) (agent string, sessionID string, content string, cronExpr string, err error) {
+func parseJobAddArgs(argsStr string) (agent string, sessionID string, content string, cronExpr string, projectDir string, err error) {
 	parts := splitArgs(argsStr)
-	var agentIdx, exprIdx int = -1, -1
-	var exprValue string
+	var agentIdx, exprIdx, dirIdx int = -1, -1, -1
+	var exprValue, dirValue string
 
 	for i, part := range parts {
 		if strings.HasPrefix(part, "@") && agentIdx == -1 {
@@ -234,27 +244,35 @@ func parseJobAddArgs(argsStr string) (agent string, sessionID string, content st
 			exprIdx = i
 			exprValue = strings.TrimPrefix(part, "expr=")
 			exprValue = strings.Trim(exprValue, "\"'")
+		} else if (strings.HasPrefix(part, "dir=") || strings.HasPrefix(part, "project=")) && dirIdx == -1 {
+			dirIdx = i
+			if strings.HasPrefix(part, "dir=") {
+				dirValue = strings.TrimPrefix(part, "dir=")
+			} else {
+				dirValue = strings.TrimPrefix(part, "project=")
+			}
+			dirValue = strings.Trim(dirValue, "\"'")
 		}
 	}
 
 	if agent == "" {
-		return "", "", "", "", fmt.Errorf("缺少目标智能体: 请使用 @<agent-name> 格式指定\n示例: /job-add @writer sess_abc123 每日提醒 expr=\"0 0 9 * * 1\"")
+		return "", "", "", "", "", fmt.Errorf("缺少目标智能体: 请使用 @<agent-name> 格式指定\n示例: /job-add @writer sess_abc123 每日博客文章 expr=\"0 0 9 * * 1\" dir=\"/path/to/project\"")
 	}
 
 	if exprValue == "" {
-		return "", "", "", "", fmt.Errorf("缺少 cron 表达式: 请使用 expr=\"<cron表达式>\" 指定\n示例: /job-add @writer sess_abc123 每日提醒 expr=\"0 0 9 * * 1\"")
+		return "", "", "", "", "", fmt.Errorf("缺少 cron 表达式: 请使用 expr=\"<cron表达式>\" 指定\n示例: /job-add @writer sess_abc123 每日提醒 expr=\"0 0 9 * * 1\"")
 	}
 
 	var contentParts []string
 	for i, part := range parts {
-		if i == agentIdx || i == exprIdx {
+		if i == agentIdx || i == exprIdx || i == dirIdx {
 			continue
 		}
 		contentParts = append(contentParts, part)
 	}
 
 	if len(contentParts) == 0 {
-		return "", "", "", "", fmt.Errorf("缺少发送内容: 请指定要定时发送给 @%s 的消息内容", agent)
+		return "", "", "", "", "", fmt.Errorf("缺少发送内容: 请指定要定时发送给 @%s 的消息内容", agent)
 	}
 
 	sessionID = contentParts[0]
@@ -268,7 +286,7 @@ func parseJobAddArgs(argsStr string) (agent string, sessionID string, content st
 		sessionID = "new"
 	}
 
-	return agent, sessionID, content, exprValue, nil
+	return agent, sessionID, content, exprValue, dirValue, nil
 }
 
 func truncateString(s string, maxLen int) string {

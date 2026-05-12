@@ -29,9 +29,9 @@ type rootModel struct {
 
 	app *core.App
 
-	sessionReg   *sessionRegistry
-	outputCh     chan tea.Msg
-	chatManager  *chatSessionManager
+	sessionReg  *sessionRegistry
+	outputCh    chan tea.Msg
+	chatManager *chatSessionManager
 
 	registry         *SlashCommandRegistry
 	currentAgent     string
@@ -40,7 +40,7 @@ type rootModel struct {
 
 	mindxConfig *core.MindxConfig
 
-	executing    bool
+	executing     bool
 	currentCancel context.CancelFunc
 }
 
@@ -73,10 +73,10 @@ func redirectOutputForTUI() {
 // discardHandler 是一个丢弃所有日志的 slog.Handler 实现
 type discardHandler struct{}
 
-func (h discardHandler) Enabled(_ context.Context, _ slog.Level) bool { return false }
-func (h discardHandler) Handle(_ context.Context, _ slog.Record) error  { return nil }
-func (h discardHandler) WithAttrs([]slog.Attr) slog.Handler              { return h }
-func (h discardHandler) WithGroup(string) slog.Handler                   { return h }
+func (h discardHandler) Enabled(_ context.Context, _ slog.Level) bool  { return false }
+func (h discardHandler) Handle(_ context.Context, _ slog.Record) error { return nil }
+func (h discardHandler) WithAttrs([]slog.Attr) slog.Handler            { return h }
+func (h discardHandler) WithGroup(string) slog.Handler                 { return h }
 
 func (m *rootModel) Init() tea.Cmd {
 	var err error
@@ -195,7 +195,7 @@ func loadAgentsFromApp(app *core.App) []agentInfo {
 	var infos []agentInfo
 	for _, a := range agentList {
 		infos = append(infos, agentInfo{
-			name: a.Name,
+			name:  a.Name,
 			model: a.Model,
 		})
 	}
@@ -252,7 +252,7 @@ func (m *rootModel) loadExistingSessionMeta(agentName, sessionID string) {
 	if m.app == nil || m.app.SessDB() == nil {
 		return
 	}
-	meta, err := m.app.SessDB().GetSessionMeta(sessionID)
+	meta, err := m.app.SessDB().GetMeta(context.Background(), sessionID)
 	if err == nil && meta != nil {
 		m.app.SetCurrentSessionMeta(meta)
 	}
@@ -511,7 +511,7 @@ func (m *rootModel) handleSend(msg sendMsg) (tea.Model, tea.Cmd) {
 				stackTrace := string(buf[:n])
 
 				errMsg := fmt.Sprintf("agent execution panic:\n\nError: %v\n\nStack Trace:\n%s", r, stackTrace)
-				trySend(m.outputCh, fmt.Errorf(errMsg))
+				trySend(m.outputCh, fmt.Errorf("%s", errMsg))
 			}
 		}()
 		_, err = agent.Ask(sessionID, text)
@@ -528,7 +528,7 @@ func (m *rootModel) handleSend(msg sendMsg) (tea.Model, tea.Cmd) {
 				stackTrace := string(buf[:n])
 
 				errMsg := fmt.Sprintf("event consumer panic:\n\nError: %v\n\nStack Trace:\n%s", r, stackTrace)
-				trySend(m.outputCh, fmt.Errorf(errMsg))
+				trySend(m.outputCh, fmt.Errorf("%s", errMsg))
 			}
 		}()
 		m.consumeEvents(eventCh, sessionID)
@@ -710,7 +710,7 @@ func (m *rootModel) showWelcome() {
 
 	var projectDir string
 	if m.app != nil && m.app.CurrentSessionMeta() != nil {
-		projectDir = m.app.CurrentSessionMeta().ProjectWorkingDir
+		projectDir = m.app.CurrentSessionMeta().GetProjectDir()
 	}
 
 	m.contentPanel.ShowWelcome(appTitle, version, workspace, sessionID, "本地模式", projectDir)
