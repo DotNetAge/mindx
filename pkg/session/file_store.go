@@ -503,3 +503,92 @@ func (s *FileSessionStore) updateSessionMeta(sessionDir string) {
 	meta.MessageCount++
 	_ = meta.Save(sessionDir)
 }
+
+// === Session Lifecycle Management (Framework-level directory control) ===
+
+// Create creates a new session with the given agent name and options.
+// This centralizes session creation logic:
+//  1. Generates a unique session ID (format: sess_<timestamp>)
+//  2. Captures ProjectDir from options or os.Getwd()
+//  3. Creates session directory structure: <root>/<agent>/<session_id>/tmp
+//  4. Persists session metadata (for future GetMeta calls)
+//  5. Returns complete SessionInfo with directory context
+func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...core.SessionOption) (*core.SessionInfo, error) {
+	sessionID := generateSessionID()
+
+	sessionInfo := &core.SessionInfo{
+		SessionID:      sessionID,
+		AgentName:      agentName,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now(),
+	}
+
+	for _, opt := range opts {
+		opt(sessionInfo)
+	}
+
+	if sessionInfo.ProjectDir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("get working directory: %w", err)
+		}
+		sessionInfo.ProjectDir = cwd
+	}
+
+	sessionDirPath := s.sessionDir(agentName, sessionID)
+	tmpDir := filepath.Join(sessionDirPath, "tmp")
+
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		return nil, fmt.Errorf("create session directory %s: %w", sessionDirPath, err)
+	}
+
+	sessionInfo.SessionDir = sessionDirPath
+
+	meta := &SessionMeta{
+		SessionID:         sessionID,
+		AgentName:         agentName,
+		ProjectWorkingDir: sessionInfo.ProjectDir,
+		CreatedAt:         time.Now(),
+		LastActivityAt:    time.Now(),
+		MessageCount:      0,
+	}
+
+	if err := meta.Save(sessionDirPath); err != nil {
+		return nil, fmt.Errorf("save session meta: %w", err)
+	}
+
+	return sessionInfo, nil
+}
+
+// GetMeta returns complete session metadata including directory information.
+// It loads both GoReact SessionInfo and extended metadata from disk.
+func (s *FileSessionStore) GetMeta(_ context.Context, sessionID string) (*core.SessionInfo, error) {
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return nil, core.ErrSessionNotFound
+	}
+
+	meta, err := LoadSessionMeta(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("load session meta: %w", err)
+	}
+
+	return &core.SessionInfo{
+		SessionID:      sessionID,
+		AgentName:      meta.AgentName,
+		ProjectDir:     meta.ProjectWorkingDir,
+		SessionDir:     dirPath,
+		LastActivityAt: meta.LastActivityAt,
+		CreatedAt:      meta.CreatedAt,
+	}, nil
+}
+
+// ResolveSessionDir returns the filesystem path for the session's sandbox directory.
+// This is the canonical way for tools and components to locate session-specific files.
+func (s *FileSessionStore) ResolveSessionDir(sessionID string) (string, error) {
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return "", core.ErrSessionNotFound
+	}
+	return dirPath, nil
+}

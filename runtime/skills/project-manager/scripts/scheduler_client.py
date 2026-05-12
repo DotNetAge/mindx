@@ -7,7 +7,7 @@ to send scheduling commands: job-add, job-list, job-del.
 
 Demon Communication Protocol:
     All commands sent to SubAgents through MindX Daemon use this format:
-        @agent_name <session_id> <content>
+        @agent_name <session_id> <content> expr="<cron>" [dir="<project_dir>"]
 
     Session IDs are CLIENT-MANAGED resources:
     - session_id="new" or omitted → This CLIENT generates a UUID v4 as the
@@ -17,6 +17,12 @@ Demon Communication Protocol:
     The Daemon only routes commands to sessions; it NEVER creates session IDs.
     Without a valid session_id, the Daemon cannot route messages correctly.
 
+    Project Directory (IMPORTANT):
+    - Specifies the working directory context for Agent execution
+    - Critical when TUI's project directory differs from Daemon's working directory
+    - Optional: if omitted, Daemon uses its own default working directory
+    - Use dir="/absolute/path/to/project" to specify explicitly
+
 Protocol:
     Request:  {"jsonrpc":"2.0","id":"<uuid>","method":"<command>","params":{"args":"..."}}
     Response: {"jsonrpc":"2.0","id":"<uuid>","result":"..."} or {"error":{"code":...,"message":"..."}}
@@ -25,8 +31,13 @@ Usage Examples:
     # Add a scheduled task (client generates new UUID)
     python scheduler_client.py add-job --agent @writer --content "Daily blog post" --cron "0 0 9 * * 1"
 
+    # Add a scheduled task with explicit project directory
+    python scheduler_client.py add-job --agent @writer --content "Daily blog post" \\
+        --cron "0 0 9 * * 1" --project-dir /Users/ray/workspaces/my-project
+
     # Add a scheduled task (resume existing session)
-    python scheduler_client.py add-job --agent @writer --content "Continue writing" --cron "0 0 9 * * 1" --session-id 550e8400-e29b-41d4-a716-446655440000
+    python scheduler_client.py add-job --agent @writer --content "Continue writing" \\
+        --cron "0 0 9 * * 1" --session-id 550e8400-e29b-41d4-a716-446655440000
 
     # List all tasks
     python scheduler_client.py list-jobs
@@ -95,6 +106,7 @@ class JobAddParams:
     content: str        # Message content to send
     cron_expr: str       # 6-field Cron expression
     session_id: str = "new"  # "new" → client auto-generates UUID v4; or existing UUID to resume
+    project_dir: str = ""   # Project directory for execution context (optional, defaults to daemon's working directory)
 
 
 # ====== Core Client Class ======
@@ -225,15 +237,20 @@ class MindXSchedulerClient:
         Add a scheduled task.
 
         The command sent to MindX Daemon uses the format:
-            @agent_name <session_id> <content>
+            @agent_name <session_id> <content> expr="<cron>" [dir="<project_dir>"]
 
         Session ID handling (CLIENT-MANAGED):
             - If session_id is "new" or empty, this CLIENT generates a UUID v4
               and sends it to the Daemon. The Daemon does NOT create session IDs.
             - If session_id is an existing UUID, it is used as-is to resume.
 
+        Project Directory:
+            - Specifies the working directory context for Agent execution
+            - Critical when TUI's project directory differs from Daemon's directory
+            - Optional: if omitted, Daemon uses its own working directory
+
         Args:
-            params: Task parameters (agent, content, cron_expr, session_id)
+            params: Task parameters (agent, content, cron_expr, session_id, project_dir)
 
         Returns:
             Operation result containing task_id and session_id
@@ -247,7 +264,13 @@ class MindXSchedulerClient:
         else:
             resolved_session_id = raw_session_id
 
-        args_str = f"{agent} {resolved_session_id} {params.content} expr=\"{params.cron_expr}\""
+        # Build command with optional project_dir
+        dir_part = ""
+        if params.project_dir and params.project_dir.strip():
+            safe_dir = params.project_dir.strip().replace('"', '\\"')
+            dir_part = f" dir=\"{safe_dir}\""
+
+        args_str = f"{agent} {resolved_session_id} {params.content} expr=\"{params.cron_expr}\"{dir_part}"
 
         result_dict = self._send_command("job-add", args_str)
 
@@ -369,6 +392,8 @@ def cmd_add_job(args):
     parser.add_argument("--cron", required=True, help="Cron expression (6 fields)")
     parser.add_argument("--session-id", default="new",
                         help="'new' to auto-generate UUID v4, or existing UUID to resume (default: new)")
+    parser.add_argument("--project-dir", default="",
+                        help="Project directory for execution context (optional, e.g., /Users/ray/workspaces/my-project)")
     parser.add_argument("--host", default=DEFAULT_GATEWAY_HOST, help="Gateway host address")
     parser.add_argument("--port", type=int, default=DEFAULT_GATEWAY_PORT, help="Gateway port")
 
@@ -378,7 +403,8 @@ def cmd_add_job(args):
         agent=opts.agent,
         content=opts.content,
         cron_expr=opts.cron,
-        session_id=opts.session_id
+        session_id=opts.session_id,
+        project_dir=opts.project_dir
     )
 
     with MindXSchedulerClient(host=opts.host, port=opts.port) as client:
@@ -452,22 +478,29 @@ JSON file format example:
         "agent": "@writer",
         "content": "Every Monday: Write a technical blog post",
         "cron_expr": "0 0 9 * * 1",
-        "session_id": "new"
+        "session_id": "new",
+        "project_dir": "/Users/ray/workspaces/my-blog"
     },
     {
         "agent": "@analyst",
         "content": "Every Friday: Analyze data and generate report",
         "cron_expr": "0 0 16 * * 5",
-        "session_id": "550e8400-e29b-41d4-a716-446655440000"
+        "session_id": "550e8400-e29b-41d4-a716-446655440000",
+        "project_dir": "/Users/ray/workspaces/data-project"
     }
 ]
 
 Demon Protocol Format (sent to MindX Daemon):
-    @agent_name <session_id> <content>
+    @agent_name <session_id> <content> expr="<cron>" [dir="<project_dir>"]
 
 Session IDs are CLIENT-MANAGED:
     - session_id="new" → this CLIENT auto-generates a UUID v4 before sending
     - session_id="<uuid>" → resumes an existing interrupted session
+
+Project Directory:
+    - project_dir specifies the working directory for Agent execution
+    - Essential when TUI creates tasks in a different directory than Daemon's working dir
+    - Optional: if omitted, Daemon uses its default working directory
         """)
     parser.add_argument("--file", required=True, help="Path to JSON file")
     parser.add_argument("--host", default=DEFAULT_GATEWAY_HOST)
@@ -491,7 +524,8 @@ Session IDs are CLIENT-MANAGED:
             agent=item.get("agent", ""),
             content=item.get("content", ""),
             cron_expr=item.get("cron_expr", ""),
-            session_id=item.get("session_id", "new")
+            session_id=item.get("session_id", "new"),
+            project_dir=item.get("project_dir", "")
         )
         jobs.append(job)
 
@@ -558,8 +592,13 @@ Examples:
   # Add a task (new session)
   %(prog)s add-job --agent @writer --content "Daily reminder" --cron "0 0 9 * * *"
 
+  # Add a task with project directory
+  %(prog)s add-job --agent @writer --content "Project task" --cron "0 0 9 * * *" \\
+      --project-dir /Users/ray/workspaces/my-project
+
   # Add a task (resume existing session)
-  %(prog)s add-job --agent @writer --content "Continue work" --cron "0 0 9 * * *" --session-id 550e8400-e29b-41d4-a716-446655440000
+  %(prog)s add-job --agent @writer --content "Continue work" --cron "0 0 9 * * *" \\
+      --session-id 550e8400-e29b-41d4-a716-446655440000
 
   # List tasks
   %(prog)s list-jobs
@@ -570,8 +609,9 @@ Examples:
   # Test connection
   %(prog)s test-conn
 
-Demon Protocol: @agent_name <session_id> <content>
+Demon Protocol: @agent_name <session_id> <content> expr="<cron>" [dir="<project_dir>"]
 Session IDs are CLIENT-MANAGED (this script generates UUID v4 when "new")
+Project Dir specifies execution context (optional, defaults to daemon's working directory)
 Protocol: JSON-RPC 2.0 over WebSocket
         """)
 

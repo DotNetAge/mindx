@@ -5,13 +5,39 @@ MindX Scheduler WebSocket Client (JSON-RPC 2.0)
 Communicates with MindX Gateway via WebSocket using JSON-RPC 2.0 protocol
 to send scheduling commands: job-add, job-list, job-del.
 
+Demon Communication Protocol:
+    All commands sent to SubAgents through MindX Daemon use this format:
+        @agent_name <session_id> <content> expr="<cron>" [dir="<project_dir>"]
+
+    Session IDs are CLIENT-MANAGED resources:
+    - session_id="new" or omitted → This CLIENT generates a UUID v4 as the
+      session identifier before sending the command to Daemon.
+    - session_id="<uuid>"     → Resume an existing interrupted session.
+
+    The Daemon only routes commands to sessions; it NEVER creates session IDs.
+    Without a valid session_id, the Daemon cannot route messages correctly.
+
+    Project Directory (IMPORTANT):
+    - Specifies the working directory context for Agent execution
+    - Critical when TUI's project directory differs from Daemon's working directory
+    - Optional: if omitted, Daemon uses its own default working directory
+    - Use dir="/absolute/path/to/project" to specify explicitly
+
 Protocol:
     Request:  {"jsonrpc":"2.0","id":"<uuid>","method":"<command>","params":{"args":"..."}}
     Response: {"jsonrpc":"2.0","id":"<uuid>","result":"..."} or {"error":{"code":...,"message":"..."}}
 
 Usage Examples:
-    # Add a scheduled task
+    # Add a scheduled task (client generates new UUID)
     python scheduler_client.py add-job --agent @writer --content "Daily blog post" --cron "0 0 9 * * 1"
+
+    # Add a scheduled task with explicit project directory
+    python scheduler_client.py add-job --agent @writer --content "Daily blog post" \\
+        --cron "0 0 9 * * 1" --project-dir /Users/ray/workspaces/my-project
+
+    # Add a scheduled task (resume existing session)
+    python scheduler_client.py add-job --agent @writer --content "Continue writing" \\
+        --cron "0 0 9 * * 1" --session-id 550e8400-e29b-41d4-a716-446655440000
 
     # List all tasks
     python scheduler_client.py list-jobs
@@ -34,7 +60,7 @@ from typing import Optional
 try:
     import websocket
 except ImportError:
-    print("❌ Error: websocket-client library is required")
+    print("Error: websocket-client library is required")
     print("   Install with: pip install websocket-client")
     sys.exit(1)
 
@@ -58,6 +84,7 @@ class ScheduledJobResult:
     error: Optional[str] = None
     raw_response: Optional[str] = None
     task_id: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 @dataclass
@@ -78,6 +105,8 @@ class JobAddParams:
     agent: str          # Target agent (e.g., @writer)
     content: str        # Message content to send
     cron_expr: str       # 6-field Cron expression
+    session_id: str = "new"  # "new" -> client auto-generates UUID v4; or existing UUID to resume
+    project_dir: str = ""   # Project directory for execution context (optional, defaults to daemon's working directory)
 
 
 # ====== Core Client Class ======
@@ -118,7 +147,7 @@ class MindXSchedulerClient:
             self._connected = True
             return True
         except Exception as e:
-            print(f"❌ Connection failed: {e}")
+            print(f"Connection failed: {e}")
             return False
 
     def disconnect(self):
@@ -207,21 +236,49 @@ class MindXSchedulerClient:
         """
         Add a scheduled task.
 
+        The command sent to MindX Daemon uses the format:
+            @agent_name <session_id> <content> expr="<cron>" [dir="<project_dir>"]
+
+        Session ID handling (CLIENT-MANAGED):
+            - If session_id is "new" or empty, this CLIENT generates a UUID v4
+              and sends it to the Daemon. The Daemon does NOT create session IDs.
+            - If session_id is an existing UUID, it is used as-is to resume.
+
+        Project Directory:
+            - Specifies the working directory context for Agent execution
+            - Critical when TUI's project directory differs from Daemon's directory
+            - Optional: if omitted, Daemon uses its own working directory
+
         Args:
-            params: Task parameters (agent, content, cron_expr)
+            params: Task parameters (agent, content, cron_expr, session_id, project_dir)
 
         Returns:
-            Operation result containing task_id and other info
+            Operation result containing task_id and session_id
         """
         agent = params.agent if params.agent.startswith("@") else f"@{params.agent}"
-        args_str = f"{agent} {params.content} expr=\"{params.cron_expr}\""
+
+        # Client-managed session ID: generate UUID v4 when "new" or omitted
+        raw_session_id = params.session_id if params.session_id else "new"
+        if raw_session_id == "new":
+            resolved_session_id = str(uuid.uuid4())
+        else:
+            resolved_session_id = raw_session_id
+
+        # Build command with optional project_dir
+        dir_part = ""
+        if params.project_dir and params.project_dir.strip():
+            safe_dir = params.project_dir.strip().replace('"', '\\"')
+            dir_part = f" dir=\"{safe_dir}\""
+
+        args_str = f"{agent} {resolved_session_id} {params.content} expr=\"{params.cron_expr}\"{dir_part}"
 
         result_dict = self._send_command("job-add", args_str)
 
         result = ScheduledJobResult(
             success=result_dict["success"],
             command="job-add",
-            raw_response=result_dict.get("raw")
+            raw_response=result_dict.get("raw"),
+            session_id=resolved_session_id
         )
 
         if result.success:
@@ -293,7 +350,7 @@ class MindXSchedulerClient:
         Batch add multiple scheduled tasks.
 
         Args:
-            jobs: List of task parameters
+            jobs: List of task parameters (each may include session_id)
 
         Returns:
             List of results for each task operation
@@ -301,13 +358,14 @@ class MindXSchedulerClient:
         results = []
 
         for i, job_params in enumerate(jobs, 1):
-            print(f"\n[{i}/{len(jobs)}] Registering task: @{job_params.agent}")
+            sess_info = job_params.session_id if job_params.session_id != "new" else "auto-generate"
+            print(f"\n[{i}/{len(jobs)}] Registering task: @{job_params.agent} (session: {sess_info})")
 
             result = self.add_job(job_params)
             results.append(result)
 
             if result.success:
-                print(f"  ✅ Success: {result.task_id or 'N/A'}")
+                print(f"  OK: task={result.task_id or 'N/A'}  session={result.session_id}")
                 if result.data:
                     if isinstance(result.data, str):
                         for line in str(result.data).split("\n")[:5]:
@@ -316,7 +374,7 @@ class MindXSchedulerClient:
                     else:
                         print(f"     {result.data}")
             else:
-                print(f"  ❌ Failed: {result.error}")
+                print(f"  FAILED: {result.error}")
 
             if i < len(jobs):
                 time.sleep(0.5)
@@ -332,6 +390,10 @@ def cmd_add_job(args):
     parser.add_argument("--agent", required=True, help="Target agent (e.g., @writer)")
     parser.add_argument("--content", required=True, help="Message content to send")
     parser.add_argument("--cron", required=True, help="Cron expression (6 fields)")
+    parser.add_argument("--session-id", default="new",
+                        help="'new' to auto-generate UUID v4, or existing UUID to resume (default: new)")
+    parser.add_argument("--project-dir", default="",
+                        help="Project directory for execution context (optional, e.g., /Users/ray/workspaces/my-project)")
     parser.add_argument("--host", default=DEFAULT_GATEWAY_HOST, help="Gateway host address")
     parser.add_argument("--port", type=int, default=DEFAULT_GATEWAY_PORT, help="Gateway port")
 
@@ -340,7 +402,9 @@ def cmd_add_job(args):
     params = JobAddParams(
         agent=opts.agent,
         content=opts.content,
-        cron_expr=opts.cron
+        cron_expr=opts.cron,
+        session_id=opts.session_id,
+        project_dir=opts.project_dir
     )
 
     with MindXSchedulerClient(host=opts.host, port=opts.port) as client:
@@ -352,7 +416,7 @@ def cmd_add_job(args):
             print("=" * 60)
             return 0
         else:
-            print(f"\n❌ Error: {result.error}")
+            print(f"\nError: {result.error}")
             return 1
 
 
@@ -379,7 +443,7 @@ def cmd_list_jobs(args):
                 print("\n" + result.data)
             return 0
         else:
-            print(f"❌ Error: {result.error}")
+            print(f"\nError: {result.error}")
             return 1
 
 
@@ -388,7 +452,7 @@ def cmd_del_job(args):
     parser = argparse.ArgumentParser(description="Delete a scheduled task")
     parser.add_argument("--id", required=True, help="Task ID to delete")
     parser.add_argument("--host", default=DEFAULT_GATEWAY_HOST)
-    parser.add_argument("--port", type=int, DEFAULT=DEFAULT_GATEWAY_PORT)
+    parser.add_argument("--port", type=int, default=DEFAULT_GATEWAY_PORT)
 
     opts = parser.parse_args(args)
 
@@ -399,7 +463,7 @@ def cmd_del_job(args):
             print("\n" + result.data)
             return 0
         else:
-            print(f"\n❌ Error: {result.error}")
+            print(f"\nError: {result.error}")
             return 1
 
 
@@ -413,14 +477,30 @@ JSON file format example:
     {
         "agent": "@writer",
         "content": "Every Monday: Write a technical blog post",
-        "cron_expr": "0 0 9 * * 1"
+        "cron_expr": "0 0 9 * * 1",
+        "session_id": "new",
+        "project_dir": "/Users/ray/workspaces/my-blog"
     },
     {
         "agent": "@analyst",
         "content": "Every Friday: Analyze data and generate report",
-        "cron_expr": "0 0 16 * * 5"
+        "cron_expr": "0 0 16 * * 5",
+        "session_id": "550e8400-e29b-41d4-a716-446655440000",
+        "project_dir": "/Users/ray/workspaces/data-project"
     }
 ]
+
+Demon Protocol Format (sent to MindX Daemon):
+    @agent_name <session_id> <content> expr="<cron>" [dir="<project_dir>"]
+
+Session IDs are CLIENT-MANAGED:
+    - session_id="new" -> this CLIENT auto-generates a UUID v4 before sending
+    - session_id="<uuid>" -> resumes an existing interrupted session
+
+Project Directory:
+    - project_dir specifies the working directory for Agent execution
+    - Essential when TUI creates tasks in a different directory than Daemon's working dir
+    - Optional: if omitted, Daemon uses its default working directory
         """)
     parser.add_argument("--file", required=True, help="Path to JSON file")
     parser.add_argument("--host", default=DEFAULT_GATEWAY_HOST)
@@ -432,10 +512,10 @@ JSON file format example:
         with open(opts.file, 'r', encoding='utf-8') as f:
             jobs_data = json.load(f)
     except FileNotFoundError:
-        print(f"❌ File not found: {opts.file}")
+        print(f"File not found: {opts.file}")
         return 1
     except json.JSONDecodeError as e:
-        print(f"❌ JSON format error: {e}")
+        print(f"JSON format error: {e}")
         return 1
 
     jobs = []
@@ -443,11 +523,13 @@ JSON file format example:
         job = JobAddParams(
             agent=item.get("agent", ""),
             content=item.get("content", ""),
-            cron_expr=item.get("cron_expr", "")
+            cron_expr=item.get("cron_expr", ""),
+            session_id=item.get("session_id", "new"),
+            project_dir=item.get("project_dir", "")
         )
         jobs.append(job)
 
-    print(f"\n📋 Preparing to batch register {len(jobs)} tasks...")
+    print(f"\nPreparing to batch register {len(jobs)} tasks...")
     print("=" * 60)
 
     with MindXSchedulerClient(host=opts.host, port=opts.port) as client:
@@ -457,12 +539,12 @@ JSON file format example:
     fail_count = len(results) - success_count
 
     print("\n" + "=" * 60)
-    print(f"\n📊 Batch operation complete:")
-    print(f"   ✅ Success: {success_count}/{len(results)}")
-    print(f"   ❌ Failed: {fail_count}/{len(results)}")
+    print(f"\nBatch operation complete:")
+    print(f"   Success: {success_count}/{len(results)}")
+    print(f"   Failed: {fail_count}/{len(results)}")
 
     if fail_count > 0:
-        print("\n⚠️ Failed tasks:")
+        print("\nFailed tasks:")
         for i, r in enumerate(results, 1):
             if not r.success:
                 print(f"   {i}. {r.error}")
@@ -483,12 +565,12 @@ def cmd_test_connection(args):
         result = client.list_jobs()
 
         if result.success:
-            print("✅ Connection successful! Gateway is running")
+            print("OK: Connection successful! Gateway is running")
             data_str = result.data if isinstance(result.data, str) else json.dumps(result.data)
             print(f"\nCurrent registered tasks: {len(data_str) if data_str else 0}")
             return 0
         else:
-            print(f"❌ Connection failed: {result.error}")
+            print(f"Connection failed: {result.error}")
             return 1
 
 
@@ -507,8 +589,16 @@ Available Commands:
   test-conn    Test Gateway connection
 
 Examples:
-  # Add a task
+  # Add a task (new session)
   %(prog)s add-job --agent @writer --content "Daily reminder" --cron "0 0 9 * * *"
+
+  # Add a task with project directory
+  %(prog)s add-job --agent @writer --content "Project task" --cron "0 0 9 * * *" \\
+      --project-dir /Users/ray/workspaces/my-project
+
+  # Add a task (resume existing session)
+  %(prog)s add-job --agent @writer --content "Continue work" --cron "0 0 9 * * *" \\
+      --session-id 550e8400-e29b-41d4-a716-446655440000
 
   # List tasks
   %(prog)s list-jobs
@@ -519,6 +609,9 @@ Examples:
   # Test connection
   %(prog)s test-conn
 
+Demon Protocol: @agent_name <session_id> <content> expr="<cron>" [dir="<project_dir>"]
+Session IDs are CLIENT-MANAGED (this script generates UUID v4 when "new")
+Project Dir specifies execution context (optional, defaults to daemon's working directory)
 Protocol: JSON-RPC 2.0 over WebSocket
         """)
 
