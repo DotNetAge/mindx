@@ -30,13 +30,15 @@ def main():
 
     summaries = []
     for m in models:
-        if isinstance(m, dict):
-            summaries.append({
-                "name": m.get("name", ""),
-                "provider": m.get("provider", ""),
-                "description": m.get("description", ""),
-                "max_tokens": m.get("max_tokens", None),
-            })
+        if not isinstance(m, dict):
+            continue
+        if not m.get("enabled", True):
+            continue
+        summaries.append({
+            "name": m.get("name", ""),
+            "description": m.get("description", ""),
+            "max_tokens": m.get("max_tokens", None),
+        })
 
     yaml_helper.output_json(summaries)
 

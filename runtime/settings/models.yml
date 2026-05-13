@@ -18,6 +18,8 @@ models:
     top_k: 0
     temperature: 0
     repetition_penalty: 0
+    enabled: true
+    max_turns: 0
   - name: qwen3.6-plus
     description: Qwen3.6原生视觉语言系列Plus模型，展现出与当前顶尖前沿模型相媲美的卓越性能，模型效果相较3.5系列显著提升。模型在Agentic coding、前端编程、Vibe coding等代码能力、多模态万物识别、OCR、物体定位等能力上显著增强。
     base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
@@ -34,6 +36,8 @@ models:
     top_k: 0
     temperature: 0.7
     repetition_penalty: 0
+    enabled: true
+    max_turns: 0
   - name: qwen3.6-flash
     description: > 
       Qwen3.6原生视觉语言系列Flash模型，模型效果相较3.5-Flash显著提升。
@@ -53,6 +57,8 @@ models:
     top_k: 0
     temperature: 0.7
     repetition_penalty: 0
+    enabled: true
+    max_turns: 0
   - name: deepseek-v4-pro
     description: >
       旗舰级 MoE 大模型，总参1.6T、激活 49B，原生支持百万级超长上下文。
@@ -71,7 +77,9 @@ models:
     top_p: 0
     top_k: 0
     temperature: 0
-    repetition_penalty: 0  
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
   - name: deepseek-v4-flash
     description: DeepSeek官方V4系列最新模型，速度更快但推理能力下降，具备当今世界上最强推理能力的模型。
     base_url: https://api.deepseek.com/v1/chat/completions
@@ -87,7 +95,9 @@ models:
     top_p: 0
     top_k: 0
     temperature: 0
-    repetition_penalty: 0  
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
   - name: deepseek-v3.2
     description: DeepSeekv3.2非深度求索官方提供而是通过阿里云百练提供服务。
     base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
@@ -104,6 +114,8 @@ models:
     top_k: 0
     temperature: 0
     repetition_penalty: 0
+    enabled: true
+    max_turns: 0
   - name: kimi-k2.6
     description: Kimi最新最智能的模型，具备更强更稳的长程代码编写能力，指令遵循和自我纠错能力显著提升。同时支持文本、图片与视频输入、思考与非思考模式、对话与 Agent 任务。
     base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
@@ -120,6 +132,8 @@ models:
     top_k: 0
     temperature: 0
     repetition_penalty: 0
+    enabled: true
+    max_turns: 0
   - name: glm-5.1
     description: >
       GLM-5.1是智谱AI推出的面向长程任务（Long Horizon Task）设计的模型，总参数744B，
@@ -139,6 +153,8 @@ models:
     top_k: 0
     temperature: 0
     repetition_penalty: 0
+    enabled: true
+    max_turns: 0
   - name: kimi-k2.6
     description: >
       kimi-k2.6是Kimi最新最智能的模型，具备更强更稳的长程代码编写能力，指令遵循和自我纠错能力显著提升，
@@ -157,6 +173,8 @@ models:
     top_k: 0
     temperature: 0
     repetition_penalty: 0
+    enabled: true
+    max_turns: 0
   - name: MiniMax/MiniMax-M2.7
     description: M2.7 能够自行构建复杂 Agent Harness，并基于 Agent Teams、复杂 Skills、Tool Search tool 等能力，完成高度复杂的生产力任务。
     base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
@@ -173,3 +191,5 @@ models:
     top_k: 0
     temperature: 0
     repetition_penalty: 0
+    enabled: true
+    max_turns: 0
