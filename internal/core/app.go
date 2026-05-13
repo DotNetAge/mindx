@@ -52,8 +52,11 @@ func DefaultApp() (*App, error) {
 	userPrompt := "\n- User preferences directory: " + settings.UserPreferences()
 	userPrompt += "\n- Skills directory: " + settings.SkillsDir()
 	userPrompt += "\n- Agents directory: " + settings.AgentsDir()
-
 	core.SYSTEM_INFO_USERS = userPrompt
+	core.SYSTEM_ADDON_SECTIONS = []string{
+		BuildDelegationGuidance(),
+	}
+
 	logger.Info("loading agents", "dir", settings.AgentsDir())
 	agents, err := goreact.LoadAgentsFrom(settings.AgentsDir())
 	if err != nil {
@@ -186,6 +189,7 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 		goreact.WithConfig(masterAgent),
 		goreact.WithModel(masterModel),
 		goreact.WithLogger(a.logger),
+		// goreact.WithSkills("find-experts"),
 	}
 
 	if a.rules != nil {
@@ -324,4 +328,15 @@ func (a *App) IsModelAvailable(name ...string) bool {
 		return false
 	}
 	return llm.Content != ""
+}
+
+// BuildDelegationGuidance returns the MindX-specific delegation strategy addon.
+// Injected via SYSTEM_ADDON_SECTIONS — bridges P0 Scope Gate ("delegate") to concrete actions.
+// GoReact's DefaultBehavioralRules only says "delegate" — this tells the LLM HOW.
+func BuildDelegationGuidance() string {
+	return `## Delegation
+When a task is outside your expertise, choose one path:
+
+- **Know who handles it** → call **Delegate** tool directly (agent_name + task), then **CollectResults**
+- **Don't know who** → load **find-experts** skill first (discovers experts, then delegates via same workflow)`
 }

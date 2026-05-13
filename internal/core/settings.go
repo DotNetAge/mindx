@@ -1,10 +1,11 @@
 package core
 
-import "path/filepath"
+import (
+	"os"
+	"path/filepath"
+)
 
 type Settings struct {
-	// UserPreferences string
-	// Path        string
 	Test        bool
 	MasterAgent string
 }
@@ -13,8 +14,11 @@ func (s *Settings) UserPreferences() string {
 	if s.Test {
 		return "./tmp/mindx-test"
 	}
-	path, _ := filepath.Abs("~/.mindx")
-	return path
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "."
+	}
+	return filepath.Join(home, ".mindx")
 }
 func (s *Settings) SkillsDir() string {
 	return filepath.Join(s.UserPreferences(), "skills")
