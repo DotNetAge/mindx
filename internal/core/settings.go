@@ -55,3 +55,7 @@ func (s *Settings) SessionsDir() string {
 func (s *Settings) SchedulesDir() string {
 	return filepath.Join(s.DataDir(), "schedules")
 }
+
+func (s *Settings) VenvDir() string {
+	return filepath.Join(s.UserPreferences(), ".venv")
+}

@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -62,6 +63,7 @@ type modelItem struct {
 	Name        string
 	Description string
 	BaseURL     string
+	CredRef     string
 }
 
 type firstRunModel struct {
@@ -82,12 +84,26 @@ type firstRunModel struct {
 	modelsPath string
 	agentsDir  string
 	mindxConfig *MindxConfig
+
+	daemonChoice    bool
+	daemonSubmitted bool
+
+	pythonChoice    bool
+	pythonSubmitted bool
+	pythonDetected  bool
+	pythonVersion   string
+	pythonInfo      PythonConfig
 }
 
 type FirstRunResult struct {
 	SelectedModel string
+	CredRef       string
 	APIKey        string
 	Err           error
+
+	DaemonSetup  bool
+	PythonSetup  bool
+	PythonInfo   PythonConfig
 }
 
 func runFirstRunWizard(modelsPath, agentsDir string, mindxConfig *MindxConfig) FirstRunResult {
@@ -106,14 +122,19 @@ func runFirstRunWizard(modelsPath, agentsDir string, mindxConfig *MindxConfig) F
 	ti.SetWidth(wizardWidth - 8)
 	ti.Focus()
 
+	pythonInfo := DetectPython()
+
 	m := &firstRunModel{
-		step:        0,
-		models:      modelList,
-		maxVisible:  8,
-		apiKeyInput: ti,
-		modelsPath:  modelsPath,
-		agentsDir:   agentsDir,
-		mindxConfig: mindxConfig,
+		step:           0,
+		models:         modelList,
+		maxVisible:     8,
+		apiKeyInput:    ti,
+		modelsPath:     modelsPath,
+		agentsDir:      agentsDir,
+		mindxConfig:    mindxConfig,
+		pythonDetected: pythonInfo.Detected,
+		pythonVersion:  pythonInfo.Version,
+		pythonInfo:     pythonInfo,
 	}
 
 	p := tea.NewProgram(m, tea.WithoutSignals())
@@ -129,7 +150,11 @@ func runFirstRunWizard(modelsPath, agentsDir string, mindxConfig *MindxConfig) F
 
 	return FirstRunResult{
 		SelectedModel: fm.selectedModel.Name,
+		CredRef:       fm.selectedModel.CredRef,
 		APIKey:        fm.apiKeyInput.Value(),
+		DaemonSetup:   fm.daemonChoice,
+		PythonSetup:   fm.pythonChoice,
+		PythonInfo:    fm.pythonInfo,
 	}
 }
 
@@ -158,6 +183,7 @@ func parseModelsForWizard(path string) ([]modelItem, error) {
 			Name:        m.Name,
 			Description: desc,
 			BaseURL:     m.BaseURL,
+			CredRef:     m.APIKey,
 		})
 	}
 	return items, nil
@@ -177,6 +203,10 @@ func (m *firstRunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateModelSelect(msg)
 	case 1:
 		return m.updateAPIKeyInput(msg)
+	case 2:
+		return m.updateDaemonCheck(msg)
+	case 3:
+		return m.updatePythonCheck(msg)
 	}
 	return m, nil
 }
@@ -226,14 +256,131 @@ func (m *firstRunModel) updateAPIKeyInput(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.apiKeyInput.Value() == "" {
 				return m, nil
 			}
-			m.done = true
-			return m, tea.Quit
+			m.step = 2
+			return m, nil
 		}
 	}
 
 	var cmd tea.Cmd
 	m.apiKeyInput, cmd = m.apiKeyInput.Update(msg)
 	return m, cmd
+}
+
+func (m *firstRunModel) updateDaemonCheck(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "q", "ctrl+c", "esc":
+			m.quitting = true
+			return m, tea.Quit
+		case "left", "right":
+			m.daemonChoice = !m.daemonChoice
+		case "enter":
+			m.daemonSubmitted = true
+			m.step = 3
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+func (m *firstRunModel) updatePythonCheck(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "q", "ctrl+c", "esc":
+			m.quitting = true
+			return m, tea.Quit
+		case "left", "right":
+			if m.pythonDetected {
+				m.pythonChoice = !m.pythonChoice
+			}
+		case "enter":
+			m.pythonSubmitted = true
+			m.done = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m *firstRunModel) renderDaemonCheck() string {
+	var b strings.Builder
+
+	b.WriteString(wizardTitleStyle.Render("🧠 MindX 首次配置"))
+	b.WriteString("\n\n")
+
+	if DaemonInstalled(filepath.Dir(m.mindxConfig.filePath)) {
+		b.WriteString(cursorStyle.Render("✅ Daemon 服务已注册为自启动"))
+		b.WriteString("\n\n")
+		b.WriteString(wizardHelpStyle.Render("按 Enter 继续"))
+		return wizardBorderStyle.Render(b.String())
+	}
+
+	b.WriteString(wizardLabelStyle.Render("⚙️  Daemon 后台服务"))
+	b.WriteString("\n\n")
+	b.WriteString("MindX 可以注册为开机自启动服务，以便接收定时任务\n和 WebSocket 连接。")
+	b.WriteString("\n\n")
+
+	label := "是否注册为开机自启动服务?"
+	b.WriteString(infoKeyStyle.Render(label))
+	b.WriteString("\n\n")
+
+	if m.daemonChoice {
+		b.WriteString(selectedStyle.Render("  [Y]es"))
+		b.WriteString("\n")
+		b.WriteString(normalStyle.Render("  [N]o"))
+	} else {
+		b.WriteString(normalStyle.Render("  [Y]es"))
+		b.WriteString("\n")
+		b.WriteString(selectedStyle.Render("  [N]o"))
+	}
+	b.WriteString("\n\n")
+
+	b.WriteString(wizardHelpStyle.Render("← → 切换  Enter 确认  Esc 退出"))
+
+	return wizardBorderStyle.Render(b.String())
+}
+
+func (m *firstRunModel) renderPythonCheck() string {
+	var b strings.Builder
+
+	b.WriteString(wizardTitleStyle.Render("🧠 MindX 首次配置"))
+	b.WriteString("\n\n")
+
+	b.WriteString(wizardLabelStyle.Render("🐍 Python 环境"))
+	b.WriteString("\n\n")
+
+	if m.pythonDetected {
+		b.WriteString(cursorStyle.Render(fmt.Sprintf("✅ 已检测到 Python %s", m.pythonVersion)))
+		b.WriteString("\n\n")
+		b.WriteString("建议创建虚拟环境以安装技能所需的依赖。")
+
+		label := "\n是否创建虚拟环境?"
+		b.WriteString(infoKeyStyle.Render(label))
+		b.WriteString("\n\n")
+
+		if m.pythonChoice {
+			b.WriteString(selectedStyle.Render("  [Y]es"))
+			b.WriteString("\n")
+			b.WriteString(normalStyle.Render("  [N]o"))
+		} else {
+			b.WriteString(normalStyle.Render("  [Y]es"))
+			b.WriteString("\n")
+			b.WriteString(selectedStyle.Render("  [N]o"))
+		}
+	} else {
+		b.WriteString("⚠️  未检测到 Python 环境")
+		b.WriteString("\n\n")
+		b.WriteString("部分技能需要 Python 支持。你可以稍后手动安装 Python\n并运行 'mindx setup' 完成配置。")
+		b.WriteString("\n\n")
+		b.WriteString(infoKeyStyle.Render("按 Enter 跳过"))
+	}
+
+	b.WriteString("\n\n")
+	b.WriteString(wizardHelpStyle.Render("← → 切换  Enter 确认  Esc 退出"))
+
+	return wizardBorderStyle.Render(b.String())
 }
 
 func (m *firstRunModel) renderModelSelect() string {
@@ -305,13 +452,23 @@ func (m *firstRunModel) View() tea.View {
 		return tea.NewView(m.renderModelSelect())
 	case 1:
 		return tea.NewView(m.renderAPIKeyInput())
+	case 2:
+		return tea.NewView(m.renderDaemonCheck())
+	case 3:
+		return tea.NewView(m.renderPythonCheck())
 	}
 	return tea.NewView("")
 }
 
-func ApplyFirstRunResult(result FirstRunResult, modelsPath, agentsDir string, mindxConfig *MindxConfig) error {
-	if err := updateModelAPIKey(modelsPath, result.SelectedModel, result.APIKey); err != nil {
-		return fmt.Errorf("更新模型 API Key 失败: %w", err)
+func ApplyFirstRunResult(result FirstRunResult, credStore CredentialStore, modelsPath, agentsDir string, mindxConfig *MindxConfig) error {
+	// Store the actual API key in credential store (not in YAML)
+	if err := credStore.Set(result.CredRef, result.APIKey); err != nil {
+		return fmt.Errorf("存储 API Key 失败: %w", err)
+	}
+
+	// Restore models.yml to use the credential reference name (not the real key)
+	if err := updateModelCredRef(modelsPath, result.SelectedModel, result.CredRef); err != nil {
+		return fmt.Errorf("更新模型配置失败: %w", err)
 	}
 
 	if err := updateAllAgentsModel(agentsDir, result.SelectedModel); err != nil {
@@ -320,6 +477,38 @@ func ApplyFirstRunResult(result FirstRunResult, modelsPath, agentsDir string, mi
 
 	mindxConfig.DefaultModel = result.SelectedModel
 	mindxConfig.Initialized = true
+
+	workspaceDir := filepath.Dir(mindxConfig.filePath)
+
+	// Setup daemon if user requested
+	if result.DaemonSetup {
+		fmt.Print("⚙️  注册 Daemon 自启动服务...\n")
+		if err := SetupDaemon(workspaceDir); err != nil {
+			mindxConfig.Daemon.Installed = false
+			mindxConfig.Daemon.AutoStart = false
+			fmt.Printf("⚠️  Daemon 注册失败 (可稍后手动配置): %v\n", err)
+		} else {
+			mindxConfig.Daemon.Installed = true
+			mindxConfig.Daemon.AutoStart = true
+			fmt.Println("✅ Daemon 自启动服务已注册")
+		}
+	}
+
+	// Setup Python virtual environment if user requested
+	if result.PythonSetup && result.PythonInfo.Detected {
+		fmt.Print("🐍 创建 Python 虚拟环境...\n")
+		pyInfo, err := SetupPython(workspaceDir)
+		if err != nil {
+			fmt.Printf("⚠️  虚拟环境创建失败 (可稍后手动配置): %v\n", err)
+			mindxConfig.Python = result.PythonInfo
+		} else {
+			mindxConfig.Python = pyInfo
+			fmt.Printf("✅ Python 虚拟环境已创建: %s\n", pyInfo.VenvPath)
+		}
+	} else {
+		mindxConfig.Python = result.PythonInfo
+	}
+
 	if err := mindxConfig.Save(); err != nil {
 		return fmt.Errorf("保存 mindx.json 失败: %w", err)
 	}
@@ -327,7 +516,7 @@ func ApplyFirstRunResult(result FirstRunResult, modelsPath, agentsDir string, mi
 	return nil
 }
 
-func updateModelAPIKey(modelsPath, modelName, apiKey string) error {
+func updateModelCredRef(modelsPath, modelName, credRef string) error {
 	registry, err := goreact.LoadModels(modelsPath)
 	if err != nil {
 		return err
@@ -338,7 +527,7 @@ func updateModelAPIKey(modelsPath, modelName, apiKey string) error {
 		return fmt.Errorf("模型 %q 未在配置中找到", modelName)
 	}
 
-	cfg.APIKey = apiKey
+	cfg.APIKey = credRef
 
 	type modelsWrapper struct {
 		Models []core.ModelConfig `yaml:"models"`

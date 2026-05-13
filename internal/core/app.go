@@ -16,12 +16,13 @@ import (
 )
 
 type App struct {
-	settings *Settings
-	logger   logging.Logger
-	agents   *goreact.AgentRegistry
-	models   *goreact.ModelRegistry
-	master   *goreact.Agent
-	masterMu sync.RWMutex
+	settings  *Settings
+	credStore CredentialStore
+	logger    logging.Logger
+	agents    *goreact.AgentRegistry
+	models    *goreact.ModelRegistry
+	master    *goreact.Agent
+	masterMu  sync.RWMutex
 
 	rules  core.RuleRegistry
 	sessDB *session.FileSessionStore
@@ -52,6 +53,7 @@ func DefaultApp() (*App, error) {
 	userPrompt := "\n- User preferences directory: " + settings.UserPreferences()
 	userPrompt += "\n- Skills directory: " + settings.SkillsDir()
 	userPrompt += "\n- Agents directory: " + settings.AgentsDir()
+	userPrompt += "\n- Python virtual environment: " + settings.VenvDir()
 	core.SYSTEM_INFO_USERS = userPrompt
 	core.SYSTEM_ADDON_SECTIONS = []string{
 		BuildDelegationGuidance(),
@@ -88,8 +90,11 @@ func DefaultApp() (*App, error) {
 		logger.Warn("Failed to init session store", "error", err)
 	}
 
+	credStore := NewCredentialStore(settings.UserPreferences())
+
 	return &App{
 		settings:   settings,
+		credStore:  credStore,
 		logger:     logger,
 		agents:     agents,
 		models:     models,
@@ -117,6 +122,10 @@ func (a *App) Agents() *goreact.AgentRegistry {
 
 func (a *App) Models() *goreact.ModelRegistry {
 	return a.models
+}
+
+func (a *App) resolveAPIKey(ref string) string {
+	return ResolveAPIKey(a.credStore, ref)
 }
 
 func (a *App) SetLogger(l logging.Logger) {
@@ -184,12 +193,14 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 		return nil, fmt.Errorf("model %q not found for agent %q", masterAgent.Model, masterAgent.Name)
 	}
 
+	resolvedModel := *masterModel
+	resolvedModel.APIKey = a.resolveAPIKey(masterModel.APIKey)
+
 	opts := []goreact.AgentOption{
 		goreact.WithSkillDir(a.settings.SkillsDir()),
 		goreact.WithConfig(masterAgent),
-		goreact.WithModel(masterModel),
+		goreact.WithModel(&resolvedModel),
 		goreact.WithLogger(a.logger),
-		// goreact.WithSkills("find-experts"),
 	}
 
 	if a.rules != nil {
@@ -250,10 +261,13 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 		return nil, fmt.Errorf("model %q not found for agent %q", cfg.Model, name)
 	}
 
+	resolvedModel := *model
+	resolvedModel.APIKey = a.resolveAPIKey(model.APIKey)
+
 	opts := []goreact.AgentOption{
 		goreact.WithSkillDir(a.settings.SkillsDir()),
 		goreact.WithConfig(cfg),
-		goreact.WithModel(model),
+		goreact.WithModel(&resolvedModel),
 		goreact.WithLogger(a.logger),
 	}
 
@@ -311,13 +325,13 @@ func (a *App) IsModelAvailable(name ...string) bool {
 	}
 
 	m := a.Models().Get(n)
-	if m == nil {
+	if m == nil || !m.Enabled {
 		return false
 	}
 
 	client := gochat.Client().Config(
 		gochat.WithBaseURL(m.BaseURL),
-		gochat.WithAPIKey(m.APIKey),
+		gochat.WithAPIKey(a.resolveAPIKey(m.APIKey)),
 		gochat.WithModel(m.Name),
 		gochat.WithAuthToken(m.AuthToken),
 		gochat.WithTimeout(10*time.Second),
