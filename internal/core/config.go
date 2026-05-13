@@ -8,9 +8,17 @@ import (
 )
 
 type DaemonConfig struct {
-	Enabled bool   `json:"enabled"`
-	Port    int    `json:"port,omitempty"`
-	Path    string `json:"path,omitempty"`
+	Enabled   bool   `json:"enabled"`
+	Port      int    `json:"port,omitempty"`
+	Path      string `json:"path,omitempty"`
+	AutoStart bool   `json:"autostart,omitempty"`
+	Installed bool   `json:"installed,omitempty"`
+}
+
+type PythonConfig struct {
+	Detected bool   `json:"detected"`
+	Version  string `json:"version,omitempty"`
+	VenvPath string `json:"venv_path,omitempty"`
 }
 
 type MindxConfig struct {
@@ -20,6 +28,7 @@ type MindxConfig struct {
 	LastSessionID string       `json:"last_session_id,omitempty"`
 	DefaultModel  string       `json:"default_model,omitempty"`
 	Daemon        DaemonConfig `json:"daemon"`
+	Python        PythonConfig `json:"python"`
 
 	filePath string `json:"-"`
 }

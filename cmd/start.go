@@ -37,12 +37,8 @@ func init() {
 func runStart(cmd *cobra.Command, args []string) error {
 	workspaceDir := defaultWorkspaceDir()
 
-	if !core.WorkspaceExists(workspaceDir) {
-		fmt.Println("🔧 首次运行，正在初始化工作目录...")
-		if err := core.ExtractWorkspace(RuntimeFS, workspaceDir); err != nil {
-			return fmt.Errorf("初始化工作目录失败: %w", err)
-		}
-		fmt.Println("✅ 工作目录初始化完成:", workspaceDir)
+	if err := core.ExtractWorkspace(RuntimeFS, workspaceDir); err != nil {
+		return fmt.Errorf("初始化工作目录失败: %w", err)
 	}
 	os.Setenv("MINDX_WORKSPACE", workspaceDir)
 

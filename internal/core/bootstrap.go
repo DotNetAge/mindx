@@ -8,12 +8,8 @@ import (
 )
 
 func Bootstrap(embeddedFS fs.FS, workspaceDir string) (*MindxConfig, error) {
-	if !WorkspaceExists(workspaceDir) {
-		fmt.Println("🔧 首次运行，正在初始化工作目录...")
-		if err := ExtractWorkspace(embeddedFS, workspaceDir); err != nil {
-			return nil, fmt.Errorf("初始化工作目录失败: %w", err)
-		}
-		fmt.Println("✅ 工作目录初始化完成:", workspaceDir)
+	if err := ExtractWorkspace(embeddedFS, workspaceDir); err != nil {
+		return nil, fmt.Errorf("初始化工作目录失败: %w", err)
 	}
 
 	os.Setenv("MINDX_WORKSPACE", workspaceDir)
@@ -35,7 +31,8 @@ func Bootstrap(embeddedFS fs.FS, workspaceDir string) (*MindxConfig, error) {
 			return nil, fmt.Errorf("配置向导异常: %w", result.Err)
 		}
 
-		if err := ApplyFirstRunResult(result, modelsPath, agentsDir, cfg); err != nil {
+		credStore := NewCredentialStore(workspaceDir)
+		if err := ApplyFirstRunResult(result, credStore, modelsPath, agentsDir, cfg); err != nil {
 			return nil, fmt.Errorf("应用首次配置失败: %w", err)
 		}
 
