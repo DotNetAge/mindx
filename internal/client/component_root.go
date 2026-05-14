@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -22,10 +23,12 @@ import (
 var currentRenderWidth int
 
 type rootModel struct {
-	contentPanel *ContentPanel
-	statusBar    StatusBar
-	inputBox     InputBox
-	choicesPanel ChoicesPanel
+	contentPanel  *ContentPanel
+	header        *Header
+	notifications *NotificationBar
+	statusBar     StatusBar
+	inputBox      InputBox
+	choicesPanel  ChoicesPanel
 
 	app *core.App
 
@@ -42,6 +45,10 @@ type rootModel struct {
 
 	executing     bool
 	currentCancel context.CancelFunc
+
+	searchModel *SearchModel
+	lastWidth   int
+	lastHeight  int
 }
 
 func NewProgram(mindxConfig *core.MindxConfig) *tea.Program {
@@ -50,15 +57,18 @@ func NewProgram(mindxConfig *core.MindxConfig) *tea.Program {
 	redirectOutputForTUI()
 
 	return tea.NewProgram(&rootModel{
-		contentPanel: NewContentPanel(),
-		statusBar:    NewStatusBar(),
-		inputBox:     NewInputBox(registry),
-		choicesPanel: NewChoicesPanel(),
-		sessionReg:   newSessionRegistry(),
-		outputCh:     make(chan tea.Msg, 256),
-		registry:     registry,
-		chatManager:  GetChatSessionManager(),
-		mindxConfig:  mindxConfig,
+		contentPanel:  NewContentPanel(),
+		header:        NewHeader(),
+		notifications: NewNotificationBar(),
+		statusBar:     NewStatusBar(),
+		inputBox:      NewInputBox(registry),
+		choicesPanel:  NewChoicesPanel(),
+		searchModel:   NewSearchModel(),
+		sessionReg:    newSessionRegistry(),
+		outputCh:      make(chan tea.Msg, 256),
+		registry:      registry,
+		chatManager:   GetChatSessionManager(),
+		mindxConfig:   mindxConfig,
 	})
 }
 
@@ -79,15 +89,28 @@ func (h discardHandler) WithAttrs([]slog.Attr) slog.Handler            { return 
 func (h discardHandler) WithGroup(string) slog.Handler                 { return h }
 
 func (m *rootModel) Init() tea.Cmd {
+	// 初始化搜索模型回调
+	m.searchModel.SetCallbacks(
+		func(query string) int { return m.contentPanel.SetSearchQuery(query) },
+		func(direction string) {
+			if direction == "next" {
+				m.contentPanel.SearchNext()
+			} else {
+				m.contentPanel.SearchPrev()
+			}
+		},
+		func() (current, total int) { return m.contentPanel.SearchResult() },
+	)
+
 	var err error
-	m.app, err = core.DefaultApp()
+	m.app, err = core.DefaultApp(m.mindxConfig)
 	if err != nil {
 		return func() tea.Msg { return err }
 	}
 
 	// 注入 ZapLogger：日志输出到文件，不污染 TUI 屏幕
 	zapLogger := logging.DefaultZapLogger(&logging.ZapConfig{
-		Filename:   "logs/mindx-tui.log",
+		Filename:   filepath.Join(logging.ResolveLogDir(), "mindx-tui.log"),
 		MaxSize:    100, // MB
 		MaxBackups: 7,
 		MaxAge:     30, // days
@@ -109,6 +132,7 @@ func (m *rootModel) Init() tea.Cmd {
 		}
 	})
 
+	m.header.SetConnected(true)
 	m.statusBar.SetConnected(true)
 	m.showWelcome()
 
@@ -120,6 +144,8 @@ func (m *rootModel) Init() tea.Cmd {
 		m.currentAgent = agents[0].name
 		m.currentModel = agents[0].model
 		m.statusBar.SetAgent(m.currentAgent, m.currentModel)
+		m.header.SetAgent(m.currentAgent, m.currentModel)
+		m.header.SetAgent(m.currentAgent, m.currentModel)
 		m.contentPanel.UpdateWelcomeAgent(m.currentAgent)
 	}
 
@@ -132,6 +158,7 @@ func (m *rootModel) Init() tea.Cmd {
 			}
 		}
 		m.statusBar.SetAgent(m.currentAgent, m.currentModel)
+		m.header.SetAgent(m.currentAgent, m.currentModel)
 	}
 
 	return m.loadOrInitSession()
@@ -222,6 +249,7 @@ func (m *rootModel) loadOrInitSession() tea.Cmd {
 				m.currentAgent = session.AgentName
 				m.currentSessionID = session.SessionID
 				m.statusBar.SetAgent(m.currentAgent, m.currentModel)
+				m.header.SetAgent(m.currentAgent, m.currentModel)
 				m.loadExistingSessionMeta(session.AgentName, session.SessionID)
 				return sessionLoadedMsg{agentName: session.AgentName, sessionID: session.SessionID}
 			}
@@ -269,17 +297,33 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		currentRenderWidth = msg.Width
+		m.lastWidth = msg.Width
+		m.lastHeight = msg.Height
+
+		m.header.SetWidth(msg.Width)
+		headerHeight := m.header.Height()
+
+		searchHeight := 0
+		if m.searchModel != nil && m.searchModel.IsActive() {
+			searchHeight = 3
+		}
 
 		const bottomReservedLines = 13
 
+		contentHeight := msg.Height - bottomReservedLines - headerHeight - searchHeight
+		if contentHeight < 1 {
+			contentHeight = msg.Height / 2
+		}
 		if msg.Height > bottomReservedLines {
-			m.contentPanel.SetSize(msg.Width, msg.Height-bottomReservedLines)
+			m.contentPanel.SetSize(msg.Width, contentHeight)
 		} else {
 			m.contentPanel.SetSize(msg.Width, msg.Height/2)
 		}
 
+		m.searchModel.SetWidth(msg.Width)
 		m.statusBar.SetWidth(msg.Width)
 		m.inputBox.SetWidth(msg.Width)
+		m.notifications.SetWidth(msg.Width)
 		return m, nil
 
 	case tea.MouseMsg:
@@ -306,6 +350,27 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		// 搜索模式拦截所有键盘事件
+		if m.searchModel.IsActive() {
+			wasActive := m.searchModel.IsActive()
+			sm, cmd := m.searchModel.Update(msg)
+			m.searchModel = sm
+			// 搜索关闭时恢复内容区域高度
+			if wasActive && !m.searchModel.IsActive() && m.lastWidth > 0 && m.lastHeight > 0 {
+				headerHeight := m.header.Height()
+				const bottomReservedLines = 13
+				ch := m.lastHeight - bottomReservedLines - headerHeight
+				if ch < 1 {
+					ch = m.lastHeight / 2
+				}
+				if m.lastHeight > bottomReservedLines {
+					m.contentPanel.SetSize(m.lastWidth, ch)
+				} else {
+					m.contentPanel.SetSize(m.lastWidth, m.lastHeight/2)
+				}
+			}
+			return m, cmd
+		}
 		switch msg.String() {
 		case "up", "down", "pgup", "pgdown", "home", "end":
 			if !m.inputBox.IsFocused() || m.executing {
@@ -340,6 +405,7 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case sessionLoadedMsg:
+		m.header.DismissLogo()
 		return m, nil
 
 	case sessionInitRequiredMsg:
@@ -360,12 +426,33 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleGlobalError(msg.Error())
 		return m, nil
 
+	case headerToggleMsg:
+		m.header.SetCollapsed(!m.header.collapsed)
+		return m, nil
+
+	case collapseToggleMsg:
+		m.contentPanel.ToggleActionCollapse(msg.answerIndex, msg.actionIndex)
+		return m, nil
+
+	case notificationTimeoutMsgInternal:
+		m.notifications.HandleTick()
+		return m, nil
+
 	case exitMsg:
 		if m.currentCancel != nil {
 			m.currentCancel()
 		}
 		m.saveSessionOnExit()
 		return m, tea.Quit
+	}
+
+	// 路由未处理的消息到搜索组件（如光标闪烁 Tick）
+	if m.searchModel.IsActive() {
+		sm, cmd := m.searchModel.Update(msg)
+		m.searchModel = sm
+		if cmd != nil {
+			return m, cmd
+		}
 	}
 
 	return m, nil
@@ -376,10 +463,19 @@ func (m *rootModel) View() tea.View {
 		return tea.NewView("Loading...")
 	}
 
+	notifView := m.notifications.View()
+
 	parts := []string{
-		m.contentPanel.View(),
-		m.statusBar.View(),
+		m.header.View(),
 	}
+	if m.searchModel.IsActive() {
+		parts = append(parts, m.searchModel.View())
+	}
+	parts = append(parts, m.contentPanel.View())
+	if notifView != "" {
+		parts = append(parts, notifView)
+	}
+	parts = append(parts, m.statusBar.View())
 
 	if m.choicesPanel.IsVisible() {
 		parts = append(parts, m.choicesPanel.View())
@@ -430,12 +526,61 @@ func (m *rootModel) handleKeyPress(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if isKey {
+		switch kp.String() {
+		case "ctrl+o":
+			m.contentPanel.ToggleTranscript()
+			m.statusBar.SetModeLabel(m.modeLabelForView())
+			return m, nil
+		case "ctrl+f":
+				var searchCmd tea.Cmd
+				if m.searchModel.IsActive() {
+					m.searchModel.Deactivate()
+				} else {
+					searchCmd = m.searchModel.Activate()
+				}
+				// éæ°è®¡ç®å¸å±ä»¥éåºæç´¢æ é«åº¦
+				if m.lastWidth > 0 && m.lastHeight > 0 {
+					m.header.SetWidth(m.lastWidth)
+					headerHeight := m.header.Height()
+					searchHeight := 0
+					if m.searchModel.IsActive() {
+						searchHeight = 3
+					}
+					const bottomReservedLines = 13
+					contentHeight := m.lastHeight - bottomReservedLines - headerHeight - searchHeight
+					if contentHeight < 1 {
+						contentHeight = m.lastHeight / 2
+					}
+					if m.lastHeight > bottomReservedLines {
+						m.contentPanel.SetSize(m.lastWidth, contentHeight)
+					} else {
+						m.contentPanel.SetSize(m.lastWidth, m.lastHeight/2)
+					}
+				}
+				return m, searchCmd
+		}
+
 		ib, cmd := m.inputBox.HandleKey(kp)
 		m.inputBox = ib
 		return m, cmd
 	}
 
 	return m, nil
+}
+
+// modeLabelForView returns the current view mode label for the status bar.
+func (m *rootModel) modeLabelForView() string {
+	if m.contentPanel == nil {
+		return ""
+	}
+	switch m.contentPanel.viewMode {
+	case ViewModeTranscript:
+		return "Transcript"
+	case ViewModeFullscreen:
+		return "Fullscreen"
+	default:
+		return "Prompt"
+	}
 }
 
 func (m *rootModel) handleSend(msg sendMsg) (tea.Model, tea.Cmd) {
@@ -453,6 +598,7 @@ func (m *rootModel) handleSend(msg sendMsg) (tea.Model, tea.Cmd) {
 					m.currentAgent = targetAgent
 					m.currentModel = a.model
 					m.statusBar.SetAgent(m.currentAgent, m.currentModel)
+					m.header.SetAgent(m.currentAgent, m.currentModel)
 					break
 				}
 			}
@@ -586,6 +732,7 @@ func (m *rootModel) handleSessionUpdate(msg agentAnswerUpdateMsg) (tea.Model, te
 	}
 
 	m.routeToAnswer(answer, msg.contentType, msg.content)
+	answer.MarkUpdated()
 
 	spinnerCmd := answer.Update(msg)
 	m.contentPanel.refreshOnUpdate()
@@ -609,6 +756,7 @@ func (m *rootModel) handleSessionDone(msg agentAnswerDoneMsg) (tea.Model, tea.Cm
 func (m *rootModel) handleAgentSwitch(msg agentSwitchMsg) (tea.Model, tea.Cmd) {
 	m.currentAgent = msg.agentName
 	m.statusBar.SetAgent(m.currentAgent, m.currentModel)
+	m.header.SetAgent(m.currentAgent, m.currentModel)
 
 	m.currentSessionID = newSessionID(m.currentAgent)
 	if err := m.chatManager.Update(m.currentAgent, m.currentSessionID); err != nil {

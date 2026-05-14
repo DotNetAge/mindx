@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -33,7 +34,15 @@ type Daemon struct {
 }
 
 func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
-	logger := logging.DefaultConsoleLogger()
+	logDir := logging.ResolveLogDir()
+	logger := logging.DefaultZapLogger(&logging.ZapConfig{
+		Filename:   filepath.Join(logDir, "mindx-daemon.log"),
+		MaxSize:    100,
+		MaxBackups: 7,
+		MaxAge:     30,
+		Compress:   true,
+		Console:    true,
+	})
 
 	schedulerDB, _ := scheduler.NewFileSchedulerStore(app.Settings().SchedulesDir())
 

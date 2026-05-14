@@ -8,10 +8,10 @@ import (
 func TestThinkingStyleHasDarkBackground(t *testing.T) {
 	testContent := "This is a thinking message"
 
-	rendered := thinkingStyle.Render(testContent)
+	rendered := ThinkingStyle.Render(testContent)
 
 	if rendered == "" {
-		t.Error("thinkingStyle.Render() returned empty string")
+		t.Error("ThinkingStyle.Render() returned empty string")
 	}
 
 	if !strings.Contains(rendered, testContent) {
@@ -25,9 +25,9 @@ func TestThinkingStyleHasDarkBackground(t *testing.T) {
 
 func TestThinkingStyleConfiguration(t *testing.T) {
 	testContent := "test"
-	rendered := thinkingStyle.Render(testContent)
+	rendered := ThinkingStyle.Render(testContent)
 
 	if rendered == "" {
-		t.Error("thinkingStyle.Render() returned empty string, style may not be configured")
+		t.Error("ThinkingStyle.Render() returned empty string, style may not be configured")
 	}
 }

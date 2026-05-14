@@ -35,7 +35,7 @@ func init() {
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
-	workspaceDir := defaultWorkspaceDir()
+	workspaceDir := core.DefaultUserPrefsDir()
 
 	if err := core.ExtractWorkspace(RuntimeFS, workspaceDir); err != nil {
 		return fmt.Errorf("初始化工作目录失败: %w", err)
