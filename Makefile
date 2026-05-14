@@ -20,7 +20,7 @@
 #
 # =============================================================================
 
-.PHONY: build install run run-daemon test bench lint clean docs tidy help \
+.PHONY: build build-current setup-cross clear install run run-daemon test bench lint clean docs tidy help \
         dev dev-tui dev-daemon uninstall format check vet \
         release release-all cross-build docker-build docker-push \
         generate proto swagger ci cd security audit deps-update \
@@ -58,7 +58,7 @@ LDFLAGS        ?= -s -w \
 GOFLAGS        ?= -trimpath -ldflags "$(LDFLAGS)"
 
 # 目录配置
-BUILD_DIR      ?= ./build
+BUILD_DIR      ?= ./dist
 DIST_DIR       ?= ./dist
 COVERAGE_DIR   ?= ./coverage
 BENCHMARK_DIR  ?= .benchmarks
@@ -78,15 +78,48 @@ BOLD           := \033[1m
 # 主要构建目标
 # =============================================================================
 
-## build: 编译当前平台的二进制文件
+## build: 编译 macOS、Linux、Windows 三平台二进制至 dist/
 build: pre-build
-	@echo "$(GREEN)➡ Building $(BINARY_NAME) v$(VERSION)...$(NC)"
+	@mkdir -p $(BUILD_DIR)
+	@echo "$(GREEN)➡ Building darwin/amd64...$(NC)"
+	GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
+	@echo "$(GREEN)  ✅ darwin/amd64$(NC)"
+	@echo "$(GREEN)➡ Building linux/amd64...$(NC)"
+	@if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then \
+		CGO_ENABLED=1 CC=x86_64-linux-musl-gcc GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 . && \
+		echo "$(GREEN)  ✅ linux/amd64$(NC)"; \
+	else \
+		echo "$(YELLOW)  ⚠  linux/amd64 skipped — install: brew install FiloSottile/musl-cross/musl-cross$(NC)"; \
+	fi
+	@echo "$(GREEN)➡ Building windows/amd64...$(NC)"
+	@if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then \
+		CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe . && \
+		echo "$(GREEN)  ✅ windows/amd64$(NC)"; \
+	else \
+		echo "$(YELLOW)  ⚠  windows/amd64 skipped — install: brew install mingw-w64$(NC)"; \
+	fi
+	@echo "$(GREEN)✅ Build complete!$(NC)"
+	@ls -lh $(BUILD_DIR)/
+
+## build-current: 仅编译当前平台（供 run/install 使用）
+build-current: pre-build
+	@echo "$(GREEN)➡ Building $(BINARY_NAME) v$(VERSION) for $(shell $(GO) env GOOS)/$(shell $(GO) env GOARCH)...$(NC)"
 	@mkdir -p $(BUILD_DIR)
 	$(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
 	@echo "$(GREEN)✅ Build complete!$(NC)"
 	@ls -lh $(BUILD_DIR)/$(BINARY_NAME)
-	@echo "$(BLUE)📊 Binary info:$(NC)"
-	@file $(BUILD_DIR)/$(BINARY_NAME)
+
+## setup-cross: 安装交叉编译工具链（用于 Linux/Windows 目标）
+setup-cross:
+	@echo "$(GREEN)➡ Installing cross-compilation toolchains...$(NC)"
+	@if command -v brew >/dev/null 2>&1; then \
+		brew install FiloSottile/musl-cross/musl-cross mingw-w64; \
+	else \
+		echo "$(YELLOW)⚠  Homebrew not found. Install manually:$(NC)"; \
+		echo "  Linux:   brew install FiloSottile/musl-cross/musl-cross"; \
+		echo "  Windows: brew install mingw-w64"; \
+	fi
+	@echo "$(GREEN)✅ Cross-compilation toolchains installed! Run 'make build' for all platforms.$(NC)"
 
 ## build-debug: 编译调试版本（带符号信息）
 build-debug:
@@ -96,7 +129,7 @@ build-debug:
 	@echo "$(GREEN)✅ Debug build complete: $(BUILD_DIR)/$(BINARY_NAME)-debug$(NC)"
 
 ## install: 编译并安装到系统路径（需要 sudo 权限）
-install: build
+install: build-current
 	@echo "$(GREEN)➡ Installing $(BINARY_NAME)...$(NC)"
 	@if command -v sudo >/dev/null 2>&1; then \
 		sudo cp $(BUILD_DIR)/$(BINARY_NAME) /usr/local/bin/$(BINARY_NAME) && \
@@ -119,7 +152,7 @@ uninstall:
 # =============================================================================
 
 ## run: 编译并启动 TUI（默认模式）
-run: build
+run: build-current
 	@echo "$(YELLOW)🚀 Starting TUI (Terminal UI)...$(NC)"
 	@echo "$(CYAN)💡 Tips:$(NC)"
 	@echo "  • Enter messages and press Enter to send"
@@ -129,7 +162,7 @@ run: build
 	./$(BUILD_DIR)/$(BINARY_NAME)
 
 ## run-daemon: 编译并启动 Daemon 服务
-run-daemon: build
+run-daemon: build-current
 	@echo "$(YELLOW)🔧 Starting Daemon service...$(NC)"
 	@echo "$(CYAN)💡 Service info:$(NC)"
 	@echo "  • WebSocket: ws://localhost:1314/ws"
@@ -138,7 +171,7 @@ run-daemon: build
 	./$(BUILD_DIR)/$(BINARY_NAME) start
 
 ## run-verbose: 以详细日志模式运行 TUI
-run-verbose: build
+run-verbose: build-current
 	@echo "$(YELLOW)🚀 Starting TUI (verbose mode)...$(NC)"
 	MINDX_LOG_LEVEL=debug ./$(BUILD_DIR)/$(BINARY_NAME)
 
@@ -409,36 +442,48 @@ cross-build: build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin
 build-linux-amd64:
 	@echo "$(GREEN)➡ Building for linux/amd64...$(NC)"
 	@mkdir -p $(DIST_DIR)
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-amd64 .
-	@echo "$(GREEN)✅ linux/amd64 done$(NC)"
+	@if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then \
+		CGO_ENABLED=1 CC=x86_64-linux-musl-gcc GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-amd64 . && \
+		echo "$(GREEN)✅ linux/amd64 done$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠  linux/amd64 skipped — install: brew install FiloSottile/musl-cross/musl-cross$(NC)"; \
+	fi
 
 ## build-linux-arm64: Linux ARM64
 build-linux-arm64:
 	@echo "$(GREEN)➡ Building for linux/arm64...$(NC)"
 	@mkdir -p $(DIST_DIR)
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-arm64 .
-	@echo "$(GREEN)✅ linux/arm64 done$(NC)"
+	@if command -v aarch64-linux-musl-gcc >/dev/null 2>&1; then \
+		CGO_ENABLED=1 CC=aarch64-linux-musl-gcc GOOS=linux GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-arm64 . && \
+		echo "$(GREEN)✅ linux/arm64 done$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠  linux/arm64 skipped — install: brew install FiloSottile/musl-cross/musl-cross$(NC)"; \
+	fi
 
 ## build-darwin-amd64: macOS Intel
 build-darwin-amd64:
 	@echo "$(GREEN)➡ Building for darwin/amd64...$(NC)"
 	@mkdir -p $(DIST_DIR)
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 .
+	GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 .
 	@echo "$(GREEN)✅ darwin/amd64 done$(NC)"
 
 ## build-darwin-arm64: macOS Apple Silicon (M1/M2)
 build-darwin-arm64:
 	@echo "$(GREEN)➡ Building for darwin/arm64 (Apple Silicon)...$(NC)"
 	@mkdir -p $(DIST_DIR)
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 .
+	GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 .
 	@echo "$(GREEN)✅ darwin/arm64 done$(NC)"
 
 ## build-windows-amd64: Windows x86_64
 build-windows-amd64:
 	@echo "$(GREEN)➡ Building for windows/amd64...$(NC)"
 	@mkdir -p $(DIST_DIR)
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe .
-	@echo "$(GREEN)✅ windows/amd64 done$(NC)"
+	@if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then \
+		CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe . && \
+		echo "$(GREEN)✅ windows/amd64 done$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠  windows/amd64 skipped — install: brew install mingw-w64$(NC)"; \
+	fi
 
 # =============================================================================
 # 发布目标
@@ -587,8 +632,10 @@ help:
 	@echo "$(GREEN)╚══════════════════════════════════════════════╝$(NC)"
 	@echo ""
 	@echo "$(YELLOW)📦 Build Targets:$(NC)"
-	@echo "  $(GREEN)build$(NC)           Compile binary for current platform"
+	@echo "  $(GREEN)build$(NC)           Cross-compile for macOS/Linux/Windows to dist/"
+	@echo "  $(GREEN)build-current$(NC)   Compile only for current platform"
 	@echo "  $(GREEN)build-debug$(NC)     Compile debug binary (with symbols)"
+	@echo "  $(GREEN)setup-cross$(NC)     Install cross-compilation toolchains (brew)"
 	@echo "  $(GREEN)install$(NC)         Install to system PATH (requires sudo)"
 	@echo "  $(GREEN)uninstall$(NC)       Remove from system PATH"
 	@echo ""
@@ -667,6 +714,7 @@ help:
 	@echo ""
 	@echo "$(YELLOW)🧹 Utility Targets:$(NC)"
 	@echo "  $(GREEN)clean$(NC)            Remove all build artifacts"
+	@echo "  $(GREEN)clear$(NC)            ⚠ Delete dist/, tmp/, and entire ~/.mindx workspace"
 	@echo ""
 	@echo "$(CYAN)Examples:$(NC)"
 	@echo "  make build && make run                    # Build and run TUI"
@@ -703,6 +751,18 @@ clean-all: clean
 	rm -rf $(DOCS_DIR)
 	@echo "$(GREEN)✅ Deep clean complete!$(NC)"
 
+## clear: 清理构建产物、临时文件与 mindx 工作区（危险！会删除 ~/.mindx）
+clear:
+	@echo "$(RED)☢️  WARNING: This will delete entire ~/.mindx workspace!$(NC)"
+	@echo "$(YELLOW)  Includes: all agents, settings, sessions, logs, memory$(NC)"
+	@read -p "Type 'yes' to confirm: " reply; \
+	if [ "$$reply" = "yes" ]; then \
+		rm -rf $(BUILD_DIR) ./tmp ~/.mindx; \
+		echo "$(GREEN)✅ Clear complete! dist/, tmp/, ~/.mindx removed.$(NC)"; \
+	else \
+		echo "$(RED)❌ Aborted.$(NC)"; \
+	fi
+
 # =============================================================================
 # 内部目标（辅助功能）
 # =============================================================================
@@ -713,7 +773,7 @@ pre-build:
 	@$(GO) version >/dev/null 2>&1 || (echo "$(RED)❌ Error: Go version check failed$(NC)" && exit 1)
 	@echo "$(GREEN)✅ Pre-build checks passed!$(NC)"
 
-post-build: build
+post-build: build-current
 	@echo "$(GREEN)📊 Post-build summary:$(NC)"
 	@ls -lh $(BUILD_DIR)/$(BINARY_NAME)
 	@du -sh $(BUILD_DIR)/$(BINARY_NAME)

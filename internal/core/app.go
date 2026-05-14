@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/DotNetAge/gochat"
 	"github.com/DotNetAge/goreact"
 	"github.com/DotNetAge/goreact/core"
+	goragcore "github.com/DotNetAge/gorag/core"
 	"github.com/DotNetAge/mindx/pkg/logging"
+	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/session"
 	"github.com/joho/godotenv"
 )
@@ -30,9 +33,11 @@ type App struct {
 	agentCache         map[string]*goreact.Agent
 	agentMu            sync.RWMutex
 	currentSessionMeta *core.SessionInfo // Changed from session.SessionMeta to core.SessionInfo (framework-level)
+
+	embedder goragcore.Embedder
 }
 
-func DefaultApp() (*App, error) {
+func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	logger := logging.DefaultConsoleLogger()
 
 	err := godotenv.Load()
@@ -92,6 +97,17 @@ func DefaultApp() (*App, error) {
 
 	credStore := NewCredentialStore(settings.UserPreferences())
 
+	// Create embedder if configured for semantic memory support
+	var emb goragcore.Embedder
+	if mindxConfig != nil && mindxConfig.HasEmbedder() {
+		modelPath := mindxConfig.EmbedderModelPath(settings.UserPreferences())
+		var embErr error
+		emb, embErr = memory.NewEmbedderFromConfig(modelPath)
+		if embErr != nil {
+			logger.Warn("Failed to create embedder, memory disabled: %v", embErr)
+		}
+	}
+
 	return &App{
 		settings:   settings,
 		credStore:  credStore,
@@ -101,6 +117,7 @@ func DefaultApp() (*App, error) {
 		rules:      rules,
 		sessDB:     sessDB,
 		agentCache: make(map[string]*goreact.Agent),
+		embedder:   emb,
 	}, nil
 }
 
@@ -228,11 +245,28 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 		opts = append(opts, goreact.WithSessionBaseDir(sessionBaseDir))
 	}
 
+	// Create per-agent memory if embedder is available
+	if a.embedder != nil {
+		memConfig := memory.MemoryConfig{
+			MemoryType: core.MemoryTypeLongTerm,
+			AgentName:  masterAgent.Name,
+			MemoryDir:  filepath.Join(a.settings.UserPreferences(), "memory"),
+			Embedder:   a.embedder,
+		}
+		mem, memErr := memory.NewRAGMemoryFromConfig(memConfig)
+		if memErr != nil {
+			a.logger.Warn("Failed to create memory for agent %q: %v", masterAgent.Name, memErr)
+		} else {
+			opts = append(opts, goreact.WithMemory(mem))
+		}
+	}
+
 	m, err := goreact.NewAgent(opts...)
 	if err != nil {
 		return nil, err
 	}
 	a.master = m
+	a.syncProjectMemory(m, a.settings.MasterAgent)
 	return a.master, nil
 }
 
@@ -244,6 +278,7 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 	a.agentMu.RLock()
 	if cached, ok := a.agentCache[name]; ok {
 		a.agentMu.RUnlock()
+		a.syncProjectMemory(cached, name)
 		return cached, nil
 	}
 	a.agentMu.RUnlock()
@@ -295,6 +330,22 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 		opts = append(opts, goreact.WithSessionBaseDir(sessionBaseDir))
 	}
 
+	// Create per-agent memory if embedder is available
+	if a.embedder != nil {
+		memConfig := memory.MemoryConfig{
+			MemoryType: core.MemoryTypeLongTerm,
+			AgentName:  cfg.Name,
+			MemoryDir:  filepath.Join(a.settings.UserPreferences(), "memory"),
+			Embedder:   a.embedder,
+		}
+		mem, memErr := memory.NewRAGMemoryFromConfig(memConfig)
+		if memErr != nil {
+			a.logger.Warn("Failed to create memory for agent %q: %v", cfg.Name, memErr)
+		} else {
+			opts = append(opts, goreact.WithMemory(mem))
+		}
+	}
+
 	agent, err := goreact.NewAgent(opts...)
 	if err != nil {
 		return nil, err
@@ -303,7 +354,46 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 	a.agentMu.Lock()
 	a.agentCache[name] = agent
 	a.agentMu.Unlock()
+	a.syncProjectMemory(agent, name)
 	return agent, nil
+}
+
+// syncProjectMemory triggers incremental project file indexing for the given agent.
+// It only runs when a session with a ProjectDir is active.
+// The sync is non-blocking for performance; errors are logged.
+func (a *App) syncProjectMemory(agent *goreact.Agent, agentName string) {
+	if a.currentSessionMeta == nil || a.currentSessionMeta.GetProjectDir() == "" {
+		return
+	}
+	mem := agent.Memory()
+	if mem == nil {
+		return
+	}
+	ragMem, ok := mem.(*memory.RAGMemory)
+	if !ok {
+		return
+	}
+
+	projectDir := a.currentSessionMeta.GetProjectDir()
+	cacheDir := filepath.Join(a.settings.UserPreferences(), "memory", agentName, "project")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result := ragMem.SyncProjectDir(ctx, projectDir, cacheDir)
+	if result.Err != nil {
+		a.logger.Warn("project sync failed", "agent", agentName, "error", result.Err)
+		return
+	}
+	if result.Indexed > 0 || result.Updated > 0 || result.Removed > 0 {
+		a.logger.Info("project sync",
+			"agent", agentName,
+			"indexed", result.Indexed,
+			"updated", result.Updated,
+			"skipped", result.Skipped,
+			"removed", result.Removed,
+		)
+	}
 }
 
 func (a *App) IsModelAvailable(name ...string) bool {

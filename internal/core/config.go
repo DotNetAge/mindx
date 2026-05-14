@@ -27,10 +27,26 @@ type MindxConfig struct {
 	LastAgent     string       `json:"last_agent,omitempty"`
 	LastSessionID string       `json:"last_session_id,omitempty"`
 	DefaultModel  string       `json:"default_model,omitempty"`
+	EmbedderModel string       `json:"embedder_model,omitempty"`
 	Daemon        DaemonConfig `json:"daemon"`
 	Python        PythonConfig `json:"python"`
 
 	filePath string `json:"-"`
+}
+
+// EmbedderModelPath 返回 Embedder ONNX 模型文件的完整路径。
+// 模型文件约定存放在 <workspaceDir>/data/models/<EmbedderModel>。
+// 如果未配置 EmbedderModel 则返回空字符串。
+func (c *MindxConfig) EmbedderModelPath(workspaceDir string) string {
+	if c.EmbedderModel == "" {
+		return ""
+	}
+	return filepath.Join(workspaceDir, "data", "models", c.EmbedderModel)
+}
+
+// HasEmbedder 报告是否已配置 Embedder 模型（Memory 可用）。
+func (c *MindxConfig) HasEmbedder() bool {
+	return c.EmbedderModel != ""
 }
 
 func DefaultMindxConfig(workspaceDir string) *MindxConfig {

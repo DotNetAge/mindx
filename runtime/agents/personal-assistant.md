@@ -15,6 +15,7 @@ skills:
   - pdf
   - changelog-generator
   - find-experts
+  - find-skills
 ---
 
 ## Identity

@@ -12,7 +12,8 @@ type Server struct {
 }
 
 func NewServer(addr, wsPath string) (*Server, error) {
-	app, err := core.DefaultApp()
+	cfg, _ := core.LoadMindxConfig(core.DefaultUserPrefsDir())
+	app, err := core.DefaultApp(cfg)
 	if err != nil {
 		return nil, err
 	}

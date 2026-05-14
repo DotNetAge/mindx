@@ -3,12 +3,20 @@ package memory
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/DotNetAge/gorag"
 	goragcore "github.com/DotNetAge/gorag/core"
+	"github.com/DotNetAge/gorag/embedder"
+	"github.com/DotNetAge/gorag/logging"
 	querypkg "github.com/DotNetAge/gorag/query"
+	"github.com/DotNetAge/gorag/store/doc/bleve"
+	"github.com/DotNetAge/gorag/store/vector/govector"
 	"github.com/DotNetAge/goreact/core"
 )
 
@@ -23,18 +31,76 @@ var _ core.Memory = (*RAGMemory)(nil)
 //   - MemoryRecord.Content -> Chunk.Content body
 //   - MemoryRecord.Type/Tags/Title -> Chunk.Content headers
 //   - Retrieve query -> SemanticQuery through HybridIndexer
+//
+// Storage layout (determined by MemoryType at construction):
+//
+//	MemoryTypeLongTerm -> <MemoryDir>/<AgentName>/{vectors,fulltexts,graphs}/
+//	MemoryTypeSession  -> <SessionDir>/memory/{vectors,fulltexts,graphs}/
 type RAGMemory struct {
-	indexer  *gorag.HybridIndexer
-	embedder goragcore.Embedder
+	indexer    *gorag.HybridIndexer
+	embedder   goragcore.Embedder
+	memoryType core.MemoryType
+	logger     logging.Logger
 }
 
 // RAGMemoryOption configures RAGMemory creation.
 type RAGMemoryOption func(*RAGMemory)
 
-// NewRAGMemory creates a new RAGMemory backed by a HybridIndexer.
+// MemoryConfig configures a RAGMemory instance for a specific agent and memory type.
+// It determines storage paths and provides the dependencies needed for the HybridIndexer.
+type MemoryConfig struct {
+	// MemoryType determines storage layout:
+	//   MemoryTypeLongTerm (default) -> <MemoryDir>/<AgentName>/
+	//   MemoryTypeSession            -> <SessionDir>/memory/
+	MemoryType core.MemoryType
+
+	// AgentName is used as the data filename and collection name.
+	// Required for both memory types.
+	AgentName string
+
+	// MemoryDir is the base memory directory for LongTerm storage.
+	// Typically ~/.mindx/memory/. Required for MemoryTypeLongTerm.
+	MemoryDir string
+
+	// SessionDir is the session sandbox directory for Session storage.
+	// Required for MemoryTypeSession.
+	SessionDir string
+
+	// Logger for the HybridIndexer. Optional; defaults to a no-op logger.
+	Logger logging.Logger
+
+	// Embedder is required for semantic vector search.
+	Embedder goragcore.Embedder
+}
+
+// dataDir resolves the RAG storage root directory based on MemoryType.
+func (c MemoryConfig) dataDir() string {
+	switch c.MemoryType {
+	case core.MemoryTypeSession:
+		return filepath.Join(c.SessionDir, "memory")
+	default:
+		return filepath.Join(c.MemoryDir, c.AgentName)
+	}
+}
+
+// NewEmbedderFromConfig 根据 Embedder 模型文件路径创建 ChineseClipEmbedder。
+// 如果 modelPath 为空，返回 nil（Memory 不可用）。
+func NewEmbedderFromConfig(modelPath string) (goragcore.Embedder, error) {
+	if modelPath == "" {
+		return nil, nil
+	}
+	emb, err := embedder.NewChineseClipEmbedder(embedder.WithModelFile(modelPath))
+	if err != nil {
+		return nil, fmt.Errorf("memory: create embedder: %w", err)
+	}
+	return emb, nil
+}
+
+// NewRAGMemory creates a new RAGMemory backed by a pre-built HybridIndexer.
 func NewRAGMemory(indexer *gorag.HybridIndexer, opts ...RAGMemoryOption) *RAGMemory {
 	m := &RAGMemory{
-		indexer: indexer,
+		indexer:    indexer,
+		memoryType: core.MemoryTypeLongTerm,
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -42,11 +108,115 @@ func NewRAGMemory(indexer *gorag.HybridIndexer, opts ...RAGMemoryOption) *RAGMem
 	return m
 }
 
+// NewRAGMemoryFromConfig creates a new RAGMemory with full store initialization.
+// It creates vector, fulltext, and graph stores under the resolved data directory
+// (determined by MemoryConfig.MemoryType), then constructs a HybridIndexer with all stores.
+//
+// LongTerm example:
+//
+//	mem, err := NewRAGMemoryFromConfig(MemoryConfig{
+//	    MemoryType: core.MemoryTypeLongTerm,
+//	    AgentName:  "code-reviewer",
+//	    MemoryDir:  filepath.Join(os.Getenv("HOME"), ".mindx", "memory"),
+//	    Embedder:   embedder,
+//	})
+//
+// Session example:
+//
+//	mem, err := NewRAGMemoryFromConfig(MemoryConfig{
+//	    MemoryType: core.MemoryTypeSession,
+//	    AgentName:  "code-reviewer",
+//	    SessionDir: sessionInfo.SessionDir,
+//	    Embedder:   embedder,
+//	})
+func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
+	if cfg.Embedder == nil {
+		return nil, fmt.Errorf("memory: embedder is required")
+	}
+	if cfg.AgentName == "" {
+		return nil, fmt.Errorf("memory: agent name is required")
+	}
+	if cfg.MemoryDir == "" && cfg.MemoryType != core.MemoryTypeSession {
+		return nil, fmt.Errorf("memory: memory dir is required for %s memory type", memoryTypeLabel(cfg.MemoryType))
+	}
+	if cfg.SessionDir == "" && cfg.MemoryType == core.MemoryTypeSession {
+		return nil, fmt.Errorf("memory: session dir is required for session memory type")
+	}
+
+	dataDir := cfg.dataDir()
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return nil, fmt.Errorf("memory: create data directory %s: %w", dataDir, err)
+	}
+
+	// --- Vector store ---
+	vecDir := filepath.Join(dataDir, "vectors")
+	if mkErr := os.MkdirAll(vecDir, 0755); mkErr != nil {
+		return nil, fmt.Errorf("memory: create vector directory %s: %w", vecDir, mkErr)
+	}
+	vs, err := govector.NewStore(
+		govector.WithCollection(cfg.AgentName),
+		govector.WithDimension(cfg.Embedder.Dim()),
+		govector.WithDBPath(filepath.Join(vecDir, cfg.AgentName+".db")),
+		govector.WithHNSW(true),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("memory: create vector store: %w", err)
+	}
+
+	// --- Fulltext (bleve) store ---
+	ftDir := filepath.Join(dataDir, "fulltexts")
+	if mkErr := os.MkdirAll(ftDir, 0755); mkErr != nil {
+		return nil, fmt.Errorf("memory: create fulltext directory %s: %w", ftDir, mkErr)
+	}
+	fts, err := bleve.NewBleveStore(filepath.Join(ftDir, cfg.AgentName+".bleve"))
+	if err != nil {
+		return nil, fmt.Errorf("memory: create fulltext store: %w", err)
+	}
+
+	// Logger: if not explicitly provided, auto-create a per-instance file logger
+	// at ~/.mindx/logs/memory/<AgentName>.log
+	logger := cfg.Logger
+	if logger == nil {
+		logger = newMemoryFileLogger(cfg.AgentName)
+	}
+	if logger == nil {
+		logger = logging.DefaultNoopLogger()
+	}
+
+	// --- HybridIndexer ---
+	// Both memory types use semantic + fulltext only (no graph store).
+	indexer, err := gorag.NewHybridIndexer(
+		logger, vs, nil, fts, nil, cfg.Embedder,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("memory: create hybrid indexer: %w", err)
+	}
+
+	return &RAGMemory{
+		indexer:    indexer,
+		embedder:   cfg.Embedder,
+		memoryType: cfg.MemoryType,
+		logger:     logger,
+	}, nil
+}
+
+// WithMemoryType sets the memory type for a RAGMemory created via NewRAGMemory.
+func WithMemoryType(t core.MemoryType) RAGMemoryOption {
+	return func(m *RAGMemory) {
+		m.memoryType = t
+	}
+}
+
 // WithEmbedder sets the embedder for creating semantic queries during retrieval.
 func WithEmbedder(embedder goragcore.Embedder) RAGMemoryOption {
 	return func(m *RAGMemory) {
 		m.embedder = embedder
 	}
+}
+
+// MemoryType returns the memory type of this RAGMemory instance.
+func (m *RAGMemory) MemoryType() core.MemoryType {
+	return m.memoryType
 }
 
 // Retrieve searches memory for records relevant to the query.
@@ -168,6 +338,74 @@ func (m *RAGMemory) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// SyncProjectDir incrementally indexes files from projectDir into this memory store.
+// cacheDir is where the file mtime cache is persisted (e.g., ~/.mindx/memory/<AgentName>/project/).
+// Returns a detailed sync result with per-file error information.
+func (m *RAGMemory) SyncProjectDir(ctx context.Context, projectDir, cacheDir string) *ProjectSyncResult {
+	pi := NewProjectIndexer(m.indexer, cacheDir, m.logger)
+	return pi.Sync(ctx, projectDir)
+}
+
+// Close shuts down the underlying HybridIndexer and releases resources,
+// including the per-instance log file if one was created.
+func (m *RAGMemory) Close(ctx context.Context) error {
+	var errs []error
+
+	if m.indexer != nil {
+		if err := m.indexer.Close(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if closer, ok := m.logger.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("memory close: %v", errs)
+	}
+	return nil
+}
+
+// newMemoryFileLogger creates a per-instance file logger at
+// ~/.mindx/logs/memory/<AgentName>.log. Returns nil if the mindx
+// home directory cannot be determined or the log file cannot be created.
+func newMemoryFileLogger(agentName string) logging.Logger {
+	if agentName == "" {
+		return nil
+	}
+
+	mindxHome := os.Getenv("MINDX_WORKSPACE")
+	if mindxHome == "" {
+		if runtime.GOOS == "windows" {
+			if appData := os.Getenv("APPDATA"); appData != "" {
+				mindxHome = filepath.Join(appData, "mindx")
+			}
+		}
+		if mindxHome == "" {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return nil
+			}
+			mindxHome = filepath.Join(homeDir, ".mindx")
+		}
+	}
+
+	logDir := filepath.Join(mindxHome, "logs", "memory")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil
+	}
+
+	logFile := filepath.Join(logDir, agentName+".log")
+	logger, err := logging.DefaultFileLogger(logFile)
+	if err != nil {
+		return nil
+	}
+	return logger
+}
+
 func (m *RAGMemory) buildQuery(query string) goragcore.Query {
 	if m.embedder != nil {
 		return querypkg.NewSemanticQuery(query, m.embedder)
@@ -269,5 +507,4 @@ func parseMemoryType(s string) core.MemoryType {
 		return core.MemoryTypeLongTerm
 	}
 }
-
 

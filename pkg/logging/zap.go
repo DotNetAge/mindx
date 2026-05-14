@@ -3,11 +3,36 @@ package logging
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+// ResolveLogDir returns the absolute path to the MindX log directory.
+//   - macOS/Linux: ~/.mindx/logs
+//   - Windows:     %APPDATA%\mindx\logs
+// It respects the MINDX_WORKSPACE environment variable if set.
+func ResolveLogDir() string {
+	base := os.Getenv("MINDX_WORKSPACE")
+	if base == "" {
+		if runtime.GOOS == "windows" {
+			if appData := os.Getenv("APPDATA"); appData != "" {
+				base = filepath.Join(appData, "mindx")
+			}
+		}
+		if base == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "logs"
+			}
+			base = filepath.Join(home, ".mindx")
+		}
+	}
+	return filepath.Join(base, "logs")
+}
 
 // zapLogger is an implementation of Logger that uses uber-go/zap for high-performance logging.
 type zapLogger struct {

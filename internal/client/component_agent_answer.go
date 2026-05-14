@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -13,9 +14,9 @@ import (
 // 内部结构（从上到下）: UserQuestion → Thinks → Results → ActionLog
 // 所有内容均为 append-only。
 type AgentAnswer struct {
-	SessionID   string
-	AgentName   string
-	isThinking  bool
+	SessionID  string
+	AgentName  string
+	isThinking bool
 
 	userQuestion    string
 	thinking        strings.Builder
@@ -23,6 +24,11 @@ type AgentAnswer struct {
 	thinkingSpinner spinner.Model
 	results         []answerResult
 	actionLog       []actionStep
+
+	// 时间戳
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Duration  time.Duration
 
 	markdownFn func(string) string
 }
@@ -40,6 +46,7 @@ type actionStep struct {
 	ProgressText    string
 	ResultText      string
 	spinner         spinner.Model
+	collapsed       bool // 是否折叠详细输出
 }
 
 type actionStatus int
@@ -53,9 +60,12 @@ const (
 // NewAgentAnswer 创建一个新的 AgentAnswer。
 func NewAgentAnswer(sessionID, agentName string) *AgentAnswer {
 	sp := spinner.New()
+	now := time.Now()
 	return &AgentAnswer{
 		SessionID:       sessionID,
 		AgentName:       agentName,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 		thinkingSpinner: sp,
 	}
 }
@@ -122,6 +132,14 @@ func (a *AgentAnswer) SetThinkingDone(content string) {
 	a.isThinking = false
 }
 
+// MarkUpdated 更新时间戳和耗时。
+func (a *AgentAnswer) MarkUpdated() {
+	a.UpdatedAt = time.Now()
+	if !a.CreatedAt.IsZero() {
+		a.Duration = a.UpdatedAt.Sub(a.CreatedAt)
+	}
+}
+
 // AppendResult 追加一条结果。第一个 result 被视为用户问题。
 func (a *AgentAnswer) AppendResult(content string) {
 	if a.userQuestion == "" {
@@ -183,6 +201,16 @@ func (a *AgentAnswer) MarkActionFailed(errorText string) {
 	}
 }
 
+// ToggleActionCollapse 切换指定动作步骤的折叠状态。
+// 返回切换后的状态。如果索引无效返回 false。
+func (a *AgentAnswer) ToggleActionCollapse(index int) bool {
+	if index < 0 || index >= len(a.actionLog) {
+		return false
+	}
+	a.actionLog[index].collapsed = !a.actionLog[index].collapsed
+	return a.actionLog[index].collapsed
+}
+
 // SetActionProgress 更新当前执行中步骤的进度文本。
 func (a *AgentAnswer) SetActionProgress(text string) {
 	for i := len(a.actionLog) - 1; i >= 0; i-- {
@@ -203,7 +231,7 @@ func (a *AgentAnswer) View() string {
 		if a.markdownFn != nil {
 			content = a.markdownFn(content)
 		}
-		b.WriteString(userQuestionStyle.Render(content))
+		b.WriteString(UserQuestionStyle.Render(content))
 		b.WriteString("\n")
 	}
 
@@ -213,20 +241,20 @@ func (a *AgentAnswer) View() string {
 		if a.markdownFn != nil {
 			formatted = a.markdownFn(formatted)
 		}
-		b.WriteString(thinkingStyle.Render(formatted))
+		b.WriteString(ThinkingStyle.Render(formatted))
 		b.WriteString("\n")
 	} else if a.isThinking {
 		var thinkBuilder strings.Builder
 		thinkBuilder.WriteString(a.thinkingSpinner.View())
 		thinkBuilder.WriteString(" ")
-		thinkBuilder.WriteString(thinkingStyle.Render("深度思考中"))
+		thinkBuilder.WriteString(ThinkingStyle.Render("深度思考中"))
 		thinking := a.thinking.String()
 		if thinking != "" {
 			thinkBuilder.WriteString("\n")
 			if a.markdownFn != nil {
 				thinking = a.markdownFn(thinking)
 			}
-			thinkBuilder.WriteString(thinkingStyle.Render(thinking))
+			thinkBuilder.WriteString(ThinkingStyle.Render(thinking))
 		}
 		b.WriteString(thinkBuilder.String())
 		b.WriteString("\n")
@@ -237,7 +265,7 @@ func (a *AgentAnswer) View() string {
 		content := r.Content
 		switch r.Role {
 		case "error":
-			b.WriteString(errorStyle.Render(content))
+			b.WriteString(ErrorStyle.Render(content))
 		case "result":
 			if a.markdownFn != nil {
 				content = a.markdownFn(content)
@@ -267,24 +295,24 @@ func (s actionStep) View(agentName string) string {
 		s.spinner.View()
 		icon = s.spinner.View()
 	case actionDone:
-		icon = actionDoneStyle.Render("✓")
+		icon = ActionDoneStyle.Render("✓")
 	case actionFailed:
-		icon = actionFailedStyle.Render("✗")
+		icon = ActionFailedStyle.Render("✗")
 	}
 
 	var b strings.Builder
 
 	b.WriteString(icon)
 	b.WriteString(" ")
-	b.WriteString(agentStyle.Render(agentName))
+	b.WriteString(AgentStyle.Render(agentName))
 	b.WriteString(" ")
 
 	switch s.Status {
 	case actionExecuting:
-		b.WriteString(actionToolStyle.Render(s.ToolName))
+		b.WriteString(ActionToolStyle.Render(s.ToolName))
 		if s.ProgressText != "" {
 			b.WriteString("(")
-			b.WriteString(actionProgressStyle.Render(s.ProgressText))
+			b.WriteString(ActionProgressStyle.Render(s.ProgressText))
 			b.WriteString(")")
 		}
 		if s.EstimatedTokens > 0 {
@@ -293,18 +321,32 @@ func (s actionStep) View(agentName string) string {
 			b.WriteString("Token")
 		}
 	case actionDone:
-		b.WriteString(actionToolStyle.Render(s.ToolName))
+		b.WriteString(ActionToolStyle.Render(s.ToolName))
 		b.WriteString(" 已完成")
 		if s.ResultText != "" {
-			b.WriteString(" | 消耗 ")
-			b.WriteString(actionResultStyle.Render(s.ResultText))
+			if s.collapsed {
+				b.WriteString(" | ")
+				b.WriteString(ActionResultStyle.Render("[+] Show output"))
+			} else {
+				b.WriteString(" | 消耗 ")
+				b.WriteString(ActionResultStyle.Render(s.ResultText))
+				b.WriteString("  ")
+				b.WriteString(ActionResultStyle.Render("[−] Hide output"))
+			}
 		}
 	case actionFailed:
-		b.WriteString(actionToolStyle.Render(s.ToolName))
+		b.WriteString(ActionToolStyle.Render(s.ToolName))
 		b.WriteString(" 失败")
 		if s.ResultText != "" {
-			b.WriteString(" | ")
-			b.WriteString(actionResultStyle.Render(s.ResultText))
+			if s.collapsed {
+				b.WriteString(" | ")
+				b.WriteString(ActionResultStyle.Render("[+] Show output"))
+			} else {
+				b.WriteString(" | ")
+				b.WriteString(ActionResultStyle.Render(s.ResultText))
+				b.WriteString("  ")
+				b.WriteString(ActionResultStyle.Render("[−] Hide output"))
+			}
 		}
 	}
 
