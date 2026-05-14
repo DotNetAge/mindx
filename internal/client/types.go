@@ -1,9 +1,6 @@
 package client
 
-import (
-	"charm.land/lipgloss/v2"
-	"github.com/DotNetAge/gort/pkg/gateway"
-)
+import "github.com/DotNetAge/gort/pkg/gateway"
 
 const maxConnectRetries = 10
 
@@ -90,21 +87,38 @@ type sessionInitRequiredMsg struct{}
 // exitMsg 表示用户请求退出程序。
 type exitMsg struct{}
 
-// ---- Lip Gloss 样式 ----
+// ---- View Mode Transitions ----
 
-var (
-	userQuestionStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#4FC3F7"))
-	thinkingStyle       = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#888888")).
-				Italic(true)
-	agentStyle          = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#9C27B0"))
-	errorStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("#CF6679"))
-	connectedDot        = lipgloss.NewStyle().Foreground(lipgloss.Color("#4CAF50")).SetString("●")
-	disconnectedDot     = lipgloss.NewStyle().Foreground(lipgloss.Color("#CF6679")).SetString("●")
-	actionSpinnerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD54F"))
-	actionDoneStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#4CAF50"))
-	actionFailedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#CF6679"))
-	actionToolStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#81D4FA"))
-	actionProgressStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).Italic(true)
-	actionResultStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
-)
+// transcriptToggleMsg 切换 Transcript 视图（Ctrl+O）
+type transcriptToggleMsg struct{}
+
+// fullscreenToggleMsg 切换全屏模式
+type fullscreenToggleMsg struct{}
+
+// searchToggleMsg 激活/关闭搜索（Ctrl+F）
+type searchToggleMsg struct{}
+
+// searchQueryMsg 搜索查询更新
+type searchQueryMsg struct {
+	query string
+}
+
+// searchNextMsg 导航到下一个匹配
+type searchNextMsg struct{}
+
+// searchPrevMsg 导航到上一个匹配
+type searchPrevMsg struct{}
+
+// collapseToggleMsg 切换工具输出的折叠状态
+type collapseToggleMsg struct {
+	answerIndex int
+	actionIndex int
+}
+
+// notificationTimeoutMsg 通知自动关闭超时
+type notificationTimeoutMsg struct {
+	id string
+}
+
+// headerToggleMsg 切换 Header 折叠状态
+type headerToggleMsg struct{}

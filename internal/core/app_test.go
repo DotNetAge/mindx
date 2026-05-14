@@ -48,7 +48,7 @@ func TestNewApp(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpDir, "settings", "rules.yml"), []byte{}, 0644)
 	os.MkdirAll(filepath.Join(tmpDir, "sessions"), 0755)
 
-	app, err := DefaultApp()
+	app, err := DefaultApp(nil)
 	if err != nil {
 		t.Fatalf("DefaultApp() error = %v", err)
 	}

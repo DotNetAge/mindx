@@ -1,4 +1,4 @@
-package core
+package setup
 
 import (
 	"bytes"
@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/DotNetAge/mindx/internal/core"
 )
 
-func DetectPython() PythonConfig {
-	info := PythonConfig{}
+func DetectPython() core.PythonConfig {
+	info := core.PythonConfig{}
 
 	pythonCommands := []string{"python3", "python"}
 	if runtime.GOOS == "windows" {
@@ -34,7 +36,7 @@ func DetectPython() PythonConfig {
 	return info
 }
 
-func SetupPython(workspaceDir string) (PythonConfig, error) {
+func SetupPython(workspaceDir string) (core.PythonConfig, error) {
 	info := DetectPython()
 	if !info.Detected {
 		if err := InstallPython(); err != nil {

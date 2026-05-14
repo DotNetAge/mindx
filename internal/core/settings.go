@@ -1,7 +1,6 @@
 package core
 
 import (
-	"os"
 	"path/filepath"
 )
 
@@ -14,11 +13,7 @@ func (s *Settings) UserPreferences() string {
 	if s.Test {
 		return "./tmp/mindx-test"
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "."
-	}
-	return filepath.Join(home, ".mindx")
+	return DefaultUserPrefsDir()
 }
 func (s *Settings) SkillsDir() string {
 	return filepath.Join(s.UserPreferences(), "skills")

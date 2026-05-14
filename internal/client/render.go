@@ -4,12 +4,9 @@ import (
 	"fmt"
 
 	"charm.land/bubbles/v2/table"
-	"charm.land/lipgloss/v2"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/mattn/go-runewidth"
 )
-
-var styleTableTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#BB86FC"))
 
 func renderTableEnvelope(env *gateway.ResponseEnvelope, availWidth int) string {
 	data, ok := env.Data.(map[string]any)
@@ -70,7 +67,7 @@ func renderTableEnvelope(env *gateway.ResponseEnvelope, availWidth int) string {
 		totalWidth = maxTableWidth
 	}
 	t.SetWidth(totalWidth)
-	return styleTableTitle.Render(env.Title) + "\n" + t.View()
+	return ThemeTitleStyle.Render(env.Title) + "\n" + t.View()
 }
 
 func renderTodoEnvelope(env *gateway.ResponseEnvelope, availWidth int) string {
@@ -120,7 +117,7 @@ func renderTodoEnvelope(env *gateway.ResponseEnvelope, availWidth int) string {
 		tableWidth = availWidth
 	}
 	t.SetWidth(tableWidth)
-	return styleTableTitle.Render(env.Title) + "\n" + t.View()
+	return ThemeTitleStyle.Render(env.Title) + "\n" + t.View()
 }
 
 func renderOptionsEnvelope(env *gateway.ResponseEnvelope, availWidth int) string {
@@ -169,7 +166,7 @@ func renderOptionsEnvelope(env *gateway.ResponseEnvelope, availWidth int) string
 		tableWidth = availWidth
 	}
 	t.SetWidth(tableWidth)
-	return styleTableTitle.Render(env.Title) + "\n" + t.View()
+	return ThemeTitleStyle.Render(env.Title) + "\n" + t.View()
 }
 
 // renderActionStart 从 ResponseEnvelope 提取 ActionStartData，生成动作日志所需的内容字符串。

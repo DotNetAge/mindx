@@ -62,7 +62,7 @@ func main() {
 	}))
 	defer server.Close()
 
-	app, err := core.DefaultApp()
+	app, err := core.DefaultApp(nil)
 	if err != nil {
 		fmt.Printf("Error creating app: %v\n", err)
 		os.Exit(1)

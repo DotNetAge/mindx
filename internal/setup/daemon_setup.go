@@ -1,4 +1,4 @@
-package core
+package setup
 
 import (
 	"fmt"
@@ -6,10 +6,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+
+	"github.com/DotNetAge/mindx/internal/core"
 )
 
 func DaemonInstalled(workspaceDir string) bool {
-	cfg, err := LoadMindxConfig(workspaceDir)
+	cfg, err := core.LoadMindxConfig(workspaceDir)
 	if err != nil {
 		return false
 	}

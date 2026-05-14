@@ -64,7 +64,7 @@ models:
       旗舰级 MoE 大模型，总参1.6T、激活 49B，原生支持百万级超长上下文。
       依托海量高质量训练数据，具备顶尖数学逻辑、复杂推理、专业代码与长文本深度解析能力，
       适配高阶科研、复杂办公、深度智能代理等高难度场景。
-    base_url: https://api.deepseek.com/v1/chat/completions
+    base_url: https://api.deepseek.com
     api_key: DEEPSEEK_API_KEY
     auth_token: ""
     max_tokens: 131072
@@ -82,7 +82,7 @@ models:
     max_turns: 0
   - name: deepseek-v4-flash
     description: DeepSeek官方V4系列最新模型，速度更快但推理能力下降，具备当今世界上最强推理能力的模型。
-    base_url: https://api.deepseek.com/v1/chat/completions
+    base_url: https://api.deepseek.com
     api_key: DEEPSEEK_API_KEY
     auth_token: ""
     max_tokens: 131072
