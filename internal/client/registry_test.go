@@ -1,79 +1,98 @@
-package client
+package client_test
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/DotNetAge/mindx/internal/client"
 )
 
-func TestCommandFindCaseSensitive(t *testing.T) {
-	registry := NewSlashCommandRegistry()
-
-	registry.Register(Command{
-		Name: "agent", Description: "Test agent command",
-		Run: func(args string) *CommandResult {
-			return &CommandResult{Message: "agent executed"}
-		},
+func TestRegisterAndGet(t *testing.T) {
+	r := client.NewSlashCommandRegistry()
+	r.Register(client.CommandDef{
+		Name:        "test",
+		Description: "a test command",
+		Run:         func(args []string) client.CommandResult { return client.CommandResult{} },
 	})
-
-	registry.Register(Command{
-		Name: "help", Description: "Test help command",
-		Run: func(args string) *CommandResult {
-			return &CommandResult{Message: "help executed"}
-		},
-	})
-
-	tests := []struct {
-		name     string
-		input    string
-		expected bool
-	}{
-		{"Exact match lowercase", "agent", true},
-		{"Exact match help", "help", true},
-		{"Uppercase A should NOT match", "Agent", false},
-		{"All uppercase should NOT match", "AGENT", false},
-		{"Mixed case should NOT match", "aGeNt", false},
-		{"Unknown command", "unknown", false},
+	cmd := r.Get("test")
+	if cmd == nil {
+		t.Fatal("Get returned nil")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := registry.Find(tt.input)
-			if tt.expected && cmd == nil {
-				t.Errorf("Find(%q) = nil, want non-nil", tt.input)
-			}
-			if !tt.expected && cmd != nil {
-				t.Errorf("Find(%q) = %v, want nil", tt.input, cmd.Name)
-			}
-		})
+	if cmd.Name != "test" {
+		t.Errorf("Name = %q, want %q", cmd.Name, "test")
+	}
+	if cmd.Description != "a test command" {
+		t.Errorf("Description = %q, want %q", cmd.Description, "a test command")
 	}
 }
 
-func TestCommandFilterCaseSensitive(t *testing.T) {
-	registry := NewSlashCommandRegistry()
-
-	registry.Register(Command{
-		Name: "agent", Description: "Test agent command",
+func TestList(t *testing.T) {
+	r := client.NewSlashCommandRegistry()
+	r.Register(client.CommandDef{
+		Name:        "cmd1",
+		Description: "first",
+		Run:         func(args []string) client.CommandResult { return client.CommandResult{} },
 	})
-	registry.Register(Command{
-		Name: "help", Description: "Test help command",
+	r.Register(client.CommandDef{
+		Name:        "cmd2",
+		Description: "second",
+		Run:         func(args []string) client.CommandResult { return client.CommandResult{} },
 	})
-
-	tests := []struct {
-		name        string
-		prefix      string
-		expectCount int
-	}{
-		{"Lowercase 'a' matches agent", "a", 1},
-		{"Lowercase 'h' matches help", "h", 1},
-		{"Uppercase 'A' should match nothing", "A", 0},
-		{"Empty prefix returns all", "", 2},
+	list := r.List()
+	if len(list) != 2 {
+		t.Fatalf("List() returned %d items, want 2", len(list))
 	}
+	names := map[string]bool{}
+	for _, c := range list {
+		names[c.Name] = true
+	}
+	if !names["cmd1"] {
+		t.Error("List missing cmd1")
+	}
+	if !names["cmd2"] {
+		t.Error("List missing cmd2")
+	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := registry.Filter(tt.prefix)
-			if len(result) != tt.expectCount {
-				t.Errorf("Filter(%q) = %d commands, want %d", tt.prefix, len(result), tt.expectCount)
-			}
-		})
+func TestGetUnknown(t *testing.T) {
+	r := client.NewSlashCommandRegistry()
+	cmd := r.Get("nonexistent")
+	if cmd != nil {
+		t.Errorf("Get returned %v, want nil", cmd)
+	}
+}
+
+func TestBuiltinCommands(t *testing.T) {
+	r := client.BuiltinCommands()
+	expected := []string{"help", "clear", "exit", "transcript", "agents"}
+	for _, name := range expected {
+		cmd := r.Get(name)
+		if cmd == nil {
+			t.Errorf("BuiltinCommands missing %q", name)
+		}
+	}
+}
+
+func TestHelpCommand(t *testing.T) {
+	r := client.BuiltinCommands()
+	helpCmd := r.Get("help")
+	if helpCmd == nil {
+		t.Fatal("help command not found")
+	}
+	result := helpCmd.Run(nil)
+	if !strings.Contains(result.Message, "clear") {
+		t.Errorf("help output should contain 'clear', got: %s", result.Message)
+	}
+}
+
+func TestClearCommand(t *testing.T) {
+	r := client.BuiltinCommands()
+	clearCmd := r.Get("clear")
+	if clearCmd == nil {
+		t.Fatal("clear command not found")
+	}
+	result := clearCmd.Run(nil)
+	if result.Message != "" {
+		t.Errorf("clear command returned message %q, want empty", result.Message)
 	}
 }

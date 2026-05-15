@@ -1,187 +1,99 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
-	"strings"
 )
 
-type Command struct {
-	Name        string
-	Description string
-	Category    string
-	Hidden      bool
-	Run         func(args string) *CommandResult
-	SubCommands []Command
+type CommandResult struct {
+	Message string
 }
 
-type CommandResult struct {
-	Message   string
-	ClearChat bool
+type CommandDef struct {
+	Name        string
+	Description string
+	Run         func(args []string) CommandResult
 }
 
 type SlashCommandRegistry struct {
-	commands  []Command
-	agents    []agentInfo
-	queryFunc func(queryType, name string) (string, error)
+	commands map[string]*CommandDef
 }
 
 func NewSlashCommandRegistry() *SlashCommandRegistry {
-	return &SlashCommandRegistry{}
+	return &SlashCommandRegistry{
+		commands: make(map[string]*CommandDef),
+	}
 }
 
-func (r *SlashCommandRegistry) Register(cmd Command) {
-	r.commands = append(r.commands, cmd)
+func (r *SlashCommandRegistry) Register(cmd CommandDef) {
+	r.commands[cmd.Name] = &cmd
 }
 
-func (r *SlashCommandRegistry) All() []Command { return r.commands }
+func (r *SlashCommandRegistry) Get(name string) *CommandDef {
+	return r.commands[name]
+}
 
-func (r *SlashCommandRegistry) Visible() []Command {
-	var out []Command
+func (r *SlashCommandRegistry) List() []CommandDef {
+	list := make([]CommandDef, 0, len(r.commands))
 	for _, cmd := range r.commands {
-		if !cmd.Hidden {
-			out = append(out, cmd)
-		}
+		list = append(list, *cmd)
 	}
-	return out
+	return list
 }
 
-func (r *SlashCommandRegistry) Filter(prefix string) []Command {
-	var out []Command
-	for _, cmd := range r.commands {
-		if cmd.Hidden {
-			continue
-		}
-		if strings.HasPrefix(cmd.Name, prefix) {
-			out = append(out, cmd)
-		}
+func helpHandler(args []string) CommandResult {
+	return CommandResult{
+		Message: "可用命令: /help, /clear, /exit, /transcript, /agents",
 	}
-	return out
 }
 
-func (r *SlashCommandRegistry) Find(name string) *Command {
-	for i := range r.commands {
-		if r.commands[i].Name == name {
-			return &r.commands[i]
-		}
-	}
-	return nil
+func clearHandler(args []string) CommandResult {
+	return CommandResult{Message: ""}
 }
 
-func (r *SlashCommandRegistry) SetAgents(agents []agentInfo)      { r.agents = agents }
-func (r *SlashCommandRegistry) SetQueryFunc(fn func(queryType, name string) (string, error)) {
-	r.queryFunc = fn
+func exitHandler(args []string) CommandResult {
+	return CommandResult{Message: "退出中..."}
+}
+
+func transcriptHandler(args []string) CommandResult {
+	return CommandResult{Message: "切换转录模式"}
+}
+
+func agentsHandler(args []string) CommandResult {
+	return CommandResult{Message: "使用 @agent_name 切换 Agent"}
 }
 
 func BuiltinCommands() *SlashCommandRegistry {
 	r := NewSlashCommandRegistry()
-
-	knownCommands := []Command{
-		{Name: "help", Description: "显示所有可用命令", Category: "ui"},
-		{Name: "clear", Description: "清理当前所有上下文", Category: "ui"},
-		{Name: "exit", Description: "退出 MindX", Category: "ui"},
-		{Name: "about", Description: "关于 MindX", Category: "system"},
-		{Name: "agents", Description: "显示智能体列表", Category: "agent"},
-		{Name: "models", Description: "列出所有可用模型", Category: "model"},
-		{Name: "skills", Description: "列出所有可用技能", Category: "skill"},
-	}
-
-	for _, cmd := range knownCommands {
-		switch cmd.Name {
-		case "help":
-			cmd.Run = func(args string) *CommandResult {
-				return &CommandResult{Message: r.helpText()}
+	r.Register(CommandDef{
+		Name:        "help",
+		Description: "显示帮助信息",
+		Run: func(args []string) CommandResult {
+			var msg string
+			for _, cmd := range r.List() {
+				msg += fmt.Sprintf("/%s - %s\n", cmd.Name, cmd.Description)
 			}
-		case "clear":
-			cmd.Run = func(args string) *CommandResult {
-				return &CommandResult{ClearChat: true}
-			}
-		case "exit":
-			cmd.Run = func(args string) *CommandResult {
-				return &CommandResult{ClearChat: false, Message: "EXIT"}
-			}
-		default:
-			name := cmd.Name
-			cmd.Run = func(args string) *CommandResult {
-				return r.defaultQueryRun(name, args)
-			}
-		}
-
-		r.Register(cmd)
-	}
-
+			return CommandResult{Message: msg}
+		},
+	})
+	r.Register(CommandDef{
+		Name:        "clear",
+		Description: "清屏",
+		Run:         clearHandler,
+	})
+	r.Register(CommandDef{
+		Name:        "exit",
+		Description: "退出程序",
+		Run:         exitHandler,
+	})
+	r.Register(CommandDef{
+		Name:        "transcript",
+		Description: "切换转录视图",
+		Run:         transcriptHandler,
+	})
+	r.Register(CommandDef{
+		Name:        "agents",
+		Description: "列出所有可用 Agent",
+		Run:         agentsHandler,
+	})
 	return r
-}
-
-func (r *SlashCommandRegistry) defaultQueryRun(name, args string) *CommandResult {
-	if r.queryFunc == nil {
-		return &CommandResult{Message: fmt.Sprintf("❌ 错误: 查询功能未初始化")}
-	}
-
-	result, err := r.queryFunc(name, args)
-	if err != nil {
-		return &CommandResult{Message: fmt.Sprintf("❌ 查询失败: %v", err)}
-	}
-	if result == "" {
-		result = "✅ 操作成功"
-	}
-
-	markdown := r.formatCommandResult(name, result)
-	return &CommandResult{Message: markdown}
-}
-
-func (r *SlashCommandRegistry) formatCommandResult(name, jsonStr string) string {
-	switch name {
-	case "agents", "models", "skills":
-		var items []map[string]string
-		if err := json.Unmarshal([]byte(jsonStr), &items); err != nil {
-			return jsonStr
-		}
-		if len(items) == 0 {
-			return "*暂无数据*"
-		}
-
-		title := ""
-		switch name {
-		case "agents":
-			title = "# 可用 Agent\n"
-		case "models":
-			title = "# 可用模型\n"
-		case "skills":
-			title = "# 可用 Skill\n"
-		}
-
-		var b strings.Builder
-		b.WriteString(title)
-		b.WriteString("\n")
-		for _, item := range items {
-			nameField := item["name"]
-			if nameField == "" {
-				nameField = item["label"]
-				if nameField == "" {
-					nameField = item["value"]
-				}
-			}
-			desc := item["description"]
-			if desc == "" {
-				desc = item["desc"]
-			}
-			b.WriteString(fmt.Sprintf("- **%s** — %s\n", nameField, desc))
-		}
-		return b.String()
-	default:
-		return jsonStr
-	}
-}
-
-func (r *SlashCommandRegistry) helpText() string {
-	var b strings.Builder
-	b.WriteString("可用命令:\n")
-	for _, cmd := range r.Visible() {
-		b.WriteString(fmt.Sprintf("  /%-14s %s\n", cmd.Name, cmd.Description))
-		for _, sub := range cmd.SubCommands {
-			b.WriteString(fmt.Sprintf("    /%-12s %s\n", sub.Name, sub.Description))
-		}
-	}
-	return b.String()
 }
