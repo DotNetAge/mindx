@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestThinkingStyleHasDarkBackground(t *testing.T) {
+func TestThinkingStyleHasItalicAndColor(t *testing.T) {
 	testContent := "This is a thinking message"
 
 	rendered := ThinkingStyle.Render(testContent)
@@ -18,8 +18,11 @@ func TestThinkingStyleHasDarkBackground(t *testing.T) {
 		t.Errorf("Rendered output missing expected content: %q\nGot: %q", testContent, rendered)
 	}
 
-	if !strings.Contains(rendered, "48;2;45;45;45") {
-		t.Errorf("Rendered output missing dark background color code (#2d2d2d)\nGot: %q", rendered)
+	if !strings.Contains(rendered, "[3;") {
+		t.Errorf("Rendered output missing italic style code\nGot: %q", rendered)
+	}
+	if !strings.Contains(rendered, "38;2;136;136;136") {
+		t.Errorf("Rendered output missing foreground color (#888888)\nGot: %q", rendered)
 	}
 }
 

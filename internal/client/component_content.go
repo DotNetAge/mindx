@@ -63,6 +63,7 @@ type ContentPanel struct {
 func NewContentPanel() *ContentPanel {
 	vp := viewport.New()
 	vp.SoftWrap = true
+	vp.FillHeight = true
 	return &ContentPanel{
 		renderers: make(map[string]ResultRenderer),
 		viewport:  vp,
@@ -100,6 +101,11 @@ func (p *ContentPanel) initGlamour() {
 	if !isDark {
 		style = styles.LightStyleConfig
 	}
+	// 移除默认边距（defaultMargin=2），让内容使用终端全宽度
+	zero := uint(0)
+	style.Document.Margin = &zero
+	style.CodeBlock.Margin = &zero
+
 	width := p.width
 	if width < 40 {
 		width = 40
