@@ -308,7 +308,7 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			searchHeight = 3
 		}
 
-		const bottomReservedLines = 13
+		const bottomReservedLines = 7
 
 		contentHeight := msg.Height - bottomReservedLines - headerHeight - searchHeight
 		if contentHeight < 1 {
@@ -358,7 +358,7 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// 搜索关闭时恢复内容区域高度
 			if wasActive && !m.searchModel.IsActive() && m.lastWidth > 0 && m.lastHeight > 0 {
 				headerHeight := m.header.Height()
-				const bottomReservedLines = 13
+				const bottomReservedLines = 7
 				ch := m.lastHeight - bottomReservedLines - headerHeight
 				if ch < 1 {
 					ch = m.lastHeight / 2
@@ -444,6 +444,19 @@ func (m *rootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.saveSessionOnExit()
 		return m, tea.Quit
+
+	case time.Time:
+		var cmds []tea.Cmd
+		for _, answer := range m.sessionReg.answers {
+			if cmd := answer.Update(msg); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		m.contentPanel.refreshOnUpdate()
+		if len(cmds) > 0 {
+			return m, tea.Batch(append(cmds, waitEvent(m.outputCh))...)
+		}
+		return m, waitEvent(m.outputCh)
 	}
 
 	// 路由未处理的消息到搜索组件（如光标闪烁 Tick）
@@ -532,32 +545,32 @@ func (m *rootModel) handleKeyPress(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.SetModeLabel(m.modeLabelForView())
 			return m, nil
 		case "ctrl+f":
-				var searchCmd tea.Cmd
+			var searchCmd tea.Cmd
+			if m.searchModel.IsActive() {
+				m.searchModel.Deactivate()
+			} else {
+				searchCmd = m.searchModel.Activate()
+			}
+			// éæ°è®¡ç®å¸å±ä»¥éåºæç´¢æ é«åº¦
+			if m.lastWidth > 0 && m.lastHeight > 0 {
+				m.header.SetWidth(m.lastWidth)
+				headerHeight := m.header.Height()
+				searchHeight := 0
 				if m.searchModel.IsActive() {
-					m.searchModel.Deactivate()
+					searchHeight = 3
+				}
+				const bottomReservedLines = 7
+				contentHeight := m.lastHeight - bottomReservedLines - headerHeight - searchHeight
+				if contentHeight < 1 {
+					contentHeight = m.lastHeight / 2
+				}
+				if m.lastHeight > bottomReservedLines {
+					m.contentPanel.SetSize(m.lastWidth, contentHeight)
 				} else {
-					searchCmd = m.searchModel.Activate()
+					m.contentPanel.SetSize(m.lastWidth, m.lastHeight/2)
 				}
-				// éæ°è®¡ç®å¸å±ä»¥éåºæç´¢æ é«åº¦
-				if m.lastWidth > 0 && m.lastHeight > 0 {
-					m.header.SetWidth(m.lastWidth)
-					headerHeight := m.header.Height()
-					searchHeight := 0
-					if m.searchModel.IsActive() {
-						searchHeight = 3
-					}
-					const bottomReservedLines = 13
-					contentHeight := m.lastHeight - bottomReservedLines - headerHeight - searchHeight
-					if contentHeight < 1 {
-						contentHeight = m.lastHeight / 2
-					}
-					if m.lastHeight > bottomReservedLines {
-						m.contentPanel.SetSize(m.lastWidth, contentHeight)
-					} else {
-						m.contentPanel.SetSize(m.lastWidth, m.lastHeight/2)
-					}
-				}
-				return m, searchCmd
+			}
+			return m, searchCmd
 		}
 
 		ib, cmd := m.inputBox.HandleKey(kp)
@@ -622,7 +635,7 @@ func (m *rootModel) handleSend(msg sendMsg) (tea.Model, tea.Cmd) {
 	m.sessionReg.add(sessionID, answer)
 	answer.AppendResult(msg.text)
 
-	answer.StartThinking()
+	spinnerTickCmd := answer.StartThinking()
 	m.contentPanel.refreshOnUpdate()
 
 	agent, err := m.app.ResolveAgent(m.currentAgent)
@@ -680,7 +693,7 @@ func (m *rootModel) handleSend(msg sendMsg) (tea.Model, tea.Cmd) {
 		m.consumeEvents(eventCh, sessionID)
 	}()
 
-	return m, waitEvent(m.outputCh)
+	return m, tea.Batch(waitEvent(m.outputCh), spinnerTickCmd)
 }
 
 func (m *rootModel) consumeEvents(eventCh <-chan goreactcore.ReactEvent, sessionID string) {
@@ -734,7 +747,7 @@ func (m *rootModel) handleSessionUpdate(msg agentAnswerUpdateMsg) (tea.Model, te
 	m.routeToAnswer(answer, msg.contentType, msg.content)
 	answer.MarkUpdated()
 
-	spinnerCmd := answer.Update(msg)
+	spinnerCmd := answer.Tick()
 	m.contentPanel.refreshOnUpdate()
 	return m, tea.Batch(waitEvent(m.outputCh), spinnerCmd)
 }
@@ -775,9 +788,7 @@ func (m *rootModel) routeToAnswer(answer *AgentAnswer, contentType, content stri
 	case "thinking_done", "ThinkingDone":
 		answer.SetThinkingDone(content)
 	case "final_answer", "FinalAnswer", "FINAL_ANSWER", "result":
-		if strings.Contains(content, `"reasoning"`) || strings.Contains(content, `"Reasoning"`) {
-			answer.AppendThinking(content)
-		} else {
+		if !answer.HasToolResult(content) {
 			answer.AppendResult(content)
 		}
 	case "error":
@@ -785,8 +796,8 @@ func (m *rootModel) routeToAnswer(answer *AgentAnswer, contentType, content stri
 	case "table", "todo", "options", "plain":
 		answer.AppendTyped(content)
 	case "action_start":
-		toolName, estimatedTokens := parseActionStart(content)
-		answer.AppendAction(toolName, estimatedTokens)
+		toolName, estimatedTokens, params := parseActionStart(content)
+		answer.AppendAction(toolName, estimatedTokens, params)
 	case "action_progress":
 		answer.SetActionProgress(content)
 	case "action_result":
@@ -794,17 +805,42 @@ func (m *rootModel) routeToAnswer(answer *AgentAnswer, contentType, content stri
 	}
 }
 
-func parseActionStart(content string) (string, int) {
+func parseActionStart(content string) (string, int, map[string]any) {
+	// JSON 格式: {"tool_name":"WebSearch","params":{...},"predicted_tokens":10881}
+	var startData struct {
+		ToolName        string         `json:"tool_name"`
+		Params          map[string]any `json:"params,omitempty"`
+		PredictedTokens int            `json:"predicted_tokens,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(content), &startData); err == nil && startData.ToolName != "" {
+		return startData.ToolName, startData.PredictedTokens, startData.Params
+	}
+	// 兼容旧版 pipe 格式: ToolName|Tokens
 	parts := strings.SplitN(content, "|", 2)
 	toolName := parts[0]
 	estimatedTokens := 0
 	if len(parts) > 1 {
 		fmt.Sscanf(parts[1], "%d", &estimatedTokens)
 	}
-	return toolName, estimatedTokens
+	return toolName, estimatedTokens, nil
 }
 
 func parseActionResult(answer *AgentAnswer, content string) {
+	// JSON 格式: {"tool_name":"WebSearch","success":true,"result":"...","duration_ms":1234}
+	var resultData struct {
+		Success bool   `json:"success"`
+		Result  string `json:"result,omitempty"`
+		Error   string `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(content), &resultData); err == nil {
+		if resultData.Success {
+			answer.MarkActionDone(resultData.Result)
+		} else {
+			answer.MarkActionFailed(resultData.Error)
+		}
+		return
+	}
+	// 兼容旧版 pipe 格式
 	if strings.HasPrefix(content, "success|") {
 		rest := strings.TrimPrefix(content, "success|")
 		answer.MarkActionDone(rest)

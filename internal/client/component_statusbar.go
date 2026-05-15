@@ -30,12 +30,14 @@ type StatusBar struct {
 	modeLabel   string // 模式标签 "Prompt" / "Transcript"
 	showHints   bool   // 是否显示第二行的快捷键提示
 	shortcuts   []shortcut
+	loader      *Loader
 }
 
 func NewStatusBar() StatusBar {
 	return StatusBar{
 		showHints: true,
 		shortcuts: defaultShortcuts(),
+		loader:    NewLoader("Loading..."),
 	}
 }
 
@@ -53,11 +55,15 @@ func defaultShortcuts() []shortcut {
 
 // ── Setter 方法 ──
 
-func (s *StatusBar) SetConnected(v bool)      { s.connected = v }
-func (s *StatusBar) SetTokens(in, out int)     { s.tokensIn = in; s.tokensOut = out }
-func (s *StatusBar) AddTokens(in, out int)     { s.tokensIn += in; s.tokensOut += out; s.tokensTotal += in + out }
+func (s *StatusBar) SetConnected(v bool)   { s.connected = v }
+func (s *StatusBar) SetTokens(in, out int) { s.tokensIn = in; s.tokensOut = out }
+func (s *StatusBar) AddTokens(in, out int) {
+	s.tokensIn += in
+	s.tokensOut += out
+	s.tokensTotal += in + out
+}
 func (s *StatusBar) SetAgent(name, model string) { s.currentAgent = name; s.currentModel = model }
-func (s *StatusBar) SetWidth(w int)            { s.width = w }
+func (s *StatusBar) SetWidth(w int)              { s.width = w }
 
 // SetSessionCost 设置当前会话费用。
 func (s *StatusBar) SetSessionCost(cost string) { s.sessionCost = cost }
