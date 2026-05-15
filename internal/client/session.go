@@ -1,50 +1,33 @@
 package client
 
 import (
-	tea "charm.land/bubbletea/v2"
+	"github.com/DotNetAge/goreact"
+	"github.com/DotNetAge/mindx/internal/client/data"
+	appcore "github.com/DotNetAge/mindx/internal/core"
 )
 
-type sessionRegistry struct {
-	answers map[string]*AgentAnswer
+type chatSessionManager struct {
+	app *appcore.App
 }
 
-func newSessionRegistry() *sessionRegistry {
-	return &sessionRegistry{
-		answers: make(map[string]*AgentAnswer),
+func newChatSessionManager(app *appcore.App) *chatSessionManager {
+	return &chatSessionManager{app: app}
+}
+
+func (m *chatSessionManager) getOrCreateSession(agent *goreact.Agent) (*data.ChatSession, error) {
+	sid := agent.SessionID()
+	if sid == "" {
+		meta, err := m.app.CreateSession(agent.Name())
+		if err != nil {
+			return nil, err
+		}
+		return &data.ChatSession{
+			SessionID: meta.SessionID,
+			AgentName: agent.Name(),
+		}, nil
 	}
-}
-
-func (r *sessionRegistry) add(sessionID string, answer *AgentAnswer) {
-	r.answers[sessionID] = answer
-}
-
-func (r *sessionRegistry) remove(sessionID string) {
-	delete(r.answers, sessionID)
-}
-
-func (r *sessionRegistry) get(sessionID string) *AgentAnswer {
-	return r.answers[sessionID]
-}
-
-func (r *sessionRegistry) count() int {
-	return len(r.answers)
-}
-
-func (r *sessionRegistry) clear() {
-	r.answers = make(map[string]*AgentAnswer)
-}
-
-func trySend(ch chan<- tea.Msg, msg tea.Msg) bool {
-	select {
-	case ch <- msg:
-		return true
-	default:
-		return false
-	}
-}
-
-func waitEvent(outputCh <-chan tea.Msg) tea.Cmd {
-	return func() tea.Msg {
-		return <-outputCh
-	}
+	return &data.ChatSession{
+		SessionID: sid,
+		AgentName: agent.Name(),
+	}, nil
 }
