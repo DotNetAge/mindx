@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/DotNetAge/goreact"
 	goreactcore "github.com/DotNetAge/goreact/core"
 	"github.com/DotNetAge/mindx/internal/client/component/choices"
 	"github.com/DotNetAge/mindx/internal/client/component/conv"
@@ -27,6 +28,7 @@ type rootModel struct {
 	app         *appcore.App
 	chatManager *chatSessionManager
 	registry    *SlashCommandRegistry
+	masterAgent *goreact.Agent
 
 	eventCancel func()
 	executing   bool
@@ -42,19 +44,22 @@ func NewProgram(cfg *appcore.MindxConfig) *tea.Program {
 		registry:     BuiltinCommands(),
 	}
 
-	p := tea.NewProgram(m)
-	m.program = p
-
 	var err error
 	m.app, err = appcore.DefaultApp(cfg)
 	if err != nil {
 		m.notifBar.Add(data.Notification{Message: fmt.Sprintf("初始化失败: %v", err), Level: data.NotifError})
-		return p
+	} else {
+		m.masterAgent, err = m.app.GetMaster()
+		if err != nil {
+			m.notifBar.Add(data.Notification{Message: fmt.Sprintf("Agent不可用: %v", err), Level: data.NotifError})
+		}
+		m.chatManager = newChatSessionManager(m.app)
+		m.loadCommands()
+		m.populateWelcome()
 	}
 
-	m.chatManager = newChatSessionManager(m.app)
-	m.loadCommands()
-
+	p := tea.NewProgram(m)
+	m.program = p
 	return p
 }
 
@@ -76,19 +81,36 @@ func (m *rootModel) loadCommands() {
 	}
 }
 
-func (m *rootModel) startEventLoop() {
+func (m *rootModel) populateWelcome() {
 	if m.app == nil {
+		return
+	}
+	settings := m.app.Settings()
+	m.conversation.WelcomeData = data.WelcomeData{
+		AppTitle:  "MindX CLI v2.0.0",
+		Workspace: settings.UserPreferences(),
+		ModelName: "unknown",
+	}
+	if m.masterAgent != nil {
+		m.conversation.WelcomeData.AgentName = m.masterAgent.Name()
+		if m.masterAgent.Model() != nil {
+			m.conversation.WelcomeData.ModelName = m.masterAgent.Model().Name
+		}
+		sid := m.masterAgent.SessionID()
+		if sid != "" {
+			m.conversation.WelcomeData.SessionID = sid
+		}
+	}
+}
+
+func (m *rootModel) startEventLoop() {
+	if m.app == nil || m.masterAgent == nil {
 		return
 	}
 	m.stopEventLoop()
 
 	go func() {
-		agent, err := m.app.GetMaster()
-		if err != nil {
-			m.program.Send(clientmsg.AgentErrorMsg{SessionID: "", Error: err})
-			return
-		}
-		bus := agent.Reactor().EventBus()
+		bus := m.masterAgent.Reactor().EventBus()
 		if bus == nil {
 			return
 		}
@@ -172,6 +194,10 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		_, cmd := m.input.Update(msg)
 		return m, cmd
 
+	case tea.MouseWheelMsg:
+		m.conversation.ViewportUpdate(msg)
+		return m, nil
+
 	case clientmsg.WindowResizeMsg:
 		m.dispatchToAll(msg)
 
@@ -184,11 +210,15 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	case clientmsg.SlashCommandMsg:
 		return m.handleSlashCommand(msg)
 
+	case clientmsg.SessionDoneMsg, clientmsg.AgentErrorMsg:
+		m.executing = false
+		_, cmd := m.conversation.Update(msg)
+		return m, cmd
+
 	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg, clientmsg.ActionStartMsg,
 		clientmsg.ActionProgressMsg, clientmsg.ActionResultMsg, clientmsg.FinalAnswerMsg,
-		clientmsg.AgentErrorMsg, clientmsg.SessionDoneMsg, clientmsg.TickMsg,
-		clientmsg.CollapseToggleMsg, clientmsg.ThinkCollapseMsg, clientmsg.ClearScreenMsg,
-		clientmsg.TranscriptToggleMsg:
+		clientmsg.TickMsg, clientmsg.CollapseToggleMsg, clientmsg.ThinkCollapseMsg,
+		clientmsg.ClearScreenMsg, clientmsg.TranscriptToggleMsg:
 		_, cmd := m.conversation.Update(msg)
 		return m, cmd
 
@@ -217,38 +247,33 @@ func (m *rootModel) dispatchToAll(w clientmsg.WindowResizeMsg) {
 	m.statusBar.Update(w)
 	m.input.Update(w)
 	m.notifBar.Update(w)
-	m.conversation.Update(w)
 }
 
 func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 	if m.executing {
 		return m, m.notifBar.Add(data.Notification{Message: "已有消息正在处理", Level: data.NotifWarning})
 	}
-
-	m.executing = true
-	agent, err := m.app.GetMaster()
-	if err != nil {
+	if m.masterAgent == nil {
 		m.executing = false
-		return m, m.notifBar.Add(data.Notification{Message: fmt.Sprintf("Agent不可用: %v", err), Level: data.NotifError})
+		return m, m.notifBar.Add(data.Notification{Message: "Agent未初始化", Level: data.NotifError})
 	}
 
-	_, err = m.chatManager.getOrCreateSession(agent)
+	m.executing = true
+	agent := m.masterAgent
+
+	_, err := m.chatManager.getOrCreateSession(agent)
 	if err != nil {
 		m.executing = false
 		return m, m.notifBar.Add(data.Notification{Message: fmt.Sprintf("会话创建失败: %v", err), Level: data.NotifError})
 	}
 
 	sessionID := agent.SessionID()
-	m.conversation.Update(clientmsg.ActionStartMsg{SessionID: sessionID, ToolName: "thinking", EstimatedTok: 0})
 
 	go func() {
-		result, err := agent.Ask(sessionID, e.Text)
+		_, err := agent.Ask(sessionID, e.Text)
 		if err != nil {
 			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: err})
-			m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
-			return
 		}
-		m.program.Send(clientmsg.FinalAnswerMsg{SessionID: sessionID, Content: result.Answer})
 		m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
 	}()
 
