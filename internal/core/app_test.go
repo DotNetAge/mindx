@@ -9,7 +9,7 @@ import (
 )
 
 func TestSettings_Directories(t *testing.T) {
-	s := &Settings{}
+	s := &Settings{Test: true}
 
 	tests := []struct {
 		name     string

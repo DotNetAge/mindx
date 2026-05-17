@@ -6,7 +6,6 @@ import (
 	"image/color"
 
 	lipgloss "charm.land/lipgloss/v2"
-	"github.com/DotNetAge/mindx/internal/client/data"
 	"github.com/DotNetAge/mindx/internal/client/style"
 )
 
@@ -53,7 +52,7 @@ func (p *ConversationPanel) renderWelcome() string {
 func (p *ConversationPanel) renderGradientTitle() string {
 	titleText := p.WelcomeData.AppTitle
 	if titleText == "" {
-		titleText = "MindX CLI v2.0.0"
+		titleText = "MindX CLI v2.0.0 Beta"
 	}
 
 	gradientColors := []color.Color{
@@ -84,8 +83,4 @@ func (p *ConversationPanel) renderGradientTitle() string {
 		}
 	}
 	return b.String()
-}
-
-func (p *ConversationPanel) setWelcome(data data.WelcomeData) {
-	p.WelcomeData = data
 }
