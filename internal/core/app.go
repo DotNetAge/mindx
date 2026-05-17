@@ -19,13 +19,14 @@ import (
 )
 
 type App struct {
-	settings  *Settings
-	credStore CredentialStore
-	logger    logging.Logger
-	agents    *goreact.AgentRegistry
-	models    *goreact.ModelRegistry
-	master    *goreact.Agent
-	masterMu  sync.RWMutex
+	settings   *Settings
+	mindxConfig *MindxConfig
+	credStore  CredentialStore
+	logger     logging.Logger
+	agents     *goreact.AgentRegistry
+	models     *goreact.ModelRegistry
+	master     *goreact.Agent
+	masterMu   sync.RWMutex
 
 	rules  core.RuleRegistry
 	sessDB *session.FileSessionStore
@@ -38,9 +39,7 @@ type App struct {
 }
 
 func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
-	settings := &Settings{
-		MasterAgent: os.Getenv("MINDX_MASTER"),
-	}
+	settings := &Settings{}
 
 	logDir := settings.LogsDir()
 	if err := os.MkdirAll(logDir, 0755); err != nil {
@@ -59,9 +58,6 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	core.SYSTEM_INFO_NAME = "MindX"
 	core.SYSTEM_INFO_VERSION = "2.0.0"
 
-	// Application-specific directories (injected via SYSTEM_INFO_USERS extension point)
-	// This keeps GoReact framework-agnostic — it doesn't need to know about "Home Dir" concept.
-	// Each application defines its own home/workspace directory semantics.
 	userPrompt := "\n- User preferences directory: " + settings.UserPreferences()
 	userPrompt += "\n- Skills directory: " + settings.SkillsDir()
 	userPrompt += "\n- Agents directory: " + settings.AgentsDir()
@@ -75,13 +71,6 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	agents, err := goreact.LoadAgentsFrom(settings.AgentsDir())
 	if err != nil {
 		return nil, fmt.Errorf("failed to load agents: %w", err)
-	}
-
-	if settings.MasterAgent == "" {
-		if list := agents.List(); len(list) > 0 {
-			settings.MasterAgent = list[0].Name
-			logger.Warn("MINDX_MASTER not set, defaulting to first agent", "name", list[0].Name)
-		}
 	}
 
 	logger.Info("Loading models", "dir", settings.ModelsFile())
@@ -116,20 +105,45 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	}
 
 	return &App{
-		settings:   settings,
-		credStore:  credStore,
-		logger:     logger,
-		agents:     agents,
-		models:     models,
-		rules:      rules,
-		sessDB:     sessDB,
-		agentCache: make(map[string]*goreact.Agent),
-		embedder:   emb,
+		settings:    settings,
+		mindxConfig: mindxConfig,
+		credStore:   credStore,
+		logger:      logger,
+		agents:      agents,
+		models:      models,
+		rules:       rules,
+		sessDB:      sessDB,
+		agentCache:  make(map[string]*goreact.Agent),
+		embedder:    emb,
 	}, nil
+}
+
+func resolveCurrentAgentName(cfg *MindxConfig, agents *goreact.AgentRegistry, logger logging.Logger) string {
+	if cfg != nil && cfg.LastAgent != "" {
+		if agents.Get(cfg.LastAgent) != nil {
+			return cfg.LastAgent
+		}
+		logger.Warn("last_agent %q not found in registry, will use fallback", cfg.LastAgent)
+	}
+
+	if list := agents.List(); len(list) > 0 {
+		logger.Info("using first agent as current", "name", list[0].Name)
+		return list[0].Name
+	}
+
+	return ""
 }
 
 func (a *App) Settings() *Settings {
 	return a.settings
+}
+
+func (a *App) Config() *MindxConfig {
+	return a.mindxConfig
+}
+
+func (a *App) CurrentAgentName() string {
+	return resolveCurrentAgentName(a.mindxConfig, a.agents, a.logger)
 }
 
 func (a *App) RuleRegistry() core.RuleRegistry {
@@ -204,9 +218,14 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 		return a.master, nil
 	}
 
-	masterAgent := a.Agents().Get(a.settings.MasterAgent)
+	currentAgentName := a.CurrentAgentName()
+	if currentAgentName == "" {
+		return nil, fmt.Errorf("no agent available")
+	}
+
+	masterAgent := a.Agents().Get(currentAgentName)
 	if masterAgent == nil {
-		return nil, fmt.Errorf("Master agent not defined")
+		return nil, fmt.Errorf("agent %q not found", currentAgentName)
 	}
 
 	if masterAgent.Model == "" {
@@ -235,7 +254,6 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 		opts = append(opts, goreact.WithSessionStore(a.sessDB))
 	}
 
-	// Auto-inject directory context from active session (Design-time safety)
 	if a.currentSessionMeta != nil {
 		if a.currentSessionMeta.GetProjectDir() != "" {
 			opts = append(opts, goreact.WithProjectDir(a.currentSessionMeta.GetProjectDir()))
@@ -245,14 +263,11 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 		}
 	}
 
-	// Enable Agent Native sandbox design (4-Layer Architecture)
-	// SessionBaseDir enables SESSION_DIR-based isolation for all sessions
 	sessionBaseDir := a.settings.SessionsDir()
 	if sessionBaseDir != "" {
 		opts = append(opts, goreact.WithSessionBaseDir(sessionBaseDir))
 	}
 
-	// Create per-agent memory if embedder is available
 	if a.embedder != nil {
 		memConfig := memory.MemoryConfig{
 			MemoryType: core.MemoryTypeLongTerm,
@@ -273,7 +288,7 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 		return nil, err
 	}
 	a.master = m
-	a.syncProjectMemory(m, a.settings.MasterAgent)
+	a.syncProjectMemory(m, currentAgentName)
 	return a.master, nil
 }
 

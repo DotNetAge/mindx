@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
+	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/client/style"
 )
 
@@ -430,5 +431,16 @@ func (p *ConversationPanel) renderActionStep(step data.ActionStep) string {
 			}
 		}
 	}
+	return b.String()
+}
+
+func (p *ConversationPanel) renderResultEntry(res data.ResultEntry) string {
+	if res.Role == "error" {
+		return style.RedStyle.Render("⏺ " + res.Content)
+	}
+	var b strings.Builder
+	b.WriteString(style.WhiteStyle.Render("⏺ "))
+	b.WriteString(render.MarkdownWithWidth(res.Content, p.width-4))
+	b.WriteByte('\n')
 	return b.String()
 }
