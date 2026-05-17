@@ -38,16 +38,23 @@ type App struct {
 }
 
 func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
-	logger := logging.DefaultConsoleLogger()
-
-	err := godotenv.Load()
-	if err != nil {
-		logger.Warn("WARNING: failed to load .env file: %v", err)
+	settings := &Settings{
+		MasterAgent: os.Getenv("MINDX_MASTER"),
 	}
 
-	settings := &Settings{
-		// Path:        os.Getenv("MINDX_PWD_PATH"),
-		MasterAgent: os.Getenv("MINDX_MASTER"),
+	logDir := settings.LogsDir()
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil, fmt.Errorf("create log directory: %w", err)
+	}
+	logFile := filepath.Join(logDir, "mindx.log")
+	logger, err := logging.DefaultFileLogger(logFile)
+	if err != nil {
+		logger = logging.DefaultNoopLogger()
+	}
+
+	err = godotenv.Load()
+	if err != nil {
+		logger.Warn("WARNING: failed to load .env file: %v", err)
 	}
 	core.SYSTEM_INFO_NAME = "MindX"
 	core.SYSTEM_INFO_VERSION = "2.0.0"

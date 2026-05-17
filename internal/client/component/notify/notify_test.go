@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 )
@@ -137,7 +136,7 @@ func TestWindowResize(t *testing.T) {
 	if n.Width != 80 {
 		t.Fatalf("expected initial Width=80, got %d", n.Width)
 	}
-	n.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
+	n.Update(clientmsg.WindowResizeMsg{Width: 100, Height: 50})
 	if n.Width != 100 {
 		t.Errorf("expected Width=100 after resize, got %d", n.Width)
 	}

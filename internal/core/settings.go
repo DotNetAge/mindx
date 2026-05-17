@@ -54,3 +54,7 @@ func (s *Settings) SchedulesDir() string {
 func (s *Settings) VenvDir() string {
 	return filepath.Join(s.UserPreferences(), ".venv")
 }
+
+func (s *Settings) LogsDir() string {
+	return filepath.Join(s.UserPreferences(), "logs")
+}

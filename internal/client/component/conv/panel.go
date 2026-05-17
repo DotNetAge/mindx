@@ -5,9 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
+	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/client/style"
 )
 
@@ -23,15 +25,18 @@ type ConversationPanel struct {
 	Answers      []data.AnswerData
 	ViewMode     ViewMode
 	SearchState  data.SearchState
-	WelcomeShown bool
+	WelcomeData  data.WelcomeData
 	BlinkOn      bool
 
-	width  int
-	height int
+	width    int
+	height   int
+	viewport viewport.Model
 }
 
 func New() *ConversationPanel {
-	return &ConversationPanel{}
+	return &ConversationPanel{
+		viewport: viewport.New(),
+	}
 }
 
 func (p *ConversationPanel) Update(msg any) (*ConversationPanel, tea.Cmd) {
@@ -55,6 +60,12 @@ func (p *ConversationPanel) Update(msg any) (*ConversationPanel, tea.Cmd) {
 	case clientmsg.WindowResizeMsg:
 		p.width = m.Width
 		p.height = m.Height
+		p.viewport.SetWidth(m.Width)
+		vh := m.Height
+		if vh > 2 {
+			vh -= 2
+		}
+		p.viewport.SetHeight(vh)
 	case clientmsg.TickMsg:
 		p.BlinkOn = !p.BlinkOn
 		if p.needsTick() {
@@ -72,7 +83,6 @@ func (p *ConversationPanel) Update(msg any) (*ConversationPanel, tea.Cmd) {
 		}
 	case clientmsg.ClearScreenMsg:
 		p.Answers = nil
-		p.WelcomeShown = false
 	case clientmsg.TranscriptToggleMsg:
 		if p.ViewMode == ViewTranscript {
 			p.ViewMode = ViewNormal
@@ -216,9 +226,9 @@ func (p *ConversationPanel) findOrCreateAnswer(sessionID, agentName string) int 
 		return idx
 	}
 	ans := data.AnswerData{
-		SessionID:    sessionID,
-		AgentName:    agentName,
-		CreatedAt:    time.Now(),
+		SessionID:         sessionID,
+		AgentName:         agentName,
+		CreatedAt:         time.Now(),
 		ThinkingCollapsed: true,
 	}
 	p.Answers = append(p.Answers, ans)
@@ -243,20 +253,35 @@ func (p *ConversationPanel) tickCmd() tea.Cmd {
 	return func() tea.Msg { return clientmsg.TickMsg{} }
 }
 
+func (p *ConversationPanel) ViewportUpdate(msg tea.Msg) {
+	p.viewport, _ = p.viewport.Update(msg)
+}
+
 func (p *ConversationPanel) View() string {
 	if p.width == 0 {
 		p.width = 80
 	}
 
-	if !p.WelcomeShown {
-		p.WelcomeShown = true
+	if len(p.Answers) == 0 && p.ViewMode == ViewNormal {
 		return p.renderWelcome()
 	}
 
 	if p.ViewMode == ViewTranscript {
 		return p.renderTranscriptView()
 	}
-	return p.renderNormalView()
+	content := p.renderNormalView()
+	if content == "" {
+		return ""
+	}
+	p.viewport.SetWidth(p.width)
+	vh := p.height
+	if vh > 2 {
+		vh -= 2
+	}
+	p.viewport.SetHeight(vh)
+	p.viewport.SetContent(content)
+	p.viewport.GotoBottom()
+	return p.viewport.View()
 }
 
 func (p *ConversationPanel) renderWelcome() string {
@@ -272,11 +297,12 @@ func (p *ConversationPanel) renderWelcome() string {
 	}
 
 	infoLines := []string{
-		style.BoldWhite.Render("MindX CLI v2.0.0"),
-		style.GreenStyle.Render("Authenticated"),
-		style.WhiteStyle.Render("Type a message to start chatting"),
-		"",
-		style.GrayStyle.Render("Use / for commands, @ to switch agents"),
+		style.BoldWhite.Render(p.WelcomeData.AppTitle),
+		style.GreenStyle.Render("Authenticated as " + p.WelcomeData.AgentName),
+		style.WhiteStyle.Render("Workspace: " + p.WelcomeData.Workspace),
+		style.WhiteStyle.Render("Session: " + p.WelcomeData.SessionID),
+		style.WhiteStyle.Render("Agent: " + p.WelcomeData.AgentName),
+		style.WhiteStyle.Render("Model: " + p.WelcomeData.ModelName),
 	}
 
 	maxLogoWidth := 0
@@ -299,9 +325,48 @@ func (p *ConversationPanel) renderWelcome() string {
 
 	b.WriteString(style.Divider(strings.Repeat("─", p.width)))
 	b.WriteByte('\n')
-	b.WriteString(style.GrayStyle.Render(" ℹ Welcome to MindX"))
+	if p.WelcomeData.SessionID != "" {
+		b.WriteString(style.GrayStyle.Render(" ℹ Session loaded: " + p.WelcomeData.SessionID))
+		b.WriteByte('\n')
+	}
+	b.WriteString(style.GrayStyle.Render(" ℹ Type a message to start chatting"))
 	b.WriteByte('\n')
 
+	return b.String()
+}
+
+func (p *ConversationPanel) renderThinkingSection(ans data.AnswerData) string {
+	var b strings.Builder
+	for i, round := range ans.ThinkingLog {
+		b.WriteString(p.renderThinkingRound(round, i))
+	}
+	if ans.PendingThink != "" {
+		b.WriteString(p.renderPendingThink(ans.PendingThink))
+	} else if ans.IsThinking {
+		icon := style.CyanStyle.Render("● ")
+		if p.BlinkOn {
+			icon = style.WhiteStyle.Render("● ")
+		}
+		b.WriteString(icon)
+		b.WriteString(style.DarkStyle.Render("深度思考中..."))
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func (p *ConversationPanel) renderActionSection(ans data.AnswerData) string {
+	var b strings.Builder
+	for _, act := range ans.Actions {
+		b.WriteString(p.renderActionStep(act))
+	}
+	return b.String()
+}
+
+func (p *ConversationPanel) renderResultSection(ans data.AnswerData) string {
+	var b strings.Builder
+	for _, res := range ans.Results {
+		b.WriteString(p.renderResultEntry(res))
+	}
 	return b.String()
 }
 
@@ -320,21 +385,24 @@ func (p *ConversationPanel) renderNormalView() string {
 func (p *ConversationPanel) renderAnswer(ans data.AnswerData) string {
 	var b strings.Builder
 
-	b.WriteString(style.CyanStyle.Render("● "))
-	b.WriteString(style.WhiteStyle.Render(ans.UserQuestion))
-	b.WriteByte('\n')
+	if ans.UserQuestion != "" {
+		b.WriteString(style.CyanStyle.Render("● "))
+		b.WriteString(style.WhiteStyle.Render(ans.UserQuestion))
+		b.WriteByte('\n')
+	}
 
-	for i, round := range ans.ThinkingLog {
-		b.WriteString(p.renderThinkingRound(round, i))
+	hasThinking := len(ans.ThinkingLog) > 0 || ans.PendingThink != ""
+	hasActions := len(ans.Actions) > 0
+	hasResults := len(ans.Results) > 0
+
+	if hasThinking {
+		b.WriteString(p.renderThinkingSection(ans))
 	}
-	if ans.PendingThink != "" {
-		b.WriteString(p.renderPendingThink(ans.PendingThink))
+	if hasActions {
+		b.WriteString(p.renderActionSection(ans))
 	}
-	for _, act := range ans.Actions {
-		b.WriteString(p.renderActionStep(act))
-	}
-	for _, res := range ans.Results {
-		b.WriteString(p.renderResultEntry(res))
+	if hasResults {
+		b.WriteString(p.renderResultSection(ans))
 	}
 	return b.String()
 }
@@ -441,7 +509,7 @@ func (p *ConversationPanel) renderResultEntry(res data.ResultEntry) string {
 	}
 	var b strings.Builder
 	b.WriteString(style.WhiteStyle.Render("⏺ "))
-	b.WriteString(res.Content)
+	b.WriteString(render.MarkdownWithWidth(res.Content, p.width-4))
 	b.WriteByte('\n')
 	return b.String()
 }
