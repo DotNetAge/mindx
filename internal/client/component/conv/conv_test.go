@@ -21,9 +21,10 @@ func TestWelcomeScreen(t *testing.T) {
 	view := p.View()
 
 	checks := []string{
-		"MindX CLI",
-		"Authenticated",
-		"███",
+		"Workspace: /tmp/test",
+		"Session: sess-123",
+		"Agent: architect",
+		"Type a message to start chatting",
 	}
 	for _, c := range checks {
 		if !strings.Contains(view, c) {
@@ -327,46 +328,13 @@ func TestEmptyView(t *testing.T) {
 	if first == "" {
 		t.Error("expected welcome text on first View() call")
 	}
-	if !strings.Contains(first, "███") {
-		t.Error("expected logo in welcome view")
+	if !strings.Contains(first, "Type a message") {
+		t.Error("expected welcome hint in welcome view")
 	}
 
 	second := p.View()
 	if second == "" {
 		t.Error("expected welcome to persist while no answers exist")
-	}
-}
-
-func TestTranscriptView(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.TranscriptToggleMsg{})
-	if p.ViewMode != ViewTranscript {
-		t.Error("expected ViewTranscript after toggle")
-	}
-
-	view := p.View()
-	if view != "" {
-		t.Errorf("expected empty transcript view with no answers, got %q", view)
-	}
-}
-
-func TestTranscriptToggle(t *testing.T) {
-	p := New()
-
-	if p.ViewMode != ViewNormal {
-		t.Error("expected ViewNormal initially")
-	}
-
-	p.Update(clientmsg.TranscriptToggleMsg{})
-	if p.ViewMode != ViewTranscript {
-		t.Error("expected ViewTranscript after first toggle")
-	}
-
-	p.Update(clientmsg.TranscriptToggleMsg{})
-	if p.ViewMode != ViewNormal {
-		t.Error("expected ViewNormal after second toggle")
 	}
 }
 
@@ -429,7 +397,7 @@ func TestClearScreen(t *testing.T) {
 		t.Errorf("expected 0 answers after clear, got %d", len(p.Answers))
 	}
 	afterClear := p.View()
-	if !strings.Contains(afterClear, "███") {
+	if !strings.Contains(afterClear, "Type a message") {
 		t.Error("expected welcome to reappear after clear")
 	}
 }

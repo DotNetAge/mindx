@@ -9,24 +9,14 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
-	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/client/style"
 )
 
-type ViewMode int
-
-const (
-	ViewNormal ViewMode = iota
-	ViewTranscript
-	ViewFullscreen
-)
-
 type ConversationPanel struct {
-	Answers      []data.AnswerData
-	ViewMode     ViewMode
-	SearchState  data.SearchState
-	WelcomeData  data.WelcomeData
-	BlinkOn      bool
+	Answers     []data.AnswerData
+	SearchState data.SearchState
+	WelcomeData data.WelcomeData
+	BlinkOn     bool
 
 	width    int
 	height   int
@@ -83,12 +73,6 @@ func (p *ConversationPanel) Update(msg any) (*ConversationPanel, tea.Cmd) {
 		}
 	case clientmsg.ClearScreenMsg:
 		p.Answers = nil
-	case clientmsg.TranscriptToggleMsg:
-		if p.ViewMode == ViewTranscript {
-			p.ViewMode = ViewNormal
-		} else {
-			p.ViewMode = ViewTranscript
-		}
 	}
 	return p, nil
 }
@@ -262,13 +246,10 @@ func (p *ConversationPanel) View() string {
 		p.width = 80
 	}
 
-	if len(p.Answers) == 0 && p.ViewMode == ViewNormal {
+	if len(p.Answers) == 0 {
 		return p.renderWelcome()
 	}
 
-	if p.ViewMode == ViewTranscript {
-		return p.renderTranscriptView()
-	}
 	content := p.renderNormalView()
 	if content == "" {
 		return ""
@@ -282,57 +263,6 @@ func (p *ConversationPanel) View() string {
 	p.viewport.SetContent(content)
 	p.viewport.GotoBottom()
 	return p.viewport.View()
-}
-
-func (p *ConversationPanel) renderWelcome() string {
-	var b strings.Builder
-
-	logo := []string{
-		"███╗   ███╗██╗███╗   ██╗████╗",
-		"████╗ ████║██║████╗  ██║██╔══╝",
-		"██╔████╔██║██║██╔██╗ ██║██║",
-		"██║╚██╔╝██║██║██║╚██╗██║██║",
-		"██║ ╚═╝ ██║██║██║ ╚████║██████╗",
-		"╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═════╝",
-	}
-
-	infoLines := []string{
-		style.BoldWhite.Render(p.WelcomeData.AppTitle),
-		style.GreenStyle.Render("Authenticated as " + p.WelcomeData.AgentName),
-		style.WhiteStyle.Render("Workspace: " + p.WelcomeData.Workspace),
-		style.WhiteStyle.Render("Session: " + p.WelcomeData.SessionID),
-		style.WhiteStyle.Render("Agent: " + p.WelcomeData.AgentName),
-		style.WhiteStyle.Render("Model: " + p.WelcomeData.ModelName),
-	}
-
-	maxLogoWidth := 0
-	for _, l := range logo {
-		if len(l) > maxLogoWidth {
-			maxLogoWidth = len(l)
-		}
-	}
-
-	for i := 0; i < 6; i++ {
-		logoLine := style.CyanStyle.Render(logo[i])
-		padded := logoLine + strings.Repeat(" ", maxLogoWidth-len(logo[i])+2)
-		if i < len(infoLines) {
-			b.WriteString(padded + infoLines[i])
-		} else {
-			b.WriteString(logoLine)
-		}
-		b.WriteByte('\n')
-	}
-
-	b.WriteString(style.Divider(strings.Repeat("─", p.width)))
-	b.WriteByte('\n')
-	if p.WelcomeData.SessionID != "" {
-		b.WriteString(style.GrayStyle.Render(" ℹ Session loaded: " + p.WelcomeData.SessionID))
-		b.WriteByte('\n')
-	}
-	b.WriteString(style.GrayStyle.Render(" ℹ Type a message to start chatting"))
-	b.WriteByte('\n')
-
-	return b.String()
 }
 
 func (p *ConversationPanel) renderThinkingSection(ans data.AnswerData) string {
@@ -501,27 +431,4 @@ func (p *ConversationPanel) renderActionStep(step data.ActionStep) string {
 		}
 	}
 	return b.String()
-}
-
-func (p *ConversationPanel) renderResultEntry(res data.ResultEntry) string {
-	if res.Role == "error" {
-		return style.RedStyle.Render("⏺ " + res.Content)
-	}
-	var b strings.Builder
-	b.WriteString(style.WhiteStyle.Render("⏺ "))
-	b.WriteString(render.MarkdownWithWidth(res.Content, p.width-4))
-	b.WriteByte('\n')
-	return b.String()
-}
-
-func (p *ConversationPanel) renderTranscriptView() string {
-	if len(p.Answers) == 0 {
-		return ""
-	}
-	var blocks []string
-	for i, ans := range p.Answers {
-		header := style.DimStyle.Render(fmt.Sprintf("[%d/%d] %s", i+1, len(p.Answers), ans.CreatedAt.Format("15:04:05")))
-		blocks = append(blocks, header+"\n"+p.renderAnswer(ans))
-	}
-	return strings.Join(blocks, "\n"+style.Divider(strings.Repeat("─", p.width))+"\n")
 }

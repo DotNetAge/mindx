@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
-	"github.com/DotNetAge/mindx/internal/client/data"
-	"github.com/DotNetAge/mindx/internal/client/style"
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/DotNetAge/mindx/internal/client/data"
+	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
+	"github.com/DotNetAge/mindx/internal/client/style"
 )
 
 var (
@@ -41,12 +41,11 @@ func (s *StatusBar) Update(msg any) (*StatusBar, tea.Cmd) {
 		s.Width = m.Width
 	case clientmsg.AgentSwitchMsg:
 		s.AgentName = m.AgentName
-	case clientmsg.TranscriptToggleMsg:
-		if s.ModeLabel == "" {
-			s.ModeLabel = "Transcript"
-		} else {
-			s.ModeLabel = ""
-		}
+	case clientmsg.SessionLoadedMsg:
+		s.AgentName = m.AgentName
+		s.SessionName = m.SessionID
+	case clientmsg.ActionStartMsg:
+		s.TokensIn += m.EstimatedTok
 	}
 	return s, nil
 }

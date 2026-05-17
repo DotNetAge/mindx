@@ -57,8 +57,6 @@ type SlashCommandMsg struct {
 	Args []string
 }
 
-type TranscriptToggleMsg struct{}
-
 type CollapseToggleMsg struct {
 	AnswerIndex int
 	ActionIndex int
