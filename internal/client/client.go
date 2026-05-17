@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -17,6 +18,10 @@ import (
 	appcore "github.com/DotNetAge/mindx/internal/core"
 )
 
+const (
+	ansiClearScreen = "\x1b[2J\x1b[H" // 跨平台清屏: macOS/Linux/Windows 10+
+)
+
 type rootModel struct {
 	program      *tea.Program
 	conversation *conv.ConversationPanel
@@ -30,8 +35,9 @@ type rootModel struct {
 	registry    *SlashCommandRegistry
 	masterAgent *goreact.Agent
 
-	eventCancel func()
-	executing   bool
+	eventCancel      func()
+	executing        bool
+	needsClearScreen bool
 }
 
 func NewProgram(cfg *appcore.MindxConfig) *tea.Program {
@@ -55,6 +61,13 @@ func NewProgram(cfg *appcore.MindxConfig) *tea.Program {
 		}
 		m.chatManager = newChatSessionManager(m.app)
 		m.loadCommands()
+
+		if err := m.restoreLastSession(); err != nil {
+			m.notifBar.Add(data.Notification{Message: fmt.Sprintf("会话恢复失败（首次启动）: %v", err), Level: data.NotifInfo})
+		} else {
+			m.needsClearScreen = true
+		}
+
 		m.populateWelcome()
 	}
 
@@ -85,12 +98,17 @@ func (m *rootModel) populateWelcome() {
 	if m.app == nil {
 		return
 	}
-	settings := m.app.Settings()
 	m.conversation.WelcomeData = data.WelcomeData{
 		AppTitle:  "MindX CLI v2.0.0",
-		Workspace: settings.UserPreferences(),
 		ModelName: "unknown",
 	}
+
+	sessionMeta := m.app.CurrentSessionMeta()
+	if sessionMeta != nil {
+		m.conversation.WelcomeData.Workspace = sessionMeta.GetProjectDir()
+		m.conversation.WelcomeData.SessionID = sessionMeta.SessionID
+	}
+
 	if m.masterAgent != nil {
 		m.conversation.WelcomeData.AgentName = m.masterAgent.Name()
 		if m.masterAgent.Model() != nil {
@@ -101,6 +119,32 @@ func (m *rootModel) populateWelcome() {
 			m.conversation.WelcomeData.SessionID = sid
 		}
 	}
+}
+
+func (m *rootModel) restoreLastSession() error {
+	if m.app == nil {
+		return fmt.Errorf("app not initialized")
+	}
+
+	sessDB := m.app.SessDB()
+	if sessDB == nil {
+		return fmt.Errorf("session store not available")
+	}
+
+	ctx := context.Background()
+	sessions, err := sessDB.ListSessions(ctx)
+	if err != nil {
+		return fmt.Errorf("list sessions: %w", err)
+	}
+
+	if len(sessions) == 0 {
+		return fmt.Errorf("no existing sessions (first launch)")
+	}
+
+	latestSession := sessions[0]
+	m.app.SetCurrentSessionMeta(&latestSession)
+
+	return nil
 }
 
 func (m *rootModel) startEventLoop() {
@@ -181,6 +225,12 @@ func extractActionResultData(data any) (toolName string, success bool, result, e
 
 func (m *rootModel) Init() tea.Cmd {
 	m.startEventLoop()
+	if m.needsClearScreen {
+		return func() tea.Msg {
+			fmt.Print(ansiClearScreen)
+			return nil
+		}
+	}
 	return nil
 }
 
@@ -215,10 +265,15 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		_, cmd := m.conversation.Update(msg)
 		return m, cmd
 
-	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg, clientmsg.ActionStartMsg,
+	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg,
 		clientmsg.ActionProgressMsg, clientmsg.ActionResultMsg, clientmsg.FinalAnswerMsg,
 		clientmsg.TickMsg, clientmsg.CollapseToggleMsg, clientmsg.ThinkCollapseMsg,
-		clientmsg.ClearScreenMsg, clientmsg.TranscriptToggleMsg:
+		clientmsg.ClearScreenMsg:
+		_, cmd := m.conversation.Update(msg)
+		return m, cmd
+
+	case clientmsg.ActionStartMsg:
+		m.statusBar.Update(msg)
 		_, cmd := m.conversation.Update(msg)
 		return m, cmd
 
@@ -233,6 +288,10 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	case clientmsg.ShowChoicesMsg:
 		_, cmd := m.choices.Update(msg)
 		return m, cmd
+
+	case clientmsg.SessionLoadedMsg:
+		m.statusBar.Update(msg)
+		return m, nil
 
 	case clientmsg.ExitMsg:
 		m.stopEventLoop()

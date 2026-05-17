@@ -4,6 +4,7 @@ type AgentInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Role        string `json:"role"`
+	Model       string `json:"model"`
 	IsDefault   bool   `json:"is_default"`
 }
 

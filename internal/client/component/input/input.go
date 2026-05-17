@@ -1,94 +1,13 @@
 package input
 
 import (
-	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
 )
-
-type AgentSuggestion struct {
-	Agents []data.AgentInfo
-	Filter string
-	SelIdx int
-}
-
-func (s *AgentSuggestion) filtered() []data.AgentInfo {
-	if s.Filter == "" {
-		return s.Agents
-	}
-	var out []data.AgentInfo
-	for _, a := range s.Agents {
-		if strings.Contains(strings.ToLower(a.Name), strings.ToLower(s.Filter)) {
-			out = append(out, a)
-		}
-	}
-	return out
-}
-
-func (s *AgentSuggestion) View(width int) string {
-	list := s.filtered()
-	if len(list) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	for i, a := range list {
-		line := fmt.Sprintf("@%s  %s", a.Name, a.Description)
-		if i == s.SelIdx {
-			b.WriteString(style.CyanStyle.Render("> " + line))
-		} else {
-			b.WriteString("  " + line)
-		}
-		b.WriteByte('\n')
-	}
-	return lipgloss.NewStyle().Width(width).Render(strings.TrimRight(b.String(), "\n"))
-}
-
-type CommandSuggestion struct {
-	Commands []SlashCommand
-	Filter   string
-	SelIdx   int
-}
-
-type SlashCommand struct {
-	Name        string
-	Description string
-}
-
-func (s *CommandSuggestion) filtered() []SlashCommand {
-	if s.Filter == "" {
-		return s.Commands
-	}
-	var out []SlashCommand
-	for _, c := range s.Commands {
-		if strings.Contains(c.Name, s.Filter) {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-func (s *CommandSuggestion) View(width int) string {
-	list := s.filtered()
-	if len(list) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	for i, c := range list {
-		line := fmt.Sprintf("/%s  %s", c.Name, c.Description)
-		if i == s.SelIdx {
-			b.WriteString(style.CyanStyle.Render("> " + line))
-		} else {
-			b.WriteString("  " + line)
-		}
-		b.WriteByte('\n')
-	}
-	return lipgloss.NewStyle().Width(width).Render(strings.TrimRight(b.String(), "\n"))
-}
 
 type InputArea struct {
 	Width      int
@@ -259,12 +178,7 @@ func (i *InputArea) View() string {
 	buf.WriteByte('\n')
 	buf.WriteString(prompt)
 	displayText := text
-	if displayText == "" {
-		displayText = style.DimStyle.Render("你的消息...")
-		buf.WriteString(displayText)
-	} else {
-		buf.WriteString(style.WhiteStyle.Render(displayText))
-	}
+	buf.WriteString(style.WhiteStyle.Render(displayText))
 	buf.WriteString(cursor)
 	buf.WriteByte('\n')
 	buf.WriteString(div)
