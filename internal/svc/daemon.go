@@ -220,7 +220,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	sessionID := d.resolveSessionID(msg.SessionID, providedSessionID)
 	resolvedAgentName := agentName
 	if resolvedAgentName == "" {
-		resolvedAgentName = d.app.Settings().MasterAgent
+		resolvedAgentName = d.app.CurrentAgentName()
 		if resolvedAgentName == "" {
 			resolvedAgentName = "master"
 		}
@@ -298,11 +298,14 @@ func (d *Daemon) resolveSessionID(clientProvided string, commandProvided string)
 		return clientProvided
 	}
 
-	if d.app.SessionDB() != nil && d.app.Settings().MasterAgent != "" {
-		sid, err := d.app.SessionDB().GetByRole(context.Background(), d.app.Settings().MasterAgent)
-		if err == nil && sid != nil && sid.SessionID != "" {
-			d.logger.Info("resumed session from store", "agent", d.app.Settings().MasterAgent, "session", sid.SessionID)
-			return sid.SessionID
+	if d.app.SessionDB() != nil {
+		currentAgent := d.app.CurrentAgentName()
+		if currentAgent != "" {
+			sid, err := d.app.SessionDB().GetByRole(context.Background(), currentAgent)
+			if err == nil && sid != nil && sid.SessionID != "" {
+				d.logger.Info("resumed session from store", "agent", currentAgent, "session", sid.SessionID)
+				return sid.SessionID
+			}
 		}
 	}
 

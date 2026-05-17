@@ -18,9 +18,5 @@ func Bootstrap(embeddedFS fs.FS, workspaceDir string) (*MindxConfig, error) {
 		return nil, fmt.Errorf("加载 mindx.json 失败: %w", err)
 	}
 
-	if cfg.LastAgent != "" {
-		os.Setenv("MINDX_MASTER", cfg.LastAgent)
-	}
-
 	return cfg, nil
 }

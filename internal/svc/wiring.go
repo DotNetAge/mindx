@@ -29,7 +29,7 @@ func GetCommandMetas() []gateway.CommandMeta {
 func listAgents(app *core.App) ([]map[string]string, error) {
 	registry := app.Agents()
 	agents := registry.List()
-	masterName := app.Settings().MasterAgent
+	masterName := app.CurrentAgentName()
 
 	var result []map[string]string
 	for _, agent := range agents {

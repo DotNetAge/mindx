@@ -50,10 +50,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("MindX 尚未配置，请先运行 'mindx' 完成首次配置后再启动 Daemon 服务")
 	}
 
-	if cfg.LastAgent != "" {
-		os.Setenv("MINDX_MASTER", cfg.LastAgent)
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 

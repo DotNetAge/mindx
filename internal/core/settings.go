@@ -5,8 +5,7 @@ import (
 )
 
 type Settings struct {
-	Test        bool
-	MasterAgent string
+	Test bool
 }
 
 func (s *Settings) UserPreferences() string {
