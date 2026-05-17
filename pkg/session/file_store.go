@@ -396,8 +396,9 @@ func (s *FileSessionStore) ListSessions(ctx context.Context) ([]core.SessionInfo
 		}
 		agentName := parts[0]
 		sessionID := parts[1]
+		sessionDirPath := filepath.Join(s.rootDir, agentName, sessionID)
 
-		si, statErr := statSessionInfo(agentName, sessionID, path)
+		si, statErr := statSessionInfo(agentName, sessionID, sessionDirPath)
 		if statErr != nil {
 			return nil
 		}
@@ -467,18 +468,43 @@ func writeMessagesToFile(path string, msgs []core.Message) error {
 	return os.WriteFile(path, data, 0600)
 }
 
-func statSessionInfo(agentName, sessionID, path string) (*core.SessionInfo, error) {
-	info, err := os.Stat(path)
+func statSessionInfo(agentName, sessionID, sessionDirPath string) (*core.SessionInfo, error) {
+	info, err := os.Stat(sessionDirPath)
 	if err != nil {
 		return nil, err
 	}
 
-	return &core.SessionInfo{
+	si := &core.SessionInfo{
 		SessionID:      sessionID,
 		AgentName:      agentName,
 		LastActivityAt: info.ModTime(),
 		CreatedAt:      info.ModTime(),
-	}, nil
+	}
+
+	meta, metaErr := LoadSessionMeta(sessionDirPath)
+	if metaErr == nil {
+		si.ProjectDir = meta.ProjectWorkingDir
+		si.CreatedAt = meta.CreatedAt
+		si.LastActivityAt = meta.UpdatedAt
+		if si.LastActivityAt.IsZero() {
+			si.LastActivityAt = info.ModTime()
+		}
+	} else {
+		cwd, cwdErr := os.Getwd()
+		if cwdErr == nil {
+			si.ProjectDir = cwd
+		}
+		defaultMeta := &SessionMeta{
+			SessionID:         sessionID,
+			AgentName:         agentName,
+			ProjectWorkingDir: si.ProjectDir,
+			CreatedAt:         info.ModTime(),
+			LastActivityAt:    info.ModTime(),
+		}
+		_ = defaultMeta.Save(sessionDirPath)
+	}
+
+	return si, nil
 }
 
 // GetSessionMeta loads session metadata for the given session ID.

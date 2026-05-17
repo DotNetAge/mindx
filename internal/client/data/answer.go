@@ -43,16 +43,17 @@ type ResultEntry struct {
 }
 
 type AnswerData struct {
-	SessionID        string          `json:"session_id"`
-	AgentName        string          `json:"agent_name"`
-	UserQuestion     string          `json:"user_question"`
-	Status           AnswerStatus    `json:"status"`
-	ThinkingLog      []ThinkingRound `json:"thinking_log"`
-	PendingThink     string          `json:"pending_think"`
-	Actions          []ActionStep    `json:"actions"`
-	Results          []ResultEntry   `json:"results"`
-	IsThinking       bool            `json:"is_thinking"`
-	ThinkingCollapsed bool           `json:"thinking_collapsed"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
+	SessionID         string          `json:"session_id"`
+	AgentName         string          `json:"agent_name"`
+	UserQuestion      string          `json:"user_question"`
+	Status            AnswerStatus    `json:"status"`
+	ThinkingLog       []ThinkingRound `json:"thinking_log"`
+	PendingThink      string          `json:"pending_think"`
+	Actions           []ActionStep    `json:"actions"`
+	Results           []ResultEntry   `json:"results"`
+	IsThinking        bool            `json:"is_thinking"`
+	ThinkingCollapsed bool            `json:"thinking_collapsed"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	Duration          time.Duration   `json:"duration"`
 }
