@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	"github.com/DotNetAge/mindx/internal/client/style"
 	lipgloss "charm.land/lipgloss/v2"
@@ -35,6 +36,18 @@ func New() *StatusBar {
 }
 
 func (s *StatusBar) Update(msg any) (*StatusBar, tea.Cmd) {
+	switch m := msg.(type) {
+	case clientmsg.WindowResizeMsg:
+		s.Width = m.Width
+	case clientmsg.AgentSwitchMsg:
+		s.AgentName = m.AgentName
+	case clientmsg.TranscriptToggleMsg:
+		if s.ModeLabel == "" {
+			s.ModeLabel = "Transcript"
+		} else {
+			s.ModeLabel = ""
+		}
+	}
 	return s, nil
 }
 

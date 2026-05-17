@@ -29,7 +29,7 @@ func (n *NotificationBar) Update(msg any) (*NotificationBar, tea.Cmd) {
 	switch msg := msg.(type) {
 	case clientmsg.NotifTimeoutMsg:
 		return n.removeByID(msg.ID), nil
-	case tea.WindowSizeMsg:
+	case clientmsg.WindowResizeMsg:
 		n.Width = msg.Width
 		return n, nil
 	default:

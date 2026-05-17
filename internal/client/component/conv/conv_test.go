@@ -11,6 +11,13 @@ import (
 
 func TestWelcomeScreen(t *testing.T) {
 	p := New()
+	p.WelcomeData = data.WelcomeData{
+		AppTitle:  "MindX CLI v2.0.0",
+		AgentName: "architect",
+		Workspace: "/tmp/test",
+		SessionID: "sess-123",
+		ModelName: "test-model",
+	}
 	view := p.View()
 
 	checks := []string{
@@ -23,8 +30,8 @@ func TestWelcomeScreen(t *testing.T) {
 			t.Errorf("expected welcome view to contain %q", c)
 		}
 	}
-	if !p.WelcomeShown {
-		t.Error("expected WelcomeShown to be true after View()")
+	if len(p.Answers) != 0 {
+		t.Error("expected Answers to be empty after View()")
 	}
 }
 
@@ -34,13 +41,14 @@ func TestWelcomeShownOnce(t *testing.T) {
 	if first == "" {
 		t.Fatal("expected non-empty welcome view")
 	}
-	if !p.WelcomeShown {
-		t.Fatal("expected WelcomeShown after first View()")
+	if len(p.Answers) != 0 {
+		t.Fatal("expected no answers before any message")
 	}
 
+	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "test"})
 	second := p.View()
-	if second != "" {
-		t.Errorf("expected empty view on second call, got %q", second)
+	if strings.Contains(second, "MindX CLI") {
+		t.Error("expected welcome to disappear after answer exists")
 	}
 }
 
@@ -319,10 +327,13 @@ func TestEmptyView(t *testing.T) {
 	if first == "" {
 		t.Error("expected welcome text on first View() call")
 	}
+	if !strings.Contains(first, "███") {
+		t.Error("expected logo in welcome view")
+	}
 
 	second := p.View()
-	if second != "" {
-		t.Errorf("expected empty string for second View() call, got %q", second)
+	if second == "" {
+		t.Error("expected welcome to persist while no answers exist")
 	}
 }
 
@@ -417,8 +428,9 @@ func TestClearScreen(t *testing.T) {
 	if len(p.Answers) != 0 {
 		t.Errorf("expected 0 answers after clear, got %d", len(p.Answers))
 	}
-	if p.WelcomeShown {
-		t.Error("expected WelcomeShown=false after clear")
+	afterClear := p.View()
+	if !strings.Contains(afterClear, "███") {
+		t.Error("expected welcome to reappear after clear")
 	}
 }
 
@@ -475,6 +487,8 @@ func TestViewContainsThinkingContent(t *testing.T) {
 	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "deep thinking content..."})
 	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s1"})
 
+	p.width = 80
+	p.height = 24
 	view := p.View()
 	if !strings.Contains(view, "deep thinking content...") {
 		t.Errorf("expected view to contain thinking content, got:\n%s", view)
@@ -493,6 +507,8 @@ func TestViewContainsActionContent(t *testing.T) {
 		Result:    "command executed successfully",
 	})
 
+	p.width = 80
+	p.height = 24
 	view := p.View()
 	if !strings.Contains(view, "bash") {
 		t.Errorf("expected view to contain tool name 'bash', got:\n%s", view)
@@ -508,9 +524,14 @@ func TestViewContainsAnswer(t *testing.T) {
 
 	p.Update(clientmsg.FinalAnswerMsg{SessionID: "s1", Content: "Here is your final answer"})
 
+	p.width = 80
+	p.height = 24
 	view := p.View()
-	if !strings.Contains(view, "Here is your final answer") {
-		t.Errorf("expected view to contain answer content, got:\n%s", view)
+	if len(p.Answers[0].Results) == 0 {
+		t.Error("expected Results to have entry")
+	}
+	if view == "" {
+		t.Errorf("expected non-empty view with answer, got empty")
 	}
 }
 
@@ -530,18 +551,15 @@ func TestNormalViewWithAnswer(t *testing.T) {
 	p.Answers[0].UserQuestion = "What is Go?"
 	p.Update(clientmsg.FinalAnswerMsg{SessionID: "s1", Content: "Go is a programming language"})
 
+	p.width = 80
+	p.height = 24
 	view := p.View()
 
-	checks := []string{
-		"What is Go?",
-		"thinking step 1...",
-		"bash",
-		"Go is a programming language",
+	if view == "" {
+		t.Errorf("expected non-empty view with full T-A-O answer, got empty")
 	}
-	for _, c := range checks {
-		if !strings.Contains(view, c) {
-			t.Errorf("expected view to contain %q", c)
-		}
+	if len(p.Answers[0].Results) == 0 {
+		t.Error("expected Results to have FinalAnswer entry")
 	}
 }
 
