@@ -81,9 +81,9 @@ func handleAgents(ctx *gateway.CommandContext) (any, error) {
 			"desc":  item["description"],
 			"model": item["model"],
 		}
-		// Pass through the master flag from the backend (if present).
-		if item["master"] == "true" {
-			r["master"] = "true"
+		// Pass through the active flag from the backend (if present).
+		if item["active"] == "true" {
+			r["active"] = "true"
 		}
 		result = append(result, r)
 	}

@@ -29,7 +29,7 @@ func GetCommandMetas() []gateway.CommandMeta {
 func listAgents(app *core.App) ([]map[string]string, error) {
 	registry := app.Agents()
 	agents := registry.List()
-	masterName := app.CurrentAgentName()
+	activeName := app.CurrentAgentName()
 
 	var result []map[string]string
 	for _, agent := range agents {
@@ -39,8 +39,8 @@ func listAgents(app *core.App) ([]map[string]string, error) {
 			"description": agent.Description,
 			"model":       agent.Model,
 		}
-		if agent.Name == masterName {
-			entry["master"] = "true"
+		if agent.Name == activeName {
+			entry["active"] = "true"
 		}
 		result = append(result, entry)
 	}
@@ -48,7 +48,7 @@ func listAgents(app *core.App) ([]map[string]string, error) {
 }
 
 func listSkills(app *core.App) ([]map[string]string, error) {
-	m, err := app.GetMaster()
+	m, err := app.CurrentAgent()
 	if err != nil {
 		return []map[string]string{}, nil
 	}
