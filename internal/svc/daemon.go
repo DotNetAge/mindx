@@ -220,10 +220,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	sessionID := d.resolveSessionID(msg.SessionID, providedSessionID)
 	resolvedAgentName := agentName
 	if resolvedAgentName == "" {
-		resolvedAgentName = d.app.CurrentAgentName()
-		if resolvedAgentName == "" {
-			resolvedAgentName = "master"
-		}
+		resolvedAgentName = agent.Name()
 	}
 
 	d.logger.Info("request start",
