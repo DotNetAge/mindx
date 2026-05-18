@@ -123,6 +123,12 @@ func TestActionStart(t *testing.T) {
 
 	p.Update(clientmsg.ActionStartMsg{
 		SessionID:    "s1",
+		ToolCount:    1,
+		ToolNames:    []string{"bash"},
+		EstimatedTok: 100,
+	})
+	p.Update(clientmsg.ToolExecStartMsg{
+		SessionID:    "s1",
 		ToolName:     "bash",
 		EstimatedTok: 100,
 		Params:       map[string]any{"cmd": "ls"},
@@ -161,7 +167,7 @@ func TestActionStartFlushesPendingThink(t *testing.T) {
 	p.View()
 
 	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking before action..."})
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolName: "bash"})
+	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})
 
 	if len(p.Answers[0].ThinkingLog) != 1 {
 		t.Fatalf("expected 1 ThinkingLog entry, got %d", len(p.Answers[0].ThinkingLog))
@@ -174,24 +180,13 @@ func TestActionStartFlushesPendingThink(t *testing.T) {
 	}
 }
 
-func TestActionProgress(t *testing.T) {
+func TestToolExecEndSuccess(t *testing.T) {
 	p := New()
 	p.View()
 
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolName: "bash"})
-	p.Update(clientmsg.ActionProgressMsg{SessionID: "s1", ToolName: "bash", Progress: "running command..."})
-
-	if p.Answers[0].Actions[0].ProgressText != "running command..." {
-		t.Errorf("expected ProgressText %q, got %q", "running command...", p.Answers[0].Actions[0].ProgressText)
-	}
-}
-
-func TestActionResultSuccess(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolName: "bash"})
-	p.Update(clientmsg.ActionResultMsg{
+	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})
+	p.Update(clientmsg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash"})
+	p.Update(clientmsg.ToolExecEndMsg{
 		SessionID: "s1",
 		ToolName:  "bash",
 		Success:   true,
@@ -207,12 +202,13 @@ func TestActionResultSuccess(t *testing.T) {
 	}
 }
 
-func TestActionResultFailed(t *testing.T) {
+func TestToolExecEndFailed(t *testing.T) {
 	p := New()
 	p.View()
 
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolName: "bash"})
-	p.Update(clientmsg.ActionResultMsg{
+	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})
+	p.Update(clientmsg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash"})
+	p.Update(clientmsg.ToolExecEndMsg{
 		SessionID: "s1",
 		ToolName:  "bash",
 		Success:   false,
@@ -225,18 +221,6 @@ func TestActionResultFailed(t *testing.T) {
 	}
 	if step.ResultText != "permission denied" {
 		t.Errorf("expected ResultText %q, got %q", "permission denied", step.ResultText)
-	}
-}
-
-func TestActionProgressWrongTool(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolName: "bash"})
-	p.Update(clientmsg.ActionProgressMsg{SessionID: "s1", ToolName: "wrong-tool", Progress: "should not update"})
-
-	if p.Answers[0].Actions[0].ProgressText != "" {
-		t.Errorf("expected empty ProgressText for wrong tool, got %q", p.Answers[0].Actions[0].ProgressText)
 	}
 }
 
@@ -342,7 +326,8 @@ func TestCollapseToggle(t *testing.T) {
 	p := New()
 	p.View()
 
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolName: "bash"})
+	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})
+	p.Update(clientmsg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash"})
 	step := &p.Answers[0].Actions[0]
 
 	if !step.Collapsed {
@@ -467,13 +452,17 @@ func TestViewContainsActionContent(t *testing.T) {
 	p := New()
 	p.View()
 
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolName: "bash", EstimatedTok: 100})
-	p.Update(clientmsg.ActionResultMsg{
+	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}, EstimatedTok: 100})
+	p.Update(clientmsg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash", EstimatedTok: 100})
+	p.Update(clientmsg.ToolExecEndMsg{
 		SessionID: "s1",
 		ToolName:  "bash",
 		Success:   true,
 		Result:    "command executed successfully",
 	})
+
+	// Toggle collapse to show result text
+	p.Update(clientmsg.CollapseToggleMsg{AnswerIndex: 0, ActionIndex: 0})
 
 	p.width = 80
 	p.height = 24
@@ -509,8 +498,9 @@ func TestNormalViewWithAnswer(t *testing.T) {
 
 	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking step 1..."})
 	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s1"})
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolName: "bash", EstimatedTok: 100})
-	p.Update(clientmsg.ActionResultMsg{
+	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}, EstimatedTok: 100})
+	p.Update(clientmsg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash", EstimatedTok: 100})
+	p.Update(clientmsg.ToolExecEndMsg{
 		SessionID: "s1",
 		ToolName:  "bash",
 		Success:   true,
