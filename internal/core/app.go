@@ -9,24 +9,25 @@ import (
 	"time"
 
 	"github.com/DotNetAge/gochat"
+	goragcore "github.com/DotNetAge/gorag/core"
 	"github.com/DotNetAge/goreact"
 	"github.com/DotNetAge/goreact/core"
-	goragcore "github.com/DotNetAge/gorag/core"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/session"
 	"github.com/joho/godotenv"
+	"gopkg.in/yaml.v3"
 )
 
 type App struct {
-	settings   *Settings
+	settings    *Settings
 	mindxConfig *MindxConfig
-	credStore  CredentialStore
-	logger     logging.Logger
-	agents     *goreact.AgentRegistry
-	models     *goreact.ModelRegistry
-	master     *goreact.Agent
-	masterMu   sync.RWMutex
+	credStore   CredentialStore
+	logger      logging.Logger
+	agents      *goreact.AgentRegistry
+	models      *goreact.ModelRegistry
+	current      *goreact.Agent
+	currentMu    sync.RWMutex
 
 	rules  core.RuleRegistry
 	sessDB *session.FileSessionStore
@@ -206,16 +207,16 @@ func (a *App) CreateSession(agentName string) (*core.SessionInfo, error) {
 	return sessionInfo, nil
 }
 
-func (a *App) GetMaster() (*goreact.Agent, error) {
-	return a.getMaster()
+func (a *App) CurrentAgent() (*goreact.Agent, error) {
+	return a.currentAgent()
 }
 
-func (a *App) getMaster() (*goreact.Agent, error) {
-	a.masterMu.Lock()
-	defer a.masterMu.Unlock()
+func (a *App) currentAgent() (*goreact.Agent, error) {
+	a.currentMu.Lock()
+	defer a.currentMu.Unlock()
 
-	if a.master != nil {
-		return a.master, nil
+	if a.current != nil {
+		return a.current, nil
 	}
 
 	currentAgentName := a.CurrentAgentName()
@@ -223,25 +224,25 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 		return nil, fmt.Errorf("no agent available")
 	}
 
-	masterAgent := a.Agents().Get(currentAgentName)
-	if masterAgent == nil {
+	agent := a.Agents().Get(currentAgentName)
+	if agent == nil {
 		return nil, fmt.Errorf("agent %q not found", currentAgentName)
 	}
 
-	if masterAgent.Model == "" {
-		return nil, fmt.Errorf("agent %q has no model configured", masterAgent.Name)
+	var resolvedModel core.ModelConfig
+	if agent.Model == "" {
+		return nil, fmt.Errorf("agent %q has no model configured", agent.Name)
 	}
-	masterModel := a.Models().Get(masterAgent.Model)
-	if masterModel == nil {
-		return nil, fmt.Errorf("model %q not found for agent %q", masterAgent.Model, masterAgent.Name)
+	modelCfg := a.Models().Get(agent.Model)
+	if modelCfg == nil {
+		return nil, fmt.Errorf("model %q not found for agent %q", agent.Model, agent.Name)
 	}
-
-	resolvedModel := *masterModel
-	resolvedModel.APIKey = a.resolveAPIKey(masterModel.APIKey)
+	resolvedModel = *modelCfg
+	resolvedModel.APIKey = a.resolveAPIKey(resolvedModel.APIKey)
 
 	opts := []goreact.AgentOption{
 		goreact.WithSkillDir(a.settings.SkillsDir()),
-		goreact.WithConfig(masterAgent),
+		goreact.WithConfig(agent),
 		goreact.WithModel(&resolvedModel),
 		goreact.WithLogger(a.logger),
 	}
@@ -271,13 +272,13 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 	if a.embedder != nil {
 		memConfig := memory.MemoryConfig{
 			MemoryType: core.MemoryTypeLongTerm,
-			AgentName:  masterAgent.Name,
+			AgentName:  agent.Name,
 			MemoryDir:  filepath.Join(a.settings.UserPreferences(), "memory"),
 			Embedder:   a.embedder,
 		}
 		mem, memErr := memory.NewRAGMemoryFromConfig(memConfig)
 		if memErr != nil {
-			a.logger.Warn("Failed to create memory for agent %q: %v", masterAgent.Name, memErr)
+			a.logger.Warn("Failed to create memory for agent %q: %v", agent.Name, memErr)
 		} else {
 			opts = append(opts, goreact.WithMemory(mem))
 		}
@@ -287,14 +288,14 @@ func (a *App) getMaster() (*goreact.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.master = m
+	a.current = m
 	a.syncProjectMemory(m, currentAgentName)
-	return a.master, nil
+	return a.current, nil
 }
 
 func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 	if name == "" {
-		return a.getMaster()
+		return a.currentAgent()
 	}
 
 	a.agentMu.RLock()
@@ -421,9 +422,9 @@ func (a *App) syncProjectMemory(agent *goreact.Agent, agentName string) {
 func (a *App) IsModelAvailable(name ...string) bool {
 	n := ""
 	if len(name) == 0 {
-		a.masterMu.RLock()
-		m := a.master
-		a.masterMu.RUnlock()
+		a.currentMu.RLock()
+		m := a.current
+		a.currentMu.RUnlock()
 		if m == nil || m.Model() == nil {
 			return false
 		}
@@ -465,4 +466,108 @@ When a task is outside your expertise, choose one path:
 
 - **Know who handles it** → call **Delegate** tool directly (agent_name + task), then **CollectResults**
 - **Don't know who** → load **find-experts** skill first (discovers experts, then delegates via same workflow)`
+}
+
+func (a *App) SwitchAgentModel(agentName, modelName string) error {
+	cfg := a.Agents().Get(agentName)
+	if cfg == nil {
+		return fmt.Errorf("agent %q not found", agentName)
+	}
+
+	model := a.Models().Get(modelName)
+	if model == nil || !model.Enabled {
+		return fmt.Errorf("model %q not available", modelName)
+	}
+
+	oldModel := cfg.Model
+	cfg.Model = modelName
+
+	agentFile := filepath.Join(a.settings.AgentsDir(), agentName+".yml")
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		cfg.Model = oldModel
+		return fmt.Errorf("marshal failed: %w", err)
+	}
+	if err := os.WriteFile(agentFile, data, 0644); err != nil {
+		cfg.Model = oldModel
+		return fmt.Errorf("write failed: %w", err)
+	}
+
+	a.agentMu.Lock()
+	delete(a.agentCache, agentName)
+	a.agentMu.Unlock()
+
+	if a.CurrentAgentName() == agentName {
+		a.currentMu.Lock()
+		a.current = nil
+		a.currentMu.Unlock()
+	}
+
+	a.logger.Info("agent model updated",
+		"agent", agentName,
+		"old_model", oldModel,
+		"new_model", modelName,
+	)
+
+	return nil
+}
+
+func (a *App) SwitchSession(sessionID string) (*core.SessionInfo, error) {
+	ctx := context.Background()
+	sessions, err := a.SessDB().ListSessions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+
+	var target *core.SessionInfo
+	for i := range sessions {
+		if sessions[i].SessionID == sessionID {
+			target = &sessions[i]
+			break
+		}
+	}
+	if target == nil {
+		return nil, fmt.Errorf("session %q not found", sessionID)
+	}
+
+	a.SetCurrentSessionMeta(target)
+
+	if a.mindxConfig != nil {
+		a.mindxConfig.LastSessionID = sessionID
+		_ = a.mindxConfig.Save()
+	}
+
+	a.logger.Info("session switched",
+		"session_id", sessionID,
+	)
+
+	return target, nil
+}
+
+func (a *App) ClearCurrentSession() (*core.SessionInfo, error) {
+	currentMeta := a.CurrentSessionMeta()
+	var oldSessionID string
+	if currentMeta != nil && currentMeta.SessionID != "" {
+		oldSessionID = currentMeta.SessionID
+		a.logger.Warn("physically deleting session",
+			"session_id", currentMeta.SessionID,
+			"reason", "user requested /chat clear",
+		)
+
+		if err := a.SessDB().Delete(context.Background(), time.Now().Unix(), currentMeta.SessionID); err != nil {
+			return nil, fmt.Errorf("delete failed: %w", err)
+		}
+	}
+
+	newSession, err := a.CreateSession(a.CurrentAgentName())
+	if err != nil {
+		return nil, fmt.Errorf("create new session failed: %w", err)
+	}
+
+	a.logger.Info("session cleared and new one created",
+		"old_session_id", oldSessionID,
+		"new_session_id", newSession.SessionID,
+	)
+
+	return newSession, nil
 }
