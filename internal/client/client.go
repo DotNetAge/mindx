@@ -33,7 +33,6 @@ type rootModel struct {
 	choices      *choices.ChoicesPanel
 
 	app         *appcore.App
-	chatManager *chatSessionManager
 	registry    *SlashCommandRegistry
 	agent *goreact.Agent
 
@@ -63,7 +62,6 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 		if err != nil {
 			m.notifBar.Add(data.Notification{Message: fmt.Sprintf("Agent不可用: %v", err), Level: data.NotifError})
 		}
-		m.chatManager = newChatSessionManager(m.app)
 		m.registry = BuiltinCommands(CommandDeps{
 			App:     m.app,
 			OnClear: func() { m.program.Send(clientmsg.ClearScreenMsg{}) },
@@ -421,13 +419,6 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 
 	m.executing = true
 	agent := m.agent
-
-	_, err := m.chatManager.getOrCreateSession(agent)
-	if err != nil {
-		m.executing = false
-		return m, m.notifBar.Add(data.Notification{Message: fmt.Sprintf("会话创建失败: %v", err), Level: data.NotifError})
-	}
-
 	sessionID := agent.SessionID()
 
 	go func() {

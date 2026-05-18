@@ -183,8 +183,8 @@ func TestCommandSuggestions(t *testing.T) {
 	if i.cmdSuggest.Filter != "" {
 		t.Errorf("Expected empty filter after '/', got '%s'", i.cmdSuggest.Filter)
 	}
-	if len(i.cmdSuggest.Commands) != 3 {
-		t.Errorf("Expected 3 commands, got %d", len(i.cmdSuggest.Commands))
+	if len(i.cmdSuggest.Items) != 3 {
+		t.Errorf("Expected 3 commands, got %d", len(i.cmdSuggest.Items))
 	}
 	i.Update(tea.KeyPressMsg(tea.Key{Text: "h", Code: 'h'}))
 	i.Update(tea.KeyPressMsg(tea.Key{Text: "e", Code: 'e'}))
@@ -249,8 +249,8 @@ func TestAgentSuggestions(t *testing.T) {
 	if i.agentSuggest.Filter != "" {
 		t.Errorf("Expected empty filter after '@', got '%s'", i.agentSuggest.Filter)
 	}
-	if len(i.agentSuggest.Agents) != 2 {
-		t.Errorf("Expected 2 agents, got %d", len(i.agentSuggest.Agents))
+	if len(i.agentSuggest.Items) != 2 {
+		t.Errorf("Expected 2 agents, got %d", len(i.agentSuggest.Items))
 	}
 	i.Update(tea.KeyPressMsg(tea.Key{Text: "d", Code: 'd'}))
 	i.Update(tea.KeyPressMsg(tea.Key{Text: "e", Code: 'e'}))
