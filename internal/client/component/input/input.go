@@ -136,7 +136,7 @@ func (i *InputArea) handleKey(k tea.KeyPressMsg) (*InputArea, tea.Cmd) {
 }
 
 func (i *InputArea) handleTab() {
-	if len(i.modelSuggest.Models) > 0 {
+	if len(i.modelSuggest.Items) > 0 {
 		list := i.modelSuggest.filtered()
 		if len(list) > 0 {
 			sel := list[i.modelSuggest.SelIdx]
@@ -144,7 +144,7 @@ func (i *InputArea) handleTab() {
 			i.TextBuffer.WriteString("/model " + sel.Name + " ")
 			i.CursorPos = i.TextBuffer.Len()
 		}
-	} else if len(i.sessionSuggest.Sessions) > 0 {
+	} else if len(i.sessionSuggest.Items) > 0 {
 		list := i.sessionSuggest.filtered()
 		if len(list) > 0 {
 			sel := list[i.sessionSuggest.SelIdx]
@@ -156,7 +156,7 @@ func (i *InputArea) handleTab() {
 			}
 			i.CursorPos = i.TextBuffer.Len()
 		}
-	} else if len(i.cmdSuggest.Commands) > 0 {
+	} else if len(i.cmdSuggest.Items) > 0 {
 		list := i.cmdSuggest.filtered()
 		if len(list) > 0 {
 			sel := list[i.cmdSuggest.SelIdx]
@@ -164,7 +164,7 @@ func (i *InputArea) handleTab() {
 			i.TextBuffer.WriteString("/" + sel.Name + " ")
 			i.CursorPos = i.TextBuffer.Len()
 		}
-	} else if len(i.agentSuggest.Agents) > 0 {
+	} else if len(i.agentSuggest.Items) > 0 {
 		list := i.agentSuggest.filtered()
 		if len(list) > 0 {
 			sel := list[i.agentSuggest.SelIdx]
@@ -177,25 +177,25 @@ func (i *InputArea) handleTab() {
 }
 
 func (i *InputArea) navigateSuggestion(dir int) {
-	if len(i.modelSuggest.Models) > 0 {
+	if len(i.modelSuggest.Items) > 0 {
 		list := i.modelSuggest.filtered()
 		newIdx := i.modelSuggest.SelIdx + dir
 		if newIdx >= 0 && newIdx < len(list) {
 			i.modelSuggest.SelIdx = newIdx
 		}
-	} else if len(i.sessionSuggest.Sessions) > 0 {
+	} else if len(i.sessionSuggest.Items) > 0 {
 		list := i.sessionSuggest.filtered()
 		newIdx := i.sessionSuggest.SelIdx + dir
 		if newIdx >= 0 && newIdx < len(list) {
 			i.sessionSuggest.SelIdx = newIdx
 		}
-	} else if len(i.cmdSuggest.Commands) > 0 {
+	} else if len(i.cmdSuggest.Items) > 0 {
 		list := i.cmdSuggest.filtered()
 		newIdx := i.cmdSuggest.SelIdx + dir
 		if newIdx >= 0 && newIdx < len(list) {
 			i.cmdSuggest.SelIdx = newIdx
 		}
-	} else if len(i.agentSuggest.Agents) > 0 {
+	} else if len(i.agentSuggest.Items) > 0 {
 		list := i.agentSuggest.filtered()
 		newIdx := i.agentSuggest.SelIdx + dir
 		if newIdx >= 0 && newIdx < len(list) {
@@ -212,10 +212,10 @@ func (i *InputArea) resetSuggestions() {
 }
 
 func (i *InputArea) hasActiveSuggestion() bool {
-	return len(i.modelSuggest.Models) > 0 ||
-		len(i.sessionSuggest.Sessions) > 0 ||
-		len(i.cmdSuggest.Commands) > 0 ||
-		len(i.agentSuggest.Agents) > 0
+	return len(i.modelSuggest.Items) > 0 ||
+		len(i.sessionSuggest.Items) > 0 ||
+		len(i.cmdSuggest.Items) > 0 ||
+		len(i.agentSuggest.Items) > 0
 }
 
 func (i *InputArea) updateSuggestion() {
@@ -225,25 +225,25 @@ func (i *InputArea) updateSuggestion() {
 		if len(text) > 6 {
 			filter = strings.TrimPrefix(text, "/model ")
 		}
-		i.modelSuggest = ModelSuggestion{Models: i.Models, Filter: filter, SelIdx: 0}
+		i.modelSuggest = ModelSuggestion{Suggestion: Suggestion[ModelItem]{Items: i.Models, Filter: filter, SelIdx: 0}}
 		i.cmdSuggest = CommandSuggestion{}
 		i.agentSuggest = AgentSuggestion{}
 		i.sessionSuggest = SessionSuggestion{}
 	} else if strings.HasPrefix(text, "/chat ") {
 		filter := strings.TrimPrefix(text, "/chat ")
-		i.sessionSuggest = SessionSuggestion{Sessions: i.Sessions, Filter: filter, SelIdx: 0}
+		i.sessionSuggest = SessionSuggestion{Suggestion: Suggestion[SessionItem]{Items: i.Sessions, Filter: filter, SelIdx: 0}}
 		i.cmdSuggest = CommandSuggestion{}
 		i.agentSuggest = AgentSuggestion{}
 		i.modelSuggest = ModelSuggestion{}
 	} else if strings.HasPrefix(text, "/") {
 		filter := strings.TrimPrefix(text, "/")
-		i.cmdSuggest = CommandSuggestion{Commands: i.Commands, Filter: filter, SelIdx: 0}
+		i.cmdSuggest = CommandSuggestion{Suggestion: Suggestion[SlashCommand]{Items: i.Commands, Filter: filter, SelIdx: 0}}
 		i.agentSuggest = AgentSuggestion{}
 		i.modelSuggest = ModelSuggestion{}
 		i.sessionSuggest = SessionSuggestion{}
 	} else if strings.HasPrefix(text, "@") {
 		filter := strings.TrimPrefix(text, "@")
-		i.agentSuggest = AgentSuggestion{Agents: i.Agents, Filter: filter, SelIdx: 0}
+		i.agentSuggest = AgentSuggestion{Suggestion: Suggestion[data.AgentInfo]{Items: i.Agents, Filter: filter, SelIdx: 0}}
 		i.cmdSuggest = CommandSuggestion{}
 		i.modelSuggest = ModelSuggestion{}
 		i.sessionSuggest = SessionSuggestion{}
