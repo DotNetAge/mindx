@@ -4,32 +4,63 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DotNetAge/mindx/internal/client/data"
 	"github.com/DotNetAge/mindx/internal/client/style"
 	lipgloss "charm.land/lipgloss/v2"
 )
 
-type CommandSuggestion struct {
-	Commands []SlashCommand
-	Filter   string
-	SelIdx   int
+// Suggestion holds common suggestion state and is embedded by concrete suggestion types.
+type Suggestion[T any] struct {
+	Items  []T
+	Filter string
+	SelIdx int
 }
+
+func (s *Suggestion[T]) Reset() {
+	s.Filter = ""
+	s.SelIdx = 0
+}
+
+func filterItems[T any](items []T, filter string, match func(T, string) bool) []T {
+	if filter == "" {
+		return items
+	}
+	var out []T
+	for _, item := range items {
+		if match(item, filter) {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func selectIndex[T any](items []T, idx int) (T, bool) {
+	if len(items) == 0 || idx >= len(items) {
+		var zero T
+		return zero, false
+	}
+	return items[idx], true
+}
+
+// ---------- SlashCommand ----------
 
 type SlashCommand struct {
 	Name        string
 	Description string
 }
 
+type CommandSuggestion struct {
+	Suggestion[SlashCommand]
+}
+
 func (s *CommandSuggestion) filtered() []SlashCommand {
-	if s.Filter == "" {
-		return s.Commands
-	}
-	var out []SlashCommand
-	for _, c := range s.Commands {
-		if strings.Contains(c.Name, s.Filter) {
-			out = append(out, c)
-		}
-	}
-	return out
+	return filterItems(s.Items, s.Filter, func(c SlashCommand, f string) bool {
+		return strings.Contains(c.Name, f)
+	})
+}
+
+func (s *CommandSuggestion) Select() (SlashCommand, bool) {
+	return selectIndex(s.filtered(), s.SelIdx)
 }
 
 func (s *CommandSuggestion) View(width int) string {
@@ -50,41 +81,25 @@ func (s *CommandSuggestion) View(width int) string {
 	return lipgloss.NewStyle().Width(width).Render(strings.TrimRight(b.String(), "\n"))
 }
 
-func (s *CommandSuggestion) Reset() {
-	s.Filter = ""
-	s.SelIdx = 0
-}
-
-func (s *CommandSuggestion) Select() (selected SlashCommand, ok bool) {
-	list := s.filtered()
-	if len(list) == 0 || s.SelIdx >= len(list) {
-		return SlashCommand{}, false
-	}
-	return list[s.SelIdx], true
-}
-
-type ModelSuggestion struct {
-	Models []ModelItem
-	Filter string
-	SelIdx int
-}
+// ---------- Model ----------
 
 type ModelItem struct {
 	Name        string
 	Description string
 }
 
+type ModelSuggestion struct {
+	Suggestion[ModelItem]
+}
+
 func (s *ModelSuggestion) filtered() []ModelItem {
-	if s.Filter == "" {
-		return s.Models
-	}
-	var out []ModelItem
-	for _, m := range s.Models {
-		if strings.Contains(strings.ToLower(m.Name), strings.ToLower(s.Filter)) {
-			out = append(out, m)
-		}
-	}
-	return out
+	return filterItems(s.Items, s.Filter, func(m ModelItem, f string) bool {
+		return strings.Contains(strings.ToLower(m.Name), strings.ToLower(f))
+	})
+}
+
+func (s *ModelSuggestion) Select() (ModelItem, bool) {
+	return selectIndex(s.filtered(), s.SelIdx)
 }
 
 func (s *ModelSuggestion) View(width int) string {
@@ -106,24 +121,7 @@ func (s *ModelSuggestion) View(width int) string {
 	return lipgloss.NewStyle().Width(width).Render(strings.TrimRight(b.String(), "\n"))
 }
 
-func (s *ModelSuggestion) Reset() {
-	s.Filter = ""
-	s.SelIdx = 0
-}
-
-func (s *ModelSuggestion) Select() (selected ModelItem, ok bool) {
-	list := s.filtered()
-	if len(list) == 0 || s.SelIdx >= len(list) {
-		return ModelItem{}, false
-	}
-	return list[s.SelIdx], true
-}
-
-type SessionSuggestion struct {
-	Sessions   []SessionItem
-	Filter     string
-	SelIdx     int
-}
+// ---------- Session ----------
 
 type SessionItem struct {
 	ID          string
@@ -133,17 +131,18 @@ type SessionItem struct {
 	SpecialType string
 }
 
+type SessionSuggestion struct {
+	Suggestion[SessionItem]
+}
+
 func (s *SessionSuggestion) filtered() []SessionItem {
-	if s.Filter == "" {
-		return s.Sessions
-	}
-	var out []SessionItem
-	for _, sess := range s.Sessions {
-		if strings.Contains(sess.ID, s.Filter) {
-			out = append(out, sess)
-		}
-	}
-	return out
+	return filterItems(s.Items, s.Filter, func(sess SessionItem, f string) bool {
+		return strings.Contains(sess.ID, f)
+	})
+}
+
+func (s *SessionSuggestion) Select() (SessionItem, bool) {
+	return selectIndex(s.filtered(), s.SelIdx)
 }
 
 func (s *SessionSuggestion) View(width int) string {
@@ -177,15 +176,36 @@ func (s *SessionSuggestion) View(width int) string {
 	return lipgloss.NewStyle().Width(width).Render(strings.TrimRight(b.String(), "\n"))
 }
 
-func (s *SessionSuggestion) Reset() {
-	s.Filter = ""
-	s.SelIdx = 0
+// ---------- Agent ----------
+
+type AgentSuggestion struct {
+	Suggestion[data.AgentInfo]
 }
 
-func (s *SessionSuggestion) Select() (selected SessionItem, ok bool) {
+func (s *AgentSuggestion) filtered() []data.AgentInfo {
+	return filterItems(s.Items, s.Filter, func(a data.AgentInfo, f string) bool {
+		return strings.Contains(strings.ToLower(a.Name), strings.ToLower(f))
+	})
+}
+
+func (s *AgentSuggestion) Select() (data.AgentInfo, bool) {
+	return selectIndex(s.filtered(), s.SelIdx)
+}
+
+func (s *AgentSuggestion) View(width int) string {
 	list := s.filtered()
-	if len(list) == 0 || s.SelIdx >= len(list) {
-		return SessionItem{}, false
+	if len(list) == 0 {
+		return ""
 	}
-	return list[s.SelIdx], true
+	var b strings.Builder
+	for i, a := range list {
+		line := fmt.Sprintf("@%s  %s", a.Name, a.Description)
+		if i == s.SelIdx {
+			b.WriteString(style.CyanStyle.Render("> " + line))
+		} else {
+			b.WriteString("  " + line)
+		}
+		b.WriteByte('\n')
+	}
+	return lipgloss.NewStyle().Width(width).Render(strings.TrimRight(b.String(), "\n"))
 }
