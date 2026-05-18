@@ -84,6 +84,9 @@ func (p *ConversationPanel) handleThinkingDelta(m clientmsg.ThinkingDeltaMsg) (*
 		return p, nil
 	}
 	a := &p.Answers[idx]
+	if a.Status == data.StatusDone || a.Status == data.StatusError {
+		return p, nil
+	}
 	a.PendingThink += m.Content
 	a.Status = data.StatusThinking
 	a.IsThinking = true
@@ -91,7 +94,7 @@ func (p *ConversationPanel) handleThinkingDelta(m clientmsg.ThinkingDeltaMsg) (*
 }
 
 func (p *ConversationPanel) handleThinkingDone(m clientmsg.ThinkingDoneMsg) (*ConversationPanel, tea.Cmd) {
-	idx := p.findAnswer(m.SessionID)
+	idx := p.canModify(m.SessionID)
 	if idx < 0 {
 		return p, nil
 	}
@@ -114,6 +117,9 @@ func (p *ConversationPanel) handleActionStart(m clientmsg.ActionStartMsg) (*Conv
 		return p, nil
 	}
 	a := &p.Answers[idx]
+	if a.Status == data.StatusDone || a.Status == data.StatusError {
+		return p, nil
+	}
 	if a.PendingThink != "" {
 		round := data.ThinkingRound{
 			Content:   a.PendingThink,
@@ -135,7 +141,7 @@ func (p *ConversationPanel) handleActionStart(m clientmsg.ActionStartMsg) (*Conv
 }
 
 func (p *ConversationPanel) handleActionProgress(m clientmsg.ActionProgressMsg) (*ConversationPanel, tea.Cmd) {
-	idx := p.findAnswer(m.SessionID)
+	idx := p.canModify(m.SessionID)
 	if idx < 0 || len(p.Answers[idx].Actions) == 0 {
 		return p, nil
 	}
@@ -147,7 +153,7 @@ func (p *ConversationPanel) handleActionProgress(m clientmsg.ActionProgressMsg) 
 }
 
 func (p *ConversationPanel) handleActionResult(m clientmsg.ActionResultMsg) (*ConversationPanel, tea.Cmd) {
-	idx := p.findAnswer(m.SessionID)
+	idx := p.canModify(m.SessionID)
 	if idx < 0 || len(p.Answers[idx].Actions) == 0 {
 		return p, nil
 	}
@@ -170,6 +176,15 @@ func (p *ConversationPanel) handleFinalAnswer(m clientmsg.FinalAnswerMsg) (*Conv
 		return p, nil
 	}
 	a := &p.Answers[idx]
+	if a.Status == data.StatusResponding || a.Status == data.StatusDone || a.Status == data.StatusError {
+		return p, nil
+	}
+	if len(a.Results) > 0 {
+		last := a.Results[len(a.Results)-1]
+		if last.Role == "assistant" && last.Content == m.Content {
+			return p, nil
+		}
+	}
 	a.Results = append(a.Results, data.ResultEntry{Role: "assistant", Content: m.Content})
 	a.Status = data.StatusResponding
 	return p, nil
@@ -181,7 +196,17 @@ func (p *ConversationPanel) handleAgentError(m clientmsg.AgentErrorMsg) (*Conver
 		return p, nil
 	}
 	a := &p.Answers[idx]
-	a.Results = append(a.Results, data.ResultEntry{Role: "error", Content: m.Error.Error()})
+	if a.Status == data.StatusDone || a.Status == data.StatusError {
+		return p, nil
+	}
+	errMsg := m.Error.Error()
+	if len(a.Results) > 0 {
+		last := a.Results[len(a.Results)-1]
+		if last.Role == "error" && last.Content == errMsg {
+			return p, nil
+		}
+	}
+	a.Results = append(a.Results, data.ResultEntry{Role: "error", Content: errMsg})
 	a.Status = data.StatusError
 	return p, nil
 }
@@ -220,6 +245,18 @@ func (p *ConversationPanel) findOrCreateAnswer(sessionID, agentName string) int 
 	return len(p.Answers) - 1
 }
 
+func (p *ConversationPanel) canModify(sessionID string) int {
+	idx := p.findAnswer(sessionID)
+	if idx < 0 {
+		return -1
+	}
+	a := p.Answers[idx]
+	if a.Status == data.StatusDone || a.Status == data.StatusError {
+		return -1
+	}
+	return idx
+}
+
 func (p *ConversationPanel) needsTick() bool {
 	for _, a := range p.Answers {
 		if a.IsThinking {
@@ -240,6 +277,10 @@ func (p *ConversationPanel) tickCmd() tea.Cmd {
 
 func (p *ConversationPanel) ViewportUpdate(msg tea.Msg) {
 	p.viewport, _ = p.viewport.Update(msg)
+}
+
+func (p *ConversationPanel) Clear() {
+	p.Answers = nil
 }
 
 func (p *ConversationPanel) View() string {
@@ -268,8 +309,10 @@ func (p *ConversationPanel) View() string {
 
 func (p *ConversationPanel) renderThinkingSection(ans data.AnswerData) string {
 	var b strings.Builder
+	totalRounds := len(ans.ThinkingLog)
 	for i, round := range ans.ThinkingLog {
-		b.WriteString(p.renderThinkingRound(round, i))
+		isLastRound := i == totalRounds-1 && !ans.IsThinking
+		b.WriteString(p.renderThinkingRound(round, i, isLastRound, ans.ThinkingCollapsed))
 	}
 	if ans.PendingThink != "" {
 		b.WriteString(p.renderPendingThink(ans.PendingThink))
@@ -338,14 +381,13 @@ func (p *ConversationPanel) renderAnswer(ans data.AnswerData) string {
 	return b.String()
 }
 
-func (p *ConversationPanel) renderThinkingRound(round data.ThinkingRound, idx int) string {
+func (p *ConversationPanel) renderThinkingRound(round data.ThinkingRound, idx int, isLastRound bool, collapsed bool) string {
 	var b strings.Builder
 	icon := style.CyanStyle.Render("● ")
 	lines := strings.Split(round.Content, "\n")
+	shouldCollapse := isLastRound && collapsed && len(lines) > 3
 	displayLines := lines
-	collapsed := idx > 0
-
-	if collapsed && len(lines) > 3 {
+	if shouldCollapse {
 		displayLines = lines[:3]
 	}
 	for _, line := range displayLines {
@@ -353,17 +395,15 @@ func (p *ConversationPanel) renderThinkingRound(round data.ThinkingRound, idx in
 		b.WriteString(style.DarkStyle.Render(line))
 		b.WriteByte('\n')
 	}
-	if collapsed && len(lines) > 3 {
+	if shouldCollapse {
 		b.WriteString(fmt.Sprintf("  %s\n", style.GrayStyle.Render(fmt.Sprintf("… +%d lines (ctrl+o to expand)", len(lines)-3))))
 	}
 	if round.TokensIn > 0 || round.TokensOut > 0 {
-		b.WriteString(fmt.Sprintf("  %s\n", style.DimStyle.Render(fmt.Sprintf("[Tokens: %d in / %d out]", round.TokensIn, round.TokensOut))))
+		b.WriteString(fmt.Sprintf("  %s\n", style.DimStyle.Render(fmt.Sprintf("[Tokens: %s in / %s out]",
+			formatNumber(round.TokensIn), formatNumber(round.TokensOut)))))
 	}
 
-	if icon != "" {
-		return icon + strings.TrimLeft(b.String(), " ")
-	}
-	return b.String()
+	return icon + b.String()
 }
 
 func (p *ConversationPanel) renderPendingThink(content string) string {
@@ -378,10 +418,7 @@ func (p *ConversationPanel) renderPendingThink(content string) string {
 		b.WriteString(style.DarkStyle.Render(line))
 		b.WriteByte('\n')
 	}
-	if icon != "" {
-		return icon + strings.TrimLeft(b.String(), " ")
-	}
-	return b.String()
+	return icon + b.String()
 }
 
 func (p *ConversationPanel) renderActionStep(step data.ActionStep) string {
@@ -400,34 +437,44 @@ func (p *ConversationPanel) renderActionStep(step data.ActionStep) string {
 		icon = style.RedStyle.Render("⏺ ")
 	}
 
+	paramStr := formatParams(step.Params)
 	b.WriteString(icon)
 	b.WriteString(style.WhiteStyle.Render(step.ToolName))
-	if step.EstimatedTok > 0 {
-		b.WriteString(fmt.Sprintf(" | %s", style.GrayStyle.Render(fmt.Sprintf("预计消耗 %d Tokens", step.EstimatedTok))))
+	if paramStr != "" {
+		b.WriteString(fmt.Sprintf("(%s)", paramStr))
+	}
+	if step.EstimatedTok > 0 && step.Status == data.ActionExecuting {
+		b.WriteString(fmt.Sprintf(" | %s", style.GrayStyle.Render(fmt.Sprintf("预计消耗 %s Tokens", formatNumber(step.EstimatedTok)))))
+	} else if step.EstimatedTok > 0 {
+		b.WriteString(fmt.Sprintf(" | %s", style.GrayStyle.Render(fmt.Sprintf("预计消耗 %s Tokens", formatNumber(step.EstimatedTok)))))
 	}
 	if step.ProgressText != "" {
 		b.WriteString(fmt.Sprintf(" | %s", style.GrayStyle.Render(step.ProgressText)))
 	}
+
+	if step.Status == data.ActionFailed {
+		if step.ResultText != "" {
+			b.WriteString(fmt.Sprintf(" | failed: %s\n", style.RedStyle.Render(step.ResultText)))
+		} else {
+			b.WriteByte('\n')
+		}
+		return b.String()
+	}
+
 	b.WriteByte('\n')
 
 	if step.ResultText != "" {
 		if step.Collapsed {
 			lines := strings.Split(step.ResultText, "\n")
-			if len(lines) > 3 {
-				b.WriteString(fmt.Sprintf("  %s\n", style.GrayStyle.Render(fmt.Sprintf("完成 (%d lines)", len(lines)))))
-			} else {
-				for _, line := range lines {
-					b.WriteString(fmt.Sprintf("  %s\n", style.GrayStyle.Render(line)))
-				}
-			}
+			b.WriteString(fmt.Sprintf("  ⎿ %s\n", style.GrayStyle.Render(fmt.Sprintf("完成 (%d lines)", len(lines)))))
 		} else {
 			lines := strings.Split(step.ResultText, "\n")
 			for i, line := range lines {
-				if i >= 10 {
-					b.WriteString(fmt.Sprintf("  %s\n", style.GrayStyle.Render(fmt.Sprintf("… +%d lines (ctrl+o to expand)", len(lines)-i))))
+				if i >= 3 {
+					b.WriteString(fmt.Sprintf("    … +%d lines (ctrl+o to expand)\n", len(lines)-i))
 					break
 				}
-				b.WriteString(fmt.Sprintf("  %s\n", style.DimStyle.Render(line)))
+				b.WriteString(fmt.Sprintf("  ⎿ %s\n", style.DimStyle.Render(line)))
 			}
 		}
 	}
@@ -436,11 +483,40 @@ func (p *ConversationPanel) renderActionStep(step data.ActionStep) string {
 
 func (p *ConversationPanel) renderResultEntry(res data.ResultEntry) string {
 	if res.Role == "error" {
-		return style.RedStyle.Render("⏺ " + res.Content)
+		return fmt.Sprintf("%s%s\n", style.RedStyle.Render("⏺ "), res.Content)
 	}
 	var b strings.Builder
 	b.WriteString(style.WhiteStyle.Render("⏺ "))
 	b.WriteString(render.MarkdownWithWidth(res.Content, p.width-4))
 	b.WriteByte('\n')
 	return b.String()
+}
+
+func formatParams(params map[string]any) string {
+	if params == nil || len(params) == 0 {
+		return ""
+	}
+	var parts []string
+	for k, v := range params {
+		parts = append(parts, fmt.Sprintf("%v=%v", k, v))
+	}
+	result := strings.Join(parts, ", ")
+	if len(result) > 60 {
+		return result[:57] + "..."
+	}
+	return result
+}
+
+func formatNumber(n int) string {
+	s := fmt.Sprintf("%d", n)
+	runes := []rune(s)
+	var result []rune
+	for i, r := range runes {
+		pos := len(runes) - i
+		if pos%3 == 0 && i != 0 {
+			result = append(result, ',')
+		}
+		result = append(result, r)
+	}
+	return string(result)
 }
