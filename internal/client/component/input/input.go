@@ -51,9 +51,8 @@ func (i *InputArea) handleKey(k tea.KeyPressMsg) (*InputArea, tea.Cmd) {
 			i.updateSuggestion()
 			return i, nil
 		}
-		if i.hasActiveSuggestion() {
-			i.handleTab()
-			return i, nil
+		if cmd := i.executeSuggestion(); cmd != nil {
+			return i, cmd
 		}
 		text := strings.TrimSpace(i.TextBuffer.String())
 		if text == "" {
@@ -88,6 +87,15 @@ func (i *InputArea) handleKey(k tea.KeyPressMsg) (*InputArea, tea.Cmd) {
 
 	case "down":
 		i.navigateSuggestion(1)
+		return i, nil
+
+	case "esc":
+		if i.hasActiveSuggestion() {
+			i.resetSuggestions()
+		} else if i.TextBuffer.Len() > 0 {
+			i.TextBuffer.Reset()
+			i.CursorPos = 0
+		}
 		return i, nil
 
 	case "space":
@@ -179,27 +187,23 @@ func (i *InputArea) handleTab() {
 func (i *InputArea) navigateSuggestion(dir int) {
 	if len(i.modelSuggest.Items) > 0 {
 		list := i.modelSuggest.filtered()
-		newIdx := i.modelSuggest.SelIdx + dir
-		if newIdx >= 0 && newIdx < len(list) {
-			i.modelSuggest.SelIdx = newIdx
+		if len(list) > 0 {
+			i.modelSuggest.SelIdx = (i.modelSuggest.SelIdx + dir + len(list)) % len(list)
 		}
 	} else if len(i.sessionSuggest.Items) > 0 {
 		list := i.sessionSuggest.filtered()
-		newIdx := i.sessionSuggest.SelIdx + dir
-		if newIdx >= 0 && newIdx < len(list) {
-			i.sessionSuggest.SelIdx = newIdx
+		if len(list) > 0 {
+			i.sessionSuggest.SelIdx = (i.sessionSuggest.SelIdx + dir + len(list)) % len(list)
 		}
 	} else if len(i.cmdSuggest.Items) > 0 {
 		list := i.cmdSuggest.filtered()
-		newIdx := i.cmdSuggest.SelIdx + dir
-		if newIdx >= 0 && newIdx < len(list) {
-			i.cmdSuggest.SelIdx = newIdx
+		if len(list) > 0 {
+			i.cmdSuggest.SelIdx = (i.cmdSuggest.SelIdx + dir + len(list)) % len(list)
 		}
 	} else if len(i.agentSuggest.Items) > 0 {
 		list := i.agentSuggest.filtered()
-		newIdx := i.agentSuggest.SelIdx + dir
-		if newIdx >= 0 && newIdx < len(list) {
-			i.agentSuggest.SelIdx = newIdx
+		if len(list) > 0 {
+			i.agentSuggest.SelIdx = (i.agentSuggest.SelIdx + dir + len(list)) % len(list)
 		}
 	}
 }
@@ -216,6 +220,53 @@ func (i *InputArea) hasActiveSuggestion() bool {
 		len(i.sessionSuggest.Items) > 0 ||
 		len(i.cmdSuggest.Items) > 0 ||
 		len(i.agentSuggest.Items) > 0
+}
+
+// executeSuggestion returns a Cmd when Enter is pressed with an active suggestion panel.
+// For command/model/session suggestions, it sends the appropriate command immediately.
+// For agent suggestions, it returns nil (falls through to normal message send).
+func (i *InputArea) executeSuggestion() tea.Cmd {
+	if len(i.cmdSuggest.Items) > 0 {
+		list := i.cmdSuggest.filtered()
+		if len(list) > 0 && i.cmdSuggest.SelIdx < len(list) {
+			sel := list[i.cmdSuggest.SelIdx]
+			i.TextBuffer.Reset()
+			i.CursorPos = 0
+			i.resetSuggestions()
+			return func() tea.Msg {
+				return clientmsg.SlashCommandMsg{Name: sel.Name, Args: nil}
+			}
+		}
+	}
+	if len(i.modelSuggest.Items) > 0 {
+		list := i.modelSuggest.filtered()
+		if len(list) > 0 && i.modelSuggest.SelIdx < len(list) {
+			sel := list[i.modelSuggest.SelIdx]
+			i.TextBuffer.Reset()
+			i.CursorPos = 0
+			i.resetSuggestions()
+			return func() tea.Msg {
+				return clientmsg.SlashCommandMsg{Name: "model", Args: []string{sel.Name}}
+			}
+		}
+	}
+	if len(i.sessionSuggest.Items) > 0 {
+		list := i.sessionSuggest.filtered()
+		if len(list) > 0 && i.sessionSuggest.SelIdx < len(list) {
+			sel := list[i.sessionSuggest.SelIdx]
+			i.TextBuffer.Reset()
+			i.CursorPos = 0
+			i.resetSuggestions()
+			arg := sel.ID
+			if sel.IsSpecial {
+				arg = sel.SpecialType
+			}
+			return func() tea.Msg {
+				return clientmsg.SlashCommandMsg{Name: "chat", Args: []string{arg}}
+			}
+		}
+	}
+	return nil
 }
 
 func (i *InputArea) updateSuggestion() {

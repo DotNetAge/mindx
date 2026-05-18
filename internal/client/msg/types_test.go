@@ -26,12 +26,15 @@ func TestShowChoicesMsg(t *testing.T) {
 }
 
 func TestActionStartMsg(t *testing.T) {
-	m := ActionStartMsg{SessionID: "s1", ToolName: "read", EstimatedTok: 100}
+	m := ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"read"}, EstimatedTok: 100}
 	if m.SessionID != "s1" {
 		t.Errorf("SessionID = %q, want %q", m.SessionID, "s1")
 	}
-	if m.ToolName != "read" {
-		t.Errorf("ToolName = %q, want %q", m.ToolName, "read")
+	if len(m.ToolNames) != 1 || m.ToolNames[0] != "read" {
+		t.Errorf("ToolNames = %v, want [read]", m.ToolNames)
+	}
+	if m.ToolCount != 1 {
+		t.Errorf("ToolCount = %d, want 1", m.ToolCount)
 	}
 	if m.EstimatedTok != 100 {
 		t.Errorf("EstimatedTok = %d, want 100", m.EstimatedTok)
