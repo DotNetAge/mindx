@@ -38,10 +38,14 @@ func (p *ConversationPanel) Update(msg any) (*ConversationPanel, tea.Cmd) {
 		return p.handleThinkingDone(m)
 	case clientmsg.ActionStartMsg:
 		return p.handleActionStart(m)
+	case clientmsg.ToolExecStartMsg:
+		return p.handleToolExecStart(m)
+	case clientmsg.ToolExecEndMsg:
+		return p.handleToolExecEnd(m)
 	case clientmsg.ActionProgressMsg:
 		return p.handleActionProgress(m)
-	case clientmsg.ActionResultMsg:
-		return p.handleActionResult(m)
+	case clientmsg.ActionEndMsg:
+		return p.handleActionEnd(m)
 	case clientmsg.FinalAnswerMsg:
 		return p.handleFinalAnswer(m)
 	case clientmsg.AgentErrorMsg:
@@ -128,6 +132,25 @@ func (p *ConversationPanel) handleActionStart(m clientmsg.ActionStartMsg) (*Conv
 		a.ThinkingLog = append(a.ThinkingLog, round)
 		a.PendingThink = ""
 	}
+	// Store action-level metadata
+	a.CurrentAction = &data.ActionInfo{
+		ToolCount:           m.ToolCount,
+		ToolNames:           m.ToolNames,
+		TotalPredictedTokens: m.EstimatedTok,
+	}
+	a.Status = data.StatusExecuting
+	return p, p.tickCmd()
+}
+
+func (p *ConversationPanel) handleToolExecStart(m clientmsg.ToolExecStartMsg) (*ConversationPanel, tea.Cmd) {
+	idx := p.canModify(m.SessionID)
+	if idx < 0 {
+		return p, nil
+	}
+	a := &p.Answers[idx]
+	if a.Status == data.StatusDone || a.Status == data.StatusError {
+		return p, nil
+	}
 	step := data.ActionStep{
 		ToolName:     m.ToolName,
 		Status:       data.ActionExecuting,
@@ -140,34 +163,42 @@ func (p *ConversationPanel) handleActionStart(m clientmsg.ActionStartMsg) (*Conv
 	return p, p.tickCmd()
 }
 
-func (p *ConversationPanel) handleActionProgress(m clientmsg.ActionProgressMsg) (*ConversationPanel, tea.Cmd) {
+func (p *ConversationPanel) handleToolExecEnd(m clientmsg.ToolExecEndMsg) (*ConversationPanel, tea.Cmd) {
 	idx := p.canModify(m.SessionID)
 	if idx < 0 || len(p.Answers[idx].Actions) == 0 {
 		return p, nil
 	}
-	last := &p.Answers[idx].Actions[len(p.Answers[idx].Actions)-1]
-	if last.ToolName == m.ToolName {
-		last.ProgressText = m.Progress
+	// Match by tool name (last occurrence for multi-tool)
+	for i := len(p.Answers[idx].Actions) - 1; i >= 0; i-- {
+		step := &p.Answers[idx].Actions[i]
+		if step.ToolName == m.ToolName && step.Status == data.ActionExecuting {
+			if m.Success {
+				step.Status = data.ActionDone
+				step.ResultText = m.Result
+			} else {
+				step.Status = data.ActionFailed
+				step.ResultText = m.Error
+			}
+			break
+		}
 	}
 	return p, nil
 }
 
-func (p *ConversationPanel) handleActionResult(m clientmsg.ActionResultMsg) (*ConversationPanel, tea.Cmd) {
+func (p *ConversationPanel) handleActionProgress(m clientmsg.ActionProgressMsg) (*ConversationPanel, tea.Cmd) {
+	return p, nil
+}
+
+func (p *ConversationPanel) handleActionEnd(m clientmsg.ActionEndMsg) (*ConversationPanel, tea.Cmd) {
 	idx := p.canModify(m.SessionID)
-	if idx < 0 || len(p.Answers[idx].Actions) == 0 {
+	if idx < 0 {
 		return p, nil
 	}
-	last := &p.Answers[idx].Actions[len(p.Answers[idx].Actions)-1]
-	if last.ToolName == m.ToolName {
-		if m.Success {
-			last.Status = data.ActionDone
-			last.ResultText = m.Result
-		} else {
-			last.Status = data.ActionFailed
-			last.ResultText = m.Error
-		}
-	}
-	return p, nil
+	a := &p.Answers[idx]
+	a.ActionCompleted = true
+	a.ActionSuccessCount = m.SuccessCount
+	a.ActionFailedCount = m.FailedCount
+	return p, p.tickCmd()
 }
 
 func (p *ConversationPanel) handleFinalAnswer(m clientmsg.FinalAnswerMsg) (*ConversationPanel, tea.Cmd) {
@@ -309,10 +340,8 @@ func (p *ConversationPanel) View() string {
 
 func (p *ConversationPanel) renderThinkingSection(ans data.AnswerData) string {
 	var b strings.Builder
-	totalRounds := len(ans.ThinkingLog)
-	for i, round := range ans.ThinkingLog {
-		isLastRound := i == totalRounds-1 && !ans.IsThinking
-		b.WriteString(p.renderThinkingRound(round, i, isLastRound, ans.ThinkingCollapsed))
+	for _, round := range ans.ThinkingLog {
+		b.WriteString(p.renderThinkingRound(round, ans.ThinkingCollapsed))
 	}
 	if ans.PendingThink != "" {
 		b.WriteString(p.renderPendingThink(ans.PendingThink))
@@ -330,10 +359,62 @@ func (p *ConversationPanel) renderThinkingSection(ans data.AnswerData) string {
 
 func (p *ConversationPanel) renderActionSection(ans data.AnswerData) string {
 	var b strings.Builder
-	for _, act := range ans.Actions {
-		b.WriteString(p.renderActionStep(act))
+
+	// Action-level header
+	if ans.CurrentAction != nil {
+		b.WriteString(p.renderActionHeader(*ans.CurrentAction))
 	}
+
+	// Tool-level steps (indented)
+	for _, act := range ans.Actions {
+		b.WriteString(indentText(p.renderActionStep(act), "  "))
+	}
+
+	// Action completion summary
+	if ans.ActionCompleted {
+		b.WriteString(p.renderActionSummary(ans))
+	}
+
 	return b.String()
+}
+
+func (p *ConversationPanel) renderActionHeader(info data.ActionInfo) string {
+	var b strings.Builder
+	icon := style.GreenStyle.Render("⏺ ")
+	b.WriteString(icon)
+	b.WriteString(style.WhiteStyle.Render(fmt.Sprintf("执行操作: %d 个工具", info.ToolCount)))
+	if info.TotalPredictedTokens > 0 {
+		b.WriteString(fmt.Sprintf(" | %s", style.GrayStyle.Render(fmt.Sprintf("预计消耗 %s Tokens", formatNumber(info.TotalPredictedTokens)))))
+	}
+	b.WriteByte('\n')
+	return b.String()
+}
+
+func (p *ConversationPanel) renderActionSummary(ans data.AnswerData) string {
+	var b strings.Builder
+	total := ans.ActionSuccessCount + ans.ActionFailedCount
+	icon := style.GreenStyle.Render("⏺ ")
+	b.WriteString(icon)
+	summary := fmt.Sprintf("操作完成: %d / %d 成功", ans.ActionSuccessCount, total)
+	if ans.ActionFailedCount > 0 {
+		summary += fmt.Sprintf(", %s 失败", style.RedStyle.Render(fmt.Sprintf("%d", ans.ActionFailedCount)))
+	}
+	b.WriteString(style.WhiteStyle.Render(summary))
+	b.WriteByte('\n')
+	return b.String()
+}
+
+func indentText(text, prefix string) string {
+	if text == "" {
+		return ""
+	}
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		if line != "" {
+			lines[i] = prefix + line
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (p *ConversationPanel) renderResultSection(ans data.AnswerData) string {
@@ -366,7 +447,7 @@ func (p *ConversationPanel) renderAnswer(ans data.AnswerData) string {
 	}
 
 	hasThinking := len(ans.ThinkingLog) > 0 || ans.PendingThink != ""
-	hasActions := len(ans.Actions) > 0
+	hasActions := len(ans.Actions) > 0 || ans.CurrentAction != nil
 	hasResults := len(ans.Results) > 0
 
 	if hasThinking {
@@ -381,14 +462,14 @@ func (p *ConversationPanel) renderAnswer(ans data.AnswerData) string {
 	return b.String()
 }
 
-func (p *ConversationPanel) renderThinkingRound(round data.ThinkingRound, idx int, isLastRound bool, collapsed bool) string {
+func (p *ConversationPanel) renderThinkingRound(round data.ThinkingRound, collapsed bool) string {
 	var b strings.Builder
 	icon := style.CyanStyle.Render("● ")
 	lines := strings.Split(round.Content, "\n")
-	shouldCollapse := isLastRound && collapsed && len(lines) > 3
+	shouldCollapse := collapsed && len(lines) > 3
 	displayLines := lines
 	if shouldCollapse {
-		displayLines = lines[:3]
+		displayLines = lines[len(lines)-3:]
 	}
 	for _, line := range displayLines {
 		b.WriteString("  ")

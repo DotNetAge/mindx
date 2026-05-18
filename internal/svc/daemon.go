@@ -233,7 +233,8 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	eventCh, cancelEvents := agent.EventsFiltered(func(e goreactcore.ReactEvent) bool {
 		switch e.Type {
 		case goreactcore.ThinkingDelta, goreactcore.ThinkingDone, goreactcore.ActionStart,
-			goreactcore.ActionProgress, goreactcore.ActionResult, goreactcore.FinalAnswer,
+			goreactcore.ActionProgress, goreactcore.ToolExecStart, goreactcore.ToolExecEnd,
+			goreactcore.ActionEnd, goreactcore.FinalAnswer,
 			goreactcore.ExecutionSummary, goreactcore.Error, goreactcore.SubtaskSpawned,
 			goreactcore.SubtaskCompleted, goreactcore.ClarifyNeeded, goreactcore.PermissionRequest,
 			goreactcore.PermissionDenied, goreactcore.CycleEnd, goreactcore.TaskSummary:
@@ -331,40 +332,68 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		md := buildThinkingDoneMarkdown(*thought)
 		d.sendEvent(clientID, sid, gateway.RespThinkingDone, "思考完成", md)
 
-	case goreactcore.ActionStart:
-		action, ok := event.Data.(goreactcore.ActionStartData)
-		if !ok {
-			d.logger.Warn("unexpected ActionStart data type", "type", fmt.Sprintf("%T", event.Data))
-			return
-		}
-		d.gw.SendResponse(clientID, gateway.RespActionStart, "开始操作", map[string]interface{}{
-			"tool_name":        action.ToolName,
-			"params":           action.Params,
-			"predicted_tokens": action.PredictedTokens,
-			"iteration":        action.Iteration,
-		}, gateway.WithSessionID(sid))
+		case goreactcore.ActionStart:
+			action, ok := event.Data.(goreactcore.ActionStartData)
+			if !ok {
+				d.logger.Warn("unexpected ActionStart data type", "type", fmt.Sprintf("%T", event.Data))
+				return
+			}
+			d.gw.SendResponse(clientID, gateway.RespActionStart, "开始操作", map[string]interface{}{
+				"tool_count":       action.ToolCount,
+				"tool_names":       action.ToolNames,
+				"predicted_tokens": action.TotalPredictedTokens,
+				"iteration":        action.Iteration,
+			}, gateway.WithSessionID(sid))
 
-	case goreactcore.ActionProgress:
-		progress, ok := event.Data.(string)
-		if !ok {
-			d.logger.Warn("unexpected ActionProgress data type", "type", fmt.Sprintf("%T", event.Data))
-			return
-		}
-		d.gw.SendResponse(clientID, gateway.RespActionProgress, "操作进度", progress, gateway.WithSessionID(sid))
+		case goreactcore.ToolExecStart:
+			data, ok := event.Data.(goreactcore.ToolExecStartData)
+			if !ok {
+				d.logger.Warn("unexpected ToolExecStart data type", "type", fmt.Sprintf("%T", event.Data))
+				return
+			}
+			d.gw.SendResponse(clientID, gateway.RespActionStart, "工具开始", map[string]interface{}{
+				"tool_name": data.ToolName,
+				"params":    data.Params,
+			}, gateway.WithSessionID(sid))
 
-	case goreactcore.ActionResult:
-		result, ok := event.Data.(goreactcore.ActionResultData)
-		if !ok {
-			d.logger.Warn("unexpected ActionResult data type", "type", fmt.Sprintf("%T", event.Data))
-			return
-		}
-		d.gw.SendResponse(clientID, gateway.RespActionResult, "操作结果", map[string]interface{}{
-			"tool_name": result.ToolName,
-			"success":   result.Success,
-			"result":    result.Result,
-			"error":     result.Error,
-			"duration":  result.Duration.String(),
-		}, gateway.WithSessionID(sid))
+		case goreactcore.ToolExecEnd:
+			data, ok := event.Data.(goreactcore.ToolExecEndData)
+			if !ok {
+				d.logger.Warn("unexpected ToolExecEnd data type", "type", fmt.Sprintf("%T", event.Data))
+				return
+			}
+			d.gw.SendResponse(clientID, gateway.RespActionResult, "工具结果", map[string]interface{}{
+				"tool_name": data.ToolName,
+				"success":   data.Success,
+				"result":    data.Result,
+				"error":     data.Error,
+				"duration":  data.Duration.String(),
+			}, gateway.WithSessionID(sid))
+
+		case goreactcore.ActionProgress:
+			progress, ok := event.Data.(goreactcore.ActionProgressData)
+			if !ok {
+				d.logger.Warn("unexpected ActionProgress data type", "type", fmt.Sprintf("%T", event.Data))
+				return
+			}
+			d.gw.SendResponse(clientID, gateway.RespActionProgress, "操作进度", map[string]interface{}{
+				"completed": progress.CompletedCount,
+				"total":     progress.TotalCount,
+				"status":    progress.Status,
+			}, gateway.WithSessionID(sid))
+
+		case goreactcore.ActionEnd:
+			data, ok := event.Data.(goreactcore.ActionEndData)
+			if !ok {
+				d.logger.Warn("unexpected ActionEnd data type", "type", fmt.Sprintf("%T", event.Data))
+				return
+			}
+			d.gw.SendResponse(clientID, gateway.RespActionEnd, "操作完成", map[string]interface{}{
+				"total":   data.TotalTools,
+				"success": data.SuccessCount,
+				"failed":  data.FailedCount,
+				"summary": data.Summary,
+			}, gateway.WithSessionID(sid))
 
 	case goreactcore.SubtaskSpawned:
 		info, ok := event.Data.(goreactcore.SubtaskInfo)
@@ -521,26 +550,6 @@ func buildThinkingDoneMarkdown(t reactor.Thought) string {
 	}
 	if t.ClarificationQuestion != "" {
 		b.WriteString(fmt.Sprintf("**问题**: %s\n\n", t.ClarificationQuestion))
-	}
-	return b.String()
-}
-
-func buildActionStartMarkdown(action goreactcore.ActionStartData) string {
-	paramsStr := formatParams(action.Params)
-	return fmt.Sprintf("### ⚡ 调用工具: `%s`\n\n参数: %s\n", action.ToolName, paramsStr)
-}
-
-func buildActionResultMarkdown(result goreactcore.ActionResultData) string {
-	var b strings.Builder
-	if result.Success {
-		b.WriteString(fmt.Sprintf("### ✅ `%s` 执行成功\n\n", result.ToolName))
-		b.WriteString(fmt.Sprintf("**耗时**: %s\n\n", formatDuration(result.Duration)))
-		if result.Result != "" {
-			b.WriteString(fmt.Sprintf("**结果**:\n```\n%s\n```\n", truncate(result.Result, 500)))
-		}
-	} else {
-		b.WriteString(fmt.Sprintf("### ❌ `%s` 执行失败\n\n", result.ToolName))
-		b.WriteString(fmt.Sprintf("**错误**: %s\n", result.Error))
 	}
 	return b.String()
 }

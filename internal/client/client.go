@@ -36,7 +36,7 @@ type rootModel struct {
 	registry    *SlashCommandRegistry
 	agent *goreact.Agent
 
-	eventCancel      func()
+	eventDone        chan struct{}
 	executing        bool
 	needsClearScreen bool
 	postExitCmd      string
@@ -252,52 +252,90 @@ func (m *rootModel) startEventLoop() {
 	}
 	m.stopEventLoop()
 
+	m.eventDone = make(chan struct{})
+
 	go func() {
 		bus := m.agent.Reactor().EventBus()
 		if bus == nil {
 			return
 		}
 		eventCh, cancel := bus.Subscribe()
-		m.eventCancel = cancel
+		defer cancel()
 
-		for evt := range eventCh {
-			switch evt.Type {
-			case goreactcore.ThinkingDelta:
-				m.program.Send(clientmsg.ThinkingDeltaMsg{SessionID: evt.SessionID, Content: toString(evt.Data)})
-			case goreactcore.ThinkingDone:
-				m.program.Send(clientmsg.ThinkingDoneMsg{SessionID: evt.SessionID})
-			case goreactcore.ActionStart:
-				toolName, params, estimatedTok := extractActionStartData(evt.Data)
-				m.program.Send(clientmsg.ActionStartMsg{
-					SessionID:    evt.SessionID,
-					ToolName:     toolName,
-					EstimatedTok: estimatedTok,
-					Params:       params,
-				})
-			case goreactcore.ActionProgress:
-				m.program.Send(clientmsg.ActionProgressMsg{SessionID: evt.SessionID, ToolName: "", Progress: toString(evt.Data)})
-			case goreactcore.ActionResult:
-				toolName, success, resultStr, errStr := extractActionResultData(evt.Data)
-				m.program.Send(clientmsg.ActionResultMsg{
-					SessionID: evt.SessionID,
-					ToolName:  toolName,
-					Success:   success,
-					Result:    resultStr,
-					Error:     errStr,
-				})
-			case goreactcore.FinalAnswer:
-				m.program.Send(clientmsg.FinalAnswerMsg{SessionID: evt.SessionID, Content: toString(evt.Data)})
-			case goreactcore.Error:
-				m.program.Send(clientmsg.AgentErrorMsg{SessionID: evt.SessionID, Error: errors.New(toString(evt.Data))})
+		for {
+			select {
+			case evt, ok := <-eventCh:
+				if !ok {
+					return
+				}
+				switch evt.Type {
+				case goreactcore.ThinkingDelta:
+					m.program.Send(clientmsg.ThinkingDeltaMsg{SessionID: evt.SessionID, Content: toString(evt.Data)})
+				case goreactcore.ThinkingDone:
+					m.program.Send(clientmsg.ThinkingDoneMsg{SessionID: evt.SessionID})
+				case goreactcore.ActionStart:
+					if data, ok := evt.Data.(goreactcore.ActionStartData); ok {
+						m.program.Send(clientmsg.ActionStartMsg{
+							SessionID:    evt.SessionID,
+							ToolCount:    data.ToolCount,
+							ToolNames:    data.ToolNames,
+							EstimatedTok: data.TotalPredictedTokens,
+						})
+					}
+				case goreactcore.ToolExecStart:
+					if data, ok := evt.Data.(goreactcore.ToolExecStartData); ok {
+						m.program.Send(clientmsg.ToolExecStartMsg{
+							SessionID:    evt.SessionID,
+							ToolName:     data.ToolName,
+							Params:       data.Params,
+							EstimatedTok: data.PredictedTokens,
+						})
+					}
+				case goreactcore.ToolExecEnd:
+					if data, ok := evt.Data.(goreactcore.ToolExecEndData); ok {
+						m.program.Send(clientmsg.ToolExecEndMsg{
+							SessionID: evt.SessionID,
+							ToolName:  data.ToolName,
+							Success:   data.Success,
+							Result:    data.Result,
+							Error:     data.Error,
+						})
+					}
+				case goreactcore.ActionProgress:
+					if data, ok := evt.Data.(goreactcore.ActionProgressData); ok {
+						m.program.Send(clientmsg.ActionProgressMsg{
+							SessionID:      evt.SessionID,
+							CompletedCount: data.CompletedCount,
+							TotalCount:     data.TotalCount,
+							Status:         data.Status,
+						})
+					}
+				case goreactcore.ActionEnd:
+					if data, ok := evt.Data.(goreactcore.ActionEndData); ok {
+						m.program.Send(clientmsg.ActionEndMsg{
+							SessionID:    evt.SessionID,
+							TotalTools:   data.TotalTools,
+							SuccessCount: data.SuccessCount,
+							FailedCount:  data.FailedCount,
+							Summary:      data.Summary,
+						})
+					}
+				case goreactcore.FinalAnswer:
+					m.program.Send(clientmsg.FinalAnswerMsg{SessionID: evt.SessionID, Content: toString(evt.Data)})
+				case goreactcore.Error:
+					m.program.Send(clientmsg.AgentErrorMsg{SessionID: evt.SessionID, Error: errors.New(toString(evt.Data))})
+				}
+			case <-m.eventDone:
+				return
 			}
 		}
 	}()
 }
 
 func (m *rootModel) stopEventLoop() {
-	if m.eventCancel != nil {
-		m.eventCancel()
-		m.eventCancel = nil
+	if m.eventDone != nil {
+		close(m.eventDone)
+		m.eventDone = nil
 	}
 }
 
@@ -306,20 +344,6 @@ func toString(data any) string {
 		return s
 	}
 	return fmt.Sprintf("%v", data)
-}
-
-func extractActionStartData(data any) (toolName string, params map[string]any, estimatedTok int) {
-	if d, ok := data.(goreactcore.ActionStartData); ok {
-		return d.ToolName, d.Params, d.PredictedTokens
-	}
-	return "", nil, 0
-}
-
-func extractActionResultData(data any) (toolName string, success bool, result, errStr string) {
-	if d, ok := data.(goreactcore.ActionResultData); ok {
-		return d.ToolName, d.Success, d.Result, d.Error
-	}
-	return "", false, "", ""
 }
 
 func (m *rootModel) Init() tea.Cmd {
@@ -365,7 +389,8 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg,
-		clientmsg.ActionProgressMsg, clientmsg.ActionResultMsg, clientmsg.FinalAnswerMsg,
+		clientmsg.ActionProgressMsg, clientmsg.ToolExecStartMsg, clientmsg.ToolExecEndMsg,
+		clientmsg.ActionEndMsg, clientmsg.FinalAnswerMsg,
 		clientmsg.TickMsg, clientmsg.CollapseToggleMsg, clientmsg.ThinkCollapseMsg,
 		clientmsg.ClearScreenMsg:
 		_, cmd := m.conversation.Update(msg)
@@ -477,6 +502,13 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 			m.startEventLoop()
 			m.populateWelcome()
 			m.conversation.Clear()
+			m.statusBar.Update(clientmsg.SessionLoadedMsg{
+				AgentName: m.agent.Name(),
+				SessionID: m.agent.SessionID(),
+			})
+			if mdl := m.agent.Model(); mdl != nil {
+				m.statusBar.ModelName = mdl.Name
+			}
 		}
 		m.input.Models, _ = reloadModels(m.app)
 	case "doctor":
@@ -486,7 +518,11 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 	}
 
 	if result.Message != "" {
-		return m, m.notifBar.Add(data.Notification{Message: result.Message, Level: data.NotifInfo})
+		level := data.NotifInfo
+		if result.Success {
+			level = data.NotifSuccess
+		}
+		return m, m.notifBar.Add(data.Notification{Message: result.Message, Level: level})
 	}
 	return m, nil
 }

@@ -11,23 +11,39 @@ type ThinkingDoneMsg struct {
 
 type ActionStartMsg struct {
 	SessionID    string
-	ToolName     string
+	ToolCount    int
+	ToolNames    []string
 	EstimatedTok int
-	Params       map[string]any
 }
 
 type ActionProgressMsg struct {
-	SessionID string
-	ToolName  string
-	Progress  string
+	SessionID      string
+	CompletedCount int
+	TotalCount     int
+	Status         string
 }
 
-type ActionResultMsg struct {
+type ToolExecStartMsg struct {
+	SessionID    string
+	ToolName     string
+	Params       map[string]any
+	EstimatedTok int
+}
+
+type ToolExecEndMsg struct {
 	SessionID string
 	ToolName  string
 	Success   bool
 	Result    string
 	Error     string
+}
+
+type ActionEndMsg struct {
+	SessionID    string
+	TotalTools   int
+	SuccessCount int
+	FailedCount  int
+	Summary      string
 }
 
 type FinalAnswerMsg struct {
