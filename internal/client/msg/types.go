@@ -1,5 +1,7 @@
 package msg
 
+import "time"
+
 type ThinkingDeltaMsg struct {
 	SessionID string
 	Content   string
@@ -36,6 +38,14 @@ type ToolExecEndMsg struct {
 	Success   bool
 	Result    string
 	Error     string
+	Duration  time.Duration
+}
+
+type ExecutionSummaryMsg struct {
+	SessionID  string
+	Duration   time.Duration
+	TokensUsed int
+	ToolCalls  int
 }
 
 type ActionEndMsg struct {

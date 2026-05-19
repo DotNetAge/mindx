@@ -16,7 +16,6 @@ import (
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/session"
 	"github.com/joho/godotenv"
-	"gopkg.in/yaml.v3"
 )
 
 type App struct {
@@ -211,6 +210,26 @@ func (a *App) CurrentAgent() (*goreact.Agent, error) {
 	return a.currentAgent()
 }
 
+func (a *App) resolveModelName(agentModelName string) (string, *core.ModelConfig, error) {
+	// Priority: last_model > default_model > agent YAML model
+	modelName := agentModelName
+	if a.mindxConfig != nil {
+		if a.mindxConfig.LastModel != "" {
+			modelName = a.mindxConfig.LastModel
+		} else if a.mindxConfig.DefaultModel != "" {
+			modelName = a.mindxConfig.DefaultModel
+		}
+	}
+	if modelName == "" {
+		return "", nil, fmt.Errorf("no model configured")
+	}
+	modelCfg := a.Models().Get(modelName)
+	if modelCfg == nil {
+		return "", nil, fmt.Errorf("model %q not found", modelName)
+	}
+	return modelName, modelCfg, nil
+}
+
 func (a *App) currentAgent() (*goreact.Agent, error) {
 	a.currentMu.Lock()
 	defer a.currentMu.Unlock()
@@ -230,12 +249,9 @@ func (a *App) currentAgent() (*goreact.Agent, error) {
 	}
 
 	var resolvedModel core.ModelConfig
-	if agent.Model == "" {
-		return nil, fmt.Errorf("agent %q has no model configured", agent.Name)
-	}
-	modelCfg := a.Models().Get(agent.Model)
-	if modelCfg == nil {
-		return nil, fmt.Errorf("model %q not found for agent %q", agent.Model, agent.Name)
+	_, modelCfg, err := a.resolveModelName(agent.Model)
+	if err != nil {
+		return nil, fmt.Errorf("agent %q: %w", agent.Name, err)
 	}
 	resolvedModel = *modelCfg
 	resolvedModel.APIKey = a.resolveAPIKey(resolvedModel.APIKey)
@@ -311,16 +327,13 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 		return nil, fmt.Errorf("agent %q not found in registry", name)
 	}
 
-	if cfg.Model == "" {
-		return nil, fmt.Errorf("agent %q has no model configured", name)
-	}
-	model := a.Models().Get(cfg.Model)
-	if model == nil {
-		return nil, fmt.Errorf("model %q not found for agent %q", cfg.Model, name)
+	_, modelCfg, err := a.resolveModelName(cfg.Model)
+	if err != nil {
+		return nil, fmt.Errorf("agent %q: %w", name, err)
 	}
 
-	resolvedModel := *model
-	resolvedModel.APIKey = a.resolveAPIKey(model.APIKey)
+	resolvedModel := *modelCfg
+	resolvedModel.APIKey = a.resolveAPIKey(modelCfg.APIKey)
 
 	opts := []goreact.AgentOption{
 		goreact.WithSkillDir(a.settings.SkillsDir()),
@@ -466,50 +479,6 @@ When a task is outside your expertise, choose one path:
 
 - **Know who handles it** → call **Delegate** tool directly (agent_name + task), then **CollectResults**
 - **Don't know who** → load **find-experts** skill first (discovers experts, then delegates via same workflow)`
-}
-
-func (a *App) SwitchAgentModel(agentName, modelName string) error {
-	cfg := a.Agents().Get(agentName)
-	if cfg == nil {
-		return fmt.Errorf("agent %q not found", agentName)
-	}
-
-	model := a.Models().Get(modelName)
-	if model == nil || !model.Enabled {
-		return fmt.Errorf("model %q not available", modelName)
-	}
-
-	oldModel := cfg.Model
-	cfg.Model = modelName
-
-	agentFile := filepath.Join(a.settings.AgentsDir(), agentName+".yml")
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		cfg.Model = oldModel
-		return fmt.Errorf("marshal failed: %w", err)
-	}
-	if err := os.WriteFile(agentFile, data, 0644); err != nil {
-		cfg.Model = oldModel
-		return fmt.Errorf("write failed: %w", err)
-	}
-
-	a.agentMu.Lock()
-	delete(a.agentCache, agentName)
-	a.agentMu.Unlock()
-
-	if a.CurrentAgentName() == agentName {
-		a.currentMu.Lock()
-		a.current = nil
-		a.currentMu.Unlock()
-	}
-
-	a.logger.Info("agent model updated",
-		"agent", agentName,
-		"old_model", oldModel,
-		"new_model", modelName,
-	)
-
-	return nil
 }
 
 func (a *App) SwitchSession(sessionID string) (*core.SessionInfo, error) {

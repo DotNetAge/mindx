@@ -299,6 +299,7 @@ func (m *rootModel) startEventLoop() {
 							Success:   data.Success,
 							Result:    data.Result,
 							Error:     data.Error,
+								Duration:  data.Duration,
 						})
 					}
 				case goreactcore.ActionProgress:
@@ -320,6 +321,16 @@ func (m *rootModel) startEventLoop() {
 							Summary:      data.Summary,
 						})
 					}
+				case goreactcore.ExecutionSummary:
+					if data, ok := evt.Data.(goreactcore.ExecutionSummaryData); ok {
+						m.program.Send(clientmsg.ExecutionSummaryMsg{
+							SessionID:  evt.SessionID,
+							Duration:   data.TotalDuration,
+							TokensUsed: data.TokensUsed,
+							ToolCalls:  data.ToolCalls,
+						})
+						}
+
 				case goreactcore.FinalAnswer:
 					m.program.Send(clientmsg.FinalAnswerMsg{SessionID: evt.SessionID, Content: toString(evt.Data)})
 				case goreactcore.Error:
@@ -490,24 +501,15 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 		m.refreshAfterChatOp(result)
 	case "model":
 		if len(e.Args) > 0 && result.Success {
-			m.stopEventLoop()
-			newAgent, err := m.app.CurrentAgent()
-			if err != nil {
-				return m, m.notifBar.Add(data.Notification{
-					Message: fmt.Sprintf("Agent 重建失败: %v", err),
-					Level:   data.NotifError,
-				})
-			}
-			m.agent = newAgent
-			m.startEventLoop()
-			m.populateWelcome()
-			m.conversation.Clear()
-			m.statusBar.Update(clientmsg.SessionLoadedMsg{
-				AgentName: m.agent.Name(),
-				SessionID: m.agent.SessionID(),
-			})
-			if mdl := m.agent.Model(); mdl != nil {
-				m.statusBar.ModelName = mdl.Name
+			modelName := e.Args[0]
+			if modelCfg := m.app.Models().Get(modelName); modelCfg != nil && m.agent != nil {
+				m.agent.SetModel(modelCfg)
+				m.statusBar.ModelName = modelCfg.Name
+				m.conversation.WelcomeData.ModelName = modelCfg.Name
+				if cfg := m.app.Config(); cfg != nil {
+					cfg.LastModel = modelName
+					_ = cfg.Save()
+				}
 			}
 		}
 		m.input.Models, _ = reloadModels(m.app)
