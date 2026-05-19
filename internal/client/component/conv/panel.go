@@ -16,7 +16,6 @@ import (
 type ConversationPanel struct {
 	Answers     []data.AnswerData
 	SearchState data.SearchState
-	WelcomeData data.WelcomeData
 	BlinkOn     bool
 
 	width    int
@@ -136,8 +135,8 @@ func (p *ConversationPanel) handleActionStart(m clientmsg.ActionStartMsg) (*Conv
 	}
 	// Store action-level metadata
 	a.CurrentAction = &data.ActionInfo{
-		ToolCount:           m.ToolCount,
-		ToolNames:           m.ToolNames,
+		ToolCount:            m.ToolCount,
+		ToolNames:            m.ToolNames,
 		TotalPredictedTokens: m.EstimatedTok,
 	}
 	a.Status = data.StatusExecuting
@@ -331,10 +330,6 @@ func (p *ConversationPanel) Clear() {
 func (p *ConversationPanel) View() string {
 	if p.width == 0 {
 		p.width = 80
-	}
-
-	if len(p.Answers) == 0 {
-		return p.renderWelcome()
 	}
 
 	content := p.renderNormalView()
