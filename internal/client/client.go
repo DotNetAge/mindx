@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	"charm.land/bubbles/v2/timer"
 	tea "charm.land/bubbletea/v2"
@@ -296,12 +297,13 @@ func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 	case goreactcore.ToolExecEnd:
 		if data, ok := evt.Data.(goreactcore.ToolExecEndData); ok {
 			return clientmsg.ToolExecEndMsg{
-				SessionID: evt.SessionID,
-				ToolName:  data.ToolName,
-				Success:   data.Success,
-				Result:    data.Result,
-				Error:     data.Error,
-				Duration:  data.Duration,
+				SessionID:  evt.SessionID,
+				ToolName:   data.ToolName,
+				ToolCallID: data.ToolCallID,
+				Success:    data.Success,
+				Result:     data.Result,
+				Error:      data.Error,
+				Duration:   data.Duration,
 			}
 		}
 	case goreactcore.ActionProgress:
@@ -382,10 +384,6 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		_, cmd := m.input.Update(msg)
 		return m, cmd
 
-	case tea.MouseWheelMsg:
-		m.conversationList.ViewportUpdate(msg)
-		return m, nil
-
 	case clientmsg.WindowResizeMsg:
 		m.dispatchToAll(msg)
 
@@ -398,28 +396,64 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	case clientmsg.SlashCommandMsg:
 		return m.handleSlashCommand(msg)
 
-	case clientmsg.SessionDoneMsg, clientmsg.AgentErrorMsg:
+	case clientmsg.SessionDoneMsg:
 		m.executing = false
+		m.statusBar.CurrentState = "空闲"
+		newList, cmd := m.conversationList.Update(msg)
+		m.conversationList = newList
+		return m, cmd
+
+	case clientmsg.AgentErrorMsg:
+		m.executing = false
+		m.statusBar.CurrentState = "出错"
 		newList, cmd := m.conversationList.Update(msg)
 		m.conversationList = newList
 		return m, cmd
 
 	case timer.TickMsg:
+		m.statusBar.Tick()
 		newList, cmd := m.conversationList.Update(msg)
 		m.conversationList = newList
 		return m, cmd
 
-	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg,
-		clientmsg.ActionProgressMsg, clientmsg.ToolExecStartMsg, clientmsg.ToolExecEndMsg,
-		clientmsg.ActionEndMsg, clientmsg.FinalAnswerMsg,
-		clientmsg.CollapseToggleMsg, clientmsg.ThinkCollapseMsg,
-		clientmsg.ClearScreenMsg:
+	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg:
+		m.statusBar.CurrentState = "思考中"
+		newList, cmd := m.conversationList.Update(msg)
+		m.conversationList = newList
+		return m, cmd
+
+	case clientmsg.ToolExecStartMsg, clientmsg.ToolExecEndMsg,
+		clientmsg.ActionProgressMsg:
+		m.statusBar.CurrentState = "执行中"
+		newList, cmd := m.conversationList.Update(msg)
+		m.conversationList = newList
+		return m, cmd
+
+	case clientmsg.ActionEndMsg:
+		m.statusBar.CurrentState = "正在获取结果"
+		newList, cmd := m.conversationList.Update(msg)
+		m.conversationList = newList
+		return m, cmd
+
+	case clientmsg.FinalAnswerMsg:
+		m.statusBar.CurrentState = "完成"
 		newList, cmd := m.conversationList.Update(msg)
 		m.conversationList = newList
 		return m, cmd
 
 	case clientmsg.ActionStartMsg:
-		m.statusBar.Update(msg)
+		m.statusBar.CurrentState = "执行中"
+		newList, cmd := m.conversationList.Update(msg)
+		m.conversationList = newList
+		return m, cmd
+
+	case clientmsg.CollapseToggleMsg, clientmsg.ThinkCollapseMsg:
+		newList, cmd := m.conversationList.Update(msg)
+		m.conversationList = newList
+		return m, cmd
+
+	case clientmsg.ClearScreenMsg:
+		m.statusBar.CurrentState = "空闲"
 		newList, cmd := m.conversationList.Update(msg)
 		m.conversationList = newList
 		return m, cmd
@@ -467,6 +501,8 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.executing = true
+	m.statusBar.SessionStart = time.Now()
+	m.statusBar.SessionDuration = 0
 	agent := m.agent
 	sessionID := agent.SessionID()
 	if sessionID == "" {
@@ -585,17 +621,18 @@ func reloadModels(app *appcore.App) ([]input.ModelItem, error) {
 func (m *rootModel) View() tea.View {
 	welcomeView := m.welcome.View()
 	convView := m.conversationList.View()
-	inputView := m.input.View()
+	statusView := m.statusBar.View()
 	notifView := m.notifBar.View()
 
 	var out string
 	out += welcomeView
 	if convView != "" {
-		out += convView
+		out += convView + "\n"
 	}
 	if notifView != "" {
 		out += notifView + "\n"
 	}
-	out += inputView
+	out += statusView + "\n"
+	out += m.input.View()
 	return tea.NewView(out)
 }

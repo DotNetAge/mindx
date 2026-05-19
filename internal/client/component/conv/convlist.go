@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/timer"
-	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/mindx/internal/client/msg"
 )
@@ -16,15 +15,12 @@ type ConversationList struct {
 	Conversations []Conversation
 	width         int
 	height        int
-	viewport      viewport.Model
 	timer         timer.Model
-	contentDirty  bool
 }
 
 func NewConversationList() ConversationList {
 	return ConversationList{
-		viewport: viewport.New(),
-		timer:    timer.New(100*365*24*time.Hour, timer.WithInterval(tickInterval)),
+		timer: timer.New(100*365*24*time.Hour, timer.WithInterval(tickInterval)),
 	}
 }
 
@@ -37,19 +33,19 @@ func (l ConversationList) Update(e tea.Msg) (ConversationList, tea.Cmd) {
 	case msg.WindowResizeMsg:
 		l.width = e.Width
 		l.height = e.Height
-		l.viewport.SetWidth(e.Width)
-		vh := e.Height
-		if vh > 2 {
-			vh -= 2
-		}
-		l.viewport.SetHeight(vh)
 
 	case msg.ClearScreenMsg:
 		l.Conversations = nil
-		l.contentDirty = true
 
-	case tea.MouseWheelMsg:
-		l.viewport, _ = l.viewport.Update(e)
+	case timer.TickMsg:
+		newTimer, timerCmd := l.timer.Update(e)
+		l.timer = newTimer
+		now := time.Now()
+		for i, conv := range l.Conversations {
+			newConv, _ := UpdateConversation(conv, msg.TickMsg{Time: now})
+			l.Conversations[i] = newConv
+		}
+		return l, timerCmd
 
 	case msg.ThinkingDeltaMsg, msg.ThinkingDoneMsg,
 		msg.ActionStartMsg, msg.ToolExecStartMsg, msg.ToolExecEndMsg,
@@ -59,7 +55,6 @@ func (l ConversationList) Update(e tea.Msg) (ConversationList, tea.Cmd) {
 		msg.CollapseToggleMsg, msg.ThinkCollapseMsg,
 		msg.ActionProgressMsg:
 
-		l.contentDirty = true
 		var cmds []tea.Cmd
 		sessionID := getSessionID(e)
 		found := false
@@ -85,19 +80,6 @@ func (l ConversationList) Update(e tea.Msg) (ConversationList, tea.Cmd) {
 			}
 		}
 		return l, tea.Batch(cmds...)
-
-	case timer.TickMsg:
-		newTimer, timerCmd := l.timer.Update(e)
-		l.timer = newTimer
-		now := time.Now()
-		for i, conv := range l.Conversations {
-			newConv, _ := UpdateConversation(conv, msg.TickMsg{Time: now})
-			l.Conversations[i] = newConv
-		}
-		if l.hasActiveStreaming() {
-			l.contentDirty = true
-		}
-		return l, timerCmd
 	}
 
 	return l, nil
@@ -120,51 +102,16 @@ func (l ConversationList) View() string {
 		content += convView
 	}
 
-	if content == "" {
-		return ""
-	}
-
-	if l.width == 0 {
-		l.viewport.SetWidth(80)
-	} else {
-		l.viewport.SetWidth(l.width)
-	}
-	vh := l.height
-	if vh > 2 {
-		vh -= 2
-	}
-	l.viewport.SetHeight(vh)
-	l.viewport.SetContent(content)
-	if l.contentDirty {
-		l.viewport.GotoBottom()
-		l.contentDirty = false
-	}
-	return l.viewport.View()
+	return content
 }
 
-func (l ConversationList) ViewportUpdate(e tea.Msg) {
-	l.viewport, _ = l.viewport.Update(e)
-}
+func (l ConversationList) ViewportUpdate(tea.MouseWheelMsg) {}
 
 func (l ConversationList) Clear() {
 	l.Conversations = nil
-	l.contentDirty = true
 }
 
-func (l *ConversationList) MarkDirty() {
-	l.contentDirty = true
-}
-
-func (l ConversationList) hasActiveStreaming() bool {
-	for _, conv := range l.Conversations {
-		for _, round := range conv.Rounds {
-			if round.Thought.IsActive {
-				return true
-			}
-		}
-	}
-	return false
-}
+func (l *ConversationList) MarkDirty() {}
 
 func getSessionID(e tea.Msg) string {
 	switch e := e.(type) {
