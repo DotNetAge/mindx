@@ -3,10 +3,9 @@ package data
 import "time"
 
 type SessionMeta struct {
-	SessionID string      `json:"session_id"`
-	AgentName string      `json:"agent_name"`
-	CreatedAt time.Time   `json:"created_at"`
-	Answers   []AnswerData `json:"answers"`
+	SessionID string    `json:"session_id"`
+	AgentName string    `json:"agent_name"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type ChatSession struct {
