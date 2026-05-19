@@ -15,6 +15,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/client/component/input"
 	"github.com/DotNetAge/mindx/internal/client/component/notify"
 	"github.com/DotNetAge/mindx/internal/client/component/statusbar"
+	"github.com/DotNetAge/mindx/internal/client/component/welcome"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	appcore "github.com/DotNetAge/mindx/internal/core"
@@ -27,14 +28,15 @@ const (
 type rootModel struct {
 	program      *tea.Program
 	conversation *conv.ConversationPanel
+	welcome      *welcome.WelcomePanel
 	statusBar    *statusbar.StatusBar
 	input        *input.InputArea
 	notifBar     *notify.NotificationBar
 	choices      *choices.ChoicesPanel
 
-	app         *appcore.App
-	registry    *SlashCommandRegistry
-	agent *goreact.Agent
+	app      *appcore.App
+	registry *SlashCommandRegistry
+	agent    *goreact.Agent
 
 	eventDone        chan struct{}
 	executing        bool
@@ -47,6 +49,7 @@ var pendingPostExitCmd string
 func NewProgram(cfg *appcore.MindxConfig) error {
 	m := &rootModel{
 		conversation: conv.New(),
+		welcome:      welcome.New(),
 		statusBar:    statusbar.New(),
 		input:        input.New(),
 		notifBar:     notify.New(),
@@ -187,25 +190,25 @@ func (m *rootModel) populateWelcome() {
 	if m.app == nil {
 		return
 	}
-	m.conversation.WelcomeData = data.WelcomeData{
+	m.welcome.Data = data.WelcomeData{
 		AppTitle:  "MindX CLI v2.0.0 Beta",
 		ModelName: "unknown",
 	}
 
 	sessionMeta := m.app.CurrentSessionMeta()
 	if sessionMeta != nil {
-		m.conversation.WelcomeData.Workspace = sessionMeta.GetProjectDir()
-		m.conversation.WelcomeData.SessionID = sessionMeta.SessionID
+		m.welcome.Data.Workspace = sessionMeta.GetProjectDir()
+		m.welcome.Data.SessionID = sessionMeta.SessionID
 	}
 
 	if m.agent != nil {
-		m.conversation.WelcomeData.AgentName = m.agent.Name()
+		m.welcome.Data.AgentName = m.agent.Name()
 		if m.agent.Model() != nil {
-			m.conversation.WelcomeData.ModelName = m.agent.Model().Name
+			m.welcome.Data.ModelName = m.agent.Model().Name
 		}
 		sid := m.agent.SessionID()
 		if sid != "" {
-			m.conversation.WelcomeData.SessionID = sid
+			m.welcome.Data.SessionID = sid
 		}
 	}
 }
@@ -299,7 +302,7 @@ func (m *rootModel) startEventLoop() {
 							Success:   data.Success,
 							Result:    data.Result,
 							Error:     data.Error,
-								Duration:  data.Duration,
+							Duration:  data.Duration,
 						})
 					}
 				case goreactcore.ActionProgress:
@@ -329,7 +332,7 @@ func (m *rootModel) startEventLoop() {
 							TokensUsed: data.TokensUsed,
 							ToolCalls:  data.ToolCalls,
 						})
-						}
+					}
 
 				case goreactcore.FinalAnswer:
 					m.program.Send(clientmsg.FinalAnswerMsg{SessionID: evt.SessionID, Content: toString(evt.Data)})
@@ -438,6 +441,7 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *rootModel) dispatchToAll(w clientmsg.WindowResizeMsg) {
+	m.welcome.Update(w)
 	m.conversation.Update(w)
 	m.statusBar.Update(w)
 	m.input.Update(w)
@@ -505,7 +509,7 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 			if modelCfg := m.app.Models().Get(modelName); modelCfg != nil && m.agent != nil {
 				m.agent.SetModel(modelCfg)
 				m.statusBar.ModelName = modelCfg.Name
-				m.conversation.WelcomeData.ModelName = modelCfg.Name
+				m.welcome.Data.ModelName = modelCfg.Name
 				if cfg := m.app.Config(); cfg != nil {
 					cfg.LastModel = modelName
 					_ = cfg.Save()
@@ -563,13 +567,15 @@ func reloadModels(app *appcore.App) ([]input.ModelItem, error) {
 }
 
 func (m *rootModel) View() tea.View {
+	welcomeView := m.welcome.View()
 	convView := m.conversation.View()
 	inputView := m.input.View()
 	notifView := m.notifBar.View()
 
 	var out string
+	out += welcomeView
 	if convView != "" {
-		out = convView + "\n"
+		out += convView
 	}
 	if notifView != "" {
 		out += notifView + "\n"
