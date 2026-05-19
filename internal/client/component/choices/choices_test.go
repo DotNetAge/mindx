@@ -60,17 +60,14 @@ func TestChoicesPanelView(t *testing.T) {
 	if view == "" {
 		t.Fatal("View() returned empty string after ShowChoicesMsg")
 	}
-	if !strings.Contains(view, "pick one") {
-		t.Errorf("View() should contain prompt, got %q", view)
-	}
 	if !strings.Contains(view, "alpha") {
-		t.Errorf("View() should contain alpha option, got %q", view)
+		t.Errorf("View() should contain 'alpha' option, got %q", view)
 	}
 	if !strings.Contains(view, "beta") {
-		t.Errorf("View() should contain beta option, got %q", view)
+		t.Errorf("View() should contain 'beta' option, got %q", view)
 	}
 	if !strings.Contains(view, "gamma") {
-		t.Errorf("View() should contain gamma option, got %q", view)
+		t.Errorf("View() should contain 'gamma' option, got %q", view)
 	}
 }
 

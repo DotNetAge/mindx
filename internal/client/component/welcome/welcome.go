@@ -62,11 +62,12 @@ func (w *WelcomePanel) View() string {
 		b.WriteByte('\n')
 	}
 
-	b.WriteByte('\n')
-	b.WriteString(style.Divider(strings.Repeat("─", w.Width)))
-	b.WriteByte('\n')
-
-	return b.String()
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(style.ThemePurple).
+		Padding(0, 1).
+		Width(w.Width).
+		Render(b.String())
 }
 
 func (w *WelcomePanel) renderGradientTitle() string {
