@@ -1,56 +1,76 @@
-package conv
+package welcome
 
 import (
 	"strings"
 
 	"image/color"
 
+	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/DotNetAge/mindx/internal/client/data"
+	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
 )
 
-func (p *ConversationPanel) renderWelcome() string {
+type WelcomePanel struct {
+	Data  data.WelcomeData
+	Width int
+}
+
+func New() *WelcomePanel {
+	return &WelcomePanel{
+		Width: 80,
+	}
+}
+
+func (w *WelcomePanel) Update(msg any) (*WelcomePanel, tea.Cmd) {
+	switch m := msg.(type) {
+	case clientmsg.WindowResizeMsg:
+		w.Width = m.Width
+	}
+	return w, nil
+}
+
+func (w *WelcomePanel) View() string {
 	var b strings.Builder
 
-	b.WriteString(p.renderGradientTitle())
+	b.WriteString(w.renderGradientTitle())
 	b.WriteByte('\n')
 	b.WriteByte('\n')
 
-	if p.WelcomeData.Workspace != "" {
+	if w.Data.Workspace != "" {
 		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("white")).Render("Workspace: "))
-		b.WriteString(style.WhiteStyle.Render(p.WelcomeData.Workspace))
+		b.WriteString(style.WhiteStyle.Render(w.Data.Workspace))
 		b.WriteByte('\n')
 	}
 
-	if p.WelcomeData.SessionID != "" {
+	if w.Data.SessionID != "" {
 		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("white")).Render("Session: "))
-		b.WriteString(style.WhiteStyle.Render(p.WelcomeData.SessionID))
+		b.WriteString(style.WhiteStyle.Render(w.Data.SessionID))
 		b.WriteByte('\n')
 	}
 
-	if p.WelcomeData.AgentName != "" {
+	if w.Data.AgentName != "" {
 		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("white")).Render("Agent: "))
-		b.WriteString(style.WhiteStyle.Render(p.WelcomeData.AgentName))
+		b.WriteString(style.WhiteStyle.Render(w.Data.AgentName))
 		b.WriteByte('\n')
 	}
 
-	if p.WelcomeData.ModelName != "" {
+	if w.Data.ModelName != "" {
 		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("white")).Render("Model: "))
-		b.WriteString(style.WhiteStyle.Render(p.WelcomeData.ModelName))
+		b.WriteString(style.WhiteStyle.Render(w.Data.ModelName))
 		b.WriteByte('\n')
 	}
 
 	b.WriteByte('\n')
-	b.WriteString(style.Divider(strings.Repeat("─", p.width)))
-	b.WriteByte('\n')
-	b.WriteString(style.GrayStyle.Render(" ℹ Type a message to start chatting"))
+	b.WriteString(style.Divider(strings.Repeat("─", w.Width)))
 	b.WriteByte('\n')
 
 	return b.String()
 }
 
-func (p *ConversationPanel) renderGradientTitle() string {
-	titleText := p.WelcomeData.AppTitle
+func (w *WelcomePanel) renderGradientTitle() string {
+	titleText := w.Data.AppTitle
 	if titleText == "" {
 		titleText = "MindX CLI v2.0.0 Beta"
 	}

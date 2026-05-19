@@ -9,53 +9,8 @@ import (
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 )
 
-func TestWelcomeScreen(t *testing.T) {
-	p := New()
-	p.WelcomeData = data.WelcomeData{
-		AppTitle:  "MindX CLI v2.0.0",
-		AgentName: "architect",
-		Workspace: "/tmp/test",
-		SessionID: "sess-123",
-		ModelName: "test-model",
-	}
-	view := p.View()
-
-	checks := []string{
-		"Workspace: /tmp/test",
-		"Session: sess-123",
-		"Agent: architect",
-		"Type a message to start chatting",
-	}
-	for _, c := range checks {
-		if !strings.Contains(view, c) {
-			t.Errorf("expected welcome view to contain %q", c)
-		}
-	}
-	if len(p.Answers) != 0 {
-		t.Error("expected Answers to be empty after View()")
-	}
-}
-
-func TestWelcomeShownOnce(t *testing.T) {
-	p := New()
-	first := p.View()
-	if first == "" {
-		t.Fatal("expected non-empty welcome view")
-	}
-	if len(p.Answers) != 0 {
-		t.Fatal("expected no answers before any message")
-	}
-
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "test"})
-	second := p.View()
-	if strings.Contains(second, "MindX CLI") {
-		t.Error("expected welcome to disappear after answer exists")
-	}
-}
-
 func TestThinkingDelta(t *testing.T) {
 	p := New()
-	p.View()
 
 	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking step 1..."})
 
@@ -305,23 +260,6 @@ func TestFindOrCreateAnswer(t *testing.T) {
 	}
 }
 
-func TestEmptyView(t *testing.T) {
-	p := New()
-
-	first := p.View()
-	if first == "" {
-		t.Error("expected welcome text on first View() call")
-	}
-	if !strings.Contains(first, "Type a message") {
-		t.Error("expected welcome hint in welcome view")
-	}
-
-	second := p.View()
-	if second == "" {
-		t.Error("expected welcome to persist while no answers exist")
-	}
-}
-
 func TestCollapseToggle(t *testing.T) {
 	p := New()
 	p.View()
@@ -380,10 +318,6 @@ func TestClearScreen(t *testing.T) {
 	p.Update(clientmsg.ClearScreenMsg{})
 	if len(p.Answers) != 0 {
 		t.Errorf("expected 0 answers after clear, got %d", len(p.Answers))
-	}
-	afterClear := p.View()
-	if !strings.Contains(afterClear, "Type a message") {
-		t.Error("expected welcome to reappear after clear")
 	}
 }
 
