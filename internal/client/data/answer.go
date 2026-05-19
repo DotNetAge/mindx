@@ -37,6 +37,7 @@ type ActionStep struct {
 	ToolName      string         `json:"tool_name"`
 	Status        ActionStatus   `json:"status"`
 	EstimatedTok  int            `json:"estimated_tok"`
+	Duration      time.Duration  `json:"duration"`
 	Params        map[string]any `json:"params"`
 	ProgressText  string         `json:"progress_text"`
 	ResultText    string         `json:"result_text"`
@@ -63,6 +64,8 @@ type AnswerData struct {
 	ActionCompleted    bool            `json:"action_completed"`
 	ActionSuccessCount int             `json:"action_success_count"`
 	ActionFailedCount  int             `json:"action_failed_count"`
+	TotalTokens        int             `json:"total_tokens"`
+	TotalDuration      time.Duration   `json:"total_duration"`
 	CreatedAt          time.Time       `json:"created_at"`
 	UpdatedAt          time.Time       `json:"updated_at"`
 	Duration           time.Duration   `json:"duration"`

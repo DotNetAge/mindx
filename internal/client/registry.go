@@ -119,12 +119,12 @@ func BuiltinCommands(deps CommandDeps) *SlashCommandRegistry {
 				}
 			}
 			modelName := args[0]
-			agentName := deps.App.CurrentAgentName()
-			if err := deps.App.SwitchAgentModel(agentName, modelName); err != nil {
-				return CommandResult{Message: fmt.Sprintf("❌ %v", err), Success: false}
+			model := deps.App.Models().Get(modelName)
+			if model == nil || !model.Enabled {
+				return CommandResult{Message: fmt.Sprintf("❌ 模型 %q 不可用", modelName), Success: false}
 			}
 			return CommandResult{
-				Message: fmt.Sprintf("✅ 已切换 %s 模型为: %s", agentName, modelName),
+				Message: fmt.Sprintf("✅ 已切换模型为: %s", modelName),
 				Success: true,
 			}
 		},

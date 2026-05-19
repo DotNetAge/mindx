@@ -56,16 +56,16 @@ func (p *ConversationPanel) renderGradientTitle() string {
 	}
 
 	gradientColors := []color.Color{
-		lipgloss.Color("#42A5F5"),
-		lipgloss.Color("#1E88E5"),
-		lipgloss.Color("#1976D2"),
-		lipgloss.Color("#1565C0"),
-		lipgloss.Color("#0D47A1"),
-		lipgloss.Color("#EC407A"),
-		lipgloss.Color("#D81B60"),
-		lipgloss.Color("#C2185B"),
-		lipgloss.Color("#AD1457"),
-		lipgloss.Color("#880E4F"),
+		lipgloss.Color("#1799EA"),
+		lipgloss.Color("#548BE1"),
+		lipgloss.Color("#6985DC"),
+		lipgloss.Color("#8D78CD"),
+		lipgloss.Color("#9774C1"),
+		lipgloss.Color("#A371B6"),
+		lipgloss.Color("#AD6EAA"),
+		lipgloss.Color("#B26CA4"),
+		lipgloss.Color("#BC6899"),
+		lipgloss.Color("#D0617F"),
 	}
 
 	blendedColors := lipgloss.Blend1D(len(titleText), gradientColors...)
