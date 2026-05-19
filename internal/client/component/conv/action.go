@@ -2,6 +2,7 @@ package conv
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -85,6 +86,7 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 					step.ResultText = e.Error
 					step.Duration = e.Duration
 				}
+				step.Collapsed = false
 				break
 			}
 		}
@@ -133,7 +135,7 @@ func ViewAction(m Action, width int) string {
 	blinkOn := m.BlinkOn && !m.Completed
 
 	if m.CurrentInfo != nil {
-		b.WriteString(ViewActionHeader(*m.CurrentInfo, blinkOn, m.Elapsed, m.Completed))
+		b.WriteString(ViewActionHeader(*m.CurrentInfo, blinkOn, m.Elapsed, m.Completed, m.SuccessCount, m.FailedCount, m.TotalDuration))
 	}
 
 	for i, step := range m.Steps {
@@ -146,7 +148,7 @@ func ViewAction(m Action, width int) string {
 	return b.String()
 }
 
-func ViewActionHeader(info ActionInfo, blinkOn bool, elapsed time.Duration, completed bool) string {
+func ViewActionHeader(info ActionInfo, blinkOn bool, elapsed time.Duration, completed bool, successCount, failedCount int, totalDuration time.Duration) string {
 	var b strings.Builder
 	icon := ViewBlink(Blink{Symbol: "⏺", BlinkOn: blinkOn}, style.GrayStyle)
 	if completed {
@@ -158,7 +160,12 @@ func ViewActionHeader(info ActionInfo, blinkOn bool, elapsed time.Duration, comp
 	if info.TotalPredictedTokens > 0 {
 		b.WriteString(fmt.Sprintf(" | %s", style.GrayStyle.Render(fmt.Sprintf("预计消耗 %s Tokens", formatNumber(info.TotalPredictedTokens)))))
 	}
-	if elapsed > 0 {
+	if completed {
+		b.WriteString(fmt.Sprintf(" | %s", style.GreenStyle.Render(fmt.Sprintf("%d 成功, %d 失败", successCount, failedCount))))
+		if totalDuration > 0 {
+			b.WriteString(fmt.Sprintf(" | %s", style.WhiteStyle.Render(formatDuration(totalDuration))))
+		}
+	} else if elapsed > 0 {
 		b.WriteString(fmt.Sprintf(" | %s", style.WhiteStyle.Render(formatDuration(elapsed))))
 	}
 	b.WriteByte('\n')
@@ -231,11 +238,16 @@ func formatParams(params map[string]any) string {
 	if params == nil || len(params) == 0 {
 		return ""
 	}
-	var parts []string
-	for k, v := range params {
-		parts = append(parts, fmt.Sprintf("%v=%v", k, v))
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
 	}
-	result := strings.Join(parts, ", ")
+	sort.Strings(keys)
+	var parts []string
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%v", params[k]))
+	}
+	result := strings.Join(parts, " ")
 	if len(result) > 60 {
 		return result[:57] + "..."
 	}

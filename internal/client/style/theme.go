@@ -15,6 +15,7 @@ var (
 	ThemeBg        = lipgloss.Color("#1E1E2E")
 	ThemePurple    = lipgloss.Color("#BB86FC")
 	ThemeYellow    = lipgloss.Color("#FFD54F")
+	ThemeDarkGray  = lipgloss.Color("#555555")
 
 	CyanStyle   = lipgloss.NewStyle().Foreground(ThemeCyan)
 	GreenStyle  = lipgloss.NewStyle().Foreground(ThemeGreen)
