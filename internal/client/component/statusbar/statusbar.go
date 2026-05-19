@@ -3,6 +3,7 @@ package statusbar
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
@@ -12,23 +13,22 @@ import (
 )
 
 var (
-	connectingStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#E5C07B"))
-	sep             = fmt.Sprintf(" %s ", style.DimStyle.Render("│"))
+	sep = fmt.Sprintf(" %s ", style.DimStyle.Render("│"))
 )
 
 type StatusBar struct {
-	Width       int
-	ConnState   data.ConnectionState
-	SessionName string
-	TokensIn    int
-	TokensOut   int
-	TokensTotal int
-	SessionCost string
-	AgentName   string
-	ModelName   string
-	ModeLabel   string
-	ShowHints   bool
-	Shortcuts   []data.Shortcut
+	Width           int
+	CurrentState    string
+	BlinkOn         bool
+	TokensTotal     int
+	SessionStart    time.Time
+	SessionDuration time.Duration
+	SessionName     string
+	AgentName       string
+	ModelName       string
+	ModeLabel       string
+	Shortcuts       []data.Shortcut
+	ShowHints       bool
 }
 
 func New() *StatusBar {
@@ -45,43 +45,87 @@ func (s *StatusBar) Update(msg any) (*StatusBar, tea.Cmd) {
 		s.AgentName = m.AgentName
 		s.SessionName = m.SessionID
 	case clientmsg.ActionStartMsg:
-		s.TokensIn += m.EstimatedTok
+		s.TokensTotal += m.EstimatedTok
+	case clientmsg.ExecutionSummaryMsg:
+		if m.TokensUsed > 0 {
+			s.TokensTotal += m.TokensUsed
+		}
+	case clientmsg.FinalAnswerMsg:
+		if s.SessionStart.IsZero() {
+			s.SessionDuration = 0
+		} else {
+			s.SessionDuration = time.Since(s.SessionStart)
+		}
 	}
 	return s, nil
 }
 
+func (s *StatusBar) Tick() {
+	s.BlinkOn = !s.BlinkOn
+}
+
+func formatTokens(n int) string {
+	switch {
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fm", float64(n)/1_000_000)
+	case n >= 1_000:
+		return fmt.Sprintf("%.1fk", float64(n)/1_000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
+}
+
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	s := int(d.Seconds()) % 60
+	if h > 0 {
+		return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%02d:%02d", m, s)
+}
+
+func stateStyle(state string, blinkOn bool) string {
+	if state == "空闲" {
+		return style.DimStyle.Render("● " + state)
+	}
+	dot := " "
+	if blinkOn {
+		dot = style.PurpleStyle.Render("●")
+	}
+	return fmt.Sprintf("%s %s", dot, style.PurpleStyle.Render(state))
+}
+
 func (s *StatusBar) View() string {
-	var connStr string
-	switch s.ConnState {
-	case data.Disconnected:
-		connStr = style.RedStyle.Render("○ Disconnected")
-	case data.Connecting:
-		connStr = connectingStyle.Render("● Connecting")
-	case data.Authenticated:
-		connStr = style.GreenStyle.Render("● Authenticated")
-	case data.Connected:
-		connStr = style.GreenStyle.Render("● Connected")
+	var parts []string
+
+	stateStr := stateStyle(s.CurrentState, s.BlinkOn)
+	parts = append(parts, stateStr)
+
+	tokStr := style.WhiteStyle.Render(fmt.Sprintf("Tokens: %s", formatTokens(s.TokensTotal)))
+	parts = append(parts, tokStr)
+
+	if !s.SessionStart.IsZero() {
+		d := s.SessionDuration
+		if d == 0 {
+			d = time.Since(s.SessionStart)
+		}
+		parts = append(parts, style.GrayStyle.Render(formatDuration(d)))
 	}
 
-	line1 := connStr
-
-	if s.SessionName != "" {
-		line1 += sep + style.WhiteStyle.Render(s.SessionName)
+	if s.AgentName != "" {
+		parts = append(parts, style.WhiteStyle.Render(s.AgentName))
 	}
-
-	tokStr := fmt.Sprintf("Tokens: %d in / %d out", s.TokensIn, s.TokensOut)
-	line1 += sep + style.GrayStyle.Render(tokStr)
-
-	if s.SessionCost != "" {
-		line1 += sep + style.DimStyle.Render(s.SessionCost)
+	if s.ModelName != "" {
+		parts = append(parts, style.GrayStyle.Render(s.ModelName))
 	}
-
-	agentModelStr := fmt.Sprintf("%s (%s)", s.AgentName, s.ModelName)
-	line1 += sep + style.WhiteStyle.Render(agentModelStr)
 
 	if s.ModeLabel != "" {
-		line1 += sep + style.DimStyle.Render(s.ModeLabel)
+		parts = append(parts, style.DimStyle.Render(s.ModeLabel))
 	}
+
+	line1 := strings.Join(parts, sep)
 
 	if s.ShowHints && len(s.Shortcuts) > 0 {
 		var hintParts []string

@@ -37,12 +37,13 @@ type ToolExecStartMsg struct {
 }
 
 type ToolExecEndMsg struct {
-	SessionID string
-	ToolName  string
-	Success   bool
-	Result    string
-	Error     string
-	Duration  time.Duration
+	SessionID  string
+	ToolName   string
+	ToolCallID string
+	Success    bool
+	Result     string
+	Error      string
+	Duration   time.Duration
 }
 
 type ExecutionSummaryMsg struct {
