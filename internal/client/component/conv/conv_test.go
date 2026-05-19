@@ -5,491 +5,316 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DotNetAge/mindx/internal/client/data"
-	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
+	"github.com/DotNetAge/mindx/internal/client/msg"
 )
 
-func TestThinkingDelta(t *testing.T) {
-	p := New()
+func TestQuestionView(t *testing.T) {
+	m := Question{Text: "What is Go?"}
+	view := ViewQuestion(m, 80)
 
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking step 1..."})
-
-	if len(p.Answers) != 1 {
-		t.Fatalf("expected 1 answer, got %d", len(p.Answers))
-	}
-	a := p.Answers[0]
-	if a.PendingThink != "thinking step 1..." {
-		t.Errorf("expected PendingThink %q, got %q", "thinking step 1...", a.PendingThink)
-	}
-	if a.Status != data.StatusThinking {
-		t.Errorf("expected StatusThinking, got %v", a.Status)
-	}
-	if !a.IsThinking {
-		t.Error("expected IsThinking=true")
+	if !strings.Contains(view, "What is Go?") {
+		t.Error("expected question text in view")
 	}
 }
 
-func TestThinkingDone(t *testing.T) {
-	p := New()
-	p.View()
+func TestQuestionViewEmpty(t *testing.T) {
+	m := Question{}
+	view := ViewQuestion(m, 80)
 
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking step 1..."})
-	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s1"})
-
-	a := p.Answers[0]
-	if len(a.ThinkingLog) != 1 {
-		t.Fatalf("expected 1 ThinkingLog entry, got %d", len(a.ThinkingLog))
-	}
-	if a.ThinkingLog[0].Content != "thinking step 1..." {
-		t.Errorf("expected content %q, got %q", "thinking step 1...", a.ThinkingLog[0].Content)
-	}
-	if a.PendingThink != "" {
-		t.Errorf("expected empty PendingThink, got %q", a.PendingThink)
-	}
-	if a.IsThinking {
-		t.Error("expected IsThinking=false")
+	if view != "" {
+		t.Error("expected empty view for empty question")
 	}
 }
 
-func TestThinkingDeltaMultiRound(t *testing.T) {
-	p := New()
-	p.View()
+func TestThoughtUpdateDelta(t *testing.T) {
+	m := Thought{IsActive: true}
+	m, _ = UpdateThought(m, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking step 1..."})
 
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "round 1"})
-	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s1"})
-
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "round 2"})
-	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s1"})
-
-	if len(p.Answers[0].ThinkingLog) != 2 {
-		t.Fatalf("expected 2 ThinkingLog entries, got %d", len(p.Answers[0].ThinkingLog))
-	}
-	if p.Answers[0].ThinkingLog[0].Content != "round 1" {
-		t.Errorf("expected first entry %q, got %q", "round 1", p.Answers[0].ThinkingLog[0].Content)
-	}
-	if p.Answers[0].ThinkingLog[1].Content != "round 2" {
-		t.Errorf("expected second entry %q, got %q", "round 2", p.Answers[0].ThinkingLog[1].Content)
+	if m.Pending != "thinking step 1..." {
+		t.Errorf("expected Pending %q, got %q", "thinking step 1...", m.Pending)
 	}
 }
 
-func TestActionStart(t *testing.T) {
-	p := New()
-	p.View()
+func TestThoughtUpdateDone(t *testing.T) {
+	m := Thought{IsActive: true, Content: "thinking step 1..."}
+	m, _ = UpdateThought(m, msg.ThinkingDoneMsg{SessionID: "s1"})
 
-	p.Update(clientmsg.ActionStartMsg{
+	if m.Content != "thinking step 1..." {
+		t.Errorf("expected content %q, got %q", "thinking step 1...", m.Content)
+	}
+	if m.IsActive {
+		t.Error("expected IsActive=false")
+	}
+}
+
+func TestThoughtView(t *testing.T) {
+	m := Thought{
+		IsActive: true,
+		Content:  "thinking...",
+	}
+	view := ViewThought(m)
+
+	if !strings.Contains(view, "thinking...") {
+		t.Error("expected thought content in view")
+	}
+}
+
+func TestActionUpdateStartExecEnd(t *testing.T) {
+	m := Action{}
+	m, _ = UpdateAction(m, msg.ActionStartMsg{
 		SessionID:    "s1",
 		ToolCount:    1,
 		ToolNames:    []string{"bash"},
 		EstimatedTok: 100,
 	})
-	p.Update(clientmsg.ToolExecStartMsg{
-		SessionID:    "s1",
-		ToolName:     "bash",
-		EstimatedTok: 100,
-		Params:       map[string]any{"cmd": "ls"},
+
+	if m.CurrentInfo == nil {
+		t.Fatal("expected CurrentInfo after ActionStart")
+	}
+	if m.CurrentInfo.ToolCount != 1 {
+		t.Errorf("expected ToolCount 1, got %d", m.CurrentInfo.ToolCount)
+	}
+
+	m, _ = UpdateAction(m, msg.ToolExecStartMsg{
+		SessionID: "s1",
+		ToolName:  "bash",
+		Params:    map[string]any{"cmd": "ls"},
 	})
 
-	if len(p.Answers) != 1 {
-		t.Fatalf("expected 1 answer, got %d", len(p.Answers))
+	if len(m.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(m.Steps))
 	}
-	if len(p.Answers[0].Actions) != 1 {
-		t.Fatalf("expected 1 action, got %d", len(p.Answers[0].Actions))
+	if m.Steps[0].ToolName != "bash" {
+		t.Errorf("expected ToolName 'bash', got %q", m.Steps[0].ToolName)
 	}
-
-	step := p.Answers[0].Actions[0]
-	if step.ToolName != "bash" {
-		t.Errorf("expected ToolName 'bash', got %q", step.ToolName)
+	if m.Steps[0].Status != ActionStepExecuting {
+		t.Errorf("expected ActionStepExecuting, got %v", m.Steps[0].Status)
 	}
-	if step.Status != data.ActionExecuting {
-		t.Errorf("expected ActionExecuting, got %v", step.Status)
-	}
-	if step.EstimatedTok != 100 {
-		t.Errorf("expected EstimatedTok 100, got %d", step.EstimatedTok)
-	}
-	if step.Params == nil || step.Params["cmd"] != "ls" {
-		t.Errorf("expected params to contain cmd=ls")
-	}
-	if !step.Collapsed {
+	if !m.Steps[0].Collapsed {
 		t.Error("expected Collapsed=true by default")
 	}
-	if p.Answers[0].Status != data.StatusExecuting {
-		t.Errorf("expected StatusExecuting, got %v", p.Answers[0].Status)
-	}
-}
 
-func TestActionStartFlushesPendingThink(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking before action..."})
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})
-
-	if len(p.Answers[0].ThinkingLog) != 1 {
-		t.Fatalf("expected 1 ThinkingLog entry, got %d", len(p.Answers[0].ThinkingLog))
-	}
-	if p.Answers[0].ThinkingLog[0].Content != "thinking before action..." {
-		t.Errorf("expected flushed content %q, got %q", "thinking before action...", p.Answers[0].ThinkingLog[0].Content)
-	}
-	if p.Answers[0].PendingThink != "" {
-		t.Errorf("expected empty PendingThink after flush, got %q", p.Answers[0].PendingThink)
-	}
-}
-
-func TestToolExecEndSuccess(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})
-	p.Update(clientmsg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash"})
-	p.Update(clientmsg.ToolExecEndMsg{
+	m, _ = UpdateAction(m, msg.ToolExecEndMsg{
 		SessionID: "s1",
 		ToolName:  "bash",
 		Success:   true,
 		Result:    "command output",
 	})
 
-	step := p.Answers[0].Actions[0]
-	if step.Status != data.ActionDone {
-		t.Errorf("expected ActionDone, got %v", step.Status)
+	if m.Steps[0].Status != ActionStepDone {
+		t.Errorf("expected ActionStepDone, got %v", m.Steps[0].Status)
 	}
-	if step.ResultText != "command output" {
-		t.Errorf("expected ResultText %q, got %q", "command output", step.ResultText)
+	if m.Steps[0].ResultText != "command output" {
+		t.Errorf("expected ResultText %q, got %q", "command output", m.Steps[0].ResultText)
 	}
 }
 
-func TestToolExecEndFailed(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})
-	p.Update(clientmsg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash"})
-	p.Update(clientmsg.ToolExecEndMsg{
-		SessionID: "s1",
-		ToolName:  "bash",
-		Success:   false,
-		Error:     "permission denied",
+func TestActionUpdateEnd(t *testing.T) {
+	m := Action{
+		Steps: []ActionStep{
+			{ToolName: "bash", Status: ActionStepDone},
+		},
+		CurrentInfo: &ActionInfo{ToolCount: 1, ToolNames: []string{"bash"}},
+	}
+	m, _ = UpdateAction(m, msg.ActionEndMsg{
+		SessionID:    "s1",
+		TotalTools:   1,
+		SuccessCount: 1,
+		FailedCount:  0,
 	})
 
-	step := p.Answers[0].Actions[0]
-	if step.Status != data.ActionFailed {
-		t.Errorf("expected ActionFailed, got %v", step.Status)
+	if !m.Completed {
+		t.Error("expected Completed=true")
 	}
-	if step.ResultText != "permission denied" {
-		t.Errorf("expected ResultText %q, got %q", "permission denied", step.ResultText)
-	}
-}
-
-func TestSessionDone(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking..."})
-	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s1"})
-	p.Update(clientmsg.SessionDoneMsg{SessionID: "s1"})
-
-	a := p.Answers[0]
-	if a.Status != data.StatusDone {
-		t.Errorf("expected StatusDone, got %v", a.Status)
-	}
-	if a.IsThinking {
-		t.Error("expected IsThinking=false")
+	if m.SuccessCount != 1 {
+		t.Errorf("expected SuccessCount 1, got %d", m.SuccessCount)
 	}
 }
 
-func TestMultipleAnswers(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "s1 thinking..."})
-	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s1"})
-	p.Update(clientmsg.FinalAnswerMsg{SessionID: "s1", Content: "s1 answer"})
-
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s2", Content: "s2 thinking..."})
-	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s2"})
-	p.Update(clientmsg.FinalAnswerMsg{SessionID: "s2", Content: "s2 answer"})
-
-	if len(p.Answers) != 2 {
-		t.Fatalf("expected 2 answers, got %d", len(p.Answers))
+func TestActionView(t *testing.T) {
+	m := Action{
+		CurrentInfo: &ActionInfo{ToolCount: 1, ToolNames: []string{"bash"}},
+		Steps: []ActionStep{
+			{ToolName: "bash", Status: ActionStepDone, ResultText: "done"},
+		},
+		Completed: true,
 	}
-	if p.Answers[0].SessionID != "s1" {
-		t.Errorf("expected s1, got %s", p.Answers[0].SessionID)
-	}
-	if p.Answers[1].SessionID != "s2" {
-		t.Errorf("expected s2, got %s", p.Answers[1].SessionID)
+	view := ViewAction(m, 80)
+
+	if !strings.Contains(view, "执行操作") {
+		t.Error("expected action header in view")
 	}
 }
 
-func TestFindAnswer(t *testing.T) {
-	p := New()
-	p.Answers = []data.AnswerData{
-		{SessionID: "s1"},
-		{SessionID: "s2"},
-	}
+func TestOutputUpdateFinalAnswer(t *testing.T) {
+	m := Output{}
+	m, _ = UpdateOutput(m, msg.FinalAnswerMsg{SessionID: "s1", Content: "Go is a programming language"})
 
-	if idx := p.findAnswer("s1"); idx != 0 {
-		t.Errorf("expected 0 for s1, got %d", idx)
+	if len(m.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(m.Entries))
 	}
-	if idx := p.findAnswer("s2"); idx != 1 {
-		t.Errorf("expected 1 for s2, got %d", idx)
+	if m.Entries[0].Role != "assistant" {
+		t.Errorf("expected Role 'assistant', got %q", m.Entries[0].Role)
 	}
-}
-
-func TestFindAnswerNotFound(t *testing.T) {
-	p := New()
-	if idx := p.findAnswer("nonexistent"); idx != -1 {
-		t.Errorf("expected -1, got %d", idx)
+	if m.Entries[0].Content != "Go is a programming language" {
+		t.Errorf("expected content %q, got %q", "Go is a programming language", m.Entries[0].Content)
 	}
 }
 
-func TestFindOrCreateAnswer(t *testing.T) {
-	p := New()
-	idx1 := p.findOrCreateAnswer("s1", "")
-	if idx1 != 0 {
-		t.Errorf("expected 0 for first create, got %d", idx1)
-	}
-	if len(p.Answers) != 1 {
-		t.Errorf("expected 1 answer, got %d", len(p.Answers))
-	}
+func TestOutputUpdateError(t *testing.T) {
+	m := Output{}
+	m, _ = UpdateOutput(m, msg.AgentErrorMsg{SessionID: "s1", Error: errors.New("something went wrong")})
 
-	idx2 := p.findOrCreateAnswer("s1", "")
-	if idx2 != 0 {
-		t.Errorf("expected 0 for existing, got %d", idx2)
+	if len(m.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(m.Entries))
 	}
-	if len(p.Answers) != 1 {
-		t.Errorf("expected still 1 answer, got %d", len(p.Answers))
+	if m.Entries[0].Role != "error" {
+		t.Errorf("expected Role 'error', got %q", m.Entries[0].Role)
 	}
 }
 
-func TestCollapseToggle(t *testing.T) {
-	p := New()
-	p.View()
+func TestOutputUpdateDeduplicate(t *testing.T) {
+	m := Output{}
+	m, _ = UpdateOutput(m, msg.FinalAnswerMsg{SessionID: "s1", Content: "answer"})
+	m, _ = UpdateOutput(m, msg.FinalAnswerMsg{SessionID: "s1", Content: "answer"})
 
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})
-	p.Update(clientmsg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash"})
-	step := &p.Answers[0].Actions[0]
-
-	if !step.Collapsed {
-		t.Error("expected Collapsed=true initially")
-	}
-
-	p.Update(clientmsg.CollapseToggleMsg{AnswerIndex: 0, ActionIndex: 0})
-	if step.Collapsed {
-		t.Error("expected Collapsed=false after toggle")
-	}
-
-	p.Update(clientmsg.CollapseToggleMsg{AnswerIndex: 0, ActionIndex: 0})
-	if !step.Collapsed {
-		t.Error("expected Collapsed=true after second toggle")
+	if len(m.Entries) != 1 {
+		t.Errorf("expected 1 entry (dedup), got %d", len(m.Entries))
 	}
 }
 
-func TestThinkCollapse(t *testing.T) {
-	p := New()
-	p.View()
+func TestConversationFullFlow(t *testing.T) {
+	conv := NewConversation("s1", "agent1", "What is Go?")
 
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking..."})
-	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s1"})
-
-	if !p.Answers[0].ThinkingCollapsed {
-		t.Error("expected ThinkingCollapsed=true initially")
+	if conv.Question.Text != "What is Go?" {
+		t.Errorf("expected question %q, got %q", "What is Go?", conv.Question.Text)
+	}
+	if conv.Status != StatusThinking {
+		t.Errorf("expected StatusThinking, got %v", conv.Status)
 	}
 
-	p.Update(clientmsg.ThinkCollapseMsg{AnswerIndex: 0})
-	if p.Answers[0].ThinkingCollapsed {
-		t.Error("expected ThinkingCollapsed=false after toggle")
+	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "I need to think..."})
+	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1"})
+
+	if len(conv.Rounds) != 1 {
+		t.Errorf("expected 1 round, got %d", len(conv.Rounds))
+	}
+	if conv.Rounds[0].Thought.Content != "I need to think..." {
+		t.Errorf("expected thought content %q, got %q", "I need to think...", conv.Rounds[0].Thought.Content)
 	}
 
-	p.Update(clientmsg.ThinkCollapseMsg{AnswerIndex: 0})
-	if !p.Answers[0].ThinkingCollapsed {
-		t.Error("expected ThinkingCollapsed=true after second toggle")
+	conv, _ = UpdateConversation(conv, msg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})
+	conv, _ = UpdateConversation(conv, msg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash"})
+	conv, _ = UpdateConversation(conv, msg.ToolExecEndMsg{SessionID: "s1", ToolName: "bash", Success: true, Result: "done"})
+	conv, _ = UpdateConversation(conv, msg.ActionEndMsg{SessionID: "s1", SuccessCount: 1, FailedCount: 0})
+
+	if !conv.Rounds[0].Action.Completed {
+		t.Error("expected action completed in current round")
+	}
+
+	conv, _ = UpdateConversation(conv, msg.FinalAnswerMsg{SessionID: "s1", Content: "Go is a programming language"})
+	conv, _ = UpdateConversation(conv, msg.SessionDoneMsg{SessionID: "s1"})
+
+	if conv.Status != StatusDone {
+		t.Errorf("expected StatusDone, got %v", conv.Status)
+	}
+}
+
+func TestConversationMultiRoundFlow(t *testing.T) {
+	conv := NewConversation("s1", "agent1", "Complex task?")
+
+	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "First thought..."})
+	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1"})
+	conv, _ = UpdateConversation(conv, msg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"tool1"}})
+	conv, _ = UpdateConversation(conv, msg.ToolExecStartMsg{SessionID: "s1", ToolName: "tool1"})
+	conv, _ = UpdateConversation(conv, msg.ToolExecEndMsg{SessionID: "s1", ToolName: "tool1", Success: true, Result: "ok"})
+	conv, _ = UpdateConversation(conv, msg.ActionEndMsg{SessionID: "s1", SuccessCount: 1, FailedCount: 0})
+
+	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "Second thought..."})
+	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1"})
+	conv, _ = UpdateConversation(conv, msg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"tool2"}})
+	conv, _ = UpdateConversation(conv, msg.ToolExecStartMsg{SessionID: "s1", ToolName: "tool2"})
+	conv, _ = UpdateConversation(conv, msg.ToolExecEndMsg{SessionID: "s1", ToolName: "tool2", Success: true, Result: "done"})
+	conv, _ = UpdateConversation(conv, msg.ActionEndMsg{SessionID: "s1", SuccessCount: 1, FailedCount: 0})
+
+	if len(conv.Rounds) != 2 {
+		t.Fatalf("expected 2 rounds, got %d", len(conv.Rounds))
+	}
+	if conv.Rounds[0].Thought.Content != "First thought..." {
+		t.Errorf("expected first round thought %q, got %q", "First thought...", conv.Rounds[0].Thought.Content)
+	}
+	if conv.Rounds[1].Thought.Content != "Second thought..." {
+		t.Errorf("expected second round thought %q, got %q", "Second thought...", conv.Rounds[1].Thought.Content)
+	}
+}
+
+func TestConversationViewFullTAO(t *testing.T) {
+	conv := NewConversation("s1", "agent1", "What is Go?")
+	conv.Rounds = append(conv.Rounds, ThoughtActionRound{
+		Thought: Thought{Content: "thinking step 1..."},
+		Action: Action{
+			CurrentInfo: &ActionInfo{ToolCount: 1, ToolNames: []string{"bash"}},
+			Steps:       []ActionStep{{ToolName: "bash", Status: ActionStepDone, ResultText: "done"}},
+			Completed:   true,
+		},
+	})
+	conv.Output = Output{
+		Entries: []OutputEntry{{Role: "assistant", Content: "Go is a programming language"}},
+	}
+
+	view := ViewConversation(conv, 80)
+	if view == "" {
+		t.Fatal("expected non-empty view for full T-A-O conversation")
+	}
+	if !strings.Contains(view, "What is Go?") {
+		t.Error("expected question in view")
+	}
+	if !strings.Contains(view, "thinking step 1...") {
+		t.Error("expected thinking content in view")
+	}
+	if !strings.Contains(view, "执行操作") {
+		t.Error("expected action header in view")
+	}
+}
+
+func TestConversationViewEmpty(t *testing.T) {
+	conv := Conversation{
+		SessionID: "s1",
+		Status:    StatusThinking,
+	}
+	view := ViewConversation(conv, 80)
+
+	if view != "" {
+		t.Error("expected empty view for empty conversation")
+	}
+}
+
+func TestConversationDoneBlocksUpdates(t *testing.T) {
+	conv := NewConversation("s1", "agent1", "hello")
+	conv, _ = UpdateConversation(conv, msg.SessionDoneMsg{SessionID: "s1"})
+
+	if conv.Status != StatusDone {
+		t.Fatalf("expected StatusDone, got %v", conv.Status)
+	}
+
+	conv, _ = UpdateConversation(conv, msg.FinalAnswerMsg{SessionID: "s1", Content: "should be ignored"})
+
+	if len(conv.Output.Entries) != 0 {
+		t.Error("expected no output after done")
 	}
 }
 
 func TestClearScreen(t *testing.T) {
-	p := New()
-	p.View()
+	list := NewConversationList()
+	list.Conversations = append(list.Conversations, NewConversation("s1", "agent1", "hello"))
 
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking..."})
-	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s1"})
-	if len(p.Answers) == 0 {
-		t.Fatal("expected answers before clear")
+	if len(list.Conversations) != 1 {
+		t.Fatalf("expected 1 conversation, got %d", len(list.Conversations))
 	}
 
-	p.Update(clientmsg.ClearScreenMsg{})
-	if len(p.Answers) != 0 {
-		t.Errorf("expected 0 answers after clear, got %d", len(p.Answers))
-	}
-}
+	list, _ = list.Update(msg.ClearScreenMsg{})
 
-func TestTickAnimation(t *testing.T) {
-	p := New()
-	p.View()
-
-	if p.BlinkOn {
-		t.Error("expected BlinkOn=false initially")
-	}
-
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "..."})
-	p.Update(clientmsg.TickMsg{})
-	if !p.BlinkOn {
-		t.Error("expected BlinkOn=true after TickMsg while thinking")
-	}
-
-	p.Update(clientmsg.TickMsg{})
-	if p.BlinkOn {
-		t.Error("expected BlinkOn=false after second TickMsg")
-	}
-}
-
-func TestTickCmdReturned(t *testing.T) {
-	p := New()
-	p.View()
-
-	_, cmd := p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking..."})
-	if cmd == nil {
-		t.Fatal("expected non-nil cmd from ThinkingDelta")
-	}
-
-	msg := cmd()
-	if _, ok := msg.(clientmsg.TickMsg); !ok {
-		t.Errorf("expected TickMsg from cmd, got %T", msg)
-	}
-}
-
-func TestNoTickWhenIdle(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.TickMsg{})
-	_, cmd := p.Update(clientmsg.TickMsg{})
-	if cmd != nil {
-		t.Error("expected nil cmd when no active thinking or executing")
-	}
-}
-
-func TestViewContainsThinkingContent(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "deep thinking content..."})
-	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s1"})
-
-	p.width = 80
-	p.height = 24
-	view := p.View()
-	if !strings.Contains(view, "deep thinking content...") {
-		t.Errorf("expected view to contain thinking content, got:\n%s", view)
-	}
-}
-
-func TestViewContainsActionContent(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}, EstimatedTok: 100})
-	p.Update(clientmsg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash", EstimatedTok: 100})
-	p.Update(clientmsg.ToolExecEndMsg{
-		SessionID: "s1",
-		ToolName:  "bash",
-		Success:   true,
-		Result:    "command executed successfully",
-	})
-
-	// Toggle collapse to show result text
-	p.Update(clientmsg.CollapseToggleMsg{AnswerIndex: 0, ActionIndex: 0})
-
-	p.width = 80
-	p.height = 24
-	view := p.View()
-	if !strings.Contains(view, "bash") {
-		t.Errorf("expected view to contain tool name 'bash', got:\n%s", view)
-	}
-	if !strings.Contains(view, "command executed successfully") {
-		t.Errorf("expected view to contain action result, got:\n%s", view)
-	}
-}
-
-func TestViewContainsAnswer(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.FinalAnswerMsg{SessionID: "s1", Content: "Here is your final answer"})
-
-	p.width = 80
-	p.height = 24
-	view := p.View()
-	if len(p.Answers[0].Results) == 0 {
-		t.Error("expected Results to have entry")
-	}
-	if view == "" {
-		t.Errorf("expected non-empty view with answer, got empty")
-	}
-}
-
-func TestNormalViewWithAnswer(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking step 1..."})
-	p.Update(clientmsg.ThinkingDoneMsg{SessionID: "s1"})
-	p.Update(clientmsg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}, EstimatedTok: 100})
-	p.Update(clientmsg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash", EstimatedTok: 100})
-	p.Update(clientmsg.ToolExecEndMsg{
-		SessionID: "s1",
-		ToolName:  "bash",
-		Success:   true,
-		Result:    "done",
-	})
-	p.Answers[0].UserQuestion = "What is Go?"
-	p.Update(clientmsg.FinalAnswerMsg{SessionID: "s1", Content: "Go is a programming language"})
-
-	p.width = 80
-	p.height = 24
-	view := p.View()
-
-	if view == "" {
-		t.Errorf("expected non-empty view with full T-A-O answer, got empty")
-	}
-	if len(p.Answers[0].Results) == 0 {
-		t.Error("expected Results to have FinalAnswer entry")
-	}
-}
-
-func TestFinalAnswer(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.FinalAnswerMsg{SessionID: "s1", Content: "Here is the answer"})
-
-	if len(p.Answers[0].Results) != 1 {
-		t.Fatalf("expected 1 ResultEntry, got %d", len(p.Answers[0].Results))
-	}
-	r := p.Answers[0].Results[0]
-	if r.Role != "assistant" {
-		t.Errorf("expected Role 'assistant', got %q", r.Role)
-	}
-	if r.Content != "Here is the answer" {
-		t.Errorf("expected Content %q, got %q", "Here is the answer", r.Content)
-	}
-}
-
-func TestAgentError(t *testing.T) {
-	p := New()
-	p.View()
-
-	p.Update(clientmsg.AgentErrorMsg{
-		SessionID: "s1",
-		Error:     errors.New("something went wrong"),
-	})
-
-	if len(p.Answers[0].Results) != 1 {
-		t.Fatalf("expected 1 ResultEntry, got %d", len(p.Answers[0].Results))
-	}
-	r := p.Answers[0].Results[0]
-	if r.Role != "error" {
-		t.Errorf("expected Role 'error', got %q", r.Role)
-	}
-	if !strings.Contains(r.Content, "something went wrong") {
-		t.Errorf("expected Content to contain error text, got %q", r.Content)
+	if len(list.Conversations) != 0 {
+		t.Errorf("expected 0 conversations after clear, got %d", len(list.Conversations))
 	}
 }

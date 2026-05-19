@@ -25,8 +25,8 @@ type App struct {
 	logger      logging.Logger
 	agents      *goreact.AgentRegistry
 	models      *goreact.ModelRegistry
-	current      *goreact.Agent
-	currentMu    sync.RWMutex
+	current     *goreact.Agent
+	currentMu   sync.RWMutex
 
 	rules  core.RuleRegistry
 	sessDB *session.FileSessionStore
@@ -263,6 +263,10 @@ func (a *App) currentAgent() (*goreact.Agent, error) {
 		goreact.WithLogger(a.logger),
 	}
 
+	if a.mindxConfig != nil && a.mindxConfig.LastSessionID != "" {
+		opts = append(opts, goreact.WithSession(a.mindxConfig.LastSessionID))
+	}
+
 	if a.rules != nil {
 		opts = append(opts, goreact.WithRuleRegistry(a.rules))
 	}
@@ -276,13 +280,14 @@ func (a *App) currentAgent() (*goreact.Agent, error) {
 			opts = append(opts, goreact.WithProjectDir(a.currentSessionMeta.GetProjectDir()))
 		}
 		if a.currentSessionMeta.GetSessionDir() != "" {
-			opts = append(opts, goreact.WithSessionDir(a.currentSessionMeta.GetSessionDir()))
+			opts = append(opts, goreact.WithSessionDir(
+				filepath.Join(a.currentSessionMeta.GetSessionDir(), agent.Name)))
 		}
 	}
 
 	sessionBaseDir := a.settings.SessionsDir()
 	if sessionBaseDir != "" {
-		opts = append(opts, goreact.WithSessionBaseDir(sessionBaseDir))
+		opts = append(opts, goreact.WithSessionBaseDir(filepath.Join(sessionBaseDir, agent.Name)))
 	}
 
 	if a.embedder != nil {
@@ -303,6 +308,10 @@ func (a *App) currentAgent() (*goreact.Agent, error) {
 	m, err := goreact.NewAgent(opts...)
 	if err != nil {
 		return nil, err
+	}
+
+	if a.currentSessionMeta != nil && a.currentSessionMeta.SessionID != "" {
+		m.NewSession(a.currentSessionMeta.SessionID)
 	}
 	a.current = m
 	a.syncProjectMemory(m, currentAgentName)
@@ -342,6 +351,10 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 		goreact.WithLogger(a.logger),
 	}
 
+	if a.mindxConfig != nil && a.mindxConfig.LastSessionID != "" {
+		opts = append(opts, goreact.WithSession(a.mindxConfig.LastSessionID))
+	}
+
 	if a.rules != nil {
 		opts = append(opts, goreact.WithRuleRegistry(a.rules))
 	}
@@ -356,14 +369,15 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 			opts = append(opts, goreact.WithProjectDir(a.currentSessionMeta.GetProjectDir()))
 		}
 		if a.currentSessionMeta.GetSessionDir() != "" {
-			opts = append(opts, goreact.WithSessionDir(a.currentSessionMeta.GetSessionDir()))
+			opts = append(opts, goreact.WithSessionDir(
+				filepath.Join(a.currentSessionMeta.GetSessionDir(), name)))
 		}
 	}
 
 	// Enable Agent Native sandbox design (4-Layer Architecture)
 	sessionBaseDir := a.settings.SessionsDir()
 	if sessionBaseDir != "" {
-		opts = append(opts, goreact.WithSessionBaseDir(sessionBaseDir))
+		opts = append(opts, goreact.WithSessionBaseDir(filepath.Join(sessionBaseDir, name)))
 	}
 
 	// Create per-agent memory if embedder is available
@@ -385,6 +399,10 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 	agent, err := goreact.NewAgent(opts...)
 	if err != nil {
 		return nil, err
+	}
+
+	if a.currentSessionMeta != nil && a.currentSessionMeta.SessionID != "" {
+		agent.NewSession(a.currentSessionMeta.SessionID)
 	}
 
 	a.agentMu.Lock()

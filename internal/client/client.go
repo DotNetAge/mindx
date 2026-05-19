@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 
+	"charm.land/bubbles/v2/timer"
 	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/goreact"
 	goreactcore "github.com/DotNetAge/goreact/core"
@@ -21,39 +22,35 @@ import (
 	appcore "github.com/DotNetAge/mindx/internal/core"
 )
 
-const (
-	ansiClearScreen = "\x1b[2J\x1b[H"
-)
-
 type rootModel struct {
-	program      *tea.Program
-	conversation *conv.ConversationPanel
-	welcome      *welcome.WelcomePanel
-	statusBar    *statusbar.StatusBar
-	input        *input.InputArea
-	notifBar     *notify.NotificationBar
-	choices      *choices.ChoicesPanel
+	program          *tea.Program
+	conversationList conv.ConversationList
+	welcome          *welcome.WelcomePanel
+	statusBar        *statusbar.StatusBar
+	input            *input.InputArea
+	notifBar         *notify.NotificationBar
+	choices          *choices.ChoicesPanel
 
 	app      *appcore.App
 	registry *SlashCommandRegistry
 	agent    *goreact.Agent
 
-	eventDone        chan struct{}
-	executing        bool
-	needsClearScreen bool
-	postExitCmd      string
+	eventDone   chan struct{}
+	msgCh       chan tea.Msg
+	executing   bool
+	postExitCmd string
 }
 
 var pendingPostExitCmd string
 
 func NewProgram(cfg *appcore.MindxConfig) error {
 	m := &rootModel{
-		conversation: conv.New(),
-		welcome:      welcome.New(),
-		statusBar:    statusbar.New(),
-		input:        input.New(),
-		notifBar:     notify.New(),
-		choices:      choices.New(),
+		conversationList: conv.NewConversationList(),
+		welcome:          welcome.New(),
+		statusBar:        statusbar.New(),
+		input:            input.New(),
+		notifBar:         notify.New(),
+		choices:          choices.New(),
 	}
 
 	var err error
@@ -75,15 +72,10 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 		})
 		m.loadCommands()
 
-		if err := m.restoreLastSession(); err != nil {
-			m.notifBar.Add(data.Notification{Message: fmt.Sprintf("会话恢复失败（首次启动）: %v", err), Level: data.NotifInfo})
-		} else {
-			m.needsClearScreen = true
-		}
-
 		m.populateWelcome()
 	}
 
+	fmt.Print("\x1b[2J\x1b[H")
 	p := tea.NewProgram(m)
 	m.program = p
 	if _, err := p.Run(); err != nil {
@@ -213,42 +205,6 @@ func (m *rootModel) populateWelcome() {
 	}
 }
 
-func (m *rootModel) restoreLastSession() error {
-	if m.app == nil {
-		return fmt.Errorf("app not initialized")
-	}
-
-	sessDB := m.app.SessDB()
-	if sessDB == nil {
-		return fmt.Errorf("session store not available")
-	}
-
-	ctx := context.Background()
-	sessions, err := sessDB.ListSessions(ctx)
-	if err != nil {
-		return fmt.Errorf("list sessions: %w", err)
-	}
-
-	if len(sessions) == 0 {
-		if m.agent != nil {
-			meta, err := m.app.CreateSession(m.agent.Name())
-			if err == nil {
-				m.app.SetCurrentSessionMeta(meta)
-				return nil
-			}
-		}
-	}
-
-	if len(sessions) == 0 {
-		return nil
-	}
-
-	latestSession := sessions[0]
-	m.app.SetCurrentSessionMeta(&latestSession)
-
-	return nil
-}
-
 func (m *rootModel) startEventLoop() {
 	if m.app == nil || m.agent == nil {
 		return
@@ -256,6 +212,7 @@ func (m *rootModel) startEventLoop() {
 	m.stopEventLoop()
 
 	m.eventDone = make(chan struct{})
+	m.msgCh = make(chan tea.Msg, 512)
 
 	go func() {
 		bus := m.agent.Reactor().EventBus()
@@ -271,74 +228,27 @@ func (m *rootModel) startEventLoop() {
 				if !ok {
 					return
 				}
-				switch evt.Type {
-				case goreactcore.ThinkingDelta:
-					m.program.Send(clientmsg.ThinkingDeltaMsg{SessionID: evt.SessionID, Content: toString(evt.Data)})
-				case goreactcore.ThinkingDone:
-					m.program.Send(clientmsg.ThinkingDoneMsg{SessionID: evt.SessionID})
-				case goreactcore.ActionStart:
-					if data, ok := evt.Data.(goreactcore.ActionStartData); ok {
-						m.program.Send(clientmsg.ActionStartMsg{
-							SessionID:    evt.SessionID,
-							ToolCount:    data.ToolCount,
-							ToolNames:    data.ToolNames,
-							EstimatedTok: data.TotalPredictedTokens,
-						})
+				msg := m.convertEvent(evt)
+				if msg != nil {
+					select {
+					case m.msgCh <- msg:
+					default:
 					}
-				case goreactcore.ToolExecStart:
-					if data, ok := evt.Data.(goreactcore.ToolExecStartData); ok {
-						m.program.Send(clientmsg.ToolExecStartMsg{
-							SessionID:    evt.SessionID,
-							ToolName:     data.ToolName,
-							Params:       data.Params,
-							EstimatedTok: data.PredictedTokens,
-						})
-					}
-				case goreactcore.ToolExecEnd:
-					if data, ok := evt.Data.(goreactcore.ToolExecEndData); ok {
-						m.program.Send(clientmsg.ToolExecEndMsg{
-							SessionID: evt.SessionID,
-							ToolName:  data.ToolName,
-							Success:   data.Success,
-							Result:    data.Result,
-							Error:     data.Error,
-							Duration:  data.Duration,
-						})
-					}
-				case goreactcore.ActionProgress:
-					if data, ok := evt.Data.(goreactcore.ActionProgressData); ok {
-						m.program.Send(clientmsg.ActionProgressMsg{
-							SessionID:      evt.SessionID,
-							CompletedCount: data.CompletedCount,
-							TotalCount:     data.TotalCount,
-							Status:         data.Status,
-						})
-					}
-				case goreactcore.ActionEnd:
-					if data, ok := evt.Data.(goreactcore.ActionEndData); ok {
-						m.program.Send(clientmsg.ActionEndMsg{
-							SessionID:    evt.SessionID,
-							TotalTools:   data.TotalTools,
-							SuccessCount: data.SuccessCount,
-							FailedCount:  data.FailedCount,
-							Summary:      data.Summary,
-						})
-					}
-				case goreactcore.ExecutionSummary:
-					if data, ok := evt.Data.(goreactcore.ExecutionSummaryData); ok {
-						m.program.Send(clientmsg.ExecutionSummaryMsg{
-							SessionID:  evt.SessionID,
-							Duration:   data.TotalDuration,
-							TokensUsed: data.TokensUsed,
-							ToolCalls:  data.ToolCalls,
-						})
-					}
-
-				case goreactcore.FinalAnswer:
-					m.program.Send(clientmsg.FinalAnswerMsg{SessionID: evt.SessionID, Content: toString(evt.Data)})
-				case goreactcore.Error:
-					m.program.Send(clientmsg.AgentErrorMsg{SessionID: evt.SessionID, Error: errors.New(toString(evt.Data))})
 				}
+			case <-m.eventDone:
+				return
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case msg, ok := <-m.msgCh:
+				if !ok {
+					return
+				}
+				m.program.Send(msg)
 			case <-m.eventDone:
 				return
 			}
@@ -346,10 +256,107 @@ func (m *rootModel) startEventLoop() {
 	}()
 }
 
+func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
+	switch evt.Type {
+	case goreactcore.ThinkingDelta:
+		return clientmsg.ThinkingDeltaMsg{SessionID: evt.SessionID, Content: toString(evt.Data)}
+	case goreactcore.ThinkingDone:
+		doneMsg := clientmsg.ThinkingDoneMsg{SessionID: evt.SessionID}
+		if thought, ok := evt.Data.(map[string]any); ok {
+			doneMsg.ThoughtData = thought
+			if reasoning, ok := thought["reasoning"].(string); ok {
+				doneMsg.Reasoning = reasoning
+			}
+			if decision, ok := thought["decision"].(string); ok {
+				doneMsg.Decision = decision
+			}
+			if isFinal, ok := thought["is_final"].(bool); ok {
+				doneMsg.IsFinal = isFinal
+			}
+		}
+		return doneMsg
+	case goreactcore.ActionStart:
+		if data, ok := evt.Data.(goreactcore.ActionStartData); ok {
+			return clientmsg.ActionStartMsg{
+				SessionID:    evt.SessionID,
+				ToolCount:    data.ToolCount,
+				ToolNames:    data.ToolNames,
+				EstimatedTok: data.TotalPredictedTokens,
+			}
+		}
+	case goreactcore.ToolExecStart:
+		if data, ok := evt.Data.(goreactcore.ToolExecStartData); ok {
+			return clientmsg.ToolExecStartMsg{
+				SessionID:    evt.SessionID,
+				ToolName:     data.ToolName,
+				Params:       data.Params,
+				EstimatedTok: data.PredictedTokens,
+			}
+		}
+	case goreactcore.ToolExecEnd:
+		if data, ok := evt.Data.(goreactcore.ToolExecEndData); ok {
+			return clientmsg.ToolExecEndMsg{
+				SessionID: evt.SessionID,
+				ToolName:  data.ToolName,
+				Success:   data.Success,
+				Result:    data.Result,
+				Error:     data.Error,
+				Duration:  data.Duration,
+			}
+		}
+	case goreactcore.ActionProgress:
+		if data, ok := evt.Data.(goreactcore.ActionProgressData); ok {
+			return clientmsg.ActionProgressMsg{
+				SessionID:      evt.SessionID,
+				CompletedCount: data.CompletedCount,
+				TotalCount:     data.TotalCount,
+				Status:         data.Status,
+			}
+		}
+	case goreactcore.ActionEnd:
+		if data, ok := evt.Data.(goreactcore.ActionEndData); ok {
+			return clientmsg.ActionEndMsg{
+				SessionID:    evt.SessionID,
+				TotalTools:   data.TotalTools,
+				SuccessCount: data.SuccessCount,
+				FailedCount:  data.FailedCount,
+				Summary:      data.Summary,
+			}
+		}
+	case goreactcore.ExecutionSummary:
+		if data, ok := evt.Data.(goreactcore.ExecutionSummaryData); ok {
+			return clientmsg.ExecutionSummaryMsg{
+				SessionID:  evt.SessionID,
+				Duration:   data.TotalDuration,
+				TokensUsed: data.TokensUsed,
+				ToolCalls:  data.ToolCalls,
+			}
+		}
+	case goreactcore.FinalAnswer:
+		return clientmsg.FinalAnswerMsg{SessionID: evt.SessionID, Content: toString(evt.Data)}
+	case goreactcore.Error:
+		return clientmsg.AgentErrorMsg{SessionID: evt.SessionID, Error: errors.New(toString(evt.Data))}
+	case goreactcore.LLMTimeout:
+		if data, ok := evt.Data.(goreactcore.LLMTimeoutData); ok {
+			return clientmsg.LLMTimeoutMsg{
+				SessionID: evt.SessionID,
+				Timeout:   data.Timeout,
+				Elapsed:   data.Elapsed,
+				Error:     data.Error,
+			}
+		}
+	}
+	return nil
+}
+
 func (m *rootModel) stopEventLoop() {
 	if m.eventDone != nil {
 		close(m.eventDone)
 		m.eventDone = nil
+	}
+	if m.msgCh != nil {
+		close(m.msgCh)
+		m.msgCh = nil
 	}
 }
 
@@ -362,13 +369,7 @@ func toString(data any) string {
 
 func (m *rootModel) Init() tea.Cmd {
 	m.startEventLoop()
-	if m.needsClearScreen {
-		return func() tea.Msg {
-			fmt.Print(ansiClearScreen)
-			return nil
-		}
-	}
-	return nil
+	return m.conversationList.Init()
 }
 
 func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
@@ -382,7 +383,7 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.MouseWheelMsg:
-		m.conversation.ViewportUpdate(msg)
+		m.conversationList.ViewportUpdate(msg)
 		return m, nil
 
 	case clientmsg.WindowResizeMsg:
@@ -399,20 +400,28 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.SessionDoneMsg, clientmsg.AgentErrorMsg:
 		m.executing = false
-		_, cmd := m.conversation.Update(msg)
+		newList, cmd := m.conversationList.Update(msg)
+		m.conversationList = newList
+		return m, cmd
+
+	case timer.TickMsg:
+		newList, cmd := m.conversationList.Update(msg)
+		m.conversationList = newList
 		return m, cmd
 
 	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg,
 		clientmsg.ActionProgressMsg, clientmsg.ToolExecStartMsg, clientmsg.ToolExecEndMsg,
 		clientmsg.ActionEndMsg, clientmsg.FinalAnswerMsg,
-		clientmsg.TickMsg, clientmsg.CollapseToggleMsg, clientmsg.ThinkCollapseMsg,
+		clientmsg.CollapseToggleMsg, clientmsg.ThinkCollapseMsg,
 		clientmsg.ClearScreenMsg:
-		_, cmd := m.conversation.Update(msg)
+		newList, cmd := m.conversationList.Update(msg)
+		m.conversationList = newList
 		return m, cmd
 
 	case clientmsg.ActionStartMsg:
 		m.statusBar.Update(msg)
-		_, cmd := m.conversation.Update(msg)
+		newList, cmd := m.conversationList.Update(msg)
+		m.conversationList = newList
 		return m, cmd
 
 	case clientmsg.ChoiceSelectedMsg:
@@ -442,7 +451,7 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *rootModel) dispatchToAll(w clientmsg.WindowResizeMsg) {
 	m.welcome.Update(w)
-	m.conversation.Update(w)
+	m.conversationList, _ = m.conversationList.Update(w)
 	m.statusBar.Update(w)
 	m.input.Update(w)
 	m.notifBar.Update(w)
@@ -460,6 +469,13 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 	m.executing = true
 	agent := m.agent
 	sessionID := agent.SessionID()
+	if sessionID == "" {
+		sessionID = "main"
+	}
+
+	newConv := conv.NewConversation(sessionID, agent.Name(), e.Text)
+	m.conversationList.Conversations = append(m.conversationList.Conversations, newConv)
+	m.conversationList.MarkDirty()
 
 	go func() {
 		_, err := agent.Ask(sessionID, e.Text)
@@ -546,7 +562,7 @@ func (m *rootModel) refreshAfterChatOp(result CommandResult) {
 		})
 	}
 
-	m.conversation.Clear()
+	m.conversationList.Clear()
 	newSessions, _ := loadRecentSessions(m.app)
 	m.input.Sessions = newSessions
 }
@@ -568,7 +584,7 @@ func reloadModels(app *appcore.App) ([]input.ModelItem, error) {
 
 func (m *rootModel) View() tea.View {
 	welcomeView := m.welcome.View()
-	convView := m.conversation.View()
+	convView := m.conversationList.View()
 	inputView := m.input.View()
 	notifView := m.notifBar.View()
 

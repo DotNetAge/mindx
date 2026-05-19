@@ -8,7 +8,11 @@ type ThinkingDeltaMsg struct {
 }
 
 type ThinkingDoneMsg struct {
-	SessionID string
+	SessionID   string
+	Reasoning   string
+	Decision    string
+	IsFinal     bool
+	ThoughtData map[string]any
 }
 
 type ActionStartMsg struct {
@@ -66,6 +70,13 @@ type AgentErrorMsg struct {
 	Error     error
 }
 
+type LLMTimeoutMsg struct {
+	SessionID string
+	Timeout   time.Duration
+	Elapsed   time.Duration
+	Error     string
+}
+
 type SessionDoneMsg struct {
 	SessionID string
 }
@@ -84,19 +95,21 @@ type SlashCommandMsg struct {
 }
 
 type CollapseToggleMsg struct {
-	AnswerIndex int
+	SessionID   string
 	ActionIndex int
 }
 
 type ThinkCollapseMsg struct {
-	AnswerIndex int
+	SessionID string
 }
 
 type ClearScreenMsg struct{}
 
 type ExitMsg struct{}
 
-type TickMsg struct{}
+type TickMsg struct {
+	Time time.Time
+}
 
 type ChoiceSelectedMsg struct {
 	Index int
