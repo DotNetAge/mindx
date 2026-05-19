@@ -46,6 +46,8 @@ func (p *ConversationPanel) Update(msg any) (*ConversationPanel, tea.Cmd) {
 		return p.handleActionProgress(m)
 	case clientmsg.ActionEndMsg:
 		return p.handleActionEnd(m)
+	case clientmsg.ExecutionSummaryMsg:
+		return p.handleExecutionSummary(m)
 	case clientmsg.FinalAnswerMsg:
 		return p.handleFinalAnswer(m)
 	case clientmsg.AgentErrorMsg:
@@ -178,6 +180,7 @@ func (p *ConversationPanel) handleToolExecEnd(m clientmsg.ToolExecEndMsg) (*Conv
 			} else {
 				step.Status = data.ActionFailed
 				step.ResultText = m.Error
+				step.Duration = m.Duration
 			}
 			break
 		}
@@ -207,7 +210,7 @@ func (p *ConversationPanel) handleFinalAnswer(m clientmsg.FinalAnswerMsg) (*Conv
 		return p, nil
 	}
 	a := &p.Answers[idx]
-	if a.Status == data.StatusResponding || a.Status == data.StatusDone || a.Status == data.StatusError {
+	if a.Status == data.StatusResponding || a.Status == data.StatusError {
 		return p, nil
 	}
 	if len(a.Results) > 0 {
@@ -239,6 +242,17 @@ func (p *ConversationPanel) handleAgentError(m clientmsg.AgentErrorMsg) (*Conver
 	}
 	a.Results = append(a.Results, data.ResultEntry{Role: "error", Content: errMsg})
 	a.Status = data.StatusError
+	return p, nil
+}
+
+func (p *ConversationPanel) handleExecutionSummary(m clientmsg.ExecutionSummaryMsg) (*ConversationPanel, tea.Cmd) {
+	idx := p.findAnswer(m.SessionID)
+	if idx < 0 {
+		return p, nil
+	}
+	a := &p.Answers[idx]
+	a.TotalTokens = m.TokensUsed
+	a.TotalDuration = m.Duration
 	return p, nil
 }
 
@@ -340,19 +354,22 @@ func (p *ConversationPanel) View() string {
 
 func (p *ConversationPanel) renderThinkingSection(ans data.AnswerData) string {
 	var b strings.Builder
-	for _, round := range ans.ThinkingLog {
-		b.WriteString(p.renderThinkingRound(round, ans.ThinkingCollapsed))
-	}
-	if ans.PendingThink != "" {
-		b.WriteString(p.renderPendingThink(ans.PendingThink))
-	} else if ans.IsThinking {
+
+	if ans.IsThinking {
 		icon := style.CyanStyle.Render("● ")
 		if p.BlinkOn {
 			icon = style.WhiteStyle.Render("● ")
 		}
 		b.WriteString(icon)
-		b.WriteString(style.DarkStyle.Render("深度思考中..."))
+		b.WriteString(style.DarkStyle.Render("深度思考"))
 		b.WriteByte('\n')
+	}
+
+	for _, round := range ans.ThinkingLog {
+		b.WriteString(p.renderThinkingRound(round, ans.ThinkingCollapsed))
+	}
+	if ans.PendingThink != "" {
+		b.WriteString(p.renderPendingThink(ans.PendingThink))
 	}
 	return b.String()
 }
@@ -446,7 +463,7 @@ func (p *ConversationPanel) renderAnswer(ans data.AnswerData) string {
 		b.WriteByte('\n')
 	}
 
-	hasThinking := len(ans.ThinkingLog) > 0 || ans.PendingThink != ""
+	hasThinking := len(ans.ThinkingLog) > 0 || ans.PendingThink != "" || ans.IsThinking
 	hasActions := len(ans.Actions) > 0 || ans.CurrentAction != nil
 	hasResults := len(ans.Results) > 0
 
@@ -493,12 +510,9 @@ func (p *ConversationPanel) renderPendingThink(content string) string {
 	if p.BlinkOn {
 		icon = style.WhiteStyle.Render("● ")
 	}
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
-		b.WriteString("  ")
-		b.WriteString(style.DarkStyle.Render(line))
-		b.WriteByte('\n')
-	}
+	b.WriteString("  ")
+	b.WriteString(style.DarkStyle.Render(content))
+	b.WriteByte('\n')
 	return icon + b.String()
 }
 
@@ -600,4 +614,21 @@ func formatNumber(n int) string {
 		result = append(result, r)
 	}
 	return string(result)
+}
+
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	mins := int(d.Minutes())
+	secs := int(d.Seconds()) % 60
+	if mins > 0 {
+		return fmt.Sprintf("%dm %ds", mins, secs)
+	}
+	return fmt.Sprintf("%ds", secs)
+}
+
+func formatTokens(n int) string {
+	if n >= 1000 {
+		return fmt.Sprintf("%.1fk", float64(n)/1000)
+	}
+	return fmt.Sprintf("%d", n)
 }
