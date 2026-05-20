@@ -14,10 +14,11 @@ type Conversation struct {
 	Status    Status
 	CreatedAt time.Time
 
-	Question Question
-	Rounds   []ThoughtActionRound
-	Output   Output
-	Error    ErrorMsg
+	Question  Question
+	Reasoning Reasoning
+	Rounds    []ThoughtActionRound
+	Output    Output
+	Error     ErrorMsg
 }
 
 func NewConversation(sessionID, agentName, questionText string) Conversation {
@@ -27,6 +28,7 @@ func NewConversation(sessionID, agentName, questionText string) Conversation {
 		Status:    StatusThinking,
 		CreatedAt: time.Now(),
 		Question:  Question{Text: questionText},
+		Reasoning: NewReasoning(),
 	}
 }
 
@@ -38,30 +40,19 @@ func (c *Conversation) currentRound() *ThoughtActionRound {
 }
 
 func (c *Conversation) ensureCurrentRound() {
-	if len(c.Rounds) == 0 || !c.currentRound().Thought.IsActive && c.currentRound().Action.Completed {
+	if len(c.Rounds) == 0 || c.currentRound().Action.Completed {
 		c.Rounds = append(c.Rounds, NewThoughtActionRound())
 	}
 }
 
 func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 	switch e := e.(type) {
-	case msg.ThinkingDeltaMsg:
-		if m.Status == StatusDone || m.Status == StatusError {
-			return m, nil
-		}
-		m.ensureCurrentRound()
-		newThought, cmd := UpdateThought(m.currentRound().Thought, e)
-		m.currentRound().Thought = newThought
-		m.Status = StatusThinking
-		return m, cmd
-
 	case msg.ThinkingDoneMsg:
 		if m.Status == StatusDone || m.Status == StatusError {
 			return m, nil
 		}
-		m.ensureCurrentRound()
-		newThought, cmd := UpdateThought(m.currentRound().Thought, e)
-		m.currentRound().Thought = newThought
+		newReasoning, cmd := UpdateReasoning(m.Reasoning, e)
+		m.Reasoning = newReasoning
 		return m, cmd
 
 	case msg.ActionStartMsg:
@@ -70,9 +61,6 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 		}
 		m.ensureCurrentRound()
 		current := m.currentRound()
-		if current.Thought.IsActive && current.Thought.Content != "" {
-			current.Thought.IsActive = false
-		}
 		newAction, cmd := UpdateAction(current.Action, e)
 		current.Action = newAction
 		m.Status = StatusExecuting
@@ -109,9 +97,6 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 			newOutput, cmd := UpdateOutput(m.Output, e)
 			m.Output = newOutput
 			m.Status = StatusError
-			if round := m.currentRound(); round != nil {
-				round.Thought.IsActive = false
-			}
 			return m, cmd
 		default:
 			newOutput, cmd := UpdateOutput(m.Output, e)
@@ -129,13 +114,16 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 		return m, nil
 
 	case msg.TickMsg:
+		newReasoning, reasoningCmd := UpdateReasoning(m.Reasoning, e)
+		m.Reasoning = newReasoning
+
 		for i := range m.Rounds {
 			newThought, _ := UpdateThought(m.Rounds[i].Thought, e)
 			m.Rounds[i].Thought = newThought
 			newAction, _ := UpdateAction(m.Rounds[i].Action, e)
 			m.Rounds[i].Action = newAction
 		}
-		return m, nil
+		return m, reasoningCmd
 
 	case msg.ThinkCollapseMsg:
 		if m.currentRound() != nil {
@@ -151,32 +139,24 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 
 func ViewConversation(m Conversation, width int) string {
 	questionView := ViewQuestion(m.Question, width)
+	reasoningView := ViewReasoning(m.Reasoning)
 
 	var roundsView strings.Builder
 	for _, round := range m.Rounds {
-		thoughtView := ViewThought(round.Thought)
 		actionView := ViewAction(round.Action, width)
 
-		if thoughtView != "" || actionView != "" {
-			if questionView != "" || roundsView.Len() > 0 {
+		if actionView != "" {
+			if questionView != "" || reasoningView != "" || roundsView.Len() > 0 {
 				roundsView.WriteString("\n")
 			}
-			if thoughtView != "" {
-				roundsView.WriteString(thoughtView)
-			}
-			if actionView != "" {
-				if thoughtView != "" {
-					roundsView.WriteString("\n")
-				}
-				roundsView.WriteString(actionView)
-			}
+			roundsView.WriteString(actionView)
 		}
 	}
 
 	outputView := ViewOutput(m.Output, width)
 	errorView := ViewErrorMsg(m.Error, width)
 
-	if questionView == "" && roundsView.Len() == 0 && outputView == "" && errorView == "" {
+	if questionView == "" && reasoningView == "" && roundsView.Len() == 0 && outputView == "" && errorView == "" {
 		return ""
 	}
 
@@ -184,14 +164,20 @@ func ViewConversation(m Conversation, width int) string {
 	if questionView != "" {
 		b.writeString(questionView)
 	}
-	if roundsView.Len() > 0 {
+	if reasoningView != "" {
 		if questionView != "" {
+			b.writeString("\n")
+		}
+		b.writeString(reasoningView)
+	}
+	if roundsView.Len() > 0 {
+		if questionView != "" || reasoningView != "" {
 			b.writeString("\n")
 		}
 		b.writeString(roundsView.String())
 	}
 	if outputView != "" {
-		if questionView != "" || roundsView.Len() > 0 {
+		if questionView != "" || reasoningView != "" || roundsView.Len() > 0 {
 			b.writeString("\n")
 		}
 		b.writeString(outputView)

@@ -2,6 +2,7 @@ package conv
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/timer"
@@ -90,19 +91,18 @@ func (l ConversationList) View() string {
 		return ""
 	}
 
-	var content string
-	for _, conv := range l.Conversations {
-		convView := ViewConversation(conv, l.width)
+	// Render newest-to-oldest, building from top to bottom.
+	// Bubbletea/terminal handles truncation for lines beyond screen height.
+	var parts []string
+	for i := len(l.Conversations) - 1; i >= 0; i-- {
+		convView := ViewConversation(l.Conversations[i], l.width)
 		if convView == "" {
 			continue
 		}
-		if content != "" {
-			content += "\n\n"
-		}
-		content += convView
+		parts = append([]string{convView}, parts...)
 	}
 
-	return content
+	return strings.Join(parts, "\n\n")
 }
 
 func (l ConversationList) ViewportUpdate(tea.MouseWheelMsg) {}

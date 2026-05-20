@@ -14,6 +14,7 @@ type InputArea struct {
 	TextBuffer strings.Builder
 	CursorPos  int
 	Hidden     bool
+	Executing  bool // true while T-A-O loop is running; esc sends CancelMsg
 	Agents     []data.AgentInfo
 	Commands   []SlashCommand
 	Models     []ModelItem
@@ -77,6 +78,11 @@ func (i *InputArea) handleKey(k tea.KeyPressMsg) (*InputArea, tea.Cmd) {
 	case "ctrl+l":
 		return i, func() tea.Msg { return clientmsg.ClearScreenMsg{} }
 
+	case "ctrl+o":
+		return i, func() tea.Msg {
+			return clientmsg.CollapseToggleMsg{ActionIndex: -1}
+		}
+
 	case "tab":
 		i.handleTab()
 		return i, nil
@@ -90,6 +96,12 @@ func (i *InputArea) handleKey(k tea.KeyPressMsg) (*InputArea, tea.Cmd) {
 		return i, nil
 
 	case "esc":
+		if i.Executing {
+			// T-A-O loop is running: cancel execution
+			return i, func() tea.Msg {
+				return clientmsg.ExecutionCancelMsg{}
+			}
+		}
 		if i.hasActiveSuggestion() {
 			i.resetSuggestions()
 		} else if i.TextBuffer.Len() > 0 {
@@ -315,7 +327,11 @@ func (i *InputArea) View() string {
 	buf.WriteString(div)
 	buf.WriteByte('\n')
 	buf.WriteString(prompt)
-	buf.WriteString(style.WhiteStyle.Render(text))
+	if text == "" {
+		buf.WriteString(style.GrayStyle.Render("你的消息..."))
+	} else {
+		buf.WriteString(style.WhiteStyle.Render(text))
+	}
 	buf.WriteString(cursor)
 	buf.WriteByte('\n')
 	buf.WriteString(div)

@@ -32,7 +32,7 @@ type StatusBar struct {
 }
 
 func New() *StatusBar {
-	return &StatusBar{}
+	return &StatusBar{CurrentState: "空闲"}
 }
 
 func (s *StatusBar) Update(msg any) (*StatusBar, tea.Cmd) {

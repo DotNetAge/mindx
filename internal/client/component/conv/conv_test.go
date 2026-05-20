@@ -194,13 +194,16 @@ func TestConversationFullFlow(t *testing.T) {
 	}
 
 	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "I need to think..."})
-	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1"})
+	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Reasoning: "I need to think..."})
 
-	if len(conv.Rounds) != 1 {
-		t.Errorf("expected 1 round, got %d", len(conv.Rounds))
+	// Reasoning is top-level, not per-round
+	if conv.Reasoning.Result != "I need to think..." {
+		t.Errorf("expected reasoning result %q, got %q", "I need to think...", conv.Reasoning.Result)
 	}
-	if conv.Rounds[0].Thought.Content != "I need to think..." {
-		t.Errorf("expected thought content %q, got %q", "I need to think...", conv.Rounds[0].Thought.Content)
+
+	// Rounds are created by ActionStartMsg, not by thinking events
+	if len(conv.Rounds) != 0 {
+		t.Errorf("expected 0 rounds before action, got %d", len(conv.Rounds))
 	}
 
 	conv, _ = UpdateConversation(conv, msg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})
@@ -208,6 +211,9 @@ func TestConversationFullFlow(t *testing.T) {
 	conv, _ = UpdateConversation(conv, msg.ToolExecEndMsg{SessionID: "s1", ToolName: "bash", Success: true, Result: "done"})
 	conv, _ = UpdateConversation(conv, msg.ActionEndMsg{SessionID: "s1", SuccessCount: 1, FailedCount: 0})
 
+	if len(conv.Rounds) != 1 {
+		t.Fatalf("expected 1 round after action, got %d", len(conv.Rounds))
+	}
 	if !conv.Rounds[0].Action.Completed {
 		t.Error("expected action completed in current round")
 	}
@@ -224,40 +230,46 @@ func TestConversationMultiRoundFlow(t *testing.T) {
 	conv := NewConversation("s1", "agent1", "Complex task?")
 
 	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "First thought..."})
-	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1"})
+	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Reasoning: "First thought..."})
 	conv, _ = UpdateConversation(conv, msg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"tool1"}})
 	conv, _ = UpdateConversation(conv, msg.ToolExecStartMsg{SessionID: "s1", ToolName: "tool1"})
 	conv, _ = UpdateConversation(conv, msg.ToolExecEndMsg{SessionID: "s1", ToolName: "tool1", Success: true, Result: "ok"})
 	conv, _ = UpdateConversation(conv, msg.ActionEndMsg{SessionID: "s1", SuccessCount: 1, FailedCount: 0})
 
 	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "Second thought..."})
-	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1"})
+	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Reasoning: "Second thought..."})
 	conv, _ = UpdateConversation(conv, msg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"tool2"}})
 	conv, _ = UpdateConversation(conv, msg.ToolExecStartMsg{SessionID: "s1", ToolName: "tool2"})
 	conv, _ = UpdateConversation(conv, msg.ToolExecEndMsg{SessionID: "s1", ToolName: "tool2", Success: true, Result: "done"})
 	conv, _ = UpdateConversation(conv, msg.ActionEndMsg{SessionID: "s1", SuccessCount: 1, FailedCount: 0})
 
+	// Reasoning is top-level — only the last reasoning is stored
+	if conv.Reasoning.Result != "Second thought..." {
+		t.Errorf("expected reasoning result %q, got %q", "Second thought...", conv.Reasoning.Result)
+	}
+
+	// Rounds are created per ActionStartMsg
 	if len(conv.Rounds) != 2 {
 		t.Fatalf("expected 2 rounds, got %d", len(conv.Rounds))
 	}
-	if conv.Rounds[0].Thought.Content != "First thought..." {
-		t.Errorf("expected first round thought %q, got %q", "First thought...", conv.Rounds[0].Thought.Content)
+	if !conv.Rounds[0].Action.Completed {
+		t.Error("expected round 0 action completed")
 	}
-	if conv.Rounds[1].Thought.Content != "Second thought..." {
-		t.Errorf("expected second round thought %q, got %q", "Second thought...", conv.Rounds[1].Thought.Content)
+	if !conv.Rounds[1].Action.Completed {
+		t.Error("expected round 1 action completed")
 	}
 }
 
 func TestConversationViewFullTAO(t *testing.T) {
 	conv := NewConversation("s1", "agent1", "What is Go?")
 	conv.Rounds = append(conv.Rounds, ThoughtActionRound{
-		Thought: Thought{Content: "thinking step 1..."},
 		Action: Action{
 			CurrentInfo: &ActionInfo{ToolCount: 1, ToolNames: []string{"bash"}},
 			Steps:       []ActionStep{{ToolName: "bash", Status: ActionStepDone, ResultText: "done"}},
 			Completed:   true,
 		},
 	})
+	conv.Reasoning = Reasoning{Result: "thinking step 1..."}
 	conv.Output = Output{
 		Entries: []OutputEntry{{Role: "assistant", Content: "Go is a programming language"}},
 	}
