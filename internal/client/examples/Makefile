@@ -11,7 +11,7 @@
 # =============================================================================
 
 .PHONY: help all welcome question thinking action output conversation conv \
-        input notify statusbar choices error
+        input notify statusbar choices error reasoning
 
 ROOT := ../../..
 SRC  := internal/client/examples
@@ -34,7 +34,8 @@ help:
 	@echo "  notify        — NotificationBar 通知栏（i/s/e/w 触发通知）"
 	@echo "  statusbar     — StatusBar 状态栏（按 1/2 切换连接状态）"
 	@echo "  choices       — ChoicesPanel 选择面板（按 s 弹出选项）"
-		@echo "  error         — ErrorMsg 错误提示（按 t/a/o 触发不同阶段错误）"
+	@echo "  error         — ErrorMsg 错误提示（按 t/a/o 触发不同阶段错误）"
+	@echo "  reasoning     — Reasoning 推理状态（按 1-5 切换不同场景）"
 	@echo ""
 	@echo "Other:"
 	@echo "  all           — 编译验证所有示例（不运行）"
@@ -60,3 +61,4 @@ notify:       ; $(call RUN_EXAMPLE,notify)
 statusbar:    ; $(call RUN_EXAMPLE,statusbar)
 choices:      ; $(call RUN_EXAMPLE,choices)
 error:        ; $(call RUN_EXAMPLE,error)
+reasoning:    ; $(call RUN_EXAMPLE,reasoning)

@@ -107,7 +107,11 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 		return m, nil
 
 	case msg.CollapseToggleMsg:
-		if e.ActionIndex >= 0 && e.ActionIndex < len(m.Steps) {
+		if e.ActionIndex < 0 {
+			for i := range m.Steps {
+				m.Steps[i].Collapsed = !m.Steps[i].Collapsed
+			}
+		} else if e.ActionIndex < len(m.Steps) {
 			m.Steps[e.ActionIndex].Collapsed = !m.Steps[e.ActionIndex].Collapsed
 		}
 		return m, nil
@@ -204,32 +208,35 @@ func ViewActionStep(step ActionStep, blinkOn bool) string {
 
 	if step.ResultText != "" {
 		lines := strings.Split(step.ResultText, "\n")
-		if step.Collapsed {
-			summary := fmt.Sprintf("完成 (%d lines)", len(lines))
-			if step.EstimatedTok > 0 || step.Duration > 0 {
-				var parts []string
-				if step.EstimatedTok > 0 {
-					parts = append(parts, fmt.Sprintf("Token 消耗 %s", formatNumber(step.EstimatedTok)))
-				}
-				if step.Duration > 0 {
-					parts = append(parts, fmt.Sprintf("用时 %s", formatDuration(step.Duration)))
-				}
-				summary += " • " + strings.Join(parts, " • ")
-			}
-			b.WriteString(fmt.Sprintf("  ⎿ %s\n", style.GrayStyle.Render(summary)))
-		} else {
+
+		// Show result content (max 3 lines) when meaningful and not collapsed
+		if !step.Collapsed && len(step.ResultText) > 10 {
 			lineStyle := style.DimStyle
 			if step.Status == ActionStepFailed {
 				lineStyle = style.RedStyle
 			}
 			for i, line := range lines {
 				if i >= 3 {
-					b.WriteString(fmt.Sprintf("  ⎿ … +%d lines (ctrl+o to expand)\n", len(lines)-i))
+					b.WriteString(fmt.Sprintf("  ⎿ … +%d lines (ctrl+o toggle)\n", len(lines)-i))
 					break
 				}
 				b.WriteString(fmt.Sprintf("  ⎿ %s\n", lineStyle.Render(line)))
 			}
 		}
+
+		// Completion summary (always shown below result content)
+		summary := fmt.Sprintf("完成 (%d lines)", len(lines))
+		if step.EstimatedTok > 0 || step.Duration > 0 {
+			var parts []string
+			if step.EstimatedTok > 0 {
+				parts = append(parts, fmt.Sprintf("Token 消耗 %s", formatNumber(step.EstimatedTok)))
+			}
+			if step.Duration > 0 {
+				parts = append(parts, fmt.Sprintf("用时 %s", formatDuration(step.Duration)))
+			}
+			summary += " • " + strings.Join(parts, " • ")
+		}
+		b.WriteString(fmt.Sprintf("  ⎿ %s\n", style.GrayStyle.Render(summary)))
 	}
 	return b.String()
 }

@@ -63,8 +63,13 @@ func TestGetUnknown(t *testing.T) {
 }
 
 func TestBuiltinCommands(t *testing.T) {
-	r := client.BuiltinCommands()
-	expected := []string{"help", "clear", "exit", "transcript", "agents"}
+	deps := client.CommandDeps{
+		OnClear: func() {},
+		OnExit:  func() {},
+		OnDoctor: func() {},
+	}
+	r := client.BuiltinCommands(deps)
+	expected := []string{"help", "clear", "exit", "doctor", "model", "chat", "agents"}
 	for _, name := range expected {
 		cmd := r.Get(name)
 		if cmd == nil {
@@ -74,7 +79,12 @@ func TestBuiltinCommands(t *testing.T) {
 }
 
 func TestHelpCommand(t *testing.T) {
-	r := client.BuiltinCommands()
+	deps := client.CommandDeps{
+		OnClear: func() {},
+		OnExit:  func() {},
+		OnDoctor: func() {},
+	}
+	r := client.BuiltinCommands(deps)
 	helpCmd := r.Get("help")
 	if helpCmd == nil {
 		t.Fatal("help command not found")
@@ -86,7 +96,13 @@ func TestHelpCommand(t *testing.T) {
 }
 
 func TestClearCommand(t *testing.T) {
-	r := client.BuiltinCommands()
+	cleared := false
+	deps := client.CommandDeps{
+		OnClear: func() { cleared = true },
+		OnExit:  func() {},
+		OnDoctor: func() {},
+	}
+	r := client.BuiltinCommands(deps)
 	clearCmd := r.Get("clear")
 	if clearCmd == nil {
 		t.Fatal("clear command not found")
@@ -94,5 +110,8 @@ func TestClearCommand(t *testing.T) {
 	result := clearCmd.Run(nil)
 	if result.Message != "" {
 		t.Errorf("clear command returned message %q, want empty", result.Message)
+	}
+	if !cleared {
+		t.Error("clear command should call OnClear callback")
 	}
 }

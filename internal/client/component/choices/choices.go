@@ -118,7 +118,9 @@ func (p *ChoicesPanel) Update(msg any) (*ChoicesPanel, tea.Cmd) {
 			}
 		case "esc":
 			p.Visible = false
-			return p, nil
+			return p, func() tea.Msg {
+				return clientmsg.ChoiceSelectedMsg{Index: -1}
+			}
 		default:
 			var cmd tea.Cmd
 			p.list, cmd = p.list.Update(msg)
