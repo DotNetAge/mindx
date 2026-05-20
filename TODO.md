@@ -53,3 +53,9 @@
 
 - [x] Demon 需要Hold住与Client端完全一至的Workspace, 否则对于计划任务的执行就会产生目录的偏移，可能会导致文件找不到或目录不正确的错误；因此，客户端是通过`os.Getwd()`来获取当前工作目录，而需要有一个手段来设置Demon的工作目录，以确保Demon与Client端是完全保持一至。
   - 思路1: 将 SessionID 与 工作目录绑定，一个会话就必须与一个工作目录绑定；
+
+
+---
+
+- [ ] 增加一个ReadFileChunk 工具，这个工具可是当遇到要读取文件的内容时，可以用这个文件代替Read工具，从项目的RAG中直接读取语义相关的片段；相当于 Grep + Read + RAG，速度更高，定位更准确。读取的结果会返回:
+  "分片内容 - 文件路径 - StartPos - EndPos" 如 "关于RAG的Makefile - /Users/ray/workspaces/ai-ecosystem/mindx/internal/client/examples/Makefile [100,1000]"

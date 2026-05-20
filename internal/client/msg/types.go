@@ -138,3 +138,24 @@ type ShowChoicesMsg struct {
 type MouseScrollMsg struct {
 	Lines int
 }
+
+// ExecutionCancelMsg is sent when the user presses ESC during T-A-O execution.
+// The rootModel should call agent.Cancel() to interrupt the running loop.
+type ExecutionCancelMsg struct{}
+
+// PermissionRequestMsg carries a permission request from the reactor to the TUI.
+// The TUI should display the question/options and let the user respond.
+type PermissionRequestMsg struct {
+	ToolName      string
+	Reason        string
+	SecurityLevel int
+	Questions     []QuestionData
+}
+
+// QuestionData mirrors core.PermissionQuestion for TUI consumption.
+type QuestionData struct {
+	Question    string
+	Header      string
+	Options     []string
+	MultiSelect bool
+}
