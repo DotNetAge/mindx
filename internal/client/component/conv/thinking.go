@@ -74,6 +74,12 @@ func UpdateThought(m Thought, e tea.Msg) (Thought, tea.Cmd) {
 	return m, nil
 }
 
+const (
+	maxContentLines  = 50  // max lines of thought content to render
+	maxPendingLines  = 20  // max lines of streaming pending content to render
+	maxReasoningLines = 30 // max lines of reasoning data to render
+)
+
 func ViewThought(m Thought) string {
 	if m.Content == "" && m.Pending == "" && !m.IsActive {
 		return ""
@@ -103,6 +109,13 @@ func ViewThought(m Thought) string {
 
 	lines := strings.Split(m.Content, "\n")
 	shouldCollapse := m.Collapsed && len(lines) > 3
+	shouldTruncate := len(lines) > maxContentLines
+	var hiddenLines int
+	if shouldTruncate {
+		hiddenLines = len(lines) - maxContentLines
+		lines = lines[len(lines)-maxContentLines:]
+		shouldCollapse = true
+	}
 	displayLines := lines
 	if shouldCollapse {
 		displayLines = lines[len(lines)-3:]
@@ -122,17 +135,33 @@ func ViewThought(m Thought) string {
 		b.WriteByte('\n')
 	}
 	if shouldCollapse {
-		isLastLine = m.Pending == "" && !hasReasoning
-		collapseText := fmt.Sprintf("… +%d lines (ctrl+o to expand)", len(lines)-3)
-		if isLastLine {
-			collapseText += tokensSuffix
+		// Show both truncation and collapse notices when applicable
+		totalHidden := hiddenLines
+		if shouldTruncate && len(lines) > 3 {
+			totalHidden = len(lines) - 3 + hiddenLines
+		} else if len(lines) > 3 {
+			totalHidden = len(lines) - 3
 		}
-		b.WriteString(style.DimStyle.Render(indent + "│ " + collapseText))
-		b.WriteByte('\n')
+		if totalHidden > 0 {
+			collapseText := fmt.Sprintf("… +%d lines (ctrl+o to expand)", totalHidden)
+			isLastLine = m.Pending == "" && !hasReasoning
+			if isLastLine {
+				collapseText += tokensSuffix
+			}
+			b.WriteString(style.DimStyle.Render(indent + "│ " + collapseText))
+			b.WriteByte('\n')
+		}
 	}
 
 	if m.Pending != "" {
 		pendingLines := strings.Split(m.Pending, "\n")
+		if len(pendingLines) > maxPendingLines {
+			hidden := len(pendingLines) - maxPendingLines
+			pendingLines = append(
+				[]string{fmt.Sprintf("… +%d lines streaming", hidden)},
+				pendingLines[len(pendingLines)-maxPendingLines:]...,
+			)
+		}
 		isLastLine = !hasReasoning
 		for i, line := range pendingLines {
 			if m.Content == "" && i == 0 {
@@ -149,6 +178,13 @@ func ViewThought(m Thought) string {
 	if hasReasoning {
 		reasoning := m.ThoughtData["reasoning"].(string)
 		reasoningLines := strings.Split(reasoning, "\n")
+		if len(reasoningLines) > maxReasoningLines {
+			hidden := len(reasoningLines) - maxReasoningLines
+			reasoningLines = append(
+				[]string{fmt.Sprintf("… +%d lines reasoning truncated", hidden)},
+				reasoningLines[len(reasoningLines)-maxReasoningLines:]...,
+			)
+		}
 		for i, line := range reasoningLines {
 			prefix := indent + "└─ "
 			if i < len(reasoningLines)-1 {
