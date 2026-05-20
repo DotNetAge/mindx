@@ -40,6 +40,16 @@ type rootModel struct {
 	msgCh       chan tea.Msg
 	executing   bool
 	postExitCmd string
+
+	// pendingPermission tracks an active permission request waiting for user response.
+	// Non-nil while the choices panel is showing a permission question.
+	pendingPermission *pendingPermissionState
+}
+
+// pendingPermissionState holds the state needed to respond to a permission request.
+type pendingPermissionState struct {
+	responder goreactcore.PermissionResponder
+	req       clientmsg.PermissionRequestMsg
 }
 
 var pendingPostExitCmd string
@@ -179,6 +189,66 @@ func loadRecentSessions(app *appcore.App) ([]input.SessionItem, error) {
 	return items, nil
 }
 
+func messagesToConversations(sessionID, agentName string, msgs []goreactcore.Message) []conv.Conversation {
+	var convs []conv.Conversation
+	for _, msg := range msgs {
+		switch msg.Role {
+		case "user":
+			conv := conv.Conversation{
+				SessionID: sessionID,
+				AgentName: agentName,
+				Status:    conv.StatusDone,
+				CreatedAt: time.UnixMilli(msg.Timestamp),
+				Question:  conv.Question{Text: msg.Content},
+				Output:    conv.Output{},
+			}
+			convs = append(convs, conv)
+		case "assistant":
+			if len(convs) > 0 {
+				last := &convs[len(convs)-1]
+				last.Output.Entries = append(last.Output.Entries, conv.OutputEntry{Role: "assistant", Content: msg.Content})
+			}
+		}
+	}
+	return convs
+}
+
+func (m *rootModel) loadSessionHistory() {
+	if m.app == nil {
+		return
+	}
+	sessDB := m.app.SessDB()
+	if sessDB == nil {
+		return
+	}
+
+	// Prefer CurrentSessionMeta (always set after /chat switch),
+	// fall back to agent.SessionID() (set on startup via WithSession).
+	sessionMeta := m.app.CurrentSessionMeta()
+	sessionID := ""
+	agentName := ""
+	if sessionMeta != nil && sessionMeta.SessionID != "" {
+		sessionID = sessionMeta.SessionID
+		agentName = sessionMeta.AgentName
+	} else if m.agent != nil {
+		sessionID = m.agent.SessionID()
+	}
+	if sessionID == "" {
+		return
+	}
+	if agentName == "" && m.agent != nil {
+		agentName = m.agent.Name()
+	}
+
+	ctx := context.Background()
+	msgs, err := sessDB.Get(ctx, sessionID)
+	if err != nil || len(msgs) == 0 {
+		return
+	}
+	convs := messagesToConversations(sessionID, agentName, msgs)
+	m.conversationList.Conversations = append(m.conversationList.Conversations, convs...)
+}
+
 func (m *rootModel) populateWelcome() {
 	if m.app == nil {
 		return
@@ -196,13 +266,16 @@ func (m *rootModel) populateWelcome() {
 
 	if m.agent != nil {
 		m.welcome.Data.AgentName = m.agent.Name()
+		m.statusBar.AgentName = m.agent.Name()
 		if m.agent.Model() != nil {
 			m.welcome.Data.ModelName = m.agent.Model().Name
+			m.statusBar.ModelName = m.agent.Model().Name
 		}
 		sid := m.agent.SessionID()
 		if sid != "" {
 			m.welcome.Data.SessionID = sid
 		}
+		m.loadSessionHistory()
 	}
 }
 
@@ -361,6 +434,28 @@ func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 				Error:     data.Error,
 			}
 		}
+	case goreactcore.PermissionRequest:
+		if data, ok := evt.Data.(goreactcore.PermissionRequestData); ok {
+			questions := make([]clientmsg.QuestionData, len(data.Questions))
+			for i, q := range data.Questions {
+				opts := make([]string, len(q.Options))
+				for j, o := range q.Options {
+					opts[j] = o.Label
+				}
+				questions[i] = clientmsg.QuestionData{
+					Question:    q.Question,
+					Header:      q.Header,
+					Options:     opts,
+					MultiSelect: q.MultiSelect,
+				}
+			}
+			return clientmsg.PermissionRequestMsg{
+				ToolName:      data.ToolName,
+				Reason:        data.Reason,
+				SecurityLevel: int(data.SecurityLevel),
+				Questions:     questions,
+			}
+		}
 	}
 	return nil
 }
@@ -395,6 +490,7 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		m.dispatchToAll(w)
 
 	case tea.KeyPressMsg:
+		m.input.Executing = m.executing
 		_, cmd := m.input.Update(msg)
 		return m, cmd
 
@@ -419,7 +515,10 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.AgentErrorMsg:
 		m.executing = false
-		m.statusBar.CurrentState = "出错"
+		// Don't override "已取消" status when cancel triggered the error
+		if !errors.Is(msg.Error, context.Canceled) {
+			m.statusBar.CurrentState = "出错"
+		}
 		newList, cmd := m.conversationList.Update(msg)
 		m.conversationList = newList
 		return m, cmd
@@ -443,6 +542,12 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		m.conversationList = newList
 		return m, cmd
 
+	case clientmsg.ExecutionSummaryMsg:
+		m.statusBar.Update(msg)
+		newList, cmd := m.conversationList.Update(msg)
+		m.conversationList = newList
+		return m, cmd
+
 	case clientmsg.ActionEndMsg:
 		m.statusBar.CurrentState = "正在获取结果"
 		newList, cmd := m.conversationList.Update(msg)
@@ -451,12 +556,14 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.FinalAnswerMsg:
 		m.statusBar.CurrentState = "完成"
+		m.statusBar.Update(msg)
 		newList, cmd := m.conversationList.Update(msg)
 		m.conversationList = newList
 		return m, cmd
 
 	case clientmsg.ActionStartMsg:
 		m.statusBar.CurrentState = "执行中"
+		m.statusBar.Update(msg)
 		newList, cmd := m.conversationList.Update(msg)
 		m.conversationList = newList
 		return m, cmd
@@ -474,6 +581,43 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.ChoiceSelectedMsg:
 		_, cmd := m.choices.Update(msg)
+		// If there's a pending permission request, respond to it
+		if m.pendingPermission != nil {
+			pp := m.pendingPermission
+			m.pendingPermission = nil // Clear before responding
+			if msg.Index < 0 {
+				// esc / cancelled
+				go pp.responder.Respond(goreactcore.PermissionResult{
+					Behavior: goreactcore.PermissionDeny,
+					Message:  "user cancelled",
+				})
+			} else if len(pp.req.Questions) > 0 {
+				// AskUser: selected a choice
+				q := pp.req.Questions[0]
+				selected := q.Options[msg.Index]
+				go pp.responder.Respond(goreactcore.PermissionResult{
+					Behavior: goreactcore.PermissionAllow,
+					UpdatedInput: map[string]any{
+						"answers": map[string]any{
+							q.Question: selected,
+						},
+					},
+				})
+			} else {
+				// Simple allow/deny
+				if msg.Index == 0 {
+					go pp.responder.Respond(goreactcore.PermissionResult{
+						Behavior: goreactcore.PermissionAllow,
+						Message:  "user approved",
+					})
+				} else {
+					go pp.responder.Respond(goreactcore.PermissionResult{
+						Behavior: goreactcore.PermissionDeny,
+						Message:  "user denied",
+					})
+				}
+			}
+		}
 		return m, cmd
 
 	case clientmsg.NotifTimeoutMsg:
@@ -484,8 +628,46 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		_, cmd := m.choices.Update(msg)
 		return m, cmd
 
+	case clientmsg.PermissionRequestMsg:
+		m.statusBar.CurrentState = "等待选择"
+		// Store pending permission responder
+		responder := m.agent.Reactor().PermissionResponder()
+		m.pendingPermission = &pendingPermissionState{
+			responder: responder,
+			req:       msg,
+		}
+		// Show choices panel with questions
+		if len(msg.Questions) > 0 {
+			q := msg.Questions[0]
+			if len(q.Options) > 0 {
+				return m, func() tea.Msg {
+					return clientmsg.ShowChoicesMsg{
+						Options: q.Options,
+						Prompt:  q.Question,
+					}
+				}
+			}
+		} else {
+			// Simple allow/deny
+			return m, func() tea.Msg {
+				return clientmsg.ShowChoicesMsg{
+					Options: []string{"Allow", "Deny"},
+					Prompt:  "🔒 " + msg.ToolName + ": " + msg.Reason,
+				}
+			}
+		}
+		return m, nil
+
 	case clientmsg.SessionLoadedMsg:
 		m.statusBar.Update(msg)
+		return m, nil
+
+	case clientmsg.ExecutionCancelMsg:
+		m.executing = false
+		m.statusBar.CurrentState = "已取消"
+		if m.agent != nil {
+			m.agent.Cancel()
+		}
 		return m, nil
 
 	case clientmsg.ExitMsg:
@@ -553,12 +735,16 @@ func (m *rootModel) handleAgentSwitch(e clientmsg.AgentSwitchMsg) (tea.Model, te
 		m.executing = false
 	}
 
-	_, err := m.app.ResolveAgent(e.AgentName)
+	newAgent, err := m.app.ResolveAgent(e.AgentName)
 	if err != nil {
 		return m, m.notifBar.Add(data.Notification{Message: fmt.Sprintf("Agent %q 不可用: %v", e.AgentName, err), Level: data.NotifError})
 	}
 
-	_, _ = m.statusBar.Update(clientmsg.AgentSwitchMsg{AgentName: e.AgentName})
+	m.agent = newAgent
+	m.statusBar.AgentName = newAgent.Name()
+	if newAgent.Model() != nil {
+		m.statusBar.ModelName = newAgent.Model().Name
+	}
 	m.startEventLoop()
 
 	return m, m.notifBar.Add(data.Notification{
@@ -619,9 +805,14 @@ func (m *rootModel) refreshAfterChatOp(result CommandResult) {
 			AgentName: sessionMeta.AgentName,
 			SessionID: sessionMeta.SessionID,
 		})
+		m.statusBar.AgentName = sessionMeta.AgentName
+	}
+	if m.agent != nil && m.agent.Model() != nil {
+		m.statusBar.ModelName = m.agent.Model().Name
 	}
 
 	m.conversationList.Clear()
+	m.loadSessionHistory()
 	newSessions, _ := loadRecentSessions(m.app)
 	m.input.Sessions = newSessions
 }
@@ -654,6 +845,10 @@ func (m *rootModel) View() tea.View {
 	}
 	if notifView != "" {
 		out += notifView + "\n"
+	}
+	choicesView := m.choices.View()
+	if choicesView != "" {
+		out += choicesView + "\n\n"
 	}
 	out += statusView + "\n"
 	out += m.input.View()
