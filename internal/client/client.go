@@ -213,9 +213,15 @@ func (m *rootModel) startEventLoop() {
 	m.stopEventLoop()
 
 	m.eventDone = make(chan struct{})
-	m.msgCh = make(chan tea.Msg, 512)
+	m.msgCh = make(chan tea.Msg, 2048)
 
 	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				fmt.Printf("[mindx] event subscriber panicked: %v\n", p)
+			}
+		}()
+
 		bus := m.agent.Reactor().EventBus()
 		if bus == nil {
 			return
@@ -243,13 +249,21 @@ func (m *rootModel) startEventLoop() {
 	}()
 
 	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				fmt.Printf("[mindx] msg forwarder panicked: %v\n", p)
+			}
+		}()
+
 		for {
 			select {
 			case msg, ok := <-m.msgCh:
 				if !ok {
 					return
 				}
-				m.program.Send(msg)
+				// Fire-and-forget to prevent blocking the event pipeline
+				// when bubbletea's render cycle is under load.
+				go m.program.Send(msg)
 			case <-m.eventDone:
 				return
 			}
@@ -514,6 +528,15 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 	m.conversationList.MarkDirty()
 
 	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				m.program.Send(clientmsg.AgentErrorMsg{
+					SessionID: sessionID,
+					Error:     fmt.Errorf("handleSend panic: %v", p),
+				})
+			}
+		}()
+
 		_, err := agent.Ask(sessionID, e.Text)
 		if err != nil {
 			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: err})
