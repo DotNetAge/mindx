@@ -105,8 +105,6 @@ func (l ConversationList) View() string {
 	return strings.Join(parts, "\n\n")
 }
 
-func (l ConversationList) ViewportUpdate(tea.MouseWheelMsg) {}
-
 func (l ConversationList) Clear() {
 	l.Conversations = nil
 }

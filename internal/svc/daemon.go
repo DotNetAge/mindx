@@ -435,8 +435,14 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			d.logger.Warn("unexpected PermissionRequest data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		md := buildPermissionRequestMarkdown(req)
-		d.sendEvent(clientID, sid, gateway.RespPermissionRequest, "权限请求", md)
+		if len(req.Questions) > 0 {
+			// AskUser-style: forward full structured data to frontend
+			jsonData, _ := json.Marshal(req)
+			d.sendEvent(clientID, sid, gateway.RespPermissionRequest, "需要澄清", string(jsonData))
+		} else {
+			md := buildPermissionRequestMarkdown(req)
+			d.sendEvent(clientID, sid, gateway.RespPermissionRequest, "权限请求", md)
+		}
 
 	case goreactcore.PermissionDenied:
 		reason, ok := event.Data.(string)

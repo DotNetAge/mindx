@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/timer"
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/goreact"
 	goreactcore "github.com/DotNetAge/goreact/core"
@@ -31,6 +33,9 @@ type rootModel struct {
 	input            *input.InputArea
 	notifBar         *notify.NotificationBar
 	choices          *choices.ChoicesPanel
+	viewport         viewport.Model
+	termWidth        int
+	termHeight       int
 
 	app      *appcore.App
 	registry *SlashCommandRegistry
@@ -62,6 +67,7 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 		input:            input.New(),
 		notifBar:         notify.New(),
 		choices:          choices.New(),
+		viewport:         viewport.New(),
 	}
 
 	var err error
@@ -488,10 +494,18 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		w := clientmsg.WindowResizeMsg{Width: msg.Width, Height: msg.Height}
 		m.dispatchToAll(w)
+		m.resizeViewport(msg.Width, msg.Height)
 
 	case tea.KeyPressMsg:
 		m.input.Executing = m.executing
-		_, cmd := m.input.Update(msg)
+		_, inputCmd := m.input.Update(msg)
+		newVp, vpCmd := m.viewport.Update(msg)
+		m.viewport = newVp
+		return m, tea.Batch(inputCmd, vpCmd)
+
+	case tea.MouseWheelMsg:
+		newVp, cmd := m.viewport.Update(msg)
+		m.viewport = newVp
 		return m, cmd
 
 	case clientmsg.WindowResizeMsg:
@@ -687,6 +701,21 @@ func (m *rootModel) dispatchToAll(w clientmsg.WindowResizeMsg) {
 	m.notifBar.Update(w)
 }
 
+func (m *rootModel) resizeViewport(termWidth, termHeight int) {
+	m.termWidth = termWidth
+	m.termHeight = termHeight
+	// Initial estimate-based height; View() overrides this dynamically.
+	headerEstimate := 8
+	footerEstimate := 5
+	separators := 2
+	vpHeight := termHeight - headerEstimate - footerEstimate - separators
+	if vpHeight < 5 {
+		vpHeight = 5
+	}
+	m.viewport.SetWidth(termWidth)
+	m.viewport.SetHeight(vpHeight)
+}
+
 func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 	if m.executing {
 		return m, m.notifBar.Add(data.Notification{Message: "已有消息正在处理", Level: data.NotifWarning})
@@ -834,23 +863,55 @@ func reloadModels(app *appcore.App) ([]input.ModelItem, error) {
 
 func (m *rootModel) View() tea.View {
 	welcomeView := m.welcome.View()
-	convView := m.conversationList.View()
-	statusView := m.statusBar.View()
 	notifView := m.notifBar.View()
-
-	var out string
-	out += welcomeView
-	if convView != "" {
-		out += convView + "\n"
-	}
-	if notifView != "" {
-		out += notifView + "\n"
-	}
 	choicesView := m.choices.View()
-	if choicesView != "" {
-		out += choicesView + "\n\n"
+	statusView := m.statusBar.View()
+	inputView := m.input.View()
+
+	// Build header: welcome + optional notifications + choices
+	var header strings.Builder
+	header.WriteString(welcomeView)
+	if notifView != "" {
+		header.WriteString("\n")
+		header.WriteString(notifView)
 	}
-	out += statusView + "\n"
-	out += m.input.View()
-	return tea.NewView(out)
+	if choicesView != "" {
+		header.WriteString("\n")
+		header.WriteString(choicesView)
+	}
+	headerStr := header.String()
+
+	// Build footer: statusbar + input
+	var footer strings.Builder
+	footer.WriteString(statusView)
+	footer.WriteString("\n")
+	footer.WriteString(inputView)
+	footerStr := footer.String()
+
+	// Dynamically compute viewport height from actual rendered line counts.
+	// This accounts for the input suggestion dropdown making the footer taller.
+	headerLines := strings.Count(headerStr, "\n") + 1
+	footerLines := strings.Count(footerStr, "\n") + 1
+	separators := 2
+	vpHeight := m.termHeight - headerLines - footerLines - separators
+	if vpHeight < 3 {
+		vpHeight = 3
+	}
+	m.viewport.SetWidth(m.termWidth)
+	m.viewport.SetHeight(vpHeight)
+
+	// Update viewport content from conversation list
+	m.viewport.SetContent(m.conversationList.View())
+
+	// Compose full layout
+	var out strings.Builder
+	out.WriteString(headerStr)
+	out.WriteString("\n")
+	out.WriteString(m.viewport.View())
+	out.WriteString("\n")
+	out.WriteString(footerStr)
+
+	v := tea.NewView(out.String())
+	v.AltScreen = true
+	return v
 }

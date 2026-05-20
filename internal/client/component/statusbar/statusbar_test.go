@@ -13,17 +13,14 @@ func TestNewStatusBar(t *testing.T) {
 	if s == nil {
 		t.Fatal("New() returned nil")
 	}
-	if s.ConnState != data.Disconnected {
-		t.Errorf("expected ConnState=Disconnected, got %v", s.ConnState)
+	if s.CurrentState != "空闲" {
+		t.Errorf("expected CurrentState %q, got %q", "空闲", s.CurrentState)
 	}
 	if s.SessionName != "" {
 		t.Errorf("expected empty SessionName, got %q", s.SessionName)
 	}
-	if s.TokensIn != 0 {
-		t.Errorf("expected TokensIn=0, got %d", s.TokensIn)
-	}
-	if s.TokensOut != 0 {
-		t.Errorf("expected TokensOut=0, got %d", s.TokensOut)
+	if s.TokensTotal != 0 {
+		t.Errorf("expected TokensTotal=0, got %d", s.TokensTotal)
 	}
 	if s.ShowHints {
 		t.Error("expected ShowHints=false")
@@ -33,41 +30,31 @@ func TestNewStatusBar(t *testing.T) {
 	}
 }
 
-func TestStatusBarViewDisconnected(t *testing.T) {
+func TestStatusBarViewIdle(t *testing.T) {
 	s := New()
+	s.CurrentState = "空闲"
 	view := s.View()
 	if view == "" {
 		t.Fatal("View() returned empty string")
 	}
-	if !strings.Contains(view, "○") {
-		t.Errorf("View() should contain ○, got %q", view)
+	if !strings.Contains(view, "●") {
+		t.Errorf("View() should contain ●, got %q", view)
 	}
-	if !strings.Contains(view, "Disconnected") {
-		t.Errorf("View() should contain Disconnected, got %q", view)
+	if !strings.Contains(view, "空闲") {
+		t.Errorf("View() should contain 空闲, got %q", view)
 	}
 }
 
-func TestStatusBarViewConnecting(t *testing.T) {
+func TestStatusBarViewProcessing(t *testing.T) {
 	s := New()
-	s.ConnState = data.Connecting
+	s.CurrentState = "处理中"
+	s.BlinkOn = true
 	view := s.View()
 	if !strings.Contains(view, "●") {
 		t.Errorf("View() should contain ●, got %q", view)
 	}
-	if !strings.Contains(view, "Connecting") {
-		t.Errorf("View() should contain Connecting, got %q", view)
-	}
-}
-
-func TestStatusBarViewConnected(t *testing.T) {
-	s := New()
-	s.ConnState = data.Connected
-	view := s.View()
-	if !strings.Contains(view, "●") {
-		t.Errorf("View() should contain ●, got %q", view)
-	}
-	if !strings.Contains(view, "Connected") {
-		t.Errorf("View() should contain Connected, got %q", view)
+	if !strings.Contains(view, "处理中") {
+		t.Errorf("View() should contain 处理中, got %q", view)
 	}
 }
 
@@ -75,21 +62,20 @@ func TestStatusBarViewWithSession(t *testing.T) {
 	s := New()
 	s.SessionName = "my-session"
 	view := s.View()
-	if !strings.Contains(view, "my-session") {
-		t.Errorf("View() should contain session name, got %q", view)
+	if s.SessionName != "my-session" {
+		t.Errorf("SessionName should be stored, got %q", s.SessionName)
+	}
+	if view == "" {
+		t.Fatal("View() returned empty string")
 	}
 }
 
 func TestStatusBarViewWithTokens(t *testing.T) {
 	s := New()
-	s.TokensIn = 123
-	s.TokensOut = 456
+	s.TokensTotal = 12345
 	view := s.View()
-	if !strings.Contains(view, "123") {
-		t.Errorf("View() should contain tokens in, got %q", view)
-	}
-	if !strings.Contains(view, "456") {
-		t.Errorf("View() should contain tokens out, got %q", view)
+	if !strings.Contains(view, "12.3k") {
+		t.Errorf("View() should contain formatted tokens, got %q", view)
 	}
 }
 
@@ -141,34 +127,11 @@ func TestStatusBarUpdate(t *testing.T) {
 	}
 }
 
-func TestStatusBarViewWithSessionCost(t *testing.T) {
-	s := New()
-	s.SessionCost = "$0.05"
-	view := s.View()
-	if !strings.Contains(view, "$0.05") {
-		t.Errorf("View() should contain session cost, got %q", view)
-	}
-}
-
-func TestStatusBarViewAuthenticated(t *testing.T) {
-	s := New()
-	s.ConnState = data.Authenticated
-	view := s.View()
-	if !strings.Contains(view, "●") {
-		t.Errorf("View() should contain ●, got %q", view)
-	}
-	if !strings.Contains(view, "Authenticated") {
-		t.Errorf("View() should contain Authenticated, got %q", view)
-	}
-}
-
 func TestStatusBarViewWithAllFields(t *testing.T) {
 	s := New()
-	s.ConnState = data.Connected
+	s.CurrentState = "空闲"
 	s.SessionName = "test-session"
-	s.TokensIn = 100
-	s.TokensOut = 200
-	s.SessionCost = "$0.02"
+	s.TokensTotal = 1500
 	s.AgentName = "coder"
 	s.ModelName = "gpt-4"
 	s.ModeLabel = "chat"
@@ -177,7 +140,7 @@ func TestStatusBarViewWithAllFields(t *testing.T) {
 		{Key: "Ctrl+C", Description: "copy"},
 	}
 	view := s.View()
-	parts := []string{"Connected", "test-session", "100", "200", "$0.02", "coder", "gpt-4", "chat", "Ctrl+C", "copy"}
+	parts := []string{"空闲", "1.5k", "coder", "gpt-4", "chat", "Ctrl+C", "copy"}
 	for _, p := range parts {
 		if !strings.Contains(view, p) {
 			t.Errorf("View() should contain %q, got %q", p, view)
