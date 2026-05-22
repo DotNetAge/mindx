@@ -36,6 +36,9 @@ type App struct {
 	currentSessionMeta *core.SessionInfo // Changed from session.SessionMeta to core.SessionInfo (framework-level)
 
 	embedder goragcore.Embedder
+
+	// Permission rule store (nil = skip rule-based checking)
+	permissionRuleStore *MindxPermissionRuleStore
 }
 
 func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
@@ -62,6 +65,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	userPrompt += "\n- Skills directory: " + settings.SkillsDir()
 	userPrompt += "\n- Agents directory: " + settings.AgentsDir()
 	userPrompt += "\n- Python virtual environment: " + settings.VenvDir()
+	userPrompt += "\n- Now: " + time.Now().Format(time.DateTime)
 	core.SYSTEM_INFO_USERS = userPrompt
 	core.SYSTEM_ADDON_SECTIONS = []string{
 		BuildDelegationGuidance(),
@@ -104,17 +108,21 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		}
 	}
 
+	// Create permission rule store (nil-safe: if mindxConfig is nil, returns no-op store)
+	permStore := NewMindxPermissionRuleStore(mindxConfig)
+
 	return &App{
-		settings:    settings,
-		mindxConfig: mindxConfig,
-		credStore:   credStore,
-		logger:      logger,
-		agents:      agents,
-		models:      models,
-		rules:       rules,
-		sessDB:      sessDB,
-		agentCache:  make(map[string]*goreact.Agent),
-		embedder:    emb,
+		settings:            settings,
+		mindxConfig:         mindxConfig,
+		credStore:           credStore,
+		logger:              logger,
+		agents:              agents,
+		models:              models,
+		rules:               rules,
+		sessDB:              sessDB,
+		agentCache:          make(map[string]*goreact.Agent),
+		embedder:            emb,
+		permissionRuleStore: permStore,
 	}, nil
 }
 
@@ -138,6 +146,11 @@ func (a *App) Settings() *Settings {
 	return a.settings
 }
 
+// Embedder returns the semantic embedder for memory indexing, or nil if not configured.
+func (a *App) Embedder() goragcore.Embedder {
+	return a.embedder
+}
+
 func (a *App) Config() *MindxConfig {
 	return a.mindxConfig
 }
@@ -154,8 +167,22 @@ func (a *App) SessionDB() *session.FileSessionStore {
 	return a.sessDB
 }
 
+func (a *App) SetTestDir(tmpDir string) error {
+	a.settings.Test = true
+	sessDB, err := session.NewFileSessionStore(filepath.Join(tmpDir, "sessions"))
+	if err != nil {
+		return err
+	}
+	a.sessDB = sessDB
+	return nil
+}
+
 func (a *App) Agents() *goreact.AgentRegistry {
 	return a.agents
+}
+
+func (a *App) SetAgentsRegistry(registry *goreact.AgentRegistry) {
+	a.agents = registry
 }
 
 func (a *App) Models() *goreact.ModelRegistry {
@@ -285,23 +312,39 @@ func (a *App) currentAgent() (*goreact.Agent, error) {
 		}
 	}
 
-	sessionBaseDir := a.settings.SessionsDir()
-	if sessionBaseDir != "" {
-		opts = append(opts, goreact.WithSessionBaseDir(filepath.Join(sessionBaseDir, agent.Name)))
+	if a.permissionRuleStore != nil {
+		opts = append(opts, goreact.WithPermissionRuleStore(a.permissionRuleStore))
 	}
 
 	if a.embedder != nil {
-		memConfig := memory.MemoryConfig{
+		// LongTerm — shared unified knowledge base (indexed by Daemon memoryWatch)
+		ltMem, ltErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
 			MemoryType: core.MemoryTypeLongTerm,
-			AgentName:  agent.Name,
+			AgentName:  "_shared",
 			MemoryDir:  filepath.Join(a.settings.UserPreferences(), "memory"),
 			Embedder:   a.embedder,
-		}
-		mem, memErr := memory.NewRAGMemoryFromConfig(memConfig)
-		if memErr != nil {
-			a.logger.Warn("Failed to create memory for agent %q: %v", agent.Name, memErr)
+		})
+		if ltErr != nil {
+			a.logger.Warn("Failed to create long-term memory for agent %q: %v", agent.Name, ltErr)
 		} else {
-			opts = append(opts, goreact.WithMemory(mem))
+			opts = append(opts, goreact.WithMemory(ltMem))
+		}
+
+		// SessionRAG — slid-context recall (ephemeral, bound to SessionDir)
+		var sessionDir string
+		if a.currentSessionMeta != nil {
+			sessionDir = filepath.Join(a.currentSessionMeta.GetSessionDir(), agent.Name)
+		}
+		sMem, sErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
+			MemoryType: core.MemoryTypeSession,
+			AgentName:  agent.Name,
+			SessionDir: sessionDir,
+			Embedder:   a.embedder,
+		})
+		if sErr != nil {
+			a.logger.Warn("Failed to create session memory for agent %q: %v", agent.Name, sErr)
+		} else {
+			opts = append(opts, goreact.WithSessionMemory(sMem))
 		}
 	}
 
@@ -314,7 +357,6 @@ func (a *App) currentAgent() (*goreact.Agent, error) {
 		m.NewSession(a.currentSessionMeta.SessionID)
 	}
 	a.current = m
-	a.syncProjectMemory(m, currentAgentName)
 	return a.current, nil
 }
 
@@ -326,7 +368,6 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 	a.agentMu.RLock()
 	if cached, ok := a.agentCache[name]; ok {
 		a.agentMu.RUnlock()
-		a.syncProjectMemory(cached, name)
 		return cached, nil
 	}
 	a.agentMu.RUnlock()
@@ -374,25 +415,40 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 		}
 	}
 
-	// Enable Agent Native sandbox design (4-Layer Architecture)
-	sessionBaseDir := a.settings.SessionsDir()
-	if sessionBaseDir != "" {
-		opts = append(opts, goreact.WithSessionBaseDir(filepath.Join(sessionBaseDir, name)))
+	if a.permissionRuleStore != nil {
+		opts = append(opts, goreact.WithPermissionRuleStore(a.permissionRuleStore))
 	}
 
-	// Create per-agent memory if embedder is available
+	// Dual memory: LongTerm (project knowledge) + SessionRAG (conversation recall)
 	if a.embedder != nil {
-		memConfig := memory.MemoryConfig{
+		// LongTerm — shared unified knowledge base (indexed by Daemon memoryWatch)
+		ltMem, ltErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
 			MemoryType: core.MemoryTypeLongTerm,
-			AgentName:  cfg.Name,
+			AgentName:  "_shared",
 			MemoryDir:  filepath.Join(a.settings.UserPreferences(), "memory"),
 			Embedder:   a.embedder,
-		}
-		mem, memErr := memory.NewRAGMemoryFromConfig(memConfig)
-		if memErr != nil {
-			a.logger.Warn("Failed to create memory for agent %q: %v", cfg.Name, memErr)
+		})
+		if ltErr != nil {
+			a.logger.Warn("Failed to create long-term memory for agent %q: %v", cfg.Name, ltErr)
 		} else {
-			opts = append(opts, goreact.WithMemory(mem))
+			opts = append(opts, goreact.WithMemory(ltMem))
+		}
+
+		// SessionRAG — slid-context recall (ephemeral, bound to SessionDir)
+		var sessionDir string
+		if a.currentSessionMeta != nil {
+			sessionDir = filepath.Join(a.currentSessionMeta.GetSessionDir(), name)
+		}
+		sMem, sErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
+			MemoryType: core.MemoryTypeSession,
+			AgentName:  cfg.Name,
+			SessionDir: sessionDir,
+			Embedder:   a.embedder,
+		})
+		if sErr != nil {
+			a.logger.Warn("Failed to create session memory for agent %q: %v", cfg.Name, sErr)
+		} else {
+			opts = append(opts, goreact.WithSessionMemory(sMem))
 		}
 	}
 
@@ -408,46 +464,7 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 	a.agentMu.Lock()
 	a.agentCache[name] = agent
 	a.agentMu.Unlock()
-	a.syncProjectMemory(agent, name)
 	return agent, nil
-}
-
-// syncProjectMemory triggers incremental project file indexing for the given agent.
-// It only runs when a session with a ProjectDir is active.
-// The sync is non-blocking for performance; errors are logged.
-func (a *App) syncProjectMemory(agent *goreact.Agent, agentName string) {
-	if a.currentSessionMeta == nil || a.currentSessionMeta.GetProjectDir() == "" {
-		return
-	}
-	mem := agent.Memory()
-	if mem == nil {
-		return
-	}
-	ragMem, ok := mem.(*memory.RAGMemory)
-	if !ok {
-		return
-	}
-
-	projectDir := a.currentSessionMeta.GetProjectDir()
-	cacheDir := filepath.Join(a.settings.UserPreferences(), "memory", agentName, "project")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	result := ragMem.SyncProjectDir(ctx, projectDir, cacheDir)
-	if result.Err != nil {
-		a.logger.Warn("project sync failed", "agent", agentName, "error", result.Err)
-		return
-	}
-	if result.Indexed > 0 || result.Updated > 0 || result.Removed > 0 {
-		a.logger.Info("project sync",
-			"agent", agentName,
-			"indexed", result.Indexed,
-			"updated", result.Updated,
-			"skipped", result.Skipped,
-			"removed", result.Removed,
-		)
-	}
 }
 
 func (a *App) IsModelAvailable(name ...string) bool {

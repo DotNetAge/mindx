@@ -196,14 +196,17 @@ func TestConversationFullFlow(t *testing.T) {
 	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "I need to think..."})
 	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Reasoning: "I need to think..."})
 
-	// Reasoning is top-level, not per-round
+	// Reasoning is top-level, stored in both Reasoning and Rounds[].Thought
 	if conv.Reasoning.Result != "I need to think..." {
 		t.Errorf("expected reasoning result %q, got %q", "I need to think...", conv.Reasoning.Result)
 	}
 
-	// Rounds are created by ActionStartMsg, not by thinking events
-	if len(conv.Rounds) != 0 {
-		t.Errorf("expected 0 rounds before action, got %d", len(conv.Rounds))
+	// Rounds are now created by thinking events to capture Thought content
+	if len(conv.Rounds) != 1 {
+		t.Fatalf("expected 1 round after thinking (to capture thought content), got %d", len(conv.Rounds))
+	}
+	if conv.Rounds[0].Thought.Content != "I need to think..." {
+		t.Errorf("expected thought content %q, got %q", "I need to think...", conv.Rounds[0].Thought.Content)
 	}
 
 	conv, _ = UpdateConversation(conv, msg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})

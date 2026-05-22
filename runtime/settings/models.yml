@@ -8,6 +8,7 @@ models:
     api_key: DASHSCOPE_API_KEY
     auth_token: ""
     max_tokens: 131072
+    context_length: 262144
     is_local: false
     func_calling: true
     structuring: true
@@ -26,6 +27,7 @@ models:
     api_key: DASHSCOPE_API_KEY
     auth_token: ""
     max_tokens: 65536
+    context_length: 1000000
     is_local: false
     func_calling: true
     structuring: true
@@ -47,6 +49,7 @@ models:
     api_key: DASHSCOPE_API_KEY
     auth_token: ""
     max_tokens: 65536
+    context_length: 1000000
     is_local: false
     func_calling: true
     structuring: true
@@ -68,6 +71,7 @@ models:
     api_key: DEEPSEEK_API_KEY
     auth_token: ""
     max_tokens: 131072
+    context_length: 1000000
     is_local: false
     func_calling: true
     structuring: true
@@ -86,6 +90,7 @@ models:
     api_key: DEEPSEEK_API_KEY
     auth_token: ""
     max_tokens: 131072
+    context_length: 1000000
     is_local: false
     func_calling: true
     structuring: true
@@ -104,6 +109,7 @@ models:
     api_key: DASHSCOPE_API_KEY
     auth_token: ""
     max_tokens: 65536
+    context_length: 131072
     is_local: false
     func_calling: true
     structuring: true
@@ -122,6 +128,7 @@ models:
     api_key: DASHSCOPE_API_KEY
     auth_token: ""
     max_tokens: 128000
+    context_length: 262144
     is_local: false
     func_calling: true
     structuring: false
@@ -143,6 +150,7 @@ models:
     api_key: DASHSCOPE_API_KEY
     auth_token: ""
     max_tokens: 128000
+    context_length: 200000
     is_local: false
     func_calling: true
     structuring: true
@@ -163,6 +171,7 @@ models:
     api_key: DASHSCOPE_API_KEY
     auth_token: ""
     max_tokens: 128000
+    context_length: 262144
     is_local: false
     func_calling: true
     structuring: false
@@ -181,6 +190,7 @@ models:
     api_key: DASHSCOPE_API_KEY
     auth_token: ""
     max_tokens: 32768
+    context_length: 204800
     is_local: false
     func_calling: true
     structuring: false

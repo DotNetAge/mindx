@@ -16,6 +16,7 @@ import (
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/logging"
+	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 	"github.com/DotNetAge/mindx/pkg/session"
 	"github.com/google/uuid"
@@ -24,13 +25,15 @@ import (
 var atAgentRegex = regexp.MustCompile(`^@([\w-]+)(?:\s+([\w-]+))?\s+(.+)$`)
 
 type Daemon struct {
-	app         *core.App
-	gw          *gateway.Server
-	scheduler   *scheduler.Scheduler
-	schedulerDB *scheduler.FileSchedulerStore
-	addr        string
-	wsPath      string
-	logger      logging.Logger
+	app          *core.App
+	gw           *gateway.Server
+	scheduler    *scheduler.Scheduler
+	schedulerDB  *scheduler.FileSchedulerStore
+	memoryWatch  *memory.FileWatchService
+	sharedMemory *memory.RAGMemory
+	addr         string
+	wsPath       string
+	logger       logging.Logger
 }
 
 func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
@@ -46,12 +49,42 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 
 	schedulerDB, _ := scheduler.NewFileSchedulerStore(app.Settings().SchedulesDir())
 
+	// ── File Watch Service (LongTerm memory monitoring) ──
+	var memoryWatch *memory.FileWatchService
+	var sharedMemory *memory.RAGMemory
+	if emb := app.Embedder(); emb != nil {
+		sharedMem, memErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
+			MemoryType: goreactcore.MemoryTypeLongTerm,
+			AgentName:  "_shared",
+			MemoryDir:  filepath.Join(app.Settings().UserPreferences(), "memory"),
+			Embedder:   emb,
+		})
+		if memErr != nil {
+			logger.Warn("filewatch: failed to create shared LongTerm indexer, watch disabled", "error", memErr)
+		} else {
+			sharedMemory = sharedMem
+			watchList, wlErr := memory.NewWatchListStore(app.Settings().DataDir())
+			if wlErr != nil {
+				logger.Warn("filewatch: failed to create watchlist store, watch disabled", "error", wlErr)
+			} else {
+				memoryWatch = memory.NewFileWatchService(
+					sharedMem.Indexer(),
+					watchList,
+					filepath.Join(app.Settings().DataDir(), "memory-cache"),
+					logger,
+				)
+			}
+		}
+	}
+
 	d := &Daemon{
-		app:         app,
-		addr:        addr,
-		wsPath:      wsPath,
-		schedulerDB: schedulerDB,
-		logger:      logger,
+		app:          app,
+		addr:         addr,
+		wsPath:       wsPath,
+		schedulerDB:  schedulerDB,
+		memoryWatch:  memoryWatch,
+		sharedMemory: sharedMemory,
+		logger:       logger,
 	}
 
 	d.scheduler = scheduler.NewScheduler(schedulerDB, d.executeScheduleCommand, logger)
@@ -69,6 +102,14 @@ func (d *Daemon) Start(ctx context.Context) error {
 		}
 	}
 
+	if d.memoryWatch != nil {
+		go func() {
+			if err := d.memoryWatch.Start(ctx); err != nil {
+				d.logger.Warn("FileWatch service exited with error", "error", err)
+			}
+		}()
+	}
+
 	d.logger.Info("MindX daemon starting", "addr", fmt.Sprintf("ws://localhost%s%s", d.addr, d.wsPath))
 
 	if err := d.gw.Start(); err != nil {
@@ -77,6 +118,10 @@ func (d *Daemon) Start(ctx context.Context) error {
 
 	<-ctx.Done()
 	d.logger.Info("Shutting down")
+
+	if d.memoryWatch != nil {
+		d.memoryWatch.Stop()
+	}
 
 	if err := d.gw.StopAllChannels(ctx); err != nil {
 		d.logger.Warn("failed to stop channels", "error", err)
@@ -129,6 +174,512 @@ func (d *Daemon) initGateway() {
 		gateway.WithPath(d.wsPath),
 		gateway.WithHandler(d.defaultHandler),
 	)
+	d.registerRPCMethods()
+}
+
+func (d *Daemon) registerRPCMethods() {
+	d.gw.RegisterMethod("session.list", d.handleSessionList)
+	d.gw.RegisterMethod("session.get", d.handleSessionGet)
+	d.gw.RegisterMethod("session.meta", d.handleSessionMeta)
+
+	d.gw.RegisterMethod("memory.query", d.handleMemoryQuery)
+	d.gw.RegisterMethod("memory.store", d.handleMemoryStore)
+	d.gw.RegisterMethod("memory.delete", d.handleMemoryDelete)
+
+	d.gw.RegisterMethod("agent.list", d.handleAgentList)
+	d.gw.RegisterMethod("agent.get", d.handleAgentGet)
+	d.gw.RegisterMethod("agent.update", d.handleAgentUpdate)
+
+	d.gw.RegisterMethod("model.list", d.handleModelList)
+	d.gw.RegisterMethod("model.get", d.handleModelGet)
+
+	d.gw.RegisterMethod("skill.list", d.handleSkillList)
+	d.gw.RegisterMethod("skill.get", d.handleSkillGet)
+}
+
+// ---------------------------------------------------------------------------
+// Session RPC Handlers
+// ---------------------------------------------------------------------------
+
+type sessionListParams struct {
+	Agent string `json:"agent,omitempty"`
+}
+
+func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (any, error) {
+	var p sessionListParams
+	if params != nil {
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, fmt.Errorf("invalid params: %w", err)
+		}
+	}
+
+	sessDB := d.app.SessDB()
+	if sessDB == nil {
+		return nil, fmt.Errorf("session store not available")
+	}
+
+	sessions, err := sessDB.ListSessions(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("list sessions failed: %w", err)
+	}
+
+	if p.Agent != "" {
+		filtered := make([]goreactcore.SessionInfo, 0)
+		for i := range sessions {
+			if sessions[i].AgentName == p.Agent {
+				filtered = append(filtered, sessions[i])
+			}
+		}
+		sessions = filtered
+	}
+
+	return sessions, nil
+}
+
+type sessionGetParams struct {
+	SessionID string `json:"session_id"`
+}
+
+func (d *Daemon) handleSessionGet(_ context.Context, params json.RawMessage) (any, error) {
+	var p sessionGetParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	sessDB := d.app.SessDB()
+	if sessDB == nil {
+		return nil, fmt.Errorf("session store not available")
+	}
+
+	info, err := sessDB.Get(context.Background(), p.SessionID)
+	if err != nil {
+		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
+	}
+
+	meta, metaErr := sessDB.GetSessionMeta(p.SessionID)
+
+	result := map[string]interface{}{
+		"session_id": p.SessionID,
+		"messages":   info,
+	}
+	if metaErr == nil && meta != nil {
+		result["meta"] = meta
+	}
+	return result, nil
+}
+
+func (d *Daemon) handleSessionMeta(_ context.Context, params json.RawMessage) (any, error) {
+	var p sessionGetParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	sessDB := d.app.SessDB()
+	if sessDB == nil {
+		return nil, fmt.Errorf("session store not available")
+	}
+
+	meta, err := sessDB.GetSessionMeta(p.SessionID)
+	if err != nil {
+		return nil, fmt.Errorf("get session meta %q failed: %w", p.SessionID, err)
+	}
+
+	return meta, nil
+}
+
+// ---------------------------------------------------------------------------
+// Memory RPC Handlers
+// ---------------------------------------------------------------------------
+
+type memoryQueryParams struct {
+	Query    string  `json:"query"`
+	Limit    int     `json:"limit,omitempty"`
+	Type     string  `json:"type,omitempty"`
+	MinScore float64 `json:"min_score,omitempty"`
+}
+
+func (d *Daemon) handleMemoryQuery(_ context.Context, params json.RawMessage) (any, error) {
+	var p memoryQueryParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.Query == "" {
+		return nil, fmt.Errorf("query is required")
+	}
+
+	mem := d.sharedMemory
+	if mem == nil {
+		return nil, fmt.Errorf("memory service not available (embedder not configured)")
+	}
+
+	opts := []goreactcore.RetrieveOption{}
+	if p.Limit > 0 {
+		opts = append(opts, goreactcore.WithMemoryLimit(p.Limit))
+	}
+	if p.MinScore > 0 {
+		opts = append(opts, goreactcore.WithMinScore(p.MinScore))
+	}
+	if p.Type != "" {
+		switch p.Type {
+		case "longterm":
+			opts = append(opts, goreactcore.WithMemoryTypes(goreactcore.MemoryTypeLongTerm))
+		case "session":
+			opts = append(opts, goreactcore.WithMemoryTypes(goreactcore.MemoryTypeSession))
+		}
+	}
+
+	records, err := mem.Retrieve(context.Background(), p.Query, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("memory query failed: %w", err)
+	}
+
+	if records == nil {
+		return []goreactcore.MemoryRecord{}, nil
+	}
+	return records, nil
+}
+
+type memoryStoreParams struct {
+	Title   string   `json:"title,omitempty"`
+	Content string   `json:"content"`
+	Tags    []string `json:"tags,omitempty"`
+	Type    string   `json:"type,omitempty"`
+}
+
+func (d *Daemon) handleMemoryStore(_ context.Context, params json.RawMessage) (any, error) {
+	var p memoryStoreParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.Content == "" {
+		return nil, fmt.Errorf("content is required")
+	}
+
+	mem := d.sharedMemory
+	if mem == nil {
+		return nil, fmt.Errorf("memory service not available (embedder not configured)")
+	}
+
+	record := goreactcore.MemoryRecord{
+		Title:     p.Title,
+		Content:   p.Content,
+		Tags:      p.Tags,
+		CreatedAt: time.Now(),
+	}
+	if p.Type == "session" {
+		record.Type = goreactcore.MemoryTypeSession
+	} else {
+		record.Type = goreactcore.MemoryTypeLongTerm
+	}
+
+	id, err := mem.Store(context.Background(), record)
+	if err != nil {
+		return nil, fmt.Errorf("memory store failed: %w", err)
+	}
+
+	return map[string]string{"id": id}, nil
+}
+
+type memoryDeleteParams struct {
+	ID string `json:"id"`
+}
+
+func (d *Daemon) handleMemoryDelete(_ context.Context, params json.RawMessage) (any, error) {
+	var p memoryDeleteParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+
+	mem := d.sharedMemory
+	if mem == nil {
+		return nil, fmt.Errorf("memory service not available (embedder not configured)")
+	}
+
+	if err := mem.Delete(context.Background(), p.ID); err != nil {
+		return nil, fmt.Errorf("memory delete failed: %w", err)
+	}
+
+	return map[string]string{"status": "ok", "deleted_id": p.ID}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Agent RPC Handlers
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any, error) {
+	agents := d.app.Agents()
+	if agents == nil {
+		return []goreactcore.AgentConfig{}, nil
+	}
+	list := agents.List()
+	if list == nil {
+		return []goreactcore.AgentConfig{}, nil
+	}
+
+	type agentEntry struct {
+		Name                string         `json:"name"`
+		Role                string         `json:"role,omitempty"`
+		Description         string         `json:"description"`
+		Introduction        string         `json:"introduction,omitempty"`
+		Model               string         `json:"model"`
+		Skills              []string       `json:"skills,omitempty"`
+		Body                string         `json:"body,omitempty"`
+		EnableOrchestration bool           `json:"enable_orchestration"`
+		MaxDecomposeDepth   int            `json:"max_decompose_depth,omitempty"`
+		Meta                map[string]any `json:"meta,omitempty"`
+	}
+
+	result := make([]agentEntry, len(list))
+	for i, a := range list {
+		result[i] = agentEntry{
+			Name:                a.Name,
+			Role:                a.Role,
+			Description:         a.Description,
+			Introduction:        a.Introduction,
+			Model:               a.Model,
+			Skills:              a.Skills,
+			Body:                a.Body,
+			EnableOrchestration: a.EnableOrchestration,
+			MaxDecomposeDepth:   a.MaxDecomposeDepth,
+			Meta:                a.Meta,
+		}
+	}
+	return result, nil
+}
+
+type agentGetParams struct {
+	Name string `json:"name"`
+}
+
+func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any, error) {
+	var p agentGetParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	agents := d.app.Agents()
+	if agents == nil {
+		return nil, fmt.Errorf("agent registry not available")
+	}
+
+	cfg := agents.Get(p.Name)
+	if cfg == nil {
+		return nil, fmt.Errorf("agent %q not found", p.Name)
+	}
+
+	return cfg, nil
+}
+
+type agentUpdateParams struct {
+	Name                string         `json:"name"`
+	Role                string         `json:"role,omitempty"`
+	Description         string         `json:"description,omitempty"`
+	Introduction        string         `json:"introduction,omitempty"`
+	Model               string         `json:"model,omitempty"`
+	Skills              []string       `json:"skills,omitempty"`
+	Body                string         `json:"body,omitempty"`
+	EnableOrchestration *bool          `json:"enable_orchestration,omitempty"`
+	MaxDecomposeDepth   *int           `json:"max_decompose_depth,omitempty"`
+	Meta                map[string]any `json:"meta,omitempty"`
+}
+
+func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (any, error) {
+	var p agentUpdateParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	agents := d.app.Agents()
+	if agents == nil {
+		return nil, fmt.Errorf("agent registry not available")
+	}
+
+	existing := agents.Get(p.Name)
+	if existing == nil {
+		return nil, fmt.Errorf("agent %q not found", p.Name)
+	}
+
+	updated := *existing
+
+	if p.Role != "" {
+		updated.Role = p.Role
+	}
+	if p.Description != "" {
+		updated.Description = p.Description
+	}
+	if p.Model != "" {
+		updated.Model = p.Model
+	}
+	if p.Skills != nil {
+		updated.Skills = p.Skills
+	}
+	if p.Introduction != "" {
+		updated.Introduction = p.Introduction
+	}
+	if p.Body != "" {
+		updated.Body = p.Body
+	}
+	if p.EnableOrchestration != nil {
+		updated.EnableOrchestration = *p.EnableOrchestration
+	}
+	if p.MaxDecomposeDepth != nil {
+		updated.MaxDecomposeDepth = *p.MaxDecomposeDepth
+	}
+	if p.Meta != nil {
+		updated.Meta = p.Meta
+	}
+
+	if err := agents.SaveTo(&updated); err != nil {
+		return nil, fmt.Errorf("failed to save agent config: %w", err)
+	}
+
+	return map[string]string{
+		"status":      "ok",
+		"agent_name":  updated.Name,
+		"message":     "agent config updated",
+	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Model RPC Handlers
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleModelList(_ context.Context, _ json.RawMessage) (any, error) {
+	models := d.app.Models()
+	if models == nil {
+		return []goreactcore.ModelConfig{}, nil
+	}
+	list := models.List()
+	if list == nil {
+		return []goreactcore.ModelConfig{}, nil
+	}
+	return list, nil
+}
+
+type modelGetParams struct {
+	Name string `json:"name"`
+}
+
+func (d *Daemon) handleModelGet(_ context.Context, params json.RawMessage) (any, error) {
+	var p modelGetParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	models := d.app.Models()
+	if models == nil {
+		return nil, fmt.Errorf("model registry not available")
+	}
+
+	cfg := models.Get(p.Name)
+	if cfg == nil {
+		return nil, fmt.Errorf("model %q not found", p.Name)
+	}
+
+	return cfg, nil
+}
+
+// ---------------------------------------------------------------------------
+// Skill RPC Handlers
+// ---------------------------------------------------------------------------
+
+type skillListParams struct {
+	AgentName string `json:"agent_name,omitempty"`
+}
+
+func (d *Daemon) handleSkillList(_ context.Context, params json.RawMessage) (any, error) {
+	var p skillListParams
+	if params != nil {
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, fmt.Errorf("invalid params: %w", err)
+		}
+	}
+
+	agentName := p.AgentName
+	if agentName == "" {
+		agentName = d.app.CurrentAgentName()
+	}
+
+	m, err := d.app.CurrentAgent()
+	if err != nil {
+		return []goreactcore.Skill{}, nil
+	}
+	if m.Reactor() == nil {
+		return []goreactcore.Skill{}, nil
+	}
+	skills := m.Reactor().SkillRegistry().ListSkills()
+
+	type skillEntry struct {
+		Name         string            `json:"name"`
+		Description  string            `json:"description"`
+		RootDir      string            `json:"root_dir,omitempty"`
+		Source       string            `json:"source,omitempty"`
+		Instructions string            `json:"instructions,omitempty"`
+		Paths        []string          `json:"paths,omitempty"`
+		Metadata     map[string]string `json:"metadata,omitempty"`
+	}
+
+	result := make([]skillEntry, len(skills))
+	for i, s := range skills {
+		result[i] = skillEntry{
+			Name:         s.Name,
+			Description:  s.Description,
+			RootDir:      s.RootDir,
+			Source:       s.Source,
+			Instructions: s.Instructions,
+			Paths:        s.Paths,
+			Metadata:     s.Metadata,
+		}
+	}
+	return result, nil
+}
+
+type skillGetParams struct {
+	Name      string `json:"name"`
+	AgentName string `json:"agent_name,omitempty"`
+}
+
+func (d *Daemon) handleSkillGet(_ context.Context, params json.RawMessage) (any, error) {
+	var p skillGetParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	m, err := d.app.CurrentAgent()
+	if err != nil {
+		return nil, fmt.Errorf("current agent not available: %w", err)
+	}
+	if m.Reactor() == nil {
+		return nil, fmt.Errorf("reactor not initialized for current agent")
+	}
+
+	skill, err := m.Reactor().SkillRegistry().GetSkill(p.Name)
+	if err != nil {
+		return nil, fmt.Errorf("skill %q not found: %w", p.Name, err)
+	}
+
+	return skill, nil
 }
 
 func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessionID string, content string, projectDir string) error {
@@ -332,68 +883,68 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		md := buildThinkingDoneMarkdown(*thought)
 		d.sendEvent(clientID, sid, gateway.RespThinkingDone, "思考完成", md)
 
-		case goreactcore.ActionStart:
-			action, ok := event.Data.(goreactcore.ActionStartData)
-			if !ok {
-				d.logger.Warn("unexpected ActionStart data type", "type", fmt.Sprintf("%T", event.Data))
-				return
-			}
-			d.gw.SendResponse(clientID, gateway.RespActionStart, "开始操作", map[string]interface{}{
-				"tool_count":       action.ToolCount,
-				"tool_names":       action.ToolNames,
-				"predicted_tokens": action.TotalPredictedTokens,
-				"iteration":        action.Iteration,
-			}, gateway.WithSessionID(sid))
+	case goreactcore.ActionStart:
+		action, ok := event.Data.(goreactcore.ActionStartData)
+		if !ok {
+			d.logger.Warn("unexpected ActionStart data type", "type", fmt.Sprintf("%T", event.Data))
+			return
+		}
+		d.gw.SendResponse(clientID, gateway.RespActionStart, "开始操作", map[string]interface{}{
+			"tool_count":       action.ToolCount,
+			"tool_names":       action.ToolNames,
+			"predicted_tokens": action.TotalPredictedTokens,
+			"iteration":        action.Iteration,
+		}, gateway.WithSessionID(sid))
 
-		case goreactcore.ToolExecStart:
-			data, ok := event.Data.(goreactcore.ToolExecStartData)
-			if !ok {
-				d.logger.Warn("unexpected ToolExecStart data type", "type", fmt.Sprintf("%T", event.Data))
-				return
-			}
-			d.gw.SendResponse(clientID, gateway.RespActionStart, "工具开始", map[string]interface{}{
-				"tool_name": data.ToolName,
-				"params":    data.Params,
-			}, gateway.WithSessionID(sid))
+	case goreactcore.ToolExecStart:
+		data, ok := event.Data.(goreactcore.ToolExecStartData)
+		if !ok {
+			d.logger.Warn("unexpected ToolExecStart data type", "type", fmt.Sprintf("%T", event.Data))
+			return
+		}
+		d.gw.SendResponse(clientID, gateway.RespActionStart, "工具开始", map[string]interface{}{
+			"tool_name": data.ToolName,
+			"params":    data.Params,
+		}, gateway.WithSessionID(sid))
 
-		case goreactcore.ToolExecEnd:
-			data, ok := event.Data.(goreactcore.ToolExecEndData)
-			if !ok {
-				d.logger.Warn("unexpected ToolExecEnd data type", "type", fmt.Sprintf("%T", event.Data))
-				return
-			}
-			d.gw.SendResponse(clientID, gateway.RespActionResult, "工具结果", map[string]interface{}{
-				"tool_name": data.ToolName,
-				"success":   data.Success,
-				"result":    data.Result,
-				"error":     data.Error,
-				"duration":  data.Duration.String(),
-			}, gateway.WithSessionID(sid))
+	case goreactcore.ToolExecEnd:
+		data, ok := event.Data.(goreactcore.ToolExecEndData)
+		if !ok {
+			d.logger.Warn("unexpected ToolExecEnd data type", "type", fmt.Sprintf("%T", event.Data))
+			return
+		}
+		d.gw.SendResponse(clientID, gateway.RespActionResult, "工具结果", map[string]interface{}{
+			"tool_name": data.ToolName,
+			"success":   data.Success,
+			"result":    data.Result,
+			"error":     data.Error,
+			"duration":  data.Duration.String(),
+		}, gateway.WithSessionID(sid))
 
-		case goreactcore.ActionProgress:
-			progress, ok := event.Data.(goreactcore.ActionProgressData)
-			if !ok {
-				d.logger.Warn("unexpected ActionProgress data type", "type", fmt.Sprintf("%T", event.Data))
-				return
-			}
-			d.gw.SendResponse(clientID, gateway.RespActionProgress, "操作进度", map[string]interface{}{
-				"completed": progress.CompletedCount,
-				"total":     progress.TotalCount,
-				"status":    progress.Status,
-			}, gateway.WithSessionID(sid))
+	case goreactcore.ActionProgress:
+		progress, ok := event.Data.(goreactcore.ActionProgressData)
+		if !ok {
+			d.logger.Warn("unexpected ActionProgress data type", "type", fmt.Sprintf("%T", event.Data))
+			return
+		}
+		d.gw.SendResponse(clientID, gateway.RespActionProgress, "操作进度", map[string]interface{}{
+			"completed": progress.CompletedCount,
+			"total":     progress.TotalCount,
+			"status":    progress.Status,
+		}, gateway.WithSessionID(sid))
 
-		case goreactcore.ActionEnd:
-			data, ok := event.Data.(goreactcore.ActionEndData)
-			if !ok {
-				d.logger.Warn("unexpected ActionEnd data type", "type", fmt.Sprintf("%T", event.Data))
-				return
-			}
-			d.gw.SendResponse(clientID, gateway.RespActionEnd, "操作完成", map[string]interface{}{
-				"total":   data.TotalTools,
-				"success": data.SuccessCount,
-				"failed":  data.FailedCount,
-				"summary": data.Summary,
-			}, gateway.WithSessionID(sid))
+	case goreactcore.ActionEnd:
+		data, ok := event.Data.(goreactcore.ActionEndData)
+		if !ok {
+			d.logger.Warn("unexpected ActionEnd data type", "type", fmt.Sprintf("%T", event.Data))
+			return
+		}
+		d.gw.SendResponse(clientID, gateway.RespActionEnd, "操作完成", map[string]interface{}{
+			"total":   data.TotalTools,
+			"success": data.SuccessCount,
+			"failed":  data.FailedCount,
+			"summary": data.Summary,
+		}, gateway.WithSessionID(sid))
 
 	case goreactcore.SubtaskSpawned:
 		info, ok := event.Data.(goreactcore.SubtaskInfo)
@@ -542,7 +1093,7 @@ func generateSessionID() string {
 
 func buildThinkingDoneMarkdown(t reactor.Thought) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("### 思考完成\n\n"))
+	fmt.Fprintf(&b, "### 思考完成\n\n")
 	b.WriteString(fmt.Sprintf("**决策**: `%s`  **置信度**: %.0f%%\n\n", t.Decision, t.Confidence*100))
 	if t.Reasoning != "" {
 		b.WriteString(fmt.Sprintf("**推理**: %s\n\n", t.Reasoning))

@@ -23,10 +23,10 @@ require (
 	github.com/DotNetAge/gorag v1.1.10
 	github.com/DotNetAge/goreact v0.0.0-00010101000000-000000000000
 	github.com/DotNetAge/gort v0.1.0
+	github.com/fsnotify/fsnotify v1.10.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.1
 	github.com/joho/godotenv v1.5.1
-	github.com/mattn/go-runewidth v0.0.23
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
@@ -80,7 +80,6 @@ require (
 	github.com/couchbase/vellum v1.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
-	github.com/fsnotify/fsnotify v1.10.0 // indirect
 	github.com/getsentry/sentry-go v0.27.0 // indirect
 	github.com/glycerine/go-unsnap-stream v0.0.0-20181221182339-f9677308dec2 // indirect
 	github.com/go-ego/gse v1.0.2 // indirect
@@ -94,6 +93,7 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
+	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect

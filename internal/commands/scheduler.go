@@ -26,7 +26,7 @@ func SetSchedulerDeps(deps SchedulerDeps) {
 
 func registerSchedulerCommands(r *Registry) {
 	r.Register(Meta{
-		Name:        "job-add",
+		Name:        "job.add",
 		Description: "添加计划任务",
 		Category:    "system",
 		Scope:       gateway.ScopeRemote,
@@ -37,7 +37,7 @@ func registerSchedulerCommands(r *Registry) {
 	})
 
 	r.Register(Meta{
-		Name:        "job-list",
+		Name:        "job.list",
 		Description: "列出所有计划任务",
 		Category:    "system",
 		Scope:       gateway.ScopeRemote,
@@ -46,7 +46,7 @@ func registerSchedulerCommands(r *Registry) {
 	})
 
 	r.Register(Meta{
-		Name:        "job-del",
+		Name:        "job.del",
 		Description: "删除计划任务",
 		Category:    "system",
 		Scope:       gateway.ScopeRemote,

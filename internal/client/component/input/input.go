@@ -328,7 +328,7 @@ func (i *InputArea) View() string {
 	buf.WriteByte('\n')
 	buf.WriteString(prompt)
 	if text == "" {
-		buf.WriteString(style.GrayStyle.Render("你的消息..."))
+		buf.WriteString(style.GrayStyle.Render("发送消息或\"/\"选择指令..."))
 	} else {
 		buf.WriteString(style.WhiteStyle.Render(text))
 	}
