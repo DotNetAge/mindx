@@ -127,6 +127,20 @@ func (s *StatusBar) View() string {
 
 	line1 := strings.Join(parts, sep)
 
+	// Right-align contextual hint on the statusbar
+	if s.Width > 0 {
+		hint := "↑↓ 滚动"
+		if s.CurrentState != "空闲" {
+			hint = "esc 打断 • ↑↓ 滚动"
+		}
+		hintRendered := style.GrayStyle.Render(hint)
+		l1w := lipgloss.Width(line1)
+		hw := lipgloss.Width(hintRendered)
+		if l1w+hw+2 <= s.Width {
+			line1 += strings.Repeat(" ", s.Width-l1w-hw) + hintRendered
+		}
+	}
+
 	if s.ShowHints && len(s.Shortcuts) > 0 {
 		var hintParts []string
 		for _, sc := range s.Shortcuts {

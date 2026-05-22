@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	goreactcore "github.com/DotNetAge/goreact/core"
 )
 
 type DaemonConfig struct {
@@ -31,6 +33,11 @@ type MindxConfig struct {
 	EmbedderModel string       `json:"embedder_model,omitempty"`
 	Daemon        DaemonConfig `json:"daemon"`
 	Python        PythonConfig `json:"python"`
+
+	// PermissionRules stores user-defined allow/deny/ask rules.
+	// Loaded by MindxPermissionRuleStore and injected into goreact's PermissionChain.
+	// This is a low-frequency "秘籍" feature — most users configure via Skill AllowedTools instead.
+	PermissionRules *goreactcore.PermissionRules `json:"permission_rules,omitempty"`
 
 	filePath string `json:"-"`
 }

@@ -53,7 +53,19 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 		}
 		newReasoning, cmd := UpdateReasoning(m.Reasoning, e)
 		m.Reasoning = newReasoning
+		m.ensureCurrentRound()
+		newThought, _ := UpdateThought(m.currentRound().Thought, e)
+		m.currentRound().Thought = newThought
 		return m, cmd
+
+	case msg.ThinkingDeltaMsg:
+		if m.Status == StatusDone || m.Status == StatusError {
+			return m, nil
+		}
+		m.ensureCurrentRound()
+		newThought, _ := UpdateThought(m.currentRound().Thought, e)
+		m.currentRound().Thought = newThought
+		return m, nil
 
 	case msg.ActionStartMsg:
 		if m.Status == StatusDone || m.Status == StatusError {
@@ -143,13 +155,22 @@ func ViewConversation(m Conversation, width int) string {
 
 	var roundsView strings.Builder
 	for _, round := range m.Rounds {
+		thoughtView := ViewThought(round.Thought)
 		actionView := ViewAction(round.Action, width)
 
-		if actionView != "" {
+		if thoughtView != "" || actionView != "" {
 			if questionView != "" || reasoningView != "" || roundsView.Len() > 0 {
 				roundsView.WriteString("\n")
 			}
-			roundsView.WriteString(actionView)
+			if thoughtView != "" {
+				roundsView.WriteString(thoughtView)
+			}
+			if actionView != "" {
+				if thoughtView != "" {
+					roundsView.WriteString("\n")
+				}
+				roundsView.WriteString(actionView)
+			}
 		}
 	}
 

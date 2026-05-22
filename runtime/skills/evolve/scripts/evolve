@@ -1,0 +1,417 @@
+#!/usr/bin/env python3
+"""
+Evolve helper — bridges MindX session storage and LLM context window.
+
+Design principles:
+  - Default output is compact (context budget friendly)
+  - LLM progressively drills down (outline → range → expand)
+  - JSON mode for machine-readable output
+  - Never crashes — always produces actionable output
+  - Signals (SIGINT/SIGTERM) produce clean exit, not traceback
+  - All paths passed explicitly by LLM — no env var or default resolution
+
+Usage:
+  evolve list --sessions-dir <path> [--limit N|--all] [--json]
+  evolve get <session-id> --sessions-dir <path>
+         [--mode outline|expand] [--range M-N] [--msg N] [--max-msgs N]
+  evolve check <skill-name> --skills-dir <path>
+  evolve dedup --skills-dir <path> [--json]
+"""
+
+import argparse
+import base64
+import json
+import os
+import re
+import signal
+import sys
+import yaml
+from datetime import datetime
+
+PROG = os.path.basename(__file__)
+
+
+# ---------------------------------------------------------------------------
+# Signal safety
+# ---------------------------------------------------------------------------
+
+def _signal_handler(signum, frame):
+    sys.stderr.write(f"\n[{PROG}] interrupted\n")
+    sys.exit(130)
+
+signal.signal(signal.SIGINT, _signal_handler)
+signal.signal(signal.SIGTERM, _signal_handler)
+
+
+# ---------------------------------------------------------------------------
+# Helpers — MindX data format bridge
+# ---------------------------------------------------------------------------
+
+def find_session_files(sessions_dir):
+    """Walk sessions_dir and collect every session.yml with metadata."""
+    sessions = []
+    if not os.path.isdir(sessions_dir):
+        return sessions
+
+    for root, dirs, files in os.walk(sessions_dir):
+        if "session.yml" not in files:
+            continue
+        yml_path = os.path.join(root, "session.yml")
+        parent = os.path.basename(root)
+        grandparent = os.path.basename(os.path.dirname(root))
+
+        if parent == grandparent:
+            agent = parent
+            session_id = "default"
+        elif grandparent and grandparent != os.path.basename(sessions_dir):
+            agent = grandparent
+            session_id = parent
+        else:
+            agent = "unknown"
+            session_id = parent
+
+        try:
+            with open(yml_path, "r", encoding="utf-8") as f:
+                msgs = yaml.safe_load(f) or []
+        except Exception:
+            msgs = []
+
+        sessions.append({
+            "id": session_id,
+            "agent": agent,
+            "path": yml_path,
+            "message_count": len(msgs),
+            "updated_at": os.path.getmtime(yml_path),
+            "size": os.path.getsize(yml_path),
+        })
+
+    sessions.sort(key=lambda s: s["updated_at"], reverse=True)
+    return sessions
+
+
+def read_messages(yml_path):
+    """Parse session.yml into a message list. Returns [] on any error."""
+    if not yml_path or not os.path.isfile(yml_path):
+        return []
+    try:
+        with open(yml_path, "r", encoding="utf-8") as f:
+            msgs = yaml.safe_load(f) or []
+        return msgs
+    except Exception:
+        return []
+
+
+def decode_content(msg):
+    """Decode base64-encoded content from a session message."""
+    raw = msg.get("content", "")
+    if not raw:
+        return ""
+    try:
+        return base64.b64decode(raw).decode("utf-8", errors="replace")
+    except (ValueError, TypeError):
+        return raw  # fallback: not base64, return as-is
+
+
+def extract_tools(content, max_tools=5):
+    """Extract unique tool names from assistant message content.
+
+    Matches GoReact's JSON tool_use blocks and common XML/plain-text patterns.
+    Returns up to max_tools unique names, preserving first-seen order.
+    """
+    if not content:
+        return []
+    # GoReact stores tool calls as JSON: {"name": "tool_name", ...}
+    tools = re.findall(r'"name"\s*:\s*"(\w+)"', content)
+    if not tools:
+        tools = re.findall(r'<tool_name>(\w+)</tool_name>', content)
+    if not tools:
+        # Plain-text heuristic: bracket-enclosed words in first 300 chars
+        tools = re.findall(r'\[(\w+)\]', content[:300])
+    seen = set()
+    return [t for t in tools if not (t in seen or seen.add(t))][:max_tools]
+
+
+def resolve_session(session_id, sessions_dir):
+    """Locate a session by exact ID first, then prefix match."""
+    sessions = find_session_files(sessions_dir)
+    # Exact match first
+    for s in sessions:
+        if s["id"] == session_id:
+            return s
+    # Prefix match
+    for s in sessions:
+        if s["id"].startswith(session_id):
+            return s
+    return None
+
+
+def ts_format(ts, fmt="%H:%M"):
+    """Safely format a Unix timestamp."""
+    if ts:
+        try:
+            return datetime.fromtimestamp(ts).strftime(fmt)
+        except (OSError, ValueError, OverflowError):
+            pass
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+def cmd_list(sessions_dir, limit, show_all, json_output):
+    """List sessions — compact by default, --json for machine reading."""
+    sessions = find_session_files(sessions_dir)
+    if not sessions:
+        if json_output:
+            print(json.dumps([]))
+        else:
+            print("No sessions found.")
+            print(f"  Sessions directory: {sessions_dir}")
+            print(f"  (use --sessions-dir)")
+        return
+
+    total = len(sessions)
+    if not show_all and limit and limit > 0 and limit < total:
+        sessions = sessions[:limit]
+        truncated = total - limit
+    else:
+        truncated = 0
+
+    if json_output:
+        print(json.dumps(sessions))
+        return
+
+    # Human-readable table
+    print(f"{'SESSION ID':<24} {'AGENT':<18} {'MSGS':<5} {'SIZE':<7}  {'LAST ACTIVE':<16}")
+    print("-" * 74)
+    for s in sessions:
+        dt = ts_format(s["updated_at"], "%Y-%m-%d %H:%M")
+        size_kb = s["size"] / 1024
+        print(f"{s['id']:<24} {s['agent']:<18} {s['message_count']:<5} {size_kb:<7.1f}  {dt:<16}")
+    if truncated:
+        print(f"({truncated} more — use --all to show all, or --limit N)")
+
+
+def cmd_get(session_id, sessions_dir, mode, msg_range, msg_num, max_msgs):
+    """Get session: outline mode (default) or expand mode (full content)."""
+    target = resolve_session(session_id, sessions_dir)
+    if not target:
+        print(f"Session '{session_id}' not found.")
+        # Show options
+        sessions = find_session_files(sessions_dir)
+        if sessions:
+            print("Available sessions (first 10):")
+            for s in sessions[:10]:
+                print(f"  {s['id']:<24} agent={s['agent']:<18} {s['message_count']} msgs")
+        else:
+            print(f"  No sessions in: {sessions_dir}")
+        sys.exit(1)
+        return
+
+    msgs = read_messages(target["path"])
+    if not msgs:
+        print(f"[empty session: {target['id']}]")
+        return
+
+    if mode == "outline":
+        _print_outline(target, msgs)
+    else:
+        _print_expand(target, msgs, msg_range, msg_num, max_msgs)
+
+
+def _print_outline(target, msgs):
+    """One-line-per-message outline — compact, context-efficient."""
+    total = len(msgs)
+    user_count = sum(1 for m in msgs if m.get("role") == "user")
+    asst_count = sum(1 for m in msgs if m.get("role") == "assistant")
+
+    # Header
+    start_ts = msgs[0].get("timestamp", 0)
+    end_ts = msgs[-1].get("timestamp", 0)
+    print(f"Session: {target['id']}  |  Agent: {target['agent']}")
+    print(f"Messages: {total} ({user_count} user, {asst_count} assistant)"
+          + (f"  |  {ts_format(start_ts)} ~ {ts_format(end_ts)}" if start_ts else ""))
+    print(f"Size: {target['size']/1024:.1f} KB")
+
+    # Tool usage summary (scan once, reuse)
+    tool_counts = {}
+    for msg in msgs:
+        if msg.get("role") == "assistant":
+            content = decode_content(msg)
+            if content:
+                for t in extract_tools(content):
+                    tool_counts[t] = tool_counts.get(t, 0) + 1
+    if tool_counts:
+        summary = ", ".join(f"{t}({c})" for t, c in
+                            sorted(tool_counts.items(), key=lambda x: -x[1]))
+        print(f"Tools: {summary}")
+    print()
+
+    # Per-message outline
+    line_limit = 200
+    for i, msg in enumerate(msgs):
+        if i >= line_limit:
+            remaining = total - i
+            print(f"... {remaining} more — use --range or --msg to drill down")
+            break
+
+        role = msg.get("role", "?")
+        content = decode_content(msg)
+        ts = ts_format(msg.get("timestamp", 0))
+        preview = content[:120].replace("\n", " ").strip()
+        if len(content) > 120:
+            preview = preview[:117] + "..."
+
+        tool_tag = ""
+        if role == "assistant":
+            tools = extract_tools(content)
+            if tools:
+                tool_tag = f"[{','.join(tools)}] "
+
+        print(f"#{i+1:<3} {ts:<5} {role:<9} {tool_tag}{preview}")
+
+
+def _print_expand(target, msgs, msg_range, msg_num, max_msgs):
+    """Full message content, limited to avoid context overflow."""
+    total = len(msgs)
+
+    if msg_num is not None:
+        idx = msg_num - 1
+        subset = [(msg_num, msgs[idx])] if 0 <= idx < total else []
+        if not subset:
+            print(f"Message #{msg_num} out of range (1-{total})")
+            return
+    elif msg_range:
+        parts = msg_range.split("-", 1)
+        try:
+            start = max(0, int(parts[0]) - 1)
+            end = min(total, int(parts[1]) if len(parts) > 1 else total)
+        except (ValueError, IndexError):
+            print(f"Invalid range: {msg_range} — use M-N format (e.g. --range 5-10)")
+            return
+        if start >= end:
+            print(f"Empty range: {msg_range}")
+            return
+        subset = [(i + 1, msgs[i]) for i in range(start, end)]
+    else:
+        # Default: last N messages (most recent = most relevant)
+        start = max(0, total - max_msgs)
+        subset = [(i + 1, msgs[i]) for i in range(start, total)]
+
+    print(f"Session: {target['id']}  |  Agent: {target['agent']}")
+    print(f"Showing {len(subset)} of {total} messages [--mode expand]")
+    print("=" * 60)
+
+    max_chars = 1500
+    for num, msg in subset:
+        role = msg.get("role", "?")
+        content = decode_content(msg)
+        ts = ts_format(msg.get("timestamp", 0), "%H:%M:%S")
+
+        if len(content) > max_chars:
+            content = content[:max_chars] + f"\n[... truncated, {len(content)} chars total]"
+
+        print(f"\n--- #{num} {role.upper()} [{ts}] ---")
+        print(content)
+
+
+def cmd_check(name, skills_dir):
+    """Check if an evolved skill already exists under skills/evolved/<name>/."""
+    evolved_dir = os.path.join(skills_dir, "evolved", name)
+    exists = os.path.isdir(evolved_dir) and os.path.isfile(
+        os.path.join(evolved_dir, "SKILL.md"))
+    print(json.dumps({"name": name, "exists": exists, "path": evolved_dir}))
+
+
+def cmd_dedup(skills_dir, json_output):
+    """List all evolved skills (for dedup reference)."""
+    evolved_dir = os.path.join(skills_dir, "evolved")
+    if not os.path.isdir(evolved_dir):
+        print(json.dumps([]) if json_output else "No evolved skills yet.")
+        return
+
+    skills = []
+    for name in sorted(os.listdir(evolved_dir)):
+        skill_path = os.path.join(evolved_dir, name, "SKILL.md")
+        if not os.path.isfile(skill_path):
+            continue
+        with open(skill_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        desc = ""
+        if content.startswith("---"):
+            end = content.find("---", 3)
+            if end > 0:
+                for line in content[3:end].strip().split("\n"):
+                    if line.startswith("description:"):
+                        desc = line[len("description:"):].strip().strip("'\"")
+                        break
+        skills.append({"name": name, "description": desc})
+
+    if json_output:
+        print(json.dumps(skills))
+        return
+
+    if skills:
+        print(f"Evolved skills ({len(skills)}):")
+        for s in skills:
+            desc_short = s["description"][:80].replace("\n", " ")
+            print(f"  {s['name']:<30} {desc_short}")
+    else:
+        print("No evolved skills yet.")
+
+
+# ---------------------------------------------------------------------------
+# CLI wiring
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Evolve helper — MindX session analysis for LLM consumption",
+        epilog="Default output is always compact to protect LLM context budget. "
+               "Use --mode expand, --range, or --msg to drill down.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # ---- list ----
+    p = sub.add_parser("list", help="List analyzable sessions (last 10 by default)")
+    p.add_argument("--sessions-dir", required=True, help="Path to sessions directory")
+    p.add_argument("--limit", type=int, default=10, help="Max sessions to show")
+    p.add_argument("--all", action="store_true", help="Show all sessions")
+    p.add_argument("--json", action="store_true", help="JSON output for machine consumption")
+
+    # ---- get ----
+    p = sub.add_parser("get", help="Get session content (outline by default)")
+    p.add_argument("session_id", help="Session ID (full or unique prefix)")
+    p.add_argument("--sessions-dir", required=True, help="Path to sessions directory")
+    p.add_argument("--mode", choices=["outline", "expand"], default="outline",
+                   help="outline=compact (default), expand=full content")
+    p.add_argument("--range", metavar="M-N", help="Message range to show, e.g. 5-10")
+    p.add_argument("--msg", type=int, help="Single message number to show in full")
+    p.add_argument("--max-msgs", type=int, default=10,
+                   help="Max messages in expand mode (default: 10)")
+
+    # ---- check ----
+    p = sub.add_parser("check", help="Check if evolved skill name is taken")
+    p.add_argument("name", help="Skill name to check")
+    p.add_argument("--skills-dir", required=True, help="Path to skills directory")
+
+    # ---- dedup ----
+    p = sub.add_parser("dedup", help="List already-evolved skills")
+    p.add_argument("--skills-dir", required=True, help="Path to skills directory")
+    p.add_argument("--json", action="store_true", help="JSON output")
+
+    args = parser.parse_args()
+
+    if args.command == "list":
+        cmd_list(args.sessions_dir, args.limit, args.all, args.json)
+    elif args.command == "get":
+        cmd_get(args.session_id, args.sessions_dir, args.mode,
+                args.range, args.msg, args.max_msgs)
+    elif args.command == "check":
+        cmd_check(args.name, args.skills_dir)
+    elif args.command == "dedup":
+        cmd_dedup(args.skills_dir, args.json)
+
+
+if __name__ == "__main__":
+    main()
