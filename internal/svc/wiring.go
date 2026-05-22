@@ -7,7 +7,7 @@ import (
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 )
 
-func RegisterBuiltinCommands(gw *gateway.Server, app *core.App) {
+func RegisterBuiltinCommands(gw *gateway.Server, app *core.App, d *Daemon) {
 	commands.SetCatalogDeps(commands.CatalogDeps{
 		ListAgents: func() ([]map[string]string, error) { return listAgents(app) },
 		ListModels: func() ([]map[string]string, error) { return listModels(app) },
@@ -15,8 +15,8 @@ func RegisterBuiltinCommands(gw *gateway.Server, app *core.App) {
 	})
 
 	commands.SetSchedulerDeps(commands.SchedulerDeps{
-		SchedulerDB: func() *scheduler.FileSchedulerStore { return nil },
-		Scheduler:   func() *scheduler.Scheduler { return nil },
+		SchedulerDB: func() *scheduler.FileSchedulerStore { return d.SchedulerDB() },
+		Scheduler:   func() *scheduler.Scheduler { return d.Scheduler() },
 	})
 
 	commands.New().RegisterAll(gw)

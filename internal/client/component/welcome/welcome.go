@@ -39,7 +39,7 @@ func (w *WelcomePanel) View() string {
 	b.WriteByte('\n')
 
 	if w.Data.Workspace != "" {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("white")).Render("Workspace: "))
+		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("white")).Render("Project: "))
 		b.WriteString(style.WhiteStyle.Render(w.Data.Workspace))
 		b.WriteByte('\n')
 	}
@@ -50,24 +50,12 @@ func (w *WelcomePanel) View() string {
 		b.WriteByte('\n')
 	}
 
-	if w.Data.AgentName != "" {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("white")).Render("Agent: "))
-		b.WriteString(style.WhiteStyle.Render(w.Data.AgentName))
-		b.WriteByte('\n')
-	}
-
-	if w.Data.ModelName != "" {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("white")).Render("Model: "))
-		b.WriteString(style.WhiteStyle.Render(w.Data.ModelName))
-		b.WriteByte('\n')
-	}
-
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(style.ThemePurple).
 		Padding(0, 1).
 		Width(w.Width).
-		Render(b.String())
+		Render(strings.TrimRight(b.String(), "\n"))
 }
 
 func (w *WelcomePanel) renderGradientTitle() string {

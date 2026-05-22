@@ -230,6 +230,122 @@ func (p *ProjectIndexer) Sync(ctx context.Context, projectDir string) *ProjectSy
 	return result
 }
 
+// SyncFiles indexes only the specified files (relative paths) under projectDir.
+// This is the incremental counterpart to Sync() — instead of walking the entire
+// directory tree, it processes only the files that have changed (e.g., from
+// fsnotify events). Deleted files are detected and removed from the cache/index.
+//
+// relFiles: list of file paths relative to projectDir that have changed.
+// deleted: if true, all relFiles are treated as deletions.
+func (p *ProjectIndexer) SyncFiles(ctx context.Context, projectDir string, relFiles []string, deleted bool) *ProjectSyncResult {
+	start := time.Now()
+	result := &ProjectSyncResult{}
+
+	absDir, err := filepath.Abs(projectDir)
+	if err != nil {
+		result.Err = fmt.Errorf("project_indexer: resolve project dir: %w", err)
+		return result
+	}
+
+	// Load rules and cache
+	p.ignore = LoadMindxIgnore(absDir)
+	if err := p.loadCache(); err != nil && p.logger != nil {
+		p.logger.Warn("project_indexer: failed to load cache, starting fresh", "error", err)
+	}
+
+	for _, relPath := range relFiles {
+		// Clean and normalize
+		relPath = filepath.ToSlash(filepath.Clean(relPath))
+		if relPath == "." || relPath == "" {
+			continue
+		}
+
+		// Check if this is a directory (skip — dirs aren't indexed directly)
+		absPath := filepath.Join(absDir, relPath)
+		info, statErr := os.Stat(absPath)
+		if statErr == nil && info.IsDir() {
+			continue
+		}
+
+		if deleted || os.IsNotExist(statErr) {
+			// File deleted: remove from cache and index
+			p.removeCachedFile(ctx, relPath, result)
+			continue
+		}
+		if statErr != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: stat error: %v", relPath, statErr))
+			continue
+		}
+
+		// Skip ignored files
+		if p.ignore.IsIgnored(relPath) {
+			result.Skipped++
+			continue
+		}
+
+		// File size limit
+		if info.Size() > MaxFileSize {
+			result.Skipped++
+			if p.logger != nil {
+				p.logger.Warn("project_indexer: file too large, skipped", "path", relPath, "size", info.Size())
+			}
+			continue
+		}
+
+		// Check cache: skip if unchanged
+		entry := p.cache.Get(relPath)
+		if entry != nil && entry.Mtime == info.ModTime().UnixNano() && entry.Size == info.Size() {
+			result.Skipped++
+			continue
+		}
+
+		// Index the file
+		chunks, idxErr := p.indexFile(ctx, absPath)
+		if idxErr != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", relPath, idxErr))
+			if p.logger != nil {
+				p.logger.Warn("project_indexer: index failed", "path", relPath, "error", idxErr)
+			}
+			continue
+		}
+
+		// Remove old chunks if re-indexing
+		if entry != nil && len(entry.Chunks) > 0 {
+			p.removeChunks(ctx, entry.Chunks)
+			result.Updated++
+		} else {
+			result.Indexed++
+		}
+
+		p.cache.Set(&projectFileEntry{
+			Path:   relPath,
+			Mtime:  info.ModTime().UnixNano(),
+			Size:   info.Size(),
+			Chunks: chunks,
+		})
+	}
+
+	// Persist cache
+	if saveErr := p.saveCache(); saveErr != nil && p.logger != nil {
+		p.logger.Warn("project_indexer: failed to save cache", "error", saveErr)
+	}
+
+	result.Elapsed = time.Since(start)
+	return result
+}
+
+// removeCachedFile removes a file's chunks from the index and cache.
+func (p *ProjectIndexer) removeCachedFile(ctx context.Context, relPath string, result *ProjectSyncResult) {
+	entry := p.cache.Get(relPath)
+	if entry != nil {
+		if len(entry.Chunks) > 0 {
+			p.removeChunks(ctx, entry.Chunks)
+		}
+		p.cache.Delete(relPath)
+		result.Removed++
+	}
+}
+
 // indexFile reads and indexes a single file, returning all chunk IDs.
 func (p *ProjectIndexer) indexFile(ctx context.Context, absPath string) ([]chunkInfo, error) {
 	chunks, err := p.indexer.AddFile(ctx, absPath)

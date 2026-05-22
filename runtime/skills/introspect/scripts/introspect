@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+"""
+Introspect helper — bridges MindX agent/skill definitions and LLM context window.
+
+Handles what the LLM can't: YAML frontmatter parsing, filesystem scanning, keyword matching.
+Default output is compact; use --json for machine-readable.
+All paths passed explicitly by LLM — no env var or default resolution.
+
+Usage:
+  introspect list-skills --skills-dir <path> [--json]
+  introspect list-agents --agents-dir <path> [--json]
+  introspect match <agent-name> --skills-dir <path> --agents-dir <path>
+"""
+
+import argparse
+import json
+import os
+import re
+import signal
+import sys
+import yaml
+
+PROG = os.path.basename(__file__)
+
+
+# ---------------------------------------------------------------------------
+# Signal safety
+# ---------------------------------------------------------------------------
+
+def _signal_handler(signum, frame):
+    sys.stderr.write(f"\n[{PROG}] interrupted\n")
+    sys.exit(130)
+
+signal.signal(signal.SIGINT, _signal_handler)
+signal.signal(signal.SIGTERM, _signal_handler)
+
+
+# ---------------------------------------------------------------------------
+# MindX data format bridge
+# ---------------------------------------------------------------------------
+
+def parse_frontmatter(filepath):
+    """Parse YAML frontmatter from .yml or .md (--- delimiters)."""
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception:
+        return None, ""
+
+    if content.startswith("---"):
+        end = content.find("---", 3)
+        if end > 0:
+            try:
+                fm = yaml.safe_load(content[3:end])
+                body = content[end + 3:].strip()
+                return fm, body
+            except Exception:
+                return None, content
+
+    # Plain .yml without delimiters
+    try:
+        fm = yaml.safe_load(content)
+        return fm, content
+    except Exception:
+        return None, content
+
+
+def get_skill_name_from_dir(skill_dir):
+    """Extract skill name from SKILL.md frontmatter; fallback to dirname."""
+    skill_md = os.path.join(skill_dir, "SKILL.md")
+    if os.path.isfile(skill_md):
+        fm, _ = parse_frontmatter(skill_md)
+        if fm and "name" in fm:
+            return fm["name"], fm.get("description", "")
+    return os.path.basename(skill_dir), ""
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+def cmd_list_skills(skills_dir, json_output):
+    """List all available skills — compact by default."""
+    results = []
+    if not os.path.isdir(skills_dir):
+        if json_output:
+            print(json.dumps([]))
+        else:
+            print(f"No skills directory: {skills_dir}")
+        return
+
+    for name in sorted(os.listdir(skills_dir)):
+        skill_path = os.path.join(skills_dir, name)
+        if not os.path.isdir(skill_path):
+            continue
+        sname, desc = get_skill_name_from_dir(skill_path)
+        if sname:
+            results.append({"name": sname, "description": desc})
+
+    if json_output:
+        print(json.dumps(results))
+        return
+
+    if not results:
+        print("No skills installed.")
+        return
+
+    print(f"Skills ({len(results)}):")
+    for s in results:
+        desc_short = s["description"][:80].replace("\n", " ")
+        print(f"  {s['name']:<28} {desc_short}")
+
+
+def cmd_list_agents(agents_dir, json_output):
+    """List all agent definitions — compact by default."""
+    results = []
+    if not os.path.isdir(agents_dir):
+        if json_output:
+            print(json.dumps([]))
+        else:
+            print(f"No agents directory: {agents_dir}")
+        return
+
+    for fname in sorted(os.listdir(agents_dir)):
+        fpath = os.path.join(agents_dir, fname)
+        if not os.path.isfile(fpath):
+            continue
+        fm, _ = parse_frontmatter(fpath)
+        if fm and "name" in fm:
+            results.append({
+                "name": fm["name"],
+                "role": fm.get("role", ""),
+                "description": fm.get("description", ""),
+                "skills": fm.get("skills", []),
+            })
+
+    if json_output:
+        print(json.dumps(results))
+        return
+
+    if not results:
+        print("No agents found.")
+        return
+
+    print(f"Agents ({len(results)}):")
+    for a in results:
+        skills_str = ", ".join(a["skills"]) if a["skills"] else "(none)"
+        role_short = a["role"][:24] if a["role"] else "(no role)"
+        print(f"  {a['name']:<20} {role_short:<26} [{skills_str}]")
+
+
+def cmd_match(agent_name, agents_dir, skills_dir):
+    """Score all skills against an agent's profile — structured JSON output."""
+    # Find agent
+    agent = None
+    if os.path.isdir(agents_dir):
+        for fname in sorted(os.listdir(agents_dir)):
+            fpath = os.path.join(agents_dir, fname)
+            if not os.path.isfile(fpath):
+                continue
+            fm, _ = parse_frontmatter(fpath)
+            if fm and fm.get("name") == agent_name:
+                agent = fm
+                break
+
+    if not agent:
+        print(json.dumps({"error": f"Agent '{agent_name}' not found"}))
+        # Show available agents
+        results = []
+        if os.path.isdir(agents_dir):
+            for fname in sorted(os.listdir(agents_dir)):
+                fpath = os.path.join(agents_dir, fname)
+                if not os.path.isfile(fpath):
+                    continue
+                fm, _ = parse_frontmatter(fpath)
+                if fm and "name" in fm:
+                    results.append(fm["name"])
+        if results:
+            print(f"Available: {', '.join(results)}", file=sys.stderr)
+        sys.exit(1)
+        return
+
+    role = agent.get("role", "").lower()
+    desc = agent.get("description", "").lower()
+    equipped = set(agent.get("skills", []))
+
+    # Build keyword profile from role + description
+    keywords = set()
+    keywords.add(role)
+    important_terms = [
+        "代码", "编码", "review", "测试", "debug", "架构", "设计",
+        "运维", "部署", "前端", "后端", "全栈", "数据", "安全",
+        "文档", "项目管理", "产品", "AI", "机器学习",
+        "file", "code", "test", "deploy", "design", "security",
+        "data", "documentation", "automation", "analysis",
+    ]
+    for term in important_terms:
+        if term.lower() in role or term.lower() in desc:
+            keywords.add(term.lower())
+
+    # Score all skills
+    all_skills = []
+    if os.path.isdir(skills_dir):
+        for name in sorted(os.listdir(skills_dir)):
+            skill_path = os.path.join(skills_dir, name)
+            if not os.path.isdir(skill_path):
+                continue
+            sname, sdesc = get_skill_name_from_dir(skill_path)
+            if sname:
+                all_skills.append({"name": sname, "description": sdesc.lower()})
+
+    matched = []
+    not_matched = []
+
+    for skill in all_skills:
+        sname = skill["name"]
+        sdesc = skill["description"]
+        score = 0.0
+
+        # Name overlap
+        name_parts = set(sname.replace("-", " ").split())
+        if name_parts & keywords:
+            score += 2.0
+
+        # Keyword match in description
+        for kw in keywords:
+            if kw in sdesc:
+                score += 1.0
+
+        # Role-specific boosts
+        if "developer" in role or "engineer" in role:
+            dev_skills = {"verify", "bug-hunter", "code-reviewer", "architect",
+                          "frontend-design", "docker-expert", "find-experts",
+                          "hook-development"}
+            if sname in dev_skills:
+                score += 1.5
+
+        if "architect" in role:
+            arch_skills = {"architect", "simplify", "design-md", "find-experts"}
+            if sname in arch_skills:
+                score += 1.5
+
+        if "assistant" in role or "manager" in role:
+            asst_skills = {"file-organizer", "pdf", "docx", "xlsx", "pptx",
+                           "changelog-generator", "schedule-cron", "find-skills"}
+            if sname in asst_skills:
+                score += 1.5
+
+        entry = {
+            "name": sname,
+            "description": skill["description"],
+            "score": round(score, 1),
+            "equipped": sname in equipped,
+        }
+
+        if score >= 2.0:
+            matched.append(entry)
+        else:
+            not_matched.append(entry)
+
+    matched.sort(key=lambda x: (-x["score"], x["name"]))
+    not_matched.sort(key=lambda x: (-x["score"], x["name"]))
+
+    orphaned = [s["name"] for s in not_matched if s["equipped"]]
+
+    result = {
+        "agent_name": agent_name,
+        "role": agent.get("role", ""),
+        "equipped_skills": list(equipped),
+        "recommended": [s for s in matched if not s["equipped"]],
+        "orphaned": orphaned,
+        "already_equipped": [s for s in matched if s["equipped"]],
+    }
+
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+# ---------------------------------------------------------------------------
+# CLI wiring
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Introspect helper — MindX skill-agent matching for LLM consumption",
+        epilog="Default output is compact to protect LLM context budget. "
+               "Use --json for machine-readable output.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # list-skills
+    p = sub.add_parser("list-skills", help="List all skills (compact by default)")
+    p.add_argument("--skills-dir", required=True, help="Path to skills directory")
+    p.add_argument("--json", action="store_true", help="JSON output")
+
+    # list-agents
+    p = sub.add_parser("list-agents", help="List all agents (compact by default)")
+    p.add_argument("--agents-dir", required=True, help="Path to agents directory")
+    p.add_argument("--json", action="store_true", help="JSON output")
+
+    # match
+    p = sub.add_parser("match", help="Match skills to an agent profile")
+    p.add_argument("agent_name", help="Agent name (must match name in agent definition)")
+    p.add_argument("--skills-dir", required=True, help="Path to skills directory")
+    p.add_argument("--agents-dir", required=True, help="Path to agents directory")
+
+    args = parser.parse_args()
+
+    if args.command == "list-skills":
+        cmd_list_skills(args.skills_dir, args.json)
+    elif args.command == "list-agents":
+        cmd_list_agents(args.agents_dir, args.json)
+    elif args.command == "match":
+        cmd_match(args.agent_name, args.agents_dir, args.skills_dir)
+
+
+if __name__ == "__main__":
+    main()

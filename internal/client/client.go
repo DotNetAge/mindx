@@ -36,6 +36,7 @@ type rootModel struct {
 	viewport         viewport.Model
 	termWidth        int
 	termHeight       int
+	scrollToBottom   bool
 
 	app      *appcore.App
 	registry *SlashCommandRegistry
@@ -253,6 +254,7 @@ func (m *rootModel) loadSessionHistory() {
 	}
 	convs := messagesToConversations(sessionID, agentName, msgs)
 	m.conversationList.Conversations = append(m.conversationList.Conversations, convs...)
+	m.scrollToBottom = true
 }
 
 func (m *rootModel) populateWelcome() {
@@ -268,6 +270,12 @@ func (m *rootModel) populateWelcome() {
 	if sessionMeta != nil {
 		m.welcome.Data.Workspace = sessionMeta.GetProjectDir()
 		m.welcome.Data.SessionID = sessionMeta.SessionID
+	}
+	// Fallback to actual working directory when no session is loaded yet
+	if m.welcome.Data.Workspace == "" {
+		if wd, err := os.Getwd(); err == nil {
+			m.welcome.Data.Workspace = wd
+		}
 	}
 
 	if m.agent != nil {
@@ -902,6 +910,11 @@ func (m *rootModel) View() tea.View {
 
 	// Update viewport content from conversation list
 	m.viewport.SetContent(m.conversationList.View())
+
+	if m.scrollToBottom {
+		m.viewport.GotoBottom()
+		m.scrollToBottom = false
+	}
 
 	// Compose full layout
 	var out strings.Builder

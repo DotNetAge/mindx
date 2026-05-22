@@ -219,6 +219,12 @@ func (m *RAGMemory) MemoryType() core.MemoryType {
 	return m.memoryType
 }
 
+// Indexer returns the underlying HybridIndexer for direct file indexing.
+// Used by FileWatchService to keep LongTerm memory in sync with disk changes.
+func (m *RAGMemory) Indexer() *gorag.HybridIndexer {
+	return m.indexer
+}
+
 // Retrieve searches memory for records relevant to the query.
 // Uses the HybridIndexer's Search with a semantic query for best results.
 func (m *RAGMemory) Retrieve(ctx context.Context, query string, opts ...core.RetrieveOption) ([]core.MemoryRecord, error) {

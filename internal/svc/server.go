@@ -42,5 +42,5 @@ func (s *Server) RegisterBuiltinCommands() {
 	if s.daemon.gw == nil {
 		s.daemon.initGateway()
 	}
-	RegisterBuiltinCommands(s.daemon.gw, s.app)
+	RegisterBuiltinCommands(s.daemon.gw, s.app, s.daemon)
 }
