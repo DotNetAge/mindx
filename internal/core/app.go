@@ -287,11 +287,18 @@ func (a *App) currentAgent() (*goreact.Agent, error) {
 	resolvedModel = *modelCfg
 	resolvedModel.APIKey = a.resolveAPIKey(resolvedModel.APIKey)
 
+	cacheDir := filepath.Join(a.settings.DataDir(), "cache")
+	kvStore, _ := core.NewFileSystemKVStore(cacheDir)
+
 	opts := []goreact.AgentOption{
 		goreact.WithSkillDir(a.settings.SkillsDir()),
 		goreact.WithConfig(agent),
 		goreact.WithModel(&resolvedModel),
 		goreact.WithLogger(a.logger),
+	}
+
+	if kvStore != nil {
+		opts = append(opts, goreact.WithKVStore(kvStore))
 	}
 
 	if a.mindxConfig != nil && a.mindxConfig.LastSessionID != "" {
@@ -395,11 +402,18 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 	resolvedModel := *modelCfg
 	resolvedModel.APIKey = a.resolveAPIKey(modelCfg.APIKey)
 
+	cacheDir := filepath.Join(a.settings.DataDir(), "cache")
+	kvStore, _ := core.NewFileSystemKVStore(cacheDir)
+
 	opts := []goreact.AgentOption{
 		goreact.WithSkillDir(a.settings.SkillsDir()),
 		goreact.WithConfig(cfg),
 		goreact.WithModel(&resolvedModel),
 		goreact.WithLogger(a.logger),
+	}
+
+	if kvStore != nil {
+		opts = append(opts, goreact.WithKVStore(kvStore))
 	}
 
 	if a.mindxConfig != nil && a.mindxConfig.LastSessionID != "" {
