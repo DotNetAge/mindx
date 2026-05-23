@@ -48,8 +48,7 @@ func (m model) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "3":
 			m.thought = conv.Thought{
-				Pending:  "思考引擎正在准备，尚未产生任何历史日志...",
-				IsActive: true,
+					IsActive: true,
 			}
 			return m, tickCmd()
 		}

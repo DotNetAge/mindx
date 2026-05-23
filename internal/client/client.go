@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"charm.land/bubbles/v2/timer"
@@ -44,6 +46,9 @@ type rootModel struct {
 
 	eventDone   chan struct{}
 	msgCh       chan tea.Msg
+	eventLoopMu sync.Mutex     // guards startEventLoop/stopEventLoop
+	eventLoopWg sync.WaitGroup // tracks event loop goroutines
+	eventsOn    atomic.Bool    // true while event loop is operational
 	executing   bool
 	postExitCmd string
 
@@ -56,6 +61,13 @@ type rootModel struct {
 type pendingPermissionState struct {
 	responder goreactcore.PermissionResponder
 	req       clientmsg.PermissionRequestMsg
+}
+
+func (m *rootModel) getLogger() goreactcore.Logger {
+	if m.app != nil {
+		return m.app.Logger()
+	}
+	return nil
 }
 
 var pendingPostExitCmd string
@@ -297,71 +309,144 @@ func (m *rootModel) startEventLoop() {
 	if m.app == nil || m.agent == nil {
 		return
 	}
-	m.stopEventLoop()
+	m.eventLoopMu.Lock()
+	defer m.eventLoopMu.Unlock()
+
+	if m.eventsOn.Load() {
+		return
+	}
+
+	// Stop any previous loop first
+	m.stopEventLoopLocked()
 
 	m.eventDone = make(chan struct{})
 	m.msgCh = make(chan tea.Msg, 2048)
+	m.eventsOn.Store(true)
 
-	go func() {
-		defer func() {
-			if p := recover(); p != nil {
-				fmt.Printf("[mindx] event subscriber panicked: %v\n", p)
+	m.eventLoopWg.Add(1)
+	go m.eventSubscriberLoop()
+
+	m.eventLoopWg.Add(1)
+	go m.eventForwarderLoop()
+}
+
+// eventSubscriberLoop subscribes to the reactor event bus and forwards
+// events to msgCh. Automatically re-subscribes when the channel is closed
+// by the event bus, until shutdown is signalled.
+func (m *rootModel) eventSubscriberLoop() {
+	defer m.eventLoopWg.Done()
+	defer func() {
+		if p := recover(); p != nil {
+			if l := m.getLogger(); l != nil {
+				l.Warn("event subscriber recovered", "panic", p)
 			}
-		}()
+		}
+	}()
 
+	if l := m.getLogger(); l != nil {
+		l.Info("event subscriber loop started")
+	}
+
+	subCount := 0
+	for {
 		bus := m.agent.Reactor().EventBus()
 		if bus == nil {
+			if l := m.getLogger(); l != nil {
+				l.Info("event subscriber loop exit -- reactor event bus is nil")
+			}
 			return
 		}
 		eventCh, cancel := bus.Subscribe()
-		defer cancel()
+		subCount++
+		if l := m.getLogger(); l != nil {
+			l.Info("subscribed to event bus", "sub_attempt", subCount)
+		}
 
-		for {
-			select {
-			case evt, ok := <-eventCh:
-				if !ok {
+		func() {
+			defer cancel()
+			for {
+				select {
+				case evt, ok := <-eventCh:
+					if !ok {
+						if l := m.getLogger(); l != nil {
+							l.Info("event channel closed, re-subscribing", "sub_attempt", subCount)
+						}
+						return
+					}
+					msg := m.convertEvent(evt)
+					if msg != nil {
+						select {
+						case m.msgCh <- msg:
+						default:
+							if l := m.getLogger(); l != nil {
+								l.Warn("msgCh full, dropping event", "type", evt.Type, "session_id", evt.SessionID)
+							}
+						}
+					}
+				case <-m.eventDone:
+					if l := m.getLogger(); l != nil {
+						l.Info("event subscriber loop stopping -- shutdown signal")
+					}
 					return
 				}
-				msg := m.convertEvent(evt)
-				if msg != nil {
-					select {
-					case m.msgCh <- msg:
-					default:
-					}
-				}
-			case <-m.eventDone:
-				return
-			}
-		}
-	}()
-
-	go func() {
-		defer func() {
-			if p := recover(); p != nil {
-				fmt.Printf("[mindx] msg forwarder panicked: %v\n", p)
 			}
 		}()
 
-		for {
-			select {
-			case msg, ok := <-m.msgCh:
-				if !ok {
-					return
-				}
-				// Fire-and-forget to prevent blocking the event pipeline
-				// when bubbletea's render cycle is under load.
-				go m.program.Send(msg)
-			case <-m.eventDone:
-				return
+		// Check for shutdown before re-subscribing
+		select {
+		case <-m.eventDone:
+			if l := m.getLogger(); l != nil {
+				l.Info("event subscriber loop exit -- shutdown during reconnect")
+			}
+			return
+		default:
+		}
+
+		// Brief delay to avoid busy-loop on repeated reconnects
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// eventForwarderLoop reads from msgCh and forwards messages to the bubbletea program.
+func (m *rootModel) eventForwarderLoop() {
+	defer m.eventLoopWg.Done()
+	defer func() {
+		if p := recover(); p != nil {
+			if l := m.getLogger(); l != nil {
+				l.Warn("msg forwarder recovered", "panic", p)
 			}
 		}
 	}()
+
+	if l := m.getLogger(); l != nil {
+		l.Info("event forwarder loop started")
+	}
+
+	for {
+		select {
+		case msg, ok := <-m.msgCh:
+			if !ok {
+				if l := m.getLogger(); l != nil {
+					l.Info("event forwarder loop exit -- msgCh closed")
+				}
+				return
+			}
+			// Fire-and-forget to prevent blocking the event pipeline
+			// when bubbletea's render cycle is under load.
+			go m.program.Send(msg)
+		case <-m.eventDone:
+			if l := m.getLogger(); l != nil {
+				l.Info("event forwarder loop stopping -- shutdown signal")
+			}
+			return
+		}
+	}
 }
 
 func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 	switch evt.Type {
 	case goreactcore.ThinkingDelta:
-		return clientmsg.ThinkingDeltaMsg{SessionID: evt.SessionID, Content: toString(evt.Data)}
+		return clientmsg.ThinkingDeltaMsg{SessionID: evt.SessionID}
 	case goreactcore.ThinkingDone:
 		doneMsg := clientmsg.ThinkingDoneMsg{SessionID: evt.SessionID}
 		if thought, ok := evt.Data.(map[string]any); ok {
@@ -437,6 +522,10 @@ func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 		}
 	case goreactcore.FinalAnswer:
 		return clientmsg.FinalAnswerMsg{SessionID: evt.SessionID, Content: toString(evt.Data)}
+	case goreactcore.CycleEnd:
+		if data, ok := evt.Data.(goreactcore.CycleInfo); ok {
+			return clientmsg.IterationMsg{SessionID: evt.SessionID, Iteration: data.Iteration}
+		}
 	case goreactcore.Error:
 		return clientmsg.AgentErrorMsg{SessionID: evt.SessionID, Error: errors.New(toString(evt.Data))}
 	case goreactcore.LLMTimeout:
@@ -475,14 +564,41 @@ func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 }
 
 func (m *rootModel) stopEventLoop() {
+	m.eventLoopMu.Lock()
+	defer m.eventLoopMu.Unlock()
+	m.stopEventLoopLocked()
+}
+
+// stopEventLoopLocked requires m.eventLoopMu to be held.
+func (m *rootModel) stopEventLoopLocked() {
+	if !m.eventsOn.CompareAndSwap(true, false) {
+		return
+	}
+
 	if m.eventDone != nil {
 		close(m.eventDone)
-		m.eventDone = nil
 	}
+
+	// Wait for goroutines to finish, with timeout
+	doneCh := make(chan struct{})
+	go func() {
+		m.eventLoopWg.Wait()
+		close(doneCh)
+	}()
+
+	select {
+	case <-doneCh:
+	case <-time.After(5 * time.Second):
+		if l := m.getLogger(); l != nil {
+			l.Warn("event loop goroutines did not finish within 5s timeout")
+		}
+	}
+
 	if m.msgCh != nil {
 		close(m.msgCh)
 		m.msgCh = nil
 	}
+	m.eventDone = nil
 }
 
 func toString(data any) string {
@@ -490,6 +606,18 @@ func toString(data any) string {
 		return s
 	}
 	return fmt.Sprintf("%v", data)
+}
+
+// updateConversation updates the conversation list with msg and optionally
+// scrolls the viewport to the bottom. Used by most Update cases to eliminate
+// the repeated 3-line pattern.
+func (m *rootModel) updateConversation(msg tea.Msg, scrollToBottom bool) (tea.Model, tea.Cmd) {
+	if scrollToBottom {
+		m.scrollToBottom = true
+	}
+	newList, cmd := m.conversationList.Update(msg)
+	m.conversationList = newList
+	return m, cmd
 }
 
 func (m *rootModel) Init() tea.Cmd {
@@ -505,6 +633,13 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeViewport(msg.Width, msg.Height)
 
 	case tea.KeyPressMsg:
+		if m.choices.Visible {
+			_, choicesCmd := m.choices.Update(msg)
+			newVp, vpCmd := m.viewport.Update(msg)
+			m.viewport = newVp
+			return m, tea.Batch(choicesCmd, vpCmd)
+		}
+
 		m.input.Executing = m.executing
 		_, inputCmd := m.input.Update(msg)
 		newVp, vpCmd := m.viewport.Update(msg)
@@ -531,9 +666,7 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	case clientmsg.SessionDoneMsg:
 		m.executing = false
 		m.statusBar.CurrentState = "空闲"
-		newList, cmd := m.conversationList.Update(msg)
-		m.conversationList = newList
-		return m, cmd
+		return m.updateConversation(msg, true)
 
 	case clientmsg.AgentErrorMsg:
 		m.executing = false
@@ -541,65 +674,45 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		if !errors.Is(msg.Error, context.Canceled) {
 			m.statusBar.CurrentState = "出错"
 		}
-		newList, cmd := m.conversationList.Update(msg)
-		m.conversationList = newList
-		return m, cmd
+		return m.updateConversation(msg, false)
 
 	case timer.TickMsg:
 		m.statusBar.Tick()
-		newList, cmd := m.conversationList.Update(msg)
-		m.conversationList = newList
-		return m, cmd
+		return m.updateConversation(msg, false)
 
 	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg:
 		m.statusBar.CurrentState = "思考中"
-		newList, cmd := m.conversationList.Update(msg)
-		m.conversationList = newList
-		return m, cmd
+		return m.updateConversation(msg, true)
 
 	case clientmsg.ToolExecStartMsg, clientmsg.ToolExecEndMsg,
 		clientmsg.ActionProgressMsg:
 		m.statusBar.CurrentState = "执行中"
-		newList, cmd := m.conversationList.Update(msg)
-		m.conversationList = newList
-		return m, cmd
+		return m.updateConversation(msg, true)
 
 	case clientmsg.ExecutionSummaryMsg:
 		m.statusBar.Update(msg)
-		newList, cmd := m.conversationList.Update(msg)
-		m.conversationList = newList
-		return m, cmd
+		return m.updateConversation(msg, true)
 
 	case clientmsg.ActionEndMsg:
 		m.statusBar.CurrentState = "正在获取结果"
-		newList, cmd := m.conversationList.Update(msg)
-		m.conversationList = newList
-		return m, cmd
+		return m.updateConversation(msg, true)
 
 	case clientmsg.FinalAnswerMsg:
 		m.statusBar.CurrentState = "完成"
 		m.statusBar.Update(msg)
-		newList, cmd := m.conversationList.Update(msg)
-		m.conversationList = newList
-		return m, cmd
+		return m.updateConversation(msg, true)
 
 	case clientmsg.ActionStartMsg:
 		m.statusBar.CurrentState = "执行中"
 		m.statusBar.Update(msg)
-		newList, cmd := m.conversationList.Update(msg)
-		m.conversationList = newList
-		return m, cmd
+		return m.updateConversation(msg, true)
 
 	case clientmsg.CollapseToggleMsg, clientmsg.ThinkCollapseMsg:
-		newList, cmd := m.conversationList.Update(msg)
-		m.conversationList = newList
-		return m, cmd
+		return m.updateConversation(msg, false)
 
 	case clientmsg.ClearScreenMsg:
 		m.statusBar.CurrentState = "空闲"
-		newList, cmd := m.conversationList.Update(msg)
-		m.conversationList = newList
-		return m, cmd
+		return m.updateConversation(msg, false)
 
 	case clientmsg.ChoiceSelectedMsg:
 		_, cmd := m.choices.Update(msg)
@@ -737,9 +850,23 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 	m.statusBar.SessionStart = time.Now()
 	m.statusBar.SessionDuration = 0
 	agent := m.agent
-	sessionID := agent.SessionID()
+
+	sessionID := ""
+	if meta := m.app.CurrentSessionMeta(); meta != nil && meta.SessionID != "" {
+		sessionID = meta.SessionID
+	} else if agent != nil {
+		sessionID = agent.SessionID()
+	}
 	if sessionID == "" {
 		sessionID = "main"
+	}
+
+	preview := e.Text
+	if len([]rune(preview)) > 80 {
+		preview = string([]rune(preview)[:80]) + "..."
+	}
+	if l := m.getLogger(); l != nil {
+		l.Info("user send", "session", sessionID, "preview", preview)
 	}
 
 	newConv := conv.NewConversation(sessionID, agent.Name(), e.Text)
@@ -747,6 +874,7 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 	m.conversationList.MarkDirty()
 
 	go func() {
+		sendStart := time.Now()
 		defer func() {
 			if p := recover(); p != nil {
 				m.program.Send(clientmsg.AgentErrorMsg{
@@ -757,8 +885,16 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		}()
 
 		_, err := agent.Ask(sessionID, e.Text)
+		elapsed := time.Since(sendStart)
 		if err != nil {
+			if l := m.getLogger(); l != nil {
+				l.Warn("agent ask error", "session", sessionID, "elapsed_ms", elapsed.Milliseconds(), "error", err)
+			}
 			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: err})
+		} else {
+			if l := m.getLogger(); l != nil {
+				l.Info("agent ask done", "session", sessionID, "elapsed_ms", elapsed.Milliseconds())
+			}
 		}
 		m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
 	}()
@@ -800,7 +936,18 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 
 	switch e.Name {
 	case "chat":
-		m.refreshAfterChatOp(result)
+		clearCmd := m.refreshAfterChatOp(result)
+		if result.Message != "" {
+			level := data.NotifInfo
+			if result.Success {
+				level = data.NotifSuccess
+			}
+			return m, tea.Batch(
+				m.notifBar.Add(data.Notification{Message: result.Message, Level: level}),
+				clearCmd,
+			)
+		}
+		return m, clearCmd
 	case "model":
 		if len(e.Args) > 0 && result.Success {
 			modelName := e.Args[0]
@@ -831,9 +978,9 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 	return m, nil
 }
 
-func (m *rootModel) refreshAfterChatOp(result CommandResult) {
+func (m *rootModel) refreshAfterChatOp(result CommandResult) tea.Cmd {
 	if !result.Success {
-		return
+		return nil
 	}
 
 	sessionMeta := m.app.CurrentSessionMeta()
@@ -843,6 +990,7 @@ func (m *rootModel) refreshAfterChatOp(result CommandResult) {
 			SessionID: sessionMeta.SessionID,
 		})
 		m.statusBar.AgentName = sessionMeta.AgentName
+		m.welcome.Data.SessionID = sessionMeta.SessionID
 	}
 	if m.agent != nil && m.agent.Model() != nil {
 		m.statusBar.ModelName = m.agent.Model().Name
@@ -852,6 +1000,10 @@ func (m *rootModel) refreshAfterChatOp(result CommandResult) {
 	m.loadSessionHistory()
 	newSessions, _ := loadRecentSessions(m.app)
 	m.input.Sessions = newSessions
+
+	return func() tea.Msg {
+		return clientmsg.ClearScreenMsg{}
+	}
 }
 
 func reloadModels(app *appcore.App) ([]input.ModelItem, error) {
@@ -876,24 +1028,33 @@ func (m *rootModel) View() tea.View {
 	statusView := m.statusBar.View()
 	inputView := m.input.View()
 
-	// Build header: welcome + optional notifications + choices
+	// Build header: welcome + optional notifications only
 	var header strings.Builder
 	header.WriteString(welcomeView)
 	if notifView != "" {
 		header.WriteString("\n")
 		header.WriteString(notifView)
 	}
-	if choicesView != "" {
-		header.WriteString("\n")
-		header.WriteString(choicesView)
-	}
 	headerStr := header.String()
 
-	// Build footer: statusbar + input
+	// Build footer: statusbar + (input OR choices, mutually exclusive)
 	var footer strings.Builder
 	footer.WriteString(statusView)
 	footer.WriteString("\n")
-	footer.WriteString(inputView)
+
+	if m.choices.Visible {
+		// Show choices panel, hide input
+		m.input.Hidden = true
+		if choicesView != "" {
+			footer.WriteString(choicesView)
+		}
+	} else {
+		// Show input, hide choices
+		m.input.Hidden = false
+		if inputView != "" {
+			footer.WriteString(inputView)
+		}
+	}
 	footerStr := footer.String()
 
 	// Dynamically compute viewport height from actual rendered line counts.
@@ -926,5 +1087,6 @@ func (m *rootModel) View() tea.View {
 
 	v := tea.NewView(out.String())
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }

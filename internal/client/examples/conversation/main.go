@@ -99,7 +99,6 @@ func popRunningConv() conv.Conversation {
 
 	c.Rounds = append(c.Rounds, conv.ThoughtActionRound{
 		Thought: conv.Thought{
-			Pending:  "正在分析错误日志...",
 			IsActive: true,
 		},
 		Action: conv.Action{
@@ -125,7 +124,6 @@ func popThinkingConv() conv.Conversation {
 
 	c.Rounds = append(c.Rounds, conv.ThoughtActionRound{
 		Thought: conv.Thought{
-			Pending:  "正在检索项目结构，分析模块依赖关系，评估技术选型方案...\n考虑使用 clean architecture 分层设计，确保各模块职责清晰。",
 			IsActive: true,
 		},
 	})

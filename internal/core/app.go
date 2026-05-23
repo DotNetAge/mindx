@@ -197,6 +197,10 @@ func (a *App) SetLogger(l logging.Logger) {
 	a.logger = l
 }
 
+func (a *App) Logger() logging.Logger {
+	return a.logger
+}
+
 // CurrentSessionMeta returns the metadata for the current active session.
 func (a *App) CurrentSessionMeta() *core.SessionInfo {
 	return a.currentSessionMeta
@@ -300,6 +304,12 @@ func (a *App) currentAgent() (*goreact.Agent, error) {
 
 	if a.sessDB != nil {
 		opts = append(opts, goreact.WithSessionStore(a.sessDB))
+	}
+
+	if a.currentSessionMeta == nil && a.sessDB != nil && a.mindxConfig != nil && a.mindxConfig.LastSessionID != "" {
+		if si, err := a.sessDB.GetMeta(context.Background(), a.mindxConfig.LastSessionID); err == nil {
+			a.currentSessionMeta = si
+		}
 	}
 
 	if a.currentSessionMeta != nil {

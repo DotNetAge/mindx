@@ -16,7 +16,7 @@ type model struct {
 }
 
 func (m model) Init() tea.Cmd {
-	return m.reasoning.Spinner.Tick
+	return m.tick()
 }
 
 func (m model) Update(e tea.Msg) (tea.Model, tea.Cmd) {
@@ -30,40 +30,42 @@ func (m model) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "1":
 			m.reasoning = conv.NewReasoning()
-			return m, m.reasoning.Spinner.Tick
+			return m, tea.Batch(m.tick(), m.reasoningCmd())
 		case "2":
 			m.reasoning = conv.Reasoning{
-				Label:    "深度思考",
-				Result:   "用户询问 Go 版本，需要读取 go.mod 文件获取信息。",
-				IsActive: false,
+				Label:     "深度思考",
+				IsActive:  false,
+				StartTime: time.Now().Add(-1200 * time.Millisecond),
+				Duration:  1200 * time.Millisecond,
 			}
 			return m, nil
 		case "3":
 			m.reasoning = conv.NewReasoning().WithLabel("Thinking")
-			return m, m.reasoning.Spinner.Tick
+			return m, tea.Batch(m.tick(), m.reasoningCmd())
 		case "4":
 			m.reasoning = conv.Reasoning{
-				Label:    "Thinking",
-				Result:   "The user is asking about the Go version. I need to check the go.mod file.",
-				IsActive: false,
+				Label:     "Thinking",
+				IsActive:  false,
+				StartTime: time.Now().Add(-800 * time.Millisecond),
+				Duration:  800 * time.Millisecond,
 			}
 			return m, nil
 		case "5":
-			go func() {
-				time.Sleep(2 * time.Second)
-				doneMsg := msg.ThinkingDoneMsg{
-					SessionID: "demo",
-					Reasoning: "经过分析，这是一个使用 bubbletea v2 框架的终端应用项目。",
-				}
-				_ = doneMsg
-			}()
 			m.reasoning = conv.NewReasoning()
-			return m, m.reasoning.Spinner.Tick
+			go func() {
+				time.Sleep(3 * time.Second)
+			}()
+			return m, tea.Batch(m.tick(), m.reasoningCmd())
 		}
 		return m, nil
 	default:
 		newReasoning, cmd := conv.UpdateReasoning(m.reasoning, e)
 		m.reasoning = newReasoning
+
+		if _, ok := e.(msg.ThinkingDoneMsg); ok {
+			return m, nil
+		}
+
 		return m, cmd
 	}
 }
@@ -76,6 +78,22 @@ func (m model) View() tea.View {
 
 	hint := "\n按 1 中文思考中(动画) | 按 2 中文结果 | 按 3 英文思考中(动画) | 按 4 英文结果 | 按 5 模拟完整流程 | 按 q 退出\n"
 	return tea.NewView(view + hint)
+}
+
+func (m model) tick() tea.Cmd {
+	return tea.Every(conv.StandardTickInterval, func(t time.Time) tea.Msg {
+		return msg.TickMsg{Time: t}
+	})
+}
+
+func (m model) reasoningCmd() tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(3 * time.Second)
+		return msg.ThinkingDoneMsg{
+			SessionID: "demo",
+			Reasoning: "经过分析，这是一个使用 bubbletea v2 框架的终端应用项目。",
+		}
+	}
 }
 
 func main() {
