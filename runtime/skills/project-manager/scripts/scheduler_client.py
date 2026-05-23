@@ -68,7 +68,7 @@ except ImportError:
 # ====== Configuration ======
 
 DEFAULT_GATEWAY_HOST = "localhost"
-DEFAULT_GATEWAY_PORT = 8081
+DEFAULT_GATEWAY_PORT = 1314
 DEFAULT_GATEWAY_PATH = "/ws"
 DEFAULT_TIMEOUT = 30  # seconds
 

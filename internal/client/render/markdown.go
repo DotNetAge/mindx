@@ -18,7 +18,7 @@ var cache = &cachedRenderer{
 
 func init() {
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle("dark"),
+		glamour.WithStandardStyle("pink"),
 	)
 	if err != nil {
 		return
@@ -47,7 +47,7 @@ func getRenderer(width int) *glamour.TermRenderer {
 	}
 
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle("dark"),
+		glamour.WithStandardStyle("pink"),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {

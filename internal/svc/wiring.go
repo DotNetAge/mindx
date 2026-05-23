@@ -9,9 +9,9 @@ import (
 
 func RegisterBuiltinCommands(gw *gateway.Server, app *core.App, d *Daemon) {
 	commands.SetCatalogDeps(commands.CatalogDeps{
-		ListAgents: func() ([]map[string]string, error) { return listAgents(app) },
-		ListModels: func() ([]map[string]string, error) { return listModels(app) },
-		ListSkills: func() ([]map[string]string, error) { return listSkills(app) },
+		ListAgents: func() ([]map[string]string, error) { return listAgents(app), nil },
+		ListModels: func() ([]map[string]string, error) { return listModels(app), nil },
+		ListSkills: func() ([]map[string]string, error) { return listSkills(app), nil },
 	})
 
 	commands.SetSchedulerDeps(commands.SchedulerDeps{
@@ -26,7 +26,7 @@ func GetCommandMetas() []gateway.CommandMeta {
 	return commands.New().Metas()
 }
 
-func listAgents(app *core.App) ([]map[string]string, error) {
+func listAgents(app *core.App) []map[string]string {
 	registry := app.Agents()
 	agents := registry.List()
 	activeName := app.CurrentAgentName()
@@ -44,16 +44,16 @@ func listAgents(app *core.App) ([]map[string]string, error) {
 		}
 		result = append(result, entry)
 	}
-	return result, nil
+	return result
 }
 
-func listSkills(app *core.App) ([]map[string]string, error) {
+func listSkills(app *core.App) []map[string]string {
 	m, err := app.CurrentAgent()
 	if err != nil {
-		return []map[string]string{}, nil
+		return []map[string]string{}
 	}
 	if m.Reactor() == nil {
-		return []map[string]string{}, nil
+		return []map[string]string{}
 	}
 	skills := m.Reactor().SkillRegistry().ListSkills()
 
@@ -64,10 +64,10 @@ func listSkills(app *core.App) ([]map[string]string, error) {
 			"description": skill.Description,
 		})
 	}
-	return result, nil
+	return result
 }
 
-func listModels(app *core.App) ([]map[string]string, error) {
+func listModels(app *core.App) []map[string]string {
 	models := app.Models().List()
 	var result []map[string]string
 	for _, model := range models {
@@ -76,5 +76,5 @@ func listModels(app *core.App) ([]map[string]string, error) {
 			"description": model.Description,
 		})
 	}
-	return result, nil
+	return result
 }

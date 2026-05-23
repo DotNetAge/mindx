@@ -1,15 +1,19 @@
 package svc
 
 import (
+	cryptorand "crypto/rand"
 	"fmt"
 	"time"
 	"unicode/utf8"
 
-	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 )
 
+var ulidEntropy = ulid.Monotonic(cryptorand.Reader, 0)
+
 func generateSessionID() string {
-	return fmt.Sprintf("sess_%s", uuid.New().String()[:8])
+	uid := ulid.MustNew(ulid.Timestamp(time.Now()), ulidEntropy)
+	return uid.String()
 }
 
 func formatDuration(d time.Duration) string {

@@ -1,46 +1,24 @@
 #!/usr/bin/env python3
 """
-List available models from models.yml.
+List available models via daemon RPC.
 
 Usage:
-    python list_models.py --models-file <path/to/models.yml>
+    python list_models.py
 
-Output: JSON array of model summaries.
+Output: JSON array of model summaries with name, description, and max_tokens.
 """
 
+import json
 import os
 import sys
-import argparse
 
-# Add scripts dir to path for yaml_helper import
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import yaml_helper
+import rpc_client
 
 
 def main():
-    parser = argparse.ArgumentParser(description="List available models")
-    parser.add_argument("--models-file", required=True, help="Path to models.yml")
-    args = parser.parse_args()
-
-    if not os.path.isfile(args.models_file):
-        yaml_helper.fail(f"Models file not found: {args.models_file}")
-
-    data = yaml_helper.parse_yaml_file(args.models_file)
-    models = data.get("models", [])
-
-    summaries = []
-    for m in models:
-        if not isinstance(m, dict):
-            continue
-        if not m.get("enabled", True):
-            continue
-        summaries.append({
-            "name": m.get("name", ""),
-            "description": m.get("description", ""),
-            "max_tokens": m.get("max_tokens", None),
-        })
-
-    yaml_helper.output_json(summaries)
+    result = rpc_client.rpc_call("model.list")
+    print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
