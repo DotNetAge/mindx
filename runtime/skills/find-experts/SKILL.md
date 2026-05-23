@@ -41,13 +41,13 @@ python scripts/list_agents.py --agents-dir "<agents_directory>" working_dir="<sk
 - **Task scale & difficulty** — simple tasks need only one well-matched expert; complex tasks may require multiple experts across related domains
 - **Skills equipped** — does the agent already have relevant skills installed?
 
-For multi-domain tasks, select **multiple experts** and delegate sub-tasks to each based on their respective specializations. Always aim for the **most suitable** candidate(s), not just any available agent.
+For multi-domain tasks, select **multiple experts** and spawn sub-tasks to each via SubAgent based on their respective specializations. Always aim for the **most suitable** candidate(s), not just any available agent.
 
-## Step 2: Delegate (or Create Then Delegate)
+## Step 2: Spawn SubAgent (or Create Then Spawn)
 
 ### Case A: Suitable Expert Found
 
-Use the `Delegate` tool directly. Compose a **clear, self-contained task brief** that includes:
+Use the `SubAgent` tool directly. Compose a **clear, self-contained task brief** that includes:
 
 - Original user context and intent
 - Specific deliverable expected
@@ -88,11 +88,11 @@ Then follow these steps in order:
        --model "<model_name>" \
        --skills "skill1,skill2" working_dir="<skill_base_dir>"
    ```
-4. **Then Delegate** to the newly created agent following the same briefing guidelines as Case A.
+4. **Then Spawn** the newly created agent following the same briefing guidelines as Case A.
 
 ## Step 3: Collect Results
 
-Use `CollectResults` to retrieve the expert's output when execution completes. The `Delegate` call returns a tracking ID — pass it to `CollectResults`.
+Use `CollectResults` to retrieve the expert's output when execution completes. The `SubAgent` call returns a tracking ID — pass it to `CollectResults`.
 
 Inspect the result against the user's original request:
 
@@ -154,10 +154,10 @@ For large-scale tasks requiring parallel work across domains:
 
 # Anti-Patterns
 
-- **Do NOT delegate** tasks within your own domain of expertise — handle them directly
-- **Do NOT delegate** trivial tasks you can complete faster yourself
+- **Do NOT use SubAgent** for tasks within your own domain of expertise — handle them directly
+- **Do NOT use SubAgent** for trivial tasks you can complete faster yourself
 - **Do NOT create** an agent without first running `list_agents.py` to confirm no suitable one exists
-- **Do NOT use Delegate** to bounce clarification back upward — the original delegator handles that directly
+- **Do NOT use SubAgent** to bounce clarification back upward — the original delegator handles that directly
 - **Do NOT accept** unverified output — always inspect before reporting to the user
 
 ---

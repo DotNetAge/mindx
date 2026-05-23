@@ -536,7 +536,7 @@ func BuildDelegationGuidance() string {
 	return `## Delegation
 When a task is outside your expertise, choose one path:
 
-- **Know who handles it** → call **Delegate** tool directly (agent_name + task), then **CollectResults**
+- **Know who handles it** → call **SubAgent** tool directly (agent_name + task), then **CollectResults**
 - **Don't know who** → load **find-experts** skill first (discovers experts, then delegates via same workflow)`
 }
 
