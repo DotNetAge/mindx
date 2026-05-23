@@ -15,10 +15,6 @@ description: >
 allowed-tools: bash read_file write_file
 ---
 
-# Project Manager Skill
-
-An AI-powered project management system that transforms vague ideas into executable, scheduled, and tracked plans. Use this when the user wants to plan something substantial — not a single task, but a multi-step effort requiring goals, timelines, agent assignments, and progress tracking.
-
 ## When to Use This Skill
 
 - The user proposes a new project or initiative with a vague idea ("I want to build a community", "help me plan something")

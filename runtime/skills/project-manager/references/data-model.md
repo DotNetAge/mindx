@@ -10,17 +10,17 @@ The root node of a project, representing a complete project entity.
 
 **Properties:**
 
-| Property | Type | Required | Description | Example |
-|----------|------|----------|-------------|---------|
-| `id` | string | ✅ Auto-generated | Unique identifier, format `proj-{8-char uuid}` | `proj-a1b2c3d4` |
-| `name` | string | ✅ | Project name | `"Community Operations"` |
-| `description` | string | ✅ | Project description / goal | `"Increase community activity by 50%"` |
-| `status` | string | ✅ | Status: `active`/`completed`/`paused`/`cancelled` | `"active"` |
-| `progress` | float | ✅ | Overall progress (0.0–1.0) | `0.45` |
-| `created_at` | string | ✅ | Creation time (ISO 8601) | `"2026-05-06T09:00:00Z"` |
-| `updated_at` | string | ✅ | Last update time | `"2026-05-07T14:30:00Z"` |
-| `metrics` | object | ❌ | Success KPI definition | `{"kpi": "activity+50%"}` |
-| `timeline` | object | ❌ | Time range | `{"start": "...", "end": "..."}` |
+| Property      | Type   | Required         | Description                                       | Example                                |
+| ------------- | ------ | ---------------- | ------------------------------------------------- | -------------------------------------- |
+| `id`          | string | ✅ Auto-generated | Unique identifier, format `proj-{8-char uuid}`    | `proj-a1b2c3d4`                        |
+| `name`        | string | ✅                | Project name                                      | `"Community Operations"`               |
+| `description` | string | ✅                | Project description / goal                        | `"Increase community activity by 50%"` |
+| `status`      | string | ✅                | Status: `active`/`completed`/`paused`/`cancelled` | `"active"`                             |
+| `progress`    | float  | ✅                | Overall progress (0.0–1.0)                        | `0.45`                                 |
+| `created_at`  | string | ✅                | Creation time (ISO 8601)                          | `"2026-05-06T09:00:00Z"`               |
+| `updated_at`  | string | ✅                | Last update time                                  | `"2026-05-07T14:30:00Z"`               |
+| `metrics`     | object | ❌                | Success KPI definition                            | `{"kpi": "activity+50%"}`              |
+| `timeline`    | object | ❌                | Time range                                        | `{"start": "...", "end": "..."}`       |
 
 ---
 
@@ -30,17 +30,17 @@ A sub-goal under a project, representing the first level (L1) of a WBS decomposi
 
 **Properties:**
 
-| Property | Type | Required | Description | Example |
-|----------|------|----------|-------------|---------|
-| `id` | string | ✅ | Unique identifier, format `goal-{8-char uuid}` | `goal-e5f6g7h8` |
-| `title` | string | ✅ | Goal title | `"Content Creation"` |
-| `description` | string | ✅ | Detailed goal description | `"Publish 3 high-quality articles per week"` |
-| `weight` | float | ✅ | Weight percentage (0.0–1.0) | `0.4` (40%) |
-| `status` | string | ✅ | Status: `pending`/`in_progress`/`completed`/`blocked` | `"in_progress"` |
-| `progress` | float | ✅ | Progress (0.0–1.0) | `0.65` |
-| `created_at` | string | ✅ | Creation time | `"2026-05-06T09:00:00Z"` |
-| `updated_at` | string | ✅ | Last update time | `"2026-05-07T14:30:00Z"` |
-| `metrics` | object | ❌ | Goal-specific KPIs | `{"target": "3 articles/week"}` |
+| Property      | Type   | Required | Description                                           | Example                                      |
+| ------------- | ------ | -------- | ----------------------------------------------------- | -------------------------------------------- |
+| `id`          | string | ✅        | Unique identifier, format `goal-{8-char uuid}`        | `goal-e5f6g7h8`                              |
+| `title`       | string | ✅        | Goal title                                            | `"Content Creation"`                         |
+| `description` | string | ✅        | Detailed goal description                             | `"Publish 3 high-quality articles per week"` |
+| `weight`      | float  | ✅        | Weight percentage (0.0–1.0)                           | `0.4` (40%)                                  |
+| `status`      | string | ✅        | Status: `pending`/`in_progress`/`completed`/`blocked` | `"in_progress"`                              |
+| `progress`    | float  | ✅        | Progress (0.0–1.0)                                    | `0.65`                                       |
+| `created_at`  | string | ✅        | Creation time                                         | `"2026-05-06T09:00:00Z"`                     |
+| `updated_at`  | string | ✅        | Last update time                                      | `"2026-05-07T14:30:00Z"`                     |
+| `metrics`     | object | ❌        | Goal-specific KPIs                                    | `{"target": "3 articles/week"}`              |
 
 ---
 
@@ -50,35 +50,35 @@ The smallest actionable work unit, assigned to a specific Agent and optionally s
 
 **Properties:**
 
-| Property | Type | Required | Description | Example |
-|----------|------|----------|-------------|---------|
-| `id` | string | ✅ | Unique identifier, format `task-{8-char uuid}` | `task-i9j0k1l2` |
-| `title` | string | ✅ | Task title | `"Write technical blog post"` |
-| `agent` | string | ✅ | Assigned Agent | `"@writer"` |
-| `cron_expr` | string | ❌ | Scheduler Cron expression | `"0 0 9 * * 1"` |
-| `prompt` | string | ✅ | Execution instructions / prompt | `"Write an article about..."` |
-| `status` | string | ✅ | Status enum | `"scheduled"` |
-| `priority` | string | ✅ | Priority: `urgent`/`high`/`normal`/`low` | `"high"` |
-| `progress` | float | ✅ | Progress (0.0–1.0) | `0.0` |
-| `scheduler_id` | string | ❌ | Scheduler task ID | `"a1b2c3d4"` |
-| `summary` | string | ❌ | Latest execution summary | `"Completed article draft..."` |
-| `success_count` | int | ✅ | Number of successful executions | `5` |
-| `failure_count` | int | ✅ | Number of failed executions | `1` |
-| `created_at` | string | ✅ | Creation time | `"2026-05-06T09:00:00Z"` |
-| `updated_at` | string | ✅ | Last update time | `"2026-05-07T09:00:00Z"` |
+| Property        | Type   | Required | Description                                    | Example                        |
+| --------------- | ------ | -------- | ---------------------------------------------- | ------------------------------ |
+| `id`            | string | ✅        | Unique identifier, format `task-{8-char uuid}` | `task-i9j0k1l2`                |
+| `title`         | string | ✅        | Task title                                     | `"Write technical blog post"`  |
+| `agent`         | string | ✅        | Assigned Agent                                 | `"@writer"`                    |
+| `cron_expr`     | string | ❌        | Scheduler Cron expression                      | `"0 0 9 * * 1"`                |
+| `prompt`        | string | ✅        | Execution instructions / prompt                | `"Write an article about..."`  |
+| `status`        | string | ✅        | Status enum                                    | `"scheduled"`                  |
+| `priority`      | string | ✅        | Priority: `urgent`/`high`/`normal`/`low`       | `"high"`                       |
+| `progress`      | float  | ✅        | Progress (0.0–1.0)                             | `0.0`                          |
+| `scheduler_id`  | string | ❌        | Scheduler task ID                              | `"a1b2c3d4"`                   |
+| `summary`       | string | ❌        | Latest execution summary                       | `"Completed article draft..."` |
+| `success_count` | int    | ✅        | Number of successful executions                | `5`                            |
+| `failure_count` | int    | ✅        | Number of failed executions                    | `1`                            |
+| `created_at`    | string | ✅        | Creation time                                  | `"2026-05-06T09:00:00Z"`       |
+| `updated_at`    | string | ✅        | Last update time                               | `"2026-05-07T09:00:00Z"`       |
 
 **Task.status enum values:**
 
-| Value | Meaning | When Set |
-|-------|---------|----------|
-| `pending` | Pending | Newly created, waiting for scheduling or manual execution |
-| `scheduled` | Scheduled | Registered with Scheduler, waiting to fire |
-| `in_progress` | In Progress | Agent is currently working on it |
-| `completed` | Completed | Successfully finished |
-| `failed` | Failed | Execution error, can be retried |
-| `blocked` | Blocked | A predecessor task has not completed |
-| `skipped` | Skipped | Skipped by user or system |
-| `cancelled` | Cancelled | No longer needed |
+| Value         | Meaning     | When Set                                                  |
+| ------------- | ----------- | --------------------------------------------------------- |
+| `pending`     | Pending     | Newly created, waiting for scheduling or manual execution |
+| `scheduled`   | Scheduled   | Registered with Scheduler, waiting to fire                |
+| `in_progress` | In Progress | Agent is currently working on it                          |
+| `completed`   | Completed   | Successfully finished                                     |
+| `failed`      | Failed      | Execution error, can be retried                           |
+| `blocked`     | Blocked     | A predecessor task has not completed                      |
+| `skipped`     | Skipped     | Skipped by user or system                                 |
+| `cancelled`   | Cancelled   | No longer needed                                          |
 
 ---
 
@@ -88,14 +88,14 @@ Records the result of each individual task execution.
 
 **Properties:**
 
-| Property | Type | Required | Description | Example |
-|----------|------|----------|-------------|---------|
-| `id` | string | ✅ | Unique identifier, format `exec-{8-char uuid}` | `exec-m3n4o5p6` |
-| `status` | string | ✅ | Execution result: `success`/`failed`/`timeout` | `"success"` |
-| `result` | string | ❌ | Execution result / output description | `"Completed first draft, ~2000 words..."` |
-| `error` | string | ❌ | Error message (on failure) | `"Agent timed out"` |
-| `duration_seconds` | int | ❌ | Execution duration in seconds | `120` |
-| `executed_at` | string | ✅ | Execution timestamp | `"2026-05-07T09:05:00Z"` |
+| Property           | Type   | Required | Description                                    | Example                                   |
+| ------------------ | ------ | -------- | ---------------------------------------------- | ----------------------------------------- |
+| `id`               | string | ✅        | Unique identifier, format `exec-{8-char uuid}` | `exec-m3n4o5p6`                           |
+| `status`           | string | ✅        | Execution result: `success`/`failed`/`timeout` | `"success"`                               |
+| `result`           | string | ❌        | Execution result / output description          | `"Completed first draft, ~2000 words..."` |
+| `error`            | string | ❌        | Error message (on failure)                     | `"Agent timed out"`                       |
+| `duration_seconds` | int    | ❌        | Execution duration in seconds                  | `120`                                     |
+| `executed_at`      | string | ✅        | Execution timestamp                            | `"2026-05-07T09:05:00Z"`                  |
 
 ---
 
@@ -105,13 +105,13 @@ Represents resources required by a task (tools, agents, etc.).
 
 **Properties:**
 
-| Property | Type | Required | Description | Example |
-|----------|------|----------|-------------|---------|
-| `id` | string | ✅ | Unique identifier | `"res-q7r8s9t0"` |
-| `name` | string | ✅ | Display name | `"Professional Writing Agent"` |
-| `type` | string | ✅ | Type: `agent`/`tool`/`file`/`api` | `"agent"` |
-| `ref` | string | ✅ | Reference identifier | `"@writer"` or `"bash"` |
-| `description` | string | ❌ | Why this resource is needed | `"For long-form article creation"` |
+| Property      | Type   | Required | Description                       | Example                            |
+| ------------- | ------ | -------- | --------------------------------- | ---------------------------------- |
+| `id`          | string | ✅        | Unique identifier                 | `"res-q7r8s9t0"`                   |
+| `name`        | string | ✅        | Display name                      | `"Professional Writing Agent"`     |
+| `type`        | string | ✅        | Type: `agent`/`tool`/`file`/`api` | `"agent"`                          |
+| `ref`         | string | ✅        | Reference identifier              | `"@writer"` or `"bash"`            |
+| `description` | string | ❌        | Why this resource is needed       | `"For long-form article creation"` |
 
 ---
 
@@ -300,12 +300,12 @@ LIMIT 20
 
 All node IDs follow this convention for consistency:
 
-| Node Type | Prefix | Format | Example |
-|-----------|--------|--------|---------|
-| Project | `proj-` | `proj-{8-char hex}` | `proj-a1b2c3d4` |
-| Goal | `goal-` | `goal-{8-char hex}` | `goal-e5f6g7h8` |
-| Task | `task-` | `task-{8-char hex}` | `task-i9j0k1l2` |
+| Node Type | Prefix  | Format              | Example         |
+| --------- | ------- | ------------------- | --------------- |
+| Project   | `proj-` | `proj-{8-char hex}` | `proj-a1b2c3d4` |
+| Goal      | `goal-` | `goal-{8-char hex}` | `goal-e5f6g7h8` |
+| Task      | `task-` | `task-{8-char hex}` | `task-i9j0k1l2` |
 | Execution | `exec-` | `exec-{8-char hex}` | `exec-m3n4o5p6` |
-| Resource | `res-` | `res-{8-char hex}` | `res-q7r8s9t0` |
+| Resource  | `res-`  | `res-{8-char hex}`  | `res-q7r8s9t0`  |
 
 **Note:** Uses the first 8 characters of a UUID (lowercase hexadecimal) to ensure uniqueness and brevity.

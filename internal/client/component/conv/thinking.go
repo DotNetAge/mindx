@@ -27,6 +27,62 @@ type ThoughtActionRound struct {
 	Action  Action
 }
 
+type Thinking struct {
+	IsActive  bool
+	BlinkOn   bool
+	StartTime time.Time
+	Duration  time.Duration
+}
+
+const StandardTickInterval = 100 * time.Millisecond
+
+func NewThinking() Thinking {
+	return Thinking{}
+}
+
+func UpdateThinking(m Thinking, e tea.Msg) (Thinking, tea.Cmd) {
+	switch e.(type) {
+	case msg.ThinkingDeltaMsg:
+		if !m.IsActive {
+			m.IsActive = true
+			m.StartTime = time.Now()
+		}
+		return m, nil
+
+	case msg.ThinkingDoneMsg:
+		if !m.IsActive {
+			return m, nil
+		}
+		m.IsActive = false
+		m.Duration = time.Since(m.StartTime).Round(time.Millisecond)
+		return m, nil
+
+	case msg.TickMsg:
+		if m.IsActive {
+			m.BlinkOn = !m.BlinkOn
+		}
+		return m, nil
+	}
+
+	return m, nil
+}
+
+func ViewThinking(m Thinking) string {
+	if !m.IsActive && m.Duration == 0 {
+		return ""
+	}
+
+	if m.IsActive {
+		return ViewBlink(Blink{Symbol: " ● 思考中", BlinkOn: m.BlinkOn}, style.GrayStyle)
+	}
+
+	d := m.Duration
+	if d < time.Millisecond {
+		d = 0
+	}
+	return style.GrayStyle.Render(fmt.Sprintf(" ● 思考完成 %s", d))
+}
+
 func UpdateThought(m Thought, e tea.Msg) (Thought, tea.Cmd) {
 	switch e := e.(type) {
 	case msg.ThinkingDeltaMsg:
