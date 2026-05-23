@@ -2,7 +2,6 @@
 name: content-factory
 description: "Multi-agent content production system. One piece of source content becomes many formats — social posts, email, scripts, headlines, and more. Five specialized agent personas: Writer, Remixer, Editor, Scriptwriter, and Headline Machine."
 description_zh: "多智能体内容生产系统，一份素材生成多种格式"
-description_en: "Multi-agent content production system, one source to many formats"
 version: 1.0.0
 ---
 
@@ -26,13 +25,13 @@ Load this skill when:
 
 ## The Agent Roster
 
-| Agent | Role | Input | Output |
-|-------|------|-------|--------|
-| **Writer** | Long-form drafts | Topic + research + brain dump | Articles, essays, guides, newsletters |
-| **Remixer** | One-to-many adaptation | Finished source content | Twitter thread, LinkedIn, email, captions, scripts |
-| **Editor** | Clarity + polish + voice | Draft content | Publication-ready content |
-| **Scriptwriter** | Video + animation scripts | Topic or source content | 30-sec hooks, episode scripts, reels |
-| **Headline Machine** | Headlines + hooks | Topic + audience + angle | 20 headlines ranked by estimated CTR |
+| Agent                | Role                      | Input                         | Output                                             |
+| -------------------- | ------------------------- | ----------------------------- | -------------------------------------------------- |
+| **Writer**           | Long-form drafts          | Topic + research + brain dump | Articles, essays, guides, newsletters              |
+| **Remixer**          | One-to-many adaptation    | Finished source content       | Twitter thread, LinkedIn, email, captions, scripts |
+| **Editor**           | Clarity + polish + voice  | Draft content                 | Publication-ready content                          |
+| **Scriptwriter**     | Video + animation scripts | Topic or source content       | 30-sec hooks, episode scripts, reels               |
+| **Headline Machine** | Headlines + hooks         | Topic + audience + angle      | 20 headlines ranked by estimated CTR               |
 
 ---
 
@@ -276,16 +275,16 @@ Production notes: [pacing, tone, music direction]
 
 **Headline formulas to use:**
 
-| Formula | Example |
-|---------|---------|
-| Number + benefit | "7 Ways to Cut Content Creation Time in Half" |
-| Question | "Are You Leaving 80% of Your Content's Value on the Table?" |
-| How-to | "How to Turn One Blog Post Into a Month of Social Content" |
-| Counterintuitive | "Why Posting Less Actually Grew Our Audience 3x" |
-| Specific result | "The Exact System That Produced 60 Posts From One Article" |
-| Warning | "Stop Creating New Content Until You Do This First" |
-| Before/after | "From One Idea to 12 Formats in Under an Hour" |
-| Secret/unknown | "The Content Repurposing Strategy Most Creators Don't Know About" |
+| Formula          | Example                                                           |
+| ---------------- | ----------------------------------------------------------------- |
+| Number + benefit | "7 Ways to Cut Content Creation Time in Half"                     |
+| Question         | "Are You Leaving 80% of Your Content's Value on the Table?"       |
+| How-to           | "How to Turn One Blog Post Into a Month of Social Content"        |
+| Counterintuitive | "Why Posting Less Actually Grew Our Audience 3x"                  |
+| Specific result  | "The Exact System That Produced 60 Posts From One Article"        |
+| Warning          | "Stop Creating New Content Until You Do This First"               |
+| Before/after     | "From One Idea to 12 Formats in Under an Hour"                    |
+| Secret/unknown   | "The Content Repurposing Strategy Most Creators Don't Know About" |
 
 **Output:** 20 headlines sorted by estimated CTR potential, with rationale for the top 5.
 

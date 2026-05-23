@@ -11,8 +11,8 @@ import (
 )
 
 type model struct {
-	reasoning conv.Reasoning
-	width     int
+	thinking conv.Thinking
+	width    int
 }
 
 func (m model) Init() tea.Cmd {
@@ -29,38 +29,31 @@ func (m model) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "1":
-			m.reasoning = conv.NewReasoning()
-			return m, tea.Batch(m.tick(), m.reasoningCmd())
+			m.thinking = conv.NewThinking()
+			return m, tea.Batch(m.tick(), m.simulateThinkingDelta())
 		case "2":
-			m.reasoning = conv.Reasoning{
-				Label:     "深度思考",
+			m.thinking = conv.Thinking{
 				IsActive:  false,
-				StartTime: time.Now().Add(-1200 * time.Millisecond),
 				Duration:  1200 * time.Millisecond,
 			}
 			return m, nil
 		case "3":
-			m.reasoning = conv.NewReasoning().WithLabel("Thinking")
-			return m, tea.Batch(m.tick(), m.reasoningCmd())
+			m.thinking = conv.NewThinking()
+			return m, tea.Batch(m.tick(), m.simulateThinkingDelta())
 		case "4":
-			m.reasoning = conv.Reasoning{
-				Label:     "Thinking",
+			m.thinking = conv.Thinking{
 				IsActive:  false,
-				StartTime: time.Now().Add(-800 * time.Millisecond),
 				Duration:  800 * time.Millisecond,
 			}
 			return m, nil
 		case "5":
-			m.reasoning = conv.NewReasoning()
-			go func() {
-				time.Sleep(3 * time.Second)
-			}()
-			return m, tea.Batch(m.tick(), m.reasoningCmd())
+			m.thinking = conv.NewThinking()
+			return m, tea.Batch(m.tick(), m.simulateThinkingDelta())
 		}
 		return m, nil
 	default:
-		newReasoning, cmd := conv.UpdateReasoning(m.reasoning, e)
-		m.reasoning = newReasoning
+		newThinking, cmd := conv.UpdateThinking(m.thinking, e)
+		m.thinking = newThinking
 
 		if _, ok := e.(msg.ThinkingDoneMsg); ok {
 			return m, nil
@@ -71,7 +64,7 @@ func (m model) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() tea.View {
-	view := conv.ViewReasoning(m.reasoning)
+	view := conv.ViewThinking(m.thinking)
 	if view == "" {
 		view = "(空状态 - 请按按键查看示例)"
 	}
@@ -86,20 +79,20 @@ func (m model) tick() tea.Cmd {
 	})
 }
 
-func (m model) reasoningCmd() tea.Cmd {
+func (m model) simulateThinkingDelta() tea.Cmd {
 	return func() tea.Msg {
-		time.Sleep(3 * time.Second)
-		return msg.ThinkingDoneMsg{
+		time.Sleep(500 * time.Millisecond)
+		return msg.ThinkingDeltaMsg{
 			SessionID: "demo",
-			Reasoning: "经过分析，这是一个使用 bubbletea v2 框架的终端应用项目。",
+			Content:   "",
 		}
 	}
 }
 
 func main() {
 	m := model{
-		reasoning: conv.NewReasoning(),
-		width:     80,
+		thinking: conv.NewThinking(),
+		width:    80,
 	}
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {

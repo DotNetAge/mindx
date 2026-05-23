@@ -15,7 +15,7 @@ type Conversation struct {
 	CreatedAt time.Time
 
 	Question  Question
-	Reasoning Reasoning
+	Thinking  Thinking
 	Rounds    []ThoughtActionRound
 	Output    Output
 	Error     ErrorMsg
@@ -28,7 +28,7 @@ func NewConversation(sessionID, agentName, questionText string) Conversation {
 		Status:    StatusThinking,
 		CreatedAt: time.Now(),
 		Question:  Question{Text: questionText},
-		Reasoning: NewReasoning(),
+		Thinking:  NewThinking(),
 	}
 }
 
@@ -51,12 +51,12 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 		if m.Status == StatusDone || m.Status == StatusError {
 			return m, nil
 		}
-		newReasoning, cmd := UpdateReasoning(m.Reasoning, e)
-		m.Reasoning = newReasoning
 		m.ensureCurrentRound()
 		newThought, _ := UpdateThought(m.currentRound().Thought, e)
 		m.currentRound().Thought = newThought
-		return m, cmd
+		newThinking, _ := UpdateThinking(m.Thinking, e)
+		m.Thinking = newThinking
+		return m, nil
 
 	case msg.ThinkingDeltaMsg:
 		if m.Status == StatusDone || m.Status == StatusError {
@@ -126,16 +126,15 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 		return m, nil
 
 	case msg.TickMsg:
-		newReasoning, reasoningCmd := UpdateReasoning(m.Reasoning, e)
-		m.Reasoning = newReasoning
-
 		for i := range m.Rounds {
 			newThought, _ := UpdateThought(m.Rounds[i].Thought, e)
 			m.Rounds[i].Thought = newThought
 			newAction, _ := UpdateAction(m.Rounds[i].Action, e)
 			m.Rounds[i].Action = newAction
 		}
-		return m, reasoningCmd
+		newThinking, _ := UpdateThinking(m.Thinking, e)
+		m.Thinking = newThinking
+		return m, nil
 
 	case msg.ThinkCollapseMsg:
 		if m.currentRound() != nil {
@@ -151,7 +150,7 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 
 func ViewConversation(m Conversation, width int) string {
 	questionView := ViewQuestion(m.Question, width)
-	reasoningView := ViewReasoning(m.Reasoning)
+	thinkingView := ViewThinking(m.Thinking)
 
 	var roundsView strings.Builder
 	for _, round := range m.Rounds {
@@ -159,7 +158,7 @@ func ViewConversation(m Conversation, width int) string {
 		actionView := ViewAction(round.Action, width)
 
 		if thoughtView != "" || actionView != "" {
-			if questionView != "" || reasoningView != "" || roundsView.Len() > 0 {
+			if questionView != "" || thinkingView != "" || roundsView.Len() > 0 {
 				roundsView.WriteString("\n")
 			}
 			if thoughtView != "" {
@@ -177,7 +176,7 @@ func ViewConversation(m Conversation, width int) string {
 	outputView := ViewOutput(m.Output, width)
 	errorView := ViewErrorMsg(m.Error, width)
 
-	if questionView == "" && reasoningView == "" && roundsView.Len() == 0 && outputView == "" && errorView == "" {
+	if questionView == "" && thinkingView == "" && roundsView.Len() == 0 && outputView == "" && errorView == "" {
 		return ""
 	}
 
@@ -185,20 +184,20 @@ func ViewConversation(m Conversation, width int) string {
 	if questionView != "" {
 		b.writeString(questionView)
 	}
-	if reasoningView != "" {
+	if thinkingView != "" {
 		if questionView != "" {
 			b.writeString("\n")
 		}
-		b.writeString(reasoningView)
+		b.writeString(thinkingView)
 	}
 	if roundsView.Len() > 0 {
-		if questionView != "" || reasoningView != "" {
+		if questionView != "" || thinkingView != "" {
 			b.writeString("\n")
 		}
 		b.writeString(roundsView.String())
 	}
 	if outputView != "" {
-		if questionView != "" || reasoningView != "" || roundsView.Len() > 0 {
+		if questionView != "" || thinkingView != "" || roundsView.Len() > 0 {
 			b.writeString("\n")
 		}
 		b.writeString(outputView)
