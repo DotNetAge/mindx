@@ -139,6 +139,12 @@ type MouseScrollMsg struct {
 	Lines int
 }
 
+// IterationMsg is sent at the end of each T-A-O cycle.
+type IterationMsg struct {
+	SessionID string
+	Iteration int
+}
+
 // ExecutionCancelMsg is sent when the user presses ESC during T-A-O execution.
 // The rootModel should call agent.Cancel() to interrupt the running loop.
 type ExecutionCancelMsg struct{}

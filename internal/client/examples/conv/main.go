@@ -383,7 +383,6 @@ func streamingExample() conv.Conversation {
 
 	c.Rounds = append(c.Rounds, conv.ThoughtActionRound{
 		Thought: conv.Thought{
-			Pending:  "正在分析需求... 用户需要一个认证中间件，我需要先了解现有的认证相关代码...",
 			IsActive: true,
 		},
 	})
