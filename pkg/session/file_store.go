@@ -16,25 +16,53 @@ import (
 )
 
 type yamlMessage struct {
-	Role      string `yaml:"role"`
-	Content   string `yaml:"content"`
-	Timestamp int64  `yaml:"timestamp"`
+	Role       string           `yaml:"role"`
+	Content    string           `yaml:"content"`
+	Timestamp  int64            `yaml:"timestamp"`
+	ToolCallID string           `yaml:"tool_call_id,omitempty"`
+	ToolCalls  []yamlToolCall   `yaml:"tool_calls,omitempty"`
+}
+
+type yamlToolCall struct {
+	ID        string `yaml:"id"`
+	Name      string `yaml:"name"`
+	Arguments string `yaml:"arguments"`
 }
 
 func newYamlMessage(msg core.Message) yamlMessage {
+	var ymlTCs []yamlToolCall
+	for _, tc := range msg.ToolCalls {
+		ymlTCs = append(ymlTCs, yamlToolCall{
+			ID:        tc.ID,
+			Name:      tc.Name,
+			Arguments: tc.Arguments,
+		})
+	}
 	return yamlMessage{
-		Role:      msg.Role,
-		Content:   base64.StdEncoding.EncodeToString([]byte(msg.Content)),
-		Timestamp: msg.Timestamp,
+		Role:       msg.Role,
+		Content:    base64.StdEncoding.EncodeToString([]byte(msg.Content)),
+		Timestamp:  msg.Timestamp,
+		ToolCallID: msg.ToolCallID,
+		ToolCalls:  ymlTCs,
 	}
 }
 
 func (ym yamlMessage) toCoreMessage() core.Message {
 	decoded, _ := base64.StdEncoding.DecodeString(ym.Content)
+	var tcs []core.ToolCall
+	for _, ytc := range ym.ToolCalls {
+		tcs = append(tcs, core.ToolCall{
+			ID:        ytc.ID,
+			Name:      ytc.Name,
+			Arguments: ytc.Arguments,
+		})
+	}
 	return core.Message{
-		Role:      ym.Role,
-		Content:   string(decoded),
-		Timestamp: ym.Timestamp,
+		Role:       ym.Role,
+		Content:    string(decoded),
+		Timestamp:  ym.Timestamp,
+		ToolCallID: ym.ToolCallID,
+		ToolCalls:  tcs,
 	}
 }
 

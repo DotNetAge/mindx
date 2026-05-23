@@ -110,7 +110,7 @@ func WithColor(enabled bool) Option {
 func DefaultConsoleLogger() Logger {
 	return &defaultLogger{
 		file:     os.Stdout,
-		logger:   log.New(os.Stdout, "", 0),
+		logger:   log.New(os.Stdout, "", log.LstdFlags),
 		level:    INFO,
 		colorize: true,
 	}
@@ -126,8 +126,8 @@ func DefaultFileLogger(filePath string, opts ...Option) (Logger, error) {
 
 	l := &defaultLogger{
 		file:   file,
-		logger: log.New(file, "", 0),
-		level:  INFO,
+		logger: log.New(file, "", log.LstdFlags),
+		level:  DEBUG,
 	}
 
 	for _, opt := range opts {
