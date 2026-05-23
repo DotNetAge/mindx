@@ -326,19 +326,19 @@ After receiving execution results from the Scheduler, update GraphDB promptly:
 
 ```bash
 # Task completed successfully
-./scripts/gograph.sh update-task \
+python3 scripts/graph_client.py update-task \
     --task-id "task-xxx" \
     --status completed \
     --result "Completed the weekly data analysis report..."
 
 # Task failed
-./scripts/gograph.sh update-task \
+python3 scripts/graph_client.py update-task \
     --task-id "task-xxx" \
     --status failed \
     --result "Agent timed out"
 
 # Record detailed execution log
-./scripts/gograph.sh record-execution \
+python3 scripts/graph_client.py record-execution \
     --task-id "task-xxx" \
     --status success \
     --result "Output: report-weekly-2026-W19.md" \

@@ -25,6 +25,7 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("agent.get", r.daemon.handleAgentGet)
 	gw.RegisterMethod("agent.create", r.daemon.handleAgentCreate)
 	gw.RegisterMethod("agent.update", r.daemon.handleAgentUpdate)
+	gw.RegisterMethod("agent.score", r.daemon.handleAgentScore)
 
 	gw.RegisterMethod("model.list", r.daemon.handleModelList)
 	gw.RegisterMethod("model.get", r.daemon.handleModelGet)

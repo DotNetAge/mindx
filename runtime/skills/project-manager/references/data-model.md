@@ -1,6 +1,6 @@
 # GraphDB Data Model
 
-This document defines the complete data model used by the Project Manager skill in the gograph graph database.
+This document defines the complete data model used by the Project Manager skill in the cypherdb graph database.
 
 ## Node Types
 

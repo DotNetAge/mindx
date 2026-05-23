@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	goreactcore "github.com/DotNetAge/goreact/core"
 )
@@ -197,5 +198,126 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 		"status":     "ok",
 		"agent_name": updated.Name,
 		"message":    "agent config updated",
+	}, nil
+}
+
+type agentScoreParams struct {
+	AgentName string `json:"agent_name"`
+	Task      string `json:"task"`
+	Score     int    `json:"score"`
+	Notes     string `json:"notes,omitempty"`
+}
+
+func (d *Daemon) handleAgentScore(_ context.Context, params json.RawMessage) (any, error) {
+	var p agentScoreParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.AgentName == "" {
+		return nil, fmt.Errorf("agent_name is required")
+	}
+	if p.Task == "" {
+		return nil, fmt.Errorf("task is required")
+	}
+	if p.Score < 1 || p.Score > 10 {
+		return nil, fmt.Errorf("score must be between 1 and 10")
+	}
+
+	agents := d.app.Agents()
+	if agents == nil {
+		return nil, fmt.Errorf("agent registry not available")
+	}
+
+	cfg := agents.Get(p.AgentName)
+	if cfg == nil {
+		return nil, fmt.Errorf("agent %q not found", p.AgentName)
+	}
+
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+
+	entry := map[string]any{
+		"task":      p.Task,
+		"score":     p.Score,
+		"timestamp": timestamp,
+	}
+	if p.Notes != "" {
+		entry["notes"] = p.Notes
+	}
+
+	if cfg.Meta == nil {
+		cfg.Meta = make(map[string]any)
+	}
+
+	perf, _ := cfg.Meta["performance"].(map[string]any)
+	if perf == nil {
+		perf = map[string]any{
+			"scores":    []map[string]any{entry},
+			"completes": 1,
+		}
+		cfg.Meta["performance"] = perf
+	} else {
+		scores, _ := perf["scores"].([]map[string]any)
+		// When deserialized from YAML, lists of maps come as []any
+		if rawScores, ok := perf["scores"].([]any); ok {
+			scores = make([]map[string]any, 0, len(rawScores)+1)
+			for _, s := range rawScores {
+				if m, ok := s.(map[string]any); ok {
+					scores = append(scores, m)
+				}
+			}
+		}
+		scores = append(scores, entry)
+		perf["scores"] = scores
+
+		completes := 0
+		if c, ok := perf["completes"].(int); ok {
+			completes = c
+		}
+		perf["completes"] = completes + 1
+	}
+
+	if err := agents.SaveTo(cfg); err != nil {
+		return nil, fmt.Errorf("failed to save agent score: %w", err)
+	}
+
+	// Read back scores and completes for response
+	scores, _ := perf["scores"].([]map[string]any)
+	if rawScores, ok := perf["scores"].([]any); ok {
+		scoreValues := make([]int, 0, len(rawScores))
+		for _, s := range rawScores {
+			if m, ok := s.(map[string]any); ok {
+				if sc, ok := m["score"].(int); ok {
+					scoreValues = append(scoreValues, sc)
+				}
+			}
+		}
+		return map[string]any{
+			"status":    "scored",
+			"agent":     p.AgentName,
+			"task":      p.Task,
+			"score":     p.Score,
+			"notes":     p.Notes,
+			"timestamp": timestamp,
+			"scores":    scoreValues,
+			"completes": perf["completes"],
+		}, nil
+	}
+
+	scoreValues := make([]int, 0, len(scores))
+	for _, s := range scores {
+		if sc, ok := s["score"].(int); ok {
+			scoreValues = append(scoreValues, sc)
+		}
+	}
+
+	return map[string]any{
+		"status":    "scored",
+		"agent":     p.AgentName,
+		"task":      p.Task,
+		"score":     p.Score,
+		"notes":     p.Notes,
+		"timestamp": timestamp,
+		"scores":    scoreValues,
+		"completes": perf["completes"],
 	}, nil
 }
