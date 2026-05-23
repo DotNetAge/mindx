@@ -272,11 +272,11 @@ class MindXSchedulerClient:
 
         args_str = f"{agent} {resolved_session_id} {params.content} expr=\"{params.cron_expr}\"{dir_part}"
 
-        result_dict = self._send_command("job-add", args_str)
+        result_dict = self._send_command("job.add", args_str)
 
         result = ScheduledJobResult(
             success=result_dict["success"],
-            command="job-add",
+            command="job.add",
             raw_response=result_dict.get("raw"),
             session_id=resolved_session_id
         )
@@ -304,11 +304,11 @@ class MindXSchedulerClient:
         Returns:
             Operation result containing the task list
         """
-        result_dict = self._send_command("job-list", "")
+        result_dict = self._send_command("job.list", "")
 
         result = ScheduledJobResult(
             success=result_dict["success"],
-            command="job-list",
+            command="job.list",
             raw_response=result_dict.get("raw")
         )
 
@@ -330,11 +330,11 @@ class MindXSchedulerClient:
             Operation result
         """
         args_str = f"id={task_id}"
-        result_dict = self._send_command("job-del", args_str)
+        result_dict = self._send_command("job.del", args_str)
 
         result = ScheduledJobResult(
             success=result_dict["success"],
-            command="job-del",
+            command="job.del",
             raw_response=result_dict.get("raw")
         )
 

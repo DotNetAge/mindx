@@ -196,12 +196,7 @@ func TestConversationFullFlow(t *testing.T) {
 	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "I need to think..."})
 	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Reasoning: "I need to think..."})
 
-	// Reasoning is top-level, stored in both Reasoning and Rounds[].Thought
-	if conv.Reasoning.Result != "I need to think..." {
-		t.Errorf("expected reasoning result %q, got %q", "I need to think...", conv.Reasoning.Result)
-	}
-
-	// Rounds are now created by thinking events to capture Thought content
+	// Rounds are created by thinking events to capture Thought content
 	if len(conv.Rounds) != 1 {
 		t.Fatalf("expected 1 round after thinking (to capture thought content), got %d", len(conv.Rounds))
 	}
@@ -246,11 +241,6 @@ func TestConversationMultiRoundFlow(t *testing.T) {
 	conv, _ = UpdateConversation(conv, msg.ToolExecEndMsg{SessionID: "s1", ToolName: "tool2", Success: true, Result: "done"})
 	conv, _ = UpdateConversation(conv, msg.ActionEndMsg{SessionID: "s1", SuccessCount: 1, FailedCount: 0})
 
-	// Reasoning is top-level — only the last reasoning is stored
-	if conv.Reasoning.Result != "Second thought..." {
-		t.Errorf("expected reasoning result %q, got %q", "Second thought...", conv.Reasoning.Result)
-	}
-
 	// Rounds are created per ActionStartMsg
 	if len(conv.Rounds) != 2 {
 		t.Fatalf("expected 2 rounds, got %d", len(conv.Rounds))
@@ -272,7 +262,7 @@ func TestConversationViewFullTAO(t *testing.T) {
 			Completed:   true,
 		},
 	})
-	conv.Reasoning = Reasoning{Result: "thinking step 1..."}
+	conv.Rounds[0].Thought.Content = "thinking step 1..."
 	conv.Output = Output{
 		Entries: []OutputEntry{{Role: "assistant", Content: "Go is a programming language"}},
 	}

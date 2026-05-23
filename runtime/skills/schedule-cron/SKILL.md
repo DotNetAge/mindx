@@ -11,10 +11,6 @@ description: >
 allowed-tools: bash read_file write_file
 ---
 
-# Schedule Cron Skill
-
-Manages MindX Scheduler tasks via WebSocket communication. Use this when the user wants to add, list, or delete scheduled messages that deliver content to agents on a recurring basis.
-
 ## When to Use This Skill
 
 - The user wants to schedule a message to be sent to a specific agent at a set time
