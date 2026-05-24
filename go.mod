@@ -137,3 +137,5 @@ require (
 )
 
 replace github.com/DotNetAge/gorag => ../gorag
+
+replace github.com/DotNetAge/goreact => ../goreact
