@@ -192,10 +192,27 @@ But this is a rapidly improving constraint — from GPT-4's 8K to today's 128K-2
 
 The other question is whether the LLM correctly judges which Skill to load. This depends on Skill description quality. Well-written Skills (like project-manager with clear "when to use" guidance) rarely get mis-selected.
 
-## Conclusion
+## Tools-as-Orchestration vs Skills-as-Orchestration
 
-This architecture isn't someone's invention — it's a natural consequence of capable LLMs. When models are powerful enough, natural language becomes the orchestration language. No DSL, no graphs, no YAML needed.
+These aren't replacements — they're different layers.
+
+**Tools-as-orchestration** uses the LLM to orchestrate "small things" — decide whether to search or read first, what parameters to pass. The LLM makes decisions inside a workflow node.
+
+**Skills-as-orchestration** uses the LLM to orchestrate "big things" — decide which SOP to load, whether to nest another SOP at a branch point, how the entire business process should flow. The LLM makes decisions between workflow nodes.
+
+The former is tactical. The latter is strategic.
+
+```
+Tools-as-orchestration:   Search → Read → Write    (LLM decides call order)
+Skills-as-orchestration:   PM → find-experts → Create Agent → Assign  (LLM decides which SOPs to load)
+```
+
+Tools-as-orchestration lets the LLM complete a task. Skills-as-orchestration lets the LLM run a company.
+
+This isn't an invention. It's a natural consequence of capable LLMs. When models are strong enough, natural language becomes the orchestration language. No DSL, no graphs, no YAML needed.
 
 Skills are capabilities. Conversation context is the bus. The LLM is the runtime orchestrator.
 
-There's no simpler architecture than this.
+**Tools-as-orchestration is the law of the Agent world. Skills-as-orchestration is the world law of the Agent world.**
+
+They don't conflict. One governs micro execution. The other governs macro strategy. Together, they form a complete Agent operating system.
