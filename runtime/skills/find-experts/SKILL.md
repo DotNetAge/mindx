@@ -30,7 +30,7 @@ Follow these steps in order. You are the orchestrator; you own the outcome from 
 Run `list_agents.py` to retrieve the full expert roster. Each expert entry contains `name`, `role`, `description`, `skills` — use these to judge fit.
 
 ```bash
-python scripts/list_agents.py --agents-dir "<agents_directory>" working_dir="<skill_base_dir>"
+python scripts/list_agents.py
 ```
 
 **Output** is a JSON array of all agents with their name, role, description, model, and skills.
@@ -58,37 +58,14 @@ A vague brief produces a vague result. Be specific and unambiguous.
 
 ### Case B: No Suitable Expert Exists
 
-Create a new agent tailored to the task using `create_agent.py`. **Before writing any
-agent definition, read `references/agent-best-practices.md`** — it covers field conventions,
-selection criteria, and common anti-patterns.
+Load the **agent-creator** skill to create a new agent:
 
-Then follow these steps in order:
+```
+Skill("agent-creator")
+```
 
-0. **Review best practices** — Read `references/agent-best-practices.md` for complete
-   guidance on `name`, `role`, `description`, `model`, and `skills` fields.
-1. **List available skills** — run `list_skills.py` to see all installable skills:
-   ```bash 
-   python scripts/list_skills.py --skills-dir "<skills_directory>" working_dir="<skill_base_dir>"
-   ```
-   Select skills that match the expert's professional domain. Only assign relevant skills —
-   over-equipping inflates context overhead.
-2. **List available models** — run `list_models.py` to see all available models:
-   ```bash
-   python scripts/list_models.py --models-file "<models_yml_path>" working_dir="<skill_base_dir>"
-   ```
-   Choose the model best suited to the task type — different models have different strengths
-   (reasoning, coding, vision, etc.). Match model capability to task complexity.
-3. **Create the agent** — compose each field following the best practices guide:
-   ```bash
-   python scripts/create_agent.py \
-       --agents-dir "<agents_directory>" \
-       --name "<agent_name>" \
-       --role "<agent_role>" \
-       --description '<description>' \
-       --model "<model_name>" \
-       --skills "skill1,skill2" working_dir="<skill_base_dir>"
-   ```
-4. **Then Spawn** the newly created agent following the same briefing guidelines as Case A.
+Follow its instructions to design and create the agent. Then return here
+and spawn the newly created agent using the same briefing guidelines as Case A.
 
 ## Step 3: Collect Results
 
@@ -106,13 +83,12 @@ Do NOT accept polished-looking output that misses the point.
 
 Run `rank_task.py` to record the expert's performance score. This builds a cumulative statistical profile over time, enabling data-driven expert selection in future delegations.
 
-```
+```bash
 python scripts/rank_task.py \
-    --agents-dir "<agents_directory>" \
     --agent-name "<expert_name>" \
-    --task '<task_description>' \
+    --task "<task_description>" \
     --score <1-10> \
-    --notes '<evaluation_notes>' working_dir="<skill_base_dir>"
+    --notes "<evaluation_notes>"
 ```
 
 **Scoring rubric:**
@@ -164,6 +140,6 @@ For large-scale tasks requiring parallel work across domains:
 
 ## References
 
-- **`references/agent-best-practices.md`** — Complete guide for writing agent definitions:
-  field conventions, selection criteria, model/skill matching, anti-patterns, and creation checklist.
-  Read this before creating any new agent (Step 2 Case B).
+- **`references/agent-best-practices.md`** (in this skill's directory) — Complete guide for
+  writing agent definitions: field conventions, selection criteria, model/skill matching,
+  anti-patterns, and creation checklist. Referenced by the agent-creator skill.
