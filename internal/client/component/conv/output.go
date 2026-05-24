@@ -12,8 +12,9 @@ import (
 )
 
 type OutputEntry struct {
-	Role    string
-	Content string
+	Role     string
+	Content  string
+	Streaming bool
 }
 
 type Output struct {
@@ -22,9 +23,29 @@ type Output struct {
 
 func UpdateOutput(m Output, e tea.Msg) (Output, tea.Cmd) {
 	switch e := e.(type) {
+	case msg.ContentDeltaMsg:
+		if len(m.Entries) == 0 {
+			m.Entries = append(m.Entries, OutputEntry{Role: "assistant", Content: e.Content, Streaming: true})
+		} else {
+			last := &m.Entries[len(m.Entries)-1]
+			if last.Role == "assistant" && last.Streaming {
+				last.Content += e.Content
+			} else if last.Role == "assistant" && !last.Streaming {
+				m.Entries = append(m.Entries, OutputEntry{Role: "assistant", Content: e.Content, Streaming: true})
+			} else {
+				m.Entries = append(m.Entries, OutputEntry{Role: "assistant", Content: e.Content, Streaming: true})
+			}
+		}
+		return m, nil
+
 	case msg.FinalAnswerMsg:
 		if len(m.Entries) > 0 {
 			last := m.Entries[len(m.Entries)-1]
+			if last.Role == "assistant" && last.Streaming {
+				last.Content = e.Content
+				last.Streaming = false
+				return m, nil
+			}
 			if last.Role == "assistant" && last.Content == e.Content {
 				return m, nil
 			}
@@ -82,5 +103,8 @@ func viewOutputEntry(entry OutputEntry, width int) string {
 	}
 
 	content := render.MarkdownWithWidth(entry.Content, width-4)
+	if entry.Streaming {
+		content += style.DimStyle.Render("▌")
+	}
 	return sep + "\n" + content + sep
 }

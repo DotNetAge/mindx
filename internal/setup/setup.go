@@ -110,7 +110,7 @@ func updateModelCredRef(modelsPath, modelName, credRef string) error {
 		return err
 	}
 
-	cfg := registry.Get(modelName)
+	cfg := registry.GetRaw(modelName)
 	if cfg == nil {
 		return fmt.Errorf("模型 %q 未在配置中找到", modelName)
 	}
@@ -118,12 +118,29 @@ func updateModelCredRef(modelsPath, modelName, credRef string) error {
 	cfg.APIKey = credRef
 
 	type modelsWrapper struct {
-		Models []goreactcore.ModelConfig `yaml:"models"`
+		Providers []goreactcore.ProviderConfig `yaml:"providers"`
+		Models    []goreactcore.ModelConfig    `yaml:"models"`
 	}
 
-	wrapper := modelsWrapper{}
-	for _, m := range registry.List() {
-		wrapper.Models = append(wrapper.Models, *m)
+	providers := registry.Providers()
+	providerCfgs := make([]goreactcore.ProviderConfig, 0, len(providers))
+	for _, p := range providers {
+		if p != nil {
+			providerCfgs = append(providerCfgs, *p)
+		}
+	}
+
+	rawModels := registry.ListRaw()
+	modelCfgs := make([]goreactcore.ModelConfig, 0, len(rawModels))
+	for _, m := range rawModels {
+		if m != nil {
+			modelCfgs = append(modelCfgs, *m)
+		}
+	}
+
+	wrapper := modelsWrapper{
+		Providers: providerCfgs,
+		Models:    modelCfgs,
 	}
 
 	data, err := yaml.Marshal(wrapper)

@@ -80,14 +80,6 @@ func (i *InputArea) handleKey(k tea.KeyPressMsg) (*InputArea, tea.Cmd) {
 			return clientmsg.UserSendMsg{Text: text}
 		}
 
-	case i.isCopyShortcut(key):
-		if i.Executing || i.TextBuffer.Len() == 0 {
-			return i, func() tea.Msg { return clientmsg.ExitMsg{} }
-		}
-		i.TextBuffer.Reset()
-		i.CursorPos = 0
-		return i, func() tea.Msg { return nil }
-
 	case i.isClearScreenShortcut(key):
 		return i, func() tea.Msg { return clientmsg.ClearScreenMsg{} }
 
@@ -225,13 +217,6 @@ func (i *InputArea) isPrintableKey(k tea.Key) bool {
 		return true
 	}
 	return false
-}
-
-func (i *InputArea) isCopyShortcut(k tea.Key) bool {
-	if isDarwin {
-		return k.Mod.Contains(tea.ModSuper) && (k.Code == 'c' || k.Code == 'C')
-	}
-	return k.Mod.Contains(tea.ModCtrl) && (k.Code == 'c' || k.Code == 'C')
 }
 
 func (i *InputArea) isClearScreenShortcut(k tea.Key) bool {

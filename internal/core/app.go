@@ -25,6 +25,8 @@ type App struct {
 	logger      logging.Logger
 	agents      *goreact.AgentRegistry
 	models      *goreact.ModelRegistry
+	costs       *CostRegistry
+	versions    *FileVersionStore
 	current     *goreact.Agent
 	currentMu   sync.RWMutex
 
@@ -33,11 +35,10 @@ type App struct {
 
 	agentCache         map[string]*goreact.Agent
 	agentMu            sync.RWMutex
-	currentSessionMeta *core.SessionInfo // Changed from session.SessionMeta to core.SessionInfo (framework-level)
+	currentSessionMeta *core.SessionInfo
 
 	embedder goragcore.Embedder
 
-	// Permission rule store (nil = skip rule-based checking)
 	permissionRuleStore *MindxPermissionRuleStore
 }
 
@@ -83,6 +84,24 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		return nil, fmt.Errorf("failed to load models: %w", err)
 	}
 
+	logger.Info("Loading providers", "dir", settings.ProvidersFile())
+	providers, err := LoadProvidersFile(settings.ProvidersFile())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load providers: %w", err)
+	}
+	for _, p := range providers {
+		models.RegisterProvider(p.Name, p)
+		logger.Info("Registered provider", "name", p.Name)
+	}
+
+	logger.Info("Loading model costs", "dir", settings.ModelsFile())
+	costs, err := LoadCostsFromModelsFile(settings.ModelsFile())
+
+	versions := NewFileVersionStore()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load model costs: %w", err)
+	}
+
 	logger.Info("Loading rules", "file", settings.RulesFile())
 	rules, err := core.NewYAMLRuleRegistry(settings.RulesFile())
 	if err != nil {
@@ -118,6 +137,8 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		logger:              logger,
 		agents:              agents,
 		models:              models,
+		costs:               costs,
+		versions:            versions,
 		rules:               rules,
 		sessDB:              sessDB,
 		agentCache:          make(map[string]*goreact.Agent),
@@ -187,6 +208,18 @@ func (a *App) SetAgentsRegistry(registry *goreact.AgentRegistry) {
 
 func (a *App) Models() *goreact.ModelRegistry {
 	return a.models
+}
+
+func (a *App) Costs() *CostRegistry {
+	return a.costs
+}
+
+func (a *App) ModelCost(name string) (ModelCost, bool) {
+	return a.costs.Get(name)
+}
+
+func (a *App) FileVersions() *FileVersionStore {
+	return a.versions
 }
 
 func (a *App) resolveAPIKey(ref string) string {
@@ -365,6 +398,7 @@ func (a *App) currentAgent() (*goreact.Agent, error) {
 		}
 	}
 
+	opts = append(opts, goreact.WithProviderRegistry(a.models.ProviderRegistry()))
 	m, err := goreact.NewAgent(opts...)
 	if err != nil {
 		return nil, err
@@ -476,6 +510,7 @@ func (a *App) ResolveAgent(name string) (*goreact.Agent, error) {
 		}
 	}
 
+	opts = append(opts, goreact.WithProviderRegistry(a.models.ProviderRegistry()))
 	agent, err := goreact.NewAgent(opts...)
 	if err != nil {
 		return nil, err

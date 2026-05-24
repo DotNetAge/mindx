@@ -78,6 +78,29 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 		m.Status = StatusExecuting
 		return m, cmd
 
+	case msg.ToolUseDeltaMsg:
+		if m.Status == StatusDone || m.Status == StatusError {
+			return m, nil
+		}
+		m.ensureCurrentRound()
+		newAction, _ := UpdateAction(m.currentRound().Action, e)
+		m.currentRound().Action = newAction
+		if m.Status != StatusExecuting {
+			m.Status = StatusExecuting
+		}
+		return m, nil
+
+	case msg.ContentDeltaMsg:
+		if m.Status == StatusDone || m.Status == StatusError {
+			return m, nil
+		}
+		newOutput, _ := UpdateOutput(m.Output, e)
+		m.Output = newOutput
+		if m.Status != StatusResponding {
+			m.Status = StatusResponding
+		}
+		return m, nil
+
 	case msg.ToolExecStartMsg, msg.ToolExecEndMsg,
 		msg.ActionEndMsg, msg.ExecutionSummaryMsg,
 		msg.CollapseToggleMsg, msg.ActionProgressMsg:

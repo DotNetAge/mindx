@@ -4,9 +4,9 @@ models:
       Qwen3.6系列中规模最大、综合能力最强的Max模型Preview版本，当前开放纯文本模型能力供体验。
       相较于此前发布的Qwen3-Max和Qwen3.6-Plus，本模型在vibe coding能力上进一步提升、
       coding agent执行更加高效、前端编程开发能力显著提升；长尾知识能力进一步升级。
-    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api_key: DASHSCOPE_API_KEY
-    auth_token: ""
+    provider: dashscope
+    cost_per_1m_in: 2
+    cost_per_1m_out: 8
     max_tokens: 131072
     context_length: 262144
     is_local: false
@@ -23,9 +23,9 @@ models:
     max_turns: 0
   - name: qwen3.6-plus
     description: Qwen3.6原生视觉语言系列Plus模型，展现出与当前顶尖前沿模型相媲美的卓越性能，模型效果相较3.5系列显著提升。模型在Agentic coding、前端编程、Vibe coding等代码能力、多模态万物识别、OCR、物体定位等能力上显著增强。
-    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api_key: DASHSCOPE_API_KEY
-    auth_token: ""
+    provider: dashscope
+    cost_per_1m_in: 0.8
+    cost_per_1m_out: 2
     max_tokens: 65536
     context_length: 1000000
     is_local: false
@@ -45,9 +45,9 @@ models:
       Qwen3.6原生视觉语言系列Flash模型，模型效果相较3.5-Flash显著提升。
       本模型重点提升agentic coding能力（在多项代码智能体基准上大幅超越前代）、
       数学推理和代码推理能力；视觉方面在空间智能能力上显著增强，物体定位与目标检测提升尤为突出。
-    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api_key: DASHSCOPE_API_KEY
-    auth_token: ""
+    provider: dashscope
+    cost_per_1m_in: 0.1
+    cost_per_1m_out: 0.4
     max_tokens: 65536
     context_length: 1000000
     is_local: false
@@ -67,9 +67,9 @@ models:
       旗舰级 MoE 大模型，总参1.6T、激活 49B，原生支持百万级超长上下文。
       依托海量高质量训练数据，具备顶尖数学逻辑、复杂推理、专业代码与长文本深度解析能力，
       适配高阶科研、复杂办公、深度智能代理等高难度场景。
-    base_url: https://api.deepseek.com
-    api_key: DEEPSEEK_API_KEY
-    auth_token: ""
+    provider: deepseek
+    cost_per_1m_in: 3
+    cost_per_1m_out: 6
     max_tokens: 131072
     context_length: 1000000
     is_local: false
@@ -86,9 +86,9 @@ models:
     max_turns: 0
   - name: deepseek-v4-flash
     description: DeepSeek官方V4系列最新模型，速度更快但推理能力下降，具备当今世界上最强推理能力的模型。
-    base_url: https://api.deepseek.com
-    api_key: DEEPSEEK_API_KEY
-    auth_token: ""
+    provider: deepseek
+    cost_per_1m_in: 1
+    cost_per_1m_out: 2
     max_tokens: 131072
     context_length: 1000000
     is_local: false
@@ -105,9 +105,9 @@ models:
     max_turns: 0
   - name: deepseek-v3.2
     description: DeepSeekv3.2非深度求索官方提供而是通过阿里云百练提供服务。
-    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api_key: DASHSCOPE_API_KEY
-    auth_token: ""
+    provider: dashscope
+    cost_per_1m_in: 0.5
+    cost_per_1m_out: 2
     max_tokens: 65536
     context_length: 131072
     is_local: false
@@ -124,9 +124,9 @@ models:
     max_turns: 0
   - name: kimi-k2.6
     description: Kimi最新最智能的模型，具备更强更稳的长程代码编写能力，指令遵循和自我纠错能力显著提升。同时支持文本、图片与视频输入、思考与非思考模式、对话与 Agent 任务。
-    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api_key: DASHSCOPE_API_KEY
-    auth_token: ""
+    provider: dashscope
+    cost_per_1m_in: 1
+    cost_per_1m_out: 4
     max_tokens: 128000
     context_length: 262144
     is_local: false
@@ -146,9 +146,9 @@ models:
       GLM-5.1是智谱AI推出的面向长程任务（Long Horizon Task）设计的模型，总参数744B，
       支持200K超长上下文，最大输出 128K tokens。拥有强大逻辑推理、长文本理解与代码生成能力、
       兼顾性能与推理效率；在多任务基准中表现优异，适用于智能交互、企业应用、开发辅助等场景。
-    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api_key: DASHSCOPE_API_KEY
-    auth_token: ""
+    provider: dashscope
+    cost_per_1m_in: 1
+    cost_per_1m_out: 4
     max_tokens: 128000
     context_length: 200000
     is_local: false
@@ -163,32 +163,11 @@ models:
     repetition_penalty: 0
     enabled: true
     max_turns: 0
-  - name: kimi-k2.6
-    description: >
-      kimi-k2.6是Kimi最新最智能的模型，具备更强更稳的长程代码编写能力，指令遵循和自我纠错能力显著提升，
-      同时支持文本、图片与视频输入，思考与非思考模式，对话与Agent任务。
-    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api_key: DASHSCOPE_API_KEY
-    auth_token: ""
-    max_tokens: 128000
-    context_length: 262144
-    is_local: false
-    func_calling: true
-    structuring: false
-    web_searching: false
-    prefix_con: true
-    context_cache: true
-    top_p: 0
-    top_k: 0
-    temperature: 0
-    repetition_penalty: 0
-    enabled: true
-    max_turns: 0
   - name: MiniMax/MiniMax-M2.7
-    description: M2.7 能够自行构建复杂 Agent Harness，并基于 Agent Teams、复杂 Skills、Tool Search tool 等能力，完成高度复杂的生产力任务。
-    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    api_key: DASHSCOPE_API_KEY
-    auth_token: ""
+    description: M2.7 能够自行构建复杂 Agent Harness，并基于 Agent Teams、Complex Skills、Tool Search tool 等能力，完成高度复杂的生产力任务。
+    provider: dashscope
+    cost_per_1m_in: 1
+    cost_per_1m_out: 4
     max_tokens: 32768
     context_length: 204800
     is_local: false
