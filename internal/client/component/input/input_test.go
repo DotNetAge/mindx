@@ -45,8 +45,8 @@ func TestInputAreaViewEmpty(t *testing.T) {
 	if !strings.Contains(v, "❯") {
 		t.Error("View() should contain prompt '❯'")
 	}
-	if !strings.Contains(v, "你的消息...") {
-		t.Error("View() should contain placeholder '你的消息...'")
+	if !strings.Contains(v, "发送消息或") {
+		t.Error("View() should contain placeholder '发送消息或...'")
 	}
 }
 
@@ -150,21 +150,44 @@ func TestEnterEmptyText(t *testing.T) {
 
 func TestCtrlC(t *testing.T) {
 	i := New()
-	_, cmd := i.Update(tea.KeyPressMsg(tea.Key{Mod: tea.ModCtrl, Code: 'c'}))
+	var key tea.Key
+	if isDarwin {
+		key = tea.Key{Mod: tea.ModSuper, Code: 'c'}
+	} else {
+		key = tea.Key{Mod: tea.ModCtrl, Code: 'c'}
+	}
+	_, cmd := i.Update(tea.KeyPressMsg(key))
 	if cmd == nil {
-		t.Fatal("Expected non-nil cmd on ctrl+c")
+		t.Fatal("Expected non-nil cmd on copy shortcut")
 	}
 	msg := cmd()
 	if _, ok := msg.(clientmsg.ExitMsg); !ok {
 		t.Fatalf("Expected ExitMsg, got %T", msg)
 	}
+
+	i.TextBuffer.WriteString("some text")
+	i.CursorPos = 9
+	_, cmd2 := i.Update(tea.KeyPressMsg(key))
+	if cmd2 == nil {
+		t.Fatal("Expected non-nil cmd on copy shortcut with text")
+	}
+	msg2 := cmd2()
+	if _, ok := msg2.(clientmsg.ExitMsg); ok {
+		t.Fatal("Expected no ExitMsg when there's text (should clear instead)")
+	}
 }
 
 func TestCtrlL(t *testing.T) {
 	i := New()
-	_, cmd := i.Update(tea.KeyPressMsg(tea.Key{Mod: tea.ModCtrl, Code: 'l'}))
+	var key tea.Key
+	if isDarwin {
+		key = tea.Key{Mod: tea.ModSuper, Code: 'l'}
+	} else {
+		key = tea.Key{Mod: tea.ModCtrl, Code: 'l'}
+	}
+	_, cmd := i.Update(tea.KeyPressMsg(key))
 	if cmd == nil {
-		t.Fatal("Expected non-nil cmd on ctrl+l")
+		t.Fatal("Expected non-nil cmd on clear screen shortcut")
 	}
 	msg := cmd()
 	if _, ok := msg.(clientmsg.ClearScreenMsg); !ok {
