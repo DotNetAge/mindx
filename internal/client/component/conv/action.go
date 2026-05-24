@@ -19,6 +19,7 @@ type ActionStep struct {
 	Params       map[string]any
 	ProgressText string
 	ResultText   string
+	StreamingArgs string
 	Collapsed    bool
 }
 
@@ -68,6 +69,36 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 			Collapsed:    true,
 		}
 		m.Steps = append(m.Steps, step)
+		return m, nil
+
+	case msg.ToolUseDeltaMsg:
+		if m.Completed {
+			return m, nil
+		}
+		idx := e.Index
+		if idx < 0 {
+			idx = len(m.Steps)
+		}
+		for idx < len(m.Steps) {
+			step := &m.Steps[idx]
+			if step.ToolName == "" || step.ToolName == e.Name {
+				step.ToolName = e.Name
+				step.StreamingArgs += e.Arguments
+				if step.Status != ActionStepExecuting {
+					step.Status = ActionStepExecuting
+				}
+				break
+			}
+			idx++
+		}
+		if idx >= len(m.Steps) {
+			m.Steps = append(m.Steps, ActionStep{
+				ToolName:      e.Name,
+				Status:        ActionStepExecuting,
+				StreamingArgs: e.Arguments,
+				Collapsed:     true,
+			})
+		}
 		return m, nil
 
 	case msg.ToolExecEndMsg:
@@ -201,7 +232,13 @@ func ViewActionStep(step ActionStep, blinkOn bool) string {
 	if paramStr != "" {
 		b.WriteString(fmt.Sprintf("(%s)", paramStr))
 	}
-	if step.ProgressText != "" {
+	if step.StreamingArgs != "" && step.Status == ActionStepExecuting {
+		argsPreview := step.StreamingArgs
+		if len(argsPreview) > 80 {
+			argsPreview = argsPreview[:77] + "..."
+		}
+		b.WriteString(fmt.Sprintf(" | %s", style.DimStyle.Render(argsPreview+style.DimStyle.Render("▌"))))
+	} else if step.ProgressText != "" {
 		b.WriteString(fmt.Sprintf(" | %s", style.GrayStyle.Render(step.ProgressText)))
 	}
 	b.WriteByte('\n')

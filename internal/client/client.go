@@ -14,12 +14,14 @@ import (
 	"charm.land/bubbles/v2/timer"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/goreact"
 	goreactcore "github.com/DotNetAge/goreact/core"
 	"github.com/DotNetAge/mindx/internal/client/component/choices"
 	"github.com/DotNetAge/mindx/internal/client/component/conv"
 	"github.com/DotNetAge/mindx/internal/client/component/input"
 	"github.com/DotNetAge/mindx/internal/client/component/notify"
+	"github.com/DotNetAge/mindx/internal/client/component/sidebar"
 	"github.com/DotNetAge/mindx/internal/client/component/statusbar"
 	"github.com/DotNetAge/mindx/internal/client/component/welcome"
 	"github.com/DotNetAge/mindx/internal/client/data"
@@ -32,12 +34,15 @@ type rootModel struct {
 	conversationList conv.ConversationList
 	welcome          *welcome.WelcomePanel
 	statusBar        *statusbar.StatusBar
+	sidebar          *sidebar.Sidebar
 	input            *input.InputArea
 	notifBar         *notify.NotificationBar
 	choices          *choices.ChoicesPanel
 	viewport         viewport.Model
 	termWidth        int
 	termHeight       int
+	leftWidth        int
+	rightWidth       int
 	scrollToBottom   bool
 
 	app      *appcore.App
@@ -59,8 +64,7 @@ type rootModel struct {
 
 // pendingPermissionState holds the state needed to respond to a permission request.
 type pendingPermissionState struct {
-	responder goreactcore.PermissionResponder
-	req       clientmsg.PermissionRequestMsg
+	req *goreactcore.PermissionRequestData
 }
 
 func (m *rootModel) getLogger() goreactcore.Logger {
@@ -77,6 +81,7 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 		conversationList: conv.NewConversationList(),
 		welcome:          welcome.New(),
 		statusBar:        statusbar.New(),
+		sidebar:          sidebar.New(),
 		input:            input.New(),
 		notifBar:         notify.New(),
 		choices:          choices.New(),
@@ -302,6 +307,7 @@ func (m *rootModel) populateWelcome() {
 			m.welcome.Data.SessionID = sid
 		}
 		m.loadSessionHistory()
+		m.sidebar.SetWelcomeData(m.welcome.Data)
 	}
 }
 
@@ -520,6 +526,20 @@ func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 				ToolCalls:  data.ToolCalls,
 			}
 		}
+	case goreactcore.ContentDelta:
+		return clientmsg.ContentDeltaMsg{SessionID: evt.SessionID, Content: toString(evt.Data)}
+
+	case goreactcore.ToolUseDelta:
+		if data, ok := evt.Data.(goreactcore.ToolUseDeltaData); ok {
+			return clientmsg.ToolUseDeltaMsg{
+				SessionID: evt.SessionID,
+				Index:     data.Index,
+				ID:        data.ID,
+				Name:      data.Name,
+				Arguments: data.Arguments,
+			}
+		}
+
 	case goreactcore.FinalAnswer:
 		return clientmsg.FinalAnswerMsg{SessionID: evt.SessionID, Content: toString(evt.Data)}
 	case goreactcore.CycleEnd:
@@ -539,24 +559,11 @@ func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 		}
 	case goreactcore.PermissionRequest:
 		if data, ok := evt.Data.(goreactcore.PermissionRequestData); ok {
-			questions := make([]clientmsg.QuestionData, len(data.Questions))
-			for i, q := range data.Questions {
-				opts := make([]string, len(q.Options))
-				for j, o := range q.Options {
-					opts[j] = o.Label
-				}
-				questions[i] = clientmsg.QuestionData{
-					Question:    q.Question,
-					Header:      q.Header,
-					Options:     opts,
-					MultiSelect: q.MultiSelect,
-				}
-			}
+			m.pendingPermission = &pendingPermissionState{req: &data}
 			return clientmsg.PermissionRequestMsg{
 				ToolName:      data.ToolName,
 				Reason:        data.Reason,
 				SecurityLevel: int(data.SecurityLevel),
-				Questions:     questions,
 			}
 		}
 	}
@@ -633,6 +640,13 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeViewport(msg.Width, msg.Height)
 
 	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			m.handlePostExit()
+			m.stopEventLoop()
+			return m, tea.Quit
+		}
+
 		if m.choices.Visible {
 			_, choicesCmd := m.choices.Update(msg)
 			newVp, vpCmd := m.viewport.Update(msg)
@@ -716,41 +730,15 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.ChoiceSelectedMsg:
 		_, cmd := m.choices.Update(msg)
-		// If there's a pending permission request, respond to it
 		if m.pendingPermission != nil {
 			pp := m.pendingPermission
-			m.pendingPermission = nil // Clear before responding
+			m.pendingPermission = nil
 			if msg.Index < 0 {
-				// esc / cancelled
-				go pp.responder.Respond(goreactcore.PermissionResult{
-					Behavior: goreactcore.PermissionDeny,
-					Message:  "user cancelled",
-				})
-			} else if len(pp.req.Questions) > 0 {
-				// AskUser: selected a choice
-				q := pp.req.Questions[0]
-				selected := q.Options[msg.Index]
-				go pp.responder.Respond(goreactcore.PermissionResult{
-					Behavior: goreactcore.PermissionAllow,
-					UpdatedInput: map[string]any{
-						"answers": map[string]any{
-							q.Question: selected,
-						},
-					},
-				})
+				go pp.req.Deny("user cancelled")
+			} else if msg.Index == 0 {
+				go pp.req.Grant(nil)
 			} else {
-				// Simple allow/deny
-				if msg.Index == 0 {
-					go pp.responder.Respond(goreactcore.PermissionResult{
-						Behavior: goreactcore.PermissionAllow,
-						Message:  "user approved",
-					})
-				} else {
-					go pp.responder.Respond(goreactcore.PermissionResult{
-						Behavior: goreactcore.PermissionDeny,
-						Message:  "user denied",
-					})
-				}
+				go pp.req.Deny("user denied")
 			}
 		}
 		return m, cmd
@@ -765,33 +753,12 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.PermissionRequestMsg:
 		m.statusBar.CurrentState = "等待选择"
-		// Store pending permission responder
-		responder := m.agent.Reactor().PermissionResponder()
-		m.pendingPermission = &pendingPermissionState{
-			responder: responder,
-			req:       msg,
-		}
-		// Show choices panel with questions
-		if len(msg.Questions) > 0 {
-			q := msg.Questions[0]
-			if len(q.Options) > 0 {
-				return m, func() tea.Msg {
-					return clientmsg.ShowChoicesMsg{
-						Options: q.Options,
-						Prompt:  q.Question,
-					}
-				}
-			}
-		} else {
-			// Simple allow/deny
-			return m, func() tea.Msg {
-				return clientmsg.ShowChoicesMsg{
-					Options: []string{"Allow", "Deny"},
-					Prompt:  "🔒 " + msg.ToolName + ": " + msg.Reason,
-				}
+		return m, func() tea.Msg {
+			return clientmsg.ShowChoicesMsg{
+				Options: []string{"Allow", "Deny"},
+				Prompt:  "🔒 " + msg.ToolName + ": " + msg.Reason,
 			}
 		}
-		return m, nil
 
 	case clientmsg.SessionLoadedMsg:
 		m.statusBar.Update(msg)
@@ -804,6 +771,15 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			m.agent.Cancel()
 		}
 		return m, nil
+
+	case tea.InterruptMsg:
+		m.executing = false
+		if m.agent != nil {
+			m.agent.Cancel()
+		}
+		m.handlePostExit()
+		m.stopEventLoop()
+		return m, tea.Quit
 
 	case clientmsg.ExitMsg:
 		m.handlePostExit()
@@ -825,7 +801,16 @@ func (m *rootModel) dispatchToAll(w clientmsg.WindowResizeMsg) {
 func (m *rootModel) resizeViewport(termWidth, termHeight int) {
 	m.termWidth = termWidth
 	m.termHeight = termHeight
-	// Initial estimate-based height; View() overrides this dynamically.
+
+	m.leftWidth = termWidth*3/4 - 1
+	if m.leftWidth < 40 {
+		m.leftWidth = termWidth - 30
+	}
+	m.rightWidth = termWidth - m.leftWidth - 1
+	if m.rightWidth < 20 {
+		m.rightWidth = 20
+	}
+
 	headerEstimate := 8
 	footerEstimate := 5
 	separators := 2
@@ -833,8 +818,10 @@ func (m *rootModel) resizeViewport(termWidth, termHeight int) {
 	if vpHeight < 5 {
 		vpHeight = 5
 	}
-	m.viewport.SetWidth(termWidth)
+	m.viewport.SetWidth(m.leftWidth)
 	m.viewport.SetHeight(vpHeight)
+
+	m.sidebar.Update(clientmsg.WindowResizeMsg{Width: m.rightWidth, Height: vpHeight})
 }
 
 func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
@@ -1028,48 +1015,31 @@ func (m *rootModel) View() tea.View {
 	statusView := m.statusBar.View()
 	inputView := m.input.View()
 
-	// Build header: welcome + optional notifications only
-	var header strings.Builder
-	header.WriteString(welcomeView)
+	headerStr := welcomeView
 	if notifView != "" {
-		header.WriteString("\n")
-		header.WriteString(notifView)
+		headerStr = lipgloss.JoinVertical(lipgloss.Left, headerStr, notifView)
 	}
-	headerStr := header.String()
 
-	// Build footer: statusbar + (input OR choices, mutually exclusive)
-	var footer strings.Builder
-	footer.WriteString(statusView)
-	footer.WriteString("\n")
-
+	var bottomArea string
 	if m.choices.Visible {
-		// Show choices panel, hide input
 		m.input.Hidden = true
-		if choicesView != "" {
-			footer.WriteString(choicesView)
-		}
+		bottomArea = choicesView
 	} else {
-		// Show input, hide choices
 		m.input.Hidden = false
-		if inputView != "" {
-			footer.WriteString(inputView)
-		}
+		bottomArea = inputView
 	}
-	footerStr := footer.String()
 
-	// Dynamically compute viewport height from actual rendered line counts.
-	// This accounts for the input suggestion dropdown making the footer taller.
 	headerLines := strings.Count(headerStr, "\n") + 1
-	footerLines := strings.Count(footerStr, "\n") + 1
+	statusLines := strings.Count(statusView, "\n") + 1
+	bottomLines := strings.Count(bottomArea, "\n") + 1
 	separators := 2
-	vpHeight := m.termHeight - headerLines - footerLines - separators
+	vpHeight := m.termHeight - headerLines - statusLines - bottomLines - separators
 	if vpHeight < 3 {
 		vpHeight = 3
 	}
-	m.viewport.SetWidth(m.termWidth)
+	m.viewport.SetWidth(m.leftWidth)
 	m.viewport.SetHeight(vpHeight)
 
-	// Update viewport content from conversation list
 	m.viewport.SetContent(m.conversationList.View())
 
 	if m.scrollToBottom {
@@ -1077,15 +1047,19 @@ func (m *rootModel) View() tea.View {
 		m.scrollToBottom = false
 	}
 
-	// Compose full layout
-	var out strings.Builder
-	out.WriteString(headerStr)
-	out.WriteString("\n")
-	out.WriteString(m.viewport.View())
-	out.WriteString("\n")
-	out.WriteString(footerStr)
+	mainArea := m.viewport.View()
+	sideArea := m.sidebar.View()
 
-	v := tea.NewView(out.String())
+	layout := lipgloss.JoinHorizontal(lipgloss.Top, mainArea, sideArea)
+
+	full := lipgloss.JoinVertical(lipgloss.Left,
+		headerStr,
+		layout,
+		statusView,
+		bottomArea,
+	)
+
+	v := tea.NewView(full)
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	return v

@@ -133,13 +133,17 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			d.logger.Warn("unexpected PermissionRequest data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		if len(req.Questions) > 0 {
-			jsonData, _ := json.Marshal(req)
-			d.sendEvent(clientID, sid, gateway.RespPermissionRequest, "需要澄清", string(jsonData))
-		} else {
-			md := buildPermissionRequestMarkdown(req)
-			d.sendEvent(clientID, sid, gateway.RespPermissionRequest, "权限请求", md)
+		md := buildPermissionRequestMarkdown(req)
+		d.sendEvent(clientID, sid, gateway.RespPermissionRequest, "权限请求", md)
+
+	case goreactcore.AskUserRequest:
+		req, ok := event.Data.(goreactcore.AskUserRequestData)
+		if !ok {
+			d.logger.Warn("unexpected AskUserRequest data type", "type", fmt.Sprintf("%T", event.Data))
+			return
 		}
+		jsonData, _ := json.Marshal(req)
+		d.sendEvent(clientID, sid, gateway.RespForm, "需要澄清", string(jsonData))
 
 	case goreactcore.PermissionDenied:
 		reason, ok := event.Data.(string)

@@ -11,7 +11,7 @@
 # =============================================================================
 
 .PHONY: help all welcome question thinking action output conversation conv \
-        input notify statusbar choices error reasoning
+        input notify statusbar choices error reasoning permission layout overlay
 
 ROOT := ../../..
 SRC  := internal/client/examples
@@ -36,6 +36,9 @@ help:
 	@echo "  choices       — ChoicesPanel 选择面板（按 s 弹出选项）"
 	@echo "  error         — ErrorMsg 错误提示（按 t/a/o 触发不同阶段错误）"
 	@echo "  reasoning     — Reasoning 推理状态（按 1-5 切换不同场景）"
+	@echo "  permission    — PermissionBar 授权确认栏（按 1/2/3 切换场景）"
+	@echo "  layout        — Layout 完整布局（主视口+边栏+底部互斥区）"
+	@echo "  overlay       — Overlay 居中模态框（按 o 弹出多选面板）"
 	@echo ""
 	@echo "Other:"
 	@echo "  all           — 编译验证所有示例（不运行）"
@@ -62,3 +65,6 @@ statusbar:    ; $(call RUN_EXAMPLE,statusbar)
 choices:      ; $(call RUN_EXAMPLE,choices)
 error:        ; $(call RUN_EXAMPLE,error)
 reasoning:    ; $(call RUN_EXAMPLE,reasoning)
+permission:   ; $(call RUN_EXAMPLE,permission)
+layout:      ; $(call RUN_EXAMPLE,layout)
+overlay:     ; $(call RUN_EXAMPLE,overlay)

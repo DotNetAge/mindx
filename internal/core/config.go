@@ -28,8 +28,9 @@ type MindxConfig struct {
 	Initialized   bool         `json:"initialized"`
 	LastAgent     string       `json:"last_agent,omitempty"`
 	LastSessionID string       `json:"last_session_id,omitempty"`
-	LastModel     string       `json:"last_model,omitempty"`
-	DefaultModel  string       `json:"default_model,omitempty"`
+	LastModel       string `json:"last_model,omitempty"`
+	DefaultModel    string `json:"default_model,omitempty"`
+	DefaultProvider string `json:"default_provider,omitempty"`
 	EmbedderModel string       `json:"embedder_model,omitempty"`
 	Daemon        DaemonConfig `json:"daemon"`
 	Python        PythonConfig `json:"python"`

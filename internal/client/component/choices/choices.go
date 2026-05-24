@@ -3,10 +3,10 @@ package choices
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
@@ -17,19 +17,8 @@ type choiceItem string
 func (i choiceItem) FilterValue() string { return string(i) }
 
 type choiceDelegate struct {
-	styles *delegateStyles
-}
-
-type delegateStyles struct {
-	normal   lipgloss.Style
-	selected lipgloss.Style
-}
-
-func defaultDelegateStyles() *delegateStyles {
-	return &delegateStyles{
-		normal:   lipgloss.NewStyle().PaddingLeft(2).Foreground(style.ThemeDim),
-		selected: lipgloss.NewStyle().PaddingLeft(2).Foreground(style.ThemeCyan),
-	}
+	multiSelect bool
+	selected    map[int]bool
 }
 
 func (d choiceDelegate) Height() int                             { return 1 }
@@ -40,24 +29,105 @@ func (d choiceDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	if !ok {
 		return
 	}
-	if index == m.Index() {
-		fmt.Fprint(w, d.styles.selected.Render("> "+string(item)))
+	isCursor := index == m.Index()
+	isChecked := d.selected != nil && d.selected[index]
+
+	var line string
+	switch {
+	case d.multiSelect:
+		check := "[ ] "
+		if isChecked {
+			check = "[✓] "
+		}
+		dot := "○"
+		if isCursor {
+			dot = "●"
+		}
+		line = dot + " " + check + string(item)
+	default:
+		dot := "○"
+		if isCursor {
+			dot = "●"
+		}
+		if isChecked {
+			dot = "●"
+		}
+		line = dot + "  " + string(item)
+	}
+
+	if isCursor {
+		fmt.Fprint(w, style.CyanStyle.Render(line))
 	} else {
-		fmt.Fprint(w, d.styles.normal.Render(string(item)))
+		fmt.Fprint(w, style.DimStyle.Render(line))
 	}
 }
 
 type ChoicesPanel struct {
-	Visible bool
-	Items   []string
-	Prompt  string
-	Cursor  int
-	list    list.Model
-	width   int
+	Visible        bool
+	Items          []string
+	Prompt         string
+	Cursor         int
+	MultiSelect    bool
+	AllowTextInput bool
+	Selected       map[int]bool
+	CustomText     string
+	inputActive    bool
+	list           list.Model
+	width          int
 }
 
 func New() *ChoicesPanel {
 	return &ChoicesPanel{}
+}
+
+func (p *ChoicesPanel) buildList() {
+	items := make([]list.Item, len(p.Items))
+	for i, opt := range p.Items {
+		items[i] = choiceItem(opt)
+	}
+
+	w := p.width
+	if w == 0 {
+		w = 80
+	}
+	height := len(p.Items) + 2
+	if p.MultiSelect && p.AllowTextInput {
+		height += 3
+	}
+	if height < 5 {
+		height = 5
+	}
+	if height > 16 {
+		height = 16
+	}
+
+	d := choiceDelegate{
+		multiSelect: p.MultiSelect,
+		selected:    p.Selected,
+	}
+	l := list.New(items, d, w, height)
+	l.Title = p.Prompt
+	l.SetShowStatusBar(false)
+	l.SetShowPagination(false)
+	l.SetShowTitle(false)
+	l.SetShowHelp(false)
+	l.SetFilteringEnabled(false)
+
+	p.list = l
+}
+
+func (p *ChoicesPanel) rebuildView() {
+	if !p.Visible {
+		return
+	}
+	oldIdx := 0
+	if p.list.Width() > 0 {
+		oldIdx = p.list.Index()
+	}
+	p.buildList()
+	if oldIdx < len(p.Items) {
+		p.list.Select(oldIdx)
+	}
 }
 
 func (p *ChoicesPanel) Update(msg any) (*ChoicesPanel, tea.Cmd) {
@@ -67,40 +137,24 @@ func (p *ChoicesPanel) Update(msg any) (*ChoicesPanel, tea.Cmd) {
 		p.Items = msg.Options
 		p.Prompt = msg.Prompt
 		p.Cursor = 0
-
-		items := make([]list.Item, len(msg.Options))
-		for i, opt := range msg.Options {
-			items[i] = choiceItem(opt)
+		p.MultiSelect = msg.MultiSelect
+		p.AllowTextInput = msg.AllowTextInput
+		p.inputActive = false
+		p.CustomText = ""
+		if p.MultiSelect {
+			if p.Selected == nil {
+				p.Selected = make(map[int]bool)
+			} else {
+				clear(p.Selected)
+			}
 		}
-
-		w := p.width
-		if w == 0 {
-			w = 80
-		}
-		height := len(msg.Options) + 2
-		if height < 5 {
-			height = 5
-		}
-		if height > 16 {
-			height = 16
-		}
-
-		d := choiceDelegate{styles: defaultDelegateStyles()}
-		l := list.New(items, d, w, height)
-		l.Title = msg.Prompt
-		l.SetShowStatusBar(false)
-		l.SetShowPagination(false)
-		l.SetShowTitle(false)
-		l.SetShowHelp(false)
-		l.SetFilteringEnabled(false)
-
-		p.list = l
+		p.buildList()
 		return p, nil
 
 	case tea.WindowSizeMsg:
 		p.width = msg.Width
 		if p.Visible {
-			p.list.SetWidth(msg.Width)
+			p.rebuildView()
 		}
 		return p, nil
 
@@ -108,18 +162,51 @@ func (p *ChoicesPanel) Update(msg any) (*ChoicesPanel, tea.Cmd) {
 		if !p.Visible {
 			return p, nil
 		}
+		key := tea.Key(msg)
 
-		switch msg.String() {
-		case "enter":
-			p.Cursor = p.list.Index()
+		if p.inputActive && p.AllowTextInput {
+			return p.handleInputMode(key)
+		}
+
+		switch key.Code {
+		case tea.KeyEnter:
 			p.Visible = false
+			if p.MultiSelect {
+				var indices []int
+				for i, v := range p.Selected {
+					if v {
+						indices = append(indices, i)
+					}
+				}
+				return p, func() tea.Msg {
+					return clientmsg.ChoiceSelectedMsg{Indices: indices, CustomText: p.CustomText}
+				}
+			}
+			p.Cursor = p.list.Index()
 			return p, func() tea.Msg {
 				return clientmsg.ChoiceSelectedMsg{Index: p.Cursor}
 			}
-		case "esc":
+		case tea.KeyEsc:
+			p.inputActive = false
 			p.Visible = false
 			return p, func() tea.Msg {
 				return clientmsg.ChoiceSelectedMsg{Index: -1}
+			}
+		case ' ':
+			if p.MultiSelect {
+				idx := p.list.Index()
+				if p.Selected[idx] {
+					delete(p.Selected, idx)
+				} else {
+					p.Selected[idx] = true
+				}
+				p.rebuildView()
+				return p, nil
+			}
+		case tea.KeyTab:
+			if p.MultiSelect && p.AllowTextInput {
+				p.inputActive = !p.inputActive
+				return p, nil
 			}
 		default:
 			var cmd tea.Cmd
@@ -131,9 +218,83 @@ func (p *ChoicesPanel) Update(msg any) (*ChoicesPanel, tea.Cmd) {
 	return p, nil
 }
 
+func (p *ChoicesPanel) handleInputMode(key tea.Key) (*ChoicesPanel, tea.Cmd) {
+	switch key.Code {
+	case tea.KeyEnter:
+		p.Visible = false
+		var indices []int
+		for i, v := range p.Selected {
+			if v {
+				indices = append(indices, i)
+			}
+		}
+		return p, func() tea.Msg {
+			return clientmsg.ChoiceSelectedMsg{Indices: indices, CustomText: p.CustomText}
+		}
+	case tea.KeyEsc:
+		p.inputActive = false
+		return p, nil
+	case tea.KeyTab, tea.KeyUp:
+		p.inputActive = false
+		return p, nil
+	case tea.KeyBackspace:
+		if len(p.CustomText) > 0 {
+			p.CustomText = p.CustomText[:len(p.CustomText)-1]
+		}
+	default:
+		if isPrintable(key) {
+			ch := rune(key.Code)
+			if key.ShiftedCode != 0 {
+				ch = rune(key.ShiftedCode)
+			}
+			p.CustomText += string(ch)
+		}
+	}
+	return p, nil
+}
+
+func isPrintable(k tea.Key) bool {
+	if k.Mod != 0 && !k.Mod.Contains(tea.ModShift) {
+		return false
+	}
+	if k.Code >= tea.KeySpace && k.Code <= '~' {
+		return true
+	}
+	if k.Code >= 0x80 && k.Code != tea.KeyExtended {
+		return true
+	}
+	return false
+}
+
 func (p *ChoicesPanel) View() string {
 	if !p.Visible || len(p.Items) == 0 {
 		return ""
 	}
-	return p.list.View()
+
+	listView := strings.TrimSpace(p.list.View())
+
+	var b strings.Builder
+	b.WriteString(listView)
+
+	if p.MultiSelect && p.AllowTextInput {
+		b.WriteByte('\n')
+		b.WriteString(viewCustomInput(p))
+	}
+
+	return b.String()
+}
+
+func viewCustomInput(p *ChoicesPanel) string {
+	label := style.BoldWhite.Render("  其他: ")
+	if p.inputActive {
+		input := style.CyanStyle.Render(p.CustomText) + style.DimStyle.Render("▌")
+		hint := style.GrayStyle.Render("  (↑/Tab 返回列表 | Enter 确认 | Esc 取消)")
+		return label + input + "\n" + hint
+	}
+	input := style.DimStyle.Render(p.CustomText)
+	if input == "" {
+		input = style.DimStyle.Render("(不在上述选项中时输入)")
+	}
+	hint := style.GrayStyle.Render("  (Tab 激活输入 | Space 选择 | Enter 确认)")
+	return label + input + "\n" + hint
 }

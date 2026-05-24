@@ -66,6 +66,23 @@ type FinalAnswerMsg struct {
 	Content   string
 }
 
+// ContentDeltaMsg is a streaming text content fragment from the LLM response.
+// Used to progressively build the final output before FinalAnswer arrives.
+type ContentDeltaMsg struct {
+	SessionID string
+	Content   string
+}
+
+// ToolUseDeltaMsg is a streaming tool call argument fragment from the LLM response.
+// Used to show tool call arguments being generated in real-time.
+type ToolUseDeltaMsg struct {
+	SessionID string
+	Index     int
+	ID        string
+	Name      string
+	Arguments string
+}
+
 type AgentErrorMsg struct {
 	SessionID string
 	Error     error
@@ -113,7 +130,9 @@ type TickMsg struct {
 }
 
 type ChoiceSelectedMsg struct {
-	Index int
+	Index      int
+	Indices    []int
+	CustomText string
 }
 
 type NotifTimeoutMsg struct {
@@ -131,8 +150,10 @@ type WindowResizeMsg struct {
 }
 
 type ShowChoicesMsg struct {
-	Options []string
-	Prompt  string
+	Options        []string
+	Prompt         string
+	MultiSelect    bool
+	AllowTextInput bool
 }
 
 type MouseScrollMsg struct {
