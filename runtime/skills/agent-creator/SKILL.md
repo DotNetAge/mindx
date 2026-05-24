@@ -1,20 +1,20 @@
 ---
 name: agent-creator
 description: >
-  Creates new agent definitions tailored to specific roles and tasks.
-  Use when the user says "I need an expert in X", "create an agent for Y",
-  "I need a specialist in Z", or when another skill (like find-experts)
-  determines no existing agent fits the task and a new one must be created.
+  Creates and registers a new agent with a specific role, expertise,
+  or capability. Use when you need a specialist in a particular domain
+  and no existing agent fits the requirement.
 ---
 
 # When to Use This Skill
 
-- The user directly asks to create a new agent or expert
-- The user describes a role they need filled ("我需要一个设计师Agent")
-- Another skill (e.g. find-experts) determines no existing agent fits
-- You need a specialist agent for a task that no existing agent covers
+- The user says "I need a XXX expert", "I need someone who knows XXX",
+  "I need a specialist in XXX", "create an agent for XXX"
+- The user needs a professional capability no existing agent has
+- You're executing a workflow that requires a specialist, and no existing
+  agent is suitable
 
-**Do NOT use** when a suitable agent already exists — check with agent.list first.
+**Do NOT use** when a suitable agent already exists — check existing agents first.
 
 ---
 
@@ -22,14 +22,8 @@ description: >
 
 ### Step 1: Review Best Practices
 
-Before writing any agent definition, read the best practices guide.
-It covers field conventions, selection criteria, and anti-patterns:
-
-> Read `references/agent-best-practices.md` for complete guidance on
-> name, role, description, model, and skills fields.
-
-This file is located in the find-experts skill directory:
-`<workspace>/skills/find-experts/references/agent-best-practices.md`
+Read `references/agent-best-practices.md` for guidance on name, role,
+description, model, and skills fields before defining the agent.
 
 ### Step 2: List Available Skills
 
@@ -54,11 +48,15 @@ Choose the model best suited to the task type.
 
 ### Step 4: Create the Agent
 
+Craft a clear system prompt (body) that defines the agent's identity and
+responsibilities. Use the agent's role and description as a starting point.
+
 ```bash
 python3 scripts/create_agent.py \
     --name "<agent_name>" \
     --role "<agent_role>" \
-    --description '<description>' \
+    --description "<description>" \
+    --body "<system_prompt>" \
     --model "<model_name>" \
     --skills "skill1,skill2"
 ```

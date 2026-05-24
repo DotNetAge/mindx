@@ -58,14 +58,8 @@ A vague brief produces a vague result. Be specific and unambiguous.
 
 ### Case B: No Suitable Expert Exists
 
-Load the **agent-creator** skill to create a new agent:
-
-```
-Skill("agent-creator")
-```
-
-Follow its instructions to design and create the agent. Then return here
-and spawn the newly created agent using the same briefing guidelines as Case A.
+Use the **agent-creator** skill to design and create the agent.
+Then return here and spawn it using the same briefing guidelines as Case A.
 
 ## Step 3: Collect Results
 
@@ -140,6 +134,6 @@ For large-scale tasks requiring parallel work across domains:
 
 ## References
 
-- **`references/agent-best-practices.md`** (in this skill's directory) — Complete guide for
-  writing agent definitions: field conventions, selection criteria, model/skill matching,
-  anti-patterns, and creation checklist. Referenced by the agent-creator skill.
+- **`references/agent-best-practices.md`** — Complete guide for writing agent definitions:
+  field conventions, selection criteria, model/skill matching, anti-patterns, and creation
+  checklist. Shared with the agent-creator skill.
