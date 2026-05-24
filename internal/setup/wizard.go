@@ -372,7 +372,8 @@ func parseModelsForWizard(path string) ([]modelItem, error) {
 	}
 
 	var config struct {
-		Models []goreactcore.ModelConfig `yaml:"models"`
+		Providers []goreactcore.ProviderConfig `yaml:"providers"`
+		Models    []goreactcore.ModelConfig    `yaml:"models"`
 	}
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, err

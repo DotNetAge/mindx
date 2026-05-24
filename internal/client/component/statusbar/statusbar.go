@@ -16,11 +16,35 @@ var (
 	sep = fmt.Sprintf(" %s ", style.DimStyle.Render("│"))
 )
 
+type ModelPricing struct {
+	InputPrice  float64
+	OutputPrice float64
+}
+
+var pricingTable = map[string]ModelPricing{
+	"claude-sonnet-4":         {InputPrice: 3.0, OutputPrice: 15.0},
+	"claude-sonnet-4-20250514": {InputPrice: 3.0, OutputPrice: 15.0},
+	"claude-opus-4":           {InputPrice: 15.0, OutputPrice: 75.0},
+	"claude-haiku-3.5":        {InputPrice: 0.8, OutputPrice: 4.0},
+	"gpt-4o":                  {InputPrice: 2.5, OutputPrice: 10.0},
+	"gpt-4o-mini":             {InputPrice: 0.15, OutputPrice: 0.6},
+	"deepseek-v3":             {InputPrice: 0.27, OutputPrice: 1.1},
+	"deepseek-r1":             {InputPrice: 0.55, OutputPrice: 2.19},
+	"qwen-plus":               {InputPrice: 0.8, OutputPrice: 2.0},
+	"qwen-max":                {InputPrice: 2.0, OutputPrice: 6.0},
+}
+
+func defaultPricing() ModelPricing {
+	return ModelPricing{InputPrice: 3.0, OutputPrice: 15.0}
+}
+
 type StatusBar struct {
 	Width           int
 	CurrentState    string
 	BlinkOn         bool
 	TokensTotal     int
+	InputTokens     int
+	OutputTokens    int
 	SessionStart    time.Time
 	SessionDuration time.Duration
 	SessionName     string
@@ -46,9 +70,15 @@ func (s *StatusBar) Update(msg any) (*StatusBar, tea.Cmd) {
 		s.SessionName = m.SessionID
 	case clientmsg.ActionStartMsg:
 		s.TokensTotal += m.EstimatedTok
+		s.InputTokens += m.EstimatedTok / 2
+		s.OutputTokens += (m.EstimatedTok + 1) / 2
 	case clientmsg.ExecutionSummaryMsg:
 		if m.TokensUsed > 0 {
 			s.TokensTotal += m.TokensUsed
+			in := m.TokensUsed * 2 / 3
+			out := m.TokensUsed - in
+			s.InputTokens += in
+			s.OutputTokens += out
 		}
 	case clientmsg.FinalAnswerMsg:
 		if s.SessionStart.IsZero() {
@@ -62,6 +92,26 @@ func (s *StatusBar) Update(msg any) (*StatusBar, tea.Cmd) {
 
 func (s *StatusBar) Tick() {
 	s.BlinkOn = !s.BlinkOn
+}
+
+func (s *StatusBar) Cost() float64 {
+	p, ok := pricingTable[s.ModelName]
+	if !ok {
+		p = defaultPricing()
+	}
+	inputCost := float64(s.InputTokens) / 1_000_000 * p.InputPrice
+	outputCost := float64(s.OutputTokens) / 1_000_000 * p.OutputPrice
+	return inputCost + outputCost
+}
+
+func formatCost(cost float64) string {
+	if cost < 0.01 {
+		return "¥<0.01"
+	}
+	if cost < 1 {
+		return fmt.Sprintf("¥%.2f", cost)
+	}
+	return fmt.Sprintf("¥%.2f", cost)
 }
 
 func formatTokens(n int) string {
@@ -106,6 +156,10 @@ func (s *StatusBar) View() string {
 	tokStr := style.WhiteStyle.Render(fmt.Sprintf("Tokens: %s", formatTokens(s.TokensTotal)))
 	parts = append(parts, tokStr)
 
+	cost := s.Cost()
+	costStr := style.YellowStyle.Render(formatCost(cost))
+	parts = append(parts, costStr)
+
 	if !s.SessionStart.IsZero() {
 		d := s.SessionDuration
 		if d == 0 {
@@ -127,7 +181,6 @@ func (s *StatusBar) View() string {
 
 	line1 := strings.Join(parts, sep)
 
-	// Right-align contextual hint on the statusbar
 	if s.Width > 0 {
 		hint := "↑↓ 滚动"
 		if s.CurrentState != "空闲" {

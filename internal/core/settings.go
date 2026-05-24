@@ -22,6 +22,10 @@ func (s *Settings) ModelsFile() string {
 	return filepath.Join(s.UserPreferences(), "settings", "models.yml")
 }
 
+func (s *Settings) ProvidersFile() string {
+	return filepath.Join(s.UserPreferences(), "settings", "providers.yml")
+}
+
 // func (s *Settings) ProgramDir() string {
 // 	return filepath.Join(s.UserPreferences(), "programs")
 // }

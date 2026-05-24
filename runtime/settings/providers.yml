@@ -1,0 +1,9 @@
+providers:
+  - name: dashscope
+    base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    api_key: DASHSCOPE_API_KEY
+    auth_token: ""
+  - name: deepseek
+    base_url: https://api.deepseek.com
+    api_key: DEEPSEEK_API_KEY
+    auth_token: ""

@@ -45,6 +45,10 @@ type FileWatchService struct {
 	cacheBase string                     // base directory for per-dir indexing caches
 	logger   logging.Logger
 
+	// VersionRecorder is called for each changed file to persist version snapshots.
+	// Set by Daemon to integrate with FileVersionStore.
+	VersionRecorder func(absPath string)
+
 	// Debounce state: coalesce rapid events for the same file
 	debounce   map[string]time.Time // absPath → last event time
 	debounceMu sync.Mutex
@@ -342,6 +346,13 @@ func (s *FileWatchService) processChanges(pending map[string][]pendingChange) {
 					"updated", result.Updated,
 					"errors", len(result.Errors),
 				)
+			}
+			// Record file versions for changed files
+			if s.VersionRecorder != nil {
+				for _, relPath := range toIndex {
+					absPath := filepath.Join(absDir, relPath)
+					s.VersionRecorder(absPath)
+				}
 			}
 		}
 	}

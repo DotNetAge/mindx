@@ -79,6 +79,23 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 					filepath.Join(app.Settings().DataDir(), "memory-cache"),
 					logger,
 				)
+			memoryWatch.VersionRecorder = func(absPath string) {
+				if app.SessDB() == nil || app.FileVersions() == nil {
+					return
+				}
+				sessions, listErr := app.SessDB().ListSessions(context.Background())
+				if listErr != nil {
+					return
+				}
+				for _, s := range sessions {
+					if s.ProjectDir == "" || !strings.HasPrefix(absPath, s.ProjectDir) {
+						continue
+					}
+					if s.SessionDir != "" {
+						app.FileVersions().Record(s.SessionDir, absPath)
+					}
+				}
+			}
 			}
 		}
 	}
