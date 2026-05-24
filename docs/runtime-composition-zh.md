@@ -111,6 +111,26 @@ project-manager（项目管理的 SOP）
 
 每一层 SOP 都是完整的、自洽的、可独立使用的。嵌套不是代码级的 import——是文本级的"加载到上下文"。
 
+### 跟工具嵌套的区别
+
+工具也可以嵌套（比如 TaskCreate → SubAgent → CollectResults 的正交组合），但那是在**框架层**——工具是平台内置的原子能力，代码在 goreact 内部。
+
+Skill 嵌套是在**应用层**——Skill 是框架外的文档，它不依赖框架，只依赖脚本、Python、外部 API、或者任何系统上有的程序。
+
+```
+框架层（GoReact）：工具嵌套
+  TaskCreate → SubAgent → CollectResults
+  平台级，代码定义，硬编码在框架内
+
+应用层（MindX Skill）：Skill 嵌套
+  project-manager → find-experts → create_agent.py
+  应用级，文档定义，依赖外部脚本
+```
+
+工具嵌套是**平台能力**的组合，Skill 嵌套是**业务能力**的组合。前者由框架开发者定义，后者由业务使用者定义。
+
+这意味着 Skill 的生态可以不依赖框架更新而独立成长——写一个新的 Skill 就是写一份 Markdown 文件，不涉及框架代码、不需要 PR 合并、不需要版本发布。
+
 ### 跟"工具即编排"的本质区别
 
 现有平台走的是 **工具即编排** 的路线：

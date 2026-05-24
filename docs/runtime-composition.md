@@ -108,6 +108,26 @@ project-manager (SOP for project management)
 
 Each SOP is complete, self-contained, independently usable. Nesting isn't code-level import — it's text-level "load into context."
 
+### Tool Nesting vs Skill Nesting
+
+Tools can also nest (e.g. TaskCreate → SubAgent → CollectResults is an orthogonal composition). But that's at the **framework level** — tools are platform built-in capabilities, hardcoded in goreact.
+
+Skill nesting is at the **application level** — Skills are documents outside the framework. They don't depend on the framework, only on scripts, Python, external APIs, or any program available on the system.
+
+```
+Framework level (GoReact): Tool nesting
+  TaskCreate → SubAgent → CollectResults
+  Platform-level, code-defined, hardcoded in framework
+
+Application level (MindX Skill): Skill nesting
+  project-manager → find-experts → create_agent.py
+  Application-level, document-defined, relies on external scripts
+```
+
+Tool nesting composes **platform capabilities**. Skill nesting composes **business capabilities**. The former is defined by framework developers, the latter by business users.
+
+This means the Skill ecosystem can grow independently of framework releases — writing a new Skill is writing a Markdown file. No framework code, no PR, no version release.
+
 ### The Fundamental Difference
 
 Existing platforms follow **tools-as-orchestration**:
