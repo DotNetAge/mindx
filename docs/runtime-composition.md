@@ -87,6 +87,73 @@ Skills don't need interfaces, shared types, or version alignment. They just need
 
 project-manager = PM capability, find-experts = HR capability, AgentTalk = communication tool. Combine them and you get a company.
 
+## Going Deeper: SOP Within SOP
+
+The real power of this pattern is: **a Skill IS a complete SOP (Standard Operating Procedure)**. It's not a tool description, not an API doc — it's a complete instruction manual for how to do an entire job.
+
+When Skills can nest Skills, SOPs can nest SOPs, and real-world business processes can be expressed fully:
+
+```
+project-manager (SOP for project management)
+  ├── Phase 1: Discovery
+  ├── Phase 2: Decompose & Assign
+  │   └── If expert needed → load find-experts (SOP for hiring)
+  │       ├── List all agents
+  │       ├── Create new agent if none fits
+  │       └── Assign task
+  ├── Phase 3: Track
+  │   └── Receive AgentTalk → evaluate → adjust
+  └── Phase 4: Report
+```
+
+Each SOP is complete, self-contained, independently usable. Nesting isn't code-level import — it's text-level "load into context."
+
+### The Fundamental Difference
+
+Existing platforms follow **tools-as-orchestration**:
+
+```
+Startup → load 50 tool definitions into system prompt
+        → each tool ~200 tokens
+        → fixed ~10K token overhead
+        → LLM picks 2-3 out of 50
+```
+
+Regardless of what the user asks, all 50 tools occupy token budget. Unused tools waste context.
+
+**Skills-as-orchestration** is fundamentally different:
+
+```
+User: "Run my Xiaohongshu account"
+  → load project-manager (~2K tokens)
+  → Planning: needs a designer
+      → load find-experts (~1K tokens)
+      → create @designer
+      → find-experts naturally slides out of context
+  → continue project-manager workflow
+```
+
+**Token consumption scales with the actual workflow**, not with the system's total capability surface.
+
+| | Tools-as-orchestration | Skills-as-orchestration |
+|---|---|---|
+| Loading | All pre-loaded | **Lazy, on-demand** |
+| Token cost | Fixed high (~10K+) | **Proportional to workflow** |
+| Composition | Function level (params) | **Document level (context co-existence)** |
+| Flow expression | DAG / state machine | **SOP nesting SOP** |
+| Developer experience | Write code, define interfaces | **Write Markdown, reference other Skills** |
+| Runtime flexibility | Predefined, immutable | **LLM decides the path** |
+
+### What This Means
+
+An entire company's SOPs can be written as a collection of Markdown files. Each department owns its Skill. Each Skill can reference other Skills. The LLM, as an "employee", loads what it needs, when it needs it.
+
+Onboarding is no longer reading docs — it's loading the corresponding Skill.
+
+Cross-department collaboration is no longer API calls — it's loading the other department's Skill.
+
+One Skill = one Standard Operating Procedure. A collection of Skills = a company.
+
 ## Comparison
 
 | | Existing platforms | This approach |
