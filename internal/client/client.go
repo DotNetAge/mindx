@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -17,10 +18,12 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/goreact"
 	goreactcore "github.com/DotNetAge/goreact/core"
-	"github.com/DotNetAge/mindx/internal/client/component/choices"
+	"github.com/DotNetAge/mindx/internal/client/component/changes"
 	"github.com/DotNetAge/mindx/internal/client/component/conv"
+	"github.com/DotNetAge/mindx/internal/client/component/dialog"
 	"github.com/DotNetAge/mindx/internal/client/component/input"
 	"github.com/DotNetAge/mindx/internal/client/component/notify"
+	"github.com/DotNetAge/mindx/internal/client/component/permission"
 	"github.com/DotNetAge/mindx/internal/client/component/sidebar"
 	"github.com/DotNetAge/mindx/internal/client/component/statusbar"
 	"github.com/DotNetAge/mindx/internal/client/component/welcome"
@@ -29,21 +32,43 @@ import (
 	appcore "github.com/DotNetAge/mindx/internal/core"
 )
 
+const (
+	overlayNone = iota
+	overlaySelect
+	overlayOptions
+	overlayConnectProvider
+	overlayConnectAPIKey
+	overlayConnectModel
+)
+
 type rootModel struct {
-	program          *tea.Program
-	conversationList conv.ConversationList
-	welcome          *welcome.WelcomePanel
-	statusBar        *statusbar.StatusBar
-	sidebar          *sidebar.Sidebar
-	input            *input.InputArea
-	notifBar         *notify.NotificationBar
-	choices          *choices.ChoicesPanel
-	viewport         viewport.Model
-	termWidth        int
-	termHeight       int
-	leftWidth        int
-	rightWidth       int
-	scrollToBottom   bool
+	program              *tea.Program
+	conversationList     conv.ConversationList
+	welcome              *welcome.WelcomePanel
+	statusBar            *statusbar.StatusBar
+	sidebar              *sidebar.Sidebar
+	input                *input.InputArea
+	notifBar             *notify.NotificationBar
+	selectDlg            *dialog.SelectDialog
+	optionsDlg           *dialog.OptionsDialog
+	providerDlg          *dialog.ListDialog
+	apiKeyDlg            *dialog.InputDialog
+	modelDlg             *dialog.ListDialog
+	connectProvider      string
+	connectProviderNames []string
+	connectAPIKey        string
+	connectModels        []string
+	connectModelNames    []string
+	daemonAddr           string
+	fileTracker          *changes.Tracker
+	activeOverlay        int
+	permBar              permission.PermissionBar
+	viewport             viewport.Model
+	termWidth            int
+	termHeight           int
+	leftWidth            int
+	rightWidth           int
+	scrollToBottom       bool
 
 	app      *appcore.App
 	registry *SlashCommandRegistry
@@ -57,14 +82,12 @@ type rootModel struct {
 	executing   bool
 	postExitCmd string
 
-	// pendingPermission tracks an active permission request waiting for user response.
-	// Non-nil while the choices panel is showing a permission question.
-	pendingPermission *pendingPermissionState
-}
+	// pendingAskUser tracks an active LLM question (AskUser tool) waiting for user response.
+	// Non-nil while the dialog overlay is showing question(s) from the LLM.
+	pendingAskUser *goreactcore.AskUserRequestData
 
-// pendingPermissionState holds the state needed to respond to a permission request.
-type pendingPermissionState struct {
-	req *goreactcore.PermissionRequestData
+	// pendingPermission tracks a tool security permission request waiting for user response.
+	pendingPermission *goreactcore.PermissionRequestData
 }
 
 func (m *rootModel) getLogger() goreactcore.Logger {
@@ -84,8 +107,13 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 		sidebar:          sidebar.New(),
 		input:            input.New(),
 		notifBar:         notify.New(),
-		choices:          choices.New(),
+		selectDlg:        dialog.NewSelectDialog(""),
+		optionsDlg:       dialog.NewOptionsDialog(""),
+		providerDlg:      dialog.NewListDialog("连接提供商"),
+		apiKeyDlg:        dialog.NewInputDialog("API key", "API key"),
+		modelDlg:         dialog.NewListDialog("选择模型"),
 		viewport:         viewport.New(),
+		daemonAddr:       ":1314",
 	}
 
 	var err error
@@ -104,6 +132,7 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 			OnDoctor: func() {
 				m.postExitCmd = "doctor"
 			},
+			OnConnect: func() { m.startConnectFlow() },
 		})
 		m.loadCommands()
 
@@ -295,12 +324,17 @@ func (m *rootModel) populateWelcome() {
 		}
 	}
 
+	// Initialize file change tracker with the project directory
+	if m.fileTracker == nil && m.welcome.Data.Workspace != "" {
+		m.fileTracker = changes.NewTracker(m.welcome.Data.Workspace)
+	}
+
 	if m.agent != nil {
 		m.welcome.Data.AgentName = m.agent.Name()
 		m.statusBar.AgentName = m.agent.Name()
-		if m.agent.Model() != nil {
-			m.welcome.Data.ModelName = m.agent.Model().Name
-			m.statusBar.ModelName = m.agent.Model().Name
+		if model := m.agent.Model(); model != nil {
+			m.welcome.Data.ModelName = displayName(model.Title, model.Name)
+			m.updateModelDisplay(model)
 		}
 		sid := m.agent.SessionID()
 		if sid != "" {
@@ -479,6 +513,9 @@ func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 		}
 	case goreactcore.ToolExecStart:
 		if data, ok := evt.Data.(goreactcore.ToolExecStartData); ok {
+			if m.fileTracker != nil {
+				m.fileTracker.ToolExecStart(data.Params)
+			}
 			return clientmsg.ToolExecStartMsg{
 				SessionID:    evt.SessionID,
 				ToolName:     data.ToolName,
@@ -488,6 +525,21 @@ func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 		}
 	case goreactcore.ToolExecEnd:
 		if data, ok := evt.Data.(goreactcore.ToolExecEndData); ok {
+			var diffText string
+			var diffAdds, diffDels int
+			var diffFile string
+			if m.fileTracker != nil {
+				m.fileTracker.ToolExecEnd()
+				changes := m.fileTracker.Snapshot()
+				m.sidebar.SetFileChanges(changes)
+				if len(changes) > 0 {
+					last := changes[len(changes)-1]
+					diffText = last.Diff
+					diffAdds = last.Additions
+					diffDels = last.Deletions
+					diffFile = last.File
+				}
+			}
 			return clientmsg.ToolExecEndMsg{
 				SessionID:  evt.SessionID,
 				ToolName:   data.ToolName,
@@ -496,6 +548,10 @@ func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 				Result:     data.Result,
 				Error:      data.Error,
 				Duration:   data.Duration,
+				DiffText:   diffText,
+				DiffAdds:   diffAdds,
+				DiffDels:   diffDels,
+				DiffFile:   diffFile,
 			}
 		}
 	case goreactcore.ActionProgress:
@@ -557,9 +613,14 @@ func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 				Error:     data.Error,
 			}
 		}
+	case goreactcore.AskUserRequest:
+		if data, ok := evt.Data.(goreactcore.AskUserRequestData); ok {
+			m.pendingAskUser = &data
+			return clientmsg.AskUserEventMsg{}
+		}
 	case goreactcore.PermissionRequest:
 		if data, ok := evt.Data.(goreactcore.PermissionRequestData); ok {
-			m.pendingPermission = &pendingPermissionState{req: &data}
+			m.pendingPermission = &data
 			return clientmsg.PermissionRequestMsg{
 				ToolName:      data.ToolName,
 				Reason:        data.Reason,
@@ -629,8 +690,284 @@ func (m *rootModel) updateConversation(msg tea.Msg, scrollToBottom bool) (tea.Mo
 
 func (m *rootModel) Init() tea.Cmd {
 	m.startEventLoop()
-	return m.conversationList.Init()
+	return tea.Batch(
+		m.conversationList.Init(),
+		checkDaemonCmd(m.daemonAddr),
+	)
 }
+
+// ============================================================
+// Overlay key routing (AskUser dialog)
+// ============================================================
+
+func (m *rootModel) handleOverlayKey(e tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	return m.updateActiveDialog(e)
+}
+
+func (m *rootModel) handleOverlayPaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
+	return m.updateActiveDialog(msg)
+}
+
+// activateAskUserOverlay sets up the appropriate dialog from pendingAskUser state.
+func (m *rootModel) activateAskUserOverlay() {
+	if m.pendingAskUser == nil || len(m.pendingAskUser.Questions) == 0 {
+		return
+	}
+	q := m.pendingAskUser.Questions[0]
+	// q.Options is []string, pass directly to the dialog.
+	opts := q.Options
+
+	// Build a short title from the question.
+	title := q.Question
+	if len([]rune(title)) > 20 {
+		title = string([]rune(title)[:20]) + "…"
+	}
+
+	if q.MultiSelect {
+		m.optionsDlg.Title = title
+		m.optionsDlg.SetOptions(q.Question, opts)
+		m.activeOverlay = overlayOptions
+	} else {
+		m.selectDlg.Title = title
+		m.selectDlg.SetOptions(q.Question, opts)
+		m.activeOverlay = overlaySelect
+	}
+}
+
+// mapAskUserReply builds the answer map from the dialog result and calls Reply().
+func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, customText string, cancelled bool) {
+	if m.pendingAskUser == nil || len(m.pendingAskUser.Questions) == 0 {
+		return
+	}
+	q := m.pendingAskUser.Questions[0]
+	pp := m.pendingAskUser
+	m.pendingAskUser = nil
+
+	if cancelled {
+		return
+	}
+
+	var answer string
+	if isMulti {
+		var parts []string
+		for _, idx := range indices {
+			if idx >= 0 && idx < len(q.Options) {
+				parts = append(parts, q.Options[idx])
+			}
+		}
+		if customText != "" {
+			if len(parts) > 0 {
+				parts = append(parts, customText)
+			} else {
+				answer = customText
+			}
+		}
+		if len(parts) > 0 {
+			answer = strings.Join(parts, ", ")
+		}
+	} else {
+		if customText != "" {
+			answer = customText
+		} else if index >= 0 && index < len(q.Options) {
+			answer = q.Options[index]
+		}
+	}
+	if answer == "" {
+		return
+	}
+	pp.Reply(map[string]string{q.Question: answer})
+}
+
+// ============================================================
+// Connect flow: Provider → API Key → Model
+// ============================================================
+
+func displayName(title, name string) string {
+	if title != "" {
+		return title
+	}
+	return name
+}
+
+func (m *rootModel) providerDisplayName(providerName string) string {
+	if m.app == nil || providerName == "" {
+		return providerName
+	}
+	p := m.app.Models().GetProvider(providerName)
+	if p != nil && p.Title != "" {
+		return p.Title
+	}
+	return providerName
+}
+
+func (m *rootModel) updateModelDisplay(model *goreactcore.ModelConfig) {
+	if model == nil {
+		return
+	}
+	m.statusBar.ModelName = displayName(model.Title, model.Name)
+	if model.Provider != "" {
+		m.statusBar.Provider = m.providerDisplayName(model.Provider)
+	}
+}
+
+func (m *rootModel) updateActiveDialog(msg any) (tea.Model, tea.Cmd) {
+	switch m.activeOverlay {
+	case overlaySelect:
+		newDlg, cmd := m.selectDlg.Update(msg)
+		m.selectDlg = newDlg
+		return m, cmd
+	case overlayOptions:
+		newDlg, cmd := m.optionsDlg.Update(msg)
+		m.optionsDlg = newDlg
+		return m, cmd
+	case overlayConnectProvider:
+		newDlg, cmd := m.providerDlg.Update(msg)
+		m.providerDlg = newDlg
+		return m, cmd
+	case overlayConnectAPIKey:
+		newDlg, cmd := m.apiKeyDlg.Update(msg)
+		m.apiKeyDlg = newDlg
+		return m, cmd
+	case overlayConnectModel:
+		newDlg, cmd := m.modelDlg.Update(msg)
+		m.modelDlg = newDlg
+		return m, cmd
+	}
+	return m, nil
+}
+
+func (m *rootModel) windowSizeMsg() tea.WindowSizeMsg {
+	return tea.WindowSizeMsg{Width: m.termWidth, Height: m.termHeight}
+}
+
+func (m *rootModel) updateWithState(msg tea.Msg, state string, scroll bool) (tea.Model, tea.Cmd) {
+	m.statusBar.CurrentState = state
+	return m.updateConversation(msg, scroll)
+}
+
+func (m *rootModel) startConnectFlow() {
+	if m.app == nil {
+		m.notifBar.Add(data.Notification{Message: "系统未初始化", Level: data.NotifError})
+		return
+	}
+	providers := m.app.Models().Providers()
+	displayNames := make([]string, 0, len(providers))
+	m.connectProviderNames = make([]string, 0, len(providers))
+	for _, p := range providers {
+		displayNames = append(displayNames, displayName(p.Title, p.Name))
+		m.connectProviderNames = append(m.connectProviderNames, p.Name)
+	}
+	if len(displayNames) == 0 {
+		m.notifBar.Add(data.Notification{Message: "没有可用的提供商配置", Level: data.NotifWarning})
+		return
+	}
+	m.providerDlg.SetItems(displayNames)
+	m.providerDlg.Update(m.windowSizeMsg())
+	m.activeOverlay = overlayConnectProvider
+}
+
+func (m *rootModel) modelsForProvider(providerName string) []string {
+	if m.app == nil {
+		return nil
+	}
+	allModels := m.app.Models().ListRaw()
+	var display []string
+	var names []string
+	for _, mc := range allModels {
+		if mc.Provider == providerName {
+			display = append(display, displayName(mc.Title, mc.Name))
+			names = append(names, mc.Name)
+		}
+	}
+	m.connectModelNames = names
+	return display
+}
+
+func (m *rootModel) saveConnectResult(modelName string) {
+	if m.app == nil || m.connectProvider == "" {
+		return
+	}
+
+	reg := m.app.Models()
+	provider := reg.GetProvider(m.connectProvider)
+
+	if provider != nil && m.connectAPIKey != "" {
+		provider.APIKey = m.connectAPIKey
+		reg.RegisterProvider(m.connectProvider, provider)
+	}
+
+	cfg := m.app.Config()
+	if cfg != nil {
+		cfg.DefaultProvider = m.connectProvider
+		if modelName != "" {
+			cfg.LastModel = modelName
+		}
+		_ = cfg.Save()
+	}
+
+	if modelName != "" && m.agent != nil {
+		if modelCfg := reg.Get(modelName); modelCfg != nil {
+			m.agent.SetModel(modelCfg)
+			m.welcome.Data.ModelName = displayName(modelCfg.Title, modelCfg.Name)
+			m.updateModelDisplay(modelCfg)
+			reg.Save(modelCfg)
+		}
+	} else if provider != nil && m.connectAPIKey != "" {
+		// Persist provider API key even without a model selection
+		for _, raw := range reg.ListRaw() {
+			reg.Save(raw)
+			break
+		}
+	}
+
+	label := fmt.Sprintf("已连接 %s", m.connectProvider)
+	if modelName != "" {
+		label += fmt.Sprintf(" / %s", modelName)
+	}
+	m.notifBar.Add(data.Notification{Message: label, Level: data.NotifSuccess})
+
+	m.connectProvider = ""
+	m.connectAPIKey = ""
+	m.connectModels = nil
+}
+
+// ============================================================
+// Daemon health check (1-minute interval)
+// ============================================================
+
+type daemonCheckResultMsg struct {
+	Status clientmsg.DaemonConnStatus
+}
+
+func checkDaemonCmd(addr string) tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(60 * time.Second)
+		status := probeDaemon(addr)
+		return daemonCheckResultMsg{Status: status}
+	}
+}
+
+func probeDaemon(addr string) clientmsg.DaemonConnStatus {
+	host := "localhost"
+	if strings.HasPrefix(addr, ":") {
+		host = "localhost" + addr
+	} else if !strings.Contains(addr, ":") {
+		host = addr + ":1314"
+	} else {
+		host = addr
+	}
+
+	conn, err := net.DialTimeout("tcp", host, 3*time.Second)
+	if err != nil {
+		return clientmsg.DaemonDisconnected
+	}
+	conn.Close()
+	return clientmsg.DaemonConnected
+}
+
+// ============================================================
+// Main bubbletea update loop
+// ============================================================
 
 func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := e.(type) {
@@ -638,6 +975,11 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		w := clientmsg.WindowResizeMsg{Width: msg.Width, Height: msg.Height}
 		m.dispatchToAll(w)
 		m.resizeViewport(msg.Width, msg.Height)
+		m.selectDlg.Update(msg)
+		m.optionsDlg.Update(msg)
+		m.providerDlg.Update(msg)
+		m.apiKeyDlg.Update(msg)
+		m.modelDlg.Update(msg)
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -647,11 +989,16 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		if m.choices.Visible {
-			_, choicesCmd := m.choices.Update(msg)
-			newVp, vpCmd := m.viewport.Update(msg)
-			m.viewport = newVp
-			return m, tea.Batch(choicesCmd, vpCmd)
+		// Priority 1: dialog overlay (AskUser)
+		if m.activeOverlay != overlayNone {
+			return m.handleOverlayKey(msg)
+		}
+
+		// Priority 2: permission bar (tool security)
+		if m.permBar.Visible {
+			newBar, cmd := permission.UpdatePermissionBar(m.permBar, msg)
+			m.permBar = newBar
+			return m, cmd
 		}
 
 		m.input.Executing = m.executing
@@ -659,6 +1006,14 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		newVp, vpCmd := m.viewport.Update(msg)
 		m.viewport = newVp
 		return m, tea.Batch(inputCmd, vpCmd)
+
+	case tea.PasteMsg:
+		if m.activeOverlay != overlayNone {
+			return m.handleOverlayPaste(msg)
+		}
+		inp, cmd := m.input.Update(msg)
+		m.input = inp
+		return m, cmd
 
 	case tea.MouseWheelMsg:
 		newVp, cmd := m.viewport.Update(msg)
@@ -679,8 +1034,7 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.SessionDoneMsg:
 		m.executing = false
-		m.statusBar.CurrentState = "空闲"
-		return m.updateConversation(msg, true)
+		return m.updateWithState(msg, "空闲", true)
 
 	case clientmsg.AgentErrorMsg:
 		m.executing = false
@@ -694,22 +1048,30 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.Tick()
 		return m.updateConversation(msg, false)
 
+	case daemonCheckResultMsg:
+		m.statusBar.DaemonStatus = msg.Status
+		return m, checkDaemonCmd(m.daemonAddr)
+
 	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg:
-		m.statusBar.CurrentState = "思考中"
-		return m.updateConversation(msg, true)
+		return m.updateWithState(msg, "思考中", true)
 
 	case clientmsg.ToolExecStartMsg, clientmsg.ToolExecEndMsg,
 		clientmsg.ActionProgressMsg:
-		m.statusBar.CurrentState = "执行中"
-		return m.updateConversation(msg, true)
+		return m.updateWithState(msg, "执行中", true)
 
 	case clientmsg.ExecutionSummaryMsg:
 		m.statusBar.Update(msg)
+		m.sidebar.AddTokenUsage(
+			msg.TokensUsed.InputTokens,
+			msg.TokensUsed.OutputTokens,
+			msg.TokensUsed.CachedTokens,
+			msg.TokensUsed.TotalTokens,
+			m.statusBar.ModelName,
+		)
 		return m.updateConversation(msg, true)
 
 	case clientmsg.ActionEndMsg:
-		m.statusBar.CurrentState = "正在获取结果"
-		return m.updateConversation(msg, true)
+		return m.updateWithState(msg, "正在获取结果", true)
 
 	case clientmsg.FinalAnswerMsg:
 		m.statusBar.CurrentState = "完成"
@@ -725,40 +1087,94 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateConversation(msg, false)
 
 	case clientmsg.ClearScreenMsg:
+		return m.updateWithState(msg, "空闲", false)
+
+	// --- Dialog overlay: AskUser questions from the LLM ---
+
+	case clientmsg.AskUserEventMsg:
+		m.statusBar.CurrentState = "等待回答"
+		m.activateAskUserOverlay()
+		return m, nil
+
+	case dialog.SelectDialogResult:
+		m.activeOverlay = overlayNone
 		m.statusBar.CurrentState = "空闲"
-		return m.updateConversation(msg, false)
+		m.mapAskUserReply(false, msg.Index, nil, msg.CustomText, msg.Cancelled)
+		return m, nil
+
+	case dialog.OptionsDialogResult:
+		m.activeOverlay = overlayNone
+		m.statusBar.CurrentState = "空闲"
+		m.mapAskUserReply(true, 0, msg.Indices, msg.CustomText, msg.Cancelled)
+		return m, nil
+
+	// --- Connect flow: Provider → API Key → Model ---
+
+	case dialog.ListDialogResult:
+		switch m.activeOverlay {
+		case overlayConnectProvider:
+			m.activeOverlay = overlayNone
+			if !msg.Cancelled && msg.Index >= 0 && msg.Index < len(m.connectProviderNames) {
+				m.connectProvider = m.connectProviderNames[msg.Index]
+				m.activeOverlay = overlayConnectAPIKey
+				m.apiKeyDlg = dialog.NewInputDialog("API key", "API key")
+				m.apiKeyDlg.Visible = true
+				m.apiKeyDlg.Update(m.windowSizeMsg())
+			}
+		case overlayConnectModel:
+			m.activeOverlay = overlayNone
+			if !msg.Cancelled && msg.Index >= 0 && msg.Index < len(m.connectModelNames) {
+				m.saveConnectResult(m.connectModelNames[msg.Index])
+			}
+		}
+		return m, nil
+
+	case dialog.InputDialogResult:
+		if m.activeOverlay == overlayConnectAPIKey {
+			m.activeOverlay = overlayNone
+			if !msg.Cancelled && msg.Value != "" {
+				m.connectAPIKey = msg.Value
+				m.connectModels = m.modelsForProvider(m.connectProvider)
+				if len(m.connectModels) > 0 {
+					m.modelDlg = dialog.NewListDialog("选择模型")
+					m.modelDlg.SetItems(m.connectModels)
+					m.modelDlg.Update(m.windowSizeMsg())
+					m.activeOverlay = overlayConnectModel
+				} else {
+					m.saveConnectResult("")
+				}
+			}
+		}
+		return m, nil
+
+	// --- Permission request (tool security) ---
+
+	case clientmsg.PermissionRequestMsg:
+		m.statusBar.CurrentState = "等待选择"
+		newBar, _ := permission.UpdatePermissionBar(m.permBar, msg)
+		m.permBar = newBar
+		return m, nil
 
 	case clientmsg.ChoiceSelectedMsg:
-		_, cmd := m.choices.Update(msg)
 		if m.pendingPermission != nil {
 			pp := m.pendingPermission
 			m.pendingPermission = nil
+			m.statusBar.CurrentState = "空闲"
 			if msg.Index < 0 {
-				go pp.req.Deny("user cancelled")
+				go pp.Deny("user cancelled")
 			} else if msg.Index == 0 {
-				go pp.req.Grant(nil)
+				go pp.Grant(nil)
 			} else {
-				go pp.req.Deny("user denied")
+				go pp.Deny("user denied")
 			}
 		}
-		return m, cmd
+		return m, nil
+
+	// --- Notifications ---
 
 	case clientmsg.NotifTimeoutMsg:
 		_, cmd := m.notifBar.Update(msg)
 		return m, cmd
-
-	case clientmsg.ShowChoicesMsg:
-		_, cmd := m.choices.Update(msg)
-		return m, cmd
-
-	case clientmsg.PermissionRequestMsg:
-		m.statusBar.CurrentState = "等待选择"
-		return m, func() tea.Msg {
-			return clientmsg.ShowChoicesMsg{
-				Options: []string{"Allow", "Deny"},
-				Prompt:  "🔒 " + msg.ToolName + ": " + msg.Reason,
-			}
-		}
 
 	case clientmsg.SessionLoadedMsg:
 		m.statusBar.Update(msg)
@@ -902,8 +1318,8 @@ func (m *rootModel) handleAgentSwitch(e clientmsg.AgentSwitchMsg) (tea.Model, te
 
 	m.agent = newAgent
 	m.statusBar.AgentName = newAgent.Name()
-	if newAgent.Model() != nil {
-		m.statusBar.ModelName = newAgent.Model().Name
+	if model := newAgent.Model(); model != nil {
+		m.updateModelDisplay(model)
 	}
 	m.startEventLoop()
 
@@ -940,8 +1356,8 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 			modelName := e.Args[0]
 			if modelCfg := m.app.Models().Get(modelName); modelCfg != nil && m.agent != nil {
 				m.agent.SetModel(modelCfg)
-				m.statusBar.ModelName = modelCfg.Name
-				m.welcome.Data.ModelName = modelCfg.Name
+				m.welcome.Data.ModelName = displayName(modelCfg.Title, modelCfg.Name)
+				m.updateModelDisplay(modelCfg)
 				if cfg := m.app.Config(); cfg != nil {
 					cfg.LastModel = modelName
 					_ = cfg.Save()
@@ -979,8 +1395,8 @@ func (m *rootModel) refreshAfterChatOp(result CommandResult) tea.Cmd {
 		m.statusBar.AgentName = sessionMeta.AgentName
 		m.welcome.Data.SessionID = sessionMeta.SessionID
 	}
-	if m.agent != nil && m.agent.Model() != nil {
-		m.statusBar.ModelName = m.agent.Model().Name
+	if model := m.agent.Model(); model != nil {
+		m.updateModelDisplay(model)
 	}
 
 	m.conversationList.Clear()
@@ -1009,24 +1425,19 @@ func reloadModels(app *appcore.App) ([]input.ModelItem, error) {
 }
 
 func (m *rootModel) View() tea.View {
-	welcomeView := m.welcome.View()
 	notifView := m.notifBar.View()
-	choicesView := m.choices.View()
 	statusView := m.statusBar.View()
 	inputView := m.input.View()
+	permView := permission.ViewPermissionBar(m.permBar, m.termWidth)
 
-	headerStr := welcomeView
-	if notifView != "" {
-		headerStr = lipgloss.JoinVertical(lipgloss.Left, headerStr, notifView)
-	}
+	headerStr := notifView
 
-	var bottomArea string
-	if m.choices.Visible {
-		m.input.Hidden = true
-		bottomArea = choicesView
-	} else {
-		m.input.Hidden = false
-		bottomArea = inputView
+	m.input.Hidden = m.permBar.Visible
+	bottomArea := inputView
+
+	// When the permission bar is visible, replace the input area with it.
+	if m.permBar.Visible {
+		bottomArea = permView
 	}
 
 	headerLines := strings.Count(headerStr, "\n") + 1
@@ -1058,6 +1469,26 @@ func (m *rootModel) View() tea.View {
 		statusView,
 		bottomArea,
 	)
+
+	// Dialog overlay: render full-screen centered if active (AskUser).
+	if m.activeOverlay != overlayNone {
+		var modal string
+		switch m.activeOverlay {
+		case overlaySelect:
+			modal = m.selectDlg.View()
+		case overlayOptions:
+			modal = m.optionsDlg.View()
+		case overlayConnectProvider:
+			modal = m.providerDlg.View()
+		case overlayConnectAPIKey:
+			modal = m.apiKeyDlg.View()
+		case overlayConnectModel:
+			modal = m.modelDlg.View()
+		}
+		if modal != "" {
+			full = lipgloss.Place(m.termWidth, m.termHeight, lipgloss.Center, lipgloss.Center, modal)
+		}
+	}
 
 	v := tea.NewView(full)
 	v.AltScreen = true

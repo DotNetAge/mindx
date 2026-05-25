@@ -52,8 +52,8 @@ type agentGetParams struct {
 
 func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any, error) {
 	var p agentGetParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 	if p.Name == "" {
 		return nil, fmt.Errorf("name is required")
@@ -85,8 +85,8 @@ type agentCreateParams struct {
 
 func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (any, error) {
 	var p agentCreateParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 	if p.Name == "" {
 		return nil, fmt.Errorf("name is required")
@@ -102,6 +102,10 @@ func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (a
 	}
 	if p.Body == "" {
 		return nil, fmt.Errorf("body is required")
+	}
+
+	if d.app.Models() == nil || d.app.Models().Get(p.Model) == nil {
+		return nil, fmt.Errorf("model %q not found", p.Model)
 	}
 
 	agents := d.app.Agents()
@@ -149,8 +153,8 @@ type agentUpdateParams struct {
 
 func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (any, error) {
 	var p agentUpdateParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 	if p.Name == "" {
 		return nil, fmt.Errorf("name is required")
@@ -210,8 +214,8 @@ type agentScoreParams struct {
 
 func (d *Daemon) handleAgentScore(_ context.Context, params json.RawMessage) (any, error) {
 	var p agentScoreParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 	if p.AgentName == "" {
 		return nil, fmt.Errorf("agent_name is required")

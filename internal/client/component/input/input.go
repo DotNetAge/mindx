@@ -46,6 +46,14 @@ func (i *InputArea) Update(msg any) (*InputArea, tea.Cmd) {
 			return i, nil
 		}
 		return i.handleKey(m)
+	case tea.PasteMsg:
+		if i.Hidden {
+			return i, nil
+		}
+		for _, r := range []rune(m.Content) {
+			i.insertAtCursor(r)
+		}
+		return i, nil
 	}
 	return i, nil
 }

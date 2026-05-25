@@ -18,8 +18,8 @@ type memoryQueryParams struct {
 
 func (d *Daemon) handleMemoryQuery(_ context.Context, params json.RawMessage) (any, error) {
 	var p memoryQueryParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 	if p.Query == "" {
 		return nil, fmt.Errorf("query is required")
@@ -66,8 +66,8 @@ type memoryStoreParams struct {
 
 func (d *Daemon) handleMemoryStore(_ context.Context, params json.RawMessage) (any, error) {
 	var p memoryStoreParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 	if p.Content == "" {
 		return nil, fmt.Errorf("content is required")
@@ -104,8 +104,8 @@ type memoryDeleteParams struct {
 
 func (d *Daemon) handleMemoryDelete(_ context.Context, params json.RawMessage) (any, error) {
 	var p memoryDeleteParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 	if p.ID == "" {
 		return nil, fmt.Errorf("id is required")

@@ -14,10 +14,8 @@ type skillListParams struct {
 
 func (d *Daemon) handleSkillList(_ context.Context, params json.RawMessage) (any, error) {
 	var p skillListParams
-	if params != nil {
-		if err := json.Unmarshal(params, &p); err != nil {
-			return nil, fmt.Errorf("invalid params: %w", err)
-		}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 
 	agentName := p.AgentName
@@ -66,8 +64,8 @@ type skillGetParams struct {
 
 func (d *Daemon) handleSkillGet(_ context.Context, params json.RawMessage) (any, error) {
 	var p skillGetParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 	if p.Name == "" {
 		return nil, fmt.Errorf("name is required")

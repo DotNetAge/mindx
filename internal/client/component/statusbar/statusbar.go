@@ -16,28 +16,6 @@ var (
 	sep = fmt.Sprintf(" %s ", style.DimStyle.Render("│"))
 )
 
-type ModelPricing struct {
-	InputPrice  float64
-	OutputPrice float64
-}
-
-var pricingTable = map[string]ModelPricing{
-	"claude-sonnet-4":         {InputPrice: 3.0, OutputPrice: 15.0},
-	"claude-sonnet-4-20250514": {InputPrice: 3.0, OutputPrice: 15.0},
-	"claude-opus-4":           {InputPrice: 15.0, OutputPrice: 75.0},
-	"claude-haiku-3.5":        {InputPrice: 0.8, OutputPrice: 4.0},
-	"gpt-4o":                  {InputPrice: 2.5, OutputPrice: 10.0},
-	"gpt-4o-mini":             {InputPrice: 0.15, OutputPrice: 0.6},
-	"deepseek-v3":             {InputPrice: 0.27, OutputPrice: 1.1},
-	"deepseek-r1":             {InputPrice: 0.55, OutputPrice: 2.19},
-	"qwen-plus":               {InputPrice: 0.8, OutputPrice: 2.0},
-	"qwen-max":                {InputPrice: 2.0, OutputPrice: 6.0},
-}
-
-func defaultPricing() ModelPricing {
-	return ModelPricing{InputPrice: 3.0, OutputPrice: 15.0}
-}
-
 type StatusBar struct {
 	Width           int
 	CurrentState    string
@@ -45,14 +23,17 @@ type StatusBar struct {
 	TokensTotal     int
 	InputTokens     int
 	OutputTokens    int
+	CachedTokens    int
 	SessionStart    time.Time
 	SessionDuration time.Duration
 	SessionName     string
 	AgentName       string
 	ModelName       string
+	Provider        string
 	ModeLabel       string
 	Shortcuts       []data.Shortcut
 	ShowHints       bool
+	DaemonStatus    clientmsg.DaemonConnStatus
 }
 
 func New() *StatusBar {
@@ -73,19 +54,18 @@ func (s *StatusBar) Update(msg any) (*StatusBar, tea.Cmd) {
 		s.InputTokens += m.EstimatedTok / 2
 		s.OutputTokens += (m.EstimatedTok + 1) / 2
 	case clientmsg.ExecutionSummaryMsg:
-		if m.TokensUsed > 0 {
-			s.TokensTotal += m.TokensUsed
-			in := m.TokensUsed * 2 / 3
-			out := m.TokensUsed - in
-			s.InputTokens += in
-			s.OutputTokens += out
-		}
+		s.InputTokens += m.TokensUsed.InputTokens
+		s.OutputTokens += m.TokensUsed.OutputTokens
+		s.CachedTokens += m.TokensUsed.CachedTokens
+		s.TokensTotal += m.TokensUsed.TotalTokens
 	case clientmsg.FinalAnswerMsg:
 		if s.SessionStart.IsZero() {
 			s.SessionDuration = 0
 		} else {
 			s.SessionDuration = time.Since(s.SessionStart)
 		}
+	case clientmsg.DaemonStatusMsg:
+		s.DaemonStatus = m.Status
 	}
 	return s, nil
 }
@@ -95,18 +75,12 @@ func (s *StatusBar) Tick() {
 }
 
 func (s *StatusBar) Cost() float64 {
-	p, ok := pricingTable[s.ModelName]
-	if !ok {
-		p = defaultPricing()
-	}
-	inputCost := float64(s.InputTokens) / 1_000_000 * p.InputPrice
-	outputCost := float64(s.OutputTokens) / 1_000_000 * p.OutputPrice
-	return inputCost + outputCost
+	return data.CalculateCost(data.GetPricing(s.ModelName), s.InputTokens, s.OutputTokens, s.CachedTokens)
 }
 
 func formatCost(cost float64) string {
-	if cost < 0.01 {
-		return "¥<0.01"
+	if cost < 0.005 {
+		return "¥0"
 	}
 	if cost < 1 {
 		return fmt.Sprintf("¥%.2f", cost)
@@ -147,6 +121,17 @@ func stateStyle(state string, blinkOn bool) string {
 	return fmt.Sprintf("%s %s", dot, style.PurpleStyle.Render(state))
 }
 
+func daemonIndicator(status clientmsg.DaemonConnStatus) string {
+	switch status {
+	case clientmsg.DaemonConnected:
+		return style.GreenStyle.Render("● Daemon")
+	case clientmsg.DaemonDisconnected:
+		return style.DimStyle.Render("○ Daemon")
+	default:
+		return ""
+	}
+}
+
 func (s *StatusBar) View() string {
 	var parts []string
 
@@ -173,6 +158,14 @@ func (s *StatusBar) View() string {
 	}
 	if s.ModelName != "" {
 		parts = append(parts, style.GrayStyle.Render(s.ModelName))
+	}
+	if s.Provider != "" {
+		parts = append(parts, style.DimStyle.Render(s.Provider))
+	}
+
+	daemonStr := daemonIndicator(s.DaemonStatus)
+	if daemonStr != "" {
+		parts = append(parts, daemonStr)
 	}
 
 	if s.ModeLabel != "" {

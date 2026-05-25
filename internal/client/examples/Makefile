@@ -11,7 +11,8 @@
 # =============================================================================
 
 .PHONY: help all welcome question thinking action output conversation conv \
-        input notify statusbar choices error reasoning permission layout overlay
+        input notify statusbar choices error reasoning permission layout overlay \
+        provider-dialog
 
 ROOT := ../../..
 SRC  := internal/client/examples
@@ -39,6 +40,7 @@ help:
 	@echo "  permission    — PermissionBar 授权确认栏（按 1/2/3 切换场景）"
 	@echo "  layout        — Layout 完整布局（主视口+边栏+底部互斥区）"
 	@echo "  overlay       — Overlay 居中模态框（按 o 弹出多选面板）"
+	@echo "  provider-dialog — Provider Dialog 提供商连接向导（按 p 触发）"
 	@echo ""
 	@echo "Other:"
 	@echo "  all           — 编译验证所有示例（不运行）"
@@ -67,4 +69,5 @@ error:        ; $(call RUN_EXAMPLE,error)
 reasoning:    ; $(call RUN_EXAMPLE,reasoning)
 permission:   ; $(call RUN_EXAMPLE,permission)
 layout:      ; $(call RUN_EXAMPLE,layout)
-overlay:     ; $(call RUN_EXAMPLE,overlay)
+overlay:       ; $(call RUN_EXAMPLE,overlay)
+provider-dialog: ; $(call RUN_EXAMPLE,provider-dialog)

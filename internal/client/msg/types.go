@@ -1,6 +1,10 @@
 package msg
 
-import "time"
+import (
+	"time"
+
+	goreactcore "github.com/DotNetAge/goreact/core"
+)
 
 type ThinkingDeltaMsg struct {
 	SessionID string
@@ -44,12 +48,16 @@ type ToolExecEndMsg struct {
 	Result     string
 	Error      string
 	Duration   time.Duration
+	DiffText   string // unified diff for file-modifying tools
+	DiffAdds   int    // lines added
+	DiffDels   int    // lines removed
+	DiffFile   string // file path changed
 }
 
 type ExecutionSummaryMsg struct {
 	SessionID  string
 	Duration   time.Duration
-	TokensUsed int
+	TokensUsed goreactcore.TokenUsage
 	ToolCalls  int
 }
 
@@ -170,19 +178,27 @@ type IterationMsg struct {
 // The rootModel should call agent.Cancel() to interrupt the running loop.
 type ExecutionCancelMsg struct{}
 
+// AskUserEventMsg signals that an AskUserRequest event has arrived from the reactor.
+// The rootModel should activate the dialog overlay and show the pending questions.
+type AskUserEventMsg struct{}
+
 // PermissionRequestMsg carries a permission request from the reactor to the TUI.
 // The TUI should display the question/options and let the user respond.
 type PermissionRequestMsg struct {
 	ToolName      string
 	Reason        string
 	SecurityLevel int
-	Questions     []QuestionData
 }
 
-// QuestionData mirrors core.PermissionQuestion for TUI consumption.
-type QuestionData struct {
-	Question    string
-	Header      string
-	Options     []string
-	MultiSelect bool
+type DaemonConnStatus int
+
+const (
+	DaemonUnknown DaemonConnStatus = iota
+	DaemonConnected
+	DaemonDisconnected
+)
+
+// DaemonStatusMsg reports WebSocket connectivity to the daemon.
+type DaemonStatusMsg struct {
+	Status DaemonConnStatus
 }
