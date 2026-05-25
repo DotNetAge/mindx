@@ -2,6 +2,7 @@ package svc
 
 import (
 	cryptorand "crypto/rand"
+	"encoding/json"
 	"fmt"
 	"time"
 	"unicode/utf8"
@@ -29,4 +30,16 @@ func truncate(s string, maxLen int) string {
 	}
 	runes := []rune(s)
 	return string(runes[:maxLen]) + "..."
+}
+
+// unmarshalParams unmarshals JSON params into the given target and returns a
+// formatted error on failure. Accepts nil params (no-op).
+func unmarshalParams(params json.RawMessage, target any) error {
+	if params == nil {
+		return nil
+	}
+	if err := json.Unmarshal(params, target); err != nil {
+		return fmt.Errorf("invalid params: %w", err)
+	}
+	return nil
 }

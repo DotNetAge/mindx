@@ -191,9 +191,7 @@ func (d *Daemon) TestStop(ctx context.Context) error {
 		d.logger.Warn("failed to stop channels", "error", err)
 	}
 
-	if d.scheduler != nil {
-		d.scheduler.Stop()
-	}
+	d.stopBackgroundServices()
 
 	return d.gw.Shutdown(ctx)
 }
@@ -251,7 +249,8 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			goreactcore.ActionProgress, goreactcore.ToolExecStart, goreactcore.ToolExecEnd,
 			goreactcore.ActionEnd, goreactcore.FinalAnswer,
 			goreactcore.ExecutionSummary, goreactcore.Error, goreactcore.SubtaskSpawned,
-			goreactcore.SubtaskCompleted, goreactcore.ClarifyNeeded, goreactcore.PermissionRequest,
+			goreactcore.SubtaskCompleted, goreactcore.AgentTalkStart, goreactcore.AgentTalkEnd,
+			goreactcore.ClarifyNeeded, goreactcore.PermissionRequest,
 			goreactcore.PermissionDenied, goreactcore.CycleEnd, goreactcore.TaskSummary:
 			return true
 		default:

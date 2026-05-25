@@ -49,8 +49,11 @@ echo "📦 Creating tarballs..."
 
 mkdir -p dist
 
-tar czf "dist/mindx-${VERSION}-darwin-amd64.tar.gz" -C dist mindx-darwin-amd64
-tar czf "dist/mindx-${VERSION}-darwin-arm64.tar.gz" -C dist mindx-darwin-arm64
+cp dist/mindx-darwin-amd64 dist/mindx
+tar czf "dist/mindx-${VERSION}-darwin-amd64.tar.gz" -C dist mindx
+cp dist/mindx-darwin-arm64 dist/mindx
+tar czf "dist/mindx-${VERSION}-darwin-arm64.tar.gz" -C dist mindx
+rm -f dist/mindx
 
 SHA256_AMD64=$(shasum -a 256 "dist/mindx-${VERSION}-darwin-amd64.tar.gz" | cut -d' ' -f1)
 SHA256_ARM64=$(shasum -a 256 "dist/mindx-${VERSION}-darwin-arm64.tar.gz" | cut -d' ' -f1)
@@ -85,10 +88,8 @@ class Mindx < Formula
     end
   end
 
-  depends_on "go" => :build
-
   def install
-    bin.install "mindx-darwin-#{Hardware::CPU.arm? ? "arm64" : "amd64"}" => "mindx"
+    bin.install Dir["mindx-darwin-*"].first => "mindx"
   end
 
   test do

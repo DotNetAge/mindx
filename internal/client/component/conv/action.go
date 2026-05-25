@@ -12,15 +12,19 @@ import (
 )
 
 type ActionStep struct {
-	ToolName     string
-	Status       ActionStepStatus
-	EstimatedTok int
-	Duration     time.Duration
-	Params       map[string]any
-	ProgressText string
-	ResultText   string
+	ToolName      string
+	Status        ActionStepStatus
+	EstimatedTok  int
+	Duration      time.Duration
+	Params        map[string]any
+	ProgressText  string
+	ResultText    string
 	StreamingArgs string
-	Collapsed    bool
+	Collapsed     bool
+	DiffText      string // unified diff output for file-modifying tools
+	DiffAdds      int    // lines added
+	DiffDels      int    // lines removed
+	DiffFile      string // file path that was changed
 }
 
 type ActionInfo struct {
@@ -102,9 +106,7 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 		return m, nil
 
 	case msg.ToolExecEndMsg:
-		if m.Completed || len(m.Steps) == 0 {
-			return m, nil
-		}
+		if m.Completed || len(m.Steps) == 0 { return m, nil }
 		for i := len(m.Steps) - 1; i >= 0; i-- {
 			step := &m.Steps[i]
 			if step.ToolName == e.ToolName && step.Status == ActionStepExecuting {
@@ -118,6 +120,13 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 					step.Duration = e.Duration
 				}
 				step.Collapsed = false
+				// Attach diff if the tool produced file changes
+				if e.DiffText != "" {
+					step.DiffText = e.DiffText
+					step.DiffAdds = e.DiffAdds
+					step.DiffDels = e.DiffDels
+					step.DiffFile = e.DiffFile
+				}
 				break
 			}
 		}
@@ -133,7 +142,7 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 		return m, nil
 
 	case msg.ExecutionSummaryMsg:
-		m.TotalTokens = e.TokensUsed
+		m.TotalTokens = e.TokensUsed.TotalTokens
 		m.TotalDuration = e.Duration
 		return m, nil
 
@@ -177,7 +186,7 @@ func ViewAction(m Action, width int) string {
 		if i > 0 || m.CurrentInfo != nil {
 			b.WriteByte('\n')
 		}
-		b.WriteString(ViewActionStep(step, blinkOn))
+		b.WriteString(ViewActionStep(step, blinkOn, width))
 	}
 
 	return b.String()
@@ -207,7 +216,7 @@ func ViewActionHeader(info ActionInfo, blinkOn bool, elapsed time.Duration, comp
 	return b.String()
 }
 
-func ViewActionStep(step ActionStep, blinkOn bool) string {
+func ViewActionStep(step ActionStep, blinkOn bool, width int) string {
 	var b strings.Builder
 	var icon string
 	switch step.Status {
@@ -275,6 +284,13 @@ func ViewActionStep(step ActionStep, blinkOn bool) string {
 		}
 		b.WriteString(fmt.Sprintf("  ⎿ %s\n", style.GrayStyle.Render(summary)))
 	}
+
+	// Diff display for file-modifying tools
+	if step.DiffText != "" && !step.Collapsed {
+		diffWidth := width - 4 // account for indentation
+		b.WriteString(fmt.Sprintf("  ⎿ %s\n", ViewDiffWithFile(step.DiffText, step.DiffFile, step.DiffAdds, step.DiffDels, diffWidth)))
+	}
+
 	return b.String()
 }
 

@@ -1,5 +1,6 @@
 models:
   - name: qwen3.6-max
+    title: Qwen3.6 Max
     description: >
       Qwen3.6系列中规模最大、综合能力最强的Max模型Preview版本，当前开放纯文本模型能力供体验。
       相较于此前发布的Qwen3-Max和Qwen3.6-Plus，本模型在vibe coding能力上进一步提升、
@@ -9,19 +10,11 @@ models:
     cost_per_1m_out: 8
     max_tokens: 131072
     context_length: 262144
-    is_local: false
     func_calling: true
     structuring: true
-    web_searching: false
-    prefix_con: false
-    context_cache: false
-    top_p: 0
-    top_k: 0
-    temperature: 0
-    repetition_penalty: 0
     enabled: true
-    max_turns: 0
   - name: qwen3.6-plus
+    title: Qwen3.6 Plus
     description: Qwen3.6原生视觉语言系列Plus模型，展现出与当前顶尖前沿模型相媲美的卓越性能，模型效果相较3.5系列显著提升。模型在Agentic coding、前端编程、Vibe coding等代码能力、多模态万物识别、OCR、物体定位等能力上显著增强。
     provider: dashscope
     cost_per_1m_in: 0.8
@@ -41,6 +34,7 @@ models:
     enabled: true
     max_turns: 0
   - name: qwen3.6-flash
+    title: Qwen3.6 Flash
     description: > 
       Qwen3.6原生视觉语言系列Flash模型，模型效果相较3.5-Flash显著提升。
       本模型重点提升agentic coding能力（在多项代码智能体基准上大幅超越前代）、
@@ -63,6 +57,7 @@ models:
     enabled: true
     max_turns: 0
   - name: deepseek-v4-pro
+    title: Deepseek V4 Pro
     description: >
       旗舰级 MoE 大模型，总参1.6T、激活 49B，原生支持百万级超长上下文。
       依托海量高质量训练数据，具备顶尖数学逻辑、复杂推理、专业代码与长文本深度解析能力，
@@ -85,6 +80,7 @@ models:
     enabled: true
     max_turns: 0
   - name: deepseek-v4-flash
+    title: Deepseek V4 Flash
     description: DeepSeek官方V4系列最新模型，速度更快但推理能力下降，具备当今世界上最强推理能力的模型。
     provider: deepseek
     cost_per_1m_in: 1
@@ -104,6 +100,7 @@ models:
     enabled: true
     max_turns: 0
   - name: deepseek-v3.2
+    title: DeepSeek V3.2
     description: DeepSeekv3.2非深度求索官方提供而是通过阿里云百练提供服务。
     provider: dashscope
     cost_per_1m_in: 0.5
@@ -123,6 +120,7 @@ models:
     enabled: true
     max_turns: 0
   - name: kimi-k2.6
+    title: Kimi K2.6
     description: Kimi最新最智能的模型，具备更强更稳的长程代码编写能力，指令遵循和自我纠错能力显著提升。同时支持文本、图片与视频输入、思考与非思考模式、对话与 Agent 任务。
     provider: dashscope
     cost_per_1m_in: 1
@@ -142,6 +140,7 @@ models:
     enabled: true
     max_turns: 0
   - name: glm-5.1
+    title: GLM-5.1
     description: >
       GLM-5.1是智谱AI推出的面向长程任务（Long Horizon Task）设计的模型，总参数744B，
       支持200K超长上下文，最大输出 128K tokens。拥有强大逻辑推理、长文本理解与代码生成能力、
@@ -164,6 +163,7 @@ models:
     enabled: true
     max_turns: 0
   - name: MiniMax/MiniMax-M2.7
+    title: MiniMax-M2.7
     description: M2.7 能够自行构建复杂 Agent Harness，并基于 Agent Teams、Complex Skills、Tool Search tool 等能力，完成高度复杂的生产力任务。
     provider: dashscope
     cost_per_1m_in: 1
