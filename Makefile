@@ -82,7 +82,7 @@ BOLD           := \033[1m
 build: pre-build
 	@mkdir -p $(BUILD_DIR)
 	@echo "$(GREEN)➡ Building darwin/amd64...$(NC)"
-	GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
 	@echo "$(GREEN)  ✅ darwin/amd64$(NC)"
 	@echo "$(GREEN)➡ Building linux/amd64...$(NC)"
 	@if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then \
@@ -209,7 +209,7 @@ dev-watch:
 test:
 	@echo "$(GREEN)▶ Running tests with coverage...$(NC)"
 	@mkdir -p $(COVERAGE_DIR)
-	$(GO) test -race -coverprofile=$(COVERAGE_DIR)/coverage.out -v ./internal/core/...
+	$(GO) test -race -coverprofile=$(COVERAGE_DIR)/coverage.out -v ./...
 	@echo ""
 	@echo "$(GREEN)✅ Tests complete! Coverage summary:$(NC)"
 	@$(GO) tool cover -func=$(COVERAGE_DIR)/coverage.out | tail -1
@@ -345,7 +345,7 @@ vulnerability-check:
 	@echo "$(RED)🛡️ Checking for known vulnerabilities...$(NC)"
 	@if command -v snyk >/dev/null 2>&1; then \
 		snyk test ; \
-	elif command -n trivy >/dev/null 2>&1; then \
+	elif command -v trivy >/dev/null 2>&1; then \
 		trivy fs --severity HIGH,CRITICAL . ; \
 	else \
 		echo "$(YELLOW)⚠ No vulnerability scanner found.$(NC)"; \
@@ -464,14 +464,14 @@ build-linux-arm64:
 build-darwin-amd64:
 	@echo "$(GREEN)➡ Building for darwin/amd64...$(NC)"
 	@mkdir -p $(DIST_DIR)
-	GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 .
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 .
 	@echo "$(GREEN)✅ darwin/amd64 done$(NC)"
 
 ## build-darwin-arm64: macOS Apple Silicon (M1/M2)
 build-darwin-arm64:
 	@echo "$(GREEN)➡ Building for darwin/arm64 (Apple Silicon)...$(NC)"
 	@mkdir -p $(DIST_DIR)
-	GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 .
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 .
 	@echo "$(GREEN)✅ darwin/arm64 done$(NC)"
 
 ## build-windows-amd64: Windows x86_64
@@ -497,9 +497,9 @@ release: clean cross-build
 	tar -czf releases/$(BINARY_NAME)-$(VERSION)-linux-amd64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-linux-amd64
 	@# Linux ARM64
 	tar -czf releases/$(BINARY_NAME)-$(VERSION)-linux-arm64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-linux-arm64
-	@# Darwin Universal (combine amd64 + arm64)
-	@# Note: For true universal binary, use lipo on macOS
-	zip -j releases/$(BINARY_NAME)-$(VERSION)-darwin-universal.zip $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64
+	@# Darwin (separate amd64 + arm64 tarballs)
+	tar -czf releases/$(BINARY_NAME)-$(VERSION)-darwin-amd64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-darwin-amd64
+	tar -czf releases/$(BINARY_NAME)-$(VERSION)-darwin-arm64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-darwin-arm64
 	@# Windows
 	zip -j releases/$(BINARY_NAME)-$(VERSION)-windows-amd64.zip $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe
 	@echo "$(GREEN)✅ Release packages created in releases/$(NC)"
@@ -508,20 +508,22 @@ release: clean cross-build
 ## release-sign: 为发布包创建校验和（用于验证完整性）
 release-sign:
 	@echo "$(GREEN)🔐 Generating checksums...$(NC)"
-	@cd releases && sha256sum *.tar.gz *.zip > checksums.txt
+	@cd releases && shasum -a 256 *.tar.gz *.zip > checksums.txt
 	@echo "$(GREEN)✅ Checksums created: releases/checksums.txt$(NC)"
 
 ## release-notes: 生成发布说明
 release-notes:
 	@echo "$(GREEN)📝 Generating release notes...$(NC)"
-	@echo "# $(BINARY_NAME) $(VERSION) Release Notes\n" > RELEASE_NOTES.md
-	@echo "## 📦 Downloads\n" >> RELEASE_NOTES.md
-	@echo "| Platform | Architecture | File |\n" >> RELEASE_NOTES.md
-	@echo "|----------|-------------|------|\n" >> RELEASE_NOTES.md
+	@printf '%s\n' "# $(BINARY_NAME) $(VERSION) Release Notes" "" > RELEASE_NOTES.md
+	@printf '%s\n' "## 📦 Downloads" "" >> RELEASE_NOTES.md
+	@printf '| %s | %s | %s |\n' "Platform" "File" "SHA256" >> RELEASE_NOTES.md
+	@printf '|%s|%s|%s|\n' "----------" "------" "------" >> RELEASE_NOTES.md
 	@for f in releases/*.tar.gz releases/*.zip; do \
-		echo "| $$(basename $$f .tar.gz | sed 's/.*-//') | $$(basename $$f) | [Download]($$f) |\n" >> RELEASE_NOTES.md; \
+		platform=$$(basename "$$f" | sed 's/\.tar\.gz$$//;s/\.zip$$//;s/^[^-]*-[^-]*-//'); \
+		sha=$$(shasum -a 256 "$$f" | cut -d' ' -f1); \
+		printf '| %s | %s | %s |\n' "$$platform" "$$(basename "$$f")" "$$sha" >> RELEASE_NOTES.md; \
 	done
-	@echo "\n## ✨ Changes\n" >> RELEASE_NOTES.md
+	@printf '%s\n' "" "## ✨ Changes" "" >> RELEASE_NOTES.md
 	@git log --oneline --no-merges "$(shell git describe --tags --abbrev=0 2>/dev/null)..HEAD" 2>/dev/null >> RELEASE_NOTES.md || echo "- Initial release" >> RELEASE_NOTES.md
 	@echo "$(GREEN)✅ Release notes created: RELEASE_NOTES.md$(NC)"
 

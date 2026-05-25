@@ -91,7 +91,7 @@ func (p *ChoicesPanel) buildList() {
 		w = 80
 	}
 	height := len(p.Items) + 2
-	if p.MultiSelect && p.AllowTextInput {
+	if p.AllowTextInput {
 		height += 3
 	}
 	if height < 5 {
@@ -139,9 +139,10 @@ func (p *ChoicesPanel) Update(msg any) (*ChoicesPanel, tea.Cmd) {
 		p.Cursor = 0
 		p.MultiSelect = msg.MultiSelect
 		p.AllowTextInput = msg.AllowTextInput
-		p.inputActive = false
 		p.CustomText = ""
-		if p.MultiSelect {
+		// Auto-activate text input when no options (free-text question).
+		p.inputActive = len(msg.Options) == 0 && msg.AllowTextInput
+		if p.MultiSelect || p.inputActive {
 			if p.Selected == nil {
 				p.Selected = make(map[int]bool)
 			} else {
@@ -171,6 +172,13 @@ func (p *ChoicesPanel) Update(msg any) (*ChoicesPanel, tea.Cmd) {
 		switch key.Code {
 		case tea.KeyEnter:
 			p.Visible = false
+			// No items: just submit custom text (only reachable if text was active
+			// and user tabbed away, or empty-options non-input mode fallback).
+			if len(p.Items) == 0 {
+				return p, func() tea.Msg {
+					return clientmsg.ChoiceSelectedMsg{CustomText: p.CustomText}
+				}
+			}
 			if p.MultiSelect {
 				var indices []int
 				for i, v := range p.Selected {
@@ -204,7 +212,8 @@ func (p *ChoicesPanel) Update(msg any) (*ChoicesPanel, tea.Cmd) {
 				return p, nil
 			}
 		case tea.KeyTab:
-			if p.MultiSelect && p.AllowTextInput {
+			// Tab toggles text input when AllowTextInput (both single and multi select).
+			if p.AllowTextInput {
 				p.inputActive = !p.inputActive
 				return p, nil
 			}
@@ -267,17 +276,23 @@ func isPrintable(k tea.Key) bool {
 }
 
 func (p *ChoicesPanel) View() string {
-	if !p.Visible || len(p.Items) == 0 {
+	if !p.Visible {
+		return ""
+	}
+	if len(p.Items) == 0 && !p.AllowTextInput {
 		return ""
 	}
 
-	listView := strings.TrimSpace(p.list.View())
-
 	var b strings.Builder
-	b.WriteString(listView)
+	if len(p.Items) > 0 {
+		listView := strings.TrimSpace(p.list.View())
+		b.WriteString(listView)
+	}
 
-	if p.MultiSelect && p.AllowTextInput {
-		b.WriteByte('\n')
+	if p.AllowTextInput {
+		if len(p.Items) > 0 {
+			b.WriteByte('\n')
+		}
 		b.WriteString(viewCustomInput(p))
 	}
 

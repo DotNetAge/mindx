@@ -13,36 +13,38 @@ import (
 )
 
 // RunWizard runs the interactive setup wizard and applies the results.
-// It handles model selection, API key input, daemon setup, Python venv setup,
-// and memory embedder model download.
+// It handles provider selection, API key input, model selection, daemon setup,
+// Python venv setup, and memory embedder model download.
 func RunWizard(modelsPath, agentsDir, workspaceDir string, cfg *core.MindxConfig) error {
 	result := runFirstRunWizard(modelsPath, agentsDir, workspaceDir, cfg)
 	if result.Err != nil {
 		return result.Err
 	}
 
-	// Update models.yml to use the credential reference name first.
-	// This runs before storing the API key so that if models.yml update
-	// fails, no key is left orphaned in the credential store.
-	if err := updateModelCredRef(modelsPath, result.SelectedModel, result.CredRef); err != nil {
-		return fmt.Errorf("更新模型配置失败: %w", err)
+	// Update provider's api_key to credential reference and persist.
+	// Runs before storing the actual key so that if file update fails,
+	// no key is left orphaned in the credential store.
+	if result.SelectedProvider != "" {
+		if err := updateProviderCredRef(modelsPath, result.SelectedProvider); err != nil {
+			return fmt.Errorf("更新提供商配置失败: %w", err)
+		}
 	}
 
 	// Store the actual API key in credential store (not in YAML).
 	// Runs after models.yml is confirmed updated to avoid inconsistent state.
-	// If user skipped API key input, the existing key is preserved.
 	credStore := core.NewCredentialStore(workspaceDir)
 	if result.APIKey != "" {
-		if err := credStore.Set(result.CredRef, result.APIKey); err != nil {
+		if err := credStore.Set(result.SelectedProvider, result.APIKey); err != nil {
 			return fmt.Errorf("存储 API Key 失败: %w", err)
 		}
 	}
 
-	if err := updateAllAgentsModel(agentsDir, result.SelectedModel); err != nil {
-		return fmt.Errorf("更新 Agent 模型配置失败: %w", err)
+	if result.SelectedModel != "" {
+		if err := updateAllAgentsModel(agentsDir, result.SelectedModel); err != nil {
+			return fmt.Errorf("更新 Agent 模型配置失败: %w", err)
+		}
+		cfg.DefaultModel = result.SelectedModel
 	}
-
-	cfg.DefaultModel = result.SelectedModel
 	cfg.Initialized = true
 
 	// Setup daemon if user requested
@@ -104,18 +106,18 @@ func RunWizard(modelsPath, agentsDir, workspaceDir string, cfg *core.MindxConfig
 	return nil
 }
 
-func updateModelCredRef(modelsPath, modelName, credRef string) error {
+func updateProviderCredRef(modelsPath, providerName string) error {
 	registry, err := goreact.LoadModels(modelsPath)
 	if err != nil {
 		return err
 	}
 
-	cfg := registry.GetRaw(modelName)
-	if cfg == nil {
-		return fmt.Errorf("模型 %q 未在配置中找到", modelName)
+	provider := registry.GetProvider(providerName)
+	if provider == nil {
+		return fmt.Errorf("提供商 %q 未在配置中找到", providerName)
 	}
-
-	cfg.APIKey = credRef
+	provider.APIKey = providerName
+	registry.RegisterProvider(providerName, provider)
 
 	type modelsWrapper struct {
 		Providers []goreactcore.ProviderConfig `yaml:"providers"`
@@ -145,7 +147,7 @@ func updateModelCredRef(modelsPath, modelName, credRef string) error {
 
 	data, err := yaml.Marshal(wrapper)
 	if err != nil {
-		return fmt.Errorf("序列化模型配置失败: %w", err)
+		return fmt.Errorf("序列化配置失败: %w", err)
 	}
 
 	return os.WriteFile(modelsPath, data, 0644)

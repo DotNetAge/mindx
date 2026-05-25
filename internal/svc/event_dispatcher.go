@@ -36,7 +36,7 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			d.logger.Warn("unexpected ActionStart data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		d.gw.SendResponse(clientID, gateway.RespActionStart, "开始操作", map[string]interface{}{
+		d.gw.SendResponse(clientID, gateway.RespActionStart, "开始操作", 	map[string]any{
 			"tool_count":       action.ToolCount,
 			"tool_names":       action.ToolNames,
 			"predicted_tokens": action.TotalPredictedTokens,
@@ -49,7 +49,7 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			d.logger.Warn("unexpected ToolExecStart data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		d.gw.SendResponse(clientID, gateway.RespActionStart, "工具开始", map[string]interface{}{
+		d.gw.SendResponse(clientID, gateway.RespActionStart, "工具开始", map[string]any{
 			"tool_name": data.ToolName,
 			"params":    data.Params,
 		}, gateway.WithSessionID(sid))
@@ -60,7 +60,7 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			d.logger.Warn("unexpected ToolExecEnd data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		d.gw.SendResponse(clientID, gateway.RespActionResult, "工具结果", map[string]interface{}{
+		d.gw.SendResponse(clientID, gateway.RespActionResult, "工具结果", map[string]any{
 			"tool_name": data.ToolName,
 			"success":   data.Success,
 			"result":    data.Result,
@@ -74,7 +74,7 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			d.logger.Warn("unexpected ActionProgress data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		d.gw.SendResponse(clientID, gateway.RespActionProgress, "操作进度", map[string]interface{}{
+		d.gw.SendResponse(clientID, gateway.RespActionProgress, "操作进度", map[string]any{
 			"completed": progress.CompletedCount,
 			"total":     progress.TotalCount,
 			"status":    progress.Status,
@@ -86,7 +86,7 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			d.logger.Warn("unexpected ActionEnd data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		d.gw.SendResponse(clientID, gateway.RespActionEnd, "操作完成", map[string]interface{}{
+		d.gw.SendResponse(clientID, gateway.RespActionEnd, "操作完成", map[string]any{
 			"total":   data.TotalTools,
 			"success": data.SuccessCount,
 			"failed":  data.FailedCount,
@@ -179,9 +179,9 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		md := buildTaskSummaryMarkdown(taskSummary)
 		d.gw.SendResponse(clientID, gateway.RespTaskSummary, "任务总结", md,
 			gateway.WithSessionID(sid),
-			gateway.WithResponseMeta(map[string]interface{}{
-				"input_tokens":  taskSummary.InputTokens,
-				"output_tokens": taskSummary.OutputTokens,
+			gateway.WithResponseMeta(map[string]any{
+				"input_tokens":  taskSummary.TokenUsage.InputTokens,
+				"output_tokens": taskSummary.TokenUsage.OutputTokens,
 			}))
 
 	case goreactcore.Error:
@@ -199,14 +199,14 @@ func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.Response
 }
 
 func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreactcore.ExecutionSummaryData) {
-	tableData := map[string]interface{}{
+	tableData := map[string]any{
 		"headers": []string{"Metric", "Value"},
 		"rows": []map[string]string{
 			{"metric": "Iterations", "value": fmt.Sprintf("%d", summary.TotalIterations)},
 			{"metric": "Tool Calls", "value": fmt.Sprintf("%d", summary.ToolCalls)},
 			{"metric": "Tools Used", "value": strings.Join(summary.ToolsUsed, ", ")},
 			{"metric": "Duration", "value": formatDuration(summary.TotalDuration)},
-			{"metric": "Tokens Used", "value": fmt.Sprintf("%d", summary.TokensUsed)},
+			{"metric": "Tokens Used", "value": fmt.Sprintf("%d (in:%d out:%d cached:%d reasoning:%d)", summary.TokensUsed.TotalTokens, summary.TokensUsed.InputTokens, summary.TokensUsed.OutputTokens, summary.TokensUsed.CachedTokens, summary.TokensUsed.ReasoningTokens)},
 			{"metric": "Termination", "value": summary.TerminationReason},
 		},
 	}
@@ -260,5 +260,5 @@ func buildCycleEndMarkdown(cycle goreactcore.CycleInfo) string {
 }
 
 func buildTaskSummaryMarkdown(ts goreactcore.TaskSummaryData) string {
-	return fmt.Sprintf("### 📋 任务总结\n\n%s\n\n**Token**: 输入 %d / 输出 %d\n", ts.Summary, ts.InputTokens, ts.OutputTokens)
+	return fmt.Sprintf("### 📋 任务总结\n\n%s\n\n**Token**: 输入 %d / 输出 %d / 总计 %d\n", ts.Summary, ts.TokenUsage.InputTokens, ts.TokenUsage.OutputTokens, ts.TokenUsage.TotalTokens)
 }

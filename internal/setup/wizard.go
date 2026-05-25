@@ -25,11 +25,21 @@ const minContentWidth = 60
 
 var borderStyle = lipgloss.NewStyle().Padding(1, 2)
 
+type providerItem struct {
+	Name        string
+	DisplayName string
+}
+
+func (i providerItem) Title() string       { return i.DisplayName }
+func (i providerItem) Description() string { return i.Name }
+func (i providerItem) FilterValue() string { return i.DisplayName }
+
 type modelItem struct {
 	Name        string
 	desc        string
 	BaseURL     string
 	CredRef     string
+	Provider    string
 }
 
 func (i modelItem) Title() string       { return i.Name }
@@ -138,6 +148,10 @@ func runModelDownload(cacheDir string, ch chan<- downloadProgressMsg) {
 type firstRunModel struct {
 	step int
 
+	providerList   list.Model
+	providers      []providerItem
+	selectedProvider providerItem
+
 	modelList list.Model
 	models    []modelItem
 
@@ -186,10 +200,10 @@ type firstRunModel struct {
 }
 
 type firstRunResult struct {
-	SelectedModel string
-	CredRef       string
-	APIKey        string
-	Err           error
+	SelectedProvider string
+	SelectedModel    string
+	APIKey           string
+	Err              error
 
 	DaemonSetup    bool
 	PythonSetup    bool
@@ -250,12 +264,12 @@ func initGlamour(width int) *glamour.TermRenderer {
 }
 
 func runFirstRunWizard(modelsPath, agentsDir, workspaceDir string, mindxConfig *core.MindxConfig) firstRunResult {
-	modelList, err := parseModelsForWizard(modelsPath)
+	providerList, modelList, err := parseProviderAndModels(modelsPath)
 	if err != nil {
-		return firstRunResult{Err: fmt.Errorf("解析模型配置失败: %w", err)}
+		return firstRunResult{Err: fmt.Errorf("解析配置失败: %w", err)}
 	}
-	if len(modelList) == 0 {
-		return firstRunResult{Err: fmt.Errorf("模型配置文件中没有可用模型")}
+	if len(providerList) == 0 {
+		return firstRunResult{Err: fmt.Errorf("配置文件中没有可用提供商")}
 	}
 
 	ti := textinput.New()
@@ -264,26 +278,43 @@ func runFirstRunWizard(modelsPath, agentsDir, workspaceDir string, mindxConfig *
 	ti.CharLimit = 256
 	ti.Focus()
 
-	d := list.NewDefaultDelegate()
-	d.ShowDescription = true
-	d.SetSpacing(0)
-	d.SetHeight(2)
+	pd := list.NewDefaultDelegate()
+	pd.ShowDescription = false
+	pd.SetSpacing(0)
+	pd.SetHeight(1)
 
-	var items []list.Item
-	for _, m := range modelList {
-		items = append(items, m)
+	md := list.NewDefaultDelegate()
+	md.ShowDescription = true
+	md.SetSpacing(0)
+	md.SetHeight(2)
+
+	var provItems []list.Item
+	for _, p := range providerList {
+		provItems = append(provItems, p)
 	}
-	l := list.New(items, d, minContentWidth-4, 8)
-	l.SetShowStatusBar(false)
-	l.SetShowPagination(false)
-	l.SetShowTitle(false)
-	l.SetFilteringEnabled(false)
+	pl := list.New(provItems, pd, minContentWidth-4, 8)
+	pl.SetShowStatusBar(false)
+	pl.SetShowPagination(false)
+	pl.SetShowTitle(false)
+	pl.SetFilteringEnabled(false)
+
+	var modelItems []list.Item
+	for _, m := range modelList {
+		modelItems = append(modelItems, m)
+	}
+	ml := list.New(modelItems, md, minContentWidth-4, 8)
+	ml.SetShowStatusBar(false)
+	ml.SetShowPagination(false)
+	ml.SetShowTitle(false)
+	ml.SetFilteringEnabled(false)
 
 	pythonInfo := DetectPython()
 
 	m := &firstRunModel{
 		step:           0,
-		modelList:      l,
+		providerList:   pl,
+		providers:      providerList,
+		modelList:      ml,
 		models:         modelList,
 		apiKeyInput:    ti,
 		modelsPath:     modelsPath,
@@ -305,11 +336,9 @@ func runFirstRunWizard(modelsPath, agentsDir, workspaceDir string, mindxConfig *
 
 	if m.modelConfigured {
 		credStore := core.NewCredentialStore(workspaceDir)
-		for _, model := range modelList {
-			if model.Name == mindxConfig.DefaultModel {
-				if key, err := credStore.Get(model.CredRef); err == nil && key != "" {
-					m.apiKeyConfigured = true
-				}
+		for _, p := range providerList {
+			if key, err := credStore.Get(p.Name); err == nil && key != "" {
+				m.apiKeyConfigured = true
 				break
 			}
 		}
@@ -323,18 +352,9 @@ func runFirstRunWizard(modelsPath, agentsDir, workspaceDir string, mindxConfig *
 		m.pathChoice = m.pathInPath
 	}
 
-	if mindxConfig.DefaultModel != "" {
-		for i, model := range modelList {
-			if model.Name == mindxConfig.DefaultModel {
-				l.Select(i)
-				break
-			}
-		}
-	}
-
 	m.daemonChoice = DaemonInstalled(workspaceDir)
 
-	m.pythonChoice = true // 默认创建虚拟环境，用户按 Enter 直接确认
+	m.pythonChoice = true
 
 	modelPath := filepath.Join(workspaceDir, "data", "models", "model_q4.onnx")
 	if _, err := os.Stat(modelPath); err == nil {
@@ -354,21 +374,21 @@ func runFirstRunWizard(modelsPath, agentsDir, workspaceDir string, mindxConfig *
 	}
 
 	return firstRunResult{
-		SelectedModel: fm.selectedModel.Name,
-		CredRef:       fm.selectedModel.CredRef,
-		APIKey:        fm.apiKeyInput.Value(),
-		DaemonSetup:   fm.daemonChoice,
-		PythonSetup:   fm.pythonChoice,
-		PythonInfo:    fm.pythonInfo,
-		EmbedderModel: fm.embedderModel,
-		PathSetup:     fm.pathChoice,
+		SelectedProvider: fm.selectedProvider.Name,
+		SelectedModel:    fm.selectedModel.Name,
+		APIKey:           fm.apiKeyInput.Value(),
+		DaemonSetup:      fm.daemonChoice,
+		PythonSetup:      fm.pythonChoice,
+		PythonInfo:       fm.pythonInfo,
+		EmbedderModel:    fm.embedderModel,
+		PathSetup:        fm.pathChoice,
 	}
 }
 
-func parseModelsForWizard(path string) ([]modelItem, error) {
+func parseProviderAndModels(path string) ([]providerItem, []modelItem, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var config struct {
@@ -376,20 +396,30 @@ func parseModelsForWizard(path string) ([]modelItem, error) {
 		Models    []goreactcore.ModelConfig    `yaml:"models"`
 	}
 	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	var provs []providerItem
+	for _, p := range config.Providers {
+		title := p.Title
+		if title == "" {
+			title = p.Name
+		}
+		provs = append(provs, providerItem{Name: p.Name, DisplayName: title})
 	}
 
 	var items []modelItem
 	for _, m := range config.Models {
 		desc := strings.TrimSpace(m.Description)
 		items = append(items, modelItem{
-			Name:    m.Name,
-			desc:    desc,
-			BaseURL: m.BaseURL,
-			CredRef: m.APIKey,
+			Name:     m.Name,
+			desc:     desc,
+			BaseURL:  m.BaseURL,
+			CredRef:  m.APIKey,
+			Provider: m.Provider,
 		})
 	}
-	return items, nil
+	return provs, items, nil
 }
 
 func (m *firstRunModel) Init() tea.Cmd {
@@ -414,22 +444,24 @@ func (m *firstRunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch m.step {
 	case 0:
-		return m.updateModelSelect(msg)
+		return m.updateProviderSelect(msg)
 	case 1:
 		return m.updateAPIKeyInput(msg)
 	case 2:
-		return m.updateDaemonCheck(msg)
+		return m.updateModelSelect(msg)
 	case 3:
-		return m.updatePythonCheck(msg)
+		return m.updateDaemonCheck(msg)
 	case 4:
-		return m.updateMemoryConfig(msg)
+		return m.updatePythonCheck(msg)
 	case 5:
+		return m.updateMemoryConfig(msg)
+	case 6:
 		return m.updatePathSetup(msg)
 	}
 	return m, nil
 }
 
-func (m *firstRunModel) updateModelSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *firstRunModel) updateProviderSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -437,21 +469,21 @@ func (m *firstRunModel) updateModelSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		case "enter":
-			if item := m.modelList.SelectedItem(); item != nil {
-				if mi, ok := item.(modelItem); ok {
-					m.selectedModel = mi
-					m.apiKeyInput.Placeholder = fmt.Sprintf("请输入 %s 的 API Key...", mi.Name)
+			if item := m.providerList.SelectedItem(); item != nil {
+				if pi, ok := item.(providerItem); ok {
+					m.selectedProvider = pi
+					m.apiKeyInput.Placeholder = fmt.Sprintf("请输入 %s 的 API Key...", pi.Title())
 					m.apiKeyInput.Focus()
 					m.step = 1
-					cmd := textinput.Blink
-					return m, cmd
+					return m, textinput.Blink
 				}
 			}
 		case "s", "S":
-			if m.modelConfigured {
-				if item := m.modelList.SelectedItem(); item != nil {
-					if mi, ok := item.(modelItem); ok {
-						m.selectedModel = mi
+			if m.apiKeyConfigured {
+				// Skip to model selection if API key already configured
+				if item := m.providerList.SelectedItem(); item != nil {
+					if pi, ok := item.(providerItem); ok {
+						m.selectedProvider = pi
 						m.step = 2
 						return m, nil
 					}
@@ -460,6 +492,51 @@ func (m *firstRunModel) updateModelSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	var cmd tea.Cmd
+	m.providerList, cmd = m.providerList.Update(msg)
+	return m, cmd
+}
+
+func (m *firstRunModel) updateModelSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Build filtered model list for the selected provider
+	var filtered []list.Item
+	for _, mi := range m.models {
+		if mi.Provider == m.selectedProvider.Name {
+			filtered = append(filtered, mi)
+		}
+	}
+
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "q", "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+		case "esc":
+			m.step = 1
+			return m, nil
+		case "enter":
+			if item := m.modelList.SelectedItem(); item != nil {
+				if mi, ok := item.(modelItem); ok {
+					m.selectedModel = mi
+					m.step = 3
+					return m, nil
+				}
+			}
+		case "s", "S":
+			if m.modelConfigured {
+				if item := m.modelList.SelectedItem(); item != nil {
+					if mi, ok := item.(modelItem); ok {
+						m.selectedModel = mi
+						m.step = 3
+						return m, nil
+					}
+				}
+			}
+		}
+	}
+
+	m.modelList.SetItems(filtered)
 	var cmd tea.Cmd
 	m.modelList, cmd = m.modelList.Update(msg)
 	return m, cmd
@@ -669,17 +746,15 @@ func (m *firstRunModel) updatePathSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *firstRunModel) renderModelSelect() string {
+func (m *firstRunModel) renderProviderSelect() string {
 	var b strings.Builder
-	md := "选择默认模型\n\n"
-	md += "请选择一个 AI 模型作为默认对话模型。\n\n"
-	help := "↑↓ 选择  **Enter** 确认  **Esc** 退出"
-	if m.modelConfigured {
-		help = "↑↓ 选择  **Enter** 确认  **S** 跳过 (使用已有配置)  **Esc** 退出"
-	}
-	b.WriteString(m.renderMarkdown(md))
-	b.WriteString(m.modelList.View())
+	b.WriteString(m.renderMarkdown("选择提供商\n\n请选择一个 AI 提供商。\n\n"))
+	b.WriteString(m.providerList.View())
 	b.WriteString("\n")
+	help := "↑↓ 选择  **Enter** 确认  **Esc** 退出"
+	if m.apiKeyConfigured {
+		help = "↑↓ 选择  **Enter** 确认  **S** 跳过 (使用已有 Key)  **Esc** 退出"
+	}
 	b.WriteString(m.renderMarkdown(help))
 	return m.paddedView(borderStyle.Render(b.String()))
 }
@@ -687,13 +762,26 @@ func (m *firstRunModel) renderModelSelect() string {
 func (m *firstRunModel) renderAPIKeyInput() string {
 	var b strings.Builder
 	b.WriteString(m.renderMarkdown("API Key 配置\n\n"))
-	b.WriteString(fmt.Sprintf("模型: **%s**\n\n", m.selectedModel.Name))
+	b.WriteString(fmt.Sprintf("提供商: **%s**\n\n", m.selectedProvider.DisplayName))
 	b.WriteString("输入你的 API Key：\n\n")
 	b.WriteString(m.apiKeyInput.View())
 	b.WriteString("\n\n")
 	help := "**Enter** 确认  **Esc** 返回上一步"
 	if m.apiKeyConfigured {
 		help = "**Enter** 确认  **S** 跳过 (使用已有 Key)  **Esc** 返回上一步"
+	}
+	b.WriteString(m.renderMarkdown(help))
+	return m.paddedView(borderStyle.Render(b.String()))
+}
+
+func (m *firstRunModel) renderModelSelect() string {
+	var b strings.Builder
+	b.WriteString(m.renderMarkdown(fmt.Sprintf("选择模型\n\n提供商: **%s**\n\n请选择一个 AI 模型作为默认对话模型。\n\n", m.selectedProvider.DisplayName)))
+	b.WriteString(m.modelList.View())
+	b.WriteString("\n")
+	help := "↑↓ 选择  **Enter** 确认  **Esc** 返回上一步"
+	if m.modelConfigured {
+		help = "↑↓ 选择  **Enter** 确认  **S** 跳过 (使用已有配置)  **Esc** 返回上一步"
 	}
 	b.WriteString(m.renderMarkdown(help))
 	return m.paddedView(borderStyle.Render(b.String()))
@@ -851,16 +939,18 @@ func (m *firstRunModel) View() tea.View {
 	content := ""
 	switch m.step {
 	case 0:
-		content = m.renderModelSelect()
+		content = m.renderProviderSelect()
 	case 1:
 		content = m.renderAPIKeyInput()
 	case 2:
-		content = m.renderDaemonCheck()
+		content = m.renderModelSelect()
 	case 3:
-		content = m.renderPythonCheck()
+		content = m.renderDaemonCheck()
 	case 4:
-		content = m.renderMemoryConfig()
+		content = m.renderPythonCheck()
 	case 5:
+		content = m.renderMemoryConfig()
+	case 6:
 		content = m.renderPathSetup()
 	}
 	return tea.NewView(content)

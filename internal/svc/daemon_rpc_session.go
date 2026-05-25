@@ -14,10 +14,8 @@ type sessionListParams struct {
 
 func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (any, error) {
 	var p sessionListParams
-	if params != nil {
-		if err := json.Unmarshal(params, &p); err != nil {
-			return nil, fmt.Errorf("invalid params: %w", err)
-		}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 
 	sessDB := d.app.SessDB()
@@ -49,8 +47,8 @@ type sessionGetParams struct {
 
 func (d *Daemon) handleSessionGet(_ context.Context, params json.RawMessage) (any, error) {
 	var p sessionGetParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 	if p.SessionID == "" {
 		return nil, fmt.Errorf("session_id is required")
@@ -68,7 +66,7 @@ func (d *Daemon) handleSessionGet(_ context.Context, params json.RawMessage) (an
 
 	meta, metaErr := sessDB.GetSessionMeta(p.SessionID)
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"session_id": p.SessionID,
 		"messages":   info,
 	}
@@ -80,8 +78,8 @@ func (d *Daemon) handleSessionGet(_ context.Context, params json.RawMessage) (an
 
 func (d *Daemon) handleSessionMeta(_ context.Context, params json.RawMessage) (any, error) {
 	var p sessionGetParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 	if p.SessionID == "" {
 		return nil, fmt.Errorf("session_id is required")

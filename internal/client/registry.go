@@ -45,10 +45,11 @@ func (r *SlashCommandRegistry) List() []CommandDef {
 }
 
 type CommandDeps struct {
-	App      *appcore.App
-	OnClear  func()
-	OnExit   func()
-	OnDoctor func()
+	App       *appcore.App
+	OnClear   func()
+	OnExit    func()
+	OnDoctor  func()
+	OnConnect func()
 }
 
 func BuiltinCommands(deps CommandDeps) *SlashCommandRegistry {
@@ -194,6 +195,17 @@ func BuiltinCommands(deps CommandDeps) *SlashCommandRegistry {
 		Description: "列出所有可用 Agent",
 		Run: func(args []string) CommandResult {
 			return CommandResult{Message: "使用 @agent_name 切换 Agent", Success: true}
+		},
+	})
+
+	r.Register(CommandDef{
+		Name:        "connect",
+		Description: "连接提供商（选择提供商 → 输入 API Key → 选择模型）",
+		Run: func(args []string) CommandResult {
+			if deps.OnConnect != nil {
+				deps.OnConnect()
+			}
+			return CommandResult{Message: "", Success: true}
 		},
 	})
 

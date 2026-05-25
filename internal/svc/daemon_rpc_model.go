@@ -26,8 +26,8 @@ type modelGetParams struct {
 
 func (d *Daemon) handleModelGet(_ context.Context, params json.RawMessage) (any, error) {
 	var p modelGetParams
-	if err := json.Unmarshal(params, &p); err != nil {
-		return nil, fmt.Errorf("invalid params: %w", err)
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
 	}
 	if p.Name == "" {
 		return nil, fmt.Errorf("name is required")
