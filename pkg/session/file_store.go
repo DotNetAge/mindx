@@ -72,7 +72,7 @@ type FileSessionStore struct {
 	rootDir        string
 	slideMu        sync.RWMutex
 	slideHandler   core.SlideHandler
-	tokenEstimator core.TokenEstimator
+	tokenEstimator TokenEstimator
 }
 
 func NewFileSessionStore(rootDir string) (*FileSessionStore, error) {
@@ -88,11 +88,11 @@ func NewFileSessionStore(rootDir string) (*FileSessionStore, error) {
 	return &FileSessionStore{
 		rootDir:        absPath,
 		slideHandler:   core.NoopSlideHandler,
-		tokenEstimator: core.NewTokenEstimator(),
+		tokenEstimator: NewTokenEstimator(),
 	}, nil
 }
 
-func (s *FileSessionStore) SetTokenEstimator(est core.TokenEstimator) {
+func (s *FileSessionStore) SetTokenEstimator(est TokenEstimator) {
 	if est != nil {
 		s.tokenEstimator = est
 	}

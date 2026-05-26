@@ -21,21 +21,14 @@ type ActionStep struct {
 	ResultText    string
 	StreamingArgs string
 	Collapsed     bool
-	DiffText      string // unified diff output for file-modifying tools
-	DiffAdds      int    // lines added
-	DiffDels      int    // lines removed
-	DiffFile      string // file path that was changed
-}
-
-type ActionInfo struct {
-	ToolCount            int
-	ToolNames            []string
-	TotalPredictedTokens int
+	DiffText      string
+	DiffAdds      int
+	DiffDels      int
+	DiffFile      string
 }
 
 type Action struct {
 	Steps         []ActionStep
-	CurrentInfo   *ActionInfo
 	Completed     bool
 	SuccessCount  int
 	FailedCount   int
@@ -48,19 +41,6 @@ type Action struct {
 
 func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 	switch e := e.(type) {
-	case msg.ActionStartMsg:
-		if m.Completed {
-			return m, nil
-		}
-		m.CurrentInfo = &ActionInfo{
-			ToolCount:            e.ToolCount,
-			ToolNames:            e.ToolNames,
-			TotalPredictedTokens: e.EstimatedTok,
-		}
-		m.StartTime = time.Now()
-		m.Elapsed = 0
-		return m, nil
-
 	case msg.ToolExecStartMsg:
 		if m.Completed {
 			return m, nil
@@ -73,6 +53,9 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 			Collapsed:    true,
 		}
 		m.Steps = append(m.Steps, step)
+		if m.StartTime.IsZero() {
+			m.StartTime = time.Now()
+		}
 		return m, nil
 
 	case msg.ToolUseDeltaMsg:
@@ -106,7 +89,9 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 		return m, nil
 
 	case msg.ToolExecEndMsg:
-		if m.Completed || len(m.Steps) == 0 { return m, nil }
+		if m.Completed || len(m.Steps) == 0 {
+			return m, nil
+		}
 		for i := len(m.Steps) - 1; i >= 0; i-- {
 			step := &m.Steps[i]
 			if step.ToolName == e.ToolName && step.Status == ActionStepExecuting {
@@ -120,7 +105,6 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 					step.Duration = e.Duration
 				}
 				step.Collapsed = false
-				// Attach diff if the tool produced file changes
 				if e.DiffText != "" {
 					step.DiffText = e.DiffText
 					step.DiffAdds = e.DiffAdds
@@ -130,15 +114,6 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 				break
 			}
 		}
-		return m, nil
-
-	case msg.ActionEndMsg:
-		if m.Completed {
-			return m, nil
-		}
-		m.Completed = true
-		m.SuccessCount = e.SuccessCount
-		m.FailedCount = e.FailedCount
 		return m, nil
 
 	case msg.ExecutionSummaryMsg:
@@ -156,9 +131,6 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 		}
 		return m, nil
 
-	case msg.ActionProgressMsg:
-		return m, nil
-
 	case msg.TickMsg:
 		m.BlinkOn = !m.BlinkOn
 		if !m.Completed && !m.StartTime.IsZero() {
@@ -171,48 +143,20 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 }
 
 func ViewAction(m Action, width int) string {
-	if m.CurrentInfo == nil && len(m.Steps) == 0 {
+	if len(m.Steps) == 0 {
 		return ""
 	}
 
 	var b strings.Builder
 	blinkOn := m.BlinkOn && !m.Completed
 
-	if m.CurrentInfo != nil {
-		b.WriteString(ViewActionHeader(*m.CurrentInfo, blinkOn, m.Elapsed, m.Completed, m.SuccessCount, m.FailedCount, m.TotalDuration))
-	}
-
 	for i, step := range m.Steps {
-		if i > 0 || m.CurrentInfo != nil {
+		if i > 0 {
 			b.WriteByte('\n')
 		}
 		b.WriteString(ViewActionStep(step, blinkOn, width))
 	}
 
-	return b.String()
-}
-
-func ViewActionHeader(info ActionInfo, blinkOn bool, elapsed time.Duration, completed bool, successCount, failedCount int, totalDuration time.Duration) string {
-	var b strings.Builder
-	icon := ViewBlink(Blink{Symbol: "⏺", BlinkOn: blinkOn}, style.GrayStyle)
-	if completed {
-		icon = style.WhiteStyle.Render("⏺")
-	}
-	b.WriteString(icon)
-	b.WriteString(" ")
-	b.WriteString(style.WhiteStyle.Render(fmt.Sprintf("执行操作: %d 个工具", info.ToolCount)))
-	if info.TotalPredictedTokens > 0 {
-		b.WriteString(fmt.Sprintf(" | %s", style.GrayStyle.Render(fmt.Sprintf("预计消耗 %s Tokens", formatNumber(info.TotalPredictedTokens)))))
-	}
-	if completed {
-		b.WriteString(fmt.Sprintf(" | %s", style.GreenStyle.Render(fmt.Sprintf("%d 成功, %d 失败", successCount, failedCount))))
-		if totalDuration > 0 {
-			b.WriteString(fmt.Sprintf(" | %s", style.WhiteStyle.Render(formatDuration(totalDuration))))
-		}
-	} else if elapsed > 0 {
-		b.WriteString(fmt.Sprintf(" | %s", style.WhiteStyle.Render(formatDuration(elapsed))))
-	}
-	b.WriteByte('\n')
 	return b.String()
 }
 
@@ -255,7 +199,6 @@ func ViewActionStep(step ActionStep, blinkOn bool, width int) string {
 	if step.ResultText != "" {
 		lines := strings.Split(step.ResultText, "\n")
 
-		// Show result content (max 3 lines) when meaningful and not collapsed
 		if !step.Collapsed && len(step.ResultText) > 10 {
 			lineStyle := style.DimStyle
 			if step.Status == ActionStepFailed {
@@ -270,7 +213,6 @@ func ViewActionStep(step ActionStep, blinkOn bool, width int) string {
 			}
 		}
 
-		// Completion summary (always shown below result content)
 		summary := fmt.Sprintf("完成 (%d lines)", len(lines))
 		if step.EstimatedTok > 0 || step.Duration > 0 {
 			var parts []string
@@ -285,9 +227,8 @@ func ViewActionStep(step ActionStep, blinkOn bool, width int) string {
 		b.WriteString(fmt.Sprintf("  ⎿ %s\n", style.GrayStyle.Render(summary)))
 	}
 
-	// Diff display for file-modifying tools
 	if step.DiffText != "" && !step.Collapsed {
-		diffWidth := width - 4 // account for indentation
+		diffWidth := width - 4
 		b.WriteString(fmt.Sprintf("  ⎿ %s\n", ViewDiffWithFile(step.DiffText, step.DiffFile, step.DiffAdds, step.DiffDels, diffWidth)))
 	}
 

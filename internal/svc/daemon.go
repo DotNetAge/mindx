@@ -245,13 +245,18 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 
 	eventCh, cancelEvents := agent.EventsFiltered(func(e goreactcore.ReactEvent) bool {
 		switch e.Type {
-		case goreactcore.ThinkingDelta, goreactcore.ThinkingDone, goreactcore.ActionStart,
-			goreactcore.ActionProgress, goreactcore.ToolExecStart, goreactcore.ToolExecEnd,
-			goreactcore.ActionEnd, goreactcore.FinalAnswer,
-			goreactcore.ExecutionSummary, goreactcore.Error, goreactcore.SubtaskSpawned,
-			goreactcore.SubtaskCompleted, goreactcore.AgentTalkStart, goreactcore.AgentTalkEnd,
-			goreactcore.ClarifyNeeded, goreactcore.PermissionRequest,
-			goreactcore.PermissionDenied, goreactcore.CycleEnd, goreactcore.TaskSummary:
+		case goreactcore.ThinkingDelta, goreactcore.ContentDelta,
+			goreactcore.ToolUseDelta,
+			goreactcore.ThinkingDone,
+			goreactcore.ToolExecStart, goreactcore.ToolExecEnd,
+			goreactcore.FinalAnswer,
+			goreactcore.ExecutionSummary, goreactcore.Error,
+			goreactcore.SubtaskSpawned, goreactcore.SubtaskCompleted,
+			goreactcore.AgentTalkStart, goreactcore.AgentTalkEnd,
+			goreactcore.AskUserRequest,
+			goreactcore.PermissionRequest, goreactcore.PermissionDenied,
+			goreactcore.CycleEnd, goreactcore.TaskSummary,
+			goreactcore.LLMTimeout:
 			return true
 		default:
 			return false
