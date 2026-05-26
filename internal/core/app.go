@@ -352,6 +352,38 @@ func (a *App) currentAgent() (*goreact.Agent, error) {
 		}
 	}
 
+	// Smart session matching: if current working directory differs from the restored session's ProjectDir,
+	// try to find a session that matches the current directory, or create a new one.
+	if a.sessDB != nil && a.mindxConfig != nil {
+		cwd, cwdErr := os.Getwd()
+		if cwdErr == nil && a.currentSessionMeta != nil && a.currentSessionMeta.GetProjectDir() != "" {
+			if !sameDirectory(cwd, a.currentSessionMeta.GetProjectDir()) {
+				a.logger.Warn("working directory changed",
+					"old_project_dir", a.currentSessionMeta.GetProjectDir(),
+					"new_cwd", cwd,
+				)
+				// Try to find an existing session for this working directory
+				if matched := a.findSessionByProjectDir(cwd); matched != nil {
+					a.logger.Info("found matching session for current directory",
+						"session_id", matched.SessionID,
+						"project_dir", matched.GetProjectDir(),
+					)
+					a.currentSessionMeta = matched
+					a.mindxConfig.LastSessionID = matched.SessionID
+					_ = a.mindxConfig.Save()
+				} else {
+					a.logger.Info("no matching session found, will create new session on first interaction",
+						"cwd", cwd,
+					)
+					// Clear currentSessionMeta so that CreateSession will be called with correct cwd
+					a.currentSessionMeta = nil
+					a.mindxConfig.LastSessionID = ""
+					_ = a.mindxConfig.Save()
+				}
+			}
+		}
+	}
+
 	if a.currentSessionMeta != nil {
 		if a.currentSessionMeta.GetProjectDir() != "" {
 			opts = append(opts, goreact.WithProjectDir(a.currentSessionMeta.GetProjectDir()))
@@ -633,4 +665,33 @@ func (a *App) ClearCurrentSession() (*core.SessionInfo, error) {
 	)
 
 	return newSession, nil
+}
+
+// sameDirectory checks if two paths refer to the same directory (handles path normalization).
+func sameDirectory(dir1, dir2 string) bool {
+	abs1, err1 := filepath.Abs(dir1)
+	abs2, err2 := filepath.Abs(dir2)
+	if err1 != nil || err2 != nil {
+		return dir1 == dir2
+	}
+	return abs1 == abs2
+}
+
+// findSessionByProjectDir searches for the most recent session that matches the given project directory.
+func (a *App) findSessionByProjectDir(projectDir string) *core.SessionInfo {
+	ctx := context.Background()
+	sessions, err := a.SessDB().ListSessions(ctx)
+	if err != nil {
+		return nil
+	}
+
+	var bestMatch *core.SessionInfo
+	for i := range sessions {
+		if sameDirectory(sessions[i].GetProjectDir(), projectDir) {
+			if bestMatch == nil || sessions[i].LastActivityAt.After(bestMatch.LastActivityAt) {
+				bestMatch = &sessions[i]
+			}
+		}
+	}
+	return bestMatch
 }

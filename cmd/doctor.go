@@ -27,11 +27,12 @@ Python 虚拟环境和记忆体 Embedder 模型等设置。
 
 		settingsDir := filepath.Join(workspaceDir, "settings")
 		modelsPath := filepath.Join(settingsDir, "models.yml")
+		providersPath := filepath.Join(settingsDir, "providers.yml")
 		agentsDir := filepath.Join(workspaceDir, "agents")
 
 		fmt.Print("\n⚙️  MindX 环境检查与配置...\n\n")
 
-		if err := setup.RunWizard(modelsPath, agentsDir, workspaceDir, cfg); err != nil {
+		if err := setup.RunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg); err != nil {
 			return fmt.Errorf("配置失败: %w", err)
 		}
 

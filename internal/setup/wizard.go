@@ -263,8 +263,8 @@ func initGlamour(width int) *glamour.TermRenderer {
 	return r
 }
 
-func runFirstRunWizard(modelsPath, agentsDir, workspaceDir string, mindxConfig *core.MindxConfig) firstRunResult {
-	providerList, modelList, err := parseProviderAndModels(modelsPath)
+func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, mindxConfig *core.MindxConfig) firstRunResult {
+	providerList, modelList, err := parseProviderAndModels(providersPath, modelsPath)
 	if err != nil {
 		return firstRunResult{Err: fmt.Errorf("解析配置失败: %w", err)}
 	}
@@ -385,31 +385,64 @@ func runFirstRunWizard(modelsPath, agentsDir, workspaceDir string, mindxConfig *
 	}
 }
 
-func parseProviderAndModels(path string) ([]providerItem, []modelItem, error) {
-	data, err := os.ReadFile(path)
+func parseProviderAndModels(providersPath, modelsPath string) ([]providerItem, []modelItem, error) {
+	var providerItems []providerItem
+
+	// Load providers from providers.yml (if exists)
+	if data, err := os.ReadFile(providersPath); err == nil {
+		var provConfig struct {
+			Providers []goreactcore.ProviderConfig `yaml:"providers"`
+		}
+		if err := yaml.Unmarshal(data, &provConfig); err == nil {
+			for _, p := range provConfig.Providers {
+				title := p.Title
+				if title == "" {
+					title = p.Name
+				}
+				providerItems = append(providerItems, providerItem{Name: p.Name, DisplayName: title})
+			}
+		}
+	}
+
+	// Fallback: if no providers found in providers.yml, try to extract from models.yml
+	if len(providerItems) == 0 {
+		data, err := os.ReadFile(modelsPath)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		var config struct {
+			Providers []goreactcore.ProviderConfig `yaml:"providers"`
+			Models    []goreactcore.ModelConfig    `yaml:"models"`
+		}
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			return nil, nil, err
+		}
+
+		for _, p := range config.Providers {
+			title := p.Title
+			if title == "" {
+				title = p.Name
+			}
+			providerItems = append(providerItems, providerItem{Name: p.Name, DisplayName: title})
+		}
+	}
+
+	// Load models from models.yml
+	data, err := os.ReadFile(modelsPath)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var config struct {
-		Providers []goreactcore.ProviderConfig `yaml:"providers"`
-		Models    []goreactcore.ModelConfig    `yaml:"models"`
+	var modelConfig struct {
+		Models []goreactcore.ModelConfig `yaml:"models"`
 	}
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	if err := yaml.Unmarshal(data, &modelConfig); err != nil {
 		return nil, nil, err
 	}
 
-	var provs []providerItem
-	for _, p := range config.Providers {
-		title := p.Title
-		if title == "" {
-			title = p.Name
-		}
-		provs = append(provs, providerItem{Name: p.Name, DisplayName: title})
-	}
-
 	var items []modelItem
-	for _, m := range config.Models {
+	for _, m := range modelConfig.Models {
 		desc := strings.TrimSpace(m.Description)
 		items = append(items, modelItem{
 			Name:     m.Name,
@@ -419,7 +452,7 @@ func parseProviderAndModels(path string) ([]providerItem, []modelItem, error) {
 			Provider: m.Provider,
 		})
 	}
-	return provs, items, nil
+	return providerItems, items, nil
 }
 
 func (m *firstRunModel) Init() tea.Cmd {
