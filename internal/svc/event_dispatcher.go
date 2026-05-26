@@ -30,17 +30,25 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		md := buildThinkingDoneMarkdown(*thought)
 		d.sendEvent(clientID, sid, gateway.RespThinkingDone, "思考完成", md)
 
-	case goreactcore.ActionStart:
-		action, ok := event.Data.(goreactcore.ActionStartData)
+	case goreactcore.ContentDelta:
+		text, ok := event.Data.(string)
 		if !ok {
-			d.logger.Warn("unexpected ActionStart data type", "type", fmt.Sprintf("%T", event.Data))
+			d.logger.Warn("unexpected ContentDelta data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		d.gw.SendResponse(clientID, gateway.RespActionStart, "开始操作", 	map[string]any{
-			"tool_count":       action.ToolCount,
-			"tool_names":       action.ToolNames,
-			"predicted_tokens": action.TotalPredictedTokens,
-			"iteration":        action.Iteration,
+		d.gw.SendResponse(clientID, gateway.RespMarkdown, "输出中", text, gateway.WithSessionID(sid))
+
+	case goreactcore.ToolUseDelta:
+		data, ok := event.Data.(goreactcore.ToolUseDeltaData)
+		if !ok {
+			d.logger.Warn("unexpected ToolUseDelta data type", "type", fmt.Sprintf("%T", event.Data))
+			return
+		}
+		d.gw.SendResponse(clientID, gateway.RespText, "工具参数", map[string]any{
+			"index":     data.Index,
+			"id":        data.ID,
+			"name":      data.Name,
+			"arguments": data.Arguments,
 		}, gateway.WithSessionID(sid))
 
 	case goreactcore.ToolExecStart:
@@ -68,31 +76,6 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			"duration":  data.Duration.String(),
 		}, gateway.WithSessionID(sid))
 
-	case goreactcore.ActionProgress:
-		progress, ok := event.Data.(goreactcore.ActionProgressData)
-		if !ok {
-			d.logger.Warn("unexpected ActionProgress data type", "type", fmt.Sprintf("%T", event.Data))
-			return
-		}
-		d.gw.SendResponse(clientID, gateway.RespActionProgress, "操作进度", map[string]any{
-			"completed": progress.CompletedCount,
-			"total":     progress.TotalCount,
-			"status":    progress.Status,
-		}, gateway.WithSessionID(sid))
-
-	case goreactcore.ActionEnd:
-		data, ok := event.Data.(goreactcore.ActionEndData)
-		if !ok {
-			d.logger.Warn("unexpected ActionEnd data type", "type", fmt.Sprintf("%T", event.Data))
-			return
-		}
-		d.gw.SendResponse(clientID, gateway.RespActionEnd, "操作完成", map[string]any{
-			"total":   data.TotalTools,
-			"success": data.SuccessCount,
-			"failed":  data.FailedCount,
-			"summary": data.Summary,
-		}, gateway.WithSessionID(sid))
-
 	case goreactcore.SubtaskSpawned:
 		info, ok := event.Data.(goreactcore.SubtaskInfo)
 		if !ok {
@@ -118,14 +101,6 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			return
 		}
 		d.sendEvent(clientID, sid, gateway.RespFinalAnswer, "最终答案", answer)
-
-	case goreactcore.ClarifyNeeded:
-		question, ok := event.Data.(string)
-		if !ok {
-			d.logger.Warn("unexpected ClarifyNeeded data type", "type", fmt.Sprintf("%T", event.Data))
-			return
-		}
-		d.sendEvent(clientID, sid, gateway.RespClarifyNeeded, "需要澄清", question)
 
 	case goreactcore.PermissionRequest:
 		req, ok := event.Data.(goreactcore.PermissionRequestData)
@@ -184,6 +159,19 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 				"output_tokens": taskSummary.TokenUsage.OutputTokens,
 			}))
 
+	case goreactcore.LLMTimeout:
+		data, ok := event.Data.(goreactcore.LLMTimeoutData)
+		if !ok {
+			d.logger.Warn("unexpected LLMTimeout data type", "type", fmt.Sprintf("%T", event.Data))
+			return
+		}
+		d.gw.SendResponse(clientID, gateway.RespError, "超时", map[string]any{
+			"session_id": data.SessionID,
+			"timeout":    data.Timeout.String(),
+			"elapsed":    data.Elapsed.String(),
+			"error":      data.Error,
+		}, gateway.WithSessionID(sid))
+
 	case goreactcore.Error:
 		errMsg, ok := event.Data.(string)
 		if !ok {
@@ -217,20 +205,20 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreac
 
 func buildThinkingDoneMarkdown(t reactor.Thought) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "### 思考完成\n\n")
-	b.WriteString(fmt.Sprintf("**决策**: `%s`  **置信度**: %.0f%%\n\n", t.Decision, t.Confidence*100))
+	b.WriteString("### 思考完成\n\n")
+	b.WriteString(fmt.Sprintf("**决策**: `%s`\n\n", t.Decision))
 	if t.Reasoning != "" {
 		b.WriteString(fmt.Sprintf("**推理**: %s\n\n", t.Reasoning))
 	}
-	if len(t.ToolCalls) > 0 {
+	if t.Content != "" {
+		b.WriteString(fmt.Sprintf("**内容**: %s\n\n", t.Content))
+	}
+	if len(t.ToolCallList) > 0 {
 		b.WriteString("**即将调用工具**:\n\n")
-		for toolName, params := range t.ToolCalls {
-			b.WriteString(fmt.Sprintf("- `%s` — `%v`\n", toolName, params))
+		for _, tc := range t.ToolCallList {
+			b.WriteString(fmt.Sprintf("- `%s` — `%v`\n", tc.Name, tc.Arguments))
 		}
 		b.WriteString("\n")
-	}
-	if t.ClarificationQuestion != "" {
-		b.WriteString(fmt.Sprintf("**问题**: %s\n\n", t.ClarificationQuestion))
 	}
 	return b.String()
 }

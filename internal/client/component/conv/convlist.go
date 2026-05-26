@@ -49,12 +49,11 @@ func (l ConversationList) Update(e tea.Msg) (ConversationList, tea.Cmd) {
 		return l, timerCmd
 
 	case msg.ThinkingDeltaMsg, msg.ThinkingDoneMsg,
-		msg.ActionStartMsg, msg.ToolExecStartMsg, msg.ToolExecEndMsg,
-		msg.ActionEndMsg, msg.FinalAnswerMsg, msg.AgentErrorMsg,
+		msg.ToolExecStartMsg, msg.ToolExecEndMsg,
+		msg.FinalAnswerMsg, msg.AgentErrorMsg,
 		msg.LLMTimeoutMsg,
 		msg.SessionDoneMsg, msg.ExecutionSummaryMsg,
-		msg.CollapseToggleMsg, msg.ThinkCollapseMsg,
-		msg.ActionProgressMsg:
+		msg.CollapseToggleMsg, msg.ThinkCollapseMsg:
 
 		var cmds []tea.Cmd
 		sessionID := getSessionID(e)
@@ -117,13 +116,9 @@ func getSessionID(e tea.Msg) string {
 		return e.SessionID
 	case msg.ThinkingDoneMsg:
 		return e.SessionID
-	case msg.ActionStartMsg:
-		return e.SessionID
 	case msg.ToolExecStartMsg:
 		return e.SessionID
 	case msg.ToolExecEndMsg:
-		return e.SessionID
-	case msg.ActionEndMsg:
 		return e.SessionID
 	case msg.FinalAnswerMsg:
 		return e.SessionID
@@ -136,8 +131,6 @@ func getSessionID(e tea.Msg) string {
 	case msg.CollapseToggleMsg:
 		return e.SessionID
 	case msg.ThinkCollapseMsg:
-		return e.SessionID
-	case msg.ActionProgressMsg:
 		return e.SessionID
 	default:
 		return ""

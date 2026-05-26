@@ -49,10 +49,6 @@ func (s *StatusBar) Update(msg any) (*StatusBar, tea.Cmd) {
 	case clientmsg.SessionLoadedMsg:
 		s.AgentName = m.AgentName
 		s.SessionName = m.SessionID
-	case clientmsg.ActionStartMsg:
-		s.TokensTotal += m.EstimatedTok
-		s.InputTokens += m.EstimatedTok / 2
-		s.OutputTokens += (m.EstimatedTok + 1) / 2
 	case clientmsg.ExecutionSummaryMsg:
 		s.InputTokens += m.TokensUsed.InputTokens
 		s.OutputTokens += m.TokensUsed.OutputTokens

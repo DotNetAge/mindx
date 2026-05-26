@@ -18,6 +18,7 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/goreact"
 	goreactcore "github.com/DotNetAge/goreact/core"
+	goreactor "github.com/DotNetAge/goreact/reactor"
 	"github.com/DotNetAge/mindx/internal/client/component/changes"
 	"github.com/DotNetAge/mindx/internal/client/component/conv"
 	"github.com/DotNetAge/mindx/internal/client/component/dialog"
@@ -486,31 +487,19 @@ func (m *rootModel) eventForwarderLoop() {
 func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 	switch evt.Type {
 	case goreactcore.ThinkingDelta:
-		return clientmsg.ThinkingDeltaMsg{SessionID: evt.SessionID}
+		return clientmsg.ThinkingDeltaMsg{
+			SessionID: evt.SessionID,
+			Content:   toString(evt.Data),
+		}
 	case goreactcore.ThinkingDone:
 		doneMsg := clientmsg.ThinkingDoneMsg{SessionID: evt.SessionID}
-		if thought, ok := evt.Data.(map[string]any); ok {
-			doneMsg.ThoughtData = thought
-			if reasoning, ok := thought["reasoning"].(string); ok {
-				doneMsg.Reasoning = reasoning
-			}
-			if decision, ok := thought["decision"].(string); ok {
-				doneMsg.Decision = decision
-			}
-			if isFinal, ok := thought["is_final"].(bool); ok {
-				doneMsg.IsFinal = isFinal
-			}
+		if thought, ok := evt.Data.(*goreactor.Thought); ok {
+				doneMsg.Content = thought.Content
+				if thought.Reasoning != "" {
+				doneMsg.Content = thought.Reasoning
+				}
 		}
 		return doneMsg
-	case goreactcore.ActionStart:
-		if data, ok := evt.Data.(goreactcore.ActionStartData); ok {
-			return clientmsg.ActionStartMsg{
-				SessionID:    evt.SessionID,
-				ToolCount:    data.ToolCount,
-				ToolNames:    data.ToolNames,
-				EstimatedTok: data.TotalPredictedTokens,
-			}
-		}
 	case goreactcore.ToolExecStart:
 		if data, ok := evt.Data.(goreactcore.ToolExecStartData); ok {
 			if m.fileTracker != nil {
@@ -552,25 +541,6 @@ func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
 				DiffAdds:   diffAdds,
 				DiffDels:   diffDels,
 				DiffFile:   diffFile,
-			}
-		}
-	case goreactcore.ActionProgress:
-		if data, ok := evt.Data.(goreactcore.ActionProgressData); ok {
-			return clientmsg.ActionProgressMsg{
-				SessionID:      evt.SessionID,
-				CompletedCount: data.CompletedCount,
-				TotalCount:     data.TotalCount,
-				Status:         data.Status,
-			}
-		}
-	case goreactcore.ActionEnd:
-		if data, ok := evt.Data.(goreactcore.ActionEndData); ok {
-			return clientmsg.ActionEndMsg{
-				SessionID:    evt.SessionID,
-				TotalTools:   data.TotalTools,
-				SuccessCount: data.SuccessCount,
-				FailedCount:  data.FailedCount,
-				Summary:      data.Summary,
 			}
 		}
 	case goreactcore.ExecutionSummary:
@@ -1055,8 +1025,7 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg:
 		return m.updateWithState(msg, "思考中", true)
 
-	case clientmsg.ToolExecStartMsg, clientmsg.ToolExecEndMsg,
-		clientmsg.ActionProgressMsg:
+	case clientmsg.ToolExecStartMsg, clientmsg.ToolExecEndMsg:
 		return m.updateWithState(msg, "执行中", true)
 
 	case clientmsg.ExecutionSummaryMsg:
@@ -1070,16 +1039,8 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		)
 		return m.updateConversation(msg, true)
 
-	case clientmsg.ActionEndMsg:
-		return m.updateWithState(msg, "正在获取结果", true)
-
 	case clientmsg.FinalAnswerMsg:
 		m.statusBar.CurrentState = "完成"
-		m.statusBar.Update(msg)
-		return m.updateConversation(msg, true)
-
-	case clientmsg.ActionStartMsg:
-		m.statusBar.CurrentState = "执行中"
 		m.statusBar.Update(msg)
 		return m.updateConversation(msg, true)
 

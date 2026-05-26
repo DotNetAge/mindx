@@ -26,33 +26,8 @@ func TestQuestionViewEmpty(t *testing.T) {
 	}
 }
 
-func TestThoughtUpdateDelta(t *testing.T) {
-	m := Thought{IsActive: true}
-	m, _ = UpdateThought(m, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "thinking step 1..."})
-
-	if m.Pending != "thinking step 1..." {
-		t.Errorf("expected Pending %q, got %q", "thinking step 1...", m.Pending)
-	}
-}
-
-func TestThoughtUpdateDone(t *testing.T) {
-	m := Thought{IsActive: true, Content: "thinking step 1..."}
-	m, _ = UpdateThought(m, msg.ThinkingDoneMsg{SessionID: "s1"})
-
-	if m.Content != "thinking step 1..." {
-		t.Errorf("expected content %q, got %q", "thinking step 1...", m.Content)
-	}
-	if m.IsActive {
-		t.Error("expected IsActive=false")
-	}
-}
-
 func TestThoughtView(t *testing.T) {
-	m := Thought{
-		IsActive: true,
-		Content:  "thinking...",
-	}
-	view := ViewThought(m)
+	view := ViewThought("thinking...", 0, 0, false, "")
 
 	if !strings.Contains(view, "thinking...") {
 		t.Error("expected thought content in view")
@@ -61,20 +36,6 @@ func TestThoughtView(t *testing.T) {
 
 func TestActionUpdateStartExecEnd(t *testing.T) {
 	m := Action{}
-	m, _ = UpdateAction(m, msg.ActionStartMsg{
-		SessionID:    "s1",
-		ToolCount:    1,
-		ToolNames:    []string{"bash"},
-		EstimatedTok: 100,
-	})
-
-	if m.CurrentInfo == nil {
-		t.Fatal("expected CurrentInfo after ActionStart")
-	}
-	if m.CurrentInfo.ToolCount != 1 {
-		t.Errorf("expected ToolCount 1, got %d", m.CurrentInfo.ToolCount)
-	}
-
 	m, _ = UpdateAction(m, msg.ToolExecStartMsg{
 		SessionID: "s1",
 		ToolName:  "bash",
@@ -109,31 +70,8 @@ func TestActionUpdateStartExecEnd(t *testing.T) {
 	}
 }
 
-func TestActionUpdateEnd(t *testing.T) {
-	m := Action{
-		Steps: []ActionStep{
-			{ToolName: "bash", Status: ActionStepDone},
-		},
-		CurrentInfo: &ActionInfo{ToolCount: 1, ToolNames: []string{"bash"}},
-	}
-	m, _ = UpdateAction(m, msg.ActionEndMsg{
-		SessionID:    "s1",
-		TotalTools:   1,
-		SuccessCount: 1,
-		FailedCount:  0,
-	})
-
-	if !m.Completed {
-		t.Error("expected Completed=true")
-	}
-	if m.SuccessCount != 1 {
-		t.Errorf("expected SuccessCount 1, got %d", m.SuccessCount)
-	}
-}
-
 func TestActionView(t *testing.T) {
 	m := Action{
-		CurrentInfo: &ActionInfo{ToolCount: 1, ToolNames: []string{"bash"}},
 		Steps: []ActionStep{
 			{ToolName: "bash", Status: ActionStepDone, ResultText: "done"},
 		},
@@ -141,8 +79,8 @@ func TestActionView(t *testing.T) {
 	}
 	view := ViewAction(m, 80)
 
-	if !strings.Contains(view, "执行操作") {
-		t.Error("expected action header in view")
+	if !strings.Contains(view, "bash") {
+		t.Error("expected tool name in view")
 	}
 }
 
@@ -194,26 +132,20 @@ func TestConversationFullFlow(t *testing.T) {
 	}
 
 	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "I need to think..."})
-	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Reasoning: "I need to think..."})
+	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Content: "I need to think..."})
 
-	// Rounds are created by thinking events to capture Thought content
 	if len(conv.Rounds) != 1 {
-		t.Fatalf("expected 1 round after thinking (to capture thought content), got %d", len(conv.Rounds))
+		t.Fatalf("expected 1 round after thinking, got %d", len(conv.Rounds))
 	}
-	if conv.Rounds[0].Thought.Content != "I need to think..." {
-		t.Errorf("expected thought content %q, got %q", "I need to think...", conv.Rounds[0].Thought.Content)
+	if conv.Rounds[0].ThoughtContent != "I need to think..." {
+		t.Errorf("expected thought content %q, got %q", "I need to think...", conv.Rounds[0].ThoughtContent)
 	}
 
-	conv, _ = UpdateConversation(conv, msg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"bash"}})
 	conv, _ = UpdateConversation(conv, msg.ToolExecStartMsg{SessionID: "s1", ToolName: "bash"})
 	conv, _ = UpdateConversation(conv, msg.ToolExecEndMsg{SessionID: "s1", ToolName: "bash", Success: true, Result: "done"})
-	conv, _ = UpdateConversation(conv, msg.ActionEndMsg{SessionID: "s1", SuccessCount: 1, FailedCount: 0})
 
 	if len(conv.Rounds) != 1 {
-		t.Fatalf("expected 1 round after action, got %d", len(conv.Rounds))
-	}
-	if !conv.Rounds[0].Action.Completed {
-		t.Error("expected action completed in current round")
+		t.Fatalf("expected 1 round after tool exec, got %d", len(conv.Rounds))
 	}
 
 	conv, _ = UpdateConversation(conv, msg.FinalAnswerMsg{SessionID: "s1", Content: "Go is a programming language"})
@@ -228,41 +160,35 @@ func TestConversationMultiRoundFlow(t *testing.T) {
 	conv := NewConversation("s1", "agent1", "Complex task?")
 
 	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "First thought..."})
-	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Reasoning: "First thought..."})
-	conv, _ = UpdateConversation(conv, msg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"tool1"}})
+	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Content: "First thought..."})
 	conv, _ = UpdateConversation(conv, msg.ToolExecStartMsg{SessionID: "s1", ToolName: "tool1"})
 	conv, _ = UpdateConversation(conv, msg.ToolExecEndMsg{SessionID: "s1", ToolName: "tool1", Success: true, Result: "ok"})
-	conv, _ = UpdateConversation(conv, msg.ActionEndMsg{SessionID: "s1", SuccessCount: 1, FailedCount: 0})
 
 	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "Second thought..."})
-	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Reasoning: "Second thought..."})
-	conv, _ = UpdateConversation(conv, msg.ActionStartMsg{SessionID: "s1", ToolCount: 1, ToolNames: []string{"tool2"}})
+	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Content: "Second thought..."})
 	conv, _ = UpdateConversation(conv, msg.ToolExecStartMsg{SessionID: "s1", ToolName: "tool2"})
 	conv, _ = UpdateConversation(conv, msg.ToolExecEndMsg{SessionID: "s1", ToolName: "tool2", Success: true, Result: "done"})
-	conv, _ = UpdateConversation(conv, msg.ActionEndMsg{SessionID: "s1", SuccessCount: 1, FailedCount: 0})
 
-	// Rounds are created per ActionStartMsg
 	if len(conv.Rounds) != 2 {
 		t.Fatalf("expected 2 rounds, got %d", len(conv.Rounds))
 	}
-	if !conv.Rounds[0].Action.Completed {
-		t.Error("expected round 0 action completed")
+	if conv.Rounds[0].ThoughtContent != "First thought..." {
+		t.Errorf("expected round 0 thought %q, got %q", "First thought...", conv.Rounds[0].ThoughtContent)
 	}
-	if !conv.Rounds[1].Action.Completed {
-		t.Error("expected round 1 action completed")
+	if conv.Rounds[1].ThoughtContent != "Second thought..." {
+		t.Errorf("expected round 1 thought %q, got %q", "Second thought...", conv.Rounds[1].ThoughtContent)
 	}
 }
 
 func TestConversationViewFullTAO(t *testing.T) {
 	conv := NewConversation("s1", "agent1", "What is Go?")
-	conv.Rounds = append(conv.Rounds, ThoughtActionRound{
+	conv.Rounds = append(conv.Rounds, ConversationRound{
+		ThoughtContent: "thinking step 1...",
 		Action: Action{
-			CurrentInfo: &ActionInfo{ToolCount: 1, ToolNames: []string{"bash"}},
-			Steps:       []ActionStep{{ToolName: "bash", Status: ActionStepDone, ResultText: "done"}},
-			Completed:   true,
+			Steps:     []ActionStep{{ToolName: "bash", Status: ActionStepDone, ResultText: "done"}},
+			Completed: true,
 		},
 	})
-	conv.Rounds[0].Thought.Content = "thinking step 1..."
 	conv.Output = Output{
 		Entries: []OutputEntry{{Role: "assistant", Content: "Go is a programming language"}},
 	}
@@ -277,8 +203,8 @@ func TestConversationViewFullTAO(t *testing.T) {
 	if !strings.Contains(view, "thinking step 1...") {
 		t.Error("expected thinking content in view")
 	}
-	if !strings.Contains(view, "执行操作") {
-		t.Error("expected action header in view")
+	if !strings.Contains(view, "bash") {
+		t.Error("expected tool name in view")
 	}
 }
 
