@@ -12,25 +12,9 @@ type ThinkingDeltaMsg struct {
 }
 
 type ThinkingDoneMsg struct {
-	SessionID   string
-	Reasoning   string
-	Decision    string
-	IsFinal     bool
-	ThoughtData map[string]any
-}
-
-type ActionStartMsg struct {
-	SessionID    string
-	ToolCount    int
-	ToolNames    []string
-	EstimatedTok int
-}
-
-type ActionProgressMsg struct {
-	SessionID      string
-	CompletedCount int
-	TotalCount     int
-	Status         string
+	SessionID string
+	Content   string
+	IsFinal   bool
 }
 
 type ToolExecStartMsg struct {
@@ -59,14 +43,6 @@ type ExecutionSummaryMsg struct {
 	Duration   time.Duration
 	TokensUsed goreactcore.TokenUsage
 	ToolCalls  int
-}
-
-type ActionEndMsg struct {
-	SessionID    string
-	TotalTools   int
-	SuccessCount int
-	FailedCount  int
-	Summary      string
 }
 
 type FinalAnswerMsg struct {

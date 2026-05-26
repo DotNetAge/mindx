@@ -168,40 +168,45 @@ install:
 	fi
 	@# ── 系统服务配置 + 注册 + 重启 ──
 	@MINDX_BIN="$$HOME/.mindx/bin/$(BINARY_NAME)"; \
+	HOME_DIR=$$HOME; \
 	UNAME_S=$$(uname -s); \
 	if [ "$$UNAME_S" = "Darwin" ]; then \
 		PLIST="$$HOME/.mindx/settings/com.dotnetage.$(BINARY_NAME).plist"; \
 		LABEL="com.dotnetage.$(BINARY_NAME)"; \
 		LAUNCH_AGENTS="$$HOME/Library/LaunchAgents"; \
 		mkdir -p "$$LAUNCH_AGENTS" "$$HOME/.mindx/logs"; \
-		cat > "$$PLIST" <<-SERVICE
-	<?xml version="1.0" encoding="UTF-8"?>
-	<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-	<plist version="1.0">
-	<dict>
-	    <key>Label</key>
-	    <string>$$LABEL</string>
-	    <key>ProgramArguments</key>
-	    <array>
-	        <string>$$MINDX_BIN</string>
-	        <string>start</string>
-	    </array>
-	    <key>RunAtLoad</key>
-	    <true/>
-	    <key>KeepAlive</key>
-	    <true/>
-	    <key>StandardOutPath</key>
-	    <string>$$HOME/.mindx/logs/daemon.log</string>
-	    <key>StandardErrorPath</key>
-	    <string>$$HOME/.mindx/logs/daemon.err</string>
-	    <key>EnvironmentVariables</key>
-	    <dict>
-	        <key>MINDX_WORKSPACE</key>
-	        <string>$$HOME/.mindx</string>
-	    </dict>
-	</dict>
-	</plist>
-	SERVICE; \
+		printf '%s\n' \
+			'<?xml version="1.0" encoding="UTF-8"?>' \
+			'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+			'<plist version="1.0">' \
+			'<dict>' \
+			'    <key>Label</key>' \
+			"    <string>$$LABEL</string>" \
+			'    <key>ProgramArguments</key>' \
+			'    <array>' \
+			"        <string>$$MINDX_BIN</string>" \
+			'        <string>start</string>' \
+			'    </array>' \
+			'    <key>RunAtLoad</key>' \
+			'    <true/>' \
+			'    <key>KeepAlive</key>' \
+			'    <true/>' \
+			'    <key>StandardOutPath</key>' \
+			"    <string>$$HOME_DIR/.mindx/logs/daemon.log</string>" \
+			'    <key>StandardErrorPath</key>' \
+			"    <string>$$HOME_DIR/.mindx/logs/daemon.err</string>" \
+			'    <key>EnvironmentVariables</key>' \
+			'    <dict>' \
+			'        <key>MINDX_WORKSPACE</key>' \
+			"        <string>$$HOME_DIR/.mindx</string>" \
+			'        <key>HOME</key>' \
+			"        <string>$$HOME_DIR</string>" \
+			'    </dict>' \
+			'    <key>ProcessType</key>' \
+			'    <string>Interactive</string>' \
+			'</dict>' \
+			'</plist>' \
+			> "$$PLIST"; \
 		echo "$(GREEN)  ✅ launchd plist → $$PLIST$(NC)"; \
 		cp "$$PLIST" "$$LAUNCH_AGENTS/$$LABEL.plist"; \
 		echo "$(CYAN)  ⟳ Stopping existing service...$(NC)" && \
@@ -214,21 +219,21 @@ install:
 		SERVICE_PATH="$$HOME/.mindx/settings/$(BINARY_NAME).service"; \
 		SERVICE_NAME="$(BINARY_NAME)"; \
 		mkdir -p "$$HOME/.mindx/logs"; \
-		cat > "$$SERVICE_PATH" <<-SERVICE
-	[Unit]
-	Description=MindX AI Agent Daemon
-	After=network.target
-
-	[Service]
-	Type=simple
-	ExecStart=$$MINDX_BIN start
-	Restart=on-failure
-	RestartSec=5
-	Environment=MINDX_WORKSPACE=$$HOME/.mindx
-
-	[Install]
-	WantedBy=default.target
-	SERVICE; \
+		printf '%s\n' \
+			'[Unit]' \
+			'Description=MindX AI Agent Daemon' \
+			'After=network.target' \
+			'' \
+			'[Service]' \
+			'Type=simple' \
+			"ExecStart=$$MINDX_BIN start" \
+			'Restart=on-failure' \
+			'RestartSec=5' \
+			"Environment=MINDX_WORKSPACE=$$HOME/.mindx" \
+			'' \
+			'[Install]' \
+			'WantedBy=default.target' \
+			> "$$SERVICE_PATH"; \
 		echo "$(GREEN)  ✅ systemd unit → $$SERVICE_PATH$(NC)"; \
 		mkdir -p "$$HOME/.config/systemd/user"; \
 		cp "$$SERVICE_PATH" "$$HOME/.config/systemd/user/$$SERVICE_NAME.service"; \

@@ -372,14 +372,37 @@ func (a *App) currentAgent() (*goreact.Agent, error) {
 					a.mindxConfig.LastSessionID = matched.SessionID
 					_ = a.mindxConfig.Save()
 				} else {
-					a.logger.Info("no matching session found, will create new session on first interaction",
+					a.logger.Info("no matching session found, creating new session for current directory",
 						"cwd", cwd,
 					)
-					// Clear currentSessionMeta so that CreateSession will be called with correct cwd
-					a.currentSessionMeta = nil
-					a.mindxConfig.LastSessionID = ""
-					_ = a.mindxConfig.Save()
+					// Create new session immediately with correct cwd
+					newSession, createErr := a.CreateSession(a.CurrentAgentName())
+					if createErr != nil {
+						a.logger.Error("failed to create new session", createErr)
+						// Fallback: clear references so agent won't use old session
+						a.currentSessionMeta = nil
+						a.mindxConfig.LastSessionID = ""
+					} else {
+						a.currentSessionMeta = newSession
+						a.mindxConfig.LastSessionID = newSession.SessionID
+						_ = a.mindxConfig.Save()
+						a.logger.Info("new session created",
+							"session_id", newSession.SessionID,
+							"project_dir", newSession.GetProjectDir(),
+						)
+					}
 				}
+			}
+		} else if cwdErr == nil && (a.currentSessionMeta == nil || a.currentSessionMeta.GetProjectDir() == "") {
+			// No previous session meta or no project dir set - ensure we have a valid session for cwd
+			a.logger.Info("no valid session found, creating new session",
+				"cwd", cwd,
+			)
+			newSession, createErr := a.CreateSession(a.CurrentAgentName())
+			if createErr == nil {
+				a.currentSessionMeta = newSession
+				a.mindxConfig.LastSessionID = newSession.SessionID
+				_ = a.mindxConfig.Save()
 			}
 		}
 	}
