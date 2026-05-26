@@ -15,8 +15,8 @@ import (
 // RunWizard runs the interactive setup wizard and applies the results.
 // It handles provider selection, API key input, model selection, daemon setup,
 // Python venv setup, and memory embedder model download.
-func RunWizard(modelsPath, agentsDir, workspaceDir string, cfg *core.MindxConfig) error {
-	result := runFirstRunWizard(modelsPath, agentsDir, workspaceDir, cfg)
+func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *core.MindxConfig) error {
+	result := runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg)
 	if result.Err != nil {
 		return result.Err
 	}
