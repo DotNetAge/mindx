@@ -7,9 +7,6 @@ require (
 	charm.land/bubbletea/v2 v2.0.6
 	charm.land/glamour/v2 v2.0.0
 	charm.land/lipgloss/v2 v2.0.3
-	github.com/DotNetAge/gochat v0.2.5
-	github.com/DotNetAge/gorag v1.1.12
-	github.com/DotNetAge/goreact v0.1.1
 	github.com/DotNetAge/gort v0.1.1
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/fsnotify/fsnotify v1.10.1
@@ -23,6 +20,12 @@ require (
 	go.uber.org/zap v1.28.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
+)
+
+require (
+	github.com/DotNetAge/gochat v0.2.6
+	github.com/DotNetAge/gorag v0.0.0-00010101000000-000000000000
+	github.com/DotNetAge/goreact v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -77,7 +80,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/renameio v1.0.1 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.16.0 // indirect
@@ -143,3 +145,5 @@ replace github.com/DotNetAge/gorag => ../gorag
 replace github.com/DotNetAge/goreact => ../goreact
 
 replace github.com/DotNetAge/gochat => ../gochat
+
+replace github.com/coder/hnsw => ./third_party/hnsw
