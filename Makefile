@@ -22,8 +22,9 @@
 
 .PHONY: build build-current setup-cross clear install run run-daemon test bench lint clean docs tidy help \
         dev dev-tui dev-daemon uninstall format check vet \
-        release release-all cross-build docker-build docker-push \
-        generate proto swagger ci cd security audit deps-update \
+        release release-notes release-publish release-homebrew release-winget publish \
+        cross-build docker-build docker-push \
+        ci cd security audit deps-update \
         pre-commit post-commit version info changelog
 
 # =============================================================================
@@ -33,7 +34,7 @@
 # 项目信息
 BINARY_NAME    ?= mindx
 PROJECT_NAME   ?= mindx
-VERSION        ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "v2.1.0")
+VERSION        ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v2.1.0")
 BUILD_TIME     ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 GIT_COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GIT_DIRTY      ?= $(shell git diff --quiet HEAD 2>/dev/null && echo "clean" || echo "dirty")
@@ -48,9 +49,12 @@ GOLINT         ?= golangci-lint
 # Go 版本信息
 GOVERSION      ?= $(shell $(GO) version | grep -oP 'go\d+\.\d+' | head -1)
 
+# 版本号（不含 v 前缀）
+VERSION_NUM    := $(VERSION:v%=%)
+
 # 构建标志
 LDFLAGS        ?= -s -w \
-                 -X main.version=$(VERSION) \
+                 -X main.version=$(VERSION_NUM) \
                  -X main.commit=$(GIT_COMMIT) \
                  -X main.buildTime=$(BUILD_TIME) \
                  -X main.dirty=$(GIT_DIRTY)
@@ -63,6 +67,10 @@ DIST_DIR       ?= ./dist
 COVERAGE_DIR   ?= ./coverage
 BENCHMARK_DIR  ?= .benchmarks
 DOCS_DIR       ?= ./docs/api
+
+# 发布配置
+GITHUB_REPO    ?= DotNetAge/mindx
+HOMEBREW_TAP   ?= DotNetAge/homebrew-tap
 
 # 颜色输出（增强可读性）
 RED            := \033[0;31m
@@ -82,7 +90,7 @@ BOLD           := \033[1m
 build: pre-build
 	@mkdir -p $(BUILD_DIR)
 	@echo "$(GREEN)➡ Building darwin/amd64...$(NC)"
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
+	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
 	@echo "$(GREEN)  ✅ darwin/amd64$(NC)"
 	@echo "$(GREEN)➡ Building linux/amd64...$(NC)"
 	@if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then \
@@ -103,9 +111,9 @@ build: pre-build
 
 ## build-current: 仅编译当前平台（供 run/install 使用）
 build-current: pre-build
-	@echo "$(GREEN)➡ Building $(BINARY_NAME) v$(VERSION) for $(shell $(GO) env GOOS)/$(shell $(GO) env GOARCH)...$(NC)"
+	@echo "$(GREEN)➡ Building $(BINARY_NAME) v$(VERSION_NUM) for $(shell $(GO) env GOOS)/$(shell $(GO) env GOARCH)...$(NC)"
 	@mkdir -p $(BUILD_DIR)
-	$(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
+	CGO_ENABLED=1 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
 	@echo "$(GREEN)✅ Build complete!$(NC)"
 	@ls -lh $(BUILD_DIR)/$(BINARY_NAME)
 
@@ -128,17 +136,114 @@ build-debug:
 	$(GO) build -gcflags="all=-N -l" -o $(BUILD_DIR)/$(BINARY_NAME)-debug .
 	@echo "$(GREEN)✅ Debug build complete: $(BUILD_DIR)/$(BINARY_NAME)-debug$(NC)"
 
-## install: 编译并安装到系统路径（需要 sudo 权限）
-install: build-current
+## install: 构建并部署到 ~/.mindx（含 runtime 资源 + PATH + 系统服务配置）
+install:
+	@echo "$(GREEN)➡ Building $(BINARY_NAME)...$(NC)"
+	@mkdir -p bin ~/.mindx/bin ~/.mindx/settings
+	@CGO_ENABLED=1 $(GO) build $(GOFLAGS) -o bin/$(BINARY_NAME) . && \
+		echo "$(GREEN)  ✅ bin/$(BINARY_NAME)$(NC)"
 	@echo "$(GREEN)➡ Installing $(BINARY_NAME)...$(NC)"
-	@if command -v sudo >/dev/null 2>&1; then \
-		sudo cp $(BUILD_DIR)/$(BINARY_NAME) /usr/local/bin/$(BINARY_NAME) && \
-		echo "$(GREEN)✅ Installed to /usr/local/bin/$(BINARY_NAME)$(NC)"; \
+	@cp bin/$(BINARY_NAME) ~/.mindx/bin/$(BINARY_NAME) && \
+		echo "$(GREEN)  ✅ $(BINARY_NAME) → ~/.mindx/bin/$(BINARY_NAME)$(NC)"
+	@echo "$(GREEN)➡ Copying runtime files...$(NC)"
+	@cp -r runtime/* ~/.mindx/ && \
+		echo "$(GREEN)  ✅ runtime/ → ~/.mindx/$(NC)"
+	@# ── PATH 配置 ──
+	@SHELL_RC=""; \
+	if [ "$$SHELL" = "/bin/zsh" ] || [ "$$SHELL" = "/usr/bin/zsh" ]; then \
+		SHELL_RC="$$HOME/.zshrc"; \
+	elif [ "$$SHELL" = "/bin/bash" ] || [ "$$SHELL" = "/usr/bin/bash" ]; then \
+		SHELL_RC="$$HOME/.bashrc"; \
 	else \
-		cp $(BUILD_DIR)/$(BINARY_NAME) $$GOPATH/bin/$(BINARY_NAME) && \
-		echo "$(GREEN)✅ Installed to $$GOPATH/bin/$(BINARY_NAME)$(NC)"; \
+		SHELL_RC="$$HOME/.profile"; \
+	fi; \
+	LINE='export PATH="$$HOME/.mindx/bin:$$PATH"'; \
+	if ! grep -qxF "$$LINE" "$$SHELL_RC" 2>/dev/null; then \
+		echo "" >> "$$SHELL_RC"; \
+		echo "# MindX" >> "$$SHELL_RC"; \
+		echo "$$LINE" >> "$$SHELL_RC"; \
+		echo "$(GREEN)  ✅ PATH added to $$SHELL_RC$(NC)"; \
+	else \
+		echo "$(GREEN)  ✅ PATH already in $$SHELL_RC$(NC)"; \
 	fi
-	@echo "$(BLUE)🎉 Installation complete! Run '$(BINARY_NAME)' to start.$(NC)"
+	@# ── 系统服务配置 + 注册 + 重启 ──
+	@MINDX_BIN="$$HOME/.mindx/bin/$(BINARY_NAME)"; \
+	UNAME_S=$$(uname -s); \
+	if [ "$$UNAME_S" = "Darwin" ]; then \
+		PLIST="$$HOME/.mindx/settings/com.dotnetage.$(BINARY_NAME).plist"; \
+		LABEL="com.dotnetage.$(BINARY_NAME)"; \
+		LAUNCH_AGENTS="$$HOME/Library/LaunchAgents"; \
+		mkdir -p "$$LAUNCH_AGENTS" "$$HOME/.mindx/logs"; \
+		cat > "$$PLIST" <<-SERVICE
+	<?xml version="1.0" encoding="UTF-8"?>
+	<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+	<plist version="1.0">
+	<dict>
+	    <key>Label</key>
+	    <string>$$LABEL</string>
+	    <key>ProgramArguments</key>
+	    <array>
+	        <string>$$MINDX_BIN</string>
+	        <string>start</string>
+	    </array>
+	    <key>RunAtLoad</key>
+	    <true/>
+	    <key>KeepAlive</key>
+	    <true/>
+	    <key>StandardOutPath</key>
+	    <string>$$HOME/.mindx/logs/daemon.log</string>
+	    <key>StandardErrorPath</key>
+	    <string>$$HOME/.mindx/logs/daemon.err</string>
+	    <key>EnvironmentVariables</key>
+	    <dict>
+	        <key>MINDX_WORKSPACE</key>
+	        <string>$$HOME/.mindx</string>
+	    </dict>
+	</dict>
+	</plist>
+	SERVICE; \
+		echo "$(GREEN)  ✅ launchd plist → $$PLIST$(NC)"; \
+		cp "$$PLIST" "$$LAUNCH_AGENTS/$$LABEL.plist"; \
+		echo "$(CYAN)  ⟳ Stopping existing service...$(NC)" && \
+		launchctl unload "$$LAUNCH_AGENTS/$$LABEL.plist" 2>/dev/null && echo "     stopped" || echo "     (not running)"; \
+		echo "$(CYAN)  ⟳ Starting service...$(NC)" && \
+		launchctl load "$$LAUNCH_AGENTS/$$LABEL.plist" && \
+		echo "$(GREEN)  ✅ Daemon registered and started$(NC)"; \
+	fi; \
+	if [ "$$UNAME_S" = "Linux" ]; then \
+		SERVICE_PATH="$$HOME/.mindx/settings/$(BINARY_NAME).service"; \
+		SERVICE_NAME="$(BINARY_NAME)"; \
+		mkdir -p "$$HOME/.mindx/logs"; \
+		cat > "$$SERVICE_PATH" <<-SERVICE
+	[Unit]
+	Description=MindX AI Agent Daemon
+	After=network.target
+
+	[Service]
+	Type=simple
+	ExecStart=$$MINDX_BIN start
+	Restart=on-failure
+	RestartSec=5
+	Environment=MINDX_WORKSPACE=$$HOME/.mindx
+
+	[Install]
+	WantedBy=default.target
+	SERVICE; \
+		echo "$(GREEN)  ✅ systemd unit → $$SERVICE_PATH$(NC)"; \
+		mkdir -p "$$HOME/.config/systemd/user"; \
+		cp "$$SERVICE_PATH" "$$HOME/.config/systemd/user/$$SERVICE_NAME.service"; \
+		echo "$(CYAN)  ⟳ Stopping existing service...$(NC)" && \
+		systemctl --user stop "$$SERVICE_NAME" 2>/dev/null && echo "     stopped" || echo "     (not running)"; \
+		echo "$(CYAN)  ⟳ Enabling and starting service...$(NC)" && \
+		systemctl --user enable "$$SERVICE_NAME" && \
+		systemctl --user start "$$SERVICE_NAME" && \
+		echo "$(GREEN)  ✅ Daemon registered and started$(NC)"; \
+	fi
+	@echo ""
+	@echo "$(GREEN)🎉 Installation complete!$(NC)"
+	@echo ""
+	@echo "  Run: exec $$SHELL   (or source your rc file)"
+	@echo "  Then: $(BINARY_NAME)"
 
 ## uninstall: 卸载已安装的二进制文件
 uninstall:
@@ -464,14 +569,14 @@ build-linux-arm64:
 build-darwin-amd64:
 	@echo "$(GREEN)➡ Building for darwin/amd64...$(NC)"
 	@mkdir -p $(DIST_DIR)
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 .
+	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 .
 	@echo "$(GREEN)✅ darwin/amd64 done$(NC)"
 
 ## build-darwin-arm64: macOS Apple Silicon (M1/M2)
 build-darwin-arm64:
 	@echo "$(GREEN)➡ Building for darwin/arm64 (Apple Silicon)...$(NC)"
 	@mkdir -p $(DIST_DIR)
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 .
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 .
 	@echo "$(GREEN)✅ darwin/arm64 done$(NC)"
 
 ## build-windows-amd64: Windows x86_64
@@ -479,8 +584,14 @@ build-windows-amd64:
 	@echo "$(GREEN)➡ Building for windows/amd64...$(NC)"
 	@mkdir -p $(DIST_DIR)
 	@if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then \
-		CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe . && \
-		echo "$(GREEN)✅ windows/amd64 done$(NC)"; \
+		if CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe . 2>/dev/null; then \
+			echo "$(GREEN)✅ windows/amd64 done (CGO)$(NC)"; \
+		else \
+			echo "$(YELLOW)⚠  windows/amd64 CGO build failed, trying CGO_ENABLED=0...$(NC)"; \
+			CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe . && \
+			echo "$(GREEN)✅ windows/amd64 done (CGO_ENABLED=0)$(NC)" || \
+			echo "$(RED)❌ windows/amd64 failed$(NC)"; \
+		fi \
 	else \
 		echo "$(YELLOW)⚠  windows/amd64 skipped — install: brew install mingw-w64$(NC)"; \
 	fi
@@ -489,43 +600,273 @@ build-windows-amd64:
 # 发布目标
 # =============================================================================
 
-## release: 创建发布包（当前版本）
+REL = releases
+V   = $(VERSION_NUM)
+
+# 辅助：打包一个平台为 tar.gz（或 .zip），跳过缺失的二进制
+define package-platform
+	@mkdir -p $(REL)
+	@binary="$(DIST_DIR)/$(BINARY_NAME)-$(1)-$(2)$(3)"; \
+	if [ ! -f "$$binary" ]; then \
+		echo "  ⚠  $$(basename $$binary) not found, skipping"; \
+		exit 0; \
+	fi; \
+	archive="$(REL)/$(BINARY_NAME)-$(V)-$(1)-$(2).tar.gz"; \
+	if [ "$(1)" = "windows" ]; then \
+		archive="$(REL)/$(BINARY_NAME)-$(V)-$(1)-$(2).zip"; \
+		cp "$$binary" "$(DIST_DIR)/$(BINARY_NAME).exe"; \
+		(cd "$(DIST_DIR)" && zip -q "$$OLDPWD/$$archive" "$(BINARY_NAME).exe"); \
+		rm -f "$(DIST_DIR)/$(BINARY_NAME).exe"; \
+	else \
+		cp "$$binary" "$(DIST_DIR)/$(BINARY_NAME)"; \
+		tar czf "$$archive" -C "$(DIST_DIR)" "$(BINARY_NAME)"; \
+		rm -f "$(DIST_DIR)/$(BINARY_NAME)"; \
+	fi; \
+	echo "  ✅ $$(basename $$archive)  $$(ls -lh $$archive | awk '{print $$5}')"
+endef
+
+## release: 交叉编译并打包所有平台（带 checksums）
 release: clean cross-build
-	@echo "$(GREEN)📦 Creating release archives...$(NC)"
-	@mkdir -p releases
-	@# Linux AMD64
-	tar -czf releases/$(BINARY_NAME)-$(VERSION)-linux-amd64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-linux-amd64
-	@# Linux ARM64
-	tar -czf releases/$(BINARY_NAME)-$(VERSION)-linux-arm64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-linux-arm64
-	@# Darwin (separate amd64 + arm64 tarballs)
-	tar -czf releases/$(BINARY_NAME)-$(VERSION)-darwin-amd64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-darwin-amd64
-	tar -czf releases/$(BINARY_NAME)-$(VERSION)-darwin-arm64.tar.gz -C $(DIST_DIR) $(BINARY_NAME)-darwin-arm64
-	@# Windows
-	zip -j releases/$(BINARY_NAME)-$(VERSION)-windows-amd64.zip $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe
-	@echo "$(GREEN)✅ Release packages created in releases/$(NC)"
-	@ls -lh releases/
+	@echo "$(GREEN)📦 Packaging...$(NC)"
+	$(call package-platform,darwin,amd64,)
+	$(call package-platform,darwin,arm64,)
+	$(call package-platform,linux,amd64,)
+	$(call package-platform,linux,arm64,)
+	$(call package-platform,windows,amd64,.exe)
+	@echo "$(GREEN)🔐 Checksums...$(NC)"
+	@cd $(REL) && shasum -a 256 *.tar.gz 2>/dev/null > checksums.txt; shasum -a 256 *.zip 2>/dev/null >> checksums.txt; cat checksums.txt
+	@echo "$(GREEN)✅ Release packages in $(REL)/$(NC)"
+	@ls -lh $(REL)/
 
-## release-sign: 为发布包创建校验和（用于验证完整性）
-release-sign:
-	@echo "$(GREEN)🔐 Generating checksums...$(NC)"
-	@cd releases && shasum -a 256 *.tar.gz *.zip > checksums.txt
-	@echo "$(GREEN)✅ Checksums created: releases/checksums.txt$(NC)"
-
-## release-notes: 生成发布说明
+## release-notes: 生成发布说明（写入 RELEASE_NOTES.md）
 release-notes:
 	@echo "$(GREEN)📝 Generating release notes...$(NC)"
-	@printf '%s\n' "# $(BINARY_NAME) $(VERSION) Release Notes" "" > RELEASE_NOTES.md
+	@printf '%s\n' "# $(BINARY_NAME) $(V) Release Notes" "" > RELEASE_NOTES.md
 	@printf '%s\n' "## 📦 Downloads" "" >> RELEASE_NOTES.md
 	@printf '| %s | %s | %s |\n' "Platform" "File" "SHA256" >> RELEASE_NOTES.md
 	@printf '|%s|%s|%s|\n' "----------" "------" "------" >> RELEASE_NOTES.md
-	@for f in releases/*.tar.gz releases/*.zip; do \
-		platform=$$(basename "$$f" | sed 's/\.tar\.gz$$//;s/\.zip$$//;s/^[^-]*-[^-]*-//'); \
-		sha=$$(shasum -a 256 "$$f" | cut -d' ' -f1); \
-		printf '| %s | %s | %s |\n' "$$platform" "$$(basename "$$f")" "$$sha" >> RELEASE_NOTES.md; \
-	done
+	@{ \
+		for f in $(REL)/*.tar.gz $(REL)/*.zip; do \
+			[ -f "$$f" ] || continue; \
+			platform=$$(basename "$$f" | sed 's/\.tar\.gz$$//;s/\.zip$$//;s/^[^-]*-[^-]*-//'); \
+			sha=$$(shasum -a 256 "$$f" | cut -d' ' -f1); \
+			printf '| %s | %s | %s |\n' "$$platform" "$$(basename "$$f")" "$$sha"; \
+		done; \
+	} >> RELEASE_NOTES.md
 	@printf '%s\n' "" "## ✨ Changes" "" >> RELEASE_NOTES.md
-	@git log --oneline --no-merges "$(shell git describe --tags --abbrev=0 2>/dev/null)..HEAD" 2>/dev/null >> RELEASE_NOTES.md || echo "- Initial release" >> RELEASE_NOTES.md
-	@echo "$(GREEN)✅ Release notes created: RELEASE_NOTES.md$(NC)"
+	@git log --oneline --no-merges "$$(git describe --tags --abbrev=0 2>/dev/null)..HEAD" 2>/dev/null >> RELEASE_NOTES.md || echo "- Initial release" >> RELEASE_NOTES.md
+	@echo "$(GREEN)✅ RELEASE_NOTES.md created$(NC)"
+
+## release-publish: 编译 → 打包 → GitHub Release
+release-publish: release
+	@echo "$(GREEN)🚀 Creating GitHub Release v$(V)...$(NC)"
+	@if gh release view "v$(V)" --repo "$(GITHUB_REPO)" &>/dev/null; then \
+		echo "  ⚠  Release v$(V) exists, uploading assets..."; \
+		gh release upload "v$(V)" --repo "$(GITHUB_REPO)" --clobber $(REL)/*; \
+	else \
+		gh release create "v$(V)" \
+			--repo "$(GITHUB_REPO)" \
+			--title "$(BINARY_NAME) v$(V)" \
+			--notes "Release v$(V)" \
+			$(REL)/*; \
+	fi
+	@echo "$(GREEN)✅ GitHub Release v$(V) published$(NC)"
+
+## release-homebrew: 生成并推送 Homebrew formula
+release-homebrew:
+	@echo "$(GREEN)🍺 Generating Homebrew formula...$(NC)"
+	@SHA256_AMD64=$$(shasum -a 256 "$(REL)/$(BINARY_NAME)-$(V)-darwin-amd64.tar.gz" 2>/dev/null | cut -d' ' -f1); \
+	SHA256_ARM64=$$(shasum -a 256 "$(REL)/$(BINARY_NAME)-$(V)-darwin-arm64.tar.gz" 2>/dev/null | cut -d' ' -f1); \
+	if [ -z "$$SHA256_AMD64" ] || [ -z "$$SHA256_ARM64" ]; then \
+		echo "$(RED)❌ darwin tarballs not found in $(REL)/$(NC)"; \
+		exit 1; \
+	fi; \
+	TAP_DIR=$$(mktemp -d); \
+	git clone --depth=1 "https://github.com/$(HOMEBREW_TAP).git" "$$TAP_DIR" 2>/dev/null || { \
+		echo "$(YELLOW)⚠  Cannot clone $(HOMEBREW_TAP). Formula saved locally.$(NC)"; \
+		mkdir -p "$$TAP_DIR/Formula"; \
+	}; \
+	cat > "$$TAP_DIR/Formula/$(BINARY_NAME).rb" <<-FORMULA
+	# typed: false
+	# frozen_string_literal: true
+
+	class Mindx < Formula
+	  desc "MindX - AI-native multi-agent conversation platform"
+	  homepage "https://github.com/$(GITHUB_REPO)"
+	  license "MIT"
+	  version "$(V)"
+
+	  on_macos do
+	    if Hardware::CPU.intel?
+	      url "https://github.com/$(GITHUB_REPO)/releases/download/v$(V)/$(BINARY_NAME)-$(V)-darwin-amd64.tar.gz"
+	      sha256 "$${SHA256_AMD64}"
+	    end
+
+	    if Hardware::CPU.arm?
+	      url "https://github.com/$(GITHUB_REPO)/releases/download/v$(V)/$(BINARY_NAME)-$(V)-darwin-arm64.tar.gz"
+	      sha256 "$${SHA256_ARM64}"
+	    end
+	  end
+
+	  def install
+	    bin.install "$(BINARY_NAME)"
+	  end
+
+	  test do
+	    assert_match "MindX", shell_output("\#{bin}/$(BINARY_NAME) --help")
+	  end
+	end
+	FORMULA; \
+	if [ -d "$$TAP_DIR/.git" ]; then \
+		cd "$$TAP_DIR" && git add -A && git commit -m "$(BINARY_NAME) v$(V)" && git push; \
+		echo "$(GREEN)✅ Homebrew tap updated: $(HOMEBREW_TAP)$(NC)"; \
+	else \
+		cp "$$TAP_DIR/Formula/$(BINARY_NAME).rb" "$(REL)/$(BINARY_NAME)-$(V).rb"; \
+		echo "$(GREEN)✅ Formula saved: $(REL)/$(BINARY_NAME)-$(V).rb$(NC)"; \
+	fi; \
+	rm -rf "$$TAP_DIR"
+
+## release-winget: 提交 winget-pkgs PR（需 Windows zip 已发布到 GitHub Release）
+release-winget:
+	@echo "$(GREEN)📦 Submitting winget-pkgs PR...$(NC)"
+	@SHA256=$$(shasum -a 256 "$(REL)/$(BINARY_NAME)-$(V)-windows-amd64.zip" 2>/dev/null | cut -d' ' -f1); \
+	if [ -z "$$SHA256" ]; then \
+		echo "$(RED)❌ Windows zip not found in $(REL)/$(NC)"; \
+		exit 1; \
+	fi; \
+	WINGET_DIR=/tmp/winget-pkgs; \
+	MANIFEST_DIR="manifests/d/DotNetAge/Mindx/$(V)"; \
+	MANIFEST_PATH="$$MANIFEST_DIR/DotNetAge.Mindx.yaml"; \
+	GH_REPO="DotNetAge/mindx"; \
+	GIT_USER=$$(git config user.name); \
+	GIT_EMAIL=$$(git config user.email); \
+	rm -rf "$$WINGET_DIR"; \
+	gh repo fork microsoft/winget-pkgs --clone --remote=false 2>/dev/null || true; \
+	git clone --depth=1 "https://github.com/$$GIT_USER/winget-pkgs.git" "$$WINGET_DIR" 2>/dev/null || { \
+		echo "$(YELLOW)⚠  Fork not found, cloning upstream...$(NC)"; \
+		git clone --depth=1 "https://github.com/microsoft/winget-pkgs.git" "$$WINGET_DIR"; \
+		cd "$$WINGET_DIR" && gh repo fork --remote=false; \
+		cd "$(CURDIR)"; \
+	}; \
+	mkdir -p "$$WINGET_DIR/$$MANIFEST_DIR"; \
+	cat > "$$WINGET_DIR/$$MANIFEST_PATH" <<-MANIFEST
+	PackageIdentifier: DotNetAge.Mindx
+	PackageVersion: $(V)
+	PackageLocale: en-US
+	Publisher: DotNetAge
+	PublisherUrl: https://github.com/$(GH_REPO)
+	PackageName: MindX
+	License: MIT
+	ShortDescription: MindX - AI-native multi-agent conversation platform
+	Tags: AI agent cli llm mindx
+	Installers:
+	  - Architecture: x64
+	    InstallerType: zip
+	    NestedInstallerType: portable
+	    NestedInstallerFiles:
+	      - RelativeFilePath: $(BINARY_NAME).exe
+	        PortableCommandAlias: mindx
+	    InstallerUrl: https://github.com/$(GH_REPO)/releases/download/v$(V)/$(BINARY_NAME)-$(V)-windows-amd64.zip
+	    InstallerSha256: $$SHA256
+	ManifestType: singleton
+	ManifestVersion: 1.9.0
+	MANIFEST; \
+	cd "$$WINGET_DIR" && \
+	git add "$$MANIFEST_PATH" && \
+	git -c user.name="$$GIT_USER" -c user.email="$$GIT_EMAIL" \
+		commit -m "DotNetAge.Mindx v$(V)" && \
+	git push origin HEAD:main 2>&1 && \
+	gh pr create \
+		--repo microsoft/winget-pkgs \
+		--head "$$GIT_USER:main" \
+		--title "DotNetAge.Mindx version $(V)" \
+		--body "New version: **$(V)**\n\n- Package: DotNetAge.Mindx\n- URL: https://github.com/$(GH_REPO)" \
+		--label "package-submission" && \
+	echo "$(GREEN)✅ winget-pkgs PR submitted!$(NC)" || \
+	echo "$(YELLOW)⚠  PR creation failed. Manifest saved at $$WINGET_DIR/$$MANIFEST_PATH$(NC)"; \
+	cd "$(CURDIR)"
+
+## publish: 一键发布 — 打标签 → 编译 → GitHub Release → Homebrew → Winget
+publish:
+	@echo "$(GREEN)═══════════════════════════════════════════════════════════════$(NC)"
+	@echo "$(GREEN)  MindX 一键发布管道$(NC)"
+	@echo "$(GREEN)═══════════════════════════════════════════════════════════════$(NC)"
+	@echo ""
+	@# ── 前置检查 ──
+	@current_branch=$$(git rev-parse --abbrev-ref HEAD); \
+	if [ "$$current_branch" != "main" ]; then \
+		echo "$(RED)❌ 必须在 main 分支上发布 (当前: $$current_branch)$(NC)"; \
+		echo "  git checkout main && git pull"; \
+		exit 1; \
+	fi
+	@if ! git diff --quiet HEAD; then \
+		echo "$(RED)❌ 工作区有未提交的变更，请先提交$(NC)"; \
+		git status --short; \
+		exit 1; \
+	fi
+	@if ! command -v gh >/dev/null 2>&1; then \
+		echo "$(RED)❌ 需要 gh CLI: brew install gh$(NC)"; \
+		exit 1; \
+	fi
+	@if ! gh auth status 2>/dev/null; then \
+		echo "$(RED)❌ gh 未登录: gh auth login$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)✅ 前置检查通过$(NC)"
+	@echo ""
+	@# ── 版本管理 ──
+	@current_tag="$$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')"; \
+	current_ver="$${current_tag#v}"; \
+	major=$$(echo "$$current_ver" | cut -d. -f1); \
+	minor=$$(echo "$$current_ver" | cut -d. -f2); \
+	patch=$$(echo "$$current_ver" | cut -d. -f3); \
+	new_patch=$$((patch + 1)); \
+	new_ver="$${major}.$${minor}.$${new_patch}"; \
+	new_tag="v$${new_ver}"; \
+	echo "  当前版本:  $$current_tag"; \
+	echo "  发布版本:  $$new_tag"; \
+	echo ""; \
+	read -p "  确认发布 $$new_tag ? [Enter/N]: " confirm; \
+	if [ "$$confirm" != "" ] && [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then \
+		echo "$(YELLOW)⚠ 已取消$(NC)"; \
+		exit 0; \
+	fi; \
+	echo ""; \
+	echo "$(GREEN)▸ 创建标签 $$new_tag ...$(NC)"; \
+	git tag "$$new_tag" && git push origin "$$new_tag"; \
+	echo "$(GREEN)✅ 标签已推送$(NC)"; \
+	export V=$${new_ver} && export VERSION="$${new_tag}"
+	@echo ""
+	@# ── 编译 + 打包 + 校验 ──
+	@$(MAKE) release
+	@echo ""
+	@# ── GitHub Release ──
+	@$(MAKE) release-publish
+	@echo ""
+	@# ── Homebrew ──
+	@$(MAKE) release-homebrew
+	@echo ""
+	@# ── Winget ──
+	@read -p "  提交 winget-pkgs PR? [y/N]: " winget_confirm; \
+	if [ "$$winget_confirm" = "y" ] || [ "$$winget_confirm" = "Y" ]; then \
+		$(MAKE) release-winget; \
+	fi
+	@echo ""
+	@# ── Docker ──
+	@read -p "  推送 Docker 镜像? [y/N]: " docker_confirm; \
+	if [ "$$docker_confirm" = "y" ] || [ "$$docker_confirm" = "Y" ]; then \
+		$(MAKE) docker-build docker-push; \
+	fi
+	@echo ""
+	@echo "$(GREEN)═══════════════════════════════════════════════════════════════$(NC)"
+	@echo "$(GREEN)  🎉 发布完成!$(NC)"
+	@echo "$(GREEN)═══════════════════════════════════════════════════════════════$(NC)"
+	@echo ""
+	@echo "  GitHub:   https://github.com/$(GITHUB_REPO)/releases/tag/v$(VERSION_NUM)"
+	@echo "  Homebrew: brew install $(HOMEBREW_TAP)/$(BINARY_NAME)"
+	@echo "  Winget:   winget install DotNetAge.Mindx"
+	@echo "  Docker:   docker pull $(BINARY_NAME):v$(VERSION_NUM)"
+	@echo ""
 
 # =============================================================================
 # Docker 目标
