@@ -20,12 +20,12 @@ import (
 	"log"
 	"os"
 
-	goreactcore "github.com/DotNetAge/goreact/core"
+	goreactlogging "github.com/DotNetAge/goreact/logging"
 )
 
 // Logger is an alias for GoReact's core.Logger interface.
 // This ensures type compatibility across MindX and GoReact.
-type Logger = goreactcore.Logger
+type Logger = goreactlogging.Logger
 
 // Level represents the severity level of a log message.
 // Log levels are ordered from least to most severe: DEBUG < INFO < WARN < ERROR.

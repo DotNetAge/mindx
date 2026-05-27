@@ -10,17 +10,16 @@ import (
 	"testing"
 	"time"
 
-	goreact "github.com/DotNetAge/goreact"
-	goreactcore "github.com/DotNetAge/goreact/core"
+	goreactconfig "github.com/DotNetAge/goreact/config"
+	goreactsession "github.com/DotNetAge/goreact/session"
 	"github.com/DotNetAge/mindx/internal/core"
-	"github.com/DotNetAge/mindx/pkg/session"
+	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
 
 func newTestDaemon(t *testing.T) (*Daemon, func()) {
 	t.Helper()
 	tmpDir := t.TempDir()
 
-	os.Setenv("MINDX_WORKSPACE", tmpDir)
 	sessionsDir := filepath.Join(tmpDir, "sessions")
 	dataDir := filepath.Join(tmpDir, "data")
 	prefsDir := filepath.Join(tmpDir, "prefs")
@@ -41,20 +40,18 @@ func newTestDaemon(t *testing.T) (*Daemon, func()) {
 
 	d := NewDaemon(app, ":0", "/ws")
 
-	cleanup := func() {
-		os.Unsetenv("MINDX_WORKSPACE")
-	}
+	cleanup := func() {}
 
 	return d, cleanup
 }
 
-func mustCreateSession(t *testing.T, sessDB *session.FileSessionStore, agentName string) string {
+func mustCreateSession(t *testing.T, sessDB *mindxses.FileSessionStore, agentName string) string {
 	t.Helper()
 	info, err := sessDB.Create(context.Background(), agentName)
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	msg := goreactcore.Message{
+	msg := goreactsession.Message{
 		Role:      "user",
 		Content:   "init",
 		Timestamp: time.Now().UnixMilli(),
@@ -78,7 +75,7 @@ func TestHandleSessionList_Empty(t *testing.T) {
 		t.Fatalf("handleSessionList error = %v", err)
 	}
 
-	sessions, ok := result.([]goreactcore.SessionInfo)
+	sessions, ok := result.([]goreactsession.SessionInfo)
 	if !ok {
 		t.Fatalf("expected []SessionInfo, got %T", result)
 	}
@@ -105,7 +102,7 @@ func TestHandleSessionList_WithSessions(t *testing.T) {
 		t.Fatalf("handleSessionList error = %v", err)
 	}
 
-	sessions, ok := result.([]goreactcore.SessionInfo)
+	sessions, ok := result.([]goreactsession.SessionInfo)
 	if !ok {
 		t.Fatalf("expected []SessionInfo, got %T", result)
 	}
@@ -129,7 +126,7 @@ func TestHandleSessionList_FilterByAgent(t *testing.T) {
 		t.Fatalf("handleSessionList error = %v", err)
 	}
 
-	sessions, ok := result.([]goreactcore.SessionInfo)
+	sessions, ok := result.([]goreactsession.SessionInfo)
 	if !ok {
 		t.Fatalf("expected []SessionInfo, got %T", result)
 	}
@@ -220,7 +217,7 @@ func TestHandleSessionGet_NotFound(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected map, got %T", result)
 	}
-	msgs, ok := m["messages"].([]goreactcore.Message)
+	msgs, ok := m["messages"].([]goreactsession.Message)
 	if !ok {
 		t.Fatalf("expected messages to be []Message, got %T", m["messages"])
 	}
@@ -246,7 +243,7 @@ func TestHandleSessionMeta_OK(t *testing.T) {
 		t.Fatalf("handleSessionMeta error = %v", err)
 	}
 
-	meta, ok := result.(*session.SessionMeta)
+	meta, ok := result.(*mindxses.SessionMeta)
 	if !ok {
 		t.Fatalf("expected *SessionMeta, got %T", result)
 	}
@@ -534,7 +531,7 @@ func TestHandleAgentUpdate_OK(t *testing.T) {
 	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
 	mustCreateAgentFile(t, agentsDir, "test-updater")
 
-	reloaded, _ := goreact.LoadAgentsFrom(agentsDir)
+	reloaded, _ := goreactconfig.LoadAgentsFrom(agentsDir)
 	if reloaded != nil {
 		d.app.SetAgentsRegistry(reloaded)
 	}
@@ -587,7 +584,7 @@ func TestHandleAgentUpdate_PartialFieldsOnly(t *testing.T) {
 	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
 	mustCreateAgentFile(t, agentsDir, "partial-agent")
 
-	reloaded, _ := goreact.LoadAgentsFrom(agentsDir)
+	reloaded, _ := goreactconfig.LoadAgentsFrom(agentsDir)
 	if reloaded != nil {
 		d.app.SetAgentsRegistry(reloaded)
 	}
@@ -625,7 +622,7 @@ func TestHandleAgentUpdate_UpdateBody(t *testing.T) {
 	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
 	mustCreateAgentFile(t, agentsDir, "body-agent")
 
-	reloaded, _ := goreact.LoadAgentsFrom(agentsDir)
+	reloaded, _ := goreactconfig.LoadAgentsFrom(agentsDir)
 	if reloaded != nil {
 		d.app.SetAgentsRegistry(reloaded)
 	}

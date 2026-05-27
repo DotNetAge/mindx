@@ -3,6 +3,7 @@ package svc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,13 +11,15 @@ import (
 	"strings"
 	"sync"
 
-	goreactcore "github.com/DotNetAge/goreact/core"
+	"github.com/DotNetAge/goreact/events"
+	goreactmemory "github.com/DotNetAge/goreact/memory"
+	goreactsession "github.com/DotNetAge/goreact/session"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
-	"github.com/DotNetAge/mindx/pkg/session"
+	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
 
 var (
@@ -35,6 +38,7 @@ type Daemon struct {
 	wsPath       string
 	logger       logging.Logger
 	execMu       sync.Mutex
+	clientCancels sync.Map
 }
 
 func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
@@ -47,6 +51,8 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 		Compress:   true,
 		Console:    true,
 	})
+	logger.Info("=== Daemon initialization starting ===", "addr", addr, "wsPath", wsPath)
+	logger.Info("logger initialized", "log_file", filepath.Join(logDir, "mindx-daemon.log"))
 
 	var schedulerDB *scheduler.FileSchedulerStore
 	schedDB, err := scheduler.NewFileSchedulerStore(app.Settings().SchedulesDir())
@@ -54,13 +60,15 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 		logger.Warn("failed to create scheduler store, scheduled tasks disabled", "error", err)
 	} else {
 		schedulerDB = schedDB
+		logger.Info("scheduler store created", "dir", app.Settings().SchedulesDir())
 	}
 
 	var memoryWatch *memory.FileWatchService
 	var sharedMemory *memory.RAGMemory
 	if emb := app.Embedder(); emb != nil {
+		logger.Info("embedder found, initializing shared memory service")
 		sharedMem, memErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-			MemoryType: goreactcore.MemoryTypeLongTerm,
+			MemoryType: goreactmemory.MemoryTypeLongTerm,
 			AgentName:  "_shared",
 			MemoryDir:  filepath.Join(app.Settings().UserPreferences(), "memory"),
 			Embedder:   emb,
@@ -69,6 +77,7 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 			logger.Warn("filewatch: failed to create shared LongTerm indexer, watch disabled", "error", memErr)
 		} else {
 			sharedMemory = sharedMem
+			logger.Info("shared RAG memory initialized")
 			watchList, wlErr := memory.NewWatchListStore(app.Settings().DataDir())
 			if wlErr != nil {
 				logger.Warn("filewatch: failed to create watchlist store, watch disabled", "error", wlErr)
@@ -79,25 +88,30 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 					filepath.Join(app.Settings().DataDir(), "memory-cache"),
 					logger,
 				)
-			memoryWatch.VersionRecorder = func(absPath string) {
-				if app.SessDB() == nil || app.FileVersions() == nil {
-					return
-				}
-				sessions, listErr := app.SessDB().ListSessions(context.Background())
-				if listErr != nil {
-					return
-				}
-				for _, s := range sessions {
-					if s.ProjectDir == "" || !strings.HasPrefix(absPath, s.ProjectDir) {
-						continue
+				logger.Info("filewatch service configured",
+					"cache_dir", filepath.Join(app.Settings().DataDir(), "memory-cache"),
+				)
+				memoryWatch.VersionRecorder = func(absPath string) {
+					if app.SessDB() == nil || app.FileVersions() == nil {
+						return
 					}
-					if s.SessionDir != "" {
-						app.FileVersions().Record(s.SessionDir, absPath)
+					sessions, listErr := app.SessDB().ListSessions(context.Background())
+					if listErr != nil {
+						return
+					}
+					for _, s := range sessions {
+						if s.ProjectDir == "" || !strings.HasPrefix(absPath, s.ProjectDir) {
+							continue
+						}
+						if s.SessionDir != "" {
+							app.FileVersions().Record(s.SessionDir, absPath)
+						}
 					}
 				}
-			}
 			}
 		}
+	} else {
+		logger.Info("no embedder configured, filewatch disabled")
 	}
 
 	d := &Daemon{
@@ -112,38 +126,62 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 
 	if schedulerDB != nil {
 		d.scheduler = scheduler.NewScheduler(schedulerDB, d.executeScheduleCommand, logger)
+		logger.Info("scheduler instance created")
 	}
+
+	logger.Info("=== Daemon initialization complete ===",
+		"has_scheduler", d.scheduler != nil,
+		"has_memory_watch", d.memoryWatch != nil,
+		"has_shared_memory", d.sharedMemory != nil,
+	)
 	return d
 }
 
 func (d *Daemon) Start(ctx context.Context) error {
+	d.logger.Info("daemon start called", "addr", d.addr, "wsPath", d.wsPath)
+
 	if d.gw == nil {
+		d.logger.Info("initializing gateway")
 		d.initGateway()
 	}
 
 	if d.scheduler != nil {
+		d.logger.Info("starting scheduler service")
 		if err := d.scheduler.Start(ctx); err != nil {
 			d.logger.Warn("Scheduler failed to start", "error", err)
+		} else {
+			d.logger.Info("scheduler started successfully")
 		}
+	} else {
+		d.logger.Info("no scheduler configured, skipping")
 	}
 
 	if d.memoryWatch != nil {
+		d.logger.Info("starting filewatch service in background goroutine")
 		go func() {
 			if err := d.memoryWatch.Start(ctx); err != nil {
 				d.logger.Warn("FileWatch service exited with error", "error", err)
 			}
 		}()
+	} else {
+		d.logger.Info("no filewatch configured, skipping")
 	}
 
-	d.logger.Info("MindX daemon starting", "addr", fmt.Sprintf("ws://localhost%s%s", d.addr, d.wsPath))
+	addr := fmt.Sprintf("ws://localhost%s%s", d.addr, d.wsPath)
+	d.logger.Info("MindX daemon starting", "addr", addr)
+	d.logger.Info("gateway starting, waiting for connections...")
 
 	if err := d.gw.Start(); err != nil {
+		d.logger.Error("gateway start failed", err)
 		d.stopBackgroundServices()
 		return fmt.Errorf("gateway start failed: %w", err)
 	}
 
+	d.logger.Info("gateway started successfully, daemon is now running")
+	d.logger.Info("daemon running, waiting for shutdown signal...")
+
 	<-ctx.Done()
-	d.logger.Info("Shutting down")
+	d.logger.Info("received shutdown signal, cleaning up...")
 
 	d.stopBackgroundServices()
 
@@ -151,6 +189,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 		d.logger.Warn("failed to stop channels", "error", err)
 	}
 
+	d.logger.Info("shutting down gateway")
 	return d.gw.Shutdown(ctx)
 }
 
@@ -174,12 +213,18 @@ func (d *Daemon) TestStart(ctx context.Context) error {
 }
 
 func (d *Daemon) stopBackgroundServices() {
+	d.logger.Info("stopping background services...")
 	if d.memoryWatch != nil {
+		d.logger.Info("stopping filewatch service")
 		d.memoryWatch.Stop()
+		d.logger.Info("filewatch service stopped")
 	}
 	if d.scheduler != nil {
+		d.logger.Info("stopping scheduler service")
 		d.scheduler.Stop()
+		d.logger.Info("scheduler service stopped")
 	}
+	d.logger.Info("all background services stopped")
 }
 
 func (d *Daemon) TestStop(ctx context.Context) error {
@@ -197,14 +242,26 @@ func (d *Daemon) TestStop(ctx context.Context) error {
 }
 
 func (d *Daemon) initGateway() {
+	d.logger.Info("initializing WebSocket gateway",
+		"addr", d.addr,
+		"wsPath", d.wsPath,
+	)
 	d.gw = gateway.New(
 		gateway.WithAddr(d.addr),
 		gateway.WithPath(d.wsPath),
 		gateway.WithHandler(d.defaultHandler),
+		gateway.WithDisconnectHandler(func(clientID string) {
+			d.logger.Debug("client disconnected, cancelling running execution",
+				"client_id", clientID,
+			)
+			d.cancelClientExecution(clientID)
+		}),
 	)
+	d.logger.Info("gateway instance created")
 
 	registry := NewRPCHandlerRegistry(d)
 	registry.RegisterAll(d.gw)
+	d.logger.Info("RPC handlers registered successfully")
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +269,12 @@ func (d *Daemon) initGateway() {
 // ---------------------------------------------------------------------------
 
 func (d *Daemon) defaultHandler(msg *gateway.Message) {
+	d.logger.Debug("defaultHandler: received message",
+		"client_id", msg.ClientID,
+		"session_id", msg.SessionID,
+		"data_size", len(msg.Data),
+	)
+
 	var payload struct {
 		Text string `json:"text"`
 	}
@@ -222,10 +285,19 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	}
 	text := payload.Text
 
+	d.logger.Info("defaultHandler: parsing agent target",
+		"client_id", msg.ClientID,
+		"text_preview", truncate(text, 100),
+	)
+
 	agentName, providedSessionID, content := parseAgentTarget(text)
 
-	agent, err := d.app.ResolveAgent(agentName)
+	rt, err := d.app.ResolveRuntime(agentName)
 	if err != nil {
+		d.logger.Error("defaultHandler: failed to resolve runtime", err,
+			"client_id", msg.ClientID,
+			"requested_agent", agentName,
+		)
 		d.sendEvent(msg.ClientID, msg.SessionID, gateway.RespError, "错误", err.Error())
 		return
 	}
@@ -233,7 +305,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	sessionID := d.resolveSessionID(msg.SessionID, providedSessionID)
 	resolvedAgentName := agentName
 	if resolvedAgentName == "" {
-		resolvedAgentName = agent.Name()
+		resolvedAgentName = d.app.CurrentAgentName()
 	}
 
 	d.logger.Info("request start",
@@ -243,53 +315,130 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		"input_preview", truncate(content, 100),
 	)
 
-	eventCh, cancelEvents := agent.EventsFiltered(func(e goreactcore.ReactEvent) bool {
-		switch e.Type {
-		case goreactcore.ThinkingDelta, goreactcore.ContentDelta,
-			goreactcore.ToolUseDelta,
-			goreactcore.ThinkingDone,
-			goreactcore.ToolExecStart, goreactcore.ToolExecEnd,
-			goreactcore.FinalAnswer,
-			goreactcore.ExecutionSummary, goreactcore.Error,
-			goreactcore.SubtaskSpawned, goreactcore.SubtaskCompleted,
-			goreactcore.AgentTalkStart, goreactcore.AgentTalkEnd,
-			goreactcore.AskUserRequest,
-			goreactcore.PermissionRequest, goreactcore.PermissionDenied,
-			goreactcore.CycleEnd, goreactcore.TaskSummary,
-			goreactcore.LLMTimeout:
-			return true
-		default:
-			return false
-		}
-	})
+	// Cancel any existing execution for this client
+	d.cancelClientExecution(msg.ClientID)
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for event := range eventCh {
-			d.forwardEvent(msg.ClientID, event)
-		}
-	}()
+	// Create session backed by the file store
+	s := goreactsession.NewSession(sessionID, resolvedAgentName,
+		goreactsession.WithStore(d.app.SessDB()),
+	)
 
-	_, err = agent.Ask(sessionID, content)
+	// Create cancellable context for interrupt/cancel support
+	ctx, cancel := context.WithCancel(context.Background())
+	d.clientCancels.Store(msg.ClientID, cancel)
 
-	cancelEvents()
+	clientID := msg.ClientID
+	sid := sessionID
+	gw := d.gw
 
-	if err != nil {
-		d.logger.Error("request failed", err,
-			"client_id", msg.ClientID,
-			"session_id", sessionID,
-			"agent", resolvedAgentName,
-		)
-		d.sendEvent(msg.ClientID, sessionID, gateway.RespError, "错误", "request failed")
-	}
-
-	<-done
-	d.logger.Info("request done",
-		"client_id", msg.ClientID,
+	d.logger.Debug("request: starting async execution via AskBuilder",
 		"session_id", sessionID,
 		"agent", resolvedAgentName,
 	)
+
+	go func() {
+		defer func() {
+			cancel()
+			d.clientCancels.Delete(clientID)
+		}()
+
+		_, err := rt.Ask(resolvedAgentName, content, s).
+			WithContext(ctx).
+		OnThinking(func(chunk string) {
+			gw.SendResponse(clientID, gateway.RespThinkingDelta, "思考中", chunk, gateway.WithSessionID(sid))
+		}).
+		OnContent(func(chunk string) {
+			d.sendEvent(clientID, sid, gateway.RespMarkdown, "输出中", chunk)
+		}).
+		OnToolUseDelta(func(data events.ToolUseDeltaData) {
+			gw.SendResponse(clientID, gateway.RespText, "工具参数", map[string]any{
+				"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
+			}, gateway.WithSessionID(sid))
+		}).
+		OnThinkingDone(func() {
+			d.sendEvent(clientID, sid, gateway.RespThinkingDone, "思考完成", "思考阶段已完成")
+		}).
+		OnToolStart(func(data events.ToolExecStartData) {
+			gw.SendResponse(clientID, gateway.RespActionStart, "工具开始", map[string]any{
+				"tool_name": data.ToolName, "params": data.Params,
+			}, gateway.WithSessionID(sid))
+		}).
+		OnToolEnd(func(data events.ToolExecEndData) {
+			gw.SendResponse(clientID, gateway.RespActionResult, "工具结果", map[string]any{
+				"tool_name": data.ToolName, "success": data.Success, "result": data.Result, "error": data.Error, "duration": data.Duration.String(),
+			}, gateway.WithSessionID(sid))
+		}).
+		OnAnswer(func(answer string) {
+			d.sendEvent(clientID, sid, gateway.RespFinalAnswer, "最终答案", answer)
+		}).
+		OnExecutionSummary(func(data events.ExecutionSummaryData) {
+			d.sendExecutionSummary(clientID, sid, data)
+		}).
+		OnCycleEnd(func(data events.CycleInfo) {
+			md := buildCycleEndMarkdown(data)
+			d.sendEvent(clientID, sid, gateway.RespCycleEnd, "循环结束", md)
+		}).
+		OnError(func(errMsg string) {
+			d.sendEvent(clientID, sid, gateway.RespError, "错误", errMsg)
+		}).
+		OnSubtaskSpawned(func(data events.SubtaskInfo) {
+			md := buildSubtaskSpawnedMarkdown(data)
+			d.sendEvent(clientID, sid, gateway.RespSubtaskSpawned, "子任务生成", md)
+		}).
+		OnSubtaskCompleted(func(data events.SubtaskResult) {
+			md := buildSubtaskCompletedMarkdown(data)
+			d.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, "子任务完成", md)
+		}).
+		OnAskUser(func(data events.AskUserRequestData) {
+			jsonData, _ := json.Marshal(data)
+			d.sendEvent(clientID, sid, gateway.RespForm, "需要澄清", string(jsonData))
+		}).
+		OnPermissionRequest(func(data events.PermissionRequestData) {
+			md := buildPermissionRequestMarkdown(data)
+			d.sendEvent(clientID, sid, gateway.RespPermissionRequest, "权限请求", md)
+		}).
+		OnPermissionDenied(func(reason string) {
+			d.sendEvent(clientID, sid, gateway.RespPermissionDenied, "权限拒绝", reason)
+		}).
+		OnTaskSummary(func(data events.TaskSummaryData) {
+			md := buildTaskSummaryMarkdown(data)
+			gw.SendResponse(clientID, gateway.RespTaskSummary, "任务总结", md,
+				gateway.WithSessionID(sid),
+				gateway.WithResponseMeta(map[string]any{
+					"input_tokens":  data.TokenUsage.InputTokens,
+					"output_tokens": data.TokenUsage.OutputTokens,
+				}))
+		}).
+		OnLLMTimeout(func(data events.LLMTimeoutData) {
+			gw.SendResponse(clientID, gateway.RespError, "超时", map[string]any{
+				"session_id": data.SessionID, "timeout": data.Timeout.String(), "elapsed": data.Elapsed.String(), "error": data.Error,
+			}, gateway.WithSessionID(sid))
+		}).
+		Run()
+
+		if err != nil && !errors.Is(err, context.Canceled) {
+			d.logger.Error("request failed", err,
+				"client_id", clientID,
+				"session_id", sid,
+				"agent", resolvedAgentName,
+			)
+			d.sendEvent(clientID, sid, gateway.RespError, "错误", "request failed")
+		}
+
+		d.logger.Info("request done",
+			"client_id", clientID,
+			"session_id", sid,
+			"agent", resolvedAgentName,
+		)
+	}()
+}
+
+// cancelClientExecution cancels any running execution for the given client.
+func (d *Daemon) cancelClientExecution(clientID string) {
+	if v, ok := d.clientCancels.Load(clientID); ok {
+		v.(context.CancelFunc)()
+		d.clientCancels.Delete(clientID)
+	}
 }
 
 func parseAgentTarget(text string) (agentName string, sessionID string, content string) {
@@ -345,12 +494,25 @@ func (d *Daemon) resolveSessionID(clientProvided string, commandProvided string)
 // ---------------------------------------------------------------------------
 
 func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessionID string, content string, projectDir string) error {
-	resolvedAgent, err := d.app.ResolveAgent(agent)
+	d.logger.Info("scheduled task: execution started",
+		"agent", agent,
+		"session_id", sessionID,
+		"project_dir", projectDir,
+		"content_preview", truncate(content, 100),
+	)
+
+	rt, err := d.app.ResolveRuntime(agent)
 	if err != nil {
-		return fmt.Errorf("resolve agent %q: %w", agent, err)
+		d.logger.Error("scheduled task: failed to resolve runtime", err,
+			"agent", agent,
+		)
+		return fmt.Errorf("resolve runtime for %q: %w", agent, err)
 	}
 	if sessionID == "" || sessionID == "new" {
 		sessionID = generateSessionID()
+		d.logger.Info("scheduled task: created new session",
+			"session_id", sessionID,
+		)
 	}
 
 	targetDir := projectDir
@@ -358,6 +520,9 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		meta := d.restoreSessionEnvironment(sessionID)
 		if meta != nil {
 			targetDir = meta.ProjectWorkingDir
+			d.logger.Info("scheduled task: restored project dir from session meta",
+				"target_dir", targetDir,
+			)
 		}
 	}
 
@@ -367,23 +532,36 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 
 		if err := os.Chdir(targetDir); err != nil {
 			d.execMu.Unlock()
-			d.logger.Warn("failed to chdir to project dir, using current dir",
+			d.logger.Warn("scheduled task: failed to chdir to project dir, using current dir",
 				"project_dir", targetDir,
 				"error", err,
 			)
 		} else {
 			os.Setenv("MINDX_PROJECT_DIR", targetDir)
 			os.Setenv("MINDX_SESSION_ID", sessionID)
-			d.logger.Info("set execution context for scheduled task",
+			d.logger.Info("scheduled task: set execution context",
 				"session_id", sessionID,
 				"project_dir", targetDir,
 				"original_cwd", originalCWD,
 			)
 
-			_, err = resolvedAgent.Ask(sessionID, content)
+			d.logger.Info("scheduled task: calling Runtime.Ask()",
+				"session_id", sessionID,
+				"agent", agent,
+			)
+
+			s := goreactsession.NewSession(sessionID, agent,
+				goreactsession.WithStore(d.app.SessDB()),
+			)
+			_, err = rt.Ask(agent, content, s).Run()
+
+			d.logger.Info("scheduled task: Runtime.Ask() returned",
+				"session_id", sessionID,
+				"error", err,
+			)
 
 			if restoreErr := os.Chdir(originalCWD); restoreErr != nil {
-				d.logger.Warn("failed to restore cwd after scheduled task",
+				d.logger.Warn("scheduled task: failed to restore cwd after scheduled task",
 					"original", originalCWD,
 					"error", restoreErr,
 				)
@@ -395,18 +573,36 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 			if err != nil {
 				return fmt.Errorf("execute scheduled message for @%s (session: %s): %w", agent, sessionID, err)
 			}
+
+			d.logger.Info("scheduled task: execution completed successfully",
+				"session_id", sessionID,
+				"agent", agent,
+			)
 			return nil
 		}
 	}
 
-	_, err = resolvedAgent.Ask(sessionID, content)
+	d.logger.Info("scheduled task: executing without directory change",
+		"session_id", sessionID,
+		"agent", agent,
+	)
+
+	s := goreactsession.NewSession(sessionID, agent,
+		goreactsession.WithStore(d.app.SessDB()),
+	)
+	_, err = rt.Ask(agent, content, s).Run()
 	if err != nil {
 		return fmt.Errorf("execute scheduled message for @%s (session: %s): %w", agent, sessionID, err)
 	}
+
+	d.logger.Info("scheduled task: execution completed successfully (no dir change)",
+		"session_id", sessionID,
+		"agent", agent,
+	)
 	return nil
 }
 
-func (d *Daemon) restoreSessionEnvironment(sessionID string) *session.SessionMeta {
+func (d *Daemon) restoreSessionEnvironment(sessionID string) *mindxses.SessionMeta {
 	if d.app == nil || d.app.SessDB() == nil {
 		return nil
 	}

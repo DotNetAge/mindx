@@ -5,10 +5,14 @@ import (
 )
 
 type Settings struct {
-	Test bool
+	Test    bool
+	testDir string
 }
 
 func (s *Settings) UserPreferences() string {
+	if s.Test && s.testDir != "" {
+		return s.testDir
+	}
 	if s.Test {
 		return "./tmp/mindx-test"
 	}

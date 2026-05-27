@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"strings"
 
-	goreactcore "github.com/DotNetAge/goreact/core"
-	"github.com/DotNetAge/goreact/reactor"
+	goreactevents "github.com/DotNetAge/goreact/events"
 	"github.com/DotNetAge/gort/pkg/gateway"
 )
 
-func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
+func (d *Daemon) forwardEvent(clientID string, event goreactevents.ReactEvent) {
 	sid := event.SessionID
 	switch event.Type {
-	case goreactcore.ThinkingDelta:
+	case goreactevents.ThinkingDelta:
 		text, ok := event.Data.(string)
 		if !ok {
 			d.logger.Warn("unexpected ThinkingDelta data type", "type", fmt.Sprintf("%T", event.Data))
@@ -21,16 +20,10 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		}
 		d.gw.SendResponse(clientID, gateway.RespThinkingDelta, "思考中", text, gateway.WithSessionID(sid))
 
-	case goreactcore.ThinkingDone:
-		thought, ok := event.Data.(*reactor.Thought)
-		if !ok {
-			d.logger.Warn("unexpected ThinkingDone data type", "type", fmt.Sprintf("%T", event.Data))
-			return
-		}
-		md := buildThinkingDoneMarkdown(*thought)
-		d.sendEvent(clientID, sid, gateway.RespThinkingDone, "思考完成", md)
+	case goreactevents.ThinkingDone:
+		d.sendEvent(clientID, sid, gateway.RespThinkingDone, "思考完成", "思考阶段已完成")
 
-	case goreactcore.ContentDelta:
+	case goreactevents.ContentDelta:
 		text, ok := event.Data.(string)
 		if !ok {
 			d.logger.Warn("unexpected ContentDelta data type", "type", fmt.Sprintf("%T", event.Data))
@@ -38,8 +31,8 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		}
 		d.gw.SendResponse(clientID, gateway.RespMarkdown, "输出中", text, gateway.WithSessionID(sid))
 
-	case goreactcore.ToolUseDelta:
-		data, ok := event.Data.(goreactcore.ToolUseDeltaData)
+	case goreactevents.ToolUseDelta:
+		data, ok := event.Data.(goreactevents.ToolUseDeltaData)
 		if !ok {
 			d.logger.Warn("unexpected ToolUseDelta data type", "type", fmt.Sprintf("%T", event.Data))
 			return
@@ -51,8 +44,8 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			"arguments": data.Arguments,
 		}, gateway.WithSessionID(sid))
 
-	case goreactcore.ToolExecStart:
-		data, ok := event.Data.(goreactcore.ToolExecStartData)
+	case goreactevents.ToolExecStart:
+		data, ok := event.Data.(goreactevents.ToolExecStartData)
 		if !ok {
 			d.logger.Warn("unexpected ToolExecStart data type", "type", fmt.Sprintf("%T", event.Data))
 			return
@@ -62,8 +55,8 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			"params":    data.Params,
 		}, gateway.WithSessionID(sid))
 
-	case goreactcore.ToolExecEnd:
-		data, ok := event.Data.(goreactcore.ToolExecEndData)
+	case goreactevents.ToolExecEnd:
+		data, ok := event.Data.(goreactevents.ToolExecEndData)
 		if !ok {
 			d.logger.Warn("unexpected ToolExecEnd data type", "type", fmt.Sprintf("%T", event.Data))
 			return
@@ -76,8 +69,8 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			"duration":  data.Duration.String(),
 		}, gateway.WithSessionID(sid))
 
-	case goreactcore.SubtaskSpawned:
-		info, ok := event.Data.(goreactcore.SubtaskInfo)
+	case goreactevents.SubtaskSpawned:
+		info, ok := event.Data.(goreactevents.SubtaskInfo)
 		if !ok {
 			d.logger.Warn("unexpected SubtaskSpawned data type", "type", fmt.Sprintf("%T", event.Data))
 			return
@@ -85,8 +78,8 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		md := buildSubtaskSpawnedMarkdown(info)
 		d.sendEvent(clientID, sid, gateway.RespSubtaskSpawned, "子任务生成", md)
 
-	case goreactcore.SubtaskCompleted:
-		result, ok := event.Data.(goreactcore.SubtaskResult)
+	case goreactevents.SubtaskCompleted:
+		result, ok := event.Data.(goreactevents.SubtaskResult)
 		if !ok {
 			d.logger.Warn("unexpected SubtaskCompleted data type", "type", fmt.Sprintf("%T", event.Data))
 			return
@@ -94,7 +87,7 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		md := buildSubtaskCompletedMarkdown(result)
 		d.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, "子任务完成", md)
 
-	case goreactcore.FinalAnswer:
+	case goreactevents.FinalAnswer:
 		answer, ok := event.Data.(string)
 		if !ok {
 			d.logger.Warn("unexpected FinalAnswer data type", "type", fmt.Sprintf("%T", event.Data))
@@ -102,8 +95,8 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		}
 		d.sendEvent(clientID, sid, gateway.RespFinalAnswer, "最终答案", answer)
 
-	case goreactcore.PermissionRequest:
-		req, ok := event.Data.(goreactcore.PermissionRequestData)
+	case goreactevents.PermissionRequest:
+		req, ok := event.Data.(goreactevents.PermissionRequestData)
 		if !ok {
 			d.logger.Warn("unexpected PermissionRequest data type", "type", fmt.Sprintf("%T", event.Data))
 			return
@@ -111,8 +104,8 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		md := buildPermissionRequestMarkdown(req)
 		d.sendEvent(clientID, sid, gateway.RespPermissionRequest, "权限请求", md)
 
-	case goreactcore.AskUserRequest:
-		req, ok := event.Data.(goreactcore.AskUserRequestData)
+	case goreactevents.AskUserRequest:
+		req, ok := event.Data.(goreactevents.AskUserRequestData)
 		if !ok {
 			d.logger.Warn("unexpected AskUserRequest data type", "type", fmt.Sprintf("%T", event.Data))
 			return
@@ -120,7 +113,7 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		jsonData, _ := json.Marshal(req)
 		d.sendEvent(clientID, sid, gateway.RespForm, "需要澄清", string(jsonData))
 
-	case goreactcore.PermissionDenied:
+	case goreactevents.PermissionDenied:
 		reason, ok := event.Data.(string)
 		if !ok {
 			d.logger.Warn("unexpected PermissionDenied data type", "type", fmt.Sprintf("%T", event.Data))
@@ -128,16 +121,16 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		}
 		d.sendEvent(clientID, sid, gateway.RespPermissionDenied, "权限拒绝", reason)
 
-	case goreactcore.ExecutionSummary:
-		summary, ok := event.Data.(goreactcore.ExecutionSummaryData)
+	case goreactevents.ExecutionSummary:
+		summary, ok := event.Data.(goreactevents.ExecutionSummaryData)
 		if !ok {
 			d.logger.Warn("unexpected ExecutionSummary data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
 		d.sendExecutionSummary(clientID, sid, summary)
 
-	case goreactcore.CycleEnd:
-		cycle, ok := event.Data.(goreactcore.CycleInfo)
+	case goreactevents.CycleEnd:
+		cycle, ok := event.Data.(goreactevents.CycleInfo)
 		if !ok {
 			d.logger.Warn("unexpected CycleEnd data type", "type", fmt.Sprintf("%T", event.Data))
 			return
@@ -145,8 +138,8 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 		md := buildCycleEndMarkdown(cycle)
 		d.sendEvent(clientID, sid, gateway.RespCycleEnd, "循环结束", md)
 
-	case goreactcore.TaskSummary:
-		taskSummary, ok := event.Data.(goreactcore.TaskSummaryData)
+	case goreactevents.TaskSummary:
+		taskSummary, ok := event.Data.(goreactevents.TaskSummaryData)
 		if !ok {
 			d.logger.Warn("unexpected TaskSummary data type", "type", fmt.Sprintf("%T", event.Data))
 			return
@@ -159,8 +152,8 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 				"output_tokens": taskSummary.TokenUsage.OutputTokens,
 			}))
 
-	case goreactcore.LLMTimeout:
-		data, ok := event.Data.(goreactcore.LLMTimeoutData)
+	case goreactevents.LLMTimeout:
+		data, ok := event.Data.(goreactevents.LLMTimeoutData)
 		if !ok {
 			d.logger.Warn("unexpected LLMTimeout data type", "type", fmt.Sprintf("%T", event.Data))
 			return
@@ -172,7 +165,7 @@ func (d *Daemon) forwardEvent(clientID string, event goreactcore.ReactEvent) {
 			"error":      data.Error,
 		}, gateway.WithSessionID(sid))
 
-	case goreactcore.Error:
+	case goreactevents.Error:
 		errMsg, ok := event.Data.(string)
 		if !ok {
 			d.logger.Warn("unexpected Error data type", "type", fmt.Sprintf("%T", event.Data))
@@ -186,7 +179,7 @@ func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.Response
 	d.gw.SendResponse(clientID, respType, title, data, gateway.WithSessionID(sessionID))
 }
 
-func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreactcore.ExecutionSummaryData) {
+func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreactevents.ExecutionSummaryData) {
 	tableData := map[string]any{
 		"headers": []string{"Metric", "Value"},
 		"rows": []map[string]string{
@@ -203,31 +196,11 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreac
 
 // Markdown builders for event messages
 
-func buildThinkingDoneMarkdown(t reactor.Thought) string {
-	var b strings.Builder
-	b.WriteString("### 思考完成\n\n")
-	b.WriteString(fmt.Sprintf("**决策**: `%s`\n\n", t.Decision))
-	if t.Reasoning != "" {
-		b.WriteString(fmt.Sprintf("**推理**: %s\n\n", t.Reasoning))
-	}
-	if t.Content != "" {
-		b.WriteString(fmt.Sprintf("**内容**: %s\n\n", t.Content))
-	}
-	if len(t.ToolCallList) > 0 {
-		b.WriteString("**即将调用工具**:\n\n")
-		for _, tc := range t.ToolCallList {
-			b.WriteString(fmt.Sprintf("- `%s` — `%v`\n", tc.Name, tc.Arguments))
-		}
-		b.WriteString("\n")
-	}
-	return b.String()
-}
-
-func buildSubtaskSpawnedMarkdown(info goreactcore.SubtaskInfo) string {
+func buildSubtaskSpawnedMarkdown(info goreactevents.SubtaskInfo) string {
 	return fmt.Sprintf("### 🌿 子任务生成: `%s`\n\n**Agent**: %s\n**描述**: %s\n", info.TaskID, info.AgentName, info.Description)
 }
 
-func buildSubtaskCompletedMarkdown(result goreactcore.SubtaskResult) string {
+func buildSubtaskCompletedMarkdown(result goreactevents.SubtaskResult) string {
 	var b strings.Builder
 	if result.Success {
 		b.WriteString(fmt.Sprintf("### ✅ 子任务完成: `%s`\n\n", result.TaskID))
@@ -239,14 +212,14 @@ func buildSubtaskCompletedMarkdown(result goreactcore.SubtaskResult) string {
 	return b.String()
 }
 
-func buildPermissionRequestMarkdown(req goreactcore.PermissionRequestData) string {
+func buildPermissionRequestMarkdown(req goreactevents.PermissionRequestData) string {
 	return fmt.Sprintf("### 🔒 权限请求: `%s`\n\n**原因**: %s\n**安全级别**: %d\n", req.ToolName, req.Reason, req.SecurityLevel)
 }
 
-func buildCycleEndMarkdown(cycle goreactcore.CycleInfo) string {
-	return fmt.Sprintf("### 🔄 T-A-O 循环结束 (迭代 #%d, 耗时 %s)\n", cycle.Iteration, formatDuration(cycle.Duration))
+func buildCycleEndMarkdown(cycle goreactevents.CycleInfo) string {
+	return fmt.Sprintf("### 🔄 思考循环结束 (迭代 #%d, 耗时 %s)\n", cycle.Iteration, formatDuration(cycle.Duration))
 }
 
-func buildTaskSummaryMarkdown(ts goreactcore.TaskSummaryData) string {
+func buildTaskSummaryMarkdown(ts goreactevents.TaskSummaryData) string {
 	return fmt.Sprintf("### 📋 任务总结\n\n%s\n\n**Token**: 输入 %d / 输出 %d / 总计 %d\n", ts.Summary, ts.TokenUsage.InputTokens, ts.TokenUsage.OutputTokens, ts.TokenUsage.TotalTokens)
 }

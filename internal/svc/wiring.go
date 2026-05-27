@@ -48,14 +48,7 @@ func listAgents(app *core.App) []map[string]string {
 }
 
 func listSkills(app *core.App) []map[string]string {
-	m, err := app.CurrentAgent()
-	if err != nil {
-		return []map[string]string{}
-	}
-	if m.Reactor() == nil {
-		return []map[string]string{}
-	}
-	skills := m.Reactor().SkillRegistry().ListSkills()
+	skills := app.SkillRegistry().ListSkills()
 
 	var result []map[string]string
 	for _, skill := range skills {

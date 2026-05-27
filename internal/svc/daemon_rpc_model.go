@@ -5,17 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 
-	goreactcore "github.com/DotNetAge/goreact/core"
+	goreactconfig "github.com/DotNetAge/goreact/config"
 )
 
 func (d *Daemon) handleModelList(_ context.Context, _ json.RawMessage) (any, error) {
 	models := d.app.Models()
 	if models == nil {
-		return []goreactcore.ModelConfig{}, nil
+		return []goreactconfig.ModelConfig{}, nil
 	}
 	list := models.List()
 	if list == nil {
-		return []goreactcore.ModelConfig{}, nil
+		return []goreactconfig.ModelConfig{}, nil
 	}
 	return list, nil
 }

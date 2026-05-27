@@ -8,17 +8,16 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"charm.land/bubbles/v2/timer"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
-	"github.com/DotNetAge/goreact"
-	goreactcore "github.com/DotNetAge/goreact/core"
-	goreactor "github.com/DotNetAge/goreact/reactor"
+	"github.com/DotNetAge/goreact/config"
+	"github.com/DotNetAge/goreact/events"
+	goreactlogging "github.com/DotNetAge/goreact/logging"
+	goreactsession "github.com/DotNetAge/goreact/session"
 	"github.com/DotNetAge/mindx/internal/client/component/changes"
 	"github.com/DotNetAge/mindx/internal/client/component/conv"
 	"github.com/DotNetAge/mindx/internal/client/component/dialog"
@@ -73,25 +72,21 @@ type rootModel struct {
 
 	app      *appcore.App
 	registry *SlashCommandRegistry
-	agent    *goreact.Agent
 
-	eventDone   chan struct{}
-	msgCh       chan tea.Msg
-	eventLoopMu sync.Mutex     // guards startEventLoop/stopEventLoop
-	eventLoopWg sync.WaitGroup // tracks event loop goroutines
-	eventsOn    atomic.Bool    // true while event loop is operational
-	executing   bool
+	executing bool
 	postExitCmd string
 
+	// currentCancel cancels the running agent execution (for interrupt/stop).
+	currentCancel context.CancelFunc
+
 	// pendingAskUser tracks an active LLM question (AskUser tool) waiting for user response.
-	// Non-nil while the dialog overlay is showing question(s) from the LLM.
-	pendingAskUser *goreactcore.AskUserRequestData
+	pendingAskUser *events.AskUserRequestData
 
 	// pendingPermission tracks a tool security permission request waiting for user response.
-	pendingPermission *goreactcore.PermissionRequestData
+	pendingPermission *events.PermissionRequestData
 }
 
-func (m *rootModel) getLogger() goreactcore.Logger {
+func (m *rootModel) getLogger() goreactlogging.Logger {
 	if m.app != nil {
 		return m.app.Logger()
 	}
@@ -122,10 +117,6 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 	if err != nil {
 		m.notifBar.Add(data.Notification{Message: fmt.Sprintf("初始化失败: %v", err), Level: data.NotifError})
 	} else {
-		m.agent, err = m.app.CurrentAgent()
-		if err != nil {
-			m.notifBar.Add(data.Notification{Message: fmt.Sprintf("Agent不可用: %v", err), Level: data.NotifError})
-		}
 		m.registry = BuiltinCommands(CommandDeps{
 			App:     m.app,
 			OnClear: func() { m.program.Send(clientmsg.ClearScreenMsg{}) },
@@ -243,7 +234,7 @@ func loadRecentSessions(app *appcore.App) ([]input.SessionItem, error) {
 	return items, nil
 }
 
-func messagesToConversations(sessionID, agentName string, msgs []goreactcore.Message) []conv.Conversation {
+func messagesToConversations(sessionID, agentName string, msgs []goreactsession.Message) []conv.Conversation {
 	var convs []conv.Conversation
 	for _, msg := range msgs {
 		switch msg.Role {
@@ -276,22 +267,18 @@ func (m *rootModel) loadSessionHistory() {
 		return
 	}
 
-	// Prefer CurrentSessionMeta (always set after /chat switch),
-	// fall back to agent.SessionID() (set on startup via WithSession).
 	sessionMeta := m.app.CurrentSessionMeta()
 	sessionID := ""
 	agentName := ""
 	if sessionMeta != nil && sessionMeta.SessionID != "" {
 		sessionID = sessionMeta.SessionID
 		agentName = sessionMeta.AgentName
-	} else if m.agent != nil {
-		sessionID = m.agent.SessionID()
 	}
 	if sessionID == "" {
 		return
 	}
-	if agentName == "" && m.agent != nil {
-		agentName = m.agent.Name()
+	if agentName == "" {
+		agentName = m.app.CurrentAgentName()
 	}
 
 	ctx := context.Background()
@@ -315,7 +302,7 @@ func (m *rootModel) populateWelcome() {
 
 	sessionMeta := m.app.CurrentSessionMeta()
 	if sessionMeta != nil {
-		m.welcome.Data.Workspace = sessionMeta.GetProjectDir()
+		m.welcome.Data.Workspace = sessionMeta.ProjectDir
 		m.welcome.Data.SessionID = sessionMeta.SessionID
 	}
 	// Fallback to actual working directory when no session is loaded yet
@@ -330,320 +317,86 @@ func (m *rootModel) populateWelcome() {
 		m.fileTracker = changes.NewTracker(m.welcome.Data.Workspace)
 	}
 
-	if m.agent != nil {
-		m.welcome.Data.AgentName = m.agent.Name()
-		m.statusBar.AgentName = m.agent.Name()
-		if model := m.agent.Model(); model != nil {
-			m.welcome.Data.ModelName = displayName(model.Title, model.Name)
-			m.updateModelDisplay(model)
+	agentName := m.app.CurrentAgentName()
+	m.welcome.Data.AgentName = agentName
+	m.statusBar.AgentName = agentName
+
+	// Get model info from config
+	if cfg := m.app.Config(); cfg != nil && cfg.LastModel != "" {
+		if modelCfg := m.app.Models().Get(cfg.LastModel); modelCfg != nil {
+			m.welcome.Data.ModelName = displayName(modelCfg.Title, modelCfg.Name)
+			m.updateModelDisplay(modelCfg)
 		}
-		sid := m.agent.SessionID()
-		if sid != "" {
-			m.welcome.Data.SessionID = sid
-		}
-		m.loadSessionHistory()
-		m.sidebar.SetWelcomeData(m.welcome.Data)
 	}
+
+	if sessionMeta != nil && sessionMeta.SessionID != "" {
+		m.welcome.Data.SessionID = sessionMeta.SessionID
+	}
+	m.loadSessionHistory()
+	m.sidebar.SetWelcomeData(m.welcome.Data)
 }
 
-func (m *rootModel) startEventLoop() {
-	if m.app == nil || m.agent == nil {
+func displayName(title, name string) string {
+	if title != "" {
+		return title
+	}
+	return name
+}
+
+func (m *rootModel) providerDisplayName(providerName string) string {
+	if m.app == nil || providerName == "" {
+		return providerName
+	}
+	p := m.app.Models().GetProvider(providerName)
+	if p != nil && p.Title != "" {
+		return p.Title
+	}
+	return providerName
+}
+
+func (m *rootModel) updateModelDisplay(model *config.ModelConfig) {
+	if model == nil {
 		return
 	}
-	m.eventLoopMu.Lock()
-	defer m.eventLoopMu.Unlock()
-
-	if m.eventsOn.Load() {
-		return
-	}
-
-	// Stop any previous loop first
-	m.stopEventLoopLocked()
-
-	m.eventDone = make(chan struct{})
-	m.msgCh = make(chan tea.Msg, 2048)
-	m.eventsOn.Store(true)
-
-	m.eventLoopWg.Add(1)
-	go m.eventSubscriberLoop()
-
-	m.eventLoopWg.Add(1)
-	go m.eventForwarderLoop()
-}
-
-// eventSubscriberLoop subscribes to the reactor event bus and forwards
-// events to msgCh. Automatically re-subscribes when the channel is closed
-// by the event bus, until shutdown is signalled.
-func (m *rootModel) eventSubscriberLoop() {
-	defer m.eventLoopWg.Done()
-	defer func() {
-		if p := recover(); p != nil {
-			if l := m.getLogger(); l != nil {
-				l.Warn("event subscriber recovered", "panic", p)
-			}
-		}
-	}()
-
-	if l := m.getLogger(); l != nil {
-		l.Info("event subscriber loop started")
-	}
-
-	subCount := 0
-	for {
-		bus := m.agent.Reactor().EventBus()
-		if bus == nil {
-			if l := m.getLogger(); l != nil {
-				l.Info("event subscriber loop exit -- reactor event bus is nil")
-			}
-			return
-		}
-		eventCh, cancel := bus.Subscribe()
-		subCount++
-		if l := m.getLogger(); l != nil {
-			l.Info("subscribed to event bus", "sub_attempt", subCount)
-		}
-
-		func() {
-			defer cancel()
-			for {
-				select {
-				case evt, ok := <-eventCh:
-					if !ok {
-						if l := m.getLogger(); l != nil {
-							l.Info("event channel closed, re-subscribing", "sub_attempt", subCount)
-						}
-						return
-					}
-					msg := m.convertEvent(evt)
-					if msg != nil {
-						select {
-						case m.msgCh <- msg:
-						default:
-							if l := m.getLogger(); l != nil {
-								l.Warn("msgCh full, dropping event", "type", evt.Type, "session_id", evt.SessionID)
-							}
-						}
-					}
-				case <-m.eventDone:
-					if l := m.getLogger(); l != nil {
-						l.Info("event subscriber loop stopping -- shutdown signal")
-					}
-					return
-				}
-			}
-		}()
-
-		// Check for shutdown before re-subscribing
-		select {
-		case <-m.eventDone:
-			if l := m.getLogger(); l != nil {
-				l.Info("event subscriber loop exit -- shutdown during reconnect")
-			}
-			return
-		default:
-		}
-
-		// Brief delay to avoid busy-loop on repeated reconnects
-		time.Sleep(50 * time.Millisecond)
+	m.statusBar.ModelName = displayName(model.Title, model.Name)
+	if model.Provider != "" {
+		m.statusBar.Provider = m.providerDisplayName(model.Provider)
 	}
 }
 
-// eventForwarderLoop reads from msgCh and forwards messages to the bubbletea program.
-func (m *rootModel) eventForwarderLoop() {
-	defer m.eventLoopWg.Done()
-	defer func() {
-		if p := recover(); p != nil {
-			if l := m.getLogger(); l != nil {
-				l.Warn("msg forwarder recovered", "panic", p)
-			}
-		}
-	}()
-
-	if l := m.getLogger(); l != nil {
-		l.Info("event forwarder loop started")
+func (m *rootModel) updateActiveDialog(msg any) (tea.Model, tea.Cmd) {
+	switch m.activeOverlay {
+	case overlaySelect:
+		newDlg, cmd := m.selectDlg.Update(msg)
+		m.selectDlg = newDlg
+		return m, cmd
+	case overlayOptions:
+		newDlg, cmd := m.optionsDlg.Update(msg)
+		m.optionsDlg = newDlg
+		return m, cmd
+	case overlayConnectProvider:
+		newDlg, cmd := m.providerDlg.Update(msg)
+		m.providerDlg = newDlg
+		return m, cmd
+	case overlayConnectAPIKey:
+		newDlg, cmd := m.apiKeyDlg.Update(msg)
+		m.apiKeyDlg = newDlg
+		return m, cmd
+	case overlayConnectModel:
+		newDlg, cmd := m.modelDlg.Update(msg)
+		m.modelDlg = newDlg
+		return m, cmd
 	}
-
-	for {
-		select {
-		case msg, ok := <-m.msgCh:
-			if !ok {
-				if l := m.getLogger(); l != nil {
-					l.Info("event forwarder loop exit -- msgCh closed")
-				}
-				return
-			}
-			// Fire-and-forget to prevent blocking the event pipeline
-			// when bubbletea's render cycle is under load.
-			go m.program.Send(msg)
-		case <-m.eventDone:
-			if l := m.getLogger(); l != nil {
-				l.Info("event forwarder loop stopping -- shutdown signal")
-			}
-			return
-		}
-	}
+	return m, nil
 }
 
-func (m *rootModel) convertEvent(evt goreactcore.ReactEvent) tea.Msg {
-	switch evt.Type {
-	case goreactcore.ThinkingDelta:
-		return clientmsg.ThinkingDeltaMsg{
-			SessionID: evt.SessionID,
-			Content:   toString(evt.Data),
-		}
-	case goreactcore.ThinkingDone:
-		doneMsg := clientmsg.ThinkingDoneMsg{SessionID: evt.SessionID}
-		if thought, ok := evt.Data.(*goreactor.Thought); ok {
-				doneMsg.Content = thought.Content
-				if thought.Reasoning != "" {
-				doneMsg.Content = thought.Reasoning
-				}
-		}
-		return doneMsg
-	case goreactcore.ToolExecStart:
-		if data, ok := evt.Data.(goreactcore.ToolExecStartData); ok {
-			if m.fileTracker != nil {
-				m.fileTracker.ToolExecStart(data.Params)
-			}
-			return clientmsg.ToolExecStartMsg{
-				SessionID:    evt.SessionID,
-				ToolName:     data.ToolName,
-				Params:       data.Params,
-				EstimatedTok: data.PredictedTokens,
-			}
-		}
-	case goreactcore.ToolExecEnd:
-		if data, ok := evt.Data.(goreactcore.ToolExecEndData); ok {
-			var diffText string
-			var diffAdds, diffDels int
-			var diffFile string
-			if m.fileTracker != nil {
-				m.fileTracker.ToolExecEnd()
-				changes := m.fileTracker.Snapshot()
-				m.sidebar.SetFileChanges(changes)
-				if len(changes) > 0 {
-					last := changes[len(changes)-1]
-					diffText = last.Diff
-					diffAdds = last.Additions
-					diffDels = last.Deletions
-					diffFile = last.File
-				}
-			}
-			return clientmsg.ToolExecEndMsg{
-				SessionID:  evt.SessionID,
-				ToolName:   data.ToolName,
-				ToolCallID: data.ToolCallID,
-				Success:    data.Success,
-				Result:     data.Result,
-				Error:      data.Error,
-				Duration:   data.Duration,
-				DiffText:   diffText,
-				DiffAdds:   diffAdds,
-				DiffDels:   diffDels,
-				DiffFile:   diffFile,
-			}
-		}
-	case goreactcore.ExecutionSummary:
-		if data, ok := evt.Data.(goreactcore.ExecutionSummaryData); ok {
-			return clientmsg.ExecutionSummaryMsg{
-				SessionID:  evt.SessionID,
-				Duration:   data.TotalDuration,
-				TokensUsed: data.TokensUsed,
-				ToolCalls:  data.ToolCalls,
-			}
-		}
-	case goreactcore.ContentDelta:
-		return clientmsg.ContentDeltaMsg{SessionID: evt.SessionID, Content: toString(evt.Data)}
-
-	case goreactcore.ToolUseDelta:
-		if data, ok := evt.Data.(goreactcore.ToolUseDeltaData); ok {
-			return clientmsg.ToolUseDeltaMsg{
-				SessionID: evt.SessionID,
-				Index:     data.Index,
-				ID:        data.ID,
-				Name:      data.Name,
-				Arguments: data.Arguments,
-			}
-		}
-
-	case goreactcore.FinalAnswer:
-		return clientmsg.FinalAnswerMsg{SessionID: evt.SessionID, Content: toString(evt.Data)}
-	case goreactcore.CycleEnd:
-		if data, ok := evt.Data.(goreactcore.CycleInfo); ok {
-			return clientmsg.IterationMsg{SessionID: evt.SessionID, Iteration: data.Iteration}
-		}
-	case goreactcore.Error:
-		return clientmsg.AgentErrorMsg{SessionID: evt.SessionID, Error: errors.New(toString(evt.Data))}
-	case goreactcore.LLMTimeout:
-		if data, ok := evt.Data.(goreactcore.LLMTimeoutData); ok {
-			return clientmsg.LLMTimeoutMsg{
-				SessionID: evt.SessionID,
-				Timeout:   data.Timeout,
-				Elapsed:   data.Elapsed,
-				Error:     data.Error,
-			}
-		}
-	case goreactcore.AskUserRequest:
-		if data, ok := evt.Data.(goreactcore.AskUserRequestData); ok {
-			m.pendingAskUser = &data
-			return clientmsg.AskUserEventMsg{}
-		}
-	case goreactcore.PermissionRequest:
-		if data, ok := evt.Data.(goreactcore.PermissionRequestData); ok {
-			m.pendingPermission = &data
-			return clientmsg.PermissionRequestMsg{
-				ToolName:      data.ToolName,
-				Reason:        data.Reason,
-				SecurityLevel: int(data.SecurityLevel),
-			}
-		}
-	}
-	return nil
+func (m *rootModel) windowSizeMsg() tea.WindowSizeMsg {
+	return tea.WindowSizeMsg{Width: m.termWidth, Height: m.termHeight}
 }
 
-func (m *rootModel) stopEventLoop() {
-	m.eventLoopMu.Lock()
-	defer m.eventLoopMu.Unlock()
-	m.stopEventLoopLocked()
-}
-
-// stopEventLoopLocked requires m.eventLoopMu to be held.
-func (m *rootModel) stopEventLoopLocked() {
-	if !m.eventsOn.CompareAndSwap(true, false) {
-		return
-	}
-
-	if m.eventDone != nil {
-		close(m.eventDone)
-	}
-
-	// Wait for goroutines to finish, with timeout
-	doneCh := make(chan struct{})
-	go func() {
-		m.eventLoopWg.Wait()
-		close(doneCh)
-	}()
-
-	select {
-	case <-doneCh:
-	case <-time.After(5 * time.Second):
-		if l := m.getLogger(); l != nil {
-			l.Warn("event loop goroutines did not finish within 5s timeout")
-		}
-	}
-
-	if m.msgCh != nil {
-		close(m.msgCh)
-		m.msgCh = nil
-	}
-	m.eventDone = nil
-}
-
-func toString(data any) string {
-	if s, ok := data.(string); ok {
-		return s
-	}
-	return fmt.Sprintf("%v", data)
+func (m *rootModel) updateWithState(msg tea.Msg, state string, scroll bool) (tea.Model, tea.Cmd) {
+	m.statusBar.CurrentState = state
+	return m.updateConversation(msg, scroll)
 }
 
 // updateConversation updates the conversation list with msg and optionally
@@ -656,14 +409,6 @@ func (m *rootModel) updateConversation(msg tea.Msg, scrollToBottom bool) (tea.Mo
 	newList, cmd := m.conversationList.Update(msg)
 	m.conversationList = newList
 	return m, cmd
-}
-
-func (m *rootModel) Init() tea.Cmd {
-	m.startEventLoop()
-	return tea.Batch(
-		m.conversationList.Init(),
-		checkDaemonCmd(m.daemonAddr),
-	)
 }
 
 // ============================================================
@@ -684,10 +429,8 @@ func (m *rootModel) activateAskUserOverlay() {
 		return
 	}
 	q := m.pendingAskUser.Questions[0]
-	// q.Options is []string, pass directly to the dialog.
 	opts := q.Options
 
-	// Build a short title from the question.
 	title := q.Question
 	if len([]rune(title)) > 20 {
 		title = string([]rune(title)[:20]) + "…"
@@ -752,69 +495,6 @@ func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, cust
 // Connect flow: Provider → API Key → Model
 // ============================================================
 
-func displayName(title, name string) string {
-	if title != "" {
-		return title
-	}
-	return name
-}
-
-func (m *rootModel) providerDisplayName(providerName string) string {
-	if m.app == nil || providerName == "" {
-		return providerName
-	}
-	p := m.app.Models().GetProvider(providerName)
-	if p != nil && p.Title != "" {
-		return p.Title
-	}
-	return providerName
-}
-
-func (m *rootModel) updateModelDisplay(model *goreactcore.ModelConfig) {
-	if model == nil {
-		return
-	}
-	m.statusBar.ModelName = displayName(model.Title, model.Name)
-	if model.Provider != "" {
-		m.statusBar.Provider = m.providerDisplayName(model.Provider)
-	}
-}
-
-func (m *rootModel) updateActiveDialog(msg any) (tea.Model, tea.Cmd) {
-	switch m.activeOverlay {
-	case overlaySelect:
-		newDlg, cmd := m.selectDlg.Update(msg)
-		m.selectDlg = newDlg
-		return m, cmd
-	case overlayOptions:
-		newDlg, cmd := m.optionsDlg.Update(msg)
-		m.optionsDlg = newDlg
-		return m, cmd
-	case overlayConnectProvider:
-		newDlg, cmd := m.providerDlg.Update(msg)
-		m.providerDlg = newDlg
-		return m, cmd
-	case overlayConnectAPIKey:
-		newDlg, cmd := m.apiKeyDlg.Update(msg)
-		m.apiKeyDlg = newDlg
-		return m, cmd
-	case overlayConnectModel:
-		newDlg, cmd := m.modelDlg.Update(msg)
-		m.modelDlg = newDlg
-		return m, cmd
-	}
-	return m, nil
-}
-
-func (m *rootModel) windowSizeMsg() tea.WindowSizeMsg {
-	return tea.WindowSizeMsg{Width: m.termWidth, Height: m.termHeight}
-}
-
-func (m *rootModel) updateWithState(msg tea.Msg, state string, scroll bool) (tea.Model, tea.Cmd) {
-	m.statusBar.CurrentState = state
-	return m.updateConversation(msg, scroll)
-}
-
 func (m *rootModel) startConnectFlow() {
 	if m.app == nil {
 		m.notifBar.Add(data.Notification{Message: "系统未初始化", Level: data.NotifError})
@@ -875,15 +555,17 @@ func (m *rootModel) saveConnectResult(modelName string) {
 		_ = cfg.Save()
 	}
 
-	if modelName != "" && m.agent != nil {
+	if modelName != "" {
 		if modelCfg := reg.Get(modelName); modelCfg != nil {
-			m.agent.SetModel(modelCfg)
 			m.welcome.Data.ModelName = displayName(modelCfg.Title, modelCfg.Name)
 			m.updateModelDisplay(modelCfg)
+			if cfg := m.app.Config(); cfg != nil {
+				cfg.LastModel = modelName
+				_ = cfg.Save()
+			}
 			reg.Save(modelCfg)
 		}
 	} else if provider != nil && m.connectAPIKey != "" {
-		// Persist provider API key even without a model selection
 		for _, raw := range reg.ListRaw() {
 			reg.Save(raw)
 			break
@@ -939,6 +621,13 @@ func probeDaemon(addr string) clientmsg.DaemonConnStatus {
 // Main bubbletea update loop
 // ============================================================
 
+func (m *rootModel) Init() tea.Cmd {
+	return tea.Batch(
+		m.conversationList.Init(),
+		checkDaemonCmd(m.daemonAddr),
+	)
+}
+
 func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := e.(type) {
 	case tea.WindowSizeMsg:
@@ -955,7 +644,6 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			m.handlePostExit()
-			m.stopEventLoop()
 			return m, tea.Quit
 		}
 
@@ -1004,11 +692,11 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.SessionDoneMsg:
 		m.executing = false
+		m.currentCancel = nil
 		return m.updateWithState(msg, "空闲", true)
 
 	case clientmsg.AgentErrorMsg:
 		m.executing = false
-		// Don't override "已取消" status when cancel triggered the error
 		if !errors.Is(msg.Error, context.Canceled) {
 			m.statusBar.CurrentState = "出错"
 		}
@@ -1144,23 +832,19 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	case clientmsg.ExecutionCancelMsg:
 		m.executing = false
 		m.statusBar.CurrentState = "已取消"
-		if m.agent != nil {
-			m.agent.Cancel()
+		if m.currentCancel != nil {
+			m.currentCancel()
+			m.currentCancel = nil
 		}
 		return m, nil
 
 	case tea.InterruptMsg:
 		m.executing = false
-		if m.agent != nil {
-			m.agent.Cancel()
-		}
 		m.handlePostExit()
-		m.stopEventLoop()
 		return m, tea.Quit
 
 	case clientmsg.ExitMsg:
 		m.handlePostExit()
-		m.stopEventLoop()
 		return m, tea.Quit
 	}
 
@@ -1205,21 +889,16 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 	if m.executing {
 		return m, m.notifBar.Add(data.Notification{Message: "已有消息正在处理", Level: data.NotifWarning})
 	}
-	if m.agent == nil {
-		m.executing = false
-		return m, m.notifBar.Add(data.Notification{Message: "Agent未初始化", Level: data.NotifError})
-	}
 
 	m.executing = true
 	m.statusBar.SessionStart = time.Now()
 	m.statusBar.SessionDuration = 0
-	agent := m.agent
 
+	sessionMeta := m.app.CurrentSessionMeta()
 	sessionID := ""
-	if meta := m.app.CurrentSessionMeta(); meta != nil && meta.SessionID != "" {
-		sessionID = meta.SessionID
-	} else if agent != nil {
-		sessionID = agent.SessionID()
+	agentName := m.app.CurrentAgentName()
+	if sessionMeta != nil && sessionMeta.SessionID != "" {
+		sessionID = sessionMeta.SessionID
 	}
 	if sessionID == "" {
 		sessionID = "main"
@@ -1233,12 +912,16 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		l.Info("user send", "session", sessionID, "preview", preview)
 	}
 
-	newConv := conv.NewConversation(sessionID, agent.Name(), e.Text)
+	newConv := conv.NewConversation(sessionID, agentName, e.Text)
 	m.conversationList.Conversations = append(m.conversationList.Conversations, newConv)
 	m.conversationList.MarkDirty()
 
+	// Create cancellable context so ExecutionCancelMsg can interrupt the running agent.
+	ctx, cancel := context.WithCancel(context.Background())
+	m.currentCancel = cancel
+
 	go func() {
-		sendStart := time.Now()
+		defer cancel()
 		defer func() {
 			if p := recover(); p != nil {
 				m.program.Send(clientmsg.AgentErrorMsg{
@@ -1248,7 +931,122 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 			}
 		}()
 
-		_, err := agent.Ask(sessionID, e.Text)
+		rt, err := m.app.CurrentRuntime()
+		if err != nil {
+			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: fmt.Errorf("runtime不可用: %w", err)})
+			m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
+			return
+		}
+
+		s := m.app.NewSessionFromMeta()
+		if s == nil {
+			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: fmt.Errorf("会话创建失败")})
+			m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
+			return
+		}
+
+		ask := rt.Ask(agentName, e.Text, s).WithContext(ctx)
+
+		// Wire all event callbacks to bubbletea messages
+		ask.OnContent(func(c string) {
+			m.program.Send(clientmsg.ContentDeltaMsg{SessionID: sessionID, Content: c})
+		})
+		ask.OnThinking(func(c string) {
+			m.program.Send(clientmsg.ThinkingDeltaMsg{SessionID: sessionID, Content: c})
+		})
+		ask.OnToolUseDelta(func(d events.ToolUseDeltaData) {
+			m.program.Send(clientmsg.ToolUseDeltaMsg{
+				SessionID: sessionID,
+				Index:     d.Index,
+				ID:        d.ID,
+				Name:      d.Name,
+				Arguments: d.Arguments,
+			})
+		})
+		ask.OnThinkingDone(func() {
+			m.program.Send(clientmsg.ThinkingDoneMsg{SessionID: sessionID})
+		})
+		ask.OnToolStart(func(d events.ToolExecStartData) {
+			if m.fileTracker != nil {
+				m.fileTracker.ToolExecStart(d.Params)
+			}
+			m.program.Send(clientmsg.ToolExecStartMsg{
+				SessionID:    sessionID,
+				ToolName:     d.ToolName,
+				Params:       d.Params,
+				EstimatedTok: d.PredictedTokens,
+			})
+		})
+		ask.OnToolEnd(func(d events.ToolExecEndData) {
+			var diffText string
+			var diffAdds, diffDels int
+			var diffFile string
+			if m.fileTracker != nil {
+				m.fileTracker.ToolExecEnd()
+				changes := m.fileTracker.Snapshot()
+				m.sidebar.SetFileChanges(changes)
+				if len(changes) > 0 {
+					last := changes[len(changes)-1]
+					diffText = last.Diff
+					diffAdds = last.Additions
+					diffDels = last.Deletions
+					diffFile = last.File
+				}
+			}
+			m.program.Send(clientmsg.ToolExecEndMsg{
+				SessionID:  sessionID,
+				ToolName:   d.ToolName,
+				ToolCallID: d.ToolCallID,
+				Success:    d.Success,
+				Result:     d.Result,
+				Error:      d.Error,
+				Duration:   d.Duration,
+				DiffText:   diffText,
+				DiffAdds:   diffAdds,
+				DiffDels:   diffDels,
+				DiffFile:   diffFile,
+			})
+		})
+		ask.OnExecutionSummary(func(d events.ExecutionSummaryData) {
+			m.program.Send(clientmsg.ExecutionSummaryMsg{
+				SessionID:  sessionID,
+				Duration:   d.TotalDuration,
+				TokensUsed: d.TokensUsed,
+				ToolCalls:  d.ToolCalls,
+			})
+		})
+		ask.OnCycleEnd(func(d events.CycleInfo) {
+			m.program.Send(clientmsg.IterationMsg{SessionID: sessionID, Iteration: d.Iteration})
+		})
+		ask.OnAskUser(func(d events.AskUserRequestData) {
+			m.pendingAskUser = &d
+			m.program.Send(clientmsg.AskUserEventMsg{})
+		})
+		ask.OnPermissionRequest(func(d events.PermissionRequestData) {
+			m.pendingPermission = &d
+			m.program.Send(clientmsg.PermissionRequestMsg{
+				ToolName:      d.ToolName,
+				Reason:        d.Reason,
+				SecurityLevel: int(d.SecurityLevel),
+			})
+		})
+		ask.OnError(func(errStr string) {
+			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: errors.New(errStr)})
+		})
+		ask.OnLLMTimeout(func(d events.LLMTimeoutData) {
+			m.program.Send(clientmsg.LLMTimeoutMsg{
+				SessionID: sessionID,
+				Timeout:   d.Timeout,
+				Elapsed:   d.Elapsed,
+				Error:     d.Error,
+			})
+		})
+		ask.OnAnswer(func(answer string) {
+			m.program.Send(clientmsg.FinalAnswerMsg{SessionID: sessionID, Content: answer})
+		})
+
+		sendStart := time.Now()
+		_, err = ask.Run()
 		elapsed := time.Since(sendStart)
 		if err != nil {
 			if l := m.getLogger(); l != nil {
@@ -1268,21 +1066,25 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 
 func (m *rootModel) handleAgentSwitch(e clientmsg.AgentSwitchMsg) (tea.Model, tea.Cmd) {
 	if m.executing {
-		m.stopEventLoop()
 		m.executing = false
 	}
 
-	newAgent, err := m.app.ResolveAgent(e.AgentName)
-	if err != nil {
-		return m, m.notifBar.Add(data.Notification{Message: fmt.Sprintf("Agent %q 不可用: %v", e.AgentName, err), Level: data.NotifError})
+	// Update the app config with the new agent name
+	cfg := m.app.Config()
+	if cfg != nil {
+		cfg.LastAgent = e.AgentName
+		_ = cfg.Save()
 	}
 
-	m.agent = newAgent
-	m.statusBar.AgentName = newAgent.Name()
-	if model := newAgent.Model(); model != nil {
-		m.updateModelDisplay(model)
+	m.statusBar.AgentName = e.AgentName
+
+	// Update model display from the new agent's configured model
+	agent := m.app.Agents().Get(e.AgentName)
+	if agent != nil && agent.Model != "" {
+		if modelCfg := m.app.Models().Get(agent.Model); modelCfg != nil {
+			m.updateModelDisplay(modelCfg)
+		}
 	}
-	m.startEventLoop()
 
 	return m, m.notifBar.Add(data.Notification{
 		Message: fmt.Sprintf("已切换到 Agent: %s", e.AgentName),
@@ -1315,8 +1117,7 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 	case "model":
 		if len(e.Args) > 0 && result.Success {
 			modelName := e.Args[0]
-			if modelCfg := m.app.Models().Get(modelName); modelCfg != nil && m.agent != nil {
-				m.agent.SetModel(modelCfg)
+			if modelCfg := m.app.Models().Get(modelName); modelCfg != nil {
 				m.welcome.Data.ModelName = displayName(modelCfg.Title, modelCfg.Name)
 				m.updateModelDisplay(modelCfg)
 				if cfg := m.app.Config(); cfg != nil {
@@ -1328,7 +1129,6 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 		m.input.Models, _ = reloadModels(m.app)
 	case "doctor":
 		m.handlePostExit()
-		m.stopEventLoop()
 		return m, tea.Quit
 	}
 
@@ -1356,8 +1156,12 @@ func (m *rootModel) refreshAfterChatOp(result CommandResult) tea.Cmd {
 		m.statusBar.AgentName = sessionMeta.AgentName
 		m.welcome.Data.SessionID = sessionMeta.SessionID
 	}
-	if model := m.agent.Model(); model != nil {
-		m.updateModelDisplay(model)
+
+	// Update model display from config
+	if cfg := m.app.Config(); cfg != nil && cfg.LastModel != "" {
+		if modelCfg := m.app.Models().Get(cfg.LastModel); modelCfg != nil {
+			m.updateModelDisplay(modelCfg)
+		}
 	}
 
 	m.conversationList.Clear()
