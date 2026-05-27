@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	goreactcore "github.com/DotNetAge/goreact/core"
+	goreactsession "github.com/DotNetAge/goreact/session"
 )
 
 type sessionListParams struct {
@@ -29,7 +29,7 @@ func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (a
 	}
 
 	if p.Agent != "" {
-		filtered := make([]goreactcore.SessionInfo, 0)
+		filtered := make([]goreactsession.SessionInfo, 0)
 		for i := range sessions {
 			if sessions[i].AgentName == p.Agent {
 				filtered = append(filtered, sessions[i])

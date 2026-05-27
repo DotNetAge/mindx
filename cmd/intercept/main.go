@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DotNetAge/goreact"
-	react "github.com/DotNetAge/goreact/core"
+	"github.com/DotNetAge/goreact/config"
+	"github.com/DotNetAge/goreact/session"
 	"github.com/DotNetAge/mindx/internal/core"
-	"github.com/DotNetAge/mindx/pkg/session"
+	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
 
 var (
@@ -78,8 +78,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	var agentCfg *react.AgentConfig
-	var modelCfg *react.ModelConfig
+	var agentCfg *config.AgentConfig
+	var modelCfg *config.ModelConfig
 	for _, a := range agentList {
 		modelCfg = app.Models().Get(a.Model)
 		if modelCfg != nil {
@@ -101,30 +101,28 @@ func main() {
 		os.Exit(1)
 	}
 	defer os.RemoveAll(tmpDir)
-	tmpStore, err := session.NewFileSessionStore(tmpDir)
+	tmpStore, err := mindxses.NewFileSessionStore(tmpDir)
 	if err != nil {
 		fmt.Printf("Error creating temp session store: %v\n", err)
 		os.Exit(1)
 	}
 
-	agent, err := goreact.NewAgent(
-		goreact.WithConfig(agentCfg),
-		goreact.WithModel(modelCfg),
-		goreact.WithSkillDir(app.Settings().SkillsDir()),
-		goreact.WithRuleRegistry(app.RuleRegistry()),
-		goreact.WithSessionStore(tmpStore),
-	)
+	rt, err := app.ResolveRuntime(agentCfg.Name)
 	if err != nil {
-		fmt.Printf("Error creating agent: %v\n", err)
+		fmt.Printf("Error resolving runtime: %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Printf("Agent: %s (%s), Model: %s\n", agentCfg.Name, agentCfg.Role, modelCfg.Name)
 	fmt.Println("Sending: '我想开发一个AI系统'")
 
+	s := session.NewSession("test-session", agentCfg.Name,
+		session.WithStore(tmpStore),
+	)
+
 	done := make(chan struct{})
 	go func() {
-		result, err := agent.Ask("test-session", "我想开发一个AI系统")
+		result, err := rt.Ask(agentCfg.Name, "我想开发一个AI系统", s).Run()
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 		} else {

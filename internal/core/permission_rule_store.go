@@ -1,10 +1,10 @@
 package core
 
 import (
-	goreactcore "github.com/DotNetAge/goreact/core"
+	"github.com/DotNetAge/goreact/rule"
 )
 
-// MindxPermissionRuleStore implements goreact's PermissionRuleStore interface
+// MindxPermissionRuleStore implements rule.PermissionRuleStore
 // by reading/writing permission rules from MindxConfig (persisted in mindx.json).
 //
 // This is the "秘籍" integration: rules are stored alongside other user preferences
@@ -22,20 +22,20 @@ func NewMindxPermissionRuleStore(config *MindxConfig) *MindxPermissionRuleStore 
 	return &MindxPermissionRuleStore{config: config}
 }
 
-// Load implements core.PermissionRuleStore.
-func (s *MindxPermissionRuleStore) Load() (*goreactcore.PermissionRules, error) {
+// Load implements rule.PermissionRuleStore.
+func (s *MindxPermissionRuleStore) Load() (*rule.PermissionRules, error) {
 	if s.config == nil {
-		return &goreactcore.PermissionRules{}, nil
+		return &rule.PermissionRules{}, nil
 	}
 	rules := s.config.PermissionRules
 	if rules == nil {
-		return &goreactcore.PermissionRules{}, nil
+		return &rule.PermissionRules{}, nil
 	}
 	return rules, nil
 }
 
-// Save implements core.PermissionRuleStore.
-func (s *MindxPermissionRuleStore) Save(rules *goreactcore.PermissionRules) error {
+// Save implements rule.PermissionRuleStore.
+func (s *MindxPermissionRuleStore) Save(rules *rule.PermissionRules) error {
 	if s.config == nil {
 		return nil
 	}

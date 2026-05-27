@@ -6,17 +6,17 @@ import (
 	"fmt"
 	"time"
 
-	goreactcore "github.com/DotNetAge/goreact/core"
+	goreactconfig "github.com/DotNetAge/goreact/config"
 )
 
 func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any, error) {
 	agents := d.app.Agents()
 	if agents == nil {
-		return []goreactcore.AgentConfig{}, nil
+		return []goreactconfig.AgentConfig{}, nil
 	}
 	list := agents.List()
 	if list == nil {
-		return []goreactcore.AgentConfig{}, nil
+		return []goreactconfig.AgentConfig{}, nil
 	}
 
 	type agentEntry struct {
@@ -118,7 +118,7 @@ func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("agent %q already exists", p.Name)
 	}
 
-	newAgent := goreactcore.AgentConfig{
+	newAgent := goreactconfig.AgentConfig{
 		Name:         p.Name,
 		Role:         p.Role,
 		Description:  p.Description,

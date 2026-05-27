@@ -9,22 +9,23 @@ import (
 )
 
 func TestSettings_Directories(t *testing.T) {
-	s := &Settings{Test: true}
+	tmpDir := t.TempDir()
+	s := &Settings{Test: true, testDir: tmpDir}
 
 	tests := []struct {
 		name     string
 		got      string
 		expected string
 	}{
-		{"SkillsDir", s.SkillsDir(), "/tmp/mindx-test/skills"},
-		{"ModelsFile", s.ModelsFile(), "/tmp/mindx-test/settings/models.yml"},
-		// {"ProgramDir", s.ProgramDir(), "/tmp/mindx-test/programs"},
-		// {"DocumentDir", s.DocumentDir(), "/tmp/mindx-test/documents"},
-		{"DataDir", s.DataDir(), "/tmp/mindx-test/data"},
-		{"AgentsDir", s.AgentsDir(), "/tmp/mindx-test/agents"},
-		{"RulesFile", s.RulesFile(), "/tmp/mindx-test/settings/rules.yml"},
-		{"SessionsDir", s.SessionsDir(), "/tmp/mindx-test/sessions"},
-		{"SchedulesDir", s.SchedulesDir(), "/tmp/mindx-test/data/schedules"},
+		{"SkillsDir", s.SkillsDir(), filepath.Join(tmpDir, "skills")},
+		{"ModelsFile", s.ModelsFile(), filepath.Join(tmpDir, "settings", "models.yml")},
+		// {"ProgramDir", s.ProgramDir(), "/tmp/mindh-test/programs"},
+		// {"DocumentDir", s.DocumentDir(), "/tmp/mindh-test/documents"},
+		{"DataDir", s.DataDir(), filepath.Join(tmpDir, "data")},
+		{"AgentsDir", s.AgentsDir(), filepath.Join(tmpDir, "agents")},
+		{"RulesFile", s.RulesFile(), filepath.Join(tmpDir, "settings", "rules.yml")},
+		{"SessionsDir", s.SessionsDir(), filepath.Join(tmpDir, "sessions")},
+		{"SchedulesDir", s.SchedulesDir(), filepath.Join(tmpDir, "data", "schedules")},
 	}
 
 	for _, tt := range tests {
@@ -38,9 +39,6 @@ func TestSettings_Directories(t *testing.T) {
 
 func TestNewApp(t *testing.T) {
 	tmpDir := t.TempDir()
-
-	os.Setenv("MINDX_WORKSPACE", tmpDir)
-	defer os.Unsetenv("MINDX_WORKSPACE")
 
 	os.MkdirAll(filepath.Join(tmpDir, "agents"), 0755)
 	os.MkdirAll(filepath.Join(tmpDir, "settings"), 0755)

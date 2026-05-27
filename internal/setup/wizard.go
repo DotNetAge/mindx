@@ -15,7 +15,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	goragutils "github.com/DotNetAge/gorag/utils"
-	goreactcore "github.com/DotNetAge/goreact/core"
+	goreactconfig "github.com/DotNetAge/goreact/config"
 	"gopkg.in/yaml.v3"
 
 	"github.com/DotNetAge/mindx/internal/core"
@@ -391,7 +391,7 @@ func parseProviderAndModels(providersPath, modelsPath string) ([]providerItem, [
 	// Load providers from providers.yml (if exists)
 	if data, err := os.ReadFile(providersPath); err == nil {
 		var provConfig struct {
-			Providers []goreactcore.ProviderConfig `yaml:"providers"`
+			Providers []goreactconfig.ProviderConfig `yaml:"providers"`
 		}
 		if err := yaml.Unmarshal(data, &provConfig); err == nil {
 			for _, p := range provConfig.Providers {
@@ -412,8 +412,8 @@ func parseProviderAndModels(providersPath, modelsPath string) ([]providerItem, [
 		}
 
 		var config struct {
-			Providers []goreactcore.ProviderConfig `yaml:"providers"`
-			Models    []goreactcore.ModelConfig    `yaml:"models"`
+			Providers []goreactconfig.ProviderConfig `yaml:"providers"`
+			Models    []goreactconfig.ModelConfig    `yaml:"models"`
 		}
 		if err := yaml.Unmarshal(data, &config); err != nil {
 			return nil, nil, err
@@ -435,7 +435,7 @@ func parseProviderAndModels(providersPath, modelsPath string) ([]providerItem, [
 	}
 
 	var modelConfig struct {
-		Models []goreactcore.ModelConfig `yaml:"models"`
+		Models []goreactconfig.ModelConfig `yaml:"models"`
 	}
 	if err := yaml.Unmarshal(data, &modelConfig); err != nil {
 		return nil, nil, err

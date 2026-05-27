@@ -179,19 +179,13 @@ func TestIntegration_ConcurrentCommands(t *testing.T) {
 }
 
 func loadEnv() error {
-	if os.Getenv("MINDX_WORKSPACE") == "" {
-		_, filename, _, _ := runtime.Caller(0)
-		projectRoot := filepath.Join(filepath.Dir(filename), "../..")
-		envFile := filepath.Join(projectRoot, ".env")
+	_, filename, _, _ := runtime.Caller(0)
+	projectRoot := filepath.Join(filepath.Dir(filename), "../..")
+	envFile := filepath.Join(projectRoot, ".env")
 
-		if _, err := os.Stat(envFile); err == nil {
-			if err := godotenv.Load(envFile); err != nil {
-				return fmt.Errorf("failed to load .env file: %w", err)
-			}
-		}
-
-		if os.Getenv("MINDX_WORKSPACE") == "" {
-			return fmt.Errorf("MINDX_WORKSPACE not set")
+	if _, err := os.Stat(envFile); err == nil {
+		if err := godotenv.Load(envFile); err != nil {
+			return fmt.Errorf("failed to load .env file: %w", err)
 		}
 	}
 

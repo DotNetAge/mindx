@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DotNetAge/goreact/core"
+	goreactsession "github.com/DotNetAge/goreact/session"
 )
 
 func TestFileStoreWithComplexContent(t *testing.T) {
@@ -64,7 +64,7 @@ func TestFileStoreWithComplexContent(t *testing.T) {
 	t.Run("append and retrieve all formats", func(t *testing.T) {
 		for i, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				msg := core.Message{
+				msg := goreactsession.Message{
 					Role:      "user",
 					Content:   tc.content,
 					Timestamp: time.Now().UnixMilli() + int64(i),
@@ -155,7 +155,7 @@ func TestFileStoreYAMLFormat(t *testing.T) {
 
 	markdownContent := "# Complex Markdown\n\n## Features\n- **Bold** and *italic*\n- `code inline`\n- [links](http://example.com)\n\n```json\n{ \"key\": \"value\" }\n```\n\n> Blockquote with \"quotes\" and 'apostrophes'"
 
-	msg := core.Message{
+	msg := goreactsession.Message{
 		Role:      "assistant",
 		Content:   markdownContent,
 		Timestamp: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC).UnixMilli(),

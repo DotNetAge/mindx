@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	goreactcore "github.com/DotNetAge/goreact/core"
+	"github.com/DotNetAge/goreact/rule"
 )
 
 type DaemonConfig struct {
@@ -38,7 +38,7 @@ type MindxConfig struct {
 	// PermissionRules stores user-defined allow/deny/ask rules.
 	// Loaded by MindxPermissionRuleStore and injected into goreact's PermissionChain.
 	// This is a low-frequency "秘籍" feature — most users configure via Skill AllowedTools instead.
-	PermissionRules *goreactcore.PermissionRules `json:"permission_rules,omitempty"`
+	PermissionRules *rule.PermissionRules `json:"permission_rules,omitempty"`
 
 	filePath string `json:"-"`
 }

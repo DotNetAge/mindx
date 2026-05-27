@@ -146,4 +146,6 @@ replace github.com/DotNetAge/goreact => ../goreact
 
 replace github.com/DotNetAge/gochat => ../gochat
 
+replace github.com/DotNetAge/gort => ../gort
+
 replace github.com/coder/hnsw => ./third_party/hnsw
