@@ -5,8 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/DotNetAge/goreact"
-	goreactcore "github.com/DotNetAge/goreact/core"
+	"github.com/DotNetAge/goreact/config"
 	"gopkg.in/yaml.v3"
 
 	"github.com/DotNetAge/mindx/internal/core"
@@ -107,7 +106,7 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 }
 
 func updateProviderCredRef(modelsPath, providerName string) error {
-	registry, err := goreact.LoadModels(modelsPath)
+	registry, err := config.LoadModels(modelsPath)
 	if err != nil {
 		return err
 	}
@@ -120,12 +119,12 @@ func updateProviderCredRef(modelsPath, providerName string) error {
 	registry.RegisterProvider(providerName, provider)
 
 	type modelsWrapper struct {
-		Providers []goreactcore.ProviderConfig `yaml:"providers"`
-		Models    []goreactcore.ModelConfig    `yaml:"models"`
+		Providers []config.ProviderConfig `yaml:"providers"`
+		Models    []config.ModelConfig    `yaml:"models"`
 	}
 
 	providers := registry.Providers()
-	providerCfgs := make([]goreactcore.ProviderConfig, 0, len(providers))
+	providerCfgs := make([]config.ProviderConfig, 0, len(providers))
 	for _, p := range providers {
 		if p != nil {
 			providerCfgs = append(providerCfgs, *p)
@@ -133,7 +132,7 @@ func updateProviderCredRef(modelsPath, providerName string) error {
 	}
 
 	rawModels := registry.ListRaw()
-	modelCfgs := make([]goreactcore.ModelConfig, 0, len(rawModels))
+	modelCfgs := make([]config.ModelConfig, 0, len(rawModels))
 	for _, m := range rawModels {
 		if m != nil {
 			modelCfgs = append(modelCfgs, *m)
@@ -154,7 +153,7 @@ func updateProviderCredRef(modelsPath, providerName string) error {
 }
 
 func updateAllAgentsModel(agentsDir, modelName string) error {
-	registry, err := goreact.LoadAgentsFrom(agentsDir)
+	registry, err := config.LoadAgentsFrom(agentsDir)
 	if err != nil {
 		return err
 	}

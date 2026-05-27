@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	goreactcore "github.com/DotNetAge/goreact/core"
+	goreactmemory "github.com/DotNetAge/goreact/memory"
 )
 
 type memoryQueryParams struct {
@@ -30,19 +30,19 @@ func (d *Daemon) handleMemoryQuery(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("memory service not available (embedder not configured)")
 	}
 
-	opts := []goreactcore.RetrieveOption{}
+	opts := []goreactmemory.RetrieveOption{}
 	if p.Limit > 0 {
-		opts = append(opts, goreactcore.WithMemoryLimit(p.Limit))
+		opts = append(opts, goreactmemory.WithMemoryLimit(p.Limit))
 	}
 	if p.MinScore > 0 {
-		opts = append(opts, goreactcore.WithMinScore(p.MinScore))
+		opts = append(opts, goreactmemory.WithMinScore(p.MinScore))
 	}
 	if p.Type != "" {
 		switch p.Type {
 		case "longterm":
-			opts = append(opts, goreactcore.WithMemoryTypes(goreactcore.MemoryTypeLongTerm))
+			opts = append(opts, goreactmemory.WithMemoryTypes(goreactmemory.MemoryTypeLongTerm))
 		case "session":
-			opts = append(opts, goreactcore.WithMemoryTypes(goreactcore.MemoryTypeSession))
+			opts = append(opts, goreactmemory.WithMemoryTypes(goreactmemory.MemoryTypeSession))
 		}
 	}
 
@@ -52,7 +52,7 @@ func (d *Daemon) handleMemoryQuery(_ context.Context, params json.RawMessage) (a
 	}
 
 	if records == nil {
-		return []goreactcore.MemoryRecord{}, nil
+		return []goreactmemory.MemoryRecord{}, nil
 	}
 	return records, nil
 }
@@ -78,16 +78,16 @@ func (d *Daemon) handleMemoryStore(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("memory service not available (embedder not configured)")
 	}
 
-	record := goreactcore.MemoryRecord{
+	record := goreactmemory.MemoryRecord{
 		Title:     p.Title,
 		Content:   p.Content,
 		Tags:      p.Tags,
 		CreatedAt: time.Now(),
 	}
 	if p.Type == "session" {
-		record.Type = goreactcore.MemoryTypeSession
+		record.Type = goreactmemory.MemoryTypeSession
 	} else {
-		record.Type = goreactcore.MemoryTypeLongTerm
+		record.Type = goreactmemory.MemoryTypeLongTerm
 	}
 
 	id, err := mem.Store(context.Background(), record)

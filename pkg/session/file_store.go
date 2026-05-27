@@ -11,16 +11,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DotNetAge/goreact/core"
+	goreactsession "github.com/DotNetAge/goreact/session"
 	"gopkg.in/yaml.v3"
 )
 
 type yamlMessage struct {
-	Role       string           `yaml:"role"`
-	Content    string           `yaml:"content"`
-	Timestamp  int64            `yaml:"timestamp"`
-	ToolCallID string           `yaml:"tool_call_id,omitempty"`
-	ToolCalls  []yamlToolCall   `yaml:"tool_calls,omitempty"`
+	Role       string         `yaml:"role"`
+	Content    string         `yaml:"content"`
+	Timestamp  int64          `yaml:"timestamp"`
+	ToolCallID string         `yaml:"tool_call_id,omitempty"`
+	ToolCalls  []yamlToolCall `yaml:"tool_calls,omitempty"`
 }
 
 type yamlToolCall struct {
@@ -29,7 +29,7 @@ type yamlToolCall struct {
 	Arguments string `yaml:"arguments"`
 }
 
-func newYamlMessage(msg core.Message) yamlMessage {
+func newYamlMessage(msg goreactsession.Message) yamlMessage {
 	var ymlTCs []yamlToolCall
 	for _, tc := range msg.ToolCalls {
 		ymlTCs = append(ymlTCs, yamlToolCall{
@@ -47,17 +47,17 @@ func newYamlMessage(msg core.Message) yamlMessage {
 	}
 }
 
-func (ym yamlMessage) toCoreMessage() core.Message {
+func (ym yamlMessage) toCoreMessage() goreactsession.Message {
 	decoded, _ := base64.StdEncoding.DecodeString(ym.Content)
-	var tcs []core.ToolCall
+	var tcs []goreactsession.ToolCall
 	for _, ytc := range ym.ToolCalls {
-		tcs = append(tcs, core.ToolCall{
+		tcs = append(tcs, goreactsession.ToolCall{
 			ID:        ytc.ID,
 			Name:      ytc.Name,
 			Arguments: ytc.Arguments,
 		})
 	}
-	return core.Message{
+	return goreactsession.Message{
 		Role:       ym.Role,
 		Content:    string(decoded),
 		Timestamp:  ym.Timestamp,
@@ -66,12 +66,12 @@ func (ym yamlMessage) toCoreMessage() core.Message {
 	}
 }
 
-var _ core.SessionStore = (*FileSessionStore)(nil)
+var _ goreactsession.SessionStore = (*FileSessionStore)(nil)
 
 type FileSessionStore struct {
 	rootDir        string
 	slideMu        sync.RWMutex
-	slideHandler   core.SlideHandler
+	slideHandler   goreactsession.SlideHandler
 	tokenEstimator TokenEstimator
 }
 
@@ -87,7 +87,7 @@ func NewFileSessionStore(rootDir string) (*FileSessionStore, error) {
 
 	return &FileSessionStore{
 		rootDir:        absPath,
-		slideHandler:   core.NoopSlideHandler,
+		slideHandler:   goreactsession.NoopSlideHandler,
 		tokenEstimator: NewTokenEstimator(),
 	}, nil
 }
@@ -132,7 +132,7 @@ func (s *FileSessionStore) findSessionDir(sessionID string) string {
 	return result
 }
 
-func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentName string, msg core.Message) error {
+func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentName string, msg goreactsession.Message) error {
 	if msg.Role == "system" {
 		return nil
 	}
@@ -175,8 +175,8 @@ func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentNa
 	return nil
 }
 
-func (s *FileSessionStore) Get(ctx context.Context, sessionID string) ([]core.Message, error) {
-	var msgs []core.Message
+func (s *FileSessionStore) Get(ctx context.Context, sessionID string) ([]goreactsession.Message, error) {
+	var msgs []goreactsession.Message
 
 	err := filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || info.Name() != "session.yml" {
@@ -199,7 +199,7 @@ func (s *FileSessionStore) Get(ctx context.Context, sessionID string) ([]core.Me
 	return msgs, err
 }
 
-func (s *FileSessionStore) CurrentContext(ctx context.Context, agentName string, maxTokens int64) ([]core.Message, error) {
+func (s *FileSessionStore) CurrentContext(ctx context.Context, agentName string, maxTokens int64) ([]goreactsession.Message, error) {
 	sessionID, err := s.findSessionByAgent(agentName)
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func (s *FileSessionStore) CurrentContext(ctx context.Context, agentName string,
 		return nil, err
 	}
 
-	var result []core.Message
+	var result []goreactsession.Message
 	var totalTokens int64
 	for i := len(allMsgs) - 1; i >= 0; i-- {
 		msg := allMsgs[i]
@@ -231,12 +231,14 @@ func (s *FileSessionStore) CurrentContext(ctx context.Context, agentName string,
 		s.slideMu.RLock()
 		handler := s.slideHandler
 		s.slideMu.RUnlock()
-		core.EmitSlideEvent(handler, ctx, core.SlideEvent{
-			SessionID: sessionID,
-			Slided:    evicted,
-			Remaining: len(result),
-			Timestamp: time.Now().UnixMilli(),
-		})
+		if handler != nil {
+			handler(ctx, goreactsession.SlideEvent{
+				SessionID: sessionID,
+				Slided:    evicted,
+				Remaining: len(result),
+				Timestamp: time.Now().UnixMilli(),
+			})
+		}
 	}
 
 	return result, nil
@@ -266,7 +268,7 @@ func (s *FileSessionStore) Delete(ctx context.Context, timestamp int64, sessionI
 		return err
 	}
 
-	var filtered []core.Message
+	var filtered []goreactsession.Message
 	for _, m := range msgs {
 		if m.Timestamp != timestamp {
 			filtered = append(filtered, m)
@@ -286,7 +288,7 @@ func (s *FileSessionStore) Clear(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-func (s *FileSessionStore) SetSlideHandler(handler core.SlideHandler) {
+func (s *FileSessionStore) SetSlideHandler(handler goreactsession.SlideHandler) {
 	s.slideMu.Lock()
 	defer s.slideMu.Unlock()
 	s.slideHandler = handler
@@ -303,7 +305,7 @@ type yamlUsage struct {
 	RemainTokens int       `yaml:"remain_tokens"`
 }
 
-func toYamlUsage(u core.TokenUsage) yamlUsage {
+func toYamlUsage(u goreactsession.TokenUsage) yamlUsage {
 	return yamlUsage{
 		Timestamp:    u.Timestamp,
 		InputTokens:  u.InputTokens,
@@ -312,8 +314,8 @@ func toYamlUsage(u core.TokenUsage) yamlUsage {
 	}
 }
 
-func fromYamlUsage(yu yamlUsage) core.TokenUsage {
-	return core.TokenUsage{
+func fromYamlUsage(yu yamlUsage) goreactsession.TokenUsage {
+	return goreactsession.TokenUsage{
 		Timestamp:    yu.Timestamp,
 		InputTokens:  yu.InputTokens,
 		OutputTokens: yu.OutputTokens,
@@ -321,7 +323,7 @@ func fromYamlUsage(yu yamlUsage) core.TokenUsage {
 	}
 }
 
-func (s *FileSessionStore) AppendTokenUsage(_ context.Context, sessionID string, usage core.TokenUsage) error {
+func (s *FileSessionStore) AppendTokenUsage(_ context.Context, sessionID string, usage goreactsession.TokenUsage) error {
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
 		return fmt.Errorf("session %q not found", sessionID)
@@ -346,7 +348,7 @@ func (s *FileSessionStore) AppendTokenUsage(_ context.Context, sessionID string,
 	return os.WriteFile(path, data, 0644)
 }
 
-func (s *FileSessionStore) GetTokenUsages(_ context.Context, sessionID string) ([]core.TokenUsage, error) {
+func (s *FileSessionStore) GetTokenUsages(_ context.Context, sessionID string) ([]goreactsession.TokenUsage, error) {
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
 		return nil, nil
@@ -366,7 +368,7 @@ func (s *FileSessionStore) GetTokenUsages(_ context.Context, sessionID string) (
 		return nil, fmt.Errorf("parse usages file: %w", err)
 	}
 
-	usages := make([]core.TokenUsage, len(yamlUsages))
+	usages := make([]goreactsession.TokenUsage, len(yamlUsages))
 	for i, yu := range yamlUsages {
 		usages[i] = fromYamlUsage(yu)
 	}
@@ -374,8 +376,8 @@ func (s *FileSessionStore) GetTokenUsages(_ context.Context, sessionID string) (
 	return usages, nil
 }
 
-func (s *FileSessionStore) GetByRole(ctx context.Context, agent string) (*core.SessionInfo, error) {
-	var bestInfo *core.SessionInfo
+func (s *FileSessionStore) GetByRole(ctx context.Context, agent string) (*goreactsession.SessionInfo, error) {
+	var bestInfo *goreactsession.SessionInfo
 
 	agentDir := s.agentDir(agent)
 
@@ -397,7 +399,7 @@ func (s *FileSessionStore) GetByRole(ctx context.Context, agent string) (*core.S
 	})
 
 	if bestInfo == nil {
-		return nil, core.ErrSessionNotFound
+		return nil, goreactsession.ErrSessionNotFound
 	}
 
 	messages, _ := s.Get(ctx, bestInfo.SessionID)
@@ -405,8 +407,8 @@ func (s *FileSessionStore) GetByRole(ctx context.Context, agent string) (*core.S
 	return bestInfo, nil
 }
 
-func (s *FileSessionStore) ListSessions(ctx context.Context) ([]core.SessionInfo, error) {
-	var infos []core.SessionInfo
+func (s *FileSessionStore) ListSessions(ctx context.Context) ([]goreactsession.SessionInfo, error) {
+	var infos []goreactsession.SessionInfo
 
 	_ = filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || info.Name() != "session.yml" {
@@ -459,12 +461,12 @@ func (s *FileSessionStore) findSessionByAgent(agentName string) (string, error) 
 	})
 
 	if bestSession == "" {
-		return "", core.ErrSessionNotFound
+		return "", goreactsession.ErrSessionNotFound
 	}
 	return bestSession, nil
 }
 
-func parseMessagesFromFile(path string) ([]core.Message, error) {
+func parseMessagesFromFile(path string) ([]goreactsession.Message, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -475,7 +477,7 @@ func parseMessagesFromFile(path string) ([]core.Message, error) {
 		return nil, fmt.Errorf("unmarshal yaml: %w", err)
 	}
 
-	msgs := make([]core.Message, len(ymlMsgs))
+	msgs := make([]goreactsession.Message, len(ymlMsgs))
 	for i, ym := range ymlMsgs {
 		msgs[i] = ym.toCoreMessage()
 	}
@@ -483,7 +485,7 @@ func parseMessagesFromFile(path string) ([]core.Message, error) {
 	return msgs, nil
 }
 
-func writeMessagesToFile(path string, msgs []core.Message) error {
+func writeMessagesToFile(path string, msgs []goreactsession.Message) error {
 	ymlMsgs := make([]yamlMessage, len(msgs))
 	for i, msg := range msgs {
 		ymlMsgs[i] = newYamlMessage(msg)
@@ -496,13 +498,13 @@ func writeMessagesToFile(path string, msgs []core.Message) error {
 	return os.WriteFile(path, data, 0600)
 }
 
-func statSessionInfo(agentName, sessionID, sessionDirPath string) (*core.SessionInfo, error) {
+func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goreactsession.SessionInfo, error) {
 	info, err := os.Stat(sessionDirPath)
 	if err != nil {
 		return nil, err
 	}
 
-	si := &core.SessionInfo{
+	si := &goreactsession.SessionInfo{
 		SessionID:      sessionID,
 		AgentName:      agentName,
 		LastActivityAt: info.ModTime(),
@@ -540,7 +542,7 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*core.Session
 func (s *FileSessionStore) GetSessionMeta(sessionID string) (*SessionMeta, error) {
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
-		return nil, core.ErrSessionNotFound
+		return nil, goreactsession.ErrSessionNotFound
 	}
 	return LoadSessionMeta(dirPath)
 }
@@ -567,10 +569,10 @@ func (s *FileSessionStore) updateSessionMeta(sessionDir string) {
 //  3. Creates session directory structure: <root>/<agent>/<session_id>/tmp
 //  4. Persists session metadata (for future GetMeta calls)
 //  5. Returns complete SessionInfo with directory context
-func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...core.SessionOption) (*core.SessionInfo, error) {
+func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...goreactsession.SessionOption) (*goreactsession.SessionInfo, error) {
 	sessionID := generateSessionID()
 
-	sessionInfo := &core.SessionInfo{
+	sessionInfo := &goreactsession.SessionInfo{
 		SessionID:      sessionID,
 		AgentName:      agentName,
 		CreatedAt:      time.Now(),
@@ -616,10 +618,10 @@ func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...c
 
 // GetMeta returns complete session metadata including directory information.
 // It loads both GoReact SessionInfo and extended metadata from disk.
-func (s *FileSessionStore) GetMeta(_ context.Context, sessionID string) (*core.SessionInfo, error) {
+func (s *FileSessionStore) GetMeta(_ context.Context, sessionID string) (*goreactsession.SessionInfo, error) {
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
-		return nil, core.ErrSessionNotFound
+		return nil, goreactsession.ErrSessionNotFound
 	}
 
 	meta, err := LoadSessionMeta(dirPath)
@@ -627,7 +629,7 @@ func (s *FileSessionStore) GetMeta(_ context.Context, sessionID string) (*core.S
 		return nil, fmt.Errorf("load session meta: %w", err)
 	}
 
-	return &core.SessionInfo{
+	return &goreactsession.SessionInfo{
 		SessionID:      sessionID,
 		AgentName:      meta.AgentName,
 		ProjectDir:     meta.ProjectWorkingDir,
@@ -642,7 +644,7 @@ func (s *FileSessionStore) GetMeta(_ context.Context, sessionID string) (*core.S
 func (s *FileSessionStore) ResolveSessionDir(sessionID string) (string, error) {
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
-		return "", core.ErrSessionNotFound
+		return "", goreactsession.ErrSessionNotFound
 	}
 	return dirPath, nil
 }

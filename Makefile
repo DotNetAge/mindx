@@ -175,6 +175,14 @@ install:
 		LABEL="com.dotnetage.$(BINARY_NAME)"; \
 		LAUNCH_AGENTS="$$HOME/Library/LaunchAgents"; \
 		mkdir -p "$$LAUNCH_AGENTS" "$$HOME/.mindx/logs"; \
+		echo "$(CYAN)  ⟳ Cleaning up old services...$(NC)" && \
+		for old_plist in "$$LAUNCH_AGENTS"/com.mindx.*.plist "$$LAUNCH_AGENTS"/com.dotnetage.mindx.plist; do \
+			if [ -f "$$old_plist" ]; then \
+				old_label=$$(basename "$$old_plist" .plist); \
+				launchctl unload "$$old_plist" 2>/dev/null && echo "     unloaded $$old_label" || true; \
+				rm -f "$$old_plist" && echo "     removed $$old_plist"; \
+			fi; \
+		done; \
 		printf '%s\n' \
 			'<?xml version="1.0" encoding="UTF-8"?>' \
 			'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
@@ -197,8 +205,6 @@ install:
 			"    <string>$$HOME_DIR/.mindx/logs/daemon.err</string>" \
 			'    <key>EnvironmentVariables</key>' \
 			'    <dict>' \
-			'        <key>MINDX_WORKSPACE</key>' \
-			"        <string>$$HOME_DIR/.mindx</string>" \
 			'        <key>HOME</key>' \
 			"        <string>$$HOME_DIR</string>" \
 			'    </dict>' \
@@ -229,7 +235,6 @@ install:
 			"ExecStart=$$MINDX_BIN start" \
 			'Restart=on-failure' \
 			'RestartSec=5' \
-			"Environment=MINDX_WORKSPACE=$$HOME/.mindx" \
 			'' \
 			'[Install]' \
 			'WantedBy=default.target' \

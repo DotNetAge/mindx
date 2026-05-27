@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	goreactcore "github.com/DotNetAge/goreact/core"
 )
 
 type skillListParams struct {
@@ -18,19 +17,7 @@ func (d *Daemon) handleSkillList(_ context.Context, params json.RawMessage) (any
 		return nil, err
 	}
 
-	agentName := p.AgentName
-	if agentName == "" {
-		agentName = d.app.CurrentAgentName()
-	}
-
-	m, err := d.app.CurrentAgent()
-	if err != nil {
-		return []goreactcore.Skill{}, nil
-	}
-	if m.Reactor() == nil {
-		return []goreactcore.Skill{}, nil
-	}
-	skills := m.Reactor().SkillRegistry().ListSkills()
+	skills := d.app.SkillRegistry().ListSkills()
 
 	type skillEntry struct {
 		Name         string            `json:"name"`
@@ -71,18 +58,10 @@ func (d *Daemon) handleSkillGet(_ context.Context, params json.RawMessage) (any,
 		return nil, fmt.Errorf("name is required")
 	}
 
-	m, err := d.app.CurrentAgent()
-	if err != nil {
-		return nil, fmt.Errorf("current agent not available: %w", err)
-	}
-	if m.Reactor() == nil {
-		return nil, fmt.Errorf("reactor not initialized for current agent")
-	}
-
-	skill, err := m.Reactor().SkillRegistry().GetSkill(p.Name)
+	sk, err := d.app.SkillRegistry().GetSkill(p.Name)
 	if err != nil {
 		return nil, fmt.Errorf("skill %q not found: %w", p.Name, err)
 	}
 
-	return skill, nil
+	return sk, nil
 }

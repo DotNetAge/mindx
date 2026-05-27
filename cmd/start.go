@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/signal"
 	"syscall"
 
@@ -40,7 +39,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if err := core.ExtractWorkspace(RuntimeFS, workspaceDir); err != nil {
 		return fmt.Errorf("初始化工作目录失败: %w", err)
 	}
-	os.Setenv("MINDX_WORKSPACE", workspaceDir)
 
 	cfg, err := core.LoadMindxConfig(workspaceDir)
 	if err != nil {

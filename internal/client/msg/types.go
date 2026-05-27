@@ -3,7 +3,7 @@ package msg
 import (
 	"time"
 
-	goreactcore "github.com/DotNetAge/goreact/core"
+	"github.com/DotNetAge/goreact/session"
 )
 
 type ThinkingDeltaMsg struct {
@@ -41,7 +41,7 @@ type ToolExecEndMsg struct {
 type ExecutionSummaryMsg struct {
 	SessionID  string
 	Duration   time.Duration
-	TokensUsed goreactcore.TokenUsage
+	TokensUsed session.TokenUsage
 	ToolCalls  int
 }
 
