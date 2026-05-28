@@ -23,6 +23,52 @@ type yamlMessage struct {
 	ToolCalls  []yamlToolCall `yaml:"tool_calls,omitempty"`
 }
 
+// GetCursor retrieves the compaction cursor position from the session's metadata.
+// Returns 0 if no cursor has been set (meaning no compaction has occurred).
+//
+// This method is used internally by Session.ensureLoaded() to restore compaction state
+// across Session object lifecycles. External code should never call this directly.
+func (s *FileSessionStore) GetCursor(_ context.Context, sessionID string) (int, error) {
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return 0, nil // New session, no cursor yet
+	}
+
+	meta, err := LoadSessionMeta(dirPath)
+	if err != nil {
+		return 0, nil // No meta file yet, return default
+	}
+
+	return meta.Cursor, nil
+}
+
+// SetCursor persists the compaction cursor position to the session's metadata.
+// This is called after each compaction event to ensure the cursor survives
+// across Session object lifecycles (critical for lazy-loading).
+//
+// This method is used internally by Session.tryCompact(). External code should
+// never call this directly - use session.Compact() instead.
+func (s *FileSessionStore) SetCursor(_ context.Context, sessionID string, cursor int) error {
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return fmt.Errorf("session %q not found", sessionID)
+	}
+
+	meta, err := LoadSessionMeta(dirPath)
+	if err != nil {
+		// Meta file doesn't exist yet - this can happen if no session meta was created
+		// Create a minimal meta with just the cursor
+		meta = &SessionMeta{
+			SessionID: sessionID,
+			Cursor:   cursor,
+		}
+	} else {
+		meta.Cursor = cursor
+	}
+
+	return meta.Save(dirPath)
+}
+
 type yamlToolCall struct {
 	ID        string `yaml:"id"`
 	Name      string `yaml:"name"`

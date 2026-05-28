@@ -518,6 +518,15 @@ func (a *App) EnsureSession() string {
 }
 
 // NewSessionFromMeta creates a goreact session.Session from the current session metadata.
+// The session uses lazy-loading: historical messages are automatically loaded
+// from the persistent store on first access (Current() or Append()), so there's
+// no need for an explicit Restore() call here.
+//
+// Dual-Store Architecture:
+//   - SessionStore (sessDB): Persists raw messages to disk for history recovery
+//   - MemoryStore: Stores compaction summaries for semantic recall via MemoryThoughtHook
+//     - When external RAG is available (embedder configured): summaries → RAG (priority path)
+//     - When no external RAG: summaries → in-memory fallback (lost on exit)
 func (a *App) NewSessionFromMeta() *session.Session {
 	if a.currentSessionMeta == nil {
 		agentName := a.CurrentAgentName()
@@ -531,9 +540,37 @@ func (a *App) NewSessionFromMeta() *session.Session {
 	}
 
 	agentName := a.CurrentAgentName()
-	s := session.NewSession(a.currentSessionMeta.SessionID, agentName,
-		session.WithStore(a.sessDB))
+	opts := []session.SessionConfig{
+		session.WithStore(a.sessDB),
+	}
 
+	if a.embedder != nil {
+		sessionDir := a.currentSessionMeta.SessionDir
+		if sessionDir == "" {
+			sessionDir, _ = a.sessDB.ResolveSessionDir(a.currentSessionMeta.SessionID)
+		}
+		sessRAG, ragErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
+			MemoryType: goreactmemory.MemoryTypeSession,
+			AgentName:  agentName,
+			SessionDir: sessionDir,
+			Embedder:   a.embedder,
+		})
+		if ragErr != nil {
+			a.logger.Warn("failed to create session RAG memory, compaction summaries will use in-memory fallback", "error", ragErr)
+		} else {
+			opts = append(opts, session.WithMemory(mindxses.NewRAGMemoryAdapter(sessRAG)))
+
+			agent := a.Agents().Get(agentName)
+			if agent != nil {
+				model := a.Models().Get(agent.Model)
+				if model != nil && model.Enabled {
+					opts = append(opts, session.WithSummarizer(mindxses.NewLLMSummarizer(*model)))
+				}
+			}
+		}
+	}
+
+	s := session.NewSession(a.currentSessionMeta.SessionID, agentName, opts...)
 	return s
 }
 

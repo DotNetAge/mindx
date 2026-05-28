@@ -1041,6 +1041,14 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 				Error:     d.Error,
 			})
 		})
+		ask.OnMaxTurnsReached(func(d events.MaxTurnsReachedData) {
+			m.program.Send(clientmsg.MaxTurnsReachedMsg{
+				SessionID:      sessionID,
+				TurnsCompleted: d.TurnsCompleted,
+				MaxTurns:       d.MaxTurns,
+				Suggestion:     d.Suggestion,
+			})
+		})
 		ask.OnAnswer(func(answer string) {
 			m.program.Send(clientmsg.FinalAnswerMsg{SessionID: sessionID, Content: answer})
 		})
