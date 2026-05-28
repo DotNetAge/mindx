@@ -73,7 +73,7 @@ type rootModel struct {
 	app      *appcore.App
 	registry *SlashCommandRegistry
 
-	executing bool
+	executing   bool
 	postExitCmd string
 
 	// currentCancel cancels the running agent execution (for interrupt/stop).
@@ -128,6 +128,17 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 		})
 		m.loadCommands()
 
+		if m.app != nil {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						fmt.Fprintf(os.Stderr, "\nFATAL: EnsureSession failed at startup: %v\n", r)
+						os.Exit(1)
+					}
+				}()
+				m.app.EnsureSession()
+			}()
+		}
 		m.populateWelcome()
 	}
 
@@ -237,6 +248,9 @@ func loadRecentSessions(app *appcore.App) ([]input.SessionItem, error) {
 func messagesToConversations(sessionID, agentName string, msgs []goreactsession.Message) []conv.Conversation {
 	var convs []conv.Conversation
 	for _, msg := range msgs {
+		if strings.TrimSpace(msg.Content) == "" {
+			continue
+		}
 		switch msg.Role {
 		case "user":
 			conv := conv.Conversation{
@@ -882,7 +896,7 @@ func (m *rootModel) resizeViewport(termWidth, termHeight int) {
 	m.viewport.SetWidth(m.leftWidth)
 	m.viewport.SetHeight(vpHeight)
 
-	m.sidebar.Update(clientmsg.WindowResizeMsg{Width: m.rightWidth, Height: vpHeight})
+	m.sidebar.Update(clientmsg.WindowResizeMsg{Width: m.rightWidth - 2, Height: vpHeight})
 }
 
 func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
@@ -891,18 +905,16 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.executing = true
+	m.statusBar.CurrentState = "思考中"
 	m.statusBar.SessionStart = time.Now()
 	m.statusBar.SessionDuration = 0
 
 	sessionMeta := m.app.CurrentSessionMeta()
-	sessionID := ""
+	if sessionMeta == nil || sessionMeta.SessionID == "" {
+		panic(fmt.Sprintf("FATAL: no active session meta (app.EnsureSession must be called before send), agent=%s", m.app.CurrentAgentName()))
+	}
+	sessionID := sessionMeta.SessionID
 	agentName := m.app.CurrentAgentName()
-	if sessionMeta != nil && sessionMeta.SessionID != "" {
-		sessionID = sessionMeta.SessionID
-	}
-	if sessionID == "" {
-		sessionID = "main"
-	}
 
 	preview := e.Text
 	if len([]rune(preview)) > 80 {
@@ -924,6 +936,9 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		defer cancel()
 		defer func() {
 			if p := recover(); p != nil {
+				if l := m.getLogger(); l != nil {
+					l.Error("handleSend panic", fmt.Errorf("%v", p), "session", sessionID)
+				}
 				m.program.Send(clientmsg.AgentErrorMsg{
 					SessionID: sessionID,
 					Error:     fmt.Errorf("handleSend panic: %v", p),
@@ -931,18 +946,38 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 			}
 		}()
 
+		if l := m.getLogger(); l != nil {
+			l.Info("agent exec starting", "session", sessionID, "agent", agentName)
+		}
+
+		if l := m.getLogger(); l != nil {
+			l.Info("calling CurrentRuntime", "session", sessionID)
+		}
 		rt, err := m.app.CurrentRuntime()
 		if err != nil {
+			if l := m.getLogger(); l != nil {
+				l.Error("CurrentRuntime failed", err, "session", sessionID)
+			}
 			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: fmt.Errorf("runtime不可用: %w", err)})
 			m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
 			return
 		}
+		if l := m.getLogger(); l != nil {
+			l.Info("CurrentRuntime OK, calling NewSessionFromMeta", "session", sessionID)
+		}
 
 		s := m.app.NewSessionFromMeta()
 		if s == nil {
+			if l := m.getLogger(); l != nil {
+				l.Error("NewSessionFromMeta returned nil", fmt.Errorf("session is nil"), "session", sessionID)
+			}
 			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: fmt.Errorf("会话创建失败")})
 			m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
 			return
+		}
+
+		if l := m.getLogger(); l != nil {
+			l.Info("session ready, calling ask.Run", "session", sessionID, "session_id", s.ID())
 		}
 
 		ask := rt.Ask(agentName, e.Text, s).WithContext(ctx)
@@ -1232,6 +1267,8 @@ func (m *rootModel) View() tea.View {
 	}
 
 	mainArea := m.viewport.View()
+
+	m.sidebar.SyncHeight(vpHeight)
 	sideArea := m.sidebar.View()
 
 	layout := lipgloss.JoinHorizontal(lipgloss.Top, mainArea, sideArea)

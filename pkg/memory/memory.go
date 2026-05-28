@@ -44,6 +44,8 @@ type MemoryConfig struct {
 	Logger logging.Logger
 
 	Embedder goragcore.Embedder
+
+	ReadOnly bool
 }
 
 func (c MemoryConfig) dataDir() string {
@@ -105,6 +107,7 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 		govector.WithDimension(cfg.Embedder.Dim()),
 		govector.WithDBPath(filepath.Join(vecDir, cfg.AgentName+".db")),
 		govector.WithHNSW(true),
+		govector.WithReadOnly(cfg.ReadOnly),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("memory: create vector store: %w", err)

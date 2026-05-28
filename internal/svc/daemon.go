@@ -360,12 +360,12 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		}).
 		OnToolStart(func(data events.ToolExecStartData) {
 			gw.SendResponse(clientID, gateway.RespActionStart, "工具开始", map[string]any{
-				"tool_name": data.ToolName, "params": data.Params,
+				"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
 			}, gateway.WithSessionID(sid))
 		}).
 		OnToolEnd(func(data events.ToolExecEndData) {
 			gw.SendResponse(clientID, gateway.RespActionResult, "工具结果", map[string]any{
-				"tool_name": data.ToolName, "success": data.Success, "result": data.Result, "error": data.Error, "duration": data.Duration.String(),
+				"tool_name": data.ToolName, "tool_call_id": data.ToolCallID, "success": data.Success, "result": data.Result, "error": data.Error, "duration": data.Duration.String(),
 			}, gateway.WithSessionID(sid))
 		}).
 		OnAnswer(func(answer string) {
@@ -375,8 +375,29 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			d.sendExecutionSummary(clientID, sid, data)
 		}).
 		OnCycleEnd(func(data events.CycleInfo) {
-			md := buildCycleEndMarkdown(data)
-			d.sendEvent(clientID, sid, gateway.RespCycleEnd, "循环结束", md)
+			gw.SendResponse(clientID, gateway.RespCycleEnd, "循环结束", map[string]any{
+				"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
+			}, gateway.WithSessionID(sid))
+		}).
+		OnAgentTalkStart(func(data events.AgentTalkInfo) {
+			gw.SendResponse(clientID, gateway.RespAgentTalkStart, "Agent对话开始", map[string]any{
+				"to": data.To, "message": data.Message,
+			}, gateway.WithSessionID(sid))
+		}).
+		OnAgentTalkEnd(func(data events.AgentTalkResult) {
+			gw.SendResponse(clientID, gateway.RespAgentTalkEnd, "Agent对话结束", map[string]any{
+				"to": data.To, "reply": data.Reply, "error": data.Error,
+			}, gateway.WithSessionID(sid))
+		}).
+		OnCompaction(func(data events.CompactionData) {
+			gw.SendResponse(clientID, gateway.RespCompaction, "上下文压缩", map[string]any{
+				"session_id": data.SessionID, "messages_slid": data.MessagesSlid, "remaining_after": data.RemainingAfter, "window_size": data.WindowSize,
+			}, gateway.WithSessionID(sid))
+		}).
+		OnMaxTurnsReached(func(data events.MaxTurnsReachedData) {
+			gw.SendResponse(clientID, gateway.RespMaxTurnsReached, "达到最大轮次", map[string]any{
+				"turns_completed": data.TurnsCompleted, "max_turns": data.MaxTurns, "suggestion": data.Suggestion,
+			}, gateway.WithSessionID(sid))
 		}).
 		OnError(func(errMsg string) {
 			d.sendEvent(clientID, sid, gateway.RespError, "错误", errMsg)

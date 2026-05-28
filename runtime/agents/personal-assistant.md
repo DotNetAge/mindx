@@ -16,6 +16,7 @@ skills:
   - changelog-generator
   - find-experts
   - find-skills
+  - introspect
 ---
 
 ## Identity
