@@ -77,6 +77,11 @@ func (s *Sidebar) View() string {
 	return sideBarStyle.Render(content)
 }
 
+func (s *Sidebar) SyncHeight(h int) {
+	s.height = h
+	s.vp.SetHeight(h)
+}
+
 func (s *Sidebar) SetWelcomeData(d data.WelcomeData) {
 	s.welcome.Data = d
 	if s.width > 0 {

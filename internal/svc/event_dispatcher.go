@@ -165,6 +165,46 @@ func (d *Daemon) forwardEvent(clientID string, event goreactevents.ReactEvent) {
 			"error":      data.Error,
 		}, gateway.WithSessionID(sid))
 
+	case goreactevents.AgentTalkStart:
+		info, ok := event.Data.(goreactevents.AgentTalkInfo)
+		if !ok {
+			d.logger.Warn("unexpected AgentTalkStart data type", "type", fmt.Sprintf("%T", event.Data))
+			return
+		}
+		d.gw.SendResponse(clientID, gateway.RespAgentTalkStart, "Agent对话开始", map[string]any{
+			"to": info.To, "message": info.Message,
+		}, gateway.WithSessionID(sid))
+
+	case goreactevents.AgentTalkEnd:
+		result, ok := event.Data.(goreactevents.AgentTalkResult)
+		if !ok {
+			d.logger.Warn("unexpected AgentTalkEnd data type", "type", fmt.Sprintf("%T", event.Data))
+			return
+		}
+		d.gw.SendResponse(clientID, gateway.RespAgentTalkEnd, "Agent对话结束", map[string]any{
+			"to": result.To, "reply": result.Reply, "error": result.Error,
+		}, gateway.WithSessionID(sid))
+
+	case goreactevents.Compaction:
+		data, ok := event.Data.(goreactevents.CompactionData)
+		if !ok {
+			d.logger.Warn("unexpected Compaction data type", "type", fmt.Sprintf("%T", event.Data))
+			return
+		}
+		d.gw.SendResponse(clientID, gateway.RespCompaction, "上下文压缩", map[string]any{
+			"session_id": data.SessionID, "messages_slid": data.MessagesSlid, "remaining_after": data.RemainingAfter, "window_size": data.WindowSize,
+		}, gateway.WithSessionID(sid))
+
+	case goreactevents.MaxTurnsReached:
+		data, ok := event.Data.(goreactevents.MaxTurnsReachedData)
+		if !ok {
+			d.logger.Warn("unexpected MaxTurnsReached data type", "type", fmt.Sprintf("%T", event.Data))
+			return
+		}
+		d.gw.SendResponse(clientID, gateway.RespMaxTurnsReached, "达到最大轮次", map[string]any{
+			"turns_completed": data.TurnsCompleted, "max_turns": data.MaxTurns, "suggestion": data.Suggestion,
+		}, gateway.WithSessionID(sid))
+
 	case goreactevents.Error:
 		errMsg, ok := event.Data.(string)
 		if !ok {
@@ -197,7 +237,11 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreac
 // Markdown builders for event messages
 
 func buildSubtaskSpawnedMarkdown(info goreactevents.SubtaskInfo) string {
-	return fmt.Sprintf("### 🌿 子任务生成: `%s`\n\n**Agent**: %s\n**描述**: %s\n", info.TaskID, info.AgentName, info.Description)
+	md := fmt.Sprintf("### 🌿 子任务生成: `%s`\n\n**Agent**: %s\n**描述**: %s\n", info.TaskID, info.AgentName, info.Description)
+	if info.Timeout != "" {
+		md += fmt.Sprintf("**超时**: %s\n", info.Timeout)
+	}
+	return md
 }
 
 func buildSubtaskCompletedMarkdown(result goreactevents.SubtaskResult) string {
@@ -213,11 +257,20 @@ func buildSubtaskCompletedMarkdown(result goreactevents.SubtaskResult) string {
 }
 
 func buildPermissionRequestMarkdown(req goreactevents.PermissionRequestData) string {
-	return fmt.Sprintf("### 🔒 权限请求: `%s`\n\n**原因**: %s\n**安全级别**: %d\n", req.ToolName, req.Reason, req.SecurityLevel)
+	md := fmt.Sprintf("### 🔒 权限请求: `%s`\n\n**原因**: %s\n**安全级别**: %d\n", req.ToolName, req.Reason, req.SecurityLevel)
+	if len(req.Params) > 0 {
+		paramsJSON, _ := json.MarshalIndent(req.Params, "", "  ")
+		md += fmt.Sprintf("**参数**:\n```json\n%s\n```\n", string(paramsJSON))
+	}
+	return md
 }
 
 func buildCycleEndMarkdown(cycle goreactevents.CycleInfo) string {
-	return fmt.Sprintf("### 🔄 思考循环结束 (迭代 #%d, 耗时 %s)\n", cycle.Iteration, formatDuration(cycle.Duration))
+	md := fmt.Sprintf("### 🔄 思考循环结束 (迭代 #%d, 耗时 %s)\n", cycle.Iteration, formatDuration(cycle.Duration))
+	if cycle.TerminationReason != "" {
+		md += fmt.Sprintf("**终止原因**: %s\n", cycle.TerminationReason)
+	}
+	return md
 }
 
 func buildTaskSummaryMarkdown(ts goreactevents.TaskSummaryData) string {
