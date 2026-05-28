@@ -30,6 +30,9 @@ type SessionMeta struct {
 	// Runtime stats
 	MessageCount   int       `json:"message_count"`
 	LastActivityAt time.Time `json:"last_activity_at"`
+
+	// Compaction state
+	Cursor int `json:"cursor"` // Position of compaction cursor (0 = no compaction)
 }
 
 // NewSessionMeta creates a new session metadata instance with the captured project directory.

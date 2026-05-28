@@ -318,14 +318,14 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	// Cancel any existing execution for this client
 	d.cancelClientExecution(msg.ClientID)
 
-	// Create session backed by the file store
-	s := goreactsession.NewSession(sessionID, resolvedAgentName,
-		goreactsession.WithStore(d.app.SessDB()),
-	)
-
 	// Create cancellable context for interrupt/cancel support
 	ctx, cancel := context.WithCancel(context.Background())
 	d.clientCancels.Store(msg.ClientID, cancel)
+
+	// Create session backed by the file store (lazy-loading: auto-loads on first access)
+	s := goreactsession.NewSession(sessionID, resolvedAgentName,
+		goreactsession.WithStore(d.app.SessDB()),
+	)
 
 	clientID := msg.ClientID
 	sid := sessionID
