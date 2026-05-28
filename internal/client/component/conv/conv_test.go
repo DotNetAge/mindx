@@ -249,3 +249,59 @@ func TestClearScreen(t *testing.T) {
 		t.Errorf("expected 0 conversations after clear, got %d", len(list.Conversations))
 	}
 }
+
+func TestConversationMaxTurnsReached(t *testing.T) {
+	conv := NewConversation("s1", "agent1", "复杂任务")
+
+	conv, _ = UpdateConversation(conv, msg.ThinkingDeltaMsg{SessionID: "s1", Content: "分析中..."})
+	conv, _ = UpdateConversation(conv, msg.ThinkingDoneMsg{SessionID: "s1", Content: "分析中..."})
+
+	if conv.Status != StatusThinking {
+		t.Fatalf("expected StatusThinking before MaxTurnsReached, got %v", conv.Status)
+	}
+
+	conv, _ = UpdateConversation(conv, msg.MaxTurnsReachedMsg{
+		SessionID:      "s1",
+		TurnsCompleted: 20,
+		MaxTurns:       20,
+		Suggestion:     "已达到最大思考轮次 (20/20)。你可以发送\"继续\"让 AI 继续。",
+	})
+
+	if conv.Status != StatusDone {
+		t.Errorf("expected StatusDone after MaxTurnsReached, got %v", conv.Status)
+	}
+	if conv.MaxTurnsNotice == "" {
+		t.Error("expected MaxTurnsNotice to be set")
+	}
+	if !strings.Contains(conv.MaxTurnsNotice, "20/20") {
+		t.Errorf("expected notice to contain turn info, got %q", conv.MaxTurnsNotice)
+	}
+	if conv.Error.Error != "" {
+		t.Errorf("expected no error for MaxTurnsReached, got %q", conv.Error.Error)
+	}
+}
+
+func TestConversationMaxTurnsReachedView(t *testing.T) {
+	conv := NewConversation("s1", "agent1", "为什么天空是蓝色的？")
+
+	conv, _ = UpdateConversation(conv, msg.MaxTurnsReachedMsg{
+		SessionID:      "s1",
+		TurnsCompleted: 20,
+		MaxTurns:       20,
+		Suggestion:     "已达到最大思考轮次 (20/20)，任务可能需要更详细的指令。",
+	})
+
+	view := ViewConversation(conv, 80)
+	if view == "" {
+		t.Fatal("expected non-empty view for MaxTurnsReached conversation")
+	}
+	if !strings.Contains(view, "为什么天空是蓝色的？") {
+		t.Error("expected question in view")
+	}
+	if !strings.Contains(view, "20/20") {
+		t.Errorf("expected turn info in view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "💡") {
+		t.Error("expected lightbulb icon in MaxTurnsNotice view")
+	}
+}

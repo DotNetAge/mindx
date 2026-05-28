@@ -5,7 +5,9 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/mindx/internal/client/msg"
+	"github.com/DotNetAge/mindx/internal/client/style"
 )
 
 // ConversationRound represents one Think-Act cycle iteration.
@@ -25,6 +27,10 @@ type Conversation struct {
 	Rounds    []ConversationRound
 	Output    Output
 	Error     ErrorMsg
+
+	// MaxTurnsNotice stores a friendly suggestion when max turns are reached.
+	// This is displayed as an informational notice (not an error).
+	MaxTurnsNotice string
 }
 
 func NewConversation(sessionID, agentName, questionText string) Conversation {
@@ -57,8 +63,7 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 		if m.Status == StatusDone || m.Status == StatusError {
 			return m, nil
 		}
-		// Start a new round if entering a new iteration
-		if len(m.Rounds) > 0 && m.currentRound().ThoughtContent != "" {
+		if curr := m.currentRound(); curr != nil && curr.ThoughtContent != "" && m.Thinking.IsActive == false {
 			m.Rounds = append(m.Rounds, ConversationRound{})
 		}
 		m.ensureCurrentRound()
@@ -131,7 +136,7 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 		m.currentRound().Action = newAction
 		return m, cmd
 
-	case msg.FinalAnswerMsg, msg.AgentErrorMsg, msg.LLMTimeoutMsg:
+	case msg.FinalAnswerMsg, msg.AgentErrorMsg, msg.LLMTimeoutMsg, msg.MaxTurnsReachedMsg:
 		if m.Status == StatusDone {
 			return m, nil
 		}
@@ -145,6 +150,10 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 			m.Output = newOutput
 			m.Status = StatusError
 			return m, cmd
+		case msg.MaxTurnsReachedMsg:
+			m.MaxTurnsNotice = e.(msg.MaxTurnsReachedMsg).Suggestion
+			m.Status = StatusDone  // 正常完成（只是到达边界）
+			return m, nil
 		default:
 			newOutput, cmd := UpdateOutput(m.Output, e)
 			m.Output = newOutput
@@ -241,5 +250,24 @@ func ViewConversation(m Conversation, width int) string {
 		}
 		b.writeString(errorView)
 	}
+	if m.MaxTurnsNotice != "" {
+		if b.len() > 0 {
+			b.writeString("\n\n")
+		}
+		b.writeString(viewMaxTurnsNotice(m.MaxTurnsNotice, width))
+	}
 	return b.String()
+}
+
+func viewMaxTurnsNotice(notice string, width int) string {
+	yellow := lipgloss.NewStyle().Foreground(style.ThemeYellow).Bold(true)
+	border := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(style.ThemeYellow).
+		Padding(0, 1).
+		Width(width - 4)
+
+	icon := yellow.Render("💡")
+	msg := lipgloss.NewStyle().Foreground(style.ThemeYellow).Render(notice)
+	return border.Render(icon + " " + msg)
 }
