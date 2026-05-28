@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -196,6 +197,20 @@ func (a *App) Embedder() goragcore.Embedder {
 	return a.embedder
 }
 
+const defaultDaemonAddr = ":1314"
+
+func (a *App) isDaemonRunning() bool {
+	conn, err := net.DialTimeout("tcp", "localhost"+defaultDaemonAddr, 2*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	if a.logger != nil {
+		a.logger.Info("daemon detected, opening LongTerm memory in read-only mode")
+	}
+	return true
+}
+
 func (a *App) Config() *MindxConfig {
 	return a.mindxConfig
 }
@@ -316,6 +331,8 @@ func (a *App) resolveModelName(agentModelName string) (string, *config.ModelConf
 
 // createRuntime builds an agents.Runtime for the given agent name with all registries and services.
 func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
+	a.logger.Info("createRuntime: start", "agent", agentName)
+
 	agent := a.Agents().Get(agentName)
 	if agent == nil {
 		return nil, fmt.Errorf("agent %q not found", agentName)
@@ -327,6 +344,7 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	}
 	resolvedModel := *modelCfg
 	resolvedModel.APIKey = a.resolveAPIKey(resolvedModel.APIKey)
+	a.logger.Info("createRuntime: model resolved", "agent", agentName, "model", resolvedModel.Name)
 
 	cacheDir := filepath.Join(a.settings.DataDir(), "cache")
 	kvStore, _ := store.NewFileSystemKVStore(cacheDir)
@@ -344,8 +362,6 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	}
 
 	if kvStore != nil {
-		// KV store is used via ToolExecutor; Runtime doesn't directly hold it.
-		// If needed, we could add WithKVStore to RuntimeConfig.
 		_ = kvStore
 	}
 
@@ -385,20 +401,33 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	}
 	// Dual memory: LongTerm (project knowledge) + SessionRAG (conversation recall)
 	if a.embedder != nil {
-		ltMem, ltErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-			MemoryType: goreactmemory.MemoryTypeLongTerm,
-			AgentName:  "_shared",
-			MemoryDir:  filepath.Join(a.settings.UserPreferences(), "memory"),
-			Embedder:   a.embedder,
-		})
-		if ltErr != nil {
-			a.logger.Warn("Failed to create long-term memory for agent %q: %v", agent.Name, ltErr)
+		if a.isDaemonRunning() {
+			// When Daemon is running, it manages the shared bbolt database with an
+			// exclusive file lock (LOCK_EX). Opening the same .db file from the TUI
+			// in read-only mode would block indefinitely trying to acquire a shared
+			// lock (LOCK_SH), preventing messages from ever reaching the LLM.
+			// The TUI delegates all memory operations to the Daemon via RPC instead.
+			a.logger.Info("daemon detected: skipping local LongTerm memory init (delegated to daemon)")
 		} else {
-			opts = append(opts, agents.WithMemory(ltMem))
+			a.logger.Info("createRuntime: creating long-term memory", "agent", agentName)
+			ltMem, ltErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
+				MemoryType: goreactmemory.MemoryTypeLongTerm,
+				AgentName:  "_shared",
+				MemoryDir:  filepath.Join(a.settings.UserPreferences(), "memory"),
+				Embedder:   a.embedder,
+			})
+			if ltErr != nil {
+				a.logger.Warn("Failed to create long-term memory for agent %q: %v", agent.Name, ltErr)
+			} else {
+				opts = append(opts, agents.WithMemory(ltMem))
+				a.logger.Info("createRuntime: long-term memory OK", "agent", agentName)
+			}
 		}
 	}
 
+	a.logger.Info("createRuntime: calling agents.NewRuntime", "agent", agentName)
 	rt := agents.NewRuntime(opts...)
+	a.logger.Info("createRuntime: done", "agent", agentName)
 	return rt, nil
 }
 
@@ -442,18 +471,21 @@ func (a *App) ResolveRuntime(name string) (*agents.Runtime, error) {
 // EnsureSession ensures a valid session exists for the current agent and returns its ID.
 // This handles smart session matching (CWD changes) and auto-creates sessions.
 func (a *App) EnsureSession() string {
-	if a.sessDB == nil || a.mindxConfig == nil {
-		return ""
+	if a.sessDB == nil {
+		panic("FATAL: EnsureSession called but sessDB is nil")
+	}
+	if a.mindxConfig == nil {
+		panic("FATAL: EnsureSession called but mindxConfig is nil")
 	}
 
 	agentName := a.CurrentAgentName()
 	if agentName == "" {
-		return ""
+		panic("FATAL: EnsureSession called but no agent available")
 	}
 
 	cwd, cwdErr := os.Getwd()
 	if cwdErr != nil {
-		return ""
+		panic(fmt.Sprintf("FATAL: os.Getwd failed: %v", cwdErr))
 	}
 
 	// If we have a current session meta, check if CWD matches
@@ -499,22 +531,29 @@ func (a *App) EnsureSession() string {
 		return newSession.SessionID
 	}
 
-	// No current session meta — create one
-	a.logger.Info("no valid session found, creating new session", "cwd", cwd)
-	if a.currentSessionMeta == nil {
-		newSession, createErr := a.CreateSession(agentName)
-		if createErr == nil {
-			a.currentSessionMeta = newSession
-			a.mindxConfig.LastSessionID = newSession.SessionID
-			_ = a.mindxConfig.Save()
-			return newSession.SessionID
-		}
+	// No current session meta — try to find existing or create new
+	a.logger.Info("no current session, searching for existing", "cwd", cwd)
+
+	if matched := a.findSessionByProjectDir(cwd); matched != nil {
+		a.logger.Info("found matching session for current directory",
+			"session_id", matched.SessionID,
+			"project_dir", matched.ProjectDir,
+		)
+		a.currentSessionMeta = matched
+		a.mindxConfig.LastSessionID = matched.SessionID
+		_ = a.mindxConfig.Save()
+		return matched.SessionID
 	}
 
-	if a.currentSessionMeta != nil {
-		return a.currentSessionMeta.SessionID
+	a.logger.Info("no existing session found, creating new session", "cwd", cwd)
+	newSession, createErr := a.CreateSession(agentName)
+	if createErr != nil {
+		panic(fmt.Sprintf("FATAL: CreateSession failed for agent=%q cwd=%q: %v", agentName, cwd, createErr))
 	}
-	return ""
+	a.currentSessionMeta = newSession
+	a.mindxConfig.LastSessionID = newSession.SessionID
+	_ = a.mindxConfig.Save()
+	return newSession.SessionID
 }
 
 // NewSessionFromMeta creates a goreact session.Session from the current session metadata.
@@ -525,8 +564,8 @@ func (a *App) EnsureSession() string {
 // Dual-Store Architecture:
 //   - SessionStore (sessDB): Persists raw messages to disk for history recovery
 //   - MemoryStore: Stores compaction summaries for semantic recall via MemoryThoughtHook
-//     - When external RAG is available (embedder configured): summaries → RAG (priority path)
-//     - When no external RAG: summaries → in-memory fallback (lost on exit)
+//   - When external RAG is available (embedder configured): summaries → RAG (priority path)
+//   - When no external RAG: summaries → in-memory fallback (lost on exit)
 func (a *App) NewSessionFromMeta() *session.Session {
 	if a.currentSessionMeta == nil {
 		agentName := a.CurrentAgentName()

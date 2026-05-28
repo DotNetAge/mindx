@@ -138,12 +138,10 @@ build-debug:
 
 ## install: 构建并部署到 ~/.mindx（含 runtime 资源 + PATH + 系统服务配置）
 install:
-	@echo "$(GREEN)➡ Building $(BINARY_NAME)...$(NC)"
-	@mkdir -p bin ~/.mindx/bin ~/.mindx/settings
-	@CGO_ENABLED=1 $(GO) build $(GOFLAGS) -o bin/$(BINARY_NAME) . && \
-		echo "$(GREEN)  ✅ bin/$(BINARY_NAME)$(NC)"
-	@echo "$(GREEN)➡ Installing $(BINARY_NAME)...$(NC)"
-	@cp bin/$(BINARY_NAME) ~/.mindx/bin/$(BINARY_NAME) && \
+	@echo "$(GREEN)➡ Building $(BINARY_NAME) → ~/.mindx/bin/$(BINARY_NAME)...$(NC)"
+	@mkdir -p ~/.mindx/bin ~/.mindx/settings
+	@rm -f ~/.mindx/bin/$(BINARY_NAME)
+	@CGO_ENABLED=1 $(GO) build $(GOFLAGS) -o ~/.mindx/bin/$(BINARY_NAME) . && \
 		echo "$(GREEN)  ✅ $(BINARY_NAME) → ~/.mindx/bin/$(BINARY_NAME)$(NC)"
 	@echo "$(GREEN)➡ Copying runtime files...$(NC)"
 	@cp -r runtime/* ~/.mindx/ && \

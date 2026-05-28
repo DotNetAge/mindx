@@ -83,7 +83,10 @@ func ViewOutput(m Output, width int) string {
 
 	var b strings.Builder
 	for i, entry := range m.Entries {
-		if i > 0 {
+		if strings.TrimSpace(entry.Content) == "" {
+			continue
+		}
+		if i > 0 || b.Len() > 0 {
 			b.WriteByte('\n')
 		}
 		b.WriteString(viewOutputEntry(entry, width))
