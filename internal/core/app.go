@@ -57,6 +57,9 @@ type App struct {
 	currentSessionMeta *session.SessionInfo
 
 	currentMu sync.Mutex
+
+	// TokenUsageStore for persistent LLM token usage records
+	tokenUsageStore *mindxses.FileTokenUsageStore
 }
 
 func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
@@ -170,6 +173,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		runtimeCache:        make(map[string]*agents.Runtime),
 		embedder:            emb,
 		permissionRuleStore: permStore,
+		tokenUsageStore:     mindxses.NewFileTokenUsageStore(settings.DataDir()),
 	}, nil
 }
 
@@ -288,6 +292,10 @@ func (a *App) SetCurrentSessionMeta(meta *session.SessionInfo) {
 
 func (a *App) SessDB() *mindxses.FileSessionStore {
 	return a.sessDB
+}
+
+func (a *App) TokenUsageStore() *mindxses.FileTokenUsageStore {
+	return a.tokenUsageStore
 }
 
 // CreateSession creates a new session with metadata including the captured project directory (os.Getwd() at invocation time).

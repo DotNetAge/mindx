@@ -34,6 +34,10 @@ type StatusBar struct {
 	Shortcuts       []data.Shortcut
 	ShowHints       bool
 	DaemonStatus    clientmsg.DaemonConnStatus
+
+	// CostFn overrides the default pricing lookup for cost calculation.
+	// If nil, data.GetPricing/data.CalculateCost is used as fallback.
+	CostFn func(modelName string, inputTokens, outputTokens, cachedTokens int) float64
 }
 
 func New() *StatusBar {
@@ -71,6 +75,9 @@ func (s *StatusBar) Tick() {
 }
 
 func (s *StatusBar) Cost() float64 {
+	if s.CostFn != nil {
+		return s.CostFn(s.ModelName, s.InputTokens, s.OutputTokens, s.CachedTokens)
+	}
 	return data.CalculateCost(data.GetPricing(s.ModelName), s.InputTokens, s.OutputTokens, s.CachedTokens)
 }
 
