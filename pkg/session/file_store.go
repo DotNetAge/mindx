@@ -334,6 +334,18 @@ func (s *FileSessionStore) Clear(ctx context.Context, sessionID string) error {
 	return nil
 }
 
+// DeleteSession removes the entire session directory and all its contents.
+// This permanently deletes the session and cannot be undone.
+func (s *FileSessionStore) DeleteSession(_ context.Context, sessionID string) error {
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return goreactsession.ErrSessionNotFound
+	}
+
+	_ = os.RemoveAll(dirPath)
+	return nil
+}
+
 func (s *FileSessionStore) SetSlideHandler(handler goreactsession.SlideHandler) {
 	s.slideMu.Lock()
 	defer s.slideMu.Unlock()

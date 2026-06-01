@@ -97,3 +97,62 @@ func (d *Daemon) handleSessionMeta(_ context.Context, params json.RawMessage) (a
 
 	return meta, nil
 }
+
+type sessionDeleteParams struct {
+	SessionID string `json:"session_id"`
+}
+
+func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) (any, error) {
+	var p sessionDeleteParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	sessDB := d.app.SessDB()
+	if sessDB == nil {
+		return nil, fmt.Errorf("session store not available")
+	}
+
+	if err := sessDB.DeleteSession(context.Background(), p.SessionID); err != nil {
+		return nil, fmt.Errorf("delete session %q failed: %w", p.SessionID, err)
+	}
+
+	return map[string]any{
+		"session_id": p.SessionID,
+		"deleted":    true,
+	}, nil
+}
+
+type sessionCreateParams struct {
+	Agent      string `json:"agent"`
+	ProjectDir string `json:"project_dir"`
+}
+
+func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) (any, error) {
+	var p sessionCreateParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Agent == "" {
+		return nil, fmt.Errorf("agent is required")
+	}
+
+	sessDB := d.app.SessDB()
+	if sessDB == nil {
+		return nil, fmt.Errorf("session store not available")
+	}
+
+	info, err := sessDB.Create(context.Background(), p.Agent)
+	if err != nil {
+		return nil, fmt.Errorf("create session failed: %w", err)
+	}
+
+	return map[string]any{
+		"session_id": info.SessionID,
+		"agent_name": info.AgentName,
+		"created_at": info.CreatedAt,
+	}, nil
+}

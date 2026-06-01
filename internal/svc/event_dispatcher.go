@@ -158,12 +158,8 @@ func (d *Daemon) forwardEvent(clientID string, event goreactevents.ReactEvent) {
 			d.logger.Warn("unexpected LLMTimeout data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		d.gw.SendResponse(clientID, gateway.RespError, "超时", map[string]any{
-			"session_id": data.SessionID,
-			"timeout":    data.Timeout.String(),
-			"elapsed":    data.Elapsed.String(),
-			"error":      data.Error,
-		}, gateway.WithSessionID(sid))
+		msg := fmt.Sprintf("LLM 超时 (已耗时 %s): %s", data.Elapsed, data.Error)
+		d.sendEvent(clientID, sid, gateway.RespError, "超时", msg)
 
 	case goreactevents.AgentTalkStart:
 		info, ok := event.Data.(goreactevents.AgentTalkInfo)

@@ -82,8 +82,28 @@ type rootModel struct {
 	// pendingAskUser tracks an active LLM question (AskUser tool) waiting for user response.
 	pendingAskUser *events.AskUserRequestData
 
+	// rpcAskUserQuestions stores AskUser questions received via RPC (used when daemon is connected).
+	rpcAskUserQuestions []struct {
+		Question    string
+		Options     []string
+		MultiSelect bool
+	}
+
 	// pendingPermission tracks a tool security permission request waiting for user response.
 	pendingPermission *events.PermissionRequestData
+
+	// RPC client for daemon communication.
+	rpc          *daemonRPCClient
+	rpcConnected bool
+
+	// pendingCorrelationID links UI interactions (ask_user, permission) back to daemon RPC.
+	pendingCorrelationID string
+
+	// pendingPermParams stores permission request params for grant forwarding.
+	pendingPermParams map[string]any
+
+	// currentSessionID tracks the active session ID used in RPC messages.
+	currentSessionID string
 }
 
 func (m *rootModel) getLogger() goreactlogging.Logger {
@@ -140,11 +160,26 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 			}()
 		}
 		m.populateWelcome()
+
+		// Wire CostRegistry pricing into TUI components
+		m.wirePricing()
 	}
 
 	fmt.Print("\x1b[2J\x1b[H")
 	p := tea.NewProgram(m)
 	m.program = p
+
+	// Resolve initial session ID for RPC messages
+	if m.app != nil {
+		meta := m.app.CurrentSessionMeta()
+		if meta != nil {
+			m.currentSessionID = meta.SessionID
+		}
+	}
+
+	// Connect to daemon for RPC mode
+	m.connectDaemon()
+
 	if _, err := p.Run(); err != nil {
 		return err
 	}
@@ -305,6 +340,49 @@ func (m *rootModel) loadSessionHistory() {
 	m.scrollToBottom = true
 }
 
+func (m *rootModel) loadSessionTokenUsage(sessionID, agentName string) {
+	if m.app == nil || m.app.TokenUsageStore() == nil {
+		return
+	}
+	if sessionID == "" {
+		return
+	}
+
+	ctx := context.Background()
+	records, err := m.app.TokenUsageStore().Query(ctx, goreactsession.TokenUsageFilter{
+		SessionID: sessionID,
+	})
+	if err != nil || len(records) == 0 {
+		return
+	}
+
+	// Accumulate all historical records and seed the TUI components
+	var totalInput, totalOutput, totalCached, totalAll int
+	for _, r := range records {
+		totalInput += r.PromptTokens
+		totalOutput += r.CompletionTokens
+		totalCached += r.CachedTokens
+		totalAll += r.TotalTokens
+	}
+
+	// Reset and seed StatusBar
+	m.statusBar.TokensTotal = totalAll
+	m.statusBar.InputTokens = totalInput
+	m.statusBar.OutputTokens = totalOutput
+	m.statusBar.CachedTokens = totalCached
+
+	// Reset and seed Sidebar
+	m.sidebar.InputTokens = totalInput
+	m.sidebar.OutputTokens = totalOutput
+	m.sidebar.CachedTokens = totalCached
+	m.sidebar.TotalTokens = totalAll
+	if len(records) > 0 {
+		if records[len(records)-1].ModelName != "" {
+			m.sidebar.ModelName = records[len(records)-1].ModelName
+		}
+	}
+}
+
 func (m *rootModel) populateWelcome() {
 	if m.app == nil {
 		return
@@ -348,6 +426,50 @@ func (m *rootModel) populateWelcome() {
 	}
 	m.loadSessionHistory()
 	m.sidebar.SetWelcomeData(m.welcome.Data)
+}
+
+func (m *rootModel) wirePricing() {
+	if m.app == nil {
+		return
+	}
+
+	// StatusBar: total cost function using CostRegistry or hardcoded fallback
+	m.statusBar.CostFn = func(modelName string, inputTokens, outputTokens, cachedTokens int) float64 {
+		costs := m.app.Costs()
+		if costs != nil {
+			if mc, ok := costs.Get(modelName); ok {
+				return appcore.CalculateCost(mc, int64(inputTokens), int64(outputTokens), int64(cachedTokens))
+			}
+		}
+		return data.CalculateCost(data.GetPricing(modelName), inputTokens, outputTokens, cachedTokens)
+	}
+
+	// Sidebar: per-component cost breakdown using CostRegistry or hardcoded fallback
+	m.sidebar.CostFunc = func(modelName string, inputTokens, outputTokens, cachedTokens int) (float64, float64, float64) {
+		costs := m.app.Costs()
+		if costs != nil {
+			if mc, ok := costs.Get(modelName); ok {
+				inputCost := 0.0
+				if mc.CostPer1MIn > 0 {
+					inputCost = mc.CostPer1MIn / 1_000_000 * float64(inputTokens)
+				}
+				outputCost := 0.0
+				if mc.CostPer1MOut > 0 {
+					outputCost = mc.CostPer1MOut / 1_000_000 * float64(outputTokens)
+				}
+				cachedCost := 0.0
+				if mc.CostPer1MInCached > 0 && cachedTokens > 0 {
+					cachedCost = mc.CostPer1MInCached / 1_000_000 * float64(cachedTokens)
+				}
+				return inputCost, outputCost, cachedCost
+			}
+		}
+		p := data.GetPricing(modelName)
+		inputCost := float64(inputTokens) / 1_000_000 * p.InputPrice
+		outputCost := float64(outputTokens) / 1_000_000 * p.OutputPrice
+		cachedCost := float64(cachedTokens) / 1_000_000 * p.CachedPrice
+		return inputCost, outputCost, cachedCost
+	}
 }
 
 func displayName(title, name string) string {
@@ -439,36 +561,61 @@ func (m *rootModel) handleOverlayPaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 
 // activateAskUserOverlay sets up the appropriate dialog from pendingAskUser state.
 func (m *rootModel) activateAskUserOverlay() {
-	if m.pendingAskUser == nil || len(m.pendingAskUser.Questions) == 0 {
+	var question string
+	var options []string
+	var multiSelect bool
+
+	if m.pendingAskUser != nil && len(m.pendingAskUser.Questions) > 0 {
+		q := m.pendingAskUser.Questions[0]
+		question = q.Question
+		options = q.Options
+		multiSelect = q.MultiSelect
+	} else if len(m.rpcAskUserQuestions) > 0 {
+		q := m.rpcAskUserQuestions[0]
+		question = q.Question
+		options = q.Options
+		multiSelect = q.MultiSelect
+	} else {
 		return
 	}
-	q := m.pendingAskUser.Questions[0]
-	opts := q.Options
 
-	title := q.Question
+	title := question
 	if len([]rune(title)) > 20 {
 		title = string([]rune(title)[:20]) + "…"
 	}
 
-	if q.MultiSelect {
+	if multiSelect {
 		m.optionsDlg.Title = title
-		m.optionsDlg.SetOptions(q.Question, opts)
+		m.optionsDlg.SetOptions(question, options)
 		m.activeOverlay = overlayOptions
 	} else {
 		m.selectDlg.Title = title
-		m.selectDlg.SetOptions(q.Question, opts)
+		m.selectDlg.SetOptions(question, options)
 		m.activeOverlay = overlaySelect
 	}
 }
 
-// mapAskUserReply builds the answer map from the dialog result and calls Reply().
+// mapAskUserReply builds the answer map from the dialog result and calls Reply() (or RPC).
 func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, customText string, cancelled bool) {
-	if m.pendingAskUser == nil || len(m.pendingAskUser.Questions) == 0 {
+	var question string
+	var options []string
+	useRPC := m.rpcConnected && len(m.rpcAskUserQuestions) > 0
+
+	if m.pendingAskUser != nil && len(m.pendingAskUser.Questions) > 0 {
+		q := m.pendingAskUser.Questions[0]
+		question = q.Question
+		options = q.Options
+	} else if useRPC {
+		q := m.rpcAskUserQuestions[0]
+		question = q.Question
+		options = q.Options
+	} else {
 		return
 	}
-	q := m.pendingAskUser.Questions[0]
+
 	pp := m.pendingAskUser
 	m.pendingAskUser = nil
+	m.rpcAskUserQuestions = nil
 
 	if cancelled {
 		return
@@ -478,8 +625,8 @@ func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, cust
 	if isMulti {
 		var parts []string
 		for _, idx := range indices {
-			if idx >= 0 && idx < len(q.Options) {
-				parts = append(parts, q.Options[idx])
+			if idx >= 0 && idx < len(options) {
+				parts = append(parts, options[idx])
 			}
 		}
 		if customText != "" {
@@ -495,14 +642,19 @@ func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, cust
 	} else {
 		if customText != "" {
 			answer = customText
-		} else if index >= 0 && index < len(q.Options) {
-			answer = q.Options[index]
+		} else if index >= 0 && index < len(options) {
+			answer = options[index]
 		}
 	}
 	if answer == "" {
 		return
 	}
-	pp.Reply(map[string]string{q.Question: answer})
+
+	if useRPC {
+		m.rpcReplyAskUser(map[string]string{question: answer})
+	} else {
+		pp.Reply(map[string]string{question: answer})
+	}
 }
 
 // ============================================================
@@ -819,10 +971,20 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case clientmsg.ChoiceSelectedMsg:
-		if m.pendingPermission != nil {
+		m.statusBar.CurrentState = "空闲"
+		if m.rpcConnected {
+			params := m.pendingPermParams
+			m.pendingPermParams = nil
+			if msg.Index < 0 {
+				m.rpcReplyPermission("deny", nil, "user cancelled")
+			} else if msg.Index == 0 {
+				m.rpcReplyPermission("grant", params, "")
+			} else {
+				m.rpcReplyPermission("deny", nil, "user denied")
+			}
+		} else if m.pendingPermission != nil {
 			pp := m.pendingPermission
 			m.pendingPermission = nil
-			m.statusBar.CurrentState = "空闲"
 			if msg.Index < 0 {
 				go pp.Deny("user cancelled")
 			} else if msg.Index == 0 {
@@ -841,12 +1003,15 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.SessionLoadedMsg:
 		m.statusBar.Update(msg)
+		m.loadSessionTokenUsage(msg.SessionID, msg.AgentName)
 		return m, nil
 
 	case clientmsg.ExecutionCancelMsg:
 		m.executing = false
 		m.statusBar.CurrentState = "已取消"
-		if m.currentCancel != nil {
+		if m.rpcConnected {
+			m.rpcCancelExecution()
+		} else if m.currentCancel != nil {
 			m.currentCancel()
 			m.currentCancel = nil
 		}
@@ -904,31 +1069,47 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		return m, m.notifBar.Add(data.Notification{Message: "已有消息正在处理", Level: data.NotifWarning})
 	}
 
-	m.executing = true
-	m.statusBar.CurrentState = "思考中"
-	m.statusBar.SessionStart = time.Now()
-	m.statusBar.SessionDuration = 0
-
-	sessionMeta := m.app.CurrentSessionMeta()
-	if sessionMeta == nil || sessionMeta.SessionID == "" {
-		panic(fmt.Sprintf("FATAL: no active session meta (app.EnsureSession must be called before send), agent=%s", m.app.CurrentAgentName()))
-	}
-	sessionID := sessionMeta.SessionID
 	agentName := m.app.CurrentAgentName()
+	sessionMeta := m.app.CurrentSessionMeta()
+	sessionID := ""
+	if sessionMeta != nil {
+		sessionID = sessionMeta.SessionID
+	}
 
 	preview := e.Text
 	if len([]rune(preview)) > 80 {
 		preview = string([]rune(preview)[:80]) + "..."
-	}
-	if l := m.getLogger(); l != nil {
-		l.Info("user send", "session", sessionID, "preview", preview)
 	}
 
 	newConv := conv.NewConversation(sessionID, agentName, e.Text)
 	m.conversationList.Conversations = append(m.conversationList.Conversations, newConv)
 	m.conversationList.MarkDirty()
 
-	// Create cancellable context so ExecutionCancelMsg can interrupt the running agent.
+	// Use RPC path when connected to daemon
+	if m.rpcConnected {
+		text := e.Text
+		if !strings.HasPrefix(text, "@") {
+			text = "@" + agentName + " " + text
+		}
+		m.currentSessionID = sessionID
+		m.rpcSendMessage(text)
+		return m, nil
+	}
+
+	// Fallback: in-process execution
+	m.executing = true
+	m.statusBar.CurrentState = "思考中"
+	m.statusBar.SessionStart = time.Now()
+	m.statusBar.SessionDuration = 0
+
+	if sessionMeta == nil || sessionMeta.SessionID == "" {
+		panic(fmt.Sprintf("FATAL: no active session meta (app.EnsureSession must be called before send), agent=%s", m.app.CurrentAgentName()))
+	}
+
+	if l := m.getLogger(); l != nil {
+		l.Info("user send (local)", "session", sessionID, "preview", preview)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	m.currentCancel = cancel
 
@@ -946,43 +1127,22 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 			}
 		}()
 
-		if l := m.getLogger(); l != nil {
-			l.Info("agent exec starting", "session", sessionID, "agent", agentName)
-		}
-
-		if l := m.getLogger(); l != nil {
-			l.Info("calling CurrentRuntime", "session", sessionID)
-		}
 		rt, err := m.app.CurrentRuntime()
 		if err != nil {
-			if l := m.getLogger(); l != nil {
-				l.Error("CurrentRuntime failed", err, "session", sessionID)
-			}
 			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: fmt.Errorf("runtime不可用: %w", err)})
 			m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
 			return
 		}
-		if l := m.getLogger(); l != nil {
-			l.Info("CurrentRuntime OK, calling NewSessionFromMeta", "session", sessionID)
-		}
 
 		s := m.app.NewSessionFromMeta()
 		if s == nil {
-			if l := m.getLogger(); l != nil {
-				l.Error("NewSessionFromMeta returned nil", fmt.Errorf("session is nil"), "session", sessionID)
-			}
 			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: fmt.Errorf("会话创建失败")})
 			m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
 			return
 		}
 
-		if l := m.getLogger(); l != nil {
-			l.Info("session ready, calling ask.Run", "session", sessionID, "session_id", s.ID())
-		}
-
 		ask := rt.Ask(agentName, e.Text, s).WithContext(ctx)
 
-		// Wire all event callbacks to bubbletea messages
 		ask.OnContent(func(c string) {
 			m.program.Send(clientmsg.ContentDeltaMsg{SessionID: sessionID, Content: c})
 		})
@@ -991,11 +1151,7 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		})
 		ask.OnToolUseDelta(func(d events.ToolUseDeltaData) {
 			m.program.Send(clientmsg.ToolUseDeltaMsg{
-				SessionID: sessionID,
-				Index:     d.Index,
-				ID:        d.ID,
-				Name:      d.Name,
-				Arguments: d.Arguments,
+				SessionID: sessionID, Index: d.Index, ID: d.ID, Name: d.Name, Arguments: d.Arguments,
 			})
 		})
 		ask.OnThinkingDone(func() {
@@ -1006,10 +1162,7 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 				m.fileTracker.ToolExecStart(d.Params)
 			}
 			m.program.Send(clientmsg.ToolExecStartMsg{
-				SessionID:    sessionID,
-				ToolName:     d.ToolName,
-				Params:       d.Params,
-				EstimatedTok: d.PredictedTokens,
+				SessionID: sessionID, ToolName: d.ToolName, Params: d.Params, EstimatedTok: d.PredictedTokens,
 			})
 		})
 		ask.OnToolEnd(func(d events.ToolExecEndData) {
@@ -1029,25 +1182,14 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 			m.program.Send(clientmsg.ToolExecEndMsg{
-				SessionID:  sessionID,
-				ToolName:   d.ToolName,
-				ToolCallID: d.ToolCallID,
-				Success:    d.Success,
-				Result:     d.Result,
-				Error:      d.Error,
-				Duration:   d.Duration,
-				DiffText:   diffText,
-				DiffAdds:   diffAdds,
-				DiffDels:   diffDels,
-				DiffFile:   diffFile,
+				SessionID: sessionID, ToolName: d.ToolName, ToolCallID: d.ToolCallID,
+				Success: d.Success, Result: d.Result, Error: d.Error, Duration: d.Duration,
+				DiffText: diffText, DiffAdds: diffAdds, DiffDels: diffDels, DiffFile: diffFile,
 			})
 		})
 		ask.OnExecutionSummary(func(d events.ExecutionSummaryData) {
 			m.program.Send(clientmsg.ExecutionSummaryMsg{
-				SessionID:  sessionID,
-				Duration:   d.TotalDuration,
-				TokensUsed: d.TokensUsed,
-				ToolCalls:  d.ToolCalls,
+				SessionID: sessionID, Duration: d.TotalDuration, TokensUsed: d.TokensUsed, ToolCalls: d.ToolCalls,
 			})
 		})
 		ask.OnCycleEnd(func(d events.CycleInfo) {
@@ -1060,9 +1202,7 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		ask.OnPermissionRequest(func(d events.PermissionRequestData) {
 			m.pendingPermission = &d
 			m.program.Send(clientmsg.PermissionRequestMsg{
-				ToolName:      d.ToolName,
-				Reason:        d.Reason,
-				SecurityLevel: int(d.SecurityLevel),
+				ToolName: d.ToolName, Reason: d.Reason, SecurityLevel: int(d.SecurityLevel),
 			})
 		})
 		ask.OnError(func(errStr string) {
@@ -1070,36 +1210,21 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		})
 		ask.OnLLMTimeout(func(d events.LLMTimeoutData) {
 			m.program.Send(clientmsg.LLMTimeoutMsg{
-				SessionID: sessionID,
-				Timeout:   d.Timeout,
-				Elapsed:   d.Elapsed,
-				Error:     d.Error,
+				SessionID: sessionID, Timeout: d.Timeout, Elapsed: d.Elapsed, Error: d.Error,
 			})
 		})
 		ask.OnMaxTurnsReached(func(d events.MaxTurnsReachedData) {
 			m.program.Send(clientmsg.MaxTurnsReachedMsg{
-				SessionID:      sessionID,
-				TurnsCompleted: d.TurnsCompleted,
-				MaxTurns:       d.MaxTurns,
-				Suggestion:     d.Suggestion,
+				SessionID: sessionID, TurnsCompleted: d.TurnsCompleted, MaxTurns: d.MaxTurns, Suggestion: d.Suggestion,
 			})
 		})
 		ask.OnAnswer(func(answer string) {
 			m.program.Send(clientmsg.FinalAnswerMsg{SessionID: sessionID, Content: answer})
 		})
 
-		sendStart := time.Now()
 		_, err = ask.Run()
-		elapsed := time.Since(sendStart)
 		if err != nil {
-			if l := m.getLogger(); l != nil {
-				l.Warn("agent ask error", "session", sessionID, "elapsed_ms", elapsed.Milliseconds(), "error", err)
-			}
 			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: err})
-		} else {
-			if l := m.getLogger(); l != nil {
-				l.Info("agent ask done", "session", sessionID, "elapsed_ms", elapsed.Milliseconds())
-			}
 		}
 		m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
 	}()

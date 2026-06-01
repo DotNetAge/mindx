@@ -43,6 +43,12 @@ type Sidebar struct {
 	ModelName    string
 
 	FileChanges []data.FileChange
+
+	// CostFn overrides the default pricing lookup for cost calculation.
+	// If nil, data.GetPricing/data.CalculateCost is used as fallback.
+	// CostFunc model-specific cost breakdown. If nil, data.GetPricing/data.CalculateCost is used.
+	// Returns (inputCost, outputCost, cachedCost) separately for detailed display.
+	CostFunc func(modelName string, inputTokens, outputTokens, cachedTokens int) (inputCost, outputCost, cachedCost float64)
 }
 
 func New() *Sidebar {
@@ -155,11 +161,17 @@ func (s *Sidebar) buildContent() string {
 
 	// Cost detail section
 	if s.TotalTokens > 0 {
-		p := data.GetPricing(s.ModelName)
-		inputCost := float64(s.InputTokens) / 1_000_000 * p.InputPrice
-		outputCost := float64(s.OutputTokens) / 1_000_000 * p.OutputPrice
-		cachedCost := float64(s.CachedTokens) / 1_000_000 * p.CachedPrice
-		totalCost := inputCost + outputCost + cachedCost
+		var inputCost, outputCost, cachedCost, totalCost float64
+		if s.CostFunc != nil {
+			inputCost, outputCost, cachedCost = s.CostFunc(s.ModelName, s.InputTokens, s.OutputTokens, s.CachedTokens)
+			totalCost = inputCost + outputCost + cachedCost
+		} else {
+			p := data.GetPricing(s.ModelName)
+			inputCost = float64(s.InputTokens) / 1_000_000 * p.InputPrice
+			outputCost = float64(s.OutputTokens) / 1_000_000 * p.OutputPrice
+			cachedCost = float64(s.CachedTokens) / 1_000_000 * p.CachedPrice
+			totalCost = inputCost + outputCost + cachedCost
+		}
 
 		var costParts []string
 		costParts = append(costParts, boldLabel.Render("费用明细"))

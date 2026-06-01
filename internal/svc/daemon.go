@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/DotNetAge/goreact/events"
+	"github.com/google/uuid"
 	goreactmemory "github.com/DotNetAge/goreact/memory"
 	goreactsession "github.com/DotNetAge/goreact/session"
 	"github.com/DotNetAge/gort/pkg/gateway"
@@ -27,6 +28,12 @@ var (
 	ulidRegex    = regexp.MustCompile(`^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$`)
 )
 
+type pendingInteraction struct {
+	replyFn func(answers map[string]string)
+	grantFn func(params map[string]any)
+	denyFn  func(reason string)
+}
+
 type Daemon struct {
 	app          *core.App
 	gw           *gateway.Server
@@ -39,6 +46,9 @@ type Daemon struct {
 	logger       logging.Logger
 	execMu       sync.Mutex
 	clientCancels sync.Map
+
+	pendingInteractions map[string]*pendingInteraction
+	interactMu          sync.Mutex
 }
 
 func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
@@ -115,13 +125,14 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 	}
 
 	d := &Daemon{
-		app:          app,
-		addr:         addr,
-		wsPath:       wsPath,
-		schedulerDB:  schedulerDB,
-		memoryWatch:  memoryWatch,
-		sharedMemory: sharedMemory,
-		logger:       logger,
+		app:                 app,
+		addr:                addr,
+		wsPath:              wsPath,
+		schedulerDB:         schedulerDB,
+		memoryWatch:         memoryWatch,
+		sharedMemory:        sharedMemory,
+		logger:              logger,
+		pendingInteractions: make(map[string]*pendingInteraction),
 	}
 
 	if schedulerDB != nil {
@@ -276,12 +287,16 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	)
 
 	var payload struct {
-		Text string `json:"text"`
+		Text      string `json:"text"`
+		SessionID string `json:"session_id,omitempty"`
 	}
 	if err := json.Unmarshal(msg.Data, &payload); err != nil || payload.Text == "" {
 		d.logger.Warn("defaultHandler: missing or invalid text field",
 			"data", string(msg.Data), "error", err)
 		return
+	}
+	if payload.SessionID != "" {
+		msg.SessionID = payload.SessionID
 	}
 	text := payload.Text
 
@@ -337,6 +352,13 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("defaultHandler: AskBuilder panic", fmt.Errorf("%v", r),
+					"client_id", clientID, "session_id", sid)
+				d.sendEvent(clientID, sid, gateway.RespError, "错误", fmt.Sprintf("执行异常: %v", r))
+			}
+		}()
 		defer func() {
 			cancel()
 			d.clientCancels.Delete(clientID)
@@ -411,12 +433,32 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			d.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, "子任务完成", md)
 		}).
 		OnAskUser(func(data events.AskUserRequestData) {
-			jsonData, _ := json.Marshal(data)
-			d.sendEvent(clientID, sid, gateway.RespForm, "需要澄清", string(jsonData))
+			correlationID := uuid.New().String()
+			d.interactMu.Lock()
+			d.pendingInteractions[correlationID] = &pendingInteraction{
+				replyFn: data.Reply,
+			}
+			d.interactMu.Unlock()
+			gw.SendResponse(clientID, gateway.RespForm, "需要澄清", map[string]any{
+				"correlation_id": correlationID,
+				"questions":      data.Questions,
+			}, gateway.WithSessionID(sid))
 		}).
 		OnPermissionRequest(func(data events.PermissionRequestData) {
-			md := buildPermissionRequestMarkdown(data)
-			d.sendEvent(clientID, sid, gateway.RespPermissionRequest, "权限请求", md)
+			correlationID := uuid.New().String()
+			d.interactMu.Lock()
+			d.pendingInteractions[correlationID] = &pendingInteraction{
+				grantFn: data.Grant,
+				denyFn:  data.Deny,
+			}
+			d.interactMu.Unlock()
+			gw.SendResponse(clientID, gateway.RespPermissionRequest, "权限请求", map[string]any{
+				"correlation_id": correlationID,
+				"tool_name":      data.ToolName,
+				"reason":         data.Reason,
+				"security_level": data.SecurityLevel,
+				"params":         data.Params,
+			}, gateway.WithSessionID(sid))
 		}).
 		OnPermissionDenied(func(reason string) {
 			d.sendEvent(clientID, sid, gateway.RespPermissionDenied, "权限拒绝", reason)
@@ -431,9 +473,8 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				}))
 		}).
 		OnLLMTimeout(func(data events.LLMTimeoutData) {
-			gw.SendResponse(clientID, gateway.RespError, "超时", map[string]any{
-				"session_id": data.SessionID, "timeout": data.Timeout.String(), "elapsed": data.Elapsed.String(), "error": data.Error,
-			}, gateway.WithSessionID(sid))
+			msg := fmt.Sprintf("LLM 超时 (已耗时 %s): %s", data.Elapsed, data.Error)
+			d.sendEvent(clientID, sid, gateway.RespError, "超时", msg)
 		}).
 		Run()
 
