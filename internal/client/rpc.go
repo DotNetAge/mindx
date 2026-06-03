@@ -152,6 +152,48 @@ func (m *rootModel) registerNotificationHandlers() {
 		})
 	})
 
+	// RespFileModified is sent by the daemon after each Write/FileEdit tool
+	// execution to broadcast the session's current modified files list.
+	// Merge with fileTracker's diff data for accurate sidebar display.
+	c.OnResponse(gateway.RespFileModified, func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
+		evData, ok := env.Data.(map[string]any)
+		if !ok {
+			return
+		}
+
+		filesRaw, _ := evData["files"].([]any)
+		if len(filesRaw) == 0 {
+			return
+		}
+
+		// Build a set of file paths from the daemon event.
+		daemonFiles := make(map[string]bool)
+		for _, f := range filesRaw {
+			if s, ok := f.(string); ok && s != "" {
+				daemonFiles[s] = true
+			}
+		}
+
+		// Merge with fileTracker's existing changes (which carry diff data).
+		var merged []data.FileChange
+		if m.fileTracker != nil {
+			for _, c := range m.fileTracker.Snapshot() {
+				if daemonFiles[c.File] {
+					merged = append(merged, c)
+					delete(daemonFiles, c.File)
+				}
+			}
+		}
+		// Add any new files from daemon that fileTracker doesn't know about.
+		for f := range daemonFiles {
+			merged = append(merged, data.FileChange{File: f})
+		}
+
+		if len(merged) > 0 {
+			m.sidebar.SetFileChanges(merged)
+		}
+	})
+
 	c.OnResponse(gateway.RespExecutionSummary, func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
 		data, ok := env.Data.(map[string]any)
 		if !ok {
