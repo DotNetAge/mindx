@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -33,11 +33,7 @@ func (d *Daemon) handleFSList(_ context.Context, params json.RawMessage) (any, e
 
 	dirPath := p.Path
 	if dirPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("cannot determine home directory: %w", err)
-		}
-		dirPath = home
+		dirPath = defaultFSHome()
 	}
 
 	cleanPath := filepath.Clean(dirPath)
@@ -49,12 +45,13 @@ func (d *Daemon) handleFSList(_ context.Context, params json.RawMessage) (any, e
 	info, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("path does not exist: %s", cleanPath)
+			if mkdirErr := os.MkdirAll(absPath, 0755); mkdirErr != nil {
+				return nil, fmt.Errorf("path does not exist and cannot create: %s: %w", cleanPath, mkdirErr)
+			}
+		} else {
+			return nil, fmt.Errorf("access error: %w", err)
 		}
-		return nil, fmt.Errorf("access error: %w", err)
-	}
-
-	if !info.IsDir() {
+	} else if !info.IsDir() {
 		return nil, fmt.Errorf("not a directory: %s", cleanPath)
 	}
 
@@ -99,14 +96,21 @@ func (d *Daemon) handleFSList(_ context.Context, params json.RawMessage) (any, e
 	return result, nil
 }
 
-func (d *Daemon) handleFSHome(_ context.Context, _ json.RawMessage) (any, error) {
-	currentUser, err := user.Current()
-	if err != nil {
-		home, homeErr := os.UserHomeDir()
-		if homeErr != nil {
-			return nil, fmt.Errorf("cannot determine home directory: %v / %v", err, homeErr)
+func defaultFSHome() string {
+	if runtime.GOOS == "windows" {
+		systemDrive := os.Getenv("SystemDrive")
+		if systemDrive == "" {
+			systemDrive = "C:"
 		}
-		return map[string]string{"path": home}, nil
+		return filepath.Join(systemDrive, "mindx")
 	}
-	return map[string]string{"path": currentUser.HomeDir}, nil
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(home, "mindx")
+}
+
+func (d *Daemon) handleFSHome(_ context.Context, _ json.RawMessage) (any, error) {
+	return map[string]string{"path": defaultFSHome()}, nil
 }

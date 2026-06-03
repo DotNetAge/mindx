@@ -35,7 +35,7 @@ models:
     max_turns: 0
   - name: qwen3.6-flash
     title: Qwen3.6 Flash
-    description: > 
+    description: >
       Qwen3.6原生视觉语言系列Flash模型，模型效果相较3.5-Flash显著提升。
       本模型重点提升agentic coding能力（在多项代码智能体基准上大幅超越前代）、
       数学推理和代码推理能力；视觉方面在空间智能能力上显著增强，物体定位与目标检测提升尤为突出。
@@ -99,6 +99,7 @@ models:
     repetition_penalty: 0
     enabled: true
     max_turns: 0
+  # --- DashScope 托管第三方模型 ---
   - name: deepseek-v3.2
     title: DeepSeek V3.2
     description: DeepSeekv3.2非深度求索官方提供而是通过阿里云百练提供服务。
@@ -178,7 +179,227 @@ models:
     context_cache: true
     top_p: 0
     top_k: 0
-    temperature: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+
+  # ============================================================
+  # 以下为 BundledProviders.swift 同步补充的供应商原生模型
+  # ============================================================
+
+  # --- 智谱 AI (zhipu) ---
+  - name: GLM-5.1-zhipu
+    title: GLM-5.1 (智谱官方)
+    description: >
+      智谱AI官方GLM-5.1模型，总参数744B，支持200K超长上下文，最大输出128K tokens。
+      拥有强大逻辑推理、长文本理解与代码生成能力，适用于智能交互、企业应用、开发辅助等场景。
+    provider: zhipu
+    cost_per_1m_in: 6
+    cost_per_1m_out: 24
+    max_tokens: 128000
+    context_length: 200000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+
+  # --- Kimi / Moonshot (moonshot) ---
+  - name: kimi-k2.6-native
+    title: Kimi K2.6 (Moonshot官方)
+    description: Kimi官方原生K2.6模型，具备更强更稳的长程代码编写能力，指令遵循和自我纠错能力显著提升。同时支持文本、图片与视频输入、思考与非思考模式、对话与Agent任务。
+    provider: moonshot
+    cost_per_1m_in: 7
+    cost_per_1m_out: 28
+    max_tokens: 98000
+    context_length: 262144
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+
+  # --- MiniMax (minimax) ---
+  - name: MiniMax-M2.5
+    title: MiniMax-M2.5
+    description: MiniMax官方M2.5模型，具备强大的多轮对话和复杂任务处理能力。
+    provider: minimax
+    cost_per_1m_in: 2
+    cost_per_1m_out: 8
+    max_tokens: 196000
+    context_length: 197000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+
+  # --- 火山引擎 / ByteDance (ark) ---
+  - name: doubao-seed-2-0-pro-260215
+    title: Seed 2.0 Pro
+    description: 火山引擎Seed 2.0 Pro模型，字节跳动自研大模型，在多项基准测试中表现优异。
+    provider: ark
+    cost_per_1m_in: 4
+    cost_per_1m_out: 18
+    max_tokens: 131072
+    context_length: 256000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+
+  # --- OpenAI ---
+  - name: gpt-4.1
+    title: GPT-4.1
+    description: OpenAI GPT-4.1模型，支持百万级上下文窗口，在推理、编码、创意写作等任务上表现卓越。
+    provider: openai
+    cost_per_1m_in: 2
+    cost_per_1m_out: 8
+    max_tokens: 32768
+    context_length: 1000000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+  - name: gpt-5.5
+    title: GPT-5.5
+    description: OpenAI 最新GPT-5.5旗舰模型，综合能力最强，在复杂推理和多步骤任务上表现出色。
+    provider: openai
+    cost_per_1m_in: 5
+    cost_per_1m_out: 30
+    max_tokens: 32768
+    context_length: 1000000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+
+  # --- Anthropic ---
+  - name: claude-sonnet-4
+    title: Claude Sonnet 4.6
+    description: Anthropic Claude Sonnet 4.6，平衡性能与成本的中端模型，适合大多数生产场景。支持百万级上下文和强大的工具调用能力。
+    provider: anthropic
+    cost_per_1m_in: 3
+    cost_per_1m_out: 15
+    max_tokens: 128000
+    context_length: 1000000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+  - name: claude-opus-4
+    title: Claude Opus 4.6
+    description: Anthropic Claude Opus 4.6，最强推理能力的旗舰模型，适合高难度科研、复杂办公、深度智能代理等场景。
+    provider: anthropic
+    cost_per_1m_in: 5
+    cost_per_1m_out: 25
+    max_tokens: 128000
+    context_length: 1000000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+
+  # --- Google Gemini ---
+  - name: gemini-3.5-flash
+    title: Gemini 3.5 Flash
+    description: Google Gemini 3.5 Flash，轻量高效的多模态模型，速度快成本低，适合高频使用场景。
+    provider: google
+    cost_per_1m_in: 1.5
+    cost_per_1m_out: 9
+    max_tokens: 65536
+    context_length: 1000000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: true
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+  - name: gemini-3.1-pro
+    title: Gemini 3.1 Pro
+    description: Google Gemini 3.1 Pro，中高端多模态模型，在推理、编码和长文档理解方面表现优异。
+    provider: google
+    cost_per_1m_in: 2
+    cost_per_1m_out: 12
+    max_tokens: 65536
+    context_length: 1000000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: true
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
     repetition_penalty: 0
     enabled: true
     max_turns: 0

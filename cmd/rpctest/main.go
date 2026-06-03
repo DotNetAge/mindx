@@ -22,14 +22,15 @@ func main() {
 	}
 	fmt.Fprintf(os.Stderr, "已连接到 %s\n", addr)
 
-	// Register handler for ALL known event types
+	// Register handler for ALL known event types (GoReact aligned)
 	types := []gateway.ResponseType{
 		gateway.RespThinkingDelta,
 		gateway.RespThinkingDone,
 		gateway.RespMarkdown,
 		gateway.RespText,
-		gateway.RespActionStart,
-		gateway.RespActionResult,
+		gateway.RespToolUseDelta,
+		gateway.RespToolExecStart,
+		gateway.RespToolExecEnd,
 		gateway.RespExecutionSummary,
 		gateway.RespFinalAnswer,
 		gateway.RespCycleEnd,

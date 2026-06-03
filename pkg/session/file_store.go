@@ -16,11 +16,12 @@ import (
 )
 
 type yamlMessage struct {
-	Role       string         `yaml:"role"`
-	Content    string         `yaml:"content"`
-	Timestamp  int64          `yaml:"timestamp"`
-	ToolCallID string         `yaml:"tool_call_id,omitempty"`
-	ToolCalls  []yamlToolCall `yaml:"tool_calls,omitempty"`
+	Role             string         `yaml:"role"`
+	Content          string         `yaml:"content"`
+	ReasoningContent string         `yaml:"reasoning_content,omitempty"`
+	Timestamp        int64          `yaml:"timestamp"`
+	ToolCallID       string         `yaml:"tool_call_id,omitempty"`
+	ToolCalls        []yamlToolCall `yaml:"tool_calls,omitempty"`
 }
 
 // GetCursor retrieves the compaction cursor position from the session's metadata.
@@ -85,16 +86,18 @@ func newYamlMessage(msg goreactsession.Message) yamlMessage {
 		})
 	}
 	return yamlMessage{
-		Role:       msg.Role,
-		Content:    base64.StdEncoding.EncodeToString([]byte(msg.Content)),
-		Timestamp:  msg.Timestamp,
-		ToolCallID: msg.ToolCallID,
-		ToolCalls:  ymlTCs,
+		Role:             msg.Role,
+		Content:          base64.StdEncoding.EncodeToString([]byte(msg.Content)),
+		ReasoningContent: base64.StdEncoding.EncodeToString([]byte(msg.ReasoningContent)),
+		Timestamp:        msg.Timestamp,
+		ToolCallID:       msg.ToolCallID,
+		ToolCalls:        ymlTCs,
 	}
 }
 
 func (ym yamlMessage) toCoreMessage() goreactsession.Message {
 	decoded, _ := base64.StdEncoding.DecodeString(ym.Content)
+	reasoningDecoded, _ := base64.StdEncoding.DecodeString(ym.ReasoningContent)
 	var tcs []goreactsession.ToolCall
 	for _, ytc := range ym.ToolCalls {
 		tcs = append(tcs, goreactsession.ToolCall{
@@ -104,11 +107,12 @@ func (ym yamlMessage) toCoreMessage() goreactsession.Message {
 		})
 	}
 	return goreactsession.Message{
-		Role:       ym.Role,
-		Content:    string(decoded),
-		Timestamp:  ym.Timestamp,
-		ToolCallID: ym.ToolCallID,
-		ToolCalls:  tcs,
+		Role:             ym.Role,
+		Content:          string(decoded),
+		ReasoningContent: string(reasoningDecoded),
+		Timestamp:        ym.Timestamp,
+		ToolCallID:       ym.ToolCallID,
+		ToolCalls:        tcs,
 	}
 }
 
@@ -214,6 +218,19 @@ func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentNa
 
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("write session file %s: %w", path, err)
+	}
+
+	// 补录 title：首条 user 消息内容 → session 标题（仅首次，不覆盖）
+	if msg.Role == "user" && msg.Content != "" {
+		if existingMeta, err := LoadSessionMeta(dir); err == nil && existingMeta.Title == "" {
+			title := strings.TrimSpace(msg.Content)
+			title = strings.ReplaceAll(title, "\n", " ")
+			if len(title) > 80 {
+				title = title[:77] + "..."
+			}
+			existingMeta.Title = title
+			_ = existingMeta.Save(dir)
+		}
 	}
 
 	s.updateSessionMeta(dir)
@@ -572,6 +589,7 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goreactsessi
 	meta, metaErr := LoadSessionMeta(sessionDirPath)
 	if metaErr == nil {
 		si.ProjectDir = meta.ProjectWorkingDir
+		si.Title = meta.Title
 		si.CreatedAt = meta.CreatedAt
 		si.LastActivityAt = meta.UpdatedAt
 		if si.LastActivityAt.IsZero() {

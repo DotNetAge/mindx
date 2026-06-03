@@ -51,6 +51,17 @@ func (c *Conversation) currentRound() *ConversationRound {
 	return &c.Rounds[len(c.Rounds)-1]
 }
 
+// EnsureCurrentRound is the exported version of ensureCurrentRound for cross-package use
+// (e.g., session history restoration in client package).
+func (c *Conversation) EnsureCurrentRound() {
+	c.ensureCurrentRound()
+}
+
+// CurrentRound is the exported version of currentRound for cross-package use.
+func (c *Conversation) CurrentRound() *ConversationRound {
+	return c.currentRound()
+}
+
 func (c *Conversation) ensureCurrentRound() {
 	if len(c.Rounds) == 0 {
 		c.Rounds = append(c.Rounds, ConversationRound{})
