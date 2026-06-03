@@ -40,6 +40,9 @@ type App struct {
 	rules       rule.RuleRegistry
 	sessDB      *mindxses.FileSessionStore
 
+	// Loaded provider configs (for RPC queries)
+	providerConfigs []*config.ProviderConfig
+
 	// Skill registry (loaded from skills directory)
 	skillReg skill.SkillRegistry
 
@@ -174,6 +177,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		embedder:            emb,
 		permissionRuleStore: permStore,
 		tokenUsageStore:     mindxses.NewFileTokenUsageStore(settings.DataDir()),
+		providerConfigs:     providers,
 	}, nil
 }
 
@@ -296,6 +300,10 @@ func (a *App) SessDB() *mindxses.FileSessionStore {
 
 func (a *App) TokenUsageStore() *mindxses.FileTokenUsageStore {
 	return a.tokenUsageStore
+}
+
+func (a *App) ProviderConfigs() []*config.ProviderConfig {
+	return a.providerConfigs
 }
 
 // CreateSession creates a new session with metadata including the captured project directory (os.Getwd() at invocation time).

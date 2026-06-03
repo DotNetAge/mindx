@@ -37,12 +37,14 @@ var rootCmd = &cobra.Command{
 	子命令:
 	  start   启动后台 Daemon 服务（供 WebUI/MacUI 接入）
 	  doctor  重新运行配置向导
+	  web     打开浏览器访问 WebUI 界面
 
 	示例:
 	  mindx                    # 启动 TUI 聊天界面
 	  mindx start             # 启动后台服务
 	  mindx start --port 8080 # 指定端口
-	  mindx doctor            # 重新配置环境`,
+	  mindx doctor            # 重新配置环境
+	  mindx web               # 打开 WebUI`,
 	RunE:         runTUI,
 	SilenceUsage: true,
 }
@@ -54,6 +56,7 @@ func Execute() error {
 func init() {
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(doctorCmd)
+	rootCmd.AddCommand(webCmd)
 }
 
 func runTUI(cmd *cobra.Command, args []string) error {

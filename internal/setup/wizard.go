@@ -190,6 +190,9 @@ type firstRunModel struct {
 	installDir    string
 	pathInPath    bool
 
+	webUIReady     bool
+	webUISubmitted bool
+
 	modelConfigured  bool
 	apiKeyConfigured bool
 
@@ -210,6 +213,7 @@ type firstRunResult struct {
 	PythonInfo     core.PythonConfig
 	EmbedderModel  string
 	PathSetup      bool
+	WebUIReady     bool
 }
 
 func (m *firstRunModel) contentWidth() int {
@@ -362,6 +366,11 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		m.embedderModel = "model_q4.onnx"
 	}
 
+	webDirPath := filepath.Join(workspaceDir, "web")
+	if _, err := os.Stat(webDirPath); err == nil {
+		m.webUIReady = true
+	}
+
 	p := tea.NewProgram(m, tea.WithoutSignals())
 	finalModel, err := p.Run()
 	if err != nil {
@@ -382,6 +391,7 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		PythonInfo:       fm.pythonInfo,
 		EmbedderModel:    fm.embedderModel,
 		PathSetup:        fm.pathChoice,
+		WebUIReady:       fm.webUIReady,
 	}
 }
 
@@ -489,8 +499,10 @@ func (m *firstRunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case 5:
 		return m.updateMemoryConfig(msg)
 	case 6:
-		return m.updatePathSetup(msg)
-	}
+			return m.updatePathSetup(msg)
+		case 7:
+			return m.updateWebUIComplete(msg)
+		}
 	return m, nil
 }
 
@@ -766,14 +778,30 @@ func (m *firstRunModel) updatePathSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			m.pathSubmitted = true
-			m.done = true
-			return m, tea.Quit
+			m.step = 7
+			return m, nil
 		case "s", "S":
 			if m.pathInPath {
 				m.pathSubmitted = true
-				m.done = true
-				return m, tea.Quit
+				m.step = 7
+				return m, nil
 			}
+		}
+	}
+	return m, nil
+}
+
+func (m *firstRunModel) updateWebUIComplete(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "q", "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+		case "enter", " ", "s", "S":
+			m.webUISubmitted = true
+			m.done = true
+			return m, tea.Quit
 		}
 	}
 	return m, nil
@@ -968,6 +996,51 @@ func (m *firstRunModel) renderPathSetup() string {
 	return m.paddedView(borderStyle.Render(b.String()))
 }
 
+func (m *firstRunModel) renderWebUIComplete() string {
+	webDir := filepath.Join(m.workspaceDir, "web")
+	webExists := false
+	if _, err := os.Stat(webDir); err == nil {
+		webExists = true
+	}
+
+	var md string
+	if webExists {
+		md = fmt.Sprintf(`🎉 配置完成！
+
+MindX 已成功安装并配置完成。
+
+---
+
+🌐 **WebUI 界面**
+
+启动 Daemon 后即可通过浏览器访问 WebUI：
+
+   **http://localhost:1313**
+
+快速启动：
+   mindx start        # 启动后台服务
+   mindx web          # 直接打开 WebUI
+
+---
+
+**Enter** 完成 退出向导`)
+	} else {
+		md = fmt.Sprintf(`🎉 配置完成！
+
+MindX 已成功安装并配置完成。
+
+⚠️  WebUI 资源文件未检测到 (%s)
+
+如需使用 WebUI，请确保构建产物已包含 runtime/web 目录。
+
+---
+
+**Enter** 完成 退出向导`, webDir)
+	}
+
+	return m.paddedView(borderStyle.Render(m.renderMarkdown(md)))
+}
+
 func (m *firstRunModel) View() tea.View {
 	content := ""
 	switch m.step {
@@ -985,6 +1058,8 @@ func (m *firstRunModel) View() tea.View {
 		content = m.renderMemoryConfig()
 	case 6:
 		content = m.renderPathSetup()
+	case 7:
+		content = m.renderWebUIComplete()
 	}
 	return tea.NewView(content)
 }

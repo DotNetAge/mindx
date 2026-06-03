@@ -37,7 +37,8 @@ func (d *Daemon) forwardEvent(clientID string, event goreactevents.ReactEvent) {
 			d.logger.Warn("unexpected ToolUseDelta data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		d.gw.SendResponse(clientID, gateway.RespText, "工具参数", map[string]any{
+		// 透传：GoReact ToolUseDeltaData → gateway RespToolUseDelta (恒等映射)
+		d.gw.SendResponse(clientID, gateway.RespToolUseDelta, "工具调用参数", map[string]any{
 			"index":     data.Index,
 			"id":        data.ID,
 			"name":      data.Name,
@@ -50,9 +51,11 @@ func (d *Daemon) forwardEvent(clientID string, event goreactevents.ReactEvent) {
 			d.logger.Warn("unexpected ToolExecStart data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		d.gw.SendResponse(clientID, gateway.RespActionStart, "工具开始", map[string]any{
-			"tool_name": data.ToolName,
-			"params":    data.Params,
+		// 透传：GoReact ToolExecStartData → gateway RespToolExecStart (恒等映射)
+		d.gw.SendResponse(clientID, gateway.RespToolExecStart, "工具执行开始", map[string]any{
+			"tool_name":        data.ToolName,
+			"params":           data.Params,
+			"predicted_tokens": data.PredictedTokens,
 		}, gateway.WithSessionID(sid))
 
 	case goreactevents.ToolExecEnd:
@@ -61,12 +64,14 @@ func (d *Daemon) forwardEvent(clientID string, event goreactevents.ReactEvent) {
 			d.logger.Warn("unexpected ToolExecEnd data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
-		d.gw.SendResponse(clientID, gateway.RespActionResult, "工具结果", map[string]any{
-			"tool_name": data.ToolName,
-			"success":   data.Success,
-			"result":    data.Result,
-			"error":     data.Error,
-			"duration":  data.Duration.String(),
+		// 透传：GoReact ToolExecEndData → gateway RespToolExecEnd (恒等映射)
+		d.gw.SendResponse(clientID, gateway.RespToolExecEnd, "工具执行结束", map[string]any{
+			"tool_name":   data.ToolName,
+			"tool_call_id": data.ToolCallID,
+			"success":     data.Success,
+			"result":      data.Result,
+			"error":       data.Error,
+			"duration_ms": int(data.Duration.Milliseconds()),
 		}, gateway.WithSessionID(sid))
 
 	case goreactevents.SubtaskSpawned:
@@ -127,6 +132,12 @@ func (d *Daemon) forwardEvent(clientID string, event goreactevents.ReactEvent) {
 			d.logger.Warn("unexpected ExecutionSummary data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
+		d.logger.Info("[SSE-TRACE L5] ExecutionSummary event: input_tokens="+fmt.Sprint(summary.TokensUsed.InputTokens)+
+			" output_tokens="+fmt.Sprint(summary.TokensUsed.OutputTokens)+
+			" total_tokens="+fmt.Sprint(summary.TokensUsed.TotalTokens)+
+			" session="+sid+
+			" iterations="+fmt.Sprint(summary.TotalIterations)+
+			" tools="+fmt.Sprint(summary.ToolCalls))
 		d.sendExecutionSummary(clientID, sid, summary)
 
 	case goreactevents.CycleEnd:
@@ -144,6 +155,10 @@ func (d *Daemon) forwardEvent(clientID string, event goreactevents.ReactEvent) {
 			d.logger.Warn("unexpected TaskSummary data type", "type", fmt.Sprintf("%T", event.Data))
 			return
 		}
+		d.logger.Info("[SSE-TRACE L5] TaskSummary event: input_tokens="+fmt.Sprint(taskSummary.TokenUsage.InputTokens)+
+			" output_tokens="+fmt.Sprint(taskSummary.TokenUsage.OutputTokens)+
+			" total_tokens="+fmt.Sprint(taskSummary.TokenUsage.TotalTokens)+
+			" session="+sid)
 		md := buildTaskSummaryMarkdown(taskSummary)
 		d.gw.SendResponse(clientID, gateway.RespTaskSummary, "任务总结", md,
 			gateway.WithSessionID(sid),
@@ -216,6 +231,9 @@ func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.Response
 }
 
 func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreactevents.ExecutionSummaryData) {
+	d.logger.Info("[SSE-TRACE L5] sendExecutionSummary: total_tokens="+fmt.Sprint(summary.TokensUsed.TotalTokens)+
+		" input="+fmt.Sprint(summary.TokensUsed.InputTokens)+
+		" output="+fmt.Sprint(summary.TokensUsed.OutputTokens))
 	tableData := map[string]any{
 		"headers": []string{"Metric", "Value"},
 		"rows": []map[string]string{

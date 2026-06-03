@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -282,26 +283,84 @@ func loadRecentSessions(app *appcore.App) ([]input.SessionItem, error) {
 
 func messagesToConversations(sessionID, agentName string, msgs []goreactsession.Message) []conv.Conversation {
 	var convs []conv.Conversation
+	var current *conv.Conversation
+
+	// 按 tool_call_id 索引待匹配的工具调用（与 Web 前端逻辑对齐）
+	type pendingToolCall struct {
+		name string
+		args map[string]any
+	}
+	pendingToolCalls := map[string]pendingToolCall{}
+
 	for _, msg := range msgs {
-		if strings.TrimSpace(msg.Content) == "" {
-			continue
-		}
 		switch msg.Role {
 		case "user":
-			conv := conv.Conversation{
-				SessionID: sessionID,
-				AgentName: agentName,
-				Status:    conv.StatusDone,
-				CreatedAt: time.UnixMilli(msg.Timestamp),
-				Question:  conv.Question{Text: msg.Content},
-				Output:    conv.Output{},
-			}
-			convs = append(convs, conv)
+			c := conv.NewConversation(sessionID, agentName, msg.Content)
+			c.Status = conv.StatusDone
+			convs = append(convs, c)
+			current = &convs[len(convs)-1]
+
 		case "assistant":
-			if len(convs) > 0 {
-				last := &convs[len(convs)-1]
-				last.Output.Entries = append(last.Output.Entries, conv.OutputEntry{Role: "assistant", Content: msg.Content})
+			if current == nil {
+				continue
 			}
+			// 1) 还原思想流（reasoning_content 是 assistant 消息内嵌字段）
+			if msg.ReasoningContent != "" {
+				current.EnsureCurrentRound()
+				if rnd := current.CurrentRound(); rnd != nil {
+					rnd.ThoughtContent = msg.ReasoningContent
+				}
+			}
+			// 2) 收集所有 tool_calls 到 Map（GoReact 扁平格式 {id, name, arguments}）
+			for _, tc := range msg.ToolCalls {
+				var argsMap map[string]any
+				if tc.Arguments != "" {
+					json.Unmarshal([]byte(tc.Arguments), &argsMap)
+				}
+				pendingToolCalls[tc.ID] = pendingToolCall{
+					name: tc.Name,
+					args: argsMap,
+				}
+			}
+			// 3) 正文内容 → Output
+			if msg.Content != "" {
+				current.Output.Entries = append(current.Output.Entries, conv.OutputEntry{Role: "assistant", Content: msg.Content})
+			}
+
+		case "tool":
+			if current == nil {
+				continue
+			}
+			// 通过 tool_call_id 精确匹配工具调用结果
+			match, ok := pendingToolCalls[msg.ToolCallID]
+			if !ok {
+				match = pendingToolCall{name: "工具"}
+			}
+
+			current.EnsureCurrentRound()
+			if rnd := current.CurrentRound(); rnd != nil {
+				success := true
+				resultText := msg.Content
+				if strings.HasPrefix(resultText, "[") && strings.Contains(resultText, "] error:") {
+					success = false
+				}
+				rnd.Action.Steps = append(rnd.Action.Steps, conv.ActionStep{
+					ToolName:   match.name,
+					Status:     map[bool]conv.ActionStepStatus{true: conv.ActionStepDone, false: conv.ActionStepFailed}[success],
+					Params:     match.args,
+					ResultText: resultText,
+					Collapsed:  false,
+				})
+			}
+			delete(pendingToolCalls, msg.ToolCallID)
+		}
+	}
+
+	// 标记所有还原的 Action 为已完成
+	for i := range convs {
+		convs[i].Status = conv.StatusDone
+		for j := range convs[i].Rounds {
+			convs[i].Rounds[j].Action.Completed = true
 		}
 	}
 	return convs

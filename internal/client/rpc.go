@@ -74,7 +74,7 @@ func (m *rootModel) registerNotificationHandlers() {
 		m.program.Send(clientmsg.ContentDeltaMsg{SessionID: env.SessionID, Content: content})
 	})
 
-	c.OnResponse(gateway.RespText, func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
+	c.OnResponse(gateway.RespToolUseDelta, func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
 		data, ok := env.Data.(map[string]any)
 		if !ok {
 			return
@@ -92,7 +92,7 @@ func (m *rootModel) registerNotificationHandlers() {
 		})
 	})
 
-	c.OnResponse(gateway.RespActionStart, func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
+	c.OnResponse(gateway.RespToolExecStart, func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
 		data, ok := env.Data.(map[string]any)
 		if !ok {
 			return
@@ -111,7 +111,7 @@ func (m *rootModel) registerNotificationHandlers() {
 		})
 	})
 
-	c.OnResponse(gateway.RespActionResult, func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
+	c.OnResponse(gateway.RespToolExecEnd, func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
 		data, ok := env.Data.(map[string]any)
 		if !ok {
 			return
