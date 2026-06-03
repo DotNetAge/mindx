@@ -61,7 +61,7 @@ func (s *FileSessionStore) SetCursor(_ context.Context, sessionID string, cursor
 		// Create a minimal meta with just the cursor
 		meta = &SessionMeta{
 			SessionID: sessionID,
-			Cursor:   cursor,
+			Cursor:    cursor,
 		}
 	} else {
 		meta.Cursor = cursor
@@ -170,7 +170,7 @@ func (s *FileSessionStore) findSessionDir(sessionID string) string {
 		if err != nil || !info.IsDir() || info.Name() != sessionID {
 			return nil
 		}
-		sessionFile := filepath.Join(path, "session.yml")
+		sessionFile := filepath.Join(path, "meta.json")
 		if info.IsDir() {
 			if _, statErr := os.Stat(sessionFile); statErr == nil {
 				result = path
@@ -457,12 +457,12 @@ func (s *FileSessionStore) GetByRole(ctx context.Context, agent string) (*goreac
 	agentDir := s.agentDir(agent)
 
 	_ = filepath.Walk(agentDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || info.Name() != "session.yml" {
+		if err != nil || info.IsDir() || info.Name() != "meta.json" {
 			return nil
 		}
 
 		sessionID := filepath.Base(filepath.Dir(path))
-		si, statErr := statSessionInfo(agent, sessionID, path)
+		si, statErr := statSessionInfo(agent, sessionID, filepath.Dir(path))
 		if statErr != nil {
 			return nil
 		}
@@ -486,7 +486,7 @@ func (s *FileSessionStore) ListSessions(ctx context.Context) ([]goreactsession.S
 	var infos []goreactsession.SessionInfo
 
 	_ = filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || info.Name() != "session.yml" {
+		if err != nil || info.IsDir() || info.Name() != "meta.json" {
 			return nil
 		}
 
@@ -524,7 +524,7 @@ func (s *FileSessionStore) findSessionByAgent(agentName string) (string, error) 
 	var bestModTime time.Time
 
 	_ = filepath.Walk(agentDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || info.Name() != "session.yml" {
+		if err != nil || info.IsDir() || info.Name() != "meta.json" {
 			return nil
 		}
 		modTime := info.ModTime()
