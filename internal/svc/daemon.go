@@ -41,6 +41,7 @@ type Daemon struct {
 	schedulerDB  *scheduler.FileSchedulerStore
 	memoryWatch  *memory.FileWatchService
 	sharedMemory *memory.RAGMemory
+	webServer    *WebServer
 	addr         string
 	wsPath       string
 	logger       logging.Logger
@@ -131,6 +132,7 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 		schedulerDB:         schedulerDB,
 		memoryWatch:         memoryWatch,
 		sharedMemory:        sharedMemory,
+		webServer:           NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
 		logger:              logger,
 		pendingInteractions: make(map[string]*pendingInteraction),
 	}
@@ -176,6 +178,10 @@ func (d *Daemon) Start(ctx context.Context) error {
 		}()
 	} else {
 		d.logger.Info("no filewatch configured, skipping")
+	}
+
+	if err := d.webServer.Start(ctx); err != nil {
+		d.logger.Warn("WebUI server failed to start", "error", err)
 	}
 
 	addr := fmt.Sprintf("ws://localhost%s%s", d.addr, d.wsPath)
@@ -373,7 +379,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			d.sendEvent(clientID, sid, gateway.RespMarkdown, "输出中", chunk)
 		}).
 		OnToolUseDelta(func(data events.ToolUseDeltaData) {
-			gw.SendResponse(clientID, gateway.RespText, "工具参数", map[string]any{
+			gw.SendResponse(clientID, gateway.RespToolUseDelta, "工具调用参数", map[string]any{
 				"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
 			}, gateway.WithSessionID(sid))
 		}).
@@ -381,19 +387,25 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			d.sendEvent(clientID, sid, gateway.RespThinkingDone, "思考完成", "思考阶段已完成")
 		}).
 		OnToolStart(func(data events.ToolExecStartData) {
-			gw.SendResponse(clientID, gateway.RespActionStart, "工具开始", map[string]any{
+			gw.SendResponse(clientID, gateway.RespToolExecStart, "工具执行开始", map[string]any{
 				"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
 			}, gateway.WithSessionID(sid))
 		}).
 		OnToolEnd(func(data events.ToolExecEndData) {
-			gw.SendResponse(clientID, gateway.RespActionResult, "工具结果", map[string]any{
-				"tool_name": data.ToolName, "tool_call_id": data.ToolCallID, "success": data.Success, "result": data.Result, "error": data.Error, "duration": data.Duration.String(),
+			gw.SendResponse(clientID, gateway.RespToolExecEnd, "工具执行结束", map[string]any{
+				"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
+				"success": data.Success, "result": data.Result, "error": data.Error,
+				"duration_ms": int(data.Duration.Milliseconds()),
 			}, gateway.WithSessionID(sid))
 		}).
 		OnAnswer(func(answer string) {
 			d.sendEvent(clientID, sid, gateway.RespFinalAnswer, "最终答案", answer)
 		}).
 		OnExecutionSummary(func(data events.ExecutionSummaryData) {
+			d.logger.Info("[DAEMON] OnExecutionSummary FIRED: total_tokens="+fmt.Sprint(data.TokensUsed.TotalTokens)+
+				" input="+fmt.Sprint(data.TokensUsed.InputTokens)+
+				" output="+fmt.Sprint(data.TokensUsed.OutputTokens)+
+				" iterations="+fmt.Sprint(data.TotalIterations))
 			d.sendExecutionSummary(clientID, sid, data)
 		}).
 		OnCycleEnd(func(data events.CycleInfo) {

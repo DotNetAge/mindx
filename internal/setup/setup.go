@@ -102,6 +102,14 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 		return fmt.Errorf("保存 mindx.json 失败: %w", err)
 	}
 
+	if result.WebUIReady {
+		fmt.Print("\n🌐 WebUI 已就绪\n\n")
+		fmt.Printf("   启动 Daemon 后访问: http://localhost:1313\n")
+		fmt.Printf("   或直接运行: mindx web\n\n")
+	} else {
+		fmt.Print("\n💡 提示: 运行 'mindx web' 可打开 WebUI 界面 (需 Daemon 运行中)\n\n")
+	}
+
 	return nil
 }
 

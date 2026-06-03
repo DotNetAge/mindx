@@ -1,6 +1,6 @@
 ---
 name: personal-assistant
-role: Personal Computer Assistant
+role: Personal Assistant
 description: >
   Responsible for helping users manage daily computer tasks, file organization,
   system maintenance, information search, and productivity workflows. Handles
@@ -13,7 +13,6 @@ skills:
   - file-organizer
   - xlsx
   - pdf
-  - changelog-generator
   - find-experts
   - find-skills
   - introspect

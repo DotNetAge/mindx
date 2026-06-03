@@ -32,6 +32,14 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("model.list", r.daemon.handleModelList)
 	gw.RegisterMethod("model.get", r.daemon.handleModelGet)
 	gw.RegisterMethod("model.switch", r.daemon.handleModelSwitch)
+	gw.RegisterMethod("model.create", r.daemon.handleModelCreate)
+	gw.RegisterMethod("model.update", r.daemon.handleModelUpdate)
+	gw.RegisterMethod("model.delete", r.daemon.handleModelDelete)
+
+	gw.RegisterMethod("provider.list", r.daemon.handleProviderList)
+	gw.RegisterMethod("provider.create", r.daemon.handleProviderCreate)
+	gw.RegisterMethod("provider.update", r.daemon.handleProviderUpdate)
+	gw.RegisterMethod("provider.delete", r.daemon.handleProviderDelete)
 
 	gw.RegisterMethod("skill.list", r.daemon.handleSkillList)
 	gw.RegisterMethod("skill.get", r.daemon.handleSkillGet)
@@ -45,5 +53,12 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 
 	gw.RegisterMethod("user.config", r.daemon.handleUserConfig)
 
+	gw.RegisterMethod("token.usage.overview", r.daemon.handleTokenUsageOverview)
+	gw.RegisterMethod("token.usage.monthly", r.daemon.handleTokenUsageMonthly)
+	gw.RegisterMethod("token.usage.by_model", r.daemon.handleTokenUsageByModel)
+
 	gw.RegisterMethod("schedule.list", r.daemon.handleScheduleList)
+
+	gw.RegisterMethod("log.read", r.daemon.handleLogRead)
+	gw.RegisterMethod("log.clear", r.daemon.handleLogClear)
 }
