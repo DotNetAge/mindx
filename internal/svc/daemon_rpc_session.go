@@ -156,3 +156,60 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		"created_at": info.CreatedAt,
 	}, nil
 }
+
+type sessionFileActionParams struct {
+	SessionID string   `json:"session_id"`
+	Files     []string `json:"files,omitempty"`
+}
+
+func (d *Daemon) handleSessionConfirmFiles(_ context.Context, params json.RawMessage) (any, error) {
+	var p sessionFileActionParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	val, ok := d.activeSessions.Load(p.SessionID)
+	if !ok {
+		return nil, fmt.Errorf("session not active: %s", p.SessionID)
+	}
+	sess := val.(*goreactsession.Session)
+
+	confirmed, err := sess.ConfirmModify(p.Files...)
+	if err != nil {
+		return nil, fmt.Errorf("confirm files failed: %w", err)
+	}
+
+	return map[string]any{
+		"session_id": p.SessionID,
+		"confirmed":  confirmed,
+	}, nil
+}
+
+func (d *Daemon) handleSessionRollbackFiles(_ context.Context, params json.RawMessage) (any, error) {
+	var p sessionFileActionParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	val, ok := d.activeSessions.Load(p.SessionID)
+	if !ok {
+		return nil, fmt.Errorf("session not active: %s", p.SessionID)
+	}
+	sess := val.(*goreactsession.Session)
+
+	rolledBack, err := sess.Rollback(p.Files...)
+	if err != nil {
+		return nil, fmt.Errorf("rollback files failed: %w", err)
+	}
+
+	return map[string]any{
+		"session_id":  p.SessionID,
+		"rolled_back": rolledBack,
+	}, nil
+}

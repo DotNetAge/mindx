@@ -12,7 +12,7 @@ import (
 	"sync"
 
 	"github.com/DotNetAge/goreact/events"
-	"github.com/google/uuid"
+	"github.com/DotNetAge/goreact/hooks/action"
 	goreactmemory "github.com/DotNetAge/goreact/memory"
 	goreactsession "github.com/DotNetAge/goreact/session"
 	"github.com/DotNetAge/gort/pkg/gateway"
@@ -21,12 +21,203 @@ import (
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
+	"github.com/google/uuid"
 )
 
 var (
 	atAgentRegex = regexp.MustCompile(`^@([\w-]+)(?:\s+(.+))?$`)
 	ulidRegex    = regexp.MustCompile(`^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$`)
 )
+
+// fileDiffInfo holds per-file diff data emitted via RespFileModified.
+type fileDiffInfo struct {
+	Path      string `json:"path"`
+	Diff      string `json:"diff"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+	IsNew     bool   `json:"isNew"`
+}
+
+// computeFileDiff reads the current file and its backup (if exists) to compute diff stats.
+func computeFileDiff(sess *goreactsession.Session, filePath string) fileDiffInfo {
+	info := fileDiffInfo{Path: filePath}
+
+	current, err := os.ReadFile(filePath)
+	if err != nil {
+		return info
+	}
+	newContent := string(current)
+
+	sessionDir := sess.SessionDir()
+	if sessionDir == "" {
+		// No session dir — can't find backups, treat as new
+		lines := strings.Split(newContent, "\n")
+		if len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		info.IsNew = true
+		info.Additions = len(lines)
+		info.Diff = buildNewFileDiff(filePath, lines)
+		return info
+	}
+
+	backupPath := filepath.Join(sessionDir, "backup", filepath.Base(filePath)+".bak")
+	oldData, oldErr := os.ReadFile(backupPath)
+	if oldErr != nil {
+		// No backup — new file
+		lines := strings.Split(newContent, "\n")
+		if len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		info.IsNew = true
+		info.Additions = len(lines)
+		info.Diff = buildNewFileDiff(filePath, lines)
+		return info
+	}
+
+	oldContent := string(oldData)
+	info.Diff = buildUnifiedDiff(filePath, oldContent, newContent)
+	info.Additions, info.Deletions = countDiffLines(oldContent, newContent)
+	return info
+}
+
+// buildNewFileDiff generates a unified-diff-style string for a newly created file.
+func buildNewFileDiff(filePath string, lines []string) string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("--- /dev/null\n+++ b/%s\n", filepath.Base(filePath)))
+	b.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
+	for _, line := range lines {
+		b.WriteString("+")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// buildUnifiedDiff generates a basic unified diff string for a modified file.
+func buildUnifiedDiff(filePath, oldContent, newContent string) string {
+	oldLines := splitLines(oldContent)
+	newLines := splitLines(newContent)
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("--- a/%s\n+++ b/%s\n", filepath.Base(filePath), filepath.Base(filePath)))
+
+	// Simple line-by-line diff: scan for changes and emit hunks.
+	type diffLine struct {
+		kind byte // ' ', '+', '-'
+		text string
+	}
+
+	var diff []diffLine
+
+	// Build a simple LCS-based diff
+	// First pass: mark unchanged, added, removed
+	oldUsed := make([]bool, len(oldLines))
+	newUsed := make([]bool, len(newLines))
+
+	// Match identical lines in order
+	ni := 0
+	for oi := 0; oi < len(oldLines); oi++ {
+		if ni >= len(newLines) {
+			break
+		}
+		if oldLines[oi] == newLines[ni] {
+			oldUsed[oi] = true
+			newUsed[ni] = true
+			ni++
+		} else {
+			// Try to find this old line later in new lines
+			found := false
+			for nj := ni + 1; nj < len(newLines); nj++ {
+				if oldLines[oi] == newLines[nj] {
+					// Mark skipped new lines as additions
+					for nk := ni; nk < nj; nk++ {
+						if !newUsed[nk] {
+							newUsed[nk] = true
+							diff = append(diff, diffLine{kind: '+', text: newLines[nk]})
+						}
+					}
+					oldUsed[oi] = true
+					newUsed[nj] = true
+					diff = append(diff, diffLine{kind: ' ', text: oldLines[oi]})
+					ni = nj + 1
+					found = true
+					break
+				}
+			}
+			if !found {
+				diff = append(diff, diffLine{kind: '-', text: oldLines[oi]})
+			}
+		}
+	}
+
+	// Remaining new lines are additions
+	for ; ni < len(newLines); ni++ {
+		if !newUsed[ni] {
+			diff = append(diff, diffLine{kind: '+', text: newLines[ni]})
+		}
+	}
+	// Remaining old lines are deletions
+	for oi := 0; oi < len(oldLines); oi++ {
+		if !oldUsed[oi] {
+			// Check if already added as deletion
+			alreadyAdded := false
+			for _, d := range diff {
+				if d.kind == '-' && d.text == oldLines[oi] {
+					alreadyAdded = true
+					break
+				}
+			}
+			if !alreadyAdded {
+				diff = append(diff, diffLine{kind: '-', text: oldLines[oi]})
+			}
+		}
+	}
+
+	if len(diff) == 0 {
+		return ""
+	}
+
+	// Emit hunks with context
+	b.WriteString(fmt.Sprintf("@@ -1,%d +1,%d @@\n", len(oldLines), len(newLines)))
+	for _, d := range diff {
+		b.WriteByte(d.kind)
+		b.WriteString(d.text)
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+// countDiffLines counts added and removed lines.
+func countDiffLines(oldContent, newContent string) (additions, deletions int) {
+	oldSet := make(map[string]int)
+	for _, l := range strings.Split(oldContent, "\n") {
+		oldSet[l]++
+	}
+	for _, l := range strings.Split(newContent, "\n") {
+		if _, exists := oldSet[l]; exists {
+			oldSet[l]--
+		} else {
+			additions++
+		}
+	}
+	for _, count := range oldSet {
+		if count > 0 {
+			deletions += count
+		}
+	}
+	return additions, deletions
+}
+
+// splitLines splits content into lines, dropping the trailing empty line.
+func splitLines(content string) []string {
+	lines := strings.Split(content, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
 
 type pendingInteraction struct {
 	replyFn func(answers map[string]string)
@@ -35,18 +226,22 @@ type pendingInteraction struct {
 }
 
 type Daemon struct {
-	app          *core.App
-	gw           *gateway.Server
-	scheduler    *scheduler.Scheduler
-	schedulerDB  *scheduler.FileSchedulerStore
-	memoryWatch  *memory.FileWatchService
-	sharedMemory *memory.RAGMemory
-	webServer    *WebServer
-	addr         string
-	wsPath       string
-	logger       logging.Logger
-	execMu       sync.Mutex
+	app           *core.App
+	gw            *gateway.Server
+	scheduler     *scheduler.Scheduler
+	schedulerDB   *scheduler.FileSchedulerStore
+	memoryWatch   *memory.FileWatchService
+	sharedMemory  *memory.RAGMemory
+	webServer     *WebServer
+	addr          string
+	wsPath        string
+	logger        logging.Logger
+	execMu        sync.Mutex
 	clientCancels sync.Map
+
+	// activeSessions tracks live sessions by sessionID for FileModifyHook
+	// to look up the session's TrackModify function.
+	activeSessions sync.Map
 
 	pendingInteractions map[string]*pendingInteraction
 	interactMu          sync.Mutex
@@ -323,6 +518,17 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		return
 	}
 
+	// Wire FileModifyHook to look up sessions from the active sessions map.
+	// This enables file backup before Write/FileEdit tools execute.
+	rt.WithFileModifyTracker(func(sessionID string) (action.TrackFunc, bool) {
+		val, ok := d.activeSessions.Load(sessionID)
+		if !ok {
+			return nil, false
+		}
+		sess := val.(*goreactsession.Session)
+		return sess.TrackModify, true
+	})
+
 	sessionID := d.resolveSessionID(msg.SessionID, providedSessionID)
 	resolvedAgentName := agentName
 	if resolvedAgentName == "" {
@@ -347,6 +553,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	s := goreactsession.NewSession(sessionID, resolvedAgentName,
 		goreactsession.WithStore(d.app.SessDB()),
 	)
+	d.activeSessions.Store(sessionID, s)
 
 	clientID := msg.ClientID
 	sid := sessionID
@@ -359,6 +566,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 
 	go func() {
 		defer func() {
+			d.activeSessions.Delete(sid)
 			if r := recover(); r != nil {
 				d.logger.Error("defaultHandler: AskBuilder panic", fmt.Errorf("%v", r),
 					"client_id", clientID, "session_id", sid)
@@ -372,123 +580,136 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 
 		_, err := rt.Ask(resolvedAgentName, content, s).
 			WithContext(ctx).
-		OnThinking(func(chunk string) {
-			gw.SendResponse(clientID, gateway.RespThinkingDelta, "思考中", chunk, gateway.WithSessionID(sid))
-		}).
-		OnContent(func(chunk string) {
-			d.sendEvent(clientID, sid, gateway.RespMarkdown, "输出中", chunk)
-		}).
-		OnToolUseDelta(func(data events.ToolUseDeltaData) {
-			gw.SendResponse(clientID, gateway.RespToolUseDelta, "工具调用参数", map[string]any{
-				"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
-			}, gateway.WithSessionID(sid))
-		}).
-		OnThinkingDone(func() {
-			d.sendEvent(clientID, sid, gateway.RespThinkingDone, "思考完成", "思考阶段已完成")
-		}).
-		OnToolStart(func(data events.ToolExecStartData) {
-			gw.SendResponse(clientID, gateway.RespToolExecStart, "工具执行开始", map[string]any{
-				"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
-			}, gateway.WithSessionID(sid))
-		}).
-		OnToolEnd(func(data events.ToolExecEndData) {
-			gw.SendResponse(clientID, gateway.RespToolExecEnd, "工具执行结束", map[string]any{
-				"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
-				"success": data.Success, "result": data.Result, "error": data.Error,
-				"duration_ms": int(data.Duration.Milliseconds()),
-			}, gateway.WithSessionID(sid))
-		}).
-		OnAnswer(func(answer string) {
-			d.sendEvent(clientID, sid, gateway.RespFinalAnswer, "最终答案", answer)
-		}).
-		OnExecutionSummary(func(data events.ExecutionSummaryData) {
-			d.logger.Info("[DAEMON] OnExecutionSummary FIRED: total_tokens="+fmt.Sprint(data.TokensUsed.TotalTokens)+
-				" input="+fmt.Sprint(data.TokensUsed.InputTokens)+
-				" output="+fmt.Sprint(data.TokensUsed.OutputTokens)+
-				" iterations="+fmt.Sprint(data.TotalIterations))
-			d.sendExecutionSummary(clientID, sid, data)
-		}).
-		OnCycleEnd(func(data events.CycleInfo) {
-			gw.SendResponse(clientID, gateway.RespCycleEnd, "循环结束", map[string]any{
-				"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
-			}, gateway.WithSessionID(sid))
-		}).
-		OnAgentTalkStart(func(data events.AgentTalkInfo) {
-			gw.SendResponse(clientID, gateway.RespAgentTalkStart, "Agent对话开始", map[string]any{
-				"to": data.To, "message": data.Message,
-			}, gateway.WithSessionID(sid))
-		}).
-		OnAgentTalkEnd(func(data events.AgentTalkResult) {
-			gw.SendResponse(clientID, gateway.RespAgentTalkEnd, "Agent对话结束", map[string]any{
-				"to": data.To, "reply": data.Reply, "error": data.Error,
-			}, gateway.WithSessionID(sid))
-		}).
-		OnCompaction(func(data events.CompactionData) {
-			gw.SendResponse(clientID, gateway.RespCompaction, "上下文压缩", map[string]any{
-				"session_id": data.SessionID, "messages_slid": data.MessagesSlid, "remaining_after": data.RemainingAfter, "window_size": data.WindowSize,
-			}, gateway.WithSessionID(sid))
-		}).
-		OnMaxTurnsReached(func(data events.MaxTurnsReachedData) {
-			gw.SendResponse(clientID, gateway.RespMaxTurnsReached, "达到最大轮次", map[string]any{
-				"turns_completed": data.TurnsCompleted, "max_turns": data.MaxTurns, "suggestion": data.Suggestion,
-			}, gateway.WithSessionID(sid))
-		}).
-		OnError(func(errMsg string) {
-			d.sendEvent(clientID, sid, gateway.RespError, "错误", errMsg)
-		}).
-		OnSubtaskSpawned(func(data events.SubtaskInfo) {
-			md := buildSubtaskSpawnedMarkdown(data)
-			d.sendEvent(clientID, sid, gateway.RespSubtaskSpawned, "子任务生成", md)
-		}).
-		OnSubtaskCompleted(func(data events.SubtaskResult) {
-			md := buildSubtaskCompletedMarkdown(data)
-			d.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, "子任务完成", md)
-		}).
-		OnAskUser(func(data events.AskUserRequestData) {
-			correlationID := uuid.New().String()
-			d.interactMu.Lock()
-			d.pendingInteractions[correlationID] = &pendingInteraction{
-				replyFn: data.Reply,
-			}
-			d.interactMu.Unlock()
-			gw.SendResponse(clientID, gateway.RespForm, "需要澄清", map[string]any{
-				"correlation_id": correlationID,
-				"questions":      data.Questions,
-			}, gateway.WithSessionID(sid))
-		}).
-		OnPermissionRequest(func(data events.PermissionRequestData) {
-			correlationID := uuid.New().String()
-			d.interactMu.Lock()
-			d.pendingInteractions[correlationID] = &pendingInteraction{
-				grantFn: data.Grant,
-				denyFn:  data.Deny,
-			}
-			d.interactMu.Unlock()
-			gw.SendResponse(clientID, gateway.RespPermissionRequest, "权限请求", map[string]any{
-				"correlation_id": correlationID,
-				"tool_name":      data.ToolName,
-				"reason":         data.Reason,
-				"security_level": data.SecurityLevel,
-				"params":         data.Params,
-			}, gateway.WithSessionID(sid))
-		}).
-		OnPermissionDenied(func(reason string) {
-			d.sendEvent(clientID, sid, gateway.RespPermissionDenied, "权限拒绝", reason)
-		}).
-		OnTaskSummary(func(data events.TaskSummaryData) {
-			md := buildTaskSummaryMarkdown(data)
-			gw.SendResponse(clientID, gateway.RespTaskSummary, "任务总结", md,
-				gateway.WithSessionID(sid),
-				gateway.WithResponseMeta(map[string]any{
-					"input_tokens":  data.TokenUsage.InputTokens,
-					"output_tokens": data.TokenUsage.OutputTokens,
-				}))
-		}).
-		OnLLMTimeout(func(data events.LLMTimeoutData) {
-			msg := fmt.Sprintf("LLM 超时 (已耗时 %s): %s", data.Elapsed, data.Error)
-			d.sendEvent(clientID, sid, gateway.RespError, "超时", msg)
-		}).
-		Run()
+			OnThinking(func(chunk string) {
+				gw.SendResponse(clientID, gateway.RespThinkingDelta, "思考中", chunk, gateway.WithSessionID(sid))
+			}).
+			OnContent(func(chunk string) {
+				d.sendEvent(clientID, sid, gateway.RespMarkdown, "输出中", chunk)
+			}).
+			OnToolUseDelta(func(data events.ToolUseDeltaData) {
+				gw.SendResponse(clientID, gateway.RespToolUseDelta, "工具调用参数", map[string]any{
+					"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
+				}, gateway.WithSessionID(sid))
+			}).
+			OnThinkingDone(func() {
+				d.sendEvent(clientID, sid, gateway.RespThinkingDone, "思考完成", "思考阶段已完成")
+			}).
+			OnToolStart(func(data events.ToolExecStartData) {
+				gw.SendResponse(clientID, gateway.RespToolExecStart, "工具执行开始", map[string]any{
+					"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
+				}, gateway.WithSessionID(sid))
+			}).
+			OnToolEnd(func(data events.ToolExecEndData) {
+				gw.SendResponse(clientID, gateway.RespToolExecEnd, "工具执行结束", map[string]any{
+					"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
+					"success": data.Success, "result": data.Result, "error": data.Error,
+					"duration_ms": int(data.Duration.Milliseconds()),
+				}, gateway.WithSessionID(sid))
+				// Broadcast file modification state after tool execution.
+				// Compute diff stats (additions/deletions/diff text) for each modified file.
+				modFiles := s.GetModifyFiles()
+				if len(modFiles) > 0 {
+					fileInfos := make([]fileDiffInfo, 0, len(modFiles))
+					for _, fp := range modFiles {
+						fileInfos = append(fileInfos, computeFileDiff(s, fp))
+					}
+					gw.SendResponse(clientID, gateway.RespFileModified, "文件已修改", map[string]any{
+						"files":  fileInfos,
+						"action": "tracked",
+					}, gateway.WithSessionID(sid))
+				}
+			}).
+			OnAnswer(func(answer string) {
+				d.sendEvent(clientID, sid, gateway.RespFinalAnswer, "最终答案", answer)
+			}).
+			OnExecutionSummary(func(data events.ExecutionSummaryData) {
+				d.logger.Info("[DAEMON] OnExecutionSummary FIRED: total_tokens=" + fmt.Sprint(data.TokensUsed.TotalTokens) +
+					" input=" + fmt.Sprint(data.TokensUsed.InputTokens) +
+					" output=" + fmt.Sprint(data.TokensUsed.OutputTokens) +
+					" iterations=" + fmt.Sprint(data.TotalIterations))
+				d.sendExecutionSummary(clientID, sid, data)
+			}).
+			OnCycleEnd(func(data events.CycleInfo) {
+				gw.SendResponse(clientID, gateway.RespCycleEnd, "循环结束", map[string]any{
+					"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
+				}, gateway.WithSessionID(sid))
+			}).
+			OnAgentTalkStart(func(data events.AgentTalkInfo) {
+				gw.SendResponse(clientID, gateway.RespAgentTalkStart, "Agent对话开始", map[string]any{
+					"to": data.To, "message": data.Message,
+				}, gateway.WithSessionID(sid))
+			}).
+			OnAgentTalkEnd(func(data events.AgentTalkResult) {
+				gw.SendResponse(clientID, gateway.RespAgentTalkEnd, "Agent对话结束", map[string]any{
+					"to": data.To, "reply": data.Reply, "error": data.Error,
+				}, gateway.WithSessionID(sid))
+			}).
+			OnCompaction(func(data events.CompactionData) {
+				gw.SendResponse(clientID, gateway.RespCompaction, "上下文压缩", map[string]any{
+					"session_id": data.SessionID, "messages_slid": data.MessagesSlid, "remaining_after": data.RemainingAfter, "window_size": data.WindowSize,
+				}, gateway.WithSessionID(sid))
+			}).
+			OnMaxTurnsReached(func(data events.MaxTurnsReachedData) {
+				gw.SendResponse(clientID, gateway.RespMaxTurnsReached, "达到最大轮次", map[string]any{
+					"turns_completed": data.TurnsCompleted, "max_turns": data.MaxTurns, "suggestion": data.Suggestion,
+				}, gateway.WithSessionID(sid))
+			}).
+			OnError(func(errMsg string) {
+				d.sendEvent(clientID, sid, gateway.RespError, "错误", errMsg)
+			}).
+			OnSubtaskSpawned(func(data events.SubtaskInfo) {
+				md := buildSubtaskSpawnedMarkdown(data)
+				d.sendEvent(clientID, sid, gateway.RespSubtaskSpawned, "子任务生成", md)
+			}).
+			OnSubtaskCompleted(func(data events.SubtaskResult) {
+				md := buildSubtaskCompletedMarkdown(data)
+				d.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, "子任务完成", md)
+			}).
+			OnAskUser(func(data events.AskUserRequestData) {
+				correlationID := uuid.New().String()
+				d.interactMu.Lock()
+				d.pendingInteractions[correlationID] = &pendingInteraction{
+					replyFn: data.Reply,
+				}
+				d.interactMu.Unlock()
+				gw.SendResponse(clientID, gateway.RespForm, "需要澄清", map[string]any{
+					"correlation_id": correlationID,
+					"questions":      data.Questions,
+				}, gateway.WithSessionID(sid))
+			}).
+			OnPermissionRequest(func(data events.PermissionRequestData) {
+				correlationID := uuid.New().String()
+				d.interactMu.Lock()
+				d.pendingInteractions[correlationID] = &pendingInteraction{
+					grantFn: data.Grant,
+					denyFn:  data.Deny,
+				}
+				d.interactMu.Unlock()
+				gw.SendResponse(clientID, gateway.RespPermissionRequest, "权限请求", map[string]any{
+					"correlation_id": correlationID,
+					"tool_name":      data.ToolName,
+					"reason":         data.Reason,
+					"security_level": data.SecurityLevel,
+					"params":         data.Params,
+				}, gateway.WithSessionID(sid))
+			}).
+			OnPermissionDenied(func(reason string) {
+				d.sendEvent(clientID, sid, gateway.RespPermissionDenied, "权限拒绝", reason)
+			}).
+			OnTaskSummary(func(data events.TaskSummaryData) {
+				md := buildTaskSummaryMarkdown(data)
+				gw.SendResponse(clientID, gateway.RespTaskSummary, "任务总结", md,
+					gateway.WithSessionID(sid),
+					gateway.WithResponseMeta(map[string]any{
+						"input_tokens":  data.TokenUsage.InputTokens,
+						"output_tokens": data.TokenUsage.OutputTokens,
+					}))
+			}).
+			OnLLMTimeout(func(data events.LLMTimeoutData) {
+				msg := fmt.Sprintf("LLM 超时 (已耗时 %s): %s", data.Elapsed, data.Error)
+				d.sendEvent(clientID, sid, gateway.RespError, "超时", msg)
+			}).
+			Run()
 
 		if err != nil && !errors.Is(err, context.Canceled) {
 			d.logger.Error("request failed", err,
