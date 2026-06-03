@@ -116,8 +116,28 @@ func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("session store not available")
 	}
 
+	// Capture project dir and agent from session meta before deleting,
+	// so we can remove the directory from the file watchlist.
+	var projectDir, agentName string
+	meta, metaErr := sessDB.GetSessionMeta(p.SessionID)
+	if metaErr == nil && meta != nil {
+		projectDir = meta.ProjectWorkingDir
+		agentName = meta.AgentName
+	}
+
 	if err := sessDB.DeleteSession(context.Background(), p.SessionID); err != nil {
 		return nil, fmt.Errorf("delete session %q failed: %w", p.SessionID, err)
+	}
+
+	// Remove project directory from file watchlist so it stops being auto-indexed.
+	if projectDir != "" && d.memoryWatch != nil {
+		if err := d.memoryWatch.RemoveWatch(projectDir, agentName); err != nil {
+			d.logger.Warn("failed to remove project dir from watchlist",
+				"dir", projectDir,
+				"agent", agentName,
+				"error", err,
+			)
+		}
 	}
 
 	return map[string]any{
@@ -145,15 +165,33 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("session store not available")
 	}
 
-	info, err := sessDB.Create(context.Background(), p.Agent)
+	// Pass project_dir as a session option so it gets persisted to session meta
+	var opts []goreactsession.SessionOption
+	if p.ProjectDir != "" {
+		opts = append(opts, goreactsession.WithProjectDirOption(p.ProjectDir))
+	}
+
+	info, err := sessDB.Create(context.Background(), p.Agent, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create session failed: %w", err)
 	}
 
+	// Add project directory to file watchlist for auto-indexing (RAG).
+	if p.ProjectDir != "" && d.memoryWatch != nil {
+		if err := d.memoryWatch.AddWatch(p.ProjectDir, p.Agent); err != nil {
+			d.logger.Warn("failed to add project dir to watchlist",
+				"dir", p.ProjectDir,
+				"agent", p.Agent,
+				"error", err,
+			)
+		}
+	}
+
 	return map[string]any{
-		"session_id": info.SessionID,
-		"agent_name": info.AgentName,
-		"created_at": info.CreatedAt,
+		"session_id":  info.SessionID,
+		"agent_name":  info.AgentName,
+		"created_at":  info.CreatedAt,
+		"project_dir": info.ProjectDir,
 	}, nil
 }
 
