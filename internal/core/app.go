@@ -376,6 +376,7 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		agents.WithProviderRegistry(a.providerReg),
 		agents.WithRuleRegistry(a.rules),
 		agents.WithLogger(a.logger),
+		agents.WithTokenUsageStore(a.tokenUsageStore),
 	}
 
 	if a.skillReg != nil {
