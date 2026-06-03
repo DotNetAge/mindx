@@ -73,11 +73,16 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		return nil, fmt.Errorf("create log directory: %w", err)
 	}
 	logFile := filepath.Join(logDir, "mindx.log")
-	logger, err := logging.DefaultFileLogger(logFile)
-	if err != nil {
-		logger = logging.DefaultNoopLogger()
-	}
+	logger := logging.DefaultZapLogger(&logging.ZapConfig{
+		Filename:   logFile,
+		MaxSize:    100,
+		MaxBackups: 7,
+		MaxAge:     30,
+		Compress:   true,
+		Console:    true,
+	})
 
+	var err error
 	err = godotenv.Load()
 	if err != nil {
 		logger.Warn("WARNING: failed to load .env file: %v", err)

@@ -73,10 +73,16 @@ func (d *Daemon) handleLogClear(_ context.Context, params json.RawMessage) (any,
 		return nil, fmt.Errorf("clear requires confirmed=true")
 	}
 
-	logPath := filepath.Join(logging.ResolveLogDir(), "mindx.log")
-	if err := os.WriteFile(logPath, []byte{}, 0644); err != nil {
-		return nil, fmt.Errorf("clear log %s: %w", logPath, err)
+	logDir := logging.ResolveLogDir()
+	paths := []string{
+		filepath.Join(logDir, "mindx.log"),
+		filepath.Join(logDir, "error.log"),
+	}
+	for _, p := range paths {
+		if err := os.WriteFile(p, []byte{}, 0644); err != nil {
+			return nil, fmt.Errorf("clear log %s: %w", p, err)
+		}
 	}
 
-	return map[string]string{"status": "ok", "path": logPath}, nil
+	return map[string]string{"status": "ok"}, nil
 }

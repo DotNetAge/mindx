@@ -65,8 +65,23 @@ type ZapConfig struct {
 	Console bool
 }
 
-// DefaultZapLogger creates a high-performance logger using uber-go/zap with lumberjack for log rotation.
+var (
+	globalLogger Logger
+	loggerOnce   sync.Once
+)
+
+// DefaultZapLogger returns the global singleton zap logger.
+// The first call initializes it with the provided config; subsequent calls
+// return the same instance and ignore the config parameter.
 func DefaultZapLogger(cfg *ZapConfig) Logger {
+	loggerOnce.Do(func() {
+		globalLogger = newZapLogger(cfg)
+	})
+	return globalLogger
+}
+
+// newZapLogger creates a new zap logger instance (unshared).
+func newZapLogger(cfg *ZapConfig) Logger {
 	if cfg.Filename == "" {
 		cfg.Filename = "logs/mindx.log"
 	}
@@ -80,14 +95,25 @@ func DefaultZapLogger(cfg *ZapConfig) Logger {
 		cfg.MaxBackups = 7
 	}
 
+	// Derive error log filename from the main log filename.
+	// e.g. /path/to/mindx.log → /path/to/error.log
+	errorFilename := deriveErrorFilename(cfg.Filename)
+
 	logDir := filepath.Dir(cfg.Filename)
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "WARNING: failed to create log directory %s: %v\n", logDir, err)
 	}
 
 	fixLogFilePermissions(cfg.Filename)
+	fixLogFilePermissions(errorFilename)
 
+	// Writer for all logs (mindx.log)
 	fileWriter := createSafeFileWriter(cfg)
+
+	// Writer for error-only logs (error.log)
+	errorCfg := *cfg
+	errorCfg.Filename = errorFilename
+	errorWriter := createSafeFileWriter(&errorCfg)
 
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -98,7 +124,13 @@ func DefaultZapLogger(cfg *ZapConfig) Logger {
 		zap.DebugLevel,
 	)
 
-	cores := []zapcore.Core{fileCore}
+	errorCore := zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderConfig),
+		errorWriter,
+		zap.ErrorLevel,
+	)
+
+	cores := []zapcore.Core{fileCore, errorCore}
 
 	if cfg.Console {
 		consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
@@ -111,6 +143,15 @@ func DefaultZapLogger(cfg *ZapConfig) Logger {
 	return &zapLogger{
 		logger: zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1)),
 	}
+}
+
+// deriveErrorFilename returns the error log path derived from the main log path.
+//   - /path/to/mindx.log    → /path/to/error.log
+//   - /path/to/foo.log      → /path/to/error.log
+//   - /path/to/mindx        → /path/to/error.log (no extension)
+func deriveErrorFilename(mainPath string) string {
+	dir := filepath.Dir(mainPath)
+	return filepath.Join(dir, "error.log")
 }
 
 func (l *zapLogger) Info(msg string, keyvals ...any) {

@@ -55,7 +55,7 @@ type Daemon struct {
 func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 	logDir := logging.ResolveLogDir()
 	logger := logging.DefaultZapLogger(&logging.ZapConfig{
-		Filename:   filepath.Join(logDir, "mindx-daemon.log"),
+		Filename:   filepath.Join(logDir, "mindx.log"),
 		MaxSize:    100,
 		MaxBackups: 7,
 		MaxAge:     30,
@@ -63,7 +63,7 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 		Console:    true,
 	})
 	logger.Info("=== Daemon initialization starting ===", "addr", addr, "wsPath", wsPath)
-	logger.Info("logger initialized", "log_file", filepath.Join(logDir, "mindx-daemon.log"))
+	logger.Info("logger initialized", "log_file", filepath.Join(logDir, "mindx.log"))
 
 	var schedulerDB *scheduler.FileSchedulerStore
 	schedDB, err := scheduler.NewFileSchedulerStore(app.Settings().SchedulesDir())
