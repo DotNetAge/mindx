@@ -610,6 +610,14 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goreactsessi
 		_ = defaultMeta.Save(sessionDirPath)
 	}
 
+	// 加载已追踪的修改文件列表
+	if mfData, mfErr := os.ReadFile(filepath.Join(sessionDirPath, "modify_files.yml")); mfErr == nil {
+		var files []string
+		if yaml.Unmarshal(mfData, &files) == nil {
+			si.ModifyFiles = files
+		}
+	}
+
 	return si, nil
 }
 
@@ -723,4 +731,60 @@ func (s *FileSessionStore) ResolveSessionDir(sessionID string) (string, error) {
 		return "", goreactsession.ErrSessionNotFound
 	}
 	return dirPath, nil
+}
+
+// modifyFilesPath returns the path to the modify_files.yml for a session.
+func (s *FileSessionStore) modifyFilesPath(dirPath string) string {
+	return filepath.Join(dirPath, "modify_files.yml")
+}
+
+// SaveModifyFiles persists the tracked modified file paths list to disk.
+// Files are stored as a YAML string array in the session directory.
+func (s *FileSessionStore) SaveModifyFiles(sessionID string, files []string) error {
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return fmt.Errorf("session %q not found", sessionID)
+	}
+
+	path := s.modifyFilesPath(dirPath)
+
+	if files == nil {
+		// nil 表示清除，删除文件
+		if _, err := os.Stat(path); err == nil {
+			return os.Remove(path)
+		}
+		return nil
+	}
+
+	data, err := yaml.Marshal(files)
+	if err != nil {
+		return fmt.Errorf("marshal modify_files: %w", err)
+	}
+
+	return os.WriteFile(path, data, 0644)
+}
+
+// GetModifyFiles loads the tracked modified file paths list from disk.
+// Returns nil if no file exists (session has no tracked modifications).
+func (s *FileSessionStore) GetModifyFiles(sessionID string) ([]string, error) {
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return nil, nil
+	}
+
+	path := s.modifyFilesPath(dirPath)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read modify_files: %w", err)
+	}
+
+	var files []string
+	if err := yaml.Unmarshal(data, &files); err != nil {
+		return nil, fmt.Errorf("parse modify_files: %w", err)
+	}
+
+	return files, nil
 }
