@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -143,14 +144,105 @@ func setupDaemonWindows(workspaceDir string) error {
 	}
 
 	taskName := "MindXDaemon"
-	cmd := exec.Command("schtasks", "/create", "/tn", taskName,
-		"/tr", fmt.Sprintf(`"%s" start`, exePath),
-		"/sc", "onlogon",
-		"/rl", "limited",
-		"/f")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("schtasks create: %w", err)
+
+	// Use XML-based task definition for reliable quoting and working directory support.
+	// CLI schtasks /create mangles quotes in /tr when paths contain spaces.
+	xmlContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>MindX Daemon — auto-start on user logon</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>%s</UserId>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal>
+      <UserId>%s</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions>
+    <Exec>
+      <Command>"%s"</Command>
+      <Arguments>start</Arguments>
+      <WorkingDirectory>%s</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>`, os.Getenv("USERNAME"), os.Getenv("USERNAME"), exePath, workspaceDir)
+
+	// Write temp XML file (schtasks /create /xml requires UTF-16LE with BOM)
+	tmpXML := filepath.Join(os.TempDir(), "MindXDaemon.xml")
+	if err := os.WriteFile(tmpXML, toUTF16LE(xmlContent), 0644); err != nil {
+		return fmt.Errorf("write task xml: %w", err)
+	}
+	defer os.Remove(tmpXML)
+
+	// Create or force-update the scheduled task from XML
+	cmd := exec.Command("schtasks", "/create", "/tn", taskName, "/xml", tmpXML, "/f")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("schtasks create: %w\n%s", err, decodeWindowsOutput(out))
 	}
 
 	return nil
+}
+
+// toUTF16LE converts a UTF-8 string to UTF-16LE with BOM, as required by schtasks /xml.
+func toUTF16LE(s string) []byte {
+	var buf bytes.Buffer
+	buf.WriteByte(0xFF)
+	buf.WriteByte(0xFE)
+	for _, r := range s {
+		buf.Write([]byte{byte(r), byte(r >> 8)})
+	}
+	return buf.Bytes()
+}
+
+// decodeWindowsOutput attempts to decode Windows command output.
+// On Chinese Windows systems, stderr is often GBK-encoded; this fallback
+// prevents garbled ◇◇◇? characters in error messages.
+func decodeWindowsOutput(raw []byte) string {
+	if decoded, err := decodeGBK(raw); err == nil {
+		return decoded
+	}
+	return string(raw)
+}
+
+// decodeGBK tries to decode bytes as GBK/GB2312 encoding.
+func decodeGBK(b []byte) (string, error) {
+	var runes []rune
+	i := 0
+	for i < len(b) {
+		if b[i] >= 0x81 && b[i] <= 0xFE && i+1 < len(b) {
+			next := b[i+1]
+			if (next >= 0x40 && next <= 0x7E) || (next >= 0x80 && next <= 0xFE) {
+				runes = append(runes, rune(uint16(b[i])<<8|uint16(next)))
+				i += 2
+				continue
+			}
+		}
+		runes = append(runes, rune(b[i]))
+		i++
+	}
+	if len(runes) == 0 {
+		return "", fmt.Errorf("empty output")
+	}
+	result := string(runes)
+	for _, r := range result {
+		if r >= 0x20 && r != '\ufffd' {
+			return result, nil
+		}
+	}
+	return "", fmt.Errorf("invalid GBK")
 }

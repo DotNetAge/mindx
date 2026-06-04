@@ -2,19 +2,16 @@ package setup
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"charm.land/bubbles/v2/list"
-	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
-	goragutils "github.com/DotNetAge/gorag/utils"
 	goreactconfig "github.com/DotNetAge/goreact/config"
 	"gopkg.in/yaml.v3"
 
@@ -46,103 +43,8 @@ func (i modelItem) Title() string       { return i.Name }
 func (i modelItem) Description() string { return i.desc }
 func (i modelItem) FilterValue() string { return i.Name }
 
-type downloadProgressMsg struct {
-	current   int64
-	total     int64
-	file      string
-	done      bool
-	err       error
-	modelPath string
-	status    string
-}
-
-type downloadObserver struct {
-	ch chan<- downloadProgressMsg
-}
-
-func (o *downloadObserver) OnEvent(event goragutils.DownloadEvent) {
-	msg := downloadProgressMsg{
-		current: event.Current,
-		total:   event.Total,
-		file:    event.File,
-	}
-	switch event.Type {
-	case goragutils.EventStart:
-		msg.status = fmt.Sprintf("正在下载 %s...", event.File)
-	case goragutils.EventProgress:
-		downloadedMB := float64(event.Current) / (1024 * 1024)
-		if event.Total > 0 {
-			totalMB := float64(event.Total) / (1024 * 1024)
-			msg.status = fmt.Sprintf("下载中  %.0f / %.0f MB", downloadedMB, totalMB)
-		} else {
-			msg.status = fmt.Sprintf("下载中  %.0f MB", downloadedMB)
-		}
-	case goragutils.EventComplete:
-		msg.status = fmt.Sprintf("%s 下载完成", event.File)
-	}
-	o.ch <- msg
-}
-
-func runModelDownload(cacheDir string, ch chan<- downloadProgressMsg) {
-	defer close(ch)
-
-	modelID := "Xenova/chinese-clip-vit-base-patch16"
-	modelFile := "onnx/model_q4.onnx"
-	dstPath := filepath.Join(cacheDir, filepath.Base(modelFile))
-
-	if _, err := os.Stat(dstPath); err == nil {
-		ch <- downloadProgressMsg{
-			done:      true,
-			modelPath: dstPath,
-		}
-		return
-	}
-
-	observer := &downloadObserver{ch: ch}
-
-	downloader, err := goragutils.NewModelDownloader(cacheDir)
-	if err != nil {
-		ch <- downloadProgressMsg{done: true, err: fmt.Errorf("创建下载器失败: %w", err)}
-		return
-	}
-	downloader.WithObserver(observer)
-
-	files := []string{modelFile}
-	if _, err := downloader.Download(modelID, files); err != nil {
-		ch <- downloadProgressMsg{done: true, err: fmt.Errorf("下载失败: %w", err)}
-		return
-	}
-
-	srcPath := filepath.Join(cacheDir, strings.ReplaceAll(modelID, "/", string(filepath.Separator)), modelFile)
-
-	src, err := os.Open(srcPath)
-	if err != nil {
-		ch <- downloadProgressMsg{done: true, err: fmt.Errorf("打开下载模型失败: %w", err)}
-		return
-	}
-	defer src.Close()
-
-	dst, err := os.Create(dstPath)
-	if err != nil {
-		ch <- downloadProgressMsg{done: true, err: fmt.Errorf("创建模型文件失败: %w", err)}
-		return
-	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, src); err != nil {
-		ch <- downloadProgressMsg{done: true, err: fmt.Errorf("复制模型文件失败: %w", err)}
-		return
-	}
-
-	// 清理下载器缓存目录，避免文件重复
-	srcDir := filepath.Join(cacheDir, strings.ReplaceAll(modelID, "/", string(filepath.Separator)))
-	os.RemoveAll(srcDir)
-
-	ch <- downloadProgressMsg{
-		done:      true,
-		modelPath: dstPath,
-		status:    "模型下载完成",
-	}
+type daemonInstallMsg struct {
+	err error
 }
 
 type firstRunModel struct {
@@ -168,6 +70,9 @@ type firstRunModel struct {
 
 	daemonChoice    bool
 	daemonSubmitted bool
+	daemonInstallCh   chan error
+	daemonInstallErr  error
+	daemonState       int // 0=choice, 1=installing, 2=done
 
 	pythonChoice    bool
 	pythonSubmitted bool
@@ -175,13 +80,7 @@ type firstRunModel struct {
 	pythonVersion   string
 	pythonInfo      core.PythonConfig
 
-	memoryChoice    bool
-	memorySubmitted bool
 	memoryState     int
-	downloadCh      chan downloadProgressMsg
-	progressBar     progress.Model
-	downloadErr     error
-	downloadStatus  string
 	embedderModel   string
 	workspaceDir    string
 
@@ -327,7 +226,6 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		pythonDetected: pythonInfo.Detected,
 		pythonVersion:  pythonInfo.Version,
 		pythonInfo:     pythonInfo,
-		progressBar:    progress.New(progress.WithWidth(minContentWidth-12)),
 		memoryState:    0,
 		workspaceDir:   workspaceDir,
 		pathChoice:     true,
@@ -480,7 +378,6 @@ func (m *firstRunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		cw := m.contentWidth()
 		m.apiKeyInput.SetWidth(cw - 8)
-		m.progressBar = progress.New(progress.WithWidth(cw - 12))
 		m.renderer = initGlamour(cw)
 		m.modelList.SetWidth(cw - 4)
 	}
@@ -499,10 +396,10 @@ func (m *firstRunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case 5:
 		return m.updateMemoryConfig(msg)
 	case 6:
-			return m.updatePathSetup(msg)
-		case 7:
-			return m.updateWebUIComplete(msg)
-		}
+		return m.updatePathSetup(msg)
+	case 7:
+		return m.updateWebUIComplete(msg)
+	}
 	return m, nil
 }
 
@@ -623,19 +520,51 @@ func (m *firstRunModel) updateDaemonCheck(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		case "left", "right":
-			m.daemonChoice = !m.daemonChoice
+			if m.daemonState == 0 {
+				m.daemonChoice = !m.daemonChoice
+			}
 		case "enter":
-			m.daemonSubmitted = true
-			m.step = 4
-			return m, nil
+			if m.daemonState == 0 {
+				if DaemonInstalled(m.workspaceDir) {
+					m.step = 4
+					return m, nil
+				}
+				if m.daemonChoice {
+					m.daemonState = 1
+					m.daemonInstallCh = make(chan error, 1)
+					ch := m.daemonInstallCh
+					wd := m.workspaceDir
+					go func() {
+						ch <- SetupDaemon(wd)
+					}()
+					return m, m.listenDaemonInstallCmd()
+				}
+				m.step = 4
+				return m, nil
+			}
+			if m.daemonState == 2 {
+				m.step = 4
+				return m, nil
+			}
 		case "s", "S":
 			if DaemonInstalled(m.workspaceDir) {
 				m.step = 4
 				return m, nil
 			}
 		}
+	case daemonInstallMsg:
+		m.daemonInstallErr = msg.err
+		m.daemonState = 2
+		return m, nil
 	}
 	return m, nil
+}
+
+func (m *firstRunModel) listenDaemonInstallCmd() tea.Cmd {
+	return func() tea.Msg {
+		err := <-m.daemonInstallCh
+		return daemonInstallMsg{err: err}
+	}
 }
 
 func (m *firstRunModel) updatePythonCheck(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -652,7 +581,7 @@ func (m *firstRunModel) updatePythonCheck(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.pythonChoice = false
 			m.pythonSubmitted = true
-			m.step = 4
+			m.step = 5
 			return m, nil
 		case "left", "right":
 			if m.pythonDetected {
@@ -662,16 +591,16 @@ func (m *firstRunModel) updatePythonCheck(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.pythonDetected {
 				m.pythonChoice = true
 				m.pythonSubmitted = true
-				m.step = 4
+				m.step = 5
 				return m, nil
 			}
 			m.pythonSubmitted = true
-			m.step = 4
+			m.step = 5
 			return m, nil
 		case "s", "S":
 			if _, err := os.Stat(filepath.Join(m.workspaceDir, ".venv")); err == nil {
 				m.pythonSubmitted = true
-				m.step = 4
+				m.step = 5
 				return m, nil
 			}
 		}
@@ -682,87 +611,20 @@ func (m *firstRunModel) updatePythonCheck(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *firstRunModel) updateMemoryConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		switch m.memoryState {
-		case 0:
-			switch msg.String() {
-			case "q", "ctrl+c", "esc":
-				m.quitting = true
-				return m, tea.Quit
-			case "left", "right":
-				m.memoryChoice = !m.memoryChoice
-			case "enter":
-				m.memorySubmitted = true
-				if m.memoryChoice {
-					m.memoryState = 1
-					m.downloadCh = make(chan downloadProgressMsg, 100)
-					cacheDir := filepath.Join(m.workspaceDir, "data", "models")
-					m.embedderModel = "model_q4.onnx"
-					go runModelDownload(cacheDir, m.downloadCh)
-					return m, m.listenDownloadCmd()
-				}
-				if runtime.GOOS == "windows" {
-					m.step = 6
-					return m, nil
-				}
-				m.done = true
-				return m, tea.Quit
-			}
-
-		case 1:
-			if msg.String() == "q" || msg.String() == "ctrl+c" || msg.String() == "esc" {
-				m.quitting = true
-				return m, tea.Quit
-			}
-
-		case 2:
-			if msg.String() == "enter" || msg.String() == " " || msg.String() == "s" || msg.String() == "S" {
-				if runtime.GOOS == "windows" {
-					m.step = 6
-					return m, nil
-				}
-				m.done = true
-				return m, tea.Quit
-			}
-		}
-
-	case downloadProgressMsg:
-		if m.memoryState == 1 {
-			if msg.err != nil {
-				m.downloadErr = msg.err
-				m.embedderModel = ""
-				m.downloadStatus = "下载失败"
-				m.memoryState = 2
+		switch msg.String() {
+		case "q", "ctrl+c", "esc":
+			m.quitting = true
+			return m, tea.Quit
+		case "enter", " ", "s", "S":
+			if runtime.GOOS == "windows" {
+				m.step = 6
 				return m, nil
 			}
-			if msg.done {
-				m.downloadStatus = "处理中..."
-				m.memoryState = 2
-				return m, nil
-			}
-			if msg.status != "" {
-				m.downloadStatus = msg.status
-			}
-			var progCmd tea.Cmd
-			if msg.total > 0 {
-				progCmd = m.progressBar.SetPercent(float64(msg.current) / float64(msg.total))
-			} else if msg.current > 0 {
-				progCmd = m.progressBar.SetPercent(0.5)
-			}
-			return m, tea.Batch(progCmd, m.listenDownloadCmd())
+			m.done = true
+			return m, tea.Quit
 		}
 	}
-
 	return m, nil
-}
-
-func (m *firstRunModel) listenDownloadCmd() tea.Cmd {
-	return func() tea.Msg {
-		msg, ok := <-m.downloadCh
-		if !ok {
-			return nil
-		}
-		return msg
-	}
 }
 
 func (m *firstRunModel) updatePathSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -850,6 +712,27 @@ func (m *firstRunModel) renderModelSelect() string {
 
 func (m *firstRunModel) renderDaemonCheck() string {
 	var b strings.Builder
+	if m.daemonState == 1 {
+		b.WriteString(m.renderMarkdown("⚙️ **正在注册 Daemon 自启动服务...**\n\n请稍候..."))
+		return m.paddedView(borderStyle.Render(b.String()))
+	}
+	if m.daemonState == 2 {
+		if m.daemonInstallErr != nil {
+			b.WriteString(m.renderMarkdown(fmt.Sprintf(
+				"⚙️ Daemon 后台服务\n\n❌ **安装失败**\n\n错误: %s\n\n你可以稍后运行 `mindx doctor` 重新配置。\n\n**Enter** 继续",
+				m.daemonInstallErr.Error(),
+			)))
+		} else {
+			restartHint := ""
+			if runtime.GOOS == "windows" {
+				restartHint = "\n\nDaemon 已成功安装到系统，请**重新启动电脑**使其生效。"
+			}
+			b.WriteString(m.renderMarkdown(fmt.Sprintf(
+				"⚙️ Daemon 后台服务\n\n✅ **安装完成**\n\nDaemon 已注册为开机自启动服务。%s\n\n**Enter** 继续", restartHint,
+			)))
+		}
+		return m.paddedView(borderStyle.Render(b.String()))
+	}
 	installed := DaemonInstalled(m.workspaceDir)
 	if installed {
 		restartHint := ""
@@ -932,46 +815,17 @@ Python 是必需组件，技能系统依赖 Python 运行。
 }
 
 func (m *firstRunModel) renderMemoryConfig() string {
-	var b strings.Builder
-	switch m.memoryState {
-	case 0:
-		md := `💾 记忆体配置
+	md := `💾 记忆体配置
 
-🔴 **Embedder 模型未下载**
+✅ **Embedder 模型已内嵌**
 
-Embedder 模型用于将文本向量化，实现语义搜索和 RAG 记忆。
+Chinese-CLIP (model_q4.onnx) 已打包在程序内部，
+启动时自动释放到工作目录，无需单独下载。
 
-下载 Chinese-CLIP 模型后，Agent 可以跨会话检索历史知识。
-不下载则仅有基础会话记忆。
+记忆体功能默认启用，支持语义搜索和 RAG 跨会话检索。
 
-是否下载 Embedder 模型?
-
-` + m.yesNoIndicator(m.memoryChoice) + `
-
-← → 切换  **Enter** 确认  **Esc** 退出`
-		b.WriteString(m.renderMarkdown(md))
-
-	case 1:
-		b.WriteString(m.renderMarkdown("⏳ 正在下载 Embedder 模型...\n\n"))
-		if m.downloadStatus != "" {
-			b.WriteString(m.renderMarkdown(m.downloadStatus))
-			b.WriteString("\n\n")
-		}
-		b.WriteString(m.progressBar.View())
-		b.WriteString("\n\n")
-		b.WriteString(m.renderMarkdown("请等待下载完成..."))
-
-	case 2:
-		if m.downloadErr != nil {
-			b.WriteString(m.renderMarkdown(fmt.Sprintf(
-				"❌ 模型下载失败\n\n错误: %s\n\n你可以稍后运行 `mindx doctor` 重新尝试下载。\n\n**Enter** 继续",
-				m.downloadErr.Error(),
-			)))
-		} else {
-			b.WriteString(m.renderMarkdown("💾 记忆体配置\n\n✅ **Embedder 模型已就绪**\n\n记忆体功能已启用，支持语义搜索和 RAG 跨会话检索。\n\n**Enter** 继续  **S** 跳过"))
-		}
-	}
-	return m.paddedView(borderStyle.Render(b.String()))
+**Enter** 继续  **S** 跳过`
+	return m.paddedView(borderStyle.Render(m.renderMarkdown(md)))
 }
 
 func (m *firstRunModel) renderPathSetup() string {
@@ -1002,48 +856,84 @@ func (m *firstRunModel) renderPathSetup() string {
 }
 
 func (m *firstRunModel) renderWebUIComplete() string {
-	webDir := filepath.Join(m.workspaceDir, "web")
-	webExists := false
-	if _, err := os.Stat(webDir); err == nil {
-		webExists = true
+	var items []string
+
+	// Provider
+	if m.selectedProvider.Name != "" {
+		items = append(items, fmt.Sprintf("✅ 提供商 · **%s**", m.selectedProvider.DisplayName))
 	}
 
-	var md string
-	if webExists {
-		md = fmt.Sprintf(`🎉 配置完成！
+	// Model
+	if m.selectedModel.Name != "" {
+		items = append(items, fmt.Sprintf("✅ 模型 · **%s**", m.selectedModel.Name))
+	}
 
-MindX 已成功安装并配置完成。
-
----
-
-🌐 **WebUI 界面**
-
-启动 Daemon 后即可通过浏览器访问 WebUI：
-
-   **http://localhost:1313**
-
-快速启动：
-   mindx start        # 启动后台服务
-   mindx web          # 直接打开 WebUI
-
----
-
-**Enter** 完成 退出向导`)
+	// Daemon - re-check
+	if DaemonInstalled(m.workspaceDir) {
+		items = append(items, "✅ Daemon · 已注册为开机自启动服务")
+	} else if m.daemonState == 2 && m.daemonInstallErr != nil {
+		items = append(items, "❌ Daemon · 安装失败")
 	} else {
-		md = fmt.Sprintf(`🎉 配置完成！
-
-MindX 已成功安装并配置完成。
-
-⚠️  WebUI 资源文件未检测到 (%s)
-
-如需使用 WebUI，请确保构建产物已包含 runtime/web 目录。
-
----
-
-**Enter** 完成 退出向导`, webDir)
+		items = append(items, "⏭️ Daemon · 未安装")
 	}
 
-	return m.paddedView(borderStyle.Render(m.renderMarkdown(md)))
+	// Python + venv - re-check
+	venvPath := filepath.Join(m.workspaceDir, ".venv")
+	_, venvExists := os.Stat(venvPath)
+	if m.pythonDetected {
+		if venvExists == nil {
+			items = append(items, fmt.Sprintf("✅ Python · %s · 虚拟环境已创建", m.pythonVersion))
+		} else {
+			items = append(items, fmt.Sprintf("✅ Python · %s (未创建虚拟环境)", m.pythonVersion))
+		}
+	} else {
+		items = append(items, "❌ Python · 未检测到")
+	}
+
+	// Embedder model - re-check
+	modelPath := filepath.Join(m.workspaceDir, "data", "models", "model_q4.onnx")
+	if _, err := os.Stat(modelPath); err == nil {
+		items = append(items, "✅ Embedder · Chinese-CLIP 模型已就绪")
+	} else {
+		items = append(items, "⏭️ Embedder · 待启动时自动释放")
+	}
+
+	// PATH - re-check (Windows only)
+	if runtime.GOOS == "windows" && m.installDir != "" {
+		if CheckInPath(m.installDir) {
+			items = append(items, "✅ PATH · 已添加到系统 PATH")
+		} else if m.pathChoice {
+			items = append(items, "❌ PATH · 添加失败")
+		} else {
+			items = append(items, "⏭️ PATH · 未配置")
+		}
+	}
+
+	// WebUI
+	webDir := filepath.Join(m.workspaceDir, "web")
+	if _, err := os.Stat(webDir); err == nil {
+		items = append(items, "✅ WebUI · 资源文件已就绪")
+	} else {
+		items = append(items, "❌ WebUI · 资源文件未检测到")
+	}
+
+	// Build markdown output
+	var b strings.Builder
+	b.WriteString("🎉 **配置完成！**\n\n")
+	b.WriteString("安装状态：\n\n")
+	for _, item := range items {
+		b.WriteString(item + "\n\n")
+	}
+	b.WriteString("---\n\n")
+	b.WriteString("**使用方式：**\n\n")
+	b.WriteString("1. **终端 TUI**：直接运行 `mindx` 进入命令行界面\n\n")
+	b.WriteString("2. **浏览器 WebUI**：访问 http://localhost:1313\n\n")
+	if runtime.GOOS == "windows" {
+		b.WriteString("💡 Windows 用户请**重新启动终端**后使用 `mindx` 命令\n\n")
+	}
+	b.WriteString("**Enter** 完成 退出向导")
+
+	return m.paddedView(borderStyle.Render(m.renderMarkdown(b.String())))
 }
 
 func (m *firstRunModel) View() tea.View {
