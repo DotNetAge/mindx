@@ -39,9 +39,10 @@ func SetupDaemon(workspaceDir string) error {
 func setupDaemonMacOS(workspaceDir string) error {
 	plistPath := filepath.Join(os.TempDir(), "com.mindx.daemon.plist")
 
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("get executable path: %w", err)
+	home, _ := os.UserHomeDir()
+	pathEnv := "/usr/local/bin:/usr/bin:/bin"
+	if home != "" {
+		pathEnv = filepath.Join(home, ".mindx", "bin") + ":" + pathEnv
 	}
 
 	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
@@ -52,9 +53,14 @@ func setupDaemonMacOS(workspaceDir string) error {
     <string>com.mindx.daemon</string>
     <key>ProgramArguments</key>
     <array>
-        <string>%s</string>
+        <string>mindx</string>
         <string>start</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>%s</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -66,7 +72,7 @@ func setupDaemonMacOS(workspaceDir string) error {
     <key>StandardErrorPath</key>
     <string>%s</string>
 </dict>
-</plist>`, exePath, workspaceDir, filepath.Join(workspaceDir, "logs", "daemon.log"), filepath.Join(workspaceDir, "logs", "daemon.err.log"))
+</plist>`, pathEnv, workspaceDir, filepath.Join(workspaceDir, "logs", "daemon.log"), filepath.Join(workspaceDir, "logs", "daemon.err.log"))
 
 	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
 		return fmt.Errorf("write plist: %w", err)
@@ -100,9 +106,10 @@ func setupDaemonLinux(workspaceDir string) error {
 		return fmt.Errorf("create systemd user dir: %w", err)
 	}
 
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("get executable path: %w", err)
+	home, _ := os.UserHomeDir()
+	pathEnv := "/usr/local/bin:/usr/bin:/bin"
+	if home != "" {
+		pathEnv = filepath.Join(home, ".mindx", "bin") + ":" + pathEnv
 	}
 
 	serviceContent := fmt.Sprintf(`[Unit]
@@ -111,8 +118,9 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=%s start
+ExecStart=mindx start
 WorkingDirectory=%s
+Environment=PATH=%s
 Restart=on-failure
 RestartSec=5
 StandardOutput=append:%s
@@ -120,7 +128,7 @@ StandardError=append:%s
 
 [Install]
 WantedBy=default.target
-`, exePath, workspaceDir, filepath.Join(workspaceDir, "logs", "daemon.log"), filepath.Join(workspaceDir, "logs", "daemon.err.log"))
+`, workspaceDir, pathEnv, filepath.Join(workspaceDir, "logs", "daemon.log"), filepath.Join(workspaceDir, "logs", "daemon.err.log"))
 
 	servicePath := filepath.Join(serviceDir, "mindx-daemon.service")
 	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
@@ -142,11 +150,6 @@ WantedBy=default.target
 }
 
 func setupDaemonWindows(workspaceDir string) error {
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("get executable path: %w", err)
-	}
-
 	taskName := "MindXDaemon"
 	username := os.Getenv("USERNAME")
 	if username == "" {
@@ -163,7 +166,7 @@ func setupDaemonWindows(workspaceDir string) error {
 	if err := os.MkdirAll(filepath.Dir(vbsPath), 0755); err != nil {
 		return fmt.Errorf("create bin dir: %w", err)
 	}
-	vbsContent := fmt.Sprintf(`CreateObject("WScript.Shell").Run """%s"" start", 0, False`, exePath)
+	vbsContent := `CreateObject("WScript.Shell").Run "mindx start", 0, False`
 	if err := os.WriteFile(vbsPath, []byte(vbsContent), 0644); err != nil {
 		return fmt.Errorf("write vbs launcher: %w", err)
 	}

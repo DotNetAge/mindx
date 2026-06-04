@@ -49,10 +49,10 @@ VERSION_NUM    := $(VERSION:v%=%)
 
 # 构建标志
 LDFLAGS        ?= -s -w \
-                 -X main.version=$(VERSION_NUM) \
-                 -X main.commit=$(GIT_COMMIT) \
-                 -X main.buildTime=$(BUILD_TIME) \
-                 -X main.dirty=$(GIT_DIRTY)
+                 -X github.com/DotNetAge/mindx/cmd.Version=$(VERSION_NUM) \
+                 -X github.com/DotNetAge/mindx/cmd.Commit=$(GIT_COMMIT) \
+                 -X github.com/DotNetAge/mindx/cmd.BuildTime=$(BUILD_TIME) \
+                 -X github.com/DotNetAge/mindx/cmd.Dirty=$(GIT_DIRTY)
 
 GOFLAGS        ?= -trimpath -ldflags "$(LDFLAGS)"
 
@@ -227,12 +227,65 @@ install:
 	@echo "  Run: exec $$SHELL   (or source your rc file)"
 	@echo "  Then: $(BINARY_NAME)"
 
-## uninstall: 卸载已安装的二进制文件
+## uninstall: 卸载 mindx（停止服务 + 清理二进制/配置/PATH）
 uninstall:
 	@echo "$(RED)🗑️ Uninstalling $(BINARY_NAME)...$(NC)"
+	@echo ""
+	@# ── 停止正在运行的 daemon ──
+	@echo "$(CYAN)  ⟳ Stopping daemon...$(NC)"
+	@UNAME_S=$$(uname -s); \
+	if [ "$$UNAME_S" = "Darwin" ]; then \
+		launchctl unload ~/Library/LaunchAgents/com.dotnetage.$(BINARY_NAME).plist 2>/dev/null && \
+			echo "     stopped launchd service" || echo "     (no launchd service)"; \
+	elif [ "$$UNAME_S" = "Linux" ]; then \
+		systemctl --user stop $(BINARY_NAME) 2>/dev/null && \
+			echo "     stopped systemd service" || echo "     (no systemd service)"; \
+		systemctl --user disable $(BINARY_NAME) 2>/dev/null || true; \
+	fi; \
+	pkill -f "$(BINARY_NAME) start" 2>/dev/null && echo "     killed mindx start" || true; \
+	lsof -ti:1313 -ti:1314 2>/dev/null | xargs kill 2>/dev/null && echo "     freed ports 1313/1314" || true
+	@sleep 1
+	@echo ""
+	@# ── 删除服务文件 ──
+	@echo "$(CYAN)  ⟳ Removing service files...$(NC)"
+	@UNAME_S=$$(uname -s); \
+	if [ "$$UNAME_S" = "Darwin" ]; then \
+		rm -f ~/Library/LaunchAgents/com.dotnetage.$(BINARY_NAME).plist && \
+			echo "     removed launchd plist" || true; \
+	elif [ "$$UNAME_S" = "Linux" ]; then \
+		rm -f ~/.config/systemd/user/$(BINARY_NAME).service && \
+			systemctl --user daemon-reload 2>/dev/null && \
+			echo "     removed systemd unit" || true; \
+	fi
+	@rm -f ~/.mindx/settings/com.dotnetage.$(BINARY_NAME).plist 2>/dev/null || true
+	@rm -f ~/.mindx/settings/$(BINARY_NAME).service 2>/dev/null || true
+	@echo ""
+	@# ── 从 shell rc 中移除 PATH ──
+	@echo "$(CYAN)  ⟳ Removing PATH from shell rc files...$(NC)"
+	@for rc in "$$HOME/.zshrc" "$$HOME/.bashrc" "$$HOME/.bash_profile" "$$HOME/.profile"; do \
+		if [ -f "$$rc" ]; then \
+			grep -v '^# MindX$$' "$$rc" | grep -v '^export PATH=".*\.mindx/bin' > "$$rc.tmp" && \
+				mv "$$rc.tmp" "$$rc" && echo "     cleaned $$(basename $$rc)" || true; \
+		fi; \
+	done
+	@echo ""
+	@# ── 删除安装文件 ──
+	@echo "$(CYAN)  ⟳ Removing installed files...$(NC)"
+	@rm -rf ~/.mindx/bin && echo "     removed ~/.mindx/bin" || true
+	@rm -rf ~/.mindx/settings && echo "     removed ~/.mindx/settings" || true
+	@rm -rf ~/.mindx/logs && echo "     removed ~/.mindx/logs" || true
 	@rm -f /usr/local/bin/$(BINARY_NAME) 2>/dev/null || true
 	@rm -f $$GOPATH/bin/$(BINARY_NAME) 2>/dev/null || true
-	@echo "$(GREEN)✅ Successfully uninstalled!$(NC)"
+	@echo ""
+	@# ── Windows 清理（仅在 Windows 上生效）──
+	@schtasks /delete /tn MindXDaemon /f 2>/dev/null && echo "     removed Windows scheduled task" || true
+	@powershell -NoProfile -NonInteractive -Command \
+		"$$d=[Environment]::GetFolderPath('Desktop'); \
+		 Remove-Item \"$$d/mindx.lnk\" -Force -ErrorAction SilentlyContinue" 2>/dev/null || true
+	@echo ""
+	@echo "$(GREEN)✅ Uninstall complete!$(NC)"
+	@echo "   ~/.mindx/agents, memory, sessions, and config were kept."
+	@echo "   To remove them too, run: rm -rf ~/.mindx"
 
 # =============================================================================
 # 运行目标
