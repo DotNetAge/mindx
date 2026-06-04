@@ -1,10 +1,21 @@
+# Git
 .git
 .gitignore
-node_modules
-dist
-bin
-releases
-.dev
-.test
-*.log
-.env
+
+# Build output
+# runtime/bin/mindx 由 make docker 填充，保留在上下文中
+
+# IDE
+.idea
+.vscode
+
+# macOS
+.DS_Store
+
+# Go temp
+*.test
+*.out
+
+# Python
+__pycache__
+*.pyc

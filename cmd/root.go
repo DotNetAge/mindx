@@ -35,15 +35,21 @@ var rootCmd = &cobra.Command{
 	  直接运行 mindx 将启动 TUI（终端界面）进行对话。
 
 	子命令:
-	  start   启动后台 Daemon 服务（供 WebUI/MacUI 接入）
-	  doctor  重新运行配置向导
-	  web     打开浏览器访问 WebUI 界面
+	  start    启动后台 Daemon 服务（供 WebUI/MacUI 接入）
+	  stop     停止 Daemon 服务
+	  install  安装到系统（PATH + Daemon + 快捷方式）
+	  status   查看系统状态
+	  doctor   诊断系统健康
+	  web      打开浏览器访问 WebUI 界面
 
 	示例:
 	  mindx                    # 启动 TUI 聊天界面
 	  mindx start             # 启动后台服务
 	  mindx start --port 8080 # 指定端口
-	  mindx doctor            # 重新配置环境
+	  mindx install           # 安装到系统
+	  mindx status            # 查看状态
+	  mindx doctor            # 诊断健康
+	  mindx doctor --fix      # 自动修复
 	  mindx web               # 打开 WebUI`,
 	RunE:         runTUI,
 	SilenceUsage: true,
@@ -68,6 +74,11 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Suggest install if running from non-standard location
+	if installed, _, _ := setup.IsInstalled(); !installed {
+		fmt.Print("💡 提示: 运行 'mindx install' 可将 MindX 安装到系统（配置 PATH / Daemon / 快捷方式）\n\n")
+	}
+
 	if !cfg.Initialized {
 		fmt.Print("\n⚙️  检测到首次运行，进入配置向导...\n\n")
 
@@ -84,9 +95,6 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	} else if needsDoctor(cfg, workspaceDir) {
 		fmt.Print("\n⚙️  环境检查：部分组件未就绪，进入配置向导...\n\n")
 
-		if !cfg.HasEmbedder() {
-			fmt.Print("💡 Embedder 模型未配置，语义记忆不可用。\n")
-		}
 		if _, err := os.Stat(filepath.Join(workspaceDir, ".venv")); os.IsNotExist(err) {
 			fmt.Print("💡 Python 虚拟环境未创建，技能依赖未安装。\n")
 		}
