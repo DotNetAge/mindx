@@ -9,8 +9,13 @@ import (
 	"github.com/DotNetAge/mindx/internal/client"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/setup"
+	setupstyle "github.com/DotNetAge/mindx/internal/setup/style"
 	"github.com/spf13/cobra"
 )
+
+func init() {
+	setupstyle.GradientVersion = Version
+}
 
 // needsDoctor checks if the environment is healthy enough to run the chat TUI.
 // Returns true if the user needs to run the setup wizard.

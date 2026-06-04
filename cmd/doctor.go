@@ -37,9 +37,9 @@ func init() {
 
 // Check represents a single diagnostic check result.
 type Check struct {
-	Name    string // Component name
-	Status  string // ✅ ⚠️ ❌ ℹ️
-	Message string // Human-readable description
+	Name    string       // Component name
+	Status  string       // ✅ ⚠️ ❌ ℹ️
+	Message string       // Human-readable description
 	Fix     func() error // Auto-fix function (may be nil)
 }
 
@@ -135,7 +135,7 @@ func runAllChecks() []Check {
 			Name:    "System PATH",
 			Status:  "❌",
 			Message: fmt.Sprintf("%s not in system PATH — 'mindx' command won't work globally", dir),
-			Fix: func() error { _, err := setup.AddToSystemPath(dir); return err },
+			Fix:     func() error { _, err := setup.AddToSystemPath(dir); return err },
 		})
 	}
 

@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/DotNetAge/mindx/internal/setup"
+	setupstyle "github.com/DotNetAge/mindx/internal/setup/style"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +30,7 @@ Examples:
 }
 
 var (
-	installDir     string
+	installDir      string
 	installNoDaemon bool
 	installNoPath   bool
 	installNoShortcut bool
@@ -45,8 +45,7 @@ func init() {
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {
-	fmt.Println("🔧 MindX System Installation")
-	fmt.Println(strings.Repeat("─", 40))
+	fmt.Println(setupstyle.GradientTitle(""))
 	fmt.Println()
 
 	opts := setup.InstallOptions{
@@ -62,7 +61,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println()
-	fmt.Println(strings.Repeat("─", 40))
+	fmt.Println("────────────────────────────────────────")
 	fmt.Println("✅ Installation complete!")
 	fmt.Println()
 	fmt.Printf("   Binary: %s\n", result.BinaryDest)

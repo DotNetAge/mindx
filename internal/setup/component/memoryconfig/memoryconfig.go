@@ -318,7 +318,7 @@ Embedder 模型用于将文本向量化，实现语义搜索和 RAG 记忆。
 	content := style.Border.Render(b.String())
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		style.GradientTitle("MindX2 beta Setup"),
+		style.GradientTitle(""),
 		"",
 		content,
 	) + "\n"

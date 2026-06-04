@@ -138,7 +138,7 @@ Daemon 是后台常驻服务，用于接收定时任务和 WebSocket 连接。
 	content := style.Border.Render(b.String())
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		style.GradientTitle("MindX2 beta Setup"),
+		style.GradientTitle(""),
 		"",
 		content,
 	) + "\n"
