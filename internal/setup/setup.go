@@ -2,6 +2,7 @@ package setup
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -14,7 +15,12 @@ import (
 // RunWizard runs the interactive setup wizard and applies the results.
 // It handles provider selection, API key input, model selection, daemon setup,
 // Python venv setup, and PATH configuration.
-func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *core.MindxConfig) error {
+func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *core.MindxConfig, embeddedFS fs.FS) error {
+	// 强制将内置的 providers.yml 同步到用户设置目录（覆盖旧版本）
+	if err := core.SyncEmbeddedFile(embeddedFS, "runtime/settings/providers.yml", providersPath); err != nil {
+		return fmt.Errorf("同步 providers.yml 失败: %w", err)
+	}
+
 	result := runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg)
 	if result.Err != nil {
 		return result.Err
@@ -24,7 +30,7 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 	// Runs before storing the actual key so that if file update fails,
 	// no key is left orphaned in the credential store.
 	if result.SelectedProvider != "" {
-		if err := updateProviderCredRef(modelsPath, result.SelectedProvider); err != nil {
+		if err := updateProviderCredRef(providersPath, result.SelectedProvider); err != nil {
 			return fmt.Errorf("更新提供商配置失败: %w", err)
 		}
 	}
@@ -35,6 +41,16 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 	if result.APIKey != "" {
 		if err := credStore.Set(result.SelectedProvider, result.APIKey); err != nil {
 			return fmt.Errorf("存储 API Key 失败: %w", err)
+		}
+	}
+
+	// 将所有从环境变量预解析的非空 Provider Key 写入 Credential Store
+	for providerName, key := range result.ResolvedKeys {
+		if key != "" && providerName != result.SelectedProvider {
+			if err := credStore.Set(providerName, key); err != nil {
+				// 单个写入失败不阻断流程，仅记录警告
+				fmt.Printf("⚠️  存储 %s 的 API Key 失败: %v\n", providerName, err)
+			}
 		}
 	}
 
@@ -111,51 +127,39 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 	return nil
 }
 
-func updateProviderCredRef(modelsPath, providerName string) error {
-	registry, err := config.LoadModels(modelsPath)
+func updateProviderCredRef(providersPath, providerName string) error {
+	data, err := os.ReadFile(providersPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("读取 providers.yml 失败: %w", err)
 	}
 
-	provider := registry.GetProvider(providerName)
-	if provider == nil {
+	var provConfig struct {
+		Providers []config.ProviderConfig `yaml:"providers"`
+	}
+	if err := yaml.Unmarshal(data, &provConfig); err != nil {
+		return fmt.Errorf("解析 providers.yml 失败: %w", err)
+	}
+
+	var found *config.ProviderConfig
+	for i := range provConfig.Providers {
+		if provConfig.Providers[i].Name == providerName {
+			found = &provConfig.Providers[i]
+			break
+		}
+	}
+	if found == nil {
 		return fmt.Errorf("提供商 %q 未在配置中找到", providerName)
 	}
-	provider.APIKey = providerName
-	registry.RegisterProvider(providerName, provider)
 
-	type modelsWrapper struct {
-		Providers []config.ProviderConfig `yaml:"providers"`
-		Models    []config.ModelConfig    `yaml:"models"`
-	}
+	// 将 api_key 设为 provider name（作为 CredentialStore 的引用 key）
+	found.APIKey = providerName
 
-	providers := registry.Providers()
-	providerCfgs := make([]config.ProviderConfig, 0, len(providers))
-	for _, p := range providers {
-		if p != nil {
-			providerCfgs = append(providerCfgs, *p)
-		}
-	}
-
-	rawModels := registry.ListRaw()
-	modelCfgs := make([]config.ModelConfig, 0, len(rawModels))
-	for _, m := range rawModels {
-		if m != nil {
-			modelCfgs = append(modelCfgs, *m)
-		}
-	}
-
-	wrapper := modelsWrapper{
-		Providers: providerCfgs,
-		Models:    modelCfgs,
-	}
-
-	data, err := yaml.Marshal(wrapper)
+	out, err := yaml.Marshal(provConfig)
 	if err != nil {
 		return fmt.Errorf("序列化配置失败: %w", err)
 	}
 
-	return os.WriteFile(modelsPath, data, 0644)
+	return os.WriteFile(providersPath, out, 0644)
 }
 
 func updateAllAgentsModel(agentsDir, modelName string) error {

@@ -10,22 +10,22 @@
 #   make run               # 运行 TUI（默认模式）
 #   make run-daemon        # 运行 Daemon 服务
 #   make test              # 运行所有测试
-#   make bench             # 性能基准测试
-#   make lint              # 代码检查
 #   make clean             # 清理构建产物
 #   make docs              # 生成文档
-#   make tidy              # 整理依赖
 #   make release           # 发布多平台版本
 #   make docker-build      # 构建 Docker 镜像
 #
 # =============================================================================
 
-.PHONY: build build-current setup-cross clear install run run-daemon stop test bench lint clean docs tidy help \
-        dev dev-tui dev-daemon uninstall format check vet \
+.PHONY: build build-all setup-cross clear install run run-daemon stop test clean docs help \
+        dev uninstall \
         release release-notes release-publish release-homebrew release-winget publish \
-        cross-build docker-build docker-push \
-        ci cd security audit deps-update \
-        pre-commit post-commit version info changelog
+        docker-build docker-push \
+        ci cd deps-update \
+        pre-commit version info changelog \
+        build-debug dev-watch test-verbose test-specific \
+        vulnerability-check deps-graph \
+        docs-serve readme clean-all docker docker-run docker-run-daemon docker-clean setup-hooks
 
 # =============================================================================
 # 配置变量
@@ -33,7 +33,6 @@
 
 # 项目信息
 BINARY_NAME    ?= mindx
-PROJECT_NAME   ?= mindx
 VERSION        ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v2.1.0")
 BUILD_TIME     ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 GIT_COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -41,10 +40,6 @@ GIT_DIRTY      ?= $(shell git diff --quiet HEAD 2>/dev/null && echo "clean" || e
 
 # Go 工具链
 GO             ?= go
-GOFMT          ?= gofmt
-GOIMPORTS      ?= goimports
-GOVET          ?= go vet
-GOLINT         ?= golangci-lint
 
 # Go 版本信息
 GOVERSION      ?= $(shell $(GO) version | grep -oP 'go\d+\.\d+' | head -1)
@@ -63,9 +58,7 @@ GOFLAGS        ?= -trimpath -ldflags "$(LDFLAGS)"
 
 # 目录配置
 BUILD_DIR      ?= ./dist
-DIST_DIR       ?= ./dist
 COVERAGE_DIR   ?= ./coverage
-BENCHMARK_DIR  ?= .benchmarks
 DOCS_DIR       ?= ./docs/api
 
 # 发布配置
@@ -86,36 +79,17 @@ BOLD           := \033[1m
 # 主要构建目标
 # =============================================================================
 
-## build: 编译 macOS、Linux、Windows 三平台二进制至 dist/
+## build: 编译当前平台二进制至 dist/
 build: pre-build
-	@mkdir -p $(BUILD_DIR)
-	@echo "$(GREEN)➡ Building darwin/amd64...$(NC)"
-	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 .
-	@echo "$(GREEN)  ✅ darwin/amd64$(NC)"
-	@echo "$(GREEN)➡ Building linux/amd64...$(NC)"
-	@if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then \
-		CGO_ENABLED=1 CC=x86_64-linux-musl-gcc GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 . && \
-		echo "$(GREEN)  ✅ linux/amd64$(NC)"; \
-	else \
-		echo "$(YELLOW)  ⚠  linux/amd64 skipped — install: brew install FiloSottile/musl-cross/musl-cross$(NC)"; \
-	fi
-	@echo "$(GREEN)➡ Building windows/amd64...$(NC)"
-	@if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then \
-		CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe . && \
-		echo "$(GREEN)  ✅ windows/amd64$(NC)"; \
-	else \
-		echo "$(YELLOW)  ⚠  windows/amd64 skipped — install: brew install mingw-w64$(NC)"; \
-	fi
-	@echo "$(GREEN)✅ Build complete!$(NC)"
-	@ls -lh $(BUILD_DIR)/
-
-## build-current: 仅编译当前平台（供 run/install 使用）
-build-current: pre-build
 	@echo "$(GREEN)➡ Building $(BINARY_NAME) v$(VERSION_NUM) for $(shell $(GO) env GOOS)/$(shell $(GO) env GOARCH)...$(NC)"
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=1 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
 	@echo "$(GREEN)✅ Build complete!$(NC)"
 	@ls -lh $(BUILD_DIR)/$(BINARY_NAME)
+
+## build-all: 编译所有主流平台二进制至 dist/
+build-all: pre-build build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 build-windows-amd64
+	@echo "$(GREEN)✅ All platforms built! Check $(BUILD_DIR)/$(NC)"
 
 ## setup-cross: 安装交叉编译工具链（用于 Linux/Windows 目标）
 setup-cross:
@@ -127,7 +101,7 @@ setup-cross:
 		echo "  Linux:   brew install FiloSottile/musl-cross/musl-cross"; \
 		echo "  Windows: brew install mingw-w64"; \
 	fi
-	@echo "$(GREEN)✅ Cross-compilation toolchains installed! Run 'make build' for all platforms.$(NC)"
+	@echo "$(GREEN)✅ Cross-compilation toolchains installed! Run 'make build-all' for all platforms.$(NC)"
 
 ## build-debug: 编译调试版本（带符号信息）
 build-debug:
@@ -265,7 +239,7 @@ uninstall:
 # =============================================================================
 
 ## run: 编译并启动 TUI（默认模式）
-run: build-current
+run: build
 	@echo "$(YELLOW)🚀 Starting TUI (Terminal UI)...$(NC)"
 	@echo "$(CYAN)💡 Tips:$(NC)"
 	@echo "  • Enter messages and press Enter to send"
@@ -275,7 +249,7 @@ run: build-current
 	./$(BUILD_DIR)/$(BINARY_NAME)
 
 ## run-daemon: 编译并启动 Daemon 服务
-run-daemon: build-current
+run-daemon: build
 	@echo "$(YELLOW)🔧 Starting Daemon service...$(NC)"
 	@echo "$(CYAN)💡 Service info:$(NC)"
 	@echo "  • WebSocket: ws://localhost:1314/ws"
@@ -283,7 +257,7 @@ run-daemon: build-current
 	@echo ""
 	./$(BUILD_DIR)/$(BINARY_NAME) start
 
-## stop: 停止本机 mindx daemon（由 make install 启动的守护进程）
+## stop: 停止本机 mindx daemon
 stop:
 	@echo "$(YELLOW)🛑 Stopping mindx daemon...$(NC)"
 	@pkill -f "mindx start" 2>/dev/null || \
@@ -293,32 +267,12 @@ stop:
 	@sleep 1
 	@echo "$(GREEN)✅ mindx daemon stopped.$(NC)"
 
-## run-verbose: 以详细日志模式运行 TUI
-run-verbose: build-current
-	@echo "$(YELLOW)🚀 Starting TUI (verbose mode)...$(NC)"
-	MINDX_LOG_LEVEL=debug ./$(BUILD_DIR)/$(BINARY_NAME)
-
-# =============================================================================
-# 开发目标
-# =============================================================================
-
-## dev: 开发模式（TUI + 热重载，推荐日常开发）
+## dev: 开发模式（go run，不编译，推荐日常开发）
 dev:
 	@echo "$(YELLOW)🛠️  Running in development mode...$(NC)"
-	@echo "$(CYAN)📝 Using: go run . (auto-reload on file changes)$(NC)"
 	$(GO) run .
 
-## dev-tui: 仅运行 TUI（不重新编译，快速测试）
-dev-tui:
-	@echo "$(YELLOW)🚀 Quick TUI run...$(NC)"
-	$(GO) run cmd/root.go
-
-## dev-daemon: 仅运行 Daemon（不重新编译，快速测试）
-dev-daemon:
-	@echo "$(YELLOW)🔧 Quick Daemon run...$(NC)"
-	$(GO) run cmd/start.go
-
-## dev-watch: 文件监控自动重载（需要 air 或 CompileDaemon）
+## dev-watch: 文件监控自动重载（需要 air）
 dev-watch:
 	@command -v air >/dev/null 2>&1 && \
 		(air -c .air.toml) || \
@@ -337,21 +291,6 @@ test:
 	@echo "$(GREEN)✅ Tests complete! Coverage summary:$(NC)"
 	@$(GO) tool cover -func=$(COVERAGE_DIR)/coverage.out | tail -1
 
-## test-short: 快速测试（跳过慢速和集成测试）
-test-short:
-	@echo "$(GREEN)▶ Running short tests (skip slow/integration)...$(NC)"
-	$(GO) test -short -v ./...
-
-## test-integration: 运行集成测试（需要完整环境）
-test-integration:
-	@echo "$(GREEN)▶ Running integration tests...$(NC)"
-	$(GO) test -run Integration -v ./internal/svc/...
-
-## test-race: 竞态条件检测
-test-race:
-	@echo "$(GREEN)▶ Running race detector...$(NC)"
-	$(GO) test -race -v ./...
-
 ## test-verbose: 详细测试输出（包含所有包）
 test-verbose:
 	@echo "$(GREEN)▶ Running all tests with verbose output...$(NC)"
@@ -362,153 +301,6 @@ test-verbose:
 test-specific:
 	@echo "$(GREEN)▶ Running specific test: $(TESTFUNC)...$(NC)"
 	$(GO) test -run $(TESTFUNC) -v ./...
-
-## bench: 性能基准测试
-bench:
-	@echo "$(GREEN)⏱ Running benchmarks...$(NC)"
-	@mkdir -p $(BENCHMARK_DIR)
-	$(GO) test -bench=. -benchmem -count=1 ./internal/core/... > $(BENCHMARK_DIR)/bench-$(shell date +%Y%m%d-%H%M%S).txt
-	@echo "$(GREEN)✅ Benchmarks saved to $(BENCHMARK_DIR)/$(NC)"
-
-## bench-compare: 对比两次基准测试结果
-# 用法: make bench-compare OLD=bench-20260510-120000.txt NEW=bench-20260510-130000.txt
-bench-compare:
-	@echo "$(GREEN)📊 Comparing benchmarks...$(NC)"
-	@if [ -z "$(OLD)" ] || [ -z "$(NEW)" ]; then \
-		echo "$(RED)❌ Error: OLD and NEW parameters required$(NC)"; \
-		echo "$(YELLOW)Usage: make bench-compare OLD=file1.txt NEW=file2.txt$(NC)"; \
-		exit 1; \
-	fi
-	benchstat $(BENCHMARK_DIR)/$(OLD) $(BENCHMARK_DIR)/$(NEW)
-
-## bench-save: 保存当前基准结果用于后续对比
-bench-save: bench
-	@echo "$(GREEN)💾 Benchmarks saved successfully!$(NC)"
-
-# =============================================================================
-# 代码质量目标
-# =============================================================================
-
-## lint: 运行 golangci-lint（全面的代码质量检查）
-lint:
-	@echo "$(GREEN)🔍 Running linters...$(NC)"
-	@if command -v $(GOLINT) >/dev/null 2>&1; then \
-		$(GOLINT) run ./... ; \
-	else \
-		echo "$(YELLOW)⚠ $(GOLINT) not installed.$(NC)"; \
-		echo "$(CYAN)Install: brew install golangci-lint  # macOS$(NC)"; \
-		echo "$(CYAN)        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest$(NC)"; \
-	fi
-
-## lint-fix: 自动修复可修复的 lint 问题
-lint-fix:
-	@echo "$(GREEN)🔧 Auto-fixing lint issues...$(NC)"
-	@if command -v $(GOLINT) >/dev/null 2>&1; then \
-		$(GOLINT) run --fix ./... ; \
-	else \
-		echo "$(YELLOW)⚠ $(GOLINT) not installed. See 'make lint' for installation instructions.$(NC)"; \
-	fi
-
-## vet: Go vet 静态分析
-vet:
-	@echo "$(GREEN)🔍 Running go vet...$(NC)"
-	$(GO) vet ./...
-	@echo "$(GREEN)✅ Vet passed! No issues found.$(NC)"
-
-## fmt: 格式化所有 Go 代码
-fmt:
-	@echo "$(GREEN)🎨 Formatting code...$(NC)"
-	@find . -name "*.go" -not -path "./vendor/*" -exec $(GOFMT) -w {} \;
-	@echo "$(GREEN)✅ All files formatted!$(NC)"
-
-## fmt-check: 检查代码格式是否正确（不修改文件）
-check:
-	@echo "$(GREEN)🔍 Checking code formatting...$(NC)"
-	@test -z "$$($(GOFMT) -l ./... | grep -v vendor)" || { \
-		echo "$(YELLOW)⚠ Files need formatting:$(NC)"; \
-		$(GOFMT) -l ./... | grep -v vendor; \
-		echo "$(CYAN)Run 'make fmt' to fix automatically.$(NC)"; \
-		exit 1; \
-	}
-	@echo "$(GREEN)✅ All files properly formatted!$(NC)"
-
-## imports: 整理 import 顺序和移除未使用的导入
-imports:
-	@echo "$(Green)📦 Organizing imports...$(NC)"
-	@if command -v $(GOIMPORTS) >/dev/null 2>&1; then \
-		find . -name "*.go" -not -path "./vendor/*" -exec $(GOIMPORTS) -w {} \; ; \
-	else \
-		echo "$(YELLOW)⚠ goimports not installed.$(NC)"; \
-		echo "$(CYAN)Install: go install golang.org/x/tools/cmd/goimports@latest$(NC)"; \
-	fi
-
-# =============================================================================
-# 安全与审计目标
-# =============================================================================
-
-## security: 安全漏洞扫描
-security:
-	@echo "$(GREEN)🔒 Running security scan...$(NC)"
-	@if command -v govulncheck >/dev/null 2>&1; then \
-		govulncheck ./... ; \
-	else \
-		echo "$(YELLOW)⚠ govulncheck not installed.$(NC)"; \
-		echo "$(CYAN)Install: go install golang.org/x/vuln/cmd/govulncheck@latest$(NC)"; \
-	fi
-
-## audit: 完整的依赖审计
-audit: security
-	@echo "$(GREEN)📋 Auditing dependencies...$(NC)"
-	$(GO) list -m all | head -20
-	@echo ""
-	@echo "$(GREEN)✅ Audit complete!$(NC)"
-
-## vulnerability-check: 检查已知 CVE 漏洞
-vulnerability-check:
-	@echo "$(RED)🛡️ Checking for known vulnerabilities...$(NC)"
-	@if command -v snyk >/dev/null 2>&1; then \
-		snyk test ; \
-	elif command -v trivy >/dev/null 2>&1; then \
-		trivy fs --severity HIGH,CRITICAL . ; \
-	else \
-		echo "$(YELLOW)⚠ No vulnerability scanner found.$(NC)"; \
-		echo "$(CYAN)Recommended: snyk or trivy$(NC)"; \
-	fi
-
-# =============================================================================
-# 依赖管理
-# =============================================================================
-
-## tidy: 整理 Go 模块依赖（清理未使用的依赖）
-tidy:
-	@echo "$(GREEN)📦 Tidying modules...$(NC)"
-	$(GO) mod tidy
-	$(GO) mod verify
-	@echo "$(GREEN)✅ Modules tidied and verified!$(NC)"
-
-## deps: 下载所有依赖到本地缓存
-deps:
-	@echo "$(GREEN)📦 Downloading dependencies...$(NC)"
-	$(GO) mod download
-	@echo "$(GREEN)✅ Dependencies ready!$(NC)"
-
-## deps-update: 更新所有依赖到最新版本（谨慎使用）
-deps-update:
-	@echo "$(YELLOW)⚠ Updating all dependencies...$(NC)"
-	$(GO) get -u ./...
-	$(GO) mod tidy
-	@echo "$(GREEN)✅ Dependencies updated! Review changes before committing.$(NC)"
-
-## deps-graph: 显示依赖关系图
-deps-graph:
-	@echo "$(BLUE)📊 Dependency graph:$(NC)"
-	$(GO) mod graph | head -50
-
-## vendor: 创建 vendor 目录（用于离线构建）
-vendor:
-	@echo "$(GREEN)📦 Creating vendor directory...$(NC)"
-	$(GO) mod vendor
-	@echo "$(GREEN)✅ Vendor directory created!$(NC)"
 
 # =============================================================================
 # 文档目标
@@ -530,7 +322,7 @@ docs:
 docs-serve:
 	@echo "$(BLUE)🌐 Starting documentation server...$(NC)"
 	@echo "$(CYAN)Open http://localhost:6060 in your browser$(NC)"
-	pkgsite http://localhost:6060
+	godoc -http=:6060 2>/dev/null || pkgsite
 
 ## readme: 生成 README 的 TOC 和 badge 更新
 readme:
@@ -545,7 +337,7 @@ readme:
 ## changelog: 从 git 历史生成 CHANGELOG.md
 changelog:
 	@echo "$(GREEN)📝 Generating changelog...$(NC)"
-	@if command -l git-chglog >/dev/null 2>&1; then \
+	@if command -v git-chglog >/dev/null 2>&1; then \
 		git-chglog -o CHANGELOG.md ; \
 	else \
 		git log --pretty=format:"- %s (%h)" --since="1 month ago" > CHANGELOG.md.tmp ; \
@@ -553,20 +345,12 @@ changelog:
 	fi
 	@echo "$(GREEN)✅ Changelog generated!$(NC)"
 
-# =============================================================================
-# 交叉编译目标（多平台支持）
-# =============================================================================
-
-## cross-build: 编译所有主流平台版本
-cross-build: build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 build-windows-amd64
-	@echo "$(GREEN)✅ All platforms built! Check $(DIST_DIR)/$(NC)"
-
 ## build-linux-amd64: Linux x86_64
 build-linux-amd64:
 	@echo "$(GREEN)➡ Building for linux/amd64...$(NC)"
-	@mkdir -p $(DIST_DIR)
+	@mkdir -p $(BUILD_DIR)/linux-amd64
 	@if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then \
-		CGO_ENABLED=1 CC=x86_64-linux-musl-gcc GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-amd64 . && \
+		CGO_ENABLED=1 CC=x86_64-linux-musl-gcc GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) . && \
 		echo "$(GREEN)✅ linux/amd64 done$(NC)"; \
 	else \
 		echo "$(YELLOW)⚠  linux/amd64 skipped — install: brew install FiloSottile/musl-cross/musl-cross$(NC)"; \
@@ -575,9 +359,9 @@ build-linux-amd64:
 ## build-linux-arm64: Linux ARM64
 build-linux-arm64:
 	@echo "$(GREEN)➡ Building for linux/arm64...$(NC)"
-	@mkdir -p $(DIST_DIR)
+	@mkdir -p $(BUILD_DIR)/linux-arm64
 	@if command -v aarch64-linux-musl-gcc >/dev/null 2>&1; then \
-		CGO_ENABLED=1 CC=aarch64-linux-musl-gcc GOOS=linux GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-linux-arm64 . && \
+		CGO_ENABLED=1 CC=aarch64-linux-musl-gcc GOOS=linux GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/linux-arm64/$(BINARY_NAME) . && \
 		echo "$(GREEN)✅ linux/arm64 done$(NC)"; \
 	else \
 		echo "$(YELLOW)⚠  linux/arm64 skipped — install: brew install FiloSottile/musl-cross/musl-cross$(NC)"; \
@@ -586,27 +370,27 @@ build-linux-arm64:
 ## build-darwin-amd64: macOS Intel
 build-darwin-amd64:
 	@echo "$(GREEN)➡ Building for darwin/amd64...$(NC)"
-	@mkdir -p $(DIST_DIR)
-	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64 .
+	@mkdir -p $(BUILD_DIR)/darwin-amd64
+	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/darwin-amd64/$(BINARY_NAME) .
 	@echo "$(GREEN)✅ darwin/amd64 done$(NC)"
 
 ## build-darwin-arm64: macOS Apple Silicon (M1/M2)
 build-darwin-arm64:
 	@echo "$(GREEN)➡ Building for darwin/arm64 (Apple Silicon)...$(NC)"
-	@mkdir -p $(DIST_DIR)
-	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64 .
+	@mkdir -p $(BUILD_DIR)/darwin-arm64
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/darwin-arm64/$(BINARY_NAME) .
 	@echo "$(GREEN)✅ darwin/arm64 done$(NC)"
 
 ## build-windows-amd64: Windows x86_64
 build-windows-amd64:
 	@echo "$(GREEN)➡ Building for windows/amd64...$(NC)"
-	@mkdir -p $(DIST_DIR)
+	@mkdir -p $(BUILD_DIR)/windows-amd64
 	@if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then \
-		if CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe . 2>/dev/null; then \
+		if CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/windows-amd64/$(BINARY_NAME).exe . 2>/dev/null; then \
 			echo "$(GREEN)✅ windows/amd64 done (CGO)$(NC)"; \
 		else \
 			echo "$(YELLOW)⚠  windows/amd64 CGO build failed, trying CGO_ENABLED=0...$(NC)"; \
-			CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe . && \
+			CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/windows-amd64/$(BINARY_NAME).exe . && \
 			echo "$(GREEN)✅ windows/amd64 done (CGO_ENABLED=0)$(NC)" || \
 			echo "$(RED)❌ windows/amd64 failed$(NC)"; \
 		fi \
@@ -624,27 +408,24 @@ V   = $(VERSION_NUM)
 # 辅助：打包一个平台为 tar.gz（或 .zip），跳过缺失的二进制
 define package-platform
 	@mkdir -p $(REL)
-	@binary="$(DIST_DIR)/$(BINARY_NAME)-$(1)-$(2)$(3)"; \
+	@platform_dir="$(BUILD_DIR)/$(1)-$(2)"; \
+	binary="$$platform_dir/$(BINARY_NAME)$(3)"; \
 	if [ ! -f "$$binary" ]; then \
-		echo "  ⚠  $$(basename $$binary) not found, skipping"; \
+		echo "  ⚠  $(1)-$(2) not found, skipping"; \
 		exit 0; \
 	fi; \
 	archive="$(REL)/$(BINARY_NAME)-$(V)-$(1)-$(2).tar.gz"; \
 	if [ "$(1)" = "windows" ]; then \
 		archive="$(REL)/$(BINARY_NAME)-$(V)-$(1)-$(2).zip"; \
-		cp "$$binary" "$(DIST_DIR)/$(BINARY_NAME).exe"; \
-		(cd "$(DIST_DIR)" && zip -q "$$OLDPWD/$$archive" "$(BINARY_NAME).exe"); \
-		rm -f "$(DIST_DIR)/$(BINARY_NAME).exe"; \
+		(cd "$$platform_dir" && zip -q "$$OLDPWD/$$archive" "$(BINARY_NAME).exe"); \
 	else \
-		cp "$$binary" "$(DIST_DIR)/$(BINARY_NAME)"; \
-		tar czf "$$archive" -C "$(DIST_DIR)" "$(BINARY_NAME)"; \
-		rm -f "$(DIST_DIR)/$(BINARY_NAME)"; \
+		tar czf "$$archive" -C "$$platform_dir" "$(BINARY_NAME)"; \
 	fi; \
 	echo "  ✅ $$(basename $$archive)  $$(ls -lh $$archive | awk '{print $$5}')"
 endef
 
 ## release: 交叉编译并打包所有平台（带 checksums）
-release: clean cross-build
+release: clean build-all
 	@echo "$(GREEN)📦 Packaging...$(NC)"
 	$(call package-platform,darwin,amd64,)
 	$(call package-platform,darwin,arm64,)
@@ -893,7 +674,7 @@ publish:
 ## docker: 开发指令 — 编译 Linux 二进制 + 打包 runtime/bin/ + Docker Compose 构建并启动
 docker: build-linux-amd64
 	@echo "$(GREEN)📦 Copying binary to runtime/bin/mindx...$(NC)"
-	cp $(DIST_DIR)/$(BINARY_NAME)-linux-amd64 runtime/bin/mindx
+	cp $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) runtime/bin/mindx
 	@echo "$(GREEN)🐳 Starting MindX via Docker Compose...$(NC)"
 	docker compose build
 	@echo "$(GREEN)✅ Build complete. Starting daemon...$(NC)"
@@ -946,23 +727,17 @@ docker-clean:
 # CI/CD 目标
 # =============================================================================
 
-## CI: 完整的 CI 流水线（lint + test + build + security）
-ci: lint vet test build security
+## CI: 完整的 CI 流水线（test + build）
+ci: test build
 	@echo "$(GREEN)✅ CI pipeline completed successfully!$(NC)"
 
 ## CD: 完整的 CD 流水线（CI + release + docker-build）
 cd: ci release docker-build
 	@echo "$(GREEN)✅ CD pipeline completed successfully!$(NC)"
 
-## pre-commit: Git pre-commit hook（格式化 + 检查）
-pre-commit: fmt check vet lint test-short
+## pre-commit: Git pre-commit hook（快速测试）
+pre-commit: test
 	@echo "$(GREEN)✅ Pre-commit checks passed!$(NC)"
-
-## post-commit: Git post-commit hook（可选的通知或部署触发）
-post-commit:
-	@echo "$(GREEN)📤 Post-commit actions...$(NC)"
-	@# 可以在这里添加通知、CI 触发等操作
-	@echo "$(GREEN)✅ Post-commit complete!$(NC)"
 
 # =============================================================================
 # 信息目标
@@ -1007,68 +782,36 @@ help:
 	@echo "$(GREEN)╚══════════════════════════════════════════════╝$(NC)"
 	@echo ""
 	@echo "$(YELLOW)📦 Build Targets:$(NC)"
-	@echo "  $(GREEN)build$(NC)           Cross-compile for macOS/Linux/Windows to dist/"
-	@echo "  $(GREEN)build-current$(NC)   Compile only for current platform"
+	@echo "  $(GREEN)build$(NC)           Compile for current platform"
+	@echo "  $(GREEN)build-all$(NC)      Build all platforms (darwin + linux + windows)"
 	@echo "  $(GREEN)build-debug$(NC)     Compile debug binary (with symbols)"
 	@echo "  $(GREEN)setup-cross$(NC)     Install cross-compilation toolchains (brew)"
+	@echo "  $(GREEN)build-linux-amd64$(NC)   Linux x86_64"
+	@echo "  $(GREEN)build-linux-arm64$(NC)   Linux ARM64"
+	@echo "  $(GREEN)build-darwin-amd64$(NC)   macOS Intel"
+	@echo "  $(GREEN)build-darwin-arm64$(NC)   macOS Apple Silicon"
+	@echo "  $(GREEN)build-windows-amd64$(NC)  Windows x86_64"
 	@echo "  $(GREEN)install$(NC)         Install to system PATH (requires sudo)"
 	@echo "  $(GREEN)uninstall$(NC)       Remove from system PATH"
 	@echo ""
-	@echo "$(YELLOW)▶️ Run Targets:$(NC)"
-	@echo "  $(GREEN)run$(NC)             Start TUI (default mode)"
-	@echo "  $(GREEN)run-daemon$(NC)      Start Daemon service"
-	@echo "  $(GREEN)run-verbose$(NC)     Start TUI with debug logging"
-	@echo "  $(GREEN)stop$(NC)             Stop running mindx daemon"
-	@echo ""
-	@echo "$(YELLOW)🛠️ Development Targets:$(NC)"
-	@echo "  $(GREEN)dev$(NC)             Dev mode (hot-reload)"
-	@echo "  $(GREEN)dev-tui$(NC)        Quick TUI run"
-	@echo "  $(GREEN)dev-daemon$(NC)     Quick Daemon run"
-	@echo "  $(GREEN)dev-watch$(NC)      File watcher auto-reload"
+	@echo "$(YELLOW)▶️ Run & Dev Targets:$(NC)"
+	@echo "  $(GREEN)run$(NC)             Build and start TUI"
+	@echo "  $(GREEN)run-daemon$(NC)      Build and start Daemon service"
+	@echo "  $(GREEN)stop$(NC)             Stop running daemon"
+	@echo "  $(GREEN)dev$(NC)             Go run (no build, for development)"
+	@echo "  $(GREEN)dev-watch$(NC)      File watcher auto-reload (air)"
 	@echo ""
 	@echo "$(YELLOW)🧪 Test Targets:$(NC)"
 	@echo "  $(GREEN)test$(NC)            Run unit tests with coverage"
-	@echo "  $(GREEN)test-short$(NC)      Quick tests (skip integration)"
-	@echo "  $(GREEN)test-integration$(NC) Integration tests only"
-	@echo "  $(GREEN)test-race$(NC)       Race condition detection"
-	@echo "  $(GREEN)bench$(NC)           Performance benchmarks"
-	@echo "  $(GREEN)bench-compare$(NC)   Compare benchmark results"
-	@echo ""
-	@echo "$(YELLOW)✨ Quality Targets:$(NC)"
-	@echo "  $(GREEN)lint$(NC)            Code quality check (golangci-lint)"
-	@echo "  $(GREEN)lint-fix$(NC)        Auto-fix lint issues"
-	@echo "  $(GREEN)vet$(NC)             Static analysis (go vet)"
-	@echo "  $(GREEN)fmt$(NC)             Format code (gofmt)"
-	@echo "  $(GREEN)check$(NC)           Verify formatting"
-	@echo "  $(GREEN)imports$(NC)         Organize imports"
-	@echo ""
-	@echo "$(YELLOW)🔒 Security Targets:$(NC)"
-	@echo "  $(GREEN)security$(NC)        Vulnerability scan (govulncheck)"
-	@echo "  $(GREEN)audit$(NC)           Full dependency audit"
-	@echo "  $(GREEN)vulnerability-check$(NC) CVE scanner"
-	@echo ""
-	@echo "$(YELLOW)📦 Dependency Targets:$(NC)"
-	@echo "  $(GREEN)tidy$(NC)            Clean up module dependencies"
-	@echo "  $(GREEN)deps$(NC)            Download all dependencies"
-	@echo "  $(GREEN)deps-update$(NC)     Update to latest versions"
-	@echo "  $(GREEN)vendor$(NC)          Create vendor directory"
+	@echo "  $(GREEN)test-verbose$(NC)     Verbose test output"
 	@echo ""
 	@echo "$(YELLOW)📝 Documentation Targets:$(NC)"
 	@echo "  $(GREEN)docs$(NC)            Generate API documentation"
 	@echo "  $(GREEN)docs-serve$(NC)      Start local doc server"
 	@echo "  $(GREEN)changelog$(NC)       Generate CHANGELOG.md"
 	@echo ""
-	@echo "$(YELLOW)🌍 Cross-Compile Targets:$(NC)"
-	@echo "  $(GREEN)cross-build$(NC)     Build for all platforms"
-	@echo "  $(GREEN)build-linux-amd64$(NC)   Linux x86_64"
-	@echo "  $(GREEN)build-linux-arm64$(NC)   Linux ARM64"
-	@echo "  $(GREEN)build-darwin-amd64$(NC)   macOS Intel"
-	@echo "  $(GREEN)build-darwin-arm64$(NC)   macOS Apple Silicon"
-	@echo "  $(GREEN)build-windows-amd64$(NC)  Windows x86_64"
-	@echo ""
 	@echo "$(YELLOW)🚀 Release Targets:$(NC)"
-	@echo "  $(GREEN)release$(NC)          Create release packages"
-	@echo "  $(GREEN)release-sign$(NC)     Generate checksums"
+	@echo "$(GREEN)  $(GREEN)release$(NC)          Create release packages"
 	@echo "  $(GREEN)release-notes$(NC)    Generate release notes"
 	@echo ""
 	@echo "$(YELLOW)🐳 Docker Targets:$(NC)"
@@ -1082,7 +825,6 @@ help:
 	@echo "  $(GREEN)ci$(NC)               Full CI pipeline"
 	@echo "  $(GREEN)cd$(NC)               Full CD pipeline"
 	@echo "  $(GREEN)pre-commit$(NC)       Git pre-commit hook"
-	@echo "  $(GREEN)post-commit$(NC)      Git post-commit hook"
 	@echo ""
 	@echo "$(YELLOW)ℹ️ Info Targets:$(NC)"
 	@echo "  $(GREEN)version$(NC)          Show version information"
@@ -1095,11 +837,10 @@ help:
 	@echo ""
 	@echo "$(CYAN)Examples:$(NC)"
 	@echo "  make build && make run                    # Build and run TUI"
-	@echo "  make test && make bench                   # Test and benchmark"
-	@echo "  make fmt && make lint                     # Format and lint"
+	@echo "  make test                                 # Run tests"
 	@echo "  make ci                                   # Full CI pipeline"
 	@echo "  make release && make release-notes         # Create release"
-	@echo "  make cross-build                          # Multi-platform build"
+	@echo "  make build                                 # Multi-platform build"
 	@echo "  make docker-build && make docker-run       # Docker workflow"
 	@echo ""
 
@@ -1111,9 +852,7 @@ help:
 clean:
 	@echo "$(RED)🧹 Cleaning build artifacts...$(NC)"
 	rm -rf $(BUILD_DIR)
-	rm -rf $(DIST_DIR)
 	rm -rf $(COVERAGE_DIR)
-	rm -rf $(BENCHMARK_DIR)
 	rm -f coverage.out
 	rm -f profile.out
 	rm -f cpu.prof
@@ -1149,11 +888,6 @@ pre-build:
 	@test -n "$(GO)" || (echo "$(RED)❌ Error: Go not found$(NC)" && exit 1)
 	@$(GO) version >/dev/null 2>&1 || (echo "$(RED)❌ Error: Go version check failed$(NC)" && exit 1)
 	@echo "$(GREEN)✅ Pre-build checks passed!$(NC)"
-
-post-build: build-current
-	@echo "$(GREEN)📊 Post-build summary:$(NC)"
-	@ls -lh $(BUILD_DIR)/$(BINARY_NAME)
-	@du -sh $(BUILD_DIR)/$(BINARY_NAME)
 
 # =============================================================================
 # 默认目标

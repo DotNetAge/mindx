@@ -15,6 +15,8 @@ import (
 	goreactconfig "github.com/DotNetAge/goreact/config"
 	"gopkg.in/yaml.v3"
 
+	"github.com/DotNetAge/mindx/internal/setup/style"
+
 	"github.com/DotNetAge/mindx/internal/core"
 )
 
@@ -95,6 +97,9 @@ type firstRunModel struct {
 	modelConfigured  bool
 	apiKeyConfigured bool
 
+	// preResolvedKeys: 从环境变量预解析的 Provider API Key（provider name -> actual key value）
+	preResolvedKeys map[string]string
+
 	width  int
 	height int
 
@@ -105,6 +110,7 @@ type firstRunResult struct {
 	SelectedProvider string
 	SelectedModel    string
 	APIKey           string
+	ResolvedKeys     map[string]string // 所有从环境变量预解析的非空 Provider Key
 	Err              error
 
 	DaemonSetup    bool
@@ -164,6 +170,37 @@ func initGlamour(width int) *glamour.TermRenderer {
 		return nil
 	}
 	return r
+}
+
+// resolveProviderKeysFromEnv 从 providers.yml 读取所有供应商的 api_key 字段（作为环境变量名），
+// 尝试从系统环境变量中解析出实际值，返回 map[providerName]actualKeyValue。
+func resolveProviderKeysFromEnv(providersPath string) (map[string]string, error) {
+	data, err := os.ReadFile(providersPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var provConfig struct {
+		Providers []goreactconfig.ProviderConfig `yaml:"providers"`
+	}
+	if err := yaml.Unmarshal(data, &provConfig); err != nil {
+		return nil, err
+	}
+
+	keys := make(map[string]string)
+	for _, p := range provConfig.Providers {
+		if p.APIKey == "" {
+			keys[p.Name] = ""
+			continue
+		}
+		// api_key 字段存的是环境变量名，尝试读取实际值
+		if v := os.Getenv(p.APIKey); v != "" {
+			keys[p.Name] = v
+		} else {
+			keys[p.Name] = ""
+		}
+	}
+	return keys, nil
 }
 
 func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, mindxConfig *core.MindxConfig) firstRunResult {
@@ -234,6 +271,11 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		height:         24,
 	}
 
+	// 预解析所有 Provider 的 API Key（从环境变量读取）
+	if preKeys, err := resolveProviderKeysFromEnv(providersPath); err == nil {
+		m.preResolvedKeys = preKeys
+	}
+
 	m.modelConfigured = mindxConfig.DefaultModel != ""
 
 	if m.modelConfigured {
@@ -284,6 +326,7 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		SelectedProvider: fm.selectedProvider.Name,
 		SelectedModel:    fm.selectedModel.Name,
 		APIKey:           fm.apiKeyInput.Value(),
+		ResolvedKeys:     fm.preResolvedKeys,
 		DaemonSetup:      fm.daemonChoice,
 		PythonSetup:      fm.pythonChoice,
 		PythonInfo:       fm.pythonInfo,
@@ -414,6 +457,16 @@ func (m *firstRunModel) updateProviderSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if item := m.providerList.SelectedItem(); item != nil {
 				if pi, ok := item.(providerItem); ok {
 					m.selectedProvider = pi
+					// 检查是否已有预解析的环境变量 Key 或 CredentialStore 中的 Key
+					if preKey, hasPre := m.preResolvedKeys[pi.Name]; hasPre && preKey != "" {
+						m.apiKeyInput.SetValue(preKey)
+						m.step = 2
+						return m, nil
+					}
+					if m.apiKeyConfigured {
+						m.step = 2
+						return m, nil
+					}
 					m.apiKeyInput.Placeholder = fmt.Sprintf("请输入 %s 的 API Key...", pi.Title())
 					m.apiKeyInput.Focus()
 					m.step = 1
@@ -956,5 +1009,5 @@ func (m *firstRunModel) View() tea.View {
 	case 7:
 		content = m.renderWebUIComplete()
 	}
-	return tea.NewView(content)
+	return tea.NewView(style.GradientTitle("") + "\n\n" + content)
 }

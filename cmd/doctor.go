@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/DotNetAge/mindx/internal/core"
@@ -159,6 +160,19 @@ func runAllChecks() []Check {
 		})
 	default:
 		checks = append(checks, Check{Name: "Daemon Service", Status: "❓", Message: "Cannot determine status"})
+	}
+
+	// 3a. Daemon service — verify VBS launcher on Windows
+	if runtime.GOOS == "windows" && (daemonStatus == setup.DaemonRunning || daemonStatus == setup.DaemonStopped) {
+		vbsPath := filepath.Join(workspaceDir, "bin", "MindXDaemon.vbs")
+		if _, err := os.Stat(vbsPath); os.IsNotExist(err) {
+			checks = append(checks, Check{
+				Name:    "Daemon Launcher",
+				Status:  "⚠️",
+				Message: "Daemon registered but VBS launcher missing — may have been installed by an older version with a buggy launcher",
+				Fix:     func() error { return setup.SetupDaemon(workspaceDir) },
+			})
+		}
 	}
 
 	// 4. Python venv
