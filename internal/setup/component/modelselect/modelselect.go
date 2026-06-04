@@ -207,7 +207,7 @@ func (m *Model) View() string {
 	content := style.Border.Render(b.String())
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		style.GradientTitle("MindX2 beta Setup"),
+		style.GradientTitle(""),
 		"",
 		content,
 	) + "\n"

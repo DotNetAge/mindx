@@ -200,6 +200,33 @@ type sessionFileActionParams struct {
 	Files     []string `json:"files,omitempty"`
 }
 
+// getOrLoadSession 尝试从 activeSessions 获取 session，
+// 如果会话已结束（goroutine 已退出），则从持久化存储重建。
+// 如果存储不可用或 session 在磁盘上也不存在，则创建一个空 session
+// 兜底（后续 ConfirmModify/Rollback 会返回空列表而非报错）。
+func (d *Daemon) getOrLoadSession(sessionID string) (*goreactsession.Session, error) {
+	val, ok := d.activeSessions.Load(sessionID)
+	if ok {
+		return val.(*goreactsession.Session), nil
+	}
+
+	sess := goreactsession.NewSession(sessionID, "")
+	sessDB := d.app.SessDB()
+	if sessDB != nil {
+		// 从持久化存储重建 session，触发 lazy-load 以恢复 modifyFiles
+		sess = goreactsession.NewSession(sessionID, "",
+			goreactsession.WithStore(sessDB),
+		)
+		// 触发懒加载：加载历史消息和 modify_files
+		//
+		// 即使加载失败（如 session 目录已不存在），ensureLoaded 内部也会
+		// 标记 loaded=true 并静默返回空 session，不会阻塞流程。
+		sess.All()
+	}
+
+	return sess, nil
+}
+
 func (d *Daemon) handleSessionConfirmFiles(_ context.Context, params json.RawMessage) (any, error) {
 	var p sessionFileActionParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -209,11 +236,10 @@ func (d *Daemon) handleSessionConfirmFiles(_ context.Context, params json.RawMes
 		return nil, fmt.Errorf("session_id is required")
 	}
 
-	val, ok := d.activeSessions.Load(p.SessionID)
-	if !ok {
-		return nil, fmt.Errorf("session not active: %s", p.SessionID)
+	sess, err := d.getOrLoadSession(p.SessionID)
+	if err != nil {
+		return nil, err
 	}
-	sess := val.(*goreactsession.Session)
 
 	confirmed, err := sess.ConfirmModify(p.Files...)
 	if err != nil {
@@ -235,11 +261,10 @@ func (d *Daemon) handleSessionRollbackFiles(_ context.Context, params json.RawMe
 		return nil, fmt.Errorf("session_id is required")
 	}
 
-	val, ok := d.activeSessions.Load(p.SessionID)
-	if !ok {
-		return nil, fmt.Errorf("session not active: %s", p.SessionID)
+	sess, err := d.getOrLoadSession(p.SessionID)
+	if err != nil {
+		return nil, err
 	}
-	sess := val.(*goreactsession.Session)
 
 	rolledBack, err := sess.Rollback(p.Files...)
 	if err != nil {

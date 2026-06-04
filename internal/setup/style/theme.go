@@ -18,9 +18,13 @@ var (
 	CodeInline = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
 )
 
+// GradientVersion is the version string used in the default gradient title.
+// Set this at startup to reflect the actual build version.
+var GradientVersion = "beta"
+
 func GradientTitle(text string) string {
 	if text == "" {
-		text = "MindX v2 beta Setup"
+		text = "MindX v" + GradientVersion + " Setup"
 	}
 
 	runes := []rune(text)
