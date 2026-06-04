@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/DotNetAge/mindx/internal/core"
 )
@@ -127,19 +128,22 @@ func stopDaemonLinux() error {
 // ── Windows ──────────────────────────────────────────────────────────────────
 
 func checkDaemonWindows() (DaemonStatus, error) {
-	cmd := exec.Command("schtasks", "/query", "/tn", "MindXDaemon", "/fo", "CSV", "/nh")
+	// Check via PowerShell Get-ScheduledTask which returns English state values.
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+		`try { (Get-ScheduledTask -TaskName "MindXDaemon" -ErrorAction Stop).State } catch { Write-Output "NotFound" }`)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// Task doesn't exist
 		return DaemonNotInstalled, nil
 	}
-	output := decodeWindowsOutput(out)
-	// CSV format: "Task Name","Next Run Time","Status"
-	// Status can be "Ready" or "Running"
-	if contains(output, "Running") {
+	state := strings.TrimSpace(string(out))
+	switch state {
+	case "Running":
 		return DaemonRunning, nil
+	case "Ready", "Disabled":
+		return DaemonStopped, nil
+	default:
+		return DaemonNotInstalled, nil
 	}
-	return DaemonStopped, nil
 }
 
 func stopDaemonWindows() error {
@@ -155,13 +159,4 @@ func stopDaemonWindows() error {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-func contains(s, substr string) bool { return len(s) >= len(substr) && search(s, substr) >= 0 }
-
-func search(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}
+// isRunningTask checks if the MindXDaemon scheduled task is currently running.

@@ -87,7 +87,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		providersPath := filepath.Join(settingsDir, "providers.yml")
 		agentsDir := filepath.Join(workspaceDir, "agents")
 
-		if err := setup.RunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg); err != nil {
+		if err := setup.RunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg, RuntimeFS); err != nil {
 			return fmt.Errorf("配置向导异常: %w", err)
 		}
 
@@ -105,7 +105,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		providersPath := filepath.Join(settingsDir, "providers.yml")
 		agentsDir := filepath.Join(workspaceDir, "agents")
 
-		if err := setup.RunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg); err != nil {
+		if err := setup.RunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg, RuntimeFS); err != nil {
 			return fmt.Errorf("环境修复失败: %w", err)
 		}
 

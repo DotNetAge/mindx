@@ -7,6 +7,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
+
+	"golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/transform"
 
 	"github.com/DotNetAge/mindx/internal/core"
 )
@@ -144,13 +148,37 @@ func setupDaemonWindows(workspaceDir string) error {
 	}
 
 	taskName := "MindXDaemon"
+	username := os.Getenv("USERNAME")
+	if username == "" {
+		if out, e := exec.Command("whoami").Output(); e == nil {
+			username = strings.TrimSpace(string(out))
+		}
+	}
+	if username == "" {
+		username = "%USERNAME%"
+	}
 
-	// Use XML-based task definition for reliable quoting and working directory support.
-	// CLI schtasks /create mangles quotes in /tr when paths contain spaces.
+	// Create VBS launcher that starts mindx with a hidden window (no Cmd popup on logon).
+	vbsPath := filepath.Join(workspaceDir, "bin", "MindXDaemon.vbs")
+	if err := os.MkdirAll(filepath.Dir(vbsPath), 0755); err != nil {
+		return fmt.Errorf("create bin dir: %w", err)
+	}
+	vbsContent := fmt.Sprintf(`CreateObject("WScript.Shell").Run """%s"" start", 0, False`, exePath)
+	if err := os.WriteFile(vbsPath, []byte(vbsContent), 0644); err != nil {
+		return fmt.Errorf("write vbs launcher: %w", err)
+	}
+
+	// Resolve wscript.exe path — handles non-C: system drives (e.g. D:\Windows\System32\wscript.exe)
+	systemRoot := os.Getenv("SystemRoot")
+	if systemRoot == "" {
+		systemRoot = "C:\\Windows"
+	}
+	wscriptPath := filepath.Join(systemRoot, "System32", "wscript.exe")
+
 	xmlContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>MindX Daemon — auto-start on user logon</Description>
+    <Description>MindX Daemon</Description>
   </RegistrationInfo>
   <Triggers>
     <LogonTrigger>
@@ -174,12 +202,12 @@ func setupDaemonWindows(workspaceDir string) error {
   </Settings>
   <Actions>
     <Exec>
-      <Command>"%s"</Command>
-      <Arguments>start</Arguments>
+      <Command>%s</Command>
+      <Arguments>%s</Arguments>
       <WorkingDirectory>%s</WorkingDirectory>
     </Exec>
   </Actions>
-</Task>`, os.Getenv("USERNAME"), os.Getenv("USERNAME"), exePath, workspaceDir)
+</Task>`, username, username, wscriptPath, vbsPath, workspaceDir)
 
 	// Write temp XML file (schtasks /create /xml requires UTF-16LE with BOM)
 	tmpXML := filepath.Join(os.TempDir(), "MindXDaemon.xml")
@@ -188,35 +216,85 @@ func setupDaemonWindows(workspaceDir string) error {
 	}
 	defer os.Remove(tmpXML)
 
-	// Create or force-update the scheduled task from XML
-	cmd := exec.Command("schtasks", "/create", "/tn", taskName, "/xml", tmpXML, "/f")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("schtasks create: %w\n%s", err, decodeWindowsOutput(out))
+	// Try schtasks /create first
+	if err := createSchtasks(taskName, tmpXML); err == nil {
+		return nil
 	}
 
+	// Fallback: PowerShell New-ScheduledTask (more reliable on some Windows configs)
+	return setupDaemonWindowsPowerShell(vbsPath, workspaceDir, taskName)
+}
+
+func createSchtasks(taskName, xmlPath string) error {
+	cmd := exec.Command("schtasks", "/create", "/tn", taskName, "/xml", xmlPath, "/f")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("schtasks: %s", decodeWindowsOutput(out))
+	}
+	return nil
+}
+
+func setupDaemonWindowsPowerShell(vbsPath, workspaceDir, taskName string) error {
+	psScript := fmt.Sprintf(`
+$ErrorActionPreference = 'Stop'
+$action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument '"%s"' -WorkingDirectory '%s'
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType InteractiveToken -RunLevel LeastPrivilege
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName '%s' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force
+`, vbsPath, workspaceDir, taskName)
+
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", psScript)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("powershell fallback: %s", decodeWindowsOutput(out))
+	}
 	return nil
 }
 
 // toUTF16LE converts a UTF-8 string to UTF-16LE with BOM, as required by schtasks /xml.
+// Uses golang.org/x/text for correct surrogate pair handling (non-BMP characters).
 func toUTF16LE(s string) []byte {
+	enc := unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM)
+
 	var buf bytes.Buffer
+	// Write BOM
 	buf.WriteByte(0xFF)
 	buf.WriteByte(0xFE)
-	for _, r := range s {
-		buf.Write([]byte{byte(r), byte(r >> 8)})
-	}
+	// Encode the string using the transformer
+	writer := transform.NewWriter(&buf, enc.NewEncoder())
+	writer.Write([]byte(s))
+	writer.Close()
 	return buf.Bytes()
 }
 
 // decodeWindowsOutput attempts to decode Windows command output.
-// On Chinese Windows systems, stderr is often GBK-encoded; this fallback
-// prevents garbled ◇◇◇? characters in error messages.
+// Tries UTF-8 first, then GBK (common on Chinese Windows), then raw bytes.
 func decodeWindowsOutput(raw []byte) string {
-	if decoded, err := decodeGBK(raw); err == nil {
+	if len(raw) == 0 {
+		return ""
+	}
+	// Try UTF-8 first
+	s := string(raw)
+	if utf8Valid(s) {
+		return s
+	}
+	// Try GBK (common on Chinese Windows systems)
+	if decoded, err := decodeGBK(raw); err == nil && utf8Valid(decoded) {
 		return decoded
 	}
-	return string(raw)
+	// Fallback: raw string (may have replacement chars)
+	return s
+}
+
+// utf8Valid checks if a string contains only valid UTF-8 sequences.
+func utf8Valid(s string) bool {
+	for _, r := range s {
+		if r == '\ufffd' {
+			return false
+		}
+	}
+	return true
 }
 
 // decodeGBK tries to decode bytes as GBK/GB2312 encoding.
