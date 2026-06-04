@@ -1,4 +1,27 @@
 models:
+  - name: qwen3.7-max
+    title: Qwen3.7 Max
+    description: >
+      Qwen3.7系列中规模最大、综合能力最强的Max模型，当前开放纯文本模型能力供体验。
+      Qwen3.7是面向智能体时代的新一代旗舰模型，核心优势在于智能体能力的广度与深度：
+      在编程、办公与生产力、长周期自主执行方面均能出色胜任各项任务。
+    provider: dashscope
+    cost_per_1m_in: 12
+    cost_per_1m_out: 36
+    max_tokens: 65536
+    context_length: 1000000
+    is_local: false
+    func_calling: true
+    structuring: false
+    web_searching: true
+    prefix_con: true
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
   - name: qwen3.6-max
     title: Qwen3.6 Max
     description: >

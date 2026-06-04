@@ -626,11 +626,11 @@ func (m *firstRunModel) updateDaemonCheck(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.daemonChoice = !m.daemonChoice
 		case "enter":
 			m.daemonSubmitted = true
-			m.step = 3
+			m.step = 4
 			return m, nil
 		case "s", "S":
 			if DaemonInstalled(m.workspaceDir) {
-				m.step = 3
+				m.step = 4
 				return m, nil
 			}
 		}
@@ -701,7 +701,7 @@ func (m *firstRunModel) updateMemoryConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.listenDownloadCmd()
 				}
 				if runtime.GOOS == "windows" {
-					m.step = 5
+					m.step = 6
 					return m, nil
 				}
 				m.done = true
@@ -717,7 +717,7 @@ func (m *firstRunModel) updateMemoryConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case 2:
 			if msg.String() == "enter" || msg.String() == " " || msg.String() == "s" || msg.String() == "S" {
 				if runtime.GOOS == "windows" {
-					m.step = 5
+					m.step = 6
 					return m, nil
 				}
 				m.done = true
@@ -852,18 +852,23 @@ func (m *firstRunModel) renderDaemonCheck() string {
 	var b strings.Builder
 	installed := DaemonInstalled(m.workspaceDir)
 	if installed {
+		restartHint := ""
+		if runtime.GOOS == "windows" {
+			restartHint = "\n\nDaemon 已成功安装到系统，请**重新启动电脑**使其生效。"
+		}
 		b.WriteString(m.renderMarkdown(fmt.Sprintf(
-			"⚙️ Daemon 后台服务\n\n✅ **已安装**\n\nDaemon 已注册为开机自启动服务。\n\n**Enter** 继续  **S** 跳过",
+			"⚙️ Daemon 后台服务\n\n✅ **已安装**\n\nDaemon 已注册为开机自启动服务。%s\n\n**Enter** 继续  **S** 跳过", restartHint,
 		)))
 	} else {
 		md := `⚙️ Daemon 后台服务
 
 🔴 **未安装**
 
-Daemon 是后台常驻服务，用于接收定时任务和 WebSocket 连接。
+Daemon 是 MindX 的核心服务，提供多 Agent 协作与友好的 Web 界面，
+如跳过则只能使用基于命令行的 TUI。
 
 未安装不影响本地对话，但以下功能不可用：
-  - 定时任务自动触发
+  - 多 Agent 协作调度
   - WebSocket 远程连接
   - 系统托盘常驻
 
