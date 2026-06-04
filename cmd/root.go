@@ -40,6 +40,12 @@ var rootCmd = &cobra.Command{
 	  install  安装到系统（PATH + Daemon + 快捷方式）
 	  status   查看系统状态
 	  doctor   诊断系统健康
+	  logs     查看或追踪 Daemon 日志
+	  version  打印版本和构建信息
+	  query    搜索长期记忆
+	  provider 管理 LLM 供应商（list / rm / add）
+	  model    管理 LLM 模型（list / rm / add）
+	  agent    管理 AI 代理（list / rm / add）
 	  web      打开浏览器访问 WebUI 界面
 
 	示例:
@@ -48,6 +54,14 @@ var rootCmd = &cobra.Command{
 	  mindx start --port 8080 # 指定端口
 	  mindx install           # 安装到系统
 	  mindx status            # 查看状态
+	  mindx logs              # 查看日志
+	  mindx logs -n 100 -f    # 实时追踪日志
+	  mindx version           # 查看版本
+	  mindx query "术语"      # 搜索长期记忆
+	  mindx provider list    # 列出供应商
+	  mindx model list       # 列出模型
+	  mindx model set gpt-4  # 设置默认模型
+	  mindx agent list       # 列出代理
 	  mindx doctor            # 诊断健康
 	  mindx doctor --fix      # 自动修复
 	  mindx web               # 打开 WebUI`,
