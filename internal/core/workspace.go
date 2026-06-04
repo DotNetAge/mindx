@@ -74,3 +74,16 @@ func WorkspaceExists(workspaceDir string) bool {
 	}
 	return info.IsDir()
 }
+
+// SyncEmbeddedFile 从 embedded FS 中读取指定文件并强制写入目标路径（覆盖已有文件）。
+// 用于确保用户目录中的配置文件始终与内置版本一致（如 providers.yml 的环境变量名更新）。
+func SyncEmbeddedFile(embeddedFS fs.FS, embeddedPath, targetPath string) error {
+	data, err := fs.ReadFile(embeddedFS, embeddedPath)
+	if err != nil {
+		return fmt.Errorf("读取嵌入文件 %s 失败: %w", embeddedPath, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		return fmt.Errorf("创建目标目录失败: %w", err)
+	}
+	return os.WriteFile(targetPath, data, 0644)
+}

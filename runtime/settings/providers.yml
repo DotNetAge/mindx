@@ -12,35 +12,35 @@ providers:
   - name: zhipu
     title: 智谱
     base_url: https://open.bigmodel.cn/api/paas/v4
-    api_key: ""
+    api_key: ZHIPU_API_KEY
     auth_token: ""
   - name: moonshot
     title: Kimi
     base_url: https://api.moonshot.cn/v1
-    api_key: ""
+    api_key: MOONSHOT_API_KEY
     auth_token: ""
   - name: minimax
     title: MiniMax
     base_url: https://api.minimaxi.com/v1
-    api_key: ""
+    api_key: MINIMAX_API_KEY
     auth_token: ""
   - name: ark
     title: 火山引擎
     base_url: https://ark.cn-beijing.volces.com/api/v3
-    api_key: ""
+    api_key: ARK_API_KEY
     auth_token: ""
   - name: openai
     title: OpenAI
     base_url: https://api.openai.com/v1
-    api_key: ""
+    api_key: OPENAI_API_KEY
     auth_token: ""
   - name: anthropic
     title: Anthropic
     base_url: https://api.anthropic.com/v1
-    api_key: ""
+    api_key: ANTHROPIC_API_KEY
     auth_token: ""
   - name: google
     title: Google
     base_url: https://generativelanguage.googleapis.com/v1beta/openai
-    api_key: ""
+    api_key: GOOGLE_API_KEY
     auth_token: ""
