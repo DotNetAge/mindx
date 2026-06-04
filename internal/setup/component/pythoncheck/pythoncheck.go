@@ -180,7 +180,7 @@ Python 是必需组件，技能系统依赖 Python 运行。
 	content := style.Border.Render(b.String())
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		style.GradientTitle("MindX2 beta Setup"),
+		style.GradientTitle(""),
 		"",
 		content,
 	) + "\n"
