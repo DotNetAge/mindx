@@ -62,6 +62,45 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 	}
 	cfg.Initialized = true
 
+	// Setup PATH: copy binary and configure shell RC (must run before daemon)
+	if result.PathSetup {
+		fmt.Print("📌 安装 mindx 到系统并配置 PATH...\n")
+		exe, err := os.Executable()
+		if err != nil {
+			fmt.Printf("⚠️  无法获取可执行文件路径: %v\n", err)
+		} else {
+			installDir, err := resolveInstallDir("")
+			if err != nil {
+				fmt.Printf("⚠️  无法确定安装目录: %v\n", err)
+			} else {
+				if err := os.MkdirAll(installDir, 0755); err != nil {
+					fmt.Printf("⚠️  创建安装目录失败: %v\n", err)
+				} else {
+					destExe := filepath.Join(installDir, filepath.Base(exe))
+					if destExe != exe {
+						if err := copyFile(exe, destExe); err != nil {
+							fmt.Printf("⚠️  复制二进制失败: %v\n", err)
+						} else {
+							fmt.Printf("✅ 二进制已安装到: %s\n", destExe)
+						}
+					} else {
+						fmt.Printf("✅ 二进制已存在于: %s\n", destExe)
+					}
+
+					// add install directory to shell RC PATH
+					if already, err := AddToSystemPath(installDir); err != nil {
+						fmt.Printf("⚠️  PATH 设置失败 (可稍后手动配置): %v\n", err)
+					} else if !already {
+						fmt.Printf("✅ mindx 已添加到系统 PATH: %s\n", installDir)
+						fmt.Print("\033[31m⚠️  必须重启终端后生效\033[0m\n\n")
+					} else {
+						fmt.Println("✅ mindx 已存在于系统 PATH")
+					}
+				}
+			}
+		}
+	}
+
 	// Setup daemon if user requested
 	if result.DaemonSetup {
 		fmt.Print("⚙️  注册 Daemon 自启动服务...\n")
@@ -94,22 +133,6 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 
 	if result.EmbedderModel != "" {
 		cfg.EmbedderModel = result.EmbedderModel
-	}
-
-	if result.PathSetup {
-		fmt.Print("📌 配置系统 PATH...\n")
-		exe, err := os.Executable()
-		if err == nil {
-			dir := filepath.Dir(exe)
-			if already, err := AddToSystemPath(dir); err != nil {
-				fmt.Printf("⚠️  PATH 设置失败 (可稍后手动配置): %v\n", err)
-			} else if !already {
-				fmt.Printf("✅ mindx 已添加到系统 PATH: %s\n", dir)
-				fmt.Print("\033[31m⚠️  必须重启终端后自动生效\033[0m\n\n")
-			} else {
-				fmt.Println("✅ mindx 已存在于系统 PATH")
-			}
-		}
 	}
 
 	if err := cfg.Save(); err != nil {

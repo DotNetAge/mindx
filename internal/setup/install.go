@@ -68,7 +68,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 	// Note: Runtime assets (agents, prompts, models) are extracted at startup
 	// by core.ExtractWorkspace() from the embedded FS. No need to duplicate here.
 
-	// Step 3: Configure system PATH
+	// Step 2: Configure system PATH
 	if !opts.SkipPath {
 		pathOk, pathErr := AddToSystemPath(installDir)
 		if pathErr != nil {
@@ -76,7 +76,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 		} else {
 			result.PathConfigured = pathOk
 			if pathOk {
-				fmt.Println("✅ System PATH updated")
+				fmt.Printf("✅ System PATH updated: %s\n", installDir)
 				if runtime.GOOS == "windows" {
 					fmt.Println("   New terminals will pick up the change automatically.")
 				} else {
@@ -138,10 +138,9 @@ func resolveInstallDir(override string) (string, error) {
 	case "windows":
 		return filepath.Join(os.Getenv("ProgramFiles"), "mindx"), nil
 	case "darwin", "linux":
-		// Prefer user-local install (no sudo needed)
 		home, _ := os.UserHomeDir()
 		if home != "" {
-			return filepath.Join(home, ".local", "bin"), nil
+			return filepath.Join(home, ".mindx", "bin"), nil
 		}
 		return "/usr/local/bin", nil
 	default:
