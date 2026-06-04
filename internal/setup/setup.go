@@ -13,7 +13,7 @@ import (
 
 // RunWizard runs the interactive setup wizard and applies the results.
 // It handles provider selection, API key input, model selection, daemon setup,
-// Python venv setup, and memory embedder model download.
+// Python venv setup, and PATH configuration.
 func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *core.MindxConfig) error {
 	result := runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg)
 	if result.Err != nil {
@@ -85,13 +85,11 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 		exe, err := os.Executable()
 		if err == nil {
 			dir := filepath.Dir(exe)
-			if !CheckInPath(dir) {
-				if err := AddToPath(dir); err != nil {
-					fmt.Printf("⚠️  PATH 设置失败 (可稍后手动配置): %v\n", err)
-				} else {
-					fmt.Printf("✅ mindx 已添加到系统 PATH: %s\n", dir)
-					fmt.Print("\033[31m⚠️  必须重启终端后自动生效\033[0m\n\n")
-				}
+			if already, err := AddToSystemPath(dir); err != nil {
+				fmt.Printf("⚠️  PATH 设置失败 (可稍后手动配置): %v\n", err)
+			} else if !already {
+				fmt.Printf("✅ mindx 已添加到系统 PATH: %s\n", dir)
+				fmt.Print("\033[31m⚠️  必须重启终端后自动生效\033[0m\n\n")
 			} else {
 				fmt.Println("✅ mindx 已存在于系统 PATH")
 			}

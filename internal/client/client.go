@@ -1254,6 +1254,19 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		ask.OnCycleEnd(func(d events.CycleInfo) {
 			m.program.Send(clientmsg.IterationMsg{SessionID: sessionID, Iteration: d.Iteration})
 		})
+		var tokenUsage goreactsession.TokenUsage
+		ask.OnTokenUsageRecorded(func(d goreactsession.TokenUsageRecord) {
+			tokenUsage.InputTokens += d.PromptTokens
+			tokenUsage.OutputTokens += d.CompletionTokens
+			tokenUsage.CachedTokens += d.CachedTokens
+			tokenUsage.ReasoningTokens += d.ReasoningTokens
+			tokenUsage.TotalTokens += d.TotalTokens
+			tokenUsage.Timestamp = d.Timestamp
+			m.program.Send(clientmsg.ExecutionSummaryMsg{
+				SessionID: sessionID,
+				TokensUsed: tokenUsage,
+			})
+		})
 		ask.OnAskUser(func(d events.AskUserRequestData) {
 			m.pendingAskUser = &d
 			m.program.Send(clientmsg.AskUserEventMsg{})

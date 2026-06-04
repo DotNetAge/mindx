@@ -11,6 +11,9 @@
 # Output of the go coverage tool
 *.out
 
+# ONNX models (except bundled embedder model)
+*.onnx
+
 # Dependency directories
 node_modules/
 vendor/
@@ -39,8 +42,9 @@ Thumbs.db
 logs/
 *.db
 
-# Workspace data
+# Workspace data (keep bundled assets)
 runtime/data/
+!runtime/data/models/
 
 .dev/
 .test/

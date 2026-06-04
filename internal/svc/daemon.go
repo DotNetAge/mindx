@@ -709,6 +709,22 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				msg := fmt.Sprintf("LLM 超时 (已耗时 %s): %s", data.Elapsed, data.Error)
 				d.sendEvent(clientID, sid, gateway.RespError, "超时", msg)
 			}).
+			OnTokenUsageRecorded(func(record goreactsession.TokenUsageRecord) {
+				gw.SendResponse(clientID, gateway.RespTokenUsageRecorded, "Token用量", map[string]any{
+					"id":                record.ID,
+					"session_id":        record.SessionID,
+					"conversation_id":   record.ConversationID,
+					"model_name":        record.ModelName,
+					"provider_name":     record.ProviderName,
+					"agent_name":        record.AgentName,
+					"prompt_tokens":     record.PromptTokens,
+					"completion_tokens": record.CompletionTokens,
+					"cached_tokens":     record.CachedTokens,
+					"reasoning_tokens":  record.ReasoningTokens,
+					"total_tokens":      record.TotalTokens,
+					"timestamp":         record.Timestamp,
+				}, gateway.WithSessionID(sid))
+			}).
 			Run()
 
 		if err != nil && !errors.Is(err, context.Canceled) {

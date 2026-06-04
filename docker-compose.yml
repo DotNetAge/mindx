@@ -1,0 +1,28 @@
+services:
+  mindx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mindx-daemon
+    ports:
+      - "1313:1313"   # Web UI
+      - "1314:1314"   # WebSocket
+    environment:
+      # 在此设置 API Key（变量名定义在 runtime/settings/providers.yml 中）
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      # 持久化会话历史、日志
+      - mindx-data:/home/mindx/.mindx/sessions
+      - mindx-logs:/home/mindx/.mindx/logs
+      # 工作区目录（与宿主机共享）
+      # Agent 可在该目录下读写文件，宿主机直接访问
+      # 例: Windows 上映射 D:\workspaces
+      - ./workspaces:/home/mindx/workspaces
+    restart: unless-stopped
+
+volumes:
+  mindx-data:
+  mindx-logs:

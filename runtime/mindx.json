@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "initialized": true,
+  "last_agent": "personal-assistant",
+  "last_session_id": "",
+  "last_model": "deepseek-v4-flash",
+  "default_model": "deepseek-v4-flash",
+  "default_provider": "deepseek",
+  "embedder_model": "model_q4.onnx",
+  "daemon": {
+    "enabled": false
+  },
+  "python": {
+    "detected": true,
+    "version": "3.14.4",
+    "venv_path": "/Users/ray/.mindx/.venv"
+  }
+}

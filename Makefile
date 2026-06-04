@@ -20,7 +20,7 @@
 #
 # =============================================================================
 
-.PHONY: build build-current setup-cross clear install run run-daemon test bench lint clean docs tidy help \
+.PHONY: build build-current setup-cross clear install run run-daemon stop test bench lint clean docs tidy help \
         dev dev-tui dev-daemon uninstall format check vet \
         release release-notes release-publish release-homebrew release-winget publish \
         cross-build docker-build docker-push \
@@ -282,6 +282,16 @@ run-daemon: build-current
 	@echo "  • Press Ctrl+C to stop"
 	@echo ""
 	./$(BUILD_DIR)/$(BINARY_NAME) start
+
+## stop: 停止本机 mindx daemon（由 make install 启动的守护进程）
+stop:
+	@echo "$(YELLOW)🛑 Stopping mindx daemon...$(NC)"
+	@pkill -f "mindx start" 2>/dev/null || \
+	 pkill -f "$(BINARY_NAME) start" 2>/dev/null || \
+	 (lsof -ti:1313 -ti:1314 | xargs kill 2>/dev/null) || \
+	 echo "$(GREEN)  ✅ No running daemon found.$(NC)"
+	@sleep 1
+	@echo "$(GREEN)✅ mindx daemon stopped.$(NC)"
 
 ## run-verbose: 以详细日志模式运行 TUI
 run-verbose: build-current
@@ -880,6 +890,20 @@ publish:
 # Docker 目标
 # =============================================================================
 
+## docker: 开发指令 — 编译 Linux 二进制 + 打包 runtime/bin/ + Docker Compose 构建并启动
+docker: build-linux-amd64
+	@echo "$(GREEN)📦 Copying binary to runtime/bin/mindx...$(NC)"
+	cp $(DIST_DIR)/$(BINARY_NAME)-linux-amd64 runtime/bin/mindx
+	@echo "$(GREEN)🐳 Starting MindX via Docker Compose...$(NC)"
+	docker compose build
+	@echo "$(GREEN)✅ Build complete. Starting daemon...$(NC)"
+	docker compose up -d
+	@echo "$(GREEN)✅ MindX daemon is running!$(NC)"
+	@echo "   Web UI:  $(CYAN)http://localhost:1313$(NC)"
+	@echo "   WebSocket: $(CYAN)ws://localhost:1314$(NC)"
+	@echo "$(YELLOW)   Run 'docker compose logs -f' to tail logs$(NC)"
+	@echo "$(YELLOW)   Run 'docker compose down' to stop$(NC)"
+
 ## docker-build: 构建 Docker 镜像
 docker-build:
 	@echo "$(GREEN)🐳 Building Docker image...$(NC)"
@@ -994,6 +1018,7 @@ help:
 	@echo "  $(GREEN)run$(NC)             Start TUI (default mode)"
 	@echo "  $(GREEN)run-daemon$(NC)      Start Daemon service"
 	@echo "  $(GREEN)run-verbose$(NC)     Start TUI with debug logging"
+	@echo "  $(GREEN)stop$(NC)             Stop running mindx daemon"
 	@echo ""
 	@echo "$(YELLOW)🛠️ Development Targets:$(NC)"
 	@echo "  $(GREEN)dev$(NC)             Dev mode (hot-reload)"
@@ -1047,6 +1072,7 @@ help:
 	@echo "  $(GREEN)release-notes$(NC)    Generate release notes"
 	@echo ""
 	@echo "$(YELLOW)🐳 Docker Targets:$(NC)"
+	@echo "  $(GREEN)docker$(NC)            Docker Compose dev workflow (build + up)"
 	@echo "  $(GREEN)docker-build$(NC)     Build Docker image"
 	@echo "  $(GREEN)docker-run$(NC)       Run container (TUI)"
 	@echo "  $(GREEN)docker-push$(NC)      Push image to registry"
