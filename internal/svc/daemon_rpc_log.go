@@ -14,9 +14,17 @@ import (
 // logReadParams — 逆向分页读取日志
 //   offset: 从文件末尾向前的偏移行数（0 = 从最后开始）
 //   limit:  每次返回的行数（默认 10）
+//   stream: "main" (默认) 或 "error" — 选择读取哪个日志流
 type logReadParams struct {
-	Offset int `json:"offset,omitempty"` // 从末尾向前的偏移（行数）
-	Limit  int `json:"limit,omitempty"`  // 每页行数，默认 10
+	Offset int    `json:"offset,omitempty"` // 从末尾向前的偏移（行数）
+	Limit  int    `json:"limit,omitempty"`  // 每页行数，默认 10
+	Stream string `json:"stream,omitempty"` // "main" | "error"，默认 "main"
+}
+
+// 允许的日志流名
+var logStreamFilenames = map[string]string{
+	"main":  "mindx.log",
+	"error": "error.log",
 }
 
 func (d *Daemon) handleLogRead(_ context.Context, params json.RawMessage) (any, error) {
@@ -30,10 +38,30 @@ func (d *Daemon) handleLogRead(_ context.Context, params json.RawMessage) (any, 
 	if p.Offset < 0 {
 		p.Offset = 0
 	}
+	if p.Stream == "" {
+		p.Stream = "main"
+	}
 
-	logPath := filepath.Join(logging.ResolveLogDir(), "mindx.log")
+	filename, ok := logStreamFilenames[p.Stream]
+	if !ok {
+		return nil, fmt.Errorf("unknown log stream %q (allowed: main, error)", p.Stream)
+	}
+
+	logPath := filepath.Join(logging.ResolveLogDir(), filename)
 	data, err := os.ReadFile(logPath)
 	if err != nil {
+		// error.log 可能尚未生成 — 返回空列表而不是错误
+		if os.IsNotExist(err) {
+			return map[string]interface{}{
+				"lines":    []string{},
+				"total":    0,
+				"returned": 0,
+				"offset":   p.Offset,
+				"has_more": false,
+				"path":     logPath,
+				"stream":   p.Stream,
+			}, nil
+		}
 		return nil, fmt.Errorf("read log %s: %w", logPath, err)
 	}
 
@@ -57,6 +85,7 @@ func (d *Daemon) handleLogRead(_ context.Context, params json.RawMessage) (any, 
 		"offset":   p.Offset,
 		"has_more": start > 0, // 是否还有更早的日志可加载
 		"path":     logPath,
+		"stream":   p.Stream,
 	}, nil
 }
 
@@ -74,15 +103,83 @@ func (d *Daemon) handleLogClear(_ context.Context, params json.RawMessage) (any,
 	}
 
 	logDir := logging.ResolveLogDir()
-	paths := []string{
-		filepath.Join(logDir, "mindx.log"),
-		filepath.Join(logDir, "error.log"),
-	}
-	for _, p := range paths {
-		if err := os.WriteFile(p, []byte{}, 0644); err != nil {
-			return nil, fmt.Errorf("clear log %s: %w", p, err)
+	cleared := make([]string, 0, len(logStreamFilenames))
+	for _, filename := range logStreamFilenames {
+		path := filepath.Join(logDir, filename)
+		if err := os.WriteFile(path, []byte{}, 0644); err != nil {
+			return nil, fmt.Errorf("clear log %s: %w", path, err)
 		}
+		cleared = append(cleared, path)
 	}
 
-	return map[string]string{"status": "ok"}, nil
+	return map[string]any{
+		"status":  "ok",
+		"cleared": cleared,
+	}, nil
+}
+
+// handleLogCount — 轻量级统计接口：只计行数，不返回内容
+// 返回每个日志流的字节数和行数（行数 = 换行符数 + 1（如果文件非空且不以 \n 结尾））
+// 用于 UI 在标签上显示数量徽章
+func (d *Daemon) handleLogCount(_ context.Context, _ json.RawMessage) (any, error) {
+	logDir := logging.ResolveLogDir()
+	counts := make(map[string]map[string]int64, len(logStreamFilenames))
+
+	for stream, filename := range logStreamFilenames {
+		path := filepath.Join(logDir, filename)
+		counts[stream] = countLogFile(path)
+	}
+
+	return map[string]any{
+		"counts": counts,
+	}, nil
+}
+
+// countLogFile 统计日志文件的字节数和行数（仅计换行符，性能 O(N) 但只读不解析）
+func countLogFile(path string) map[string]int64 {
+	result := map[string]int64{
+		"bytes":  0,
+		"lines":  0,
+		"exists": 0,
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return result
+	}
+	result["exists"] = 1
+	result["bytes"] = info.Size()
+
+	if info.Size() == 0 {
+		return result
+	}
+
+	// 大文件按 64KB 块流式计数，避免一次性读到内存
+	f, err := os.Open(path)
+	if err != nil {
+		return result
+	}
+	defer f.Close()
+
+	buf := make([]byte, 64*1024)
+	var lines int64
+	for {
+		n, rerr := f.Read(buf)
+		for i := 0; i < n; i++ {
+			if buf[i] == '\n' {
+				lines++
+			}
+		}
+		if rerr != nil {
+			break
+		}
+	}
+	// 如果文件不以换行结尾，最后一行也算一行
+	if info.Size() > 0 {
+		lastByte := make([]byte, 1)
+		if _, rerr := f.ReadAt(lastByte, info.Size()-1); rerr == nil && lastByte[0] != '\n' {
+			lines++
+		}
+	}
+	result["lines"] = lines
+	return result
 }

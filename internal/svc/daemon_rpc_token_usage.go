@@ -7,6 +7,7 @@ import (
 	"time"
 
 	goreactsession "github.com/DotNetAge/goreact/session"
+	"github.com/DotNetAge/mindx/internal/core"
 )
 
 type tokenUsageMonthlyParams struct {
@@ -288,25 +289,21 @@ func emptyMonthlyResult(year, month int) map[string]any {
 	}
 }
 
-func calculateRecordCost(mc any, r goreactsession.TokenUsageRecord) float64 {
-	type costType struct {
-		CostPer1MIn       float64
-		CostPer1MOut      float64
-		CostPer1MInCached float64
-	}
-	c, ok := mc.(costType)
-	if !ok {
-		return 0
-	}
+func calculateRecordCost(mc core.ModelCost, r goreactsession.TokenUsageRecord) float64 {
 	cost := 0.0
-	if c.CostPer1MIn > 0 {
-		cost += c.CostPer1MIn / 1_000_000 * float64(r.PromptTokens)
+	if mc.CostPer1MIn > 0 {
+		cost += mc.CostPer1MIn / 1_000_000 * float64(r.PromptTokens)
 	}
-	if c.CostPer1MOut > 0 {
-		cost += c.CostPer1MOut / 1_000_000 * float64(r.CompletionTokens)
+	if mc.CostPer1MOut > 0 {
+		cost += mc.CostPer1MOut / 1_000_000 * float64(r.CompletionTokens)
 	}
-	if c.CostPer1MInCached > 0 && r.CachedTokens > 0 {
-		cost += c.CostPer1MInCached / 1_000_000 * float64(r.CachedTokens)
+	if mc.CostPer1MInCached > 0 && r.CachedTokens > 0 {
+		cost += mc.CostPer1MInCached / 1_000_000 * float64(r.CachedTokens)
+	}
+	if mc.CostPer1MOutCached > 0 {
+		// CostPer1MOutCached is reserved for future use; the current TokenUsageRecord
+		// does not yet break out cached completion tokens separately, so it is not
+		// charged here to avoid double counting.
 	}
 	return cost
 }

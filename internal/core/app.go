@@ -365,10 +365,21 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	}
 	resolvedModel := *modelCfg
 	resolvedModel.APIKey = a.resolveAPIKey(resolvedModel.APIKey)
-	a.logger.Info("createRuntime: model resolved", "agent", agentName, "model", resolvedModel.Name)
+	// 单会话最大思考/交互轮次：覆盖 ModelConfig 中可能存在的 max_turns，
+	// 引擎在 [goreact/agents/runtime.go] 中以 <=0 兜底为 20，这里显式抬到 50。
+	if resolvedModel.MaxTurns <= 0 || resolvedModel.MaxTurns < 50 {
+		resolvedModel.MaxTurns = 50
+	}
+	a.logger.Info("createRuntime: model resolved", "agent", agentName, "model", resolvedModel.Name, "max_turns", resolvedModel.MaxTurns)
 
 	cacheDir := filepath.Join(a.settings.DataDir(), "cache")
-	kvStore, _ := store.NewFileSystemKVStore(cacheDir)
+	kvStore, kvErr := store.NewFileSystemKVStore(cacheDir)
+	if kvErr != nil {
+		a.logger.Warn("createRuntime: failed to init KVStore, task tools will be unavailable", "agent", agentName, "error", kvErr)
+	} else {
+		a.logger.Info("createRuntime: KVStore ready", "agent", agentName, "dir", cacheDir)
+	}
+	resultStore := store.NewResultStore()
 
 	opts := []agents.RuntimeConfig{
 		agents.WithModel(resolvedModel),
@@ -377,14 +388,15 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		agents.WithRuleRegistry(a.rules),
 		agents.WithLogger(a.logger),
 		agents.WithTokenUsageStore(a.tokenUsageStore),
+		agents.WithResultStore(resultStore),
+	}
+
+	if kvStore != nil {
+		opts = append(opts, agents.WithKVStore(kvStore))
 	}
 
 	if a.skillReg != nil {
 		opts = append(opts, agents.WithSkillRegistry(a.skillReg))
-	}
-
-	if kvStore != nil {
-		_ = kvStore
 	}
 
 	if a.permissionRuleStore != nil {
@@ -615,6 +627,7 @@ func (a *App) NewSessionFromMeta() *session.Session {
 			AgentName:  agentName,
 			SessionDir: sessionDir,
 			Embedder:   a.embedder,
+			Logger:     a.logger,
 		})
 		if ragErr != nil {
 			a.logger.Warn("failed to create session RAG memory, compaction summaries will use in-memory fallback", "error", ragErr)

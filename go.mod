@@ -26,6 +26,7 @@ require (
 	github.com/DotNetAge/gochat v0.2.6
 	github.com/DotNetAge/gorag v0.0.0-00010101000000-000000000000
 	github.com/DotNetAge/goreact v0.0.0-00010101000000-000000000000
+	golang.org/x/text v0.37.0
 )
 
 require (
@@ -128,13 +129,12 @@ require (
 	github.com/zoomio/stopwords v0.11.0 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
 	golang.org/x/image v0.40.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

@@ -11,6 +11,7 @@ import (
 	goreactmemory "github.com/DotNetAge/goreact/memory"
 	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/spf13/cobra"
 )
@@ -75,11 +76,25 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("memory store not found at %s\nNo long-term memory has been stored yet", memDir)
 	}
 
+	logDir := filepath.Join(workspaceDir, "logs")
+	if mkErr := os.MkdirAll(logDir, 0755); mkErr != nil {
+		return fmt.Errorf("cannot create log directory: %w", mkErr)
+	}
+	queryLogger := logging.DefaultZapLogger(&logging.ZapConfig{
+		Filename:   filepath.Join(logDir, "mindx.log"),
+		MaxSize:    100,
+		MaxBackups: 7,
+		MaxAge:     30,
+		Compress:   true,
+		Console:    false,
+	})
+
 	mem, err := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
 		MemoryType: goreactmemory.MemoryTypeLongTerm,
 		AgentName:  "_shared",
 		MemoryDir:  memDir,
 		Embedder:   emb,
+		Logger:     queryLogger,
 	})
 	if err != nil {
 		return fmt.Errorf("cannot open memory store: %w", err)
