@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"charm.land/bubbles/v2/table"
 	goreactconfig "github.com/DotNetAge/goreact/config"
-	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -46,10 +46,17 @@ var modelListCmd = &cobra.Command{
 			return nil
 		}
 
-		table := render.NewTable([]string{"Name", "Provider", "Context", "Max Tokens", "Func", "Enabled"}, 100)
+		cols := []table.Column{
+			{Title: "Name", Width: 28},
+			{Title: "Provider", Width: 16},
+			{Title: "Context", Width: 10},
+			{Title: "Max Tokens", Width: 12},
+			{Title: "Func", Width: 6},
+			{Title: "Enabled", Width: 8},
+		}
+
+		rows := make([]table.Row, 0, len(models))
 		for _, m := range models {
-			ctx := formatInt(m.ContextLength)
-			maxTok := formatInt(m.MaxTokens)
 			fc := ""
 			if m.FuncCalling {
 				fc = "✓"
@@ -58,10 +65,27 @@ var modelListCmd = &cobra.Command{
 			if m.Enabled {
 				en = "✓"
 			}
-			table.AddRow([]string{m.Name, m.Provider, ctx, maxTok, fc, en})
+			name := m.Title
+			if name == "" {
+				name = m.Name
+			}
+			provTitle := m.Provider
+			if prov := registry.GetProvider(m.Provider); prov != nil && prov.Title != "" {
+				provTitle = prov.Title
+			}
+			ctx := formatInt(m.ContextLength)
+			maxTok := formatInt(m.MaxTokens)
+			rows = append(rows, table.Row{name, provTitle, ctx, maxTok, fc, en})
 		}
-		fmt.Println(table.Render())
-		fmt.Printf("\n%d model(s) configured.\n", len(models))
+
+		tbl := table.New(
+			table.WithColumns(cols),
+			table.WithRows(rows),
+			table.WithHeight(len(rows) + 1),
+			table.WithWidth(80),
+		)
+		fmt.Println(tbl.View())
+		fmt.Printf("%d model(s) configured.\n", len(models))
 		return nil
 	},
 }

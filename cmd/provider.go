@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"charm.land/bubbles/v2/table"
 	goreactconfig "github.com/DotNetAge/goreact/config"
-	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/spf13/cobra"
 )
@@ -38,7 +38,15 @@ var providerListCmd = &cobra.Command{
 			return nil
 		}
 
-		table := render.NewTable([]string{"Name", "Title", "Base URL", "API Key", "Local"}, 100)
+		cols := []table.Column{
+			{Title: "Name", Width: 20},
+			{Title: "Title", Width: 24},
+			{Title: "Base URL", Width: 36},
+			{Title: "API Key", Width: 10},
+			{Title: "Local", Width: 8},
+		}
+
+		rows := make([]table.Row, 0, len(providers))
 		for _, p := range providers {
 			apiKey := "✓ set"
 			if p.APIKey == "" {
@@ -48,9 +56,20 @@ var providerListCmd = &cobra.Command{
 			if p.IsLocal {
 				local = "✓"
 			}
-			table.AddRow([]string{p.Name, p.Title, p.BaseURL, apiKey, local})
+			title := p.Title
+			if title == "" {
+				title = "—"
+			}
+			rows = append(rows, table.Row{p.Name, title, p.BaseURL, apiKey, local})
 		}
-		fmt.Println(table.Render())
+
+		tbl := table.New(
+			table.WithColumns(cols),
+			table.WithRows(rows),
+			table.WithHeight(len(rows) + 1),
+			table.WithWidth(100),
+		)
+		fmt.Println(tbl.View())
 		return nil
 	},
 }
