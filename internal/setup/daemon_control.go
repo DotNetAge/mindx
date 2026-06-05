@@ -66,45 +66,43 @@ func StopDaemon() error {
 
 // ── macOS ───────────────────────────────────────────────────────────────────
 
+const macosLaunchdLabel = "com.dotnetage.mindx"
+
 func checkDaemonMacOS(workspaceDir string) (DaemonStatus, error) {
 	cfg, err := core.LoadMindxConfig(workspaceDir)
 	if err != nil || !cfg.Daemon.Installed {
-		return DaemonNotInstalled, nil
+		// 即使配置标记未安装，也通过 launchctl 实际检查（plist 可能已被手动安装）
 	}
 
-	cmd := exec.Command("launchctl", "list", "com.mindx.daemon")
+	cmd := exec.Command("launchctl", "print", fmt.Sprintf("gui/%d/%s", os.Getuid(), macosLaunchdLabel))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// launchctl list returns non-zero if service not loaded but plist exists → stopped
 		return DaemonStopped, nil
 	}
-	// If PID field is present (not "-" or empty), it's running
-	if len(out) > 0 && out[0] >= '0' && out[0] <= '9' {
+	if strings.Contains(string(out), "state = running") {
 		return DaemonRunning, nil
 	}
 	return DaemonStopped, nil
 }
 
 func stopDaemonMacOS(workspaceDir string) error {
-	plistPath := fmt.Sprintf(
-		"%s/Library/LaunchAgents/com.mindx.daemon.plist",
-		os.Getenv("HOME"),
-	)
-	cmd := exec.Command("launchctl", "unload", plistPath)
+	service := fmt.Sprintf("gui/%d/%s", os.Getuid(), macosLaunchdLabel)
+	cmd := exec.Command("launchctl", "bootout", service)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("launchctl unload: %w\n%s", err, string(out))
+		return fmt.Errorf("launchctl bootout: %w\n%s", err, string(out))
 	}
 	return nil
 }
 
 // ── Linux ────────────────────────────────────────────────────────────────────
 
+const linuxServiceName = "mindx"
+
 func checkDaemonLinux() (DaemonStatus, error) {
-	cmd := exec.Command("systemctl", "--user", "is-active", "mindx-daemon.service")
+	cmd := exec.Command("systemctl", "--user", "is-active", linuxServiceName+".service")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// Check if unit exists at all
-		check := exec.Command("systemctl", "--user", "list-unit-files", "mindx-daemon.service")
+		check := exec.Command("systemctl", "--user", "list-unit-files", linuxServiceName+".service")
 		if _, checkErr := check.CombinedOutput(); checkErr != nil {
 			return DaemonNotInstalled, nil
 		}
@@ -118,7 +116,7 @@ func checkDaemonLinux() (DaemonStatus, error) {
 }
 
 func stopDaemonLinux() error {
-	cmd := exec.Command("systemctl", "--user", "stop", "mindx-daemon.service")
+	cmd := exec.Command("systemctl", "--user", "stop", linuxServiceName+".service")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("systemctl stop: %w\n%s", err, string(out))
 	}

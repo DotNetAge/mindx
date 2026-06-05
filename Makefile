@@ -9,6 +9,7 @@
 #   make install           # 编译并安装到系统路径
 #   make run               # 运行 TUI（默认模式）
 #   make run-daemon        # 运行 Daemon 服务
+#   make restart           # 编译并重启 Daemon（通过 launchd/systemd，非阻塞）
 #   make test              # 运行所有测试
 #   make clean             # 清理构建产物
 #   make docs              # 生成文档
@@ -17,7 +18,7 @@
 #
 # =============================================================================
 
-.PHONY: build build-all setup-cross clear install run run-daemon stop test clean docs help \
+.PHONY: build build-all setup-cross clear install run run-daemon restart stop test clean docs help \
         dev uninstall \
         release release-notes release-publish release-homebrew release-winget publish \
         docker-build docker-push \
@@ -187,11 +188,14 @@ install:
 			> "$$PLIST"; \
 		echo "$(GREEN)  ✅ launchd plist → $$PLIST$(NC)"; \
 		cp "$$PLIST" "$$LAUNCH_AGENTS/$$LABEL.plist"; \
+		SERVICE="gui/$$(id -u)/$$LABEL"; \
 		echo "$(CYAN)  ⟳ Stopping existing service...$(NC)" && \
-		launchctl unload "$$LAUNCH_AGENTS/$$LABEL.plist" 2>/dev/null && echo "     stopped" || echo "     (not running)"; \
-		echo "$(CYAN)  ⟳ Starting service...$(NC)" && \
-		launchctl load "$$LAUNCH_AGENTS/$$LABEL.plist" && \
-		echo "$(GREEN)  ✅ Daemon registered and started$(NC)"; \
+		(launchctl bootout "$$SERVICE" 2>/dev/null && echo "     stopped" || echo "     (not running)"); \
+		echo "$(CYAN)  ⟳ Starting service (bootstrap)...$(NC)" && \
+		launchctl bootstrap gui/$$(id -u) "$$LAUNCH_AGENTS/$$LABEL.plist" && \
+		echo "$(GREEN)  ✅ Daemon registered and started$(NC)" || \
+		echo "$(RED)  ❌ Bootstrap failed, trying legacy load...$(NC)" && \
+		launchctl load "$$LAUNCH_AGENTS/$$LABEL.plist" 2>/dev/null; \
 	fi; \
 	if [ "$$UNAME_S" = "Linux" ]; then \
 		SERVICE_PATH="$$HOME/.mindx/settings/$(BINARY_NAME).service"; \
@@ -235,8 +239,9 @@ uninstall:
 	@echo "$(CYAN)  ⟳ Stopping daemon...$(NC)"
 	@UNAME_S=$$(uname -s); \
 	if [ "$$UNAME_S" = "Darwin" ]; then \
-		launchctl unload ~/Library/LaunchAgents/com.dotnetage.$(BINARY_NAME).plist 2>/dev/null && \
-			echo "     stopped launchd service" || echo "     (no launchd service)"; \
+		SERVICE="gui/$$(id -u)/com.dotnetage.$(BINARY_NAME)"; \
+		(launchctl bootout "$$SERVICE" 2>/dev/null && \
+			echo "     stopped launchd service" || echo "     (no launchd service)"); \
 	elif [ "$$UNAME_S" = "Linux" ]; then \
 		systemctl --user stop $(BINARY_NAME) 2>/dev/null && \
 			echo "     stopped systemd service" || echo "     (no systemd service)"; \
@@ -310,12 +315,60 @@ run-daemon: build
 	@echo ""
 	./$(BUILD_DIR)/$(BINARY_NAME) start
 
+## restart: 编译并重启 daemon（通过系统服务管理器，非阻塞）
+restart: build
+	@echo "$(YELLOW)🔄 Restarting mindx daemon...$(NC)"
+	@echo "$(CYAN)➡ Building → ~/.mindx/bin/$(BINARY_NAME)...$(NC)"
+	@mkdir -p ~/.mindx/bin
+	@cp -f $(BUILD_DIR)/$(BINARY_NAME) ~/.mindx/bin/$(BINARY_NAME) && \
+		echo "$(GREEN)  ✅ Binary updated.$(NC)"
+	@echo "$(CYAN)➡ Deploying frontend → ~/.mindx/web/...$(NC)"
+	@if [ -d "../mindx-chat/dist" ]; then \
+		rm -rf $$HOME/.mindx/web 2>/dev/null; \
+		cp -r ../mindx-chat/dist $$HOME/.mindx/web && \
+			echo "$(GREEN)  ✅ Frontend deployed.$(NC)" || \
+			echo "$(YELLOW)  ⚠ Frontend not found at ../mindx-chat/dist (skip).$(NC)"; \
+	else \
+		echo "$(YELLOW)  ⚠ ../mindx-chat/dist not found, skipping frontend deploy.$(NC)"; \
+	fi
+	@UNAME_S=$$(uname -s); \
+	if [ "$$UNAME_S" = "Darwin" ]; then \
+		LABEL="com.dotnetage.$(BINARY_NAME)"; \
+		SERVICE="gui/$$(id -u)/$$LABEL"; \
+		PLIST="$$HOME/Library/LaunchAgents/$$LABEL.plist"; \
+		if launchctl print "$$SERVICE" >/dev/null 2>&1; then \
+			echo "$(CYAN)  ⟳ Restarting via launchctl kickstart...$(NC)" && \
+			launchctl kickstart -k "$$SERVICE" && \
+			echo "$(GREEN)✅ Daemon restarted via launchd.$(NC)" || \
+			echo "$(RED)❌ kickstart failed, trying bootout+bootstrap...$(NC)" && \
+			launchctl bootout "$$SERVICE" 2>/dev/null; \
+			launchctl bootstrap gui/$$(id -u) "$$PLIST" && \
+			echo "$(GREEN)✅ Daemon restarted via bootstrap.$(NC)" || \
+			echo "$(RED)❌ Failed to restart. Try: make run-daemon$(NC)"; \
+		else \
+			echo "$(CYAN)  ⟳ Service not loaded, bootstrapping...$(NC)" && \
+			launchctl bootstrap gui/$$(id -u) "$$PLIST" && \
+			echo "$(GREEN)✅ Daemon started via launchd.$(NC)" || \
+			echo "$(YELLOW)⚠ Bootstrap failed, starting directly...$(NC)" && \
+			$(BUILD_DIR)/$(BINARY_NAME) start & \
+			echo "$(GREEN)✅ Daemon started in background.$(NC)"; \
+		fi; \
+	elif [ "$$UNAME_S" = "Linux" ]; then \
+		systemctl --user restart $(BINARY_NAME) 2>/dev/null && \
+			echo "$(GREEN)✅ Daemon restarted via systemd.$(NC)" || \
+			echo "$(RED)❌ Failed to restart via systemd. Try: make run-daemon$(NC)"; \
+	fi
+
 ## stop: 停止本机 mindx daemon
 stop:
 	@echo "$(YELLOW)🛑 Stopping mindx daemon...$(NC)"
-	@pkill -f "mindx start" 2>/dev/null || \
-	 pkill -f "$(BINARY_NAME) start" 2>/dev/null || \
-	 (lsof -ti:1313 -ti:1314 | xargs kill 2>/dev/null) || \
+	@UNAME_S=$$(uname -s); \
+	if [ "$$UNAME_S" = "Darwin" ]; then \
+		SERVICE="gui/$$(id -u)/com.dotnetage.$(BINARY_NAME)"; \
+		launchctl bootout "$$SERVICE" 2>/dev/null && echo "     stopped launchd service" || true; \
+	fi; \
+	pkill -f "$(BINARY_NAME) start" 2>/dev/null || \
+	 (lsof -ti:1313 -ti:1314 2>/dev/null | xargs kill 2>/dev/null) || \
 	 echo "$(GREEN)  ✅ No running daemon found.$(NC)"
 	@sleep 1
 	@echo "$(GREEN)✅ mindx daemon stopped.$(NC)"
@@ -850,6 +903,7 @@ help:
 	@echo "$(YELLOW)▶️ Run & Dev Targets:$(NC)"
 	@echo "  $(GREEN)run$(NC)             Build and start TUI"
 	@echo "  $(GREEN)run-daemon$(NC)      Build and start Daemon service"
+	@echo "  $(GREEN)restart$(NC)         Build and restart daemon via launchd/systemd (non-blocking)"
 	@echo "  $(GREEN)stop$(NC)             Stop running daemon"
 	@echo "  $(GREEN)dev$(NC)             Go run (no build, for development)"
 	@echo "  $(GREEN)dev-watch$(NC)      File watcher auto-reload (air)"
