@@ -384,6 +384,8 @@ func (d *Daemon) Start(ctx context.Context) error {
 	d.logger.Info("MindX daemon starting", "addr", addr)
 	d.logger.Info("gateway starting, waiting for connections...")
 
+	// gw.Start() 启动 HTTP server（后台 goroutine）+ TCP 探测，探测成功后即返回。
+	// 服务端在后台持续运行。如果启动失败则返回 error。
 	if err := d.gw.Start(); err != nil {
 		d.logger.Error("gateway start failed", err)
 		d.stopBackgroundServices()
@@ -393,6 +395,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 	d.logger.Info("gateway started successfully, daemon is now running")
 	d.logger.Info("daemon running, waiting for shutdown signal...")
 
+	// 阻塞等待 shutdown 信号（SIGINT/SIGTERM），响应 Ctrl+C
 	<-ctx.Done()
 	d.logger.Info("received shutdown signal, cleaning up...")
 
