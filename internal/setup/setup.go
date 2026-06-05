@@ -59,6 +59,11 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 			return fmt.Errorf("更新 Agent 模型配置失败: %w", err)
 		}
 		cfg.DefaultModel = result.SelectedModel
+		cfg.LastModel = result.SelectedModel
+	}
+	
+	if result.SelectedProvider != "" {
+		cfg.DefaultProvider = result.SelectedProvider
 	}
 	cfg.Initialized = true
 

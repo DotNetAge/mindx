@@ -447,7 +447,7 @@ func (m *rootModel) populateWelcome() {
 		return
 	}
 	m.welcome.Data = data.WelcomeData{
-		AppTitle:  "MindX CLI v2.0.0 Beta",
+		Version:   m.app.Config().AppVersion,
 		ModelName: "unknown",
 	}
 

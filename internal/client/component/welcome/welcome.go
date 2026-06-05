@@ -57,9 +57,11 @@ func (w *WelcomePanel) View() string {
 }
 
 func (w *WelcomePanel) renderGradientTitle() string {
-	titleText := w.Data.AppTitle
+	titleText := w.Data.Version
 	if titleText == "" {
-		titleText = "MindX CLI v2.0.0 Beta"
+		titleText = "MindX CLI"
+	} else {
+		titleText = "MindX CLI " + titleText
 	}
 
 	gradientColors := []color.Color{
