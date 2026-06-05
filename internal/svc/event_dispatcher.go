@@ -245,7 +245,20 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreac
 			{"metric": "Termination", "value": summary.TerminationReason},
 		},
 	}
-	d.gw.SendResponse(clientID, gateway.RespExecutionSummary, "执行摘要", tableData, gateway.WithSessionID(sessionID))
+	d.gw.SendResponse(clientID, gateway.RespExecutionSummary, "执行摘要", tableData,
+		gateway.WithSessionID(sessionID),
+		gateway.WithResponseMeta(map[string]any{
+			"tokens_used": map[string]any{
+				"total_tokens":   summary.TokensUsed.TotalTokens,
+				"input_tokens":  summary.TokensUsed.InputTokens,
+				"output_tokens": summary.TokensUsed.OutputTokens,
+				"cached_tokens":  summary.TokensUsed.CachedTokens,
+				"reasoning_tokens": summary.TokensUsed.ReasoningTokens,
+			},
+			"iterations":    summary.TotalIterations,
+			"tool_calls":    summary.ToolCalls,
+			"duration":      summary.TotalDuration.String(),
+		}))
 }
 
 // Markdown builders for event messages

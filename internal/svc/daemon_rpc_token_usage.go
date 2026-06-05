@@ -143,12 +143,30 @@ func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessa
 
 func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 	store := d.app.TokenUsageStore()
+	d.logger.Info("[TOKEN-DEBUG] buildMonthlyStats called",
+		"year", year, "month", month,
+		"store_is_nil", store == nil,
+	)
 	if store == nil {
+		d.logger.Warn("[TOKEN-DEBUG] TokenUsageStore is NIL!")
 		return emptyMonthlyResult(year, month), nil
 	}
 
+	// 诊断：打印实际文件路径和文件是否存在
+	dataDir := ""
+	if fts, ok := interface{}(store).(interface{ DataDir() string }); ok {
+		dataDir = fts.DataDir()
+	}
+	d.logger.Info("[TOKEN-DEBUG] store info",
+		"dataDir", dataDir,
+	)
+
 	since := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
 	until := since.AddDate(0, 1, 0)
+	d.logger.Info("[TOKEN-DEBUG] date range",
+		"since", since, "until", until,
+		"local_tz", time.Local.String(),
+	)
 
 	filter := goreactsession.TokenUsageFilter{
 		Since: since,
@@ -156,6 +174,10 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 	}
 
 	records, err := store.Query(context.Background(), filter)
+	d.logger.Info("[TOKEN-DEBUG] query result",
+		"record_count", len(records),
+		"query_err", err,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
