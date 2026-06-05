@@ -278,6 +278,7 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 			AgentName:  "_shared",
 			MemoryDir:  filepath.Join(app.Settings().UserPreferences(), "memory"),
 			Embedder:   emb,
+			Logger:     logger,
 		})
 		if memErr != nil {
 			logger.Warn("filewatch: failed to create shared LongTerm indexer, watch disabled", "error", memErr)
