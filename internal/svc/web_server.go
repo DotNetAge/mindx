@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/DotNetAge/mindx/pkg/logging"
@@ -63,6 +64,11 @@ func (ws *WebServer) Start(ctx context.Context) error {
 		fileServer.ServeHTTP(w, r)
 	}))
 
+	// API: 下载日志文件
+	// GET /api/log/download?stream=main|error
+	// 返回 Content-Disposition: attachment，浏览器原生下载
+	mux.HandleFunc("/api/log/download", ws.handleLogDownload)
+
 	ws.server = &http.Server{
 		Addr:    ws.addr,
 		Handler: mux,
@@ -104,4 +110,51 @@ func (ws *WebServer) URL() string {
 
 func WebDir(workspaceDir string) string {
 	return filepath.Join(workspaceDir, "web")
+}
+
+// handleLogDownload 下载日志文件
+//   GET /api/log/download?stream=main|error
+// 通过白名单选择文件名，禁止路径穿越
+func (ws *WebServer) handleLogDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stream := r.URL.Query().Get("stream")
+	if stream == "" {
+		stream = "main"
+	}
+	filename, ok := logStreamFilenames[stream]
+	if !ok {
+		http.Error(w, fmt.Sprintf("unknown stream %q (allowed: main, error)", stream), http.StatusBadRequest)
+		return
+	}
+
+	logPath := filepath.Join(logging.ResolveLogDir(), filename)
+	info, err := os.Stat(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// 文件不存在 — 返回 204 避免前端报错
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		ws.logger.Error("log download stat failed", err, "path", logPath)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// 防御性：确保最终路径仍在 logDir 内（防止未来扩参数时被绕过）
+	cleanLogPath := filepath.Clean(logPath)
+	if !strings.HasPrefix(cleanLogPath, filepath.Clean(logging.ResolveLogDir())+string(os.PathSeparator)) &&
+		cleanLogPath != filepath.Clean(logging.ResolveLogDir()) {
+		http.Error(w, "invalid path", http.StatusForbidden)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeFile(w, r, cleanLogPath)
 }

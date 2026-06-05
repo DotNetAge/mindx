@@ -20,15 +20,15 @@ const MaxFileSize = 1 << 20 // 1MB
 
 // DefaultIgnoredDirs lists directories excluded by default from project indexing.
 var DefaultIgnoredDirs = map[string]bool{
-	".git":       true,
+	".git":         true,
 	"node_modules": true,
-	".venv":      true,
-	"venv":       true,
-	"__pycache__": true,
-	"vendor":     true,
-	"dist":       true,
-	"build":      true,
-	".mindx":     true,
+	".venv":        true,
+	"venv":         true,
+	"__pycache__":  true,
+	"vendor":       true,
+	"dist":         true,
+	"build":        true,
+	".mindx":       true,
 }
 
 // projectFileEntry tracks a single indexed file's metadata.
@@ -122,6 +122,10 @@ func (p *ProjectIndexer) Sync(ctx context.Context, projectDir string) *ProjectSy
 	if err != nil {
 		result.Err = fmt.Errorf("project_indexer: resolve project dir: %w", err)
 		return result
+	}
+
+	if p.logger != nil {
+		p.logger.Info("project_indexer.sync.start", "dir", absDir)
 	}
 
 	// Load rules and cache
@@ -227,6 +231,17 @@ func (p *ProjectIndexer) Sync(ctx context.Context, projectDir string) *ProjectSy
 	}
 
 	result.Elapsed = time.Since(start)
+	if p.logger != nil {
+		p.logger.Info("project_indexer.sync.done",
+			"dir", absDir,
+			"indexed", result.Indexed,
+			"updated", result.Updated,
+			"skipped", result.Skipped,
+			"removed", result.Removed,
+			"errors", len(result.Errors),
+			"elapsed_ms", result.Elapsed.Milliseconds(),
+		)
+	}
 	return result
 }
 
@@ -427,4 +442,3 @@ func (p *ProjectIndexer) saveCache() error {
 	}
 	return os.Rename(tmpPath, p.cacheFile())
 }
-

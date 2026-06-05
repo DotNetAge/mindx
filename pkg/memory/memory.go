@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -86,6 +85,9 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 	if cfg.AgentName == "" {
 		return nil, fmt.Errorf("memory: agent name is required")
 	}
+	if cfg.Logger == nil {
+		return nil, fmt.Errorf("memory: logger is required (pass cfg.Logger to share the application logger)")
+	}
 	if cfg.MemoryDir == "" && cfg.MemoryType != memory.MemoryTypeSession {
 		return nil, fmt.Errorf("memory: memory dir is required for %s memory type", memoryTypeLabel(cfg.MemoryType))
 	}
@@ -123,12 +125,13 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 	}
 
 	logger := cfg.Logger
-	if logger == nil {
-		logger = newMemoryFileLogger(cfg.AgentName)
-	}
-	if logger == nil {
-		logger = logging.DefaultNoopLogger()
-	}
+	logger.Info("memory: initializing RAG indexer",
+		"agent", cfg.AgentName,
+		"memory_type", memoryTypeLabel(cfg.MemoryType),
+		"vector_dim", cfg.Embedder.Dim(),
+		"vector_dir", vecDir,
+		"fulltext_dir", ftDir,
+	)
 
 	indexer, err := gorag.NewHybridIndexer(
 		logger, vs, nil, fts, nil, cfg.Embedder,
@@ -301,40 +304,6 @@ func (m *RAGMemory) Close(ctx context.Context) error {
 		return fmt.Errorf("memory close: %v", errs)
 	}
 	return nil
-}
-
-func newMemoryFileLogger(agentName string) logging.Logger {
-	if agentName == "" {
-		return nil
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil
-	}
-
-	var mindxHome string
-	if runtime.GOOS == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			mindxHome = filepath.Join(appData, "mindx")
-		} else {
-			mindxHome = filepath.Join(homeDir, ".mindx")
-		}
-	} else {
-		mindxHome = filepath.Join(homeDir, ".mindx")
-	}
-
-	logDir := filepath.Join(mindxHome, "logs", "memory")
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return nil
-	}
-
-	logFile := filepath.Join(logDir, agentName+".log")
-	logger, err := logging.DefaultFileLogger(logFile)
-	if err != nil {
-		return nil
-	}
-	return logger
 }
 
 func (m *RAGMemory) buildQuery(query string) goragcore.Query {
