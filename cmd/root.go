@@ -131,6 +131,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		fmt.Print("\n✅ 环境已更新！正在启动 MindX...\n\n")
 	}
 
+	cfg.AppVersion = Version
 	if err := client.NewProgram(cfg); err != nil {
 		return err
 	}

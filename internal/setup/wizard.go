@@ -34,11 +34,12 @@ func (i providerItem) Description() string { return i.Name }
 func (i providerItem) FilterValue() string { return i.DisplayName }
 
 type modelItem struct {
-	Name        string
-	desc        string
-	BaseURL     string
-	CredRef     string
-	Provider    string
+	Name     string
+	desc     string
+	BaseURL  string
+	CredRef  string
+	Provider string
+	Enabled  bool
 }
 
 func (i modelItem) Title() string       { return i.Name }
@@ -52,8 +53,8 @@ type daemonInstallMsg struct {
 type firstRunModel struct {
 	step int
 
-	providerList   list.Model
-	providers      []providerItem
+	providerList     list.Model
+	providers        []providerItem
 	selectedProvider providerItem
 
 	modelList list.Model
@@ -70,11 +71,11 @@ type firstRunModel struct {
 	agentsDir   string
 	mindxConfig *core.MindxConfig
 
-	daemonChoice    bool
-	daemonSubmitted bool
-	daemonInstallCh   chan error
-	daemonInstallErr  error
-	daemonState       int // 0=choice, 1=installing, 2=done
+	daemonChoice     bool
+	daemonSubmitted  bool
+	daemonInstallCh  chan error
+	daemonInstallErr error
+	daemonState      int // 0=choice, 1=installing, 2=done
 
 	pythonChoice    bool
 	pythonSubmitted bool
@@ -82,9 +83,9 @@ type firstRunModel struct {
 	pythonVersion   string
 	pythonInfo      core.PythonConfig
 
-	memoryState     int
-	embedderModel   string
-	workspaceDir    string
+	memoryState   int
+	embedderModel string
+	workspaceDir  string
 
 	pathChoice    bool
 	pathSubmitted bool
@@ -113,12 +114,12 @@ type firstRunResult struct {
 	ResolvedKeys     map[string]string // 所有从环境变量预解析的非空 Provider Key
 	Err              error
 
-	DaemonSetup    bool
-	PythonSetup    bool
-	PythonInfo     core.PythonConfig
-	EmbedderModel  string
-	PathSetup      bool
-	WebUIReady     bool
+	DaemonSetup   bool
+	PythonSetup   bool
+	PythonInfo    core.PythonConfig
+	EmbedderModel string
+	PathSetup     bool
+	WebUIReady    bool
 }
 
 func (m *firstRunModel) contentWidth() int {
@@ -134,8 +135,12 @@ func (m *firstRunModel) contentWidth() int {
 
 func (m *firstRunModel) paddedView(content string) string {
 	lines := strings.Count(content, "\n") + 1
-	if m.height > lines+1 {
-		return content + strings.Repeat("\n", m.height-lines)
+	// Reserve 3 lines for gradient title (1) + two newlines (2) added in View().
+	// Without this, the title gets truncated by Bubble Tea's renderer when
+	// the frame taller than the terminal height.
+	availableHeight := m.height - 3
+	if availableHeight > lines+1 {
+		return content + strings.Repeat("\n", availableHeight-lines)
 	}
 	return content + "\n"
 }
@@ -172,9 +177,9 @@ func initGlamour(width int) *glamour.TermRenderer {
 	return r
 }
 
-// resolveProviderKeysFromEnv 从 providers.yml 读取所有供应商的 api_key 字段（作为环境变量名），
-// 尝试从系统环境变量中解析出实际值，返回 map[providerName]actualKeyValue。
-func resolveProviderKeysFromEnv(providersPath string) (map[string]string, error) {
+// resolveAllProviderKeys 从 providers.yml 读取所有供应商的 api_key 字段（作为环境变量名），
+// 依次尝试从系统环境变量和 CredentialStore 中解析实际值，返回 map[providerName]actualKeyValue。
+func resolveAllProviderKeys(providersPath, workspaceDir string) (map[string]string, error) {
 	data, err := os.ReadFile(providersPath)
 	if err != nil {
 		return nil, err
@@ -187,6 +192,7 @@ func resolveProviderKeysFromEnv(providersPath string) (map[string]string, error)
 		return nil, err
 	}
 
+	credStore := core.NewCredentialStore(workspaceDir)
 	keys := make(map[string]string)
 	for _, p := range provConfig.Providers {
 		if p.APIKey == "" {
@@ -196,6 +202,13 @@ func resolveProviderKeysFromEnv(providersPath string) (map[string]string, error)
 		// api_key 字段存的是环境变量名，尝试读取实际值
 		if v := os.Getenv(p.APIKey); v != "" {
 			keys[p.Name] = v
+		} else if credStore != nil {
+			// 尝试从 CredentialStore 读取
+			if v, err := credStore.Get(p.Name); err == nil && v != "" {
+				keys[p.Name] = v
+			} else {
+				keys[p.Name] = ""
+			}
 		} else {
 			keys[p.Name] = ""
 		}
@@ -204,7 +217,10 @@ func resolveProviderKeysFromEnv(providersPath string) (map[string]string, error)
 }
 
 func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, mindxConfig *core.MindxConfig) firstRunResult {
-	providerList, modelList, err := parseProviderAndModels(providersPath, modelsPath)
+	// 提前解析所有 Provider 的 API Key（环境变量 + CredentialStore）
+	providerKeys, _ := resolveAllProviderKeys(providersPath, workspaceDir)
+
+	providerList, modelList, err := parseProviderAndModels(providersPath, modelsPath, providerKeys)
 	if err != nil {
 		return firstRunResult{Err: fmt.Errorf("解析配置失败: %w", err)}
 	}
@@ -271,8 +287,8 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		height:         24,
 	}
 
-	// 预解析所有 Provider 的 API Key（从环境变量读取）
-	if preKeys, err := resolveProviderKeysFromEnv(providersPath); err == nil {
+	// 预解析所有 Provider 的 API Key（从环境变量和 CredentialStore 读取）
+	if preKeys, err := resolveAllProviderKeys(providersPath, workspaceDir); err == nil {
 		m.preResolvedKeys = preKeys
 	}
 
@@ -336,7 +352,7 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 	}
 }
 
-func parseProviderAndModels(providersPath, modelsPath string) ([]providerItem, []modelItem, error) {
+func parseProviderAndModels(providersPath, modelsPath string, providerKeys map[string]string) ([]providerItem, []modelItem, error) {
 	var providerItems []providerItem
 
 	// Load providers from providers.yml (if exists)
@@ -395,15 +411,52 @@ func parseProviderAndModels(providersPath, modelsPath string) ([]providerItem, [
 	var items []modelItem
 	for _, m := range modelConfig.Models {
 		desc := strings.TrimSpace(m.Description)
+		enabled := false
+		if providerKeys != nil && providerKeys[m.Provider] != "" {
+			enabled = true
+		}
 		items = append(items, modelItem{
 			Name:     m.Name,
 			desc:     desc,
 			BaseURL:  m.BaseURL,
 			CredRef:  m.APIKey,
 			Provider: m.Provider,
+			Enabled:  enabled,
 		})
 	}
 	return providerItems, items, nil
+}
+
+// enableModelsForProvider 将 models.yml 中指定提供商下的所有模型的 Enabled 设置为 true。
+func enableModelsForProvider(modelsPath, providerName string) error {
+	data, err := os.ReadFile(modelsPath)
+	if err != nil {
+		return err
+	}
+
+	var cfg goreactconfig.ModelsConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return err
+	}
+
+	changed := false
+	for i := range cfg.Models {
+		if cfg.Models[i].Provider == providerName {
+			if !cfg.Models[i].Enabled {
+				cfg.Models[i].Enabled = true
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return nil
+	}
+
+	out, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(modelsPath, out, 0644)
 }
 
 func (m *firstRunModel) Init() tea.Cmd {
@@ -550,6 +603,14 @@ func (m *firstRunModel) updateAPIKeyInput(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.apiKeyInput.Value() == "" {
 				return m, nil
 			}
+			// 将新输入的 Key 写入 preResolvedKeys，并启用该提供商下所有模型
+			if m.preResolvedKeys == nil {
+				m.preResolvedKeys = make(map[string]string)
+			}
+			m.preResolvedKeys[m.selectedProvider.Name] = m.apiKeyInput.Value()
+			go func() {
+				_ = enableModelsForProvider(m.modelsPath, m.selectedProvider.Name)
+			}()
 			m.step = 2
 			return m, nil
 		case "s", "S":
@@ -1009,5 +1070,8 @@ func (m *firstRunModel) View() tea.View {
 	case 7:
 		content = m.renderWebUIComplete()
 	}
-	return tea.NewView(style.GradientTitle("") + "\n\n" + content)
+	return tea.View{
+		Content:   style.GradientTitle("") + "\n\n" + content,
+		AltScreen: true,
+	}
 }

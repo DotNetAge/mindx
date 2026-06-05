@@ -25,6 +25,7 @@ type PythonConfig struct {
 
 type MindxConfig struct {
 	Version       int          `json:"version"`
+	AppVersion    string       `json:"-"` // runtime app version, not persisted
 	Initialized   bool         `json:"initialized"`
 	LastAgent     string       `json:"last_agent,omitempty"`
 	LastSessionID string       `json:"last_session_id,omitempty"`
