@@ -185,7 +185,15 @@ func (s *FileWatchService) RemoveWatch(dir, agent string) error {
 // watchDir adds a directory to the fsnotify watcher.
 // Subdirectories are also added to capture deep file changes.
 func (s *FileWatchService) watchDir(absDir string) error {
-	return filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {
+	// Resolve symlinks so that filepath.Walk sees the real directory.
+	// On macOS, /tmp is a symlink to /private/tmp; without this resolution
+	// Walk treats the root as a non-directory (symlink) and skips everything.
+	realDir, err := filepath.EvalSymlinks(absDir)
+	if err != nil {
+		// Fallback: try adding the path directly (fsnotify can handle some symlinks)
+		return s.watcher.Add(absDir)
+	}
+	return filepath.Walk(realDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // skip inaccessible paths
 		}
@@ -193,7 +201,7 @@ func (s *FileWatchService) watchDir(absDir string) error {
 			return nil
 		}
 		// Skip hidden and ignored directories (same logic as project_indexer)
-		if path != absDir {
+		if path != realDir {
 			base := info.Name()
 			if strings.HasPrefix(base, ".") {
 				return filepath.SkipDir
@@ -274,7 +282,17 @@ func (s *FileWatchService) eventLoop() {
 				continue
 			}
 
-			relPath, err := filepath.Rel(rootDir, event.Name)
+			// Compute relative path using resolved paths to handle symlinks correctly.
+			// e.g. event.Name=/private/tmp/test.md, rootDir=/tmp → must resolve both first.
+			resolvedEvent, _ := filepath.EvalSymlinks(event.Name)
+			resolvedRoot, _ := filepath.EvalSymlinks(rootDir)
+			if resolvedRoot == "" {
+				resolvedRoot = rootDir
+			}
+			if resolvedEvent == "" {
+				resolvedEvent = event.Name
+			}
+			relPath, err := filepath.Rel(resolvedRoot, resolvedEvent)
 			if err != nil {
 				continue
 			}
@@ -360,7 +378,11 @@ func (s *FileWatchService) processChanges(pending map[string][]pendingChange) {
 
 // watchNewDir adds a newly created directory and its subdirectories to the watcher.
 func (s *FileWatchService) watchNewDir(absPath string) error {
-	return filepath.Walk(absPath, func(path string, info os.FileInfo, err error) error {
+	realPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return s.watcher.Add(absPath)
+	}
+	return filepath.Walk(realPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -379,8 +401,23 @@ func (s *FileWatchService) watchNewDir(absPath string) error {
 }
 
 // findRootDir finds which watched root directory contains the given absolute path.
+// It handles symlinks by resolving both the input path and watchlist entries.
 func (s *FileWatchService) findRootDir(absPath string) string {
+	// Resolve the event path so we can match against resolved watchlist entries.
+	resolvedPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		resolvedPath = absPath
+	}
 	for _, entry := range s.store.List() {
+		// Resolve the watchlist entry for comparison (handles /tmp → /private/tmp)
+		resolvedEntry, err := filepath.EvalSymlinks(entry.Dir)
+		if err != nil {
+			resolvedEntry = entry.Dir
+		}
+		if strings.HasPrefix(resolvedPath, resolvedEntry+string(filepath.Separator)) || resolvedPath == resolvedEntry {
+			return entry.Dir // return ORIGINAL dir (used as key in pending map)
+		}
+		// Also check unresolved in case EvalSymlinks changes things unexpectedly
 		if strings.HasPrefix(absPath, entry.Dir+string(filepath.Separator)) || absPath == entry.Dir {
 			return entry.Dir
 		}

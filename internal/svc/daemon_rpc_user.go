@@ -9,7 +9,7 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 	cfg := d.app.Config()
 
 	result := map[string]interface{}{
-		"version":           cfg.Version,
+		"version":           cfg.AppVersion,
 		"initialized":       cfg.Initialized,
 		"last_agent":        cfg.LastAgent,
 		"last_session_id":   cfg.LastSessionID,
