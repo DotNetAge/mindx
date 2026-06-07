@@ -45,7 +45,7 @@ type Check struct {
 
 func runDoctor(cmd *cobra.Command, args []string) error {
 	fmt.Println("🔍 MindX Health Check")
-	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println(strings.Repeat("─", 50)
 
 	checks := runAllChecks()
 
@@ -64,7 +64,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println()
-	fmt.Println(strings.Repeat("─", 50))
+	fmt.Println(strings.Repeat("─", 50)
 
 	if !hasIssues {
 		fmt.Println("✅ All systems healthy!")
@@ -86,7 +86,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Printf("\n✅ %d issue(s) fixed.\n", fixed)
 	} else {
-		fmt.Println(fmt.Sprintf("\n⚠️  Found issues. Run 'mindx doctor --fix' to resolve automatically."))
+		fmt.Printf("\n⚠️  Found issues. Run 'mindx doctor --fix' to resolve automatically.")
 		fmt.Println("   Or use individual commands:")
 		fmt.Println("     mindx install          # Full system installation")
 		fmt.Println("     mindx install --no-daemon # Install without daemon")

@@ -113,9 +113,9 @@ func contentWidth(w int) int {
 func (m *Model) View() string {
 	var b strings.Builder
 	if m.installed {
-		b.WriteString(renderMarkdown(m.renderer, fmt.Sprintf(
+		b.WriteString(renderMarkdown(m.renderer,
 			"⚙️ Daemon 后台服务\n\n✅ **已安装**\n\nDaemon 已注册为开机自启动服务。\n\n**Enter** 继续  **S** 跳过",
-		)))
+		))
 	} else {
 		md := `⚙️ Daemon 后台服务
 

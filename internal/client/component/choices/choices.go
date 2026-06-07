@@ -252,9 +252,9 @@ func (p *ChoicesPanel) handleInputMode(key tea.Key) (*ChoicesPanel, tea.Cmd) {
 		}
 	default:
 		if isPrintable(key) {
-			ch := rune(key.Code)
+			ch := key.Code
 			if key.ShiftedCode != 0 {
-				ch = rune(key.ShiftedCode)
+				ch = key.ShiftedCode
 			}
 			p.CustomText += string(ch)
 		}

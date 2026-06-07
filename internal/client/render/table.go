@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DotNetAge/mindx/internal/client/style"
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/DotNetAge/mindx/internal/client/style"
 )
 
 type Table struct {

@@ -50,7 +50,7 @@ func (i *InputArea) Update(msg any) (*InputArea, tea.Cmd) {
 		if i.Hidden {
 			return i, nil
 		}
-		for _, r := range []rune(m.Content) {
+		for _, r := range m.Content {
 			i.insertAtCursor(r)
 		}
 		return i, nil
