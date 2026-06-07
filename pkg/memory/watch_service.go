@@ -142,7 +142,9 @@ func (s *FileWatchService) Start(ctx context.Context) error {
 // Stop gracefully shuts down the file watch service.
 func (s *FileWatchService) Stop() {
 	s.cancel()
-	_ = s.watcher.Close()
+	if s.watcher != nil {
+		_ = s.watcher.Close()
+	}
 	<-s.done
 	s.wg.Wait()
 }
