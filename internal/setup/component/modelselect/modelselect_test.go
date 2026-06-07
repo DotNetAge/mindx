@@ -1,11 +1,17 @@
 package modelselect
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	setupdata "github.com/DotNetAge/mindx/internal/setup/data"
 )
+
+func stripANSI(s string) string {
+	re := regexp.MustCompile("\x1b\\[[0-9;]*[a-zA-Z]")
+	return re.ReplaceAllString(s, "")
+}
 
 func TestViewContainsGradientTitle(t *testing.T) {
 	items := []setupdata.ModelItem{
@@ -18,10 +24,11 @@ func TestViewContainsGradientTitle(t *testing.T) {
 	view := m.View()
 	t.Logf("\n=== View Output ===\n%s\n=== End ===", view)
 
-	if !strings.Contains(view, "选择 AI 模型") {
-		t.Error("View output does NOT contain '选择 AI 模型'")
+	plain := stripANSI(view)
+	if !strings.Contains(plain, "选择一个 AI 模型") {
+		t.Error("View output does NOT contain '选择一个 AI 模型'")
 	} else {
-		t.Log("✅ View output contains '选择 AI 模型'")
+		t.Log("✅ View output contains '选择一个 AI 模型'")
 	}
 
 	if strings.Contains(view, "\x1b[") {

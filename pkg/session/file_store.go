@@ -338,13 +338,22 @@ func (s *FileSessionStore) Delete(ctx context.Context, timestamp int64, sessionI
 }
 
 func (s *FileSessionStore) Clear(ctx context.Context, sessionID string) error {
-	dirPath := s.findSessionDir(sessionID)
+	var dirPath string
+	_ = filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || info.Name() != "session.yml" {
+			return nil
+		}
+		parentDir := filepath.Base(filepath.Dir(path))
+		if parentDir == sessionID {
+			dirPath = filepath.Dir(path)
+			return filepath.SkipAll
+		}
+		return nil
+	})
 	if dirPath == "" {
 		return nil
 	}
-
-	_ = os.RemoveAll(dirPath)
-	return nil
+	return os.RemoveAll(dirPath)
 }
 
 // DeleteSession removes the entire session directory and all its contents.
