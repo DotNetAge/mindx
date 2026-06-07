@@ -745,13 +745,13 @@ jobs:
 
           cat com.dotnetage.mindh.flatpak-ref.yml
 
-      - name: Submit Flathub PR
-        uses: flatpak/flatpak-github-actions/flatpak-pr@v6
+      - name: Submit to Flathub
         continue-on-error: true
-        with:
-          auth-token: ${{ secrets.FLATPUBBot_TOKEN }}
-          app-id: com.dotnetage.mindh
-          manifest-path: com.dotnetage.mindh.flatpak-ref.yml
+        run: |
+          echo "Flatpak submission requires manual setup:"
+          echo "  1. Fork https://github.com/flathub/com.dotnetage.mindh"
+          echo "  2. Add FLATPUBBot_TOKEN secret"
+          echo "Skipping automated submission for now."
 
       - name: Summary
         run: |
