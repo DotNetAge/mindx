@@ -141,11 +141,16 @@ jobs:
         run: |
           mkdir -p .test
           cp -r config .test/config 2>/dev/null || true
-          # DefaultApp(nil) requires ~/.mindx/ with agents/models/providers/skills
-          mkdir -p ~/.mindx/agents ~/.mindx/skills ~/.mindx/sessions ~/.mindx/settings
-          # Minimal empty config files (tests using SetTestDir override later)
-          echo 'models: []' > ~/.mindx/settings/models.yml
-          echo 'providers: []' > ~/.mindx/settings/providers.yml
+          # DefaultApp(nil) requires mindx home with agents/models/providers/skills
+          # macOS/Linux: ~/.mindx  Windows: %APPDATA%/mindx
+          if [ -n "$APPDATA" ]; then
+            MINDX_HOME="$APPDATA/mindx"
+          else
+            MINDX_HOME="$HOME/.mindx"
+          fi
+          mkdir -p "$MINDX_HOME/agents" "$MINDX_HOME/skills" "$MINDX_HOME/sessions" "$MINDX_HOME/settings"
+          echo 'models: []' > "$MINDX_HOME/settings/models.yml"
+          echo 'providers: []' > "$MINDX_HOME/settings/providers.yml"
         shell: bash
 
       - name: Run tests with race detector & coverage
