@@ -6,6 +6,13 @@ description: |
   MindX is an AI-native multi-agent conversation platform with OPC capabilities.
   Manage AI agents, providers, and conversations from your terminal or web UI.
 
+title: MindX
+contact: ray@dotnetage.com
+license: MIT
+issues: https://github.com/DotNetAge/mindx/issues
+source-code: https://github.com/DotNetAge/mindx
+website: https://github.com/DotNetAge/mindx
+
 confinement: strict
 grade: stable
 
