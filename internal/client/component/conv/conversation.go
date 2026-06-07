@@ -22,11 +22,11 @@ type Conversation struct {
 	Status    Status
 	CreatedAt time.Time
 
-	Question  Question
-	Thinking  Thinking
-	Rounds    []ConversationRound
-	Output    Output
-	Error     ErrorMsg
+	Question Question
+	Thinking Thinking
+	Rounds   []ConversationRound
+	Output   Output
+	Error    ErrorMsg
 
 	// MaxTurnsNotice stores a friendly suggestion when max turns are reached.
 	// This is displayed as an informational notice (not an error).
@@ -163,7 +163,7 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 			return m, cmd
 		case msg.MaxTurnsReachedMsg:
 			m.MaxTurnsNotice = e.Suggestion
-			m.Status = StatusDone  // 正常完成（只是到达边界）
+			m.Status = StatusDone // 正常完成（只是到达边界）
 			return m, nil
 		default:
 			newOutput, cmd := UpdateOutput(m.Output, e)

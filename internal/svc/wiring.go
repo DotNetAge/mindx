@@ -2,8 +2,8 @@ package svc
 
 import (
 	"github.com/DotNetAge/gort/pkg/gateway"
-	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/commands"
+	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 )
 

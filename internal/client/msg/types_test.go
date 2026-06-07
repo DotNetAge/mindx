@@ -25,8 +25,6 @@ func TestShowChoicesMsg(t *testing.T) {
 	}
 }
 
-
-
 func TestAgentErrorMsg(t *testing.T) {
 	m := AgentErrorMsg{Error: errors.New("err")}
 	if m.Error.Error() != "err" {

@@ -629,8 +629,8 @@ func TestHandleAgentUpdate_UpdateBody(t *testing.T) {
 
 	newBody := "## Updated Body\n\nThis is completely new content."
 	params, _ := json.Marshal(map[string]interface{}{
-		"name":         "body-agent",
-		"body":         newBody,
+		"name": "body-agent",
+		"body": newBody,
 	})
 
 	_, err := d.handleAgentUpdate(context.Background(), params)

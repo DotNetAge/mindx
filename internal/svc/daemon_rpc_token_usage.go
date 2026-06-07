@@ -45,8 +45,8 @@ func (d *Daemon) handleTokenUsageOverview(_ context.Context, params json.RawMess
 	models := d.listAvailableModels()
 
 	return map[string]any{
-		"current_month":   currentMonthStats,
-		"previous_month":  prevMonthStats,
+		"current_month":    currentMonthStats,
+		"previous_month":   prevMonthStats,
 		"available_models": models,
 	}, nil
 }
@@ -130,13 +130,13 @@ func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessa
 	}
 
 	return []any{map[string]any{
-		"model":                p.Model,
-		"provider":             resolveProvider(records),
-		"total_tokens":         totalTokens,
-		"input_tokens":         totalInput,
-		"output_tokens":        totalOutput,
-		"total_cost":           roundCost(totalCost),
-		"request_count":        requestCount,
+		"model":                  p.Model,
+		"provider":               resolveProvider(records),
+		"total_tokens":           totalTokens,
+		"input_tokens":           totalInput,
+		"output_tokens":          totalOutput,
+		"total_cost":             roundCost(totalCost),
+		"request_count":          requestCount,
 		"avg_tokens_per_request": avgPerRequest,
 	}}, nil
 }
@@ -248,24 +248,24 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 			avgReq = ma.totalTokens / ma.requestCount
 		}
 		modelBreakdown = append(modelBreakdown, map[string]any{
-			"model":                 ma.model,
-			"provider":              ma.provider,
-			"total_tokens":          ma.totalTokens,
-			"input_tokens":          ma.inputTokens,
-			"output_tokens":         ma.outputTokens,
-			"total_cost":            roundCost(ma.totalCost),
-			"request_count":         ma.requestCount,
+			"model":                  ma.model,
+			"provider":               ma.provider,
+			"total_tokens":           ma.totalTokens,
+			"input_tokens":           ma.inputTokens,
+			"output_tokens":          ma.outputTokens,
+			"total_cost":             roundCost(ma.totalCost),
+			"request_count":          ma.requestCount,
 			"avg_tokens_per_request": avgReq,
 		})
 	}
 
 	return map[string]any{
-		"year":           year,
-		"month":          month,
-		"total_cost":     roundCost(totalCost),
-		"total_tokens":   totalTokens,
-		"total_requests": len(records),
-		"daily_usage":    dailyUsage,
+		"year":            year,
+		"month":           month,
+		"total_cost":      roundCost(totalCost),
+		"total_tokens":    totalTokens,
+		"total_requests":  len(records),
+		"daily_usage":     dailyUsage,
 		"model_breakdown": modelBreakdown,
 	}, nil
 }
@@ -301,12 +301,12 @@ type modelAgg struct {
 
 func emptyMonthlyResult(year, month int) map[string]any {
 	return map[string]any{
-		"year":           year,
-		"month":          month,
-		"total_cost":     0.0,
-		"total_tokens":   0,
-		"total_requests": 0,
-		"daily_usage":    []any{},
+		"year":            year,
+		"month":           month,
+		"total_cost":      0.0,
+		"total_tokens":    0,
+		"total_requests":  0,
+		"daily_usage":     []any{},
 		"model_breakdown": []any{},
 	}
 }

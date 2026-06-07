@@ -42,7 +42,7 @@ func (m model) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			m.result = ""
 			m.selected = ""
 			newPanel, _ := m.panel.Update(clientmsg.ShowChoicesMsg{
-				Prompt:  "请选择一个操作：",
+				Prompt: "请选择一个操作：",
 				Options: []string{
 					"分析代码结构",
 					"生成测试用例",

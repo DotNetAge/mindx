@@ -3,7 +3,7 @@ package conv
 type Status int
 
 const (
-	StatusThinking   Status = iota
+	StatusThinking Status = iota
 	StatusExecuting
 	StatusResponding
 	StatusDone

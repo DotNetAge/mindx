@@ -12,8 +12,8 @@ import (
 )
 
 type OutputEntry struct {
-	Role     string
-	Content  string
+	Role      string
+	Content   string
 	Streaming bool
 }
 
@@ -71,7 +71,7 @@ func UpdateOutput(m Output, e tea.Msg) (Output, tea.Cmd) {
 		}
 		m.Entries = append(m.Entries, OutputEntry{Role: "timeout", Content: timeoutMsg})
 		return m, nil
-}
+	}
 
 	return m, nil
 }

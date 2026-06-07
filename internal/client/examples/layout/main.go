@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
 
 	"github.com/DotNetAge/mindx/internal/client/component/choices"
@@ -44,8 +44,8 @@ type model struct {
 	width  int
 	height int
 
-	leftWidth  int
-	rightWidth int
+	leftWidth    int
+	rightWidth   int
 	mainVpHeight int
 	sideVpHeight int
 
