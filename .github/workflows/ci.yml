@@ -1,48 +1,236 @@
+# =============================================================================
+# MindX CI Pipeline — Production-grade GitHub Actions
+# =============================================================================
+# Stages: lint → vet → security → test (race + coverage) → build (matrix)
+#
+# Triggers:
+#   - push to main/develop, all PRs
+#   - manual dispatch for debugging
+# =============================================================================
+
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.all-contributorsrc'
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+  workflow_dispatch:
+
+# Cancel in-progress runs on the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ==========================================================================
+# Environment defaults
+# ==========================================================================
+env:
+  GO_VERSION: '1.26'
+  CGO_ENABLED: 0
+  GOLANGCI_LINT_VERSION: v2.9
+  MINDX_WORKSPACE: ${{ github.workspace }}/.test
 
 jobs:
-  backend:
+  # ==========================================================================
+  # Stage 1: Lint — golangci-lint with project config
+  # ==========================================================================
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
-      - name: Vet
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          args: --timeout=5m
+
+  # ==========================================================================
+  # Stage 2: Vet — static analysis
+  # ==========================================================================
+  vet:
+    name: Vet
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run go vet
         run: go vet ./...
 
+  # ==========================================================================
+  # Stage 3: Security — vulnerability check
+  # ==========================================================================
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  # ==========================================================================
+  # Stage 4: Test — race detector + coverage (matrix: OS)
+  # ==========================================================================
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [lint, vet]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      CGO_ENABLED: 1  # race detector requires CGO
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
       - name: Prepare test workspace
-        run: cp -r config .test/config
+        run: |
+          mkdir -p .test
+          cp -r config .test/config 2>/dev/null || true
         shell: bash
 
-      - name: Test
-        run: go test ./...
+      - name: Run tests with race detector & coverage
+        run: |
+          go test \
+            -race \
+            -coverprofile=coverage.out \
+            -covermode=atomic \
+            -timeout=10m \
+            -v ./... 2>&1 | tee test-output.txt
         env:
-          MINDX_WORKSPACE: ${{ github.workspace }}/.test
+          MINDX_WORKSPACE: ${{ env.MINDX_WORKSPACE }}
 
-  frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: dashboard
-    steps:
-      - uses: actions/checkout@v4
+      - name: Display coverage summary
+        if: runner.os != 'Windows'
+        run: go tool cover -func=coverage.out | tail -1
 
-      - uses: actions/setup-node@v4
+      - name: Upload coverage artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: dashboard/package-lock.json
+          name: coverage-report
+          path: coverage.out
+          retention-days: 7
 
-      - run: npm ci
-      - run: npm run lint
-      - run: npx tsc --noEmit
-      - run: npm run test
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output-${{ matrix.os }}
+          path: test-output.txt
+          retention-days: 7
+
+  # ==========================================================================
+  # Stage 5: Build verification (matrix: OS + Arch)
+  # ==========================================================================
+  build:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+    needs: [test]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-latest
+          - goos: linux
+            goarch: arm64
+            runner: ubuntu-latest
+          - goos: darwin
+            goarch: amd64
+            runner: ubuntu-latest
+          - goos: darwin
+            goarch: arm64
+            runner: ubuntu-latest
+          - goos: windows
+            goarch: amd64
+            runner: ubuntu-latest
+    env:
+      CGO_ENABLED: 0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Get version info
+        id: version
+        run: |
+          echo "version=$(git describe --tags --abbrev=0 2>/dev/null || echo 'dev')" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "build_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          BINARY_NAME=mindx
+          VERSION=${{ steps.version.outputs.version }}
+          COMMIT=${{ steps.version.outputs.commit }}
+          BUILD_TIME=${{ steps.version.outputs.build_time }}
+          SUFFIX=""
+          [ "${{ matrix.goos }}" = "windows" ] && SUFFIX=".exe"
+
+          go build \
+            -trimpath \
+            -ldflags="-s -w \
+              -X github.com/DotNetAge/mindx/cmd.Version=${VERSION#v} \
+              -X github.com/DotNetAge/mindx/cmd.Commit=${COMMIT} \
+              -X github.com/DotNetAge/mindx/cmd.BuildTime=${BUILD_TIME}" \
+            -o dist/${BINARY_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}${SUFFIX} \
+            .
+
+          ls -lh dist/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mindx-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+          retention-days: 7

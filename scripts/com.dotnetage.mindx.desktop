@@ -1,0 +1,18 @@
+[Desktop Entry]
+Name=MindX
+GenericName=AI Agent Platform
+Comment=AI-native multi-agent conversation platform with OPC capabilities
+Exec=mindx %F
+Icon=com.dotnetage.mindh
+Terminal=true
+Type=Application
+Categories=Development;Utility;Network;Chat;
+Keywords=AI;agent;LLM;conversation;CLI;terminal;
+StartupNotify=true
+MimeType=x-scheme-handler/mindx;
+Actions=StartDaemon;
+
+[Desktop Action StartDaemon]
+Name=Start Daemon Mode
+Exec=mindx start
+Icon=com.dotnetage.mindh

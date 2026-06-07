@@ -1,0 +1,748 @@
+# =============================================================================
+# MindX Release Pipeline — Automated GitHub Releases + All Package Managers
+# =============================================================================
+# Trigger: push of version tags (v*)
+#
+# Pipeline:
+#   prepare → build(5 platforms) → release(GH Release)
+#     ├── docker        → GHCR (stable only)
+#     ├── homebrew      → DotNetAge/homebrew-mindx tap
+#     ├── winget        → microsoft/winget-pkgs PR
+#     ├── linux-packages→ AppImage + .deb (attached to GH Release)
+#     ├── snap          → Snap Store (stable only)
+#     └── flatpak       → Flathub PR (stable only)
+#
+# Usage:
+#   git tag v2.2.0 && git push origin v2.2.0
+# =============================================================================
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: '1.26'
+  BINARY_NAME: mindx
+  GITHUB_REPO: ${{ github.repository }}
+  HOMEBREW_TAP: 'DotNetAge/homebrew-mindx'
+
+jobs:
+  # ==========================================================================
+  # Prepare — extract version from tag, generate release notes
+  # ==========================================================================
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_num: ${{ steps.version.outputs.version_num }}
+      notes: ${{ steps.notes.outputs.content }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG=${GITHUB_REF_NAME}
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version_num=${TAG#v}" >> "$GITHUB_OUTPUT"
+          if [[ "$TAG" == *-* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Releasing: $TAG (prerelease=$( [[ "$TAG" == *-* ]] && echo yes || echo no ))"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          CONTENT="## MindX ${{ steps.version.outputs.version }}\n\n"
+
+          if [ -n "$PREV_TAG" ]; then
+            CONTENT="${CONTENT}### Changes since ${PREV_TAG}\n\n"
+            CONTENT+="\`\`\`\n"
+            git log --pretty=format:"- %s (%h)" "${PREV_TAG}..HEAD" --no-merges >> /tmp/notes.txt 2>/dev/null || true
+            if [ -s /tmp/notes.txt ]; then
+              CONTENT+="$(cat /tmp/notes.txt)"
+            else
+              CONTENT+="- Initial release or no commits since last tag"
+            fi
+            CONTENT+="\n\`\`\`\n"
+          else
+            CONTENT+="- Initial release\n"
+          fi
+
+          CONTENT+="\n---\n\n"
+          CONTENT+="| Platform | Architecture | File |\n"
+          CONTENT+="|----------|-------------|------|\n"
+          CONTENT+="| Linux | amd64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-linux-amd64.tar.gz\` |\n"
+          CONTENT+="| Linux | arm64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-linux-arm64.tar.gz\` |\n"
+          CONTENT+="| macOS (Intel) | amd64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-darwin-amd64.tar.gz\` |\n"
+          CONTENT+="| macOS (Apple Silicon) | arm64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-darwin-arm64.tar.gz\` |\n"
+          CONTENT+="| Windows | amd64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-windows-amd64.zip\` |\n"
+
+          echo "content<<EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$CONTENT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+  # ==========================================================================
+  # Build — cross-compile all platforms in parallel
+  # ==========================================================================
+  build:
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            ext: ''
+          - goos: linux
+            goarch: arm64
+            ext: ''
+          - goos: darwin
+            goarch: amd64
+            ext: ''
+          - goos: darwin
+            goarch: arm64
+            ext: ''
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+    env:
+      CGO_ENABLED: 0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+          mkdir -p dist
+
+          go build \
+            -trimpath \
+            -ldflags="-s -w \
+              -X github.com/DotNetAge/mindx/cmd.Version=${VERSION_NUM} \
+              -X github.com/DotNetAge/mindx/cmd.Commit=${COMMIT} \
+              -X github.com/DotNetAge/mindx/cmd.BuildTime=${BUILD_TIME}" \
+            -o dist/${{ env.BINARY_NAME }}${{ matrix.ext }} \
+            .
+
+          ls -lh dist/
+
+      - name: Package (tar.gz / zip)
+        run: |
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+          cd dist
+
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "../${{ env.BINARY_NAME }}-${VERSION_NUM}-${{ matrix.goos }}-${{ matrix.goarch }}.zip" "${{ env.BINARY_NAME }}${{ matrix.ext }}"
+          else
+            tar czf "../${{ env.BINARY_NAME }}-${VERSION_NUM}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "${{ env.BINARY_NAME }}"
+          fi
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            *.tar.gz
+            *.zip
+          retention-days: 1
+
+  # ==========================================================================
+  # Release — create GitHub Release with all assets + checksums
+  # ==========================================================================
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: packages
+          merge-multiple: true
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd packages
+          shasum -a 256 *.tar.gz *.zip > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: MindX ${{ needs.prepare.outputs.version }}
+          body: ${{ needs.prepare.outputs.notes }}
+          draft: false
+          prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
+          files: |
+            packages/*.tar.gz
+            packages/*.zip
+            packages/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ==========================================================================
+  # Docker — build & push to Docker Hub (public) + GHCR (stable only)
+  #
+  # Requires Secrets:
+  #   DOCKERHUB_USERNAME  — Your Docker Hub username
+  #   DOCKERHUB_TOKEN     — Access Token (not password!)
+  #                         Get: https://hub.docker.com/settings/security
+  #                         → New Access Token → Read & Write → Generate
+  # ==========================================================================
+  docker:
+    name: Docker Image
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    if: needs.prepare.outputs.is_prerelease == 'false'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub (public)
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mindx
+            ghcr.io/${{ env.GITHUB_REPO }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.prepare.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
+
+  # ==========================================================================
+  # Homebrew — generate formula from Release assets & push to tap
+  # ==========================================================================
+  homebrew:
+    name: Homebrew Formula
+    runs-on: ubuntu-latest
+    needs: [prepare, release]
+    if: needs.prepare.outputs.is_prerelease == 'false'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout source (for formula template)
+        uses: actions/checkout@v4
+
+      - name: Download darwin assets from Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ needs.prepare.outputs.version }}
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+
+          echo "Downloading darwin assets from release ${TAG}..."
+          mkdir -p dist
+
+          gh release download "${TAG}" \
+            --pattern "mindx-*darwin-*.tar.gz" \
+            --dir dist \
+            --repo "${{ env.GITHUB_REPO }}"
+
+          ls -lh dist/
+
+      - name: Calculate SHA256
+        id: sha256
+        run: |
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+
+          SHA256_AMD64=$(shasum -a 256 "dist/mindx-${VERSION_NUM}-darwin-amd64.tar.gz" | cut -d' ' -f1)
+          SHA256_ARM64=$(shasum -a 256 "dist/mindx-${VERSION_NUM}-darwin-arm64.tar.gz" | cut -d' ' -f1)
+
+          echo "sha256_amd64=${SHA256_AMD64}" >> "$GITHUB_OUTPUT"
+          echo "sha256_arm64=${SHA256_ARM64}" >> "$GITHUB_OUTPUT"
+
+          echo "  darwin/amd64: ${SHA256_AMD64}"
+          echo "  darwin/arm64: ${SHA256_ARM64}"
+
+      - name: Generate Homebrew formula
+        run: |
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+          TAG=${{ needs.prepare.outputs.version }}
+          SHA_AMD64="${{ steps.sha256.outputs.sha256_amd64 }}"
+          SHA_ARM64="${{ steps.sha256.outputs.sha256_arm64 }}"
+
+          sed \
+            -e "s|__GITHUB_REPO__|${{ env.GITHUB_REPO }}|g" \
+            -e "s|__VERSION__|${VERSION_NUM}|g" \
+            -e "s|__TAG__|${TAG}|g" \
+            -e "s|__SHA256_AMD64__|${SHA_AMD64}|g" \
+            -e "s|__SHA256_ARM64__|${SHA_ARM64}|g" \
+            scripts/homebrew-formula.rb.tpl > dist/mindx.rb
+
+          echo "--- Generated formula ---"
+          cat dist/mindx.rb
+
+      - name: Push to Homebrew tap
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAP_REPO="${{ env.HOMEBREW_TAP }}"
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+          TAP_DIR="/tmp/homebrew-tap"
+
+          echo "Pushing formula to ${TAP_REPO}..."
+
+          # Clone tap (use token for auth on private repos too)
+          git clone \
+            "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" \
+            "${TAP_DIR}" 2>/dev/null || {
+            echo "Tap repo not found or empty. Creating..."
+            mkdir -p "${TAP_DIR}"
+            cd "${TAP_DIR}"
+            git init
+            echo "# ${TAP_REPO}" > README.md
+            mkdir -p Formula
+            git add README.md Formula
+            git commit -m "Initial commit"
+            git branch -M main
+            gh repo create "${TAP_REPO}" \
+              --public \
+              --description "Homebrew tap for MindX" \
+              --source "${{ env.GITHUB_REPO }}" \
+              --push 2>/dev/null || true
+            # Re-clone after creation
+            git clone \
+              "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" \
+              "${TAP_DIR}"
+          }
+
+          # Copy formula
+          mkdir -p "${TAP_DIR}/Formula"
+          cp dist/mindx.rb "${TAP_DIR}/Formula/mindx.rb"
+
+          cd "${TAP_DIR}"
+          git add Formula/mindx.rb
+
+          if git diff --cached --quiet; then
+            echo "Formula unchanged, skipping push"
+          else
+            git config user.name "${{ github.actor }}"
+            git config user.email "${{ github.actor }}@users.noreply.github.com"
+            git commit -m "mindx ${VERSION_NUM}"
+            git push origin HEAD:main || {
+              # Fallback: try master branch
+              git push origin HEAD:master 2>/dev/null || {
+                echo "WARNING: Could not push to tap repo."
+                echo "Formula saved locally at:"
+                cat Formula/mindx.rb
+              }
+            }
+            echo "Done! https://github.com/${TAP_REPO}"
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Homebrew Formula Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Item | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | \`${{ needs.prepare.outputs.version_num }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tap | \`${{ env.HOMEBREW_TAP }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Install | \`brew install ${{ env.HOMEBREW_TAP }}/mindx\` |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ==========================================================================
+  # Winget — submit PR to microsoft/winget-pkgs (stable only)
+  # Uses the official microsoft/winget-create-action which handles
+  # manifest generation and PR creation automatically.
+  # ==========================================================================
+  winget:
+    name: Winget (Windows)
+    runs-on: ubuntu-latest
+    needs: [prepare, release]
+    if: needs.prepare.outputs.is_prerelease == 'false'
+    permissions:
+      contents: read
+    steps:
+      - name: Submit Winget package
+        uses: microsoft/winget-create-action@v1
+        with:
+          release-tag: ${{ needs.prepare.outputs.version }}
+          installer-url: https://github.com/${{ env.GITHUB_REPO }}/releases/download/${{ needs.prepare.outputs.version }}/mindx-${{ needs.prepare.outputs.version_num }}-windows-amd64.zip
+          token: ${{ secrets.GITHUB_TOKEN }}
+          package-identifier: DotNetAge.Mindx
+          package-name: MindX
+          publisher: DotNetAge
+          license: MIT
+          license-url: https://github.com/${{ env.GITHUB_REPO }}/blob/main/LICENSE
+          short-description: AI-native multi-agent conversation platform
+          descriptions: |
+            ## MindX
+            MindX is an AI-native multi-agent conversation platform.
+            Manage AI agents, providers, and conversations from your terminal or web UI.
+
+            ### Features
+            - Multi-provider support (OpenAI, Anthropic, DeepSeek, etc.)
+            - WebSocket gateway for real-time communication
+            - Web UI dashboard
+            - Session management
+            - Skill system for extensibility
+
+      - name: Summary
+        run: |
+          echo "## Winget Manifest Submitted" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "PR submitted to \`microsoft/winget-pkgs\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Install:" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "winget install DotNetAge.Mindx" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ==========================================================================
+  # Linux Packages — AppImage + .deb (all releases including prerelease)
+  # ==========================================================================
+  linux-packages:
+    name: Linux Packages
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Linux build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-linux-*
+          path: packages
+          merge-multiple: true
+
+      - name: Install packaging tools
+        run: |
+          # nfpm for .deb/.rpm
+          curl -sfL https://install.goreleaser.com/github.com/nfpm/nfpm.sh | bash -s -- -b /usr/local/bin
+          # dpkg-deb tools
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fakeroot dpkg-dev
+
+      - name: Build AppImage
+        run: |
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+
+          # Create AppDir structure
+          mkdir -p dist/AppDir/usr/bin
+          mkdir -p dist/AppDir/usr/share/applications
+          mkdir -p dist/AppDir/usr/share/icons/hicolor/scalable/apps
+
+          # Copy binary (amd64)
+          cp packages/mindx dist/AppDir/usr/bin/mindx
+          chmod +x dist/AppDir/usr/bin/mindx
+
+          # Write AppRun launcher (NO leading whitespace!)
+          cat > dist/AppDir/AppRun << 'APPRUN'
+#!/bin/bash
+HERE="$(dirname "$(readlink -f "${0}")")"
+export PATH="${HERE}/usr/bin:${PATH}"
+exec "${HERE}/usr/bin/mindx" "$@"
+APPRUN
+          chmod +x dist/AppDir/AppRun
+
+          # Copy desktop entry & icon
+          cp scripts/com.dotnetage.mindh.desktop dist/AppDir/usr/share/applications/
+          cp scripts/com.dotnetage.mindh.svg dist/AppDir/usr/share/icons/hicolor/scalable/apps/ 2>/dev/null || true
+
+          # Download linuxdeploy
+          curl -sL \
+            https://github.com/linuxdeploy/linux/releases/download/continuous/linuxdeploy-x86_64.AppImage \
+            -o linuxdeploy
+          chmod +x linuxdeploy
+
+          # Build AppImage
+          export VERSION="${VERSION_NUM}"
+          ./linuxdeploy \
+            --appdir dist/AppDir \
+            --output appimage \
+            --desktop-file dist/AppDir/usr/share/applications/com.dotnetage.mindh.desktop \
+            --icon-file scripts/com.dotnetage.mindh.svg \
+            2>&1 || {
+            echo "WARNING: linuxdeploy failed, creating minimal AppImage..."
+            # Minimal fallback: just bundle the binary
+            cat > dist/AppDir/AppRun << 'MINIMAL'
+#!/bin/sh
+exec "$(dirname "$(readlink -f "$0")")"/usr/bin/mindx" $@"
+MINIMAL
+            chmod +x dist/AppDir/AppRun
+            ./linuxdeploy --appdir dist/AppDir --output appimage 2>/dev/null || true
+          }
+
+          # Rename output
+          if [ -f "Mindx-${VERSION_NUM}-x86_64.AppImage" ]; then
+            mv "Mindx-${VERSION_NUM}-x86_64.AppImage" "dist/Mindx-${VERSION_NUM}.AppImage"
+          elif ls Mindx-*.AppImage 2>/dev/null; then
+            mv Mindx-*.AppImage dist/ 2>/dev/null || true
+          fi
+
+          ls -lh dist/*.AppImage 2>/dev/null || echo "No AppImage generated"
+
+      - name: Build .deb packages
+        run: |
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+
+          for ARCH in amd64 arm64; do
+            echo "--- Building .deb for ${ARCH} ---"
+
+            # Use the correct binary name (always mindx in artifacts)
+            cp packages/mindx "dist/mindx_${ARCH}"
+            chmod +x "dist/mindx_${ARCH}"
+
+            # Generate nfpm config for this arch
+            cat > dist/nfpm-${ARCH}.yaml << NFPMEOF
+name: mindx
+arch: "${ARCH}"
+version: "${VERSION_NUM}"
+section: utils
+priority: optional
+maintainer: "DotNetAge <ray@dotnetage.com>"
+description: |
+  MindX - AI-native multi-agent conversation platform with OPC capabilities.
+  A powerful CLI tool for managing AI agents, providers, and conversations.
+homepage: "https://github.com/${{ env.GITHUB_REPO }}"
+license: MIT
+vendor: DotNetAge
+
+contents:
+  - src: dist/mindx_${ARCH}
+    dst: /usr/local/bin/mindx
+    file_info:
+      mode: 0755
+
+scripts:
+  postinstall: |
+    #!/bin/bash
+    echo "MindX ${VERSION_NUM} installed!"
+    echo "Run 'mindx --help' to get started."
+  preremove: |
+    #!/bin/bash
+    echo "Removing MindX..."
+    echo "User data (~/.mindx/) is preserved."
+NFPM
+
+            nfpm pkg --config "dist/nfpm-${ARCH}.yaml" --target dist/ --packager deb
+
+            # Clean up temp file
+            rm -f "dist/mindx_${ARCH}"
+          done
+
+          ls -lh dist/*.deb 2>/dev/null || echo "No .deb packages generated"
+
+      - name: Upload Linux packages to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ needs.prepare.outputs.version }}
+          FILES=""
+
+          for f in dist/*.AppImage dist/*.deb; do
+            if [ -f "$f" ]; then
+              FILES="$FILES $f"
+            fi
+          done
+
+          if [ -n "$FILES" ]; then
+            echo "Uploading to release ${TAG}:"
+            ls -lh $FILES
+            gh release upload "${TAG}" $FILES --repo "${{ env.GITHUB_REPO }}" --clobber
+          else
+            echo "No Linux packages to upload"
+          fi
+
+      - name: Summary
+        run: |
+          echo "## Linux Packages Built & Uploaded" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Package | Arch |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|------|" >> "$GITHUB_STEP_SUMMARY"
+          for f in dist/*.AppImage; do
+            [ -f "$f" ] && echo "| \`$(basename $f)\` | Universal |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          for f in dist/*.deb; do
+            [ -f "$f" ] && echo "| \`$(basename $f)\` | Debian/Ubuntu |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  # ==========================================================================
+  # Snap — build and push to Snap Store (stable only)
+  # Generates snapcraft.yaml first, then builds.
+  #
+  # Requires: SNAP_STORE_TOKEN secret
+  #   How to get the token:
+  #     1. On Linux (or via Docker/VM): snapcraft login
+  #     2. Export credentials:
+  #        snapcraft export-login --snaps mindx --channels stable credentials.txt
+  #     3. cat credentials.txt → copy contents → paste as GitHub Secret
+  #   Reference: https://documentation.ubuntu.com/snapcraft/stable/how-to/publishing/authenticate/
+  # ==========================================================================
+  snap:
+    name: Snap (Linux)
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: needs.prepare.outputs.is_prerelease == 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate snapcraft.yaml from template
+        run: |
+          sed -e "s|__VERSION__|${{ needs.prepare.outputs.version_num }}|g" \
+            snap/snapcraft.yaml.tpl > snap/snapcraft.yaml
+          cat snap/snapcraft.yaml
+
+      - name: Build Snap
+        uses: snapcore/action-build@v1
+        id: build-snap
+        with:
+          path: .
+
+      - name: Publish Snap
+        uses: snapcore/action-publish@v1
+        with:
+          store_credentials: ${{ secrets.SNAP_STORE_TOKEN }}
+          snap: ${{ steps.build-snap.outputs.snap }}
+          release: stable
+
+      - name: Summary
+        run: |
+          echo "## Snap Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Package: \`${{ steps.build-snap.outputs.snap }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Install:" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "sudo snap install mindx" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ==========================================================================
+  # Flatpak — submit PR to Flathub (stable only)
+  #
+  # NOTE: First-time setup required:
+  #   1. Fork https://github.com/flathub/com.dotnetage.mindh
+  #      (or create it via Flathub submission process)
+  #   2. Add FLATPUBBot_TOKEN secret (GitHub PAT with repo access)
+  # ==========================================================================
+  flatpak:
+    name: Flatpak (Linux)
+    runs-on: ubuntu-latest
+    needs: [prepare, release]
+    if: needs.prepare.outputs.is_prerelease == 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Linux amd64 asset & get SHA256
+        id: sha256
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+          TAG=${{ needs.prepare.outputs.version }}
+          mkdir -p dist
+
+          gh release download "${TAG}" \
+            --pattern "mindx-*linux-amd64.tar.gz" \
+            --dir dist \
+            --repo "${{ env.GITHUB_REPO }}"
+
+          SHA=$(shasum -a 256 "dist/mindx-${VERSION_NUM}-linux-amd64.tar.gz" | cut -d' ' -f1)
+          URL="https://github.com/${{ env.GITHUB_REPO }}/releases/download/${TAG}/mindx-${VERSION_NUM}-linux-amd64.tar.gz"
+
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "release_url=${URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Flatpak manifest
+        run: |
+          sed \
+            -e "s|__RELEASE_URL__|${{ steps.sha256.outputs.release_url }}|g" \
+            -e "s|__SHA256_AMD64__|${{ steps.sha256.outputs.sha256 }}|g" \
+            scripts/flatpak-manifest.yml.tpl > com.dotnetage.mindh.flatpak-ref.yml
+
+          cat com.dotnetage.mindh.flatpak-ref.yml
+
+      - name: Submit Flathub PR
+        uses: flatpak/flatpak-github-actions/flatpak-pr@v6
+        continue-on-error: true
+        with:
+          auth-token: ${{ secrets.FLATPUBBot_TOKEN }}
+          app-id: com.dotnetage.mindh
+          manifest-path: com.dotnetage.mindh.flatpak-ref.yml
+
+      - name: Summary
+        run: |
+          echo "## Flatpak" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "PR submitted to Flathub (\`com.dotnetage.mindh\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Install:" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "flatpak install flathub com.dotnetage.mindh" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
