@@ -354,7 +354,7 @@ func (m *rootModel) rpcReplyAskUser(answers map[string]string) {
 		return
 	}
 	go func() {
-		m.rpc.client.Call(context.Background(), "ask_user.reply", map[string]any{
+		_, _ = m.rpc.client.Call(context.Background(), "ask_user.reply", map[string]any{
 			"correlation_id": m.pendingCorrelationID,
 			"answers":        answers,
 		})
@@ -367,7 +367,7 @@ func (m *rootModel) rpcReplyPermission(action string, params map[string]any, rea
 		return
 	}
 	go func() {
-		m.rpc.client.Call(context.Background(), "permission.reply", map[string]any{
+		_, _ = m.rpc.client.Call(context.Background(), "permission.reply", map[string]any{
 			"correlation_id": m.pendingCorrelationID,
 			"action":         action,
 			"params":         params,
@@ -382,7 +382,7 @@ func (m *rootModel) rpcCancelExecution() {
 		return
 	}
 	go func() {
-		m.rpc.client.Call(context.Background(), "message.cancel", map[string]any{})
+		_, _ = m.rpc.client.Call(context.Background(), "message.cancel", map[string]any{})
 	}()
 }
 

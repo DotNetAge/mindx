@@ -9,7 +9,7 @@ import (
 )
 
 func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.ResponseType, title string, data string) {
-	d.gw.SendResponse(clientID, respType, title, data, gateway.WithSessionID(sessionID))
+	_ = d.gw.SendResponse(clientID, respType, title, data, gateway.WithSessionID(sessionID))
 }
 
 func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreactevents.ExecutionSummaryData) {
@@ -27,7 +27,7 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreac
 			{"metric": "Termination", "value": summary.TerminationReason},
 		},
 	}
-	d.gw.SendResponse(clientID, gateway.RespExecutionSummary, "执行摘要", tableData,
+	_ = d.gw.SendResponse(clientID, gateway.RespExecutionSummary, "执行摘要", tableData,
 		gateway.WithSessionID(sessionID),
 		gateway.WithResponseMeta(map[string]any{
 			"tokens_used": map[string]any{
