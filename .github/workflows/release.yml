@@ -681,7 +681,6 @@ jobs:
           path: .
 
       - name: Publish Snap
-        continue-on-error: true
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAP_STORE_TOKEN }}
         run: snapcraft upload mindx_*.snap --release stable
