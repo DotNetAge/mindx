@@ -444,29 +444,21 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Submit Winget package
-        uses: microsoft/winget-create-action@v1
+      - name: Setup .NET SDK for wingetcreate
+        uses: actions/setup-dotnet@v4
         with:
-          release-tag: ${{ needs.prepare.outputs.version }}
-          installer-url: https://github.com/${{ env.GITHUB_REPO }}/releases/download/${{ needs.prepare.outputs.version }}/mindx-${{ needs.prepare.outputs.version_num }}-windows-amd64.zip
-          token: ${{ secrets.GITHUB_TOKEN }}
-          package-identifier: DotNetAge.Mindx
-          package-name: MindX
-          publisher: DotNetAge
-          license: MIT
-          license-url: https://github.com/${{ env.GITHUB_REPO }}/blob/main/LICENSE
-          short-description: AI-native multi-agent conversation platform
-          descriptions: |
-            ## MindX
-            MindX is an AI-native multi-agent conversation platform.
-            Manage AI agents, providers, and conversations from your terminal or web UI.
+          dotnet-version: '8.x'
 
-            ### Features
-            - Multi-provider support (OpenAI, Anthropic, DeepSeek, etc.)
-            - WebSocket gateway for real-time communication
-            - Web UI dashboard
-            - Session management
-            - Skill system for extensibility
+      - name: Install wingetcreate
+        run: dotnet tool install --global wingetcreate
+
+      - name: Submit Winget package
+        run: |
+          wingetcreate submit \
+            --token ${{ secrets.GITHUB_TOKEN }} \
+            --url https://github.com/${{ env.GITHUB_REPO }}/releases/download/${{ needs.prepare.outputs.version }}/mindx-${{ needs.prepare.outputs.version_num }}-windows-amd64.zip \
+            --version ${{ needs.prepare.outputs.version_num }}
+        continue-on-error: true
 
       - name: Summary
         run: |
@@ -496,6 +488,17 @@ jobs:
           pattern: package-linux-*
           path: packages
           merge-multiple: true
+
+      - name: Extract Linux binaries from archives
+        run: |
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+          cd packages
+          for f in *.tar.gz; do
+            echo "Extracting $f..."
+            tar xzf "$f"
+          done
+          ls -la
+          cd ..
 
       - name: Install packaging tools
         run: |
