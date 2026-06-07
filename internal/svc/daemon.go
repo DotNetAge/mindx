@@ -409,25 +409,6 @@ func (d *Daemon) Start(ctx context.Context) error {
 	return d.gw.Shutdown(ctx)
 }
 
-func (d *Daemon) TestStart(ctx context.Context) error {
-	if d.gw == nil {
-		d.initGateway()
-	}
-
-	if d.scheduler != nil {
-		if err := d.scheduler.Start(ctx); err != nil {
-			d.logger.Warn("scheduler failed to start", "error", err)
-		}
-	}
-
-	if err := d.gw.Start(); err != nil {
-		d.stopBackgroundServices()
-		return fmt.Errorf("gateway start failed: %w", err)
-	}
-
-	return nil
-}
-
 func (d *Daemon) stopBackgroundServices() {
 	d.logger.Info("stopping background services...")
 	if d.memoryWatch != nil {
@@ -441,20 +422,6 @@ func (d *Daemon) stopBackgroundServices() {
 		d.logger.Info("scheduler service stopped")
 	}
 	d.logger.Info("all background services stopped")
-}
-
-func (d *Daemon) TestStop(ctx context.Context) error {
-	if d.gw == nil {
-		return nil
-	}
-
-	if err := d.gw.StopAllChannels(ctx); err != nil {
-		d.logger.Warn("failed to stop channels", "error", err)
-	}
-
-	d.stopBackgroundServices()
-
-	return d.gw.Shutdown(ctx)
 }
 
 func (d *Daemon) initGateway() {
