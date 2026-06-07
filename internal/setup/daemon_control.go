@@ -14,10 +14,10 @@ import (
 type DaemonStatus int
 
 const (
-	DaemonUnknown   DaemonStatus = iota // Could not determine status
-	DaemonRunning                      // Service is active and listening
-	DaemonStopped                       // Service is registered but not running
-	DaemonNotInstalled                 // No daemon registration found
+	DaemonUnknown      DaemonStatus = iota // Could not determine status
+	DaemonRunning                          // Service is active and listening
+	DaemonStopped                          // Service is registered but not running
+	DaemonNotInstalled                     // No daemon registration found
 )
 
 func (s DaemonStatus) String() string {
