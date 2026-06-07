@@ -1,7 +1,6 @@
 package daemoncheck
 
 import (
-	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
