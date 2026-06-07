@@ -102,7 +102,7 @@ jobs:
   # ==========================================================================
   build:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     needs: prepare
     strategy:
       fail-fast: false
@@ -110,21 +110,24 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
+            runner: ubuntu-latest
             ext: ''
           - goos: linux
             goarch: arm64
+            runner: ubuntu-latest
             ext: ''
           - goos: darwin
             goarch: amd64
+            runner: macos-13
             ext: ''
           - goos: darwin
             goarch: arm64
+            runner: macos-latest
             ext: ''
           - goos: windows
             goarch: amd64
+            runner: windows-latest
             ext: .exe
-    env:
-      CGO_ENABLED: 0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -135,11 +138,25 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      - name: Install C cross-compiler (linux/arm64)
+        if: matrix.goos == 'linux' && matrix.goarch == 'arm64'
+        run: sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Setup MinGW (Windows CGO)
+        if: matrix.goos == 'windows'
+        run: choco install mingw -y --no-progress
+
       - name: Build
+        shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
         run: |
+          # Set C cross-compiler for linux/arm64 (CGO requires matching CC)
+          if [ "$GOOS" = "linux" ] && [ "$GOARCH" = "arm64" ]; then
+            export CC=aarch64-linux-gnu-gcc
+          fi
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
