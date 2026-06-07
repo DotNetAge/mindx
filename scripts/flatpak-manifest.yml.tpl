@@ -20,7 +20,7 @@ modules:
     build-commands:
       - install -Dm755 mindx /app/bin/mindx
       - install -Dm644 scripts/com.dotnetage.mindx.desktop /app/share/applications/com.dotnetage.mindx.desktop
-      - install -Dm644 scripts/com.dotnetage.mindh.svg /app/share/icons/hicolor/scalable/apps/com.dotnetage.mindh.svg
+      - install -Dm644 scripts/com.dotnetage.mindx.svg /app/share/icons/hicolor/scalable/apps/com.dotnetage.mindx.svg
     sources:
       - type: archive
         url: __RELEASE_URL__
@@ -29,4 +29,4 @@ modules:
       - type: file
         path: scripts/com.dotnetage.mindx.desktop
       - type: file
-        path: scripts/com.dotnetage.mindh.svg
+        path: scripts/com.dotnetage.mindx.svg
