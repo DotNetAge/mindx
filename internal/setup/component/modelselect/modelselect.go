@@ -26,9 +26,7 @@ type Model struct {
 	renderer *glamour.TermRenderer
 }
 
-type itemDelegate struct {
-	width int
-}
+type itemDelegate struct{}
 
 func (d itemDelegate) Height() int                             { return 1 }
 func (d itemDelegate) Spacing() int                            { return 0 }

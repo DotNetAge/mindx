@@ -315,7 +315,7 @@ func messagesToConversations(sessionID, agentName string, msgs []goreactsession.
 			for _, tc := range msg.ToolCalls {
 				var argsMap map[string]any
 				if tc.Arguments != "" {
-					json.Unmarshal([]byte(tc.Arguments), &argsMap)
+					_ = json.Unmarshal([]byte(tc.Arguments), &argsMap)
 				}
 				pendingToolCalls[tc.ID] = pendingToolCall{
 					name: tc.Name,
@@ -788,11 +788,11 @@ func (m *rootModel) saveConnectResult(modelName string) {
 				cfg.LastModel = modelName
 				_ = cfg.Save()
 			}
-			reg.Save(modelCfg)
+			_ = reg.Save(modelCfg)
 		}
 	} else if provider != nil && m.connectAPIKey != "" {
 		for _, raw := range reg.ListRaw() {
-			reg.Save(raw)
+			_ = reg.Save(raw)
 			break
 		}
 	}

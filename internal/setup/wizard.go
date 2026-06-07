@@ -72,7 +72,6 @@ type firstRunModel struct {
 	mindxConfig *core.MindxConfig
 
 	daemonChoice     bool
-	daemonSubmitted  bool
 	daemonInstallCh  chan error
 	daemonInstallErr error
 	daemonState      int // 0=choice, 1=installing, 2=done

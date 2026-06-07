@@ -233,7 +233,7 @@ func splitArgs(s string) []string {
 
 func parseJobAddArgs(argsStr string) (agent string, sessionID string, content string, cronExpr string, projectDir string, err error) {
 	parts := splitArgs(argsStr)
-	var agentIdx, exprIdx, dirIdx int = -1, -1, -1
+	var agentIdx, exprIdx, dirIdx = -1, -1, -1
 	var exprValue, dirValue string
 
 	for i, part := range parts {

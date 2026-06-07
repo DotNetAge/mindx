@@ -105,7 +105,6 @@ func (l ConversationList) View() string {
 }
 
 func (l ConversationList) Clear() {
-	l.Conversations = nil
 }
 
 func (l *ConversationList) MarkDirty() {}

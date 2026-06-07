@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DotNetAge/mindx/internal/client/style"
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/DotNetAge/mindx/internal/client/style"
 )
 
 type TodoStatus int
@@ -18,13 +18,13 @@ const (
 )
 
 type TodoItem struct {
-	ID          string
-	Text        string
-	Status      TodoStatus
-	Priority    int
-	Assignee    string
-	DueDate     string
-	Labels      []string
+	ID       string
+	Text     string
+	Status   TodoStatus
+	Priority int
+	Assignee string
+	DueDate  string
+	Labels   []string
 }
 
 type TodoList struct {

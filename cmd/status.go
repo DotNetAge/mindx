@@ -64,7 +64,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Daemon
-	daemonStatus, err := setup.CheckDaemon()
+	daemonStatus, _ := setup.CheckDaemon()
 	daemonIcon := "❓"
 	switch daemonStatus {
 	case setup.DaemonRunning:
