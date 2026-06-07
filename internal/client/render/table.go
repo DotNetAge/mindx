@@ -1,3 +1,4 @@
+// Package render provides TUI rendering utilities for the MindX client.
 package render
 
 import (

@@ -74,9 +74,10 @@ func (tl *TodoList) renderItem(item TodoItem) string {
 	iconStyle := tl.statusIconStyle(item.Status)
 
 	textStyle := style.WhiteStyle
-	if item.Status == TodoCompleted {
+	switch item.Status {
+	case TodoCompleted:
 		textStyle = style.GrayStyle
-	} else if item.Status == TodoCancelled {
+	default:
 		textStyle = style.DimStyle
 	}
 

@@ -10,8 +10,8 @@ import (
 )
 
 type InputDialog struct {
-	Visible    bool
-	Title      string
+	Visible     bool
+	Title       string
 	Placeholder string
 	SubmitLabel string
 
@@ -32,10 +32,10 @@ func NewInputDialog(title, placeholder string) *InputDialog {
 	ti.Focus()
 
 	return &InputDialog{
-		Title:        title,
-		Placeholder:  placeholder,
-		SubmitLabel:  "enter submit",
-		input:        ti,
+		Title:       title,
+		Placeholder: placeholder,
+		SubmitLabel: "enter submit",
+		input:       ti,
 	}
 }
 

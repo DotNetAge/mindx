@@ -270,8 +270,8 @@ func toUTF16LE(s string) []byte {
 	buf.WriteByte(0xFE)
 	// Encode the string using the transformer
 	writer := transform.NewWriter(&buf, enc.NewEncoder())
-	writer.Write([]byte(s))
-	writer.Close()
+	_, _ = writer.Write([]byte(s))
+	_ = writer.Close()
 	return buf.Bytes()
 }
 

@@ -252,15 +252,15 @@ func removeMacOSQuarantine(path string) {
 		attrName := parts[0]
 		switch attrName {
 		case "com.apple.quarantine", "com.apple.provenance":
-			exec.Command("xattr", "-d", attrName, path).Run()
+			_ = exec.Command("xattr", "-d", attrName, path).Run()
 		}
 	}
 }
 
 func cleanOldRotatedFiles(logDir, baseName string) {
 	if runtime.GOOS == "darwin" {
-		exec.Command("xattr", "-dr", "com.apple.quarantine", logDir).Run()
-		exec.Command("xattr", "-dr", "com.apple.provenance", logDir).Run()
+		_ = exec.Command("xattr", "-dr", "com.apple.quarantine", logDir).Run()
+		_ = exec.Command("xattr", "-dr", "com.apple.provenance", logDir).Run()
 	}
 
 	matches, _ := filepath.Glob(filepath.Join(logDir, baseName+"-*"))
@@ -287,13 +287,13 @@ func createSafeFileWriter(cfg *ZapConfig) zapcore.WriteSyncer {
 	testData := []byte("log rotation test\n")
 	if _, err := lj.Write(testData); err != nil {
 		fmt.Fprintf(os.Stderr, "WARNING: lumberjack write failed (%v), using simple file writer for %s\n", err, cfg.Filename)
-		lj.Close()
+		_ = lj.Close()
 		return newSimpleFileWriter(cfg.Filename)
 	}
 
 	if err := lj.Rotate(); err != nil {
 		fmt.Fprintf(os.Stderr, "WARNING: lumberjack rotate failed (%v), using simple file writer for %s\n", err, cfg.Filename)
-		lj.Close()
+		_ = lj.Close()
 		return newSimpleFileWriter(cfg.Filename)
 	}
 

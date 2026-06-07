@@ -11,18 +11,18 @@ import (
 
 var (
 	dialogBorder = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(style.ThemePurple).
-			Padding(0, 2)
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(style.ThemePurple).
+		Padding(0, 2)
 )
 
 type SelectDialog struct {
-	Visible  bool
-	Title    string
-	Prompt   string
-	Options  []string
-	panel    *choices.ChoicesPanel
-	width    int
+	Visible bool
+	Title   string
+	Prompt  string
+	Options []string
+	panel   *choices.ChoicesPanel
+	width   int
 }
 
 func NewSelectDialog(title string) *SelectDialog {
@@ -79,7 +79,7 @@ func (d *SelectDialog) Update(msg any) (*SelectDialog, tea.Cmd) {
 						return SelectDialogResult{
 							Index:      sel.Index,
 							CustomText: sel.CustomText,
-							Cancelled:   sel.Index < 0,
+							Cancelled:  sel.Index < 0,
 						}
 					}
 				}
@@ -126,5 +126,5 @@ func (d *SelectDialog) dialogWidth() int {
 type SelectDialogResult struct {
 	Index      int
 	CustomText string
-	Cancelled   bool
+	Cancelled  bool
 }

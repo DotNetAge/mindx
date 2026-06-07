@@ -77,7 +77,7 @@ func SetupPython(workspaceDir string) (core.PythonConfig, error) {
 
 func findRequirementsFiles(root string) []string {
 	var files []string
-	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
