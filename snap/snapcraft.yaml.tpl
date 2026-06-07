@@ -1,5 +1,6 @@
 name: mindx
 base: core24
+version: __VERSION__
 summary: AI-native multi-agent conversation platform
 description: |
   MindX is an AI-native multi-agent conversation platform with OPC capabilities.
