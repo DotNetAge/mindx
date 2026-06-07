@@ -517,13 +517,11 @@ jobs:
           cp packages/mindx dist/AppDir/usr/bin/mindx
           chmod +x dist/AppDir/usr/bin/mindx
 
-          # Write AppRun launcher (NO leading whitespace!)
-          cat > dist/AppDir/AppRun << 'APPRUN'
-#!/bin/bash
-HERE="$(dirname "$(readlink -f "${0}")")"
-export PATH="${HERE}/usr/bin:${PATH}"
-exec "${HERE}/usr/bin/mindx" "$@"
-APPRUN
+          # Write AppRun launcher
+          echo '#!/bin/bash' > dist/AppDir/AppRun
+          echo 'HERE="$(dirname "$(readlink -f "${0}")")"' >> dist/AppDir/AppRun
+          echo 'export PATH="${HERE}/usr/bin:${PATH}"' >> dist/AppDir/AppRun
+          echo 'exec "${HERE}/usr/bin/mindx" "$@"' >> dist/AppDir/AppRun
           chmod +x dist/AppDir/AppRun
 
           # Copy desktop entry & icon
@@ -546,10 +544,8 @@ APPRUN
             2>&1 || {
             echo "WARNING: linuxdeploy failed, creating minimal AppImage..."
             # Minimal fallback: just bundle the binary
-            cat > dist/AppDir/AppRun << 'MINIMAL'
-#!/bin/sh
-exec "$(dirname "$(readlink -f "$0")")"/usr/bin/mindx" $@"
-MINIMAL
+            echo '#!/bin/sh' > dist/AppDir/AppRun
+            echo 'exec "$(dirname "$(readlink -f "$0")")/usr/bin/mindx" "$@"' >> dist/AppDir/AppRun
             chmod +x dist/AppDir/AppRun
             ./linuxdeploy --appdir dist/AppDir --output appimage 2>/dev/null || true
           }
