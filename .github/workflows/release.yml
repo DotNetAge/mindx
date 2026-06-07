@@ -495,11 +495,13 @@ jobs:
 
       - name: Install packaging tools
         run: |
-          # nfpm for .deb/.rpm
-          curl -sfL https://install.goreleaser.com/github.com/nfpm/nfpm.sh | bash -s -- -b /usr/local/bin
-          # dpkg-deb tools
+          # nfpm for .deb/.rpm - download binary from GitHub (install.goreleaser.com is deprecated)
+          curl -sL "https://github.com/nfpm/nfpm/releases/latest/download/nfpm_amd64.tar.gz" -o /tmp/nfpm.tar.gz
+          tar xzf /tmp/nfpm.tar.gz -C /usr/local/bin nfpm
+          chmod +x /usr/local/bin/nfpm
+          # dpkg-deb tools + file
           sudo apt-get update -qq
-          sudo apt-get install -y -qq fakeroot dpkg-dev
+          sudo apt-get install -y -qq fakeroot dpkg-dev file
 
       - name: Build AppImage
         run: |
@@ -525,27 +527,36 @@ jobs:
           cp scripts/com.dotnetage.mindx.desktop dist/AppDir/usr/share/applications/
           cp scripts/com.dotnetage.mindx.svg dist/AppDir/usr/share/icons/hicolor/scalable/apps/ 2>/dev/null || true
 
-          # Download linuxdeploy
+          # Download linuxdeploy (use correct repo + extract to avoid FUSE requirement)
           curl -sL \
-            https://github.com/linuxdeploy/linux/releases/download/continuous/linuxdeploy-x86_64.AppImage \
-            -o linuxdeploy
-          chmod +x linuxdeploy
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
+            -o linuxdeploy.AppImage
+          chmod +x linuxdeploy.AppImage
+          ./linuxdeploy.AppImage --appimage-extract 2>/dev/null || true
+          if [ -d squashfs-root ]; then
+            mv squashfs-root linuxdeploy-root
+            LINUXDEPLOY="./linuxdeploy-root/AppRun"
+          else
+            echo "WARNING: linuxdeploy extraction failed, continuing with .deb only"
+            LINUXDEPLOY=""
+          fi
 
           # Build AppImage
-          export VERSION="${VERSION_NUM}"
-          ./linuxdeploy \
-            --appdir dist/AppDir \
-            --output appimage \
-            --desktop-file dist/AppDir/usr/share/applications/com.dotnetage.mindx.desktop \
-            --icon-file scripts/com.dotnetage.mindx.svg \
-            2>&1 || {
-            echo "WARNING: linuxdeploy failed, creating minimal AppImage..."
-            # Minimal fallback: just bundle the binary
-            echo '#!/bin/sh' > dist/AppDir/AppRun
-            echo 'exec "$(dirname "$(readlink -f "$0")")/usr/bin/mindx" "$@"' >> dist/AppDir/AppRun
-            chmod +x dist/AppDir/AppRun
-            ./linuxdeploy --appdir dist/AppDir --output appimage 2>/dev/null || true
-          }
+          if [ -n "$LINUXDEPLOY" ]; then
+            export VERSION="${VERSION_NUM}"
+            $LINUXDEPLOY \
+              --appdir dist/AppDir \
+              --output appimage \
+              --desktop-file dist/AppDir/usr/share/applications/com.dotnetage.mindx.desktop \
+              --icon-file scripts/com.dotnetage.mindx.svg \
+              2>&1 || {
+              echo "WARNING: linuxdeploy failed, creating minimal AppImage..."
+              echo '#!/bin/sh' > dist/AppDir/AppRun
+              echo 'exec "$(dirname "$(readlink -f "$0")")/usr/bin/mindx" "$@"' >> dist/AppDir/AppRun
+              chmod +x dist/AppDir/AppRun
+              $LINUXDEPLOY --appdir dist/AppDir --output appimage 2>/dev/null || true
+            }
+          fi
 
           # Rename output
           if [ -f "Mindx-${VERSION_NUM}-x86_64.AppImage" ]; then
