@@ -496,7 +496,8 @@ jobs:
       - name: Install packaging tools
         run: |
           # nfpm for .deb/.rpm - download binary from GitHub (install.goreleaser.com is deprecated)
-          curl -sL "https://github.com/nfpm/nfpm/releases/latest/download/nfpm_amd64.tar.gz" -o /tmp/nfpm.tar.gz
+          NFPM_URL=$(curl -sL "https://api.github.com/repos/nfpm/nfpm/releases/latest" | python3 -c "import sys,json;d=json.load(sys.stdin);print([a['browser_download_url'] for a in d['assets'] if 'nfpm_amd64.tar.gz' in a['name']][0])")
+          curl -sL "$NFPM_URL" -o /tmp/nfpm.tar.gz
           tar xzf /tmp/nfpm.tar.gz -C /usr/local/bin nfpm
           chmod +x /usr/local/bin/nfpm
           # dpkg-deb tools + file
@@ -688,7 +689,7 @@ jobs:
       - name: Publish Snap
         uses: snapcore/action-publish@v1
         with:
-          store_credentials: ${{ secrets.SNAP_STORE_TOKEN }}
+          store_login: ${{ secrets.SNAP_STORE_TOKEN }}
           snap: ${{ steps.build-snap.outputs.snap }}
           release: stable
 
