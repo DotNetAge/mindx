@@ -70,10 +70,12 @@ jobs:
 
   # ==========================================================================
   # Dependency Review — check for vulnerabilities in go.mod/go.sum
+  # NOTE: Only runs on PRs (requires base_ref/head_ref from PR context)
   # ==========================================================================
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -130,5 +132,5 @@ jobs:
           echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| CodeQL SAST | ${{ needs.codeql.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Dependency Review | ${{ needs.dependency-review.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Dependency Review | ${{ needs.dependency-review.result == 'success' && '✅ Passed' || needs.dependency-review.result == 'skipped' && '⏭️ Skipped (PR only)' || '❌ Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| govulncheck | ${{ needs.govulncheck.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
