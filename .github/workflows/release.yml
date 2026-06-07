@@ -601,14 +601,8 @@ jobs:
               echo "      mode: 0755"
               echo ""
               echo "scripts:"
-              echo "  postinstall: |"
-              echo "    #!/bin/bash"
-              echo "    echo \"MindX ${VERSION_NUM} installed!\""
-              echo "    echo \"Run 'mindx --help' to get started.\""
-              echo "  preremove: |"
-              echo "    #!/bin/bash"
-              echo "    echo \"Removing MindX...\""
-              echo "    echo \"User data (~/.mindx/) is preserved.\""
+              echo "  postinstall: scripts/postinstall.sh"
+              echo "  preremove: scripts/preremove.sh"
             } > "dist/nfpm-${ARCH}.yaml"
 
             nfpm pkg --config "dist/nfpm-${ARCH}.yaml" --target dist/ --packager deb
@@ -687,6 +681,7 @@ jobs:
           path: .
 
       - name: Publish Snap
+        continue-on-error: true
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAP_STORE_TOKEN }}
         run: snapcraft upload mindx_*.snap --release stable
