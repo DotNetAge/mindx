@@ -13,9 +13,9 @@ func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.Response
 }
 
 func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreactevents.ExecutionSummaryData) {
-	d.logger.Info("[SSE-TRACE L5] sendExecutionSummary: total_tokens="+fmt.Sprint(summary.TokensUsed.TotalTokens)+
-		" input="+fmt.Sprint(summary.TokensUsed.InputTokens)+
-		" output="+fmt.Sprint(summary.TokensUsed.OutputTokens))
+	d.logger.Info("[SSE-TRACE L5] sendExecutionSummary: total_tokens=" + fmt.Sprint(summary.TokensUsed.TotalTokens) +
+		" input=" + fmt.Sprint(summary.TokensUsed.InputTokens) +
+		" output=" + fmt.Sprint(summary.TokensUsed.OutputTokens))
 	tableData := map[string]any{
 		"headers": []string{"Metric", "Value"},
 		"rows": []map[string]string{
@@ -31,15 +31,15 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreac
 		gateway.WithSessionID(sessionID),
 		gateway.WithResponseMeta(map[string]any{
 			"tokens_used": map[string]any{
-				"total_tokens":   summary.TokensUsed.TotalTokens,
-				"input_tokens":  summary.TokensUsed.InputTokens,
-				"output_tokens": summary.TokensUsed.OutputTokens,
-				"cached_tokens":  summary.TokensUsed.CachedTokens,
+				"total_tokens":     summary.TokensUsed.TotalTokens,
+				"input_tokens":     summary.TokensUsed.InputTokens,
+				"output_tokens":    summary.TokensUsed.OutputTokens,
+				"cached_tokens":    summary.TokensUsed.CachedTokens,
 				"reasoning_tokens": summary.TokensUsed.ReasoningTokens,
 			},
-			"iterations":    summary.TotalIterations,
-			"tool_calls":    summary.ToolCalls,
-			"duration":      summary.TotalDuration.String(),
+			"iterations": summary.TotalIterations,
+			"tool_calls": summary.ToolCalls,
+			"duration":   summary.TotalDuration.String(),
 		}))
 }
 

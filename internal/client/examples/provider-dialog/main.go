@@ -28,18 +28,18 @@ type model struct {
 	width  int
 	height int
 
-	leftWidth    int
-	rightWidth   int
-	mainVp       viewport.Model
-	sideVp       viewport.Model
+	leftWidth  int
+	rightWidth int
+	mainVp     viewport.Model
+	sideVp     viewport.Model
 
-	providerDlg   *dialog.ListDialog
-	apiKeyDlg     *dialog.InputDialog
-	modelDlg      *dialog.ListDialog
-	step         int
-	selectedProvider string
+	providerDlg          *dialog.ListDialog
+	apiKeyDlg            *dialog.InputDialog
+	modelDlg             *dialog.ListDialog
+	step                 int
+	selectedProvider     string
 	selectedProviderName string
-	modelNames    []string
+	modelNames           []string
 }
 
 func (m model) Init() tea.Cmd { return nil }

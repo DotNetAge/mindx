@@ -86,7 +86,6 @@ func yesNoIndicator(yes bool) string {
 	return "  Yes  \n**> No**"
 }
 
-
 func contentWidth(w int) int {
 	if w > minContentWidth {
 		cw := w - 4

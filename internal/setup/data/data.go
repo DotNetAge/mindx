@@ -1,10 +1,10 @@
 package data
 
 type ModelItem struct {
-	Name        string
-	Desc        string
-	BaseURL     string
-	CredRef     string
+	Name    string
+	Desc    string
+	BaseURL string
+	CredRef string
 }
 
 func (i ModelItem) Title() string       { return i.Name }

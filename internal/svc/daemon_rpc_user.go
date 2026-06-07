@@ -9,14 +9,14 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 	cfg := d.app.Config()
 
 	result := map[string]interface{}{
-		"version":           cfg.AppVersion,
-		"initialized":       cfg.Initialized,
-		"last_agent":        cfg.LastAgent,
-		"last_session_id":   cfg.LastSessionID,
-		"default_model":     cfg.DefaultModel,
-		"default_provider":  cfg.DefaultProvider,
-		"last_model":        cfg.LastModel,
-		"embedder_model":    cfg.EmbedderModel,
+		"version":          cfg.AppVersion,
+		"initialized":      cfg.Initialized,
+		"last_agent":       cfg.LastAgent,
+		"last_session_id":  cfg.LastSessionID,
+		"default_model":    cfg.DefaultModel,
+		"default_provider": cfg.DefaultProvider,
+		"last_model":       cfg.LastModel,
+		"embedder_model":   cfg.EmbedderModel,
 	}
 
 	if cfg.PermissionRules != nil {

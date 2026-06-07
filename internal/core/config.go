@@ -24,17 +24,17 @@ type PythonConfig struct {
 }
 
 type MindxConfig struct {
-	Version       int          `json:"version"`
-	AppVersion    string       `json:"-"` // runtime app version, not persisted
-	Initialized   bool         `json:"initialized"`
-	LastAgent     string       `json:"last_agent,omitempty"`
-	LastSessionID string       `json:"last_session_id,omitempty"`
-	LastModel       string `json:"last_model,omitempty"`
-	DefaultModel    string `json:"default_model,omitempty"`
-	DefaultProvider string `json:"default_provider,omitempty"`
-	EmbedderModel string       `json:"embedder_model,omitempty"`
-	Daemon        DaemonConfig `json:"daemon"`
-	Python        PythonConfig `json:"python"`
+	Version         int          `json:"version"`
+	AppVersion      string       `json:"-"` // runtime app version, not persisted
+	Initialized     bool         `json:"initialized"`
+	LastAgent       string       `json:"last_agent,omitempty"`
+	LastSessionID   string       `json:"last_session_id,omitempty"`
+	LastModel       string       `json:"last_model,omitempty"`
+	DefaultModel    string       `json:"default_model,omitempty"`
+	DefaultProvider string       `json:"default_provider,omitempty"`
+	EmbedderModel   string       `json:"embedder_model,omitempty"`
+	Daemon          DaemonConfig `json:"daemon"`
+	Python          PythonConfig `json:"python"`
 
 	// PermissionRules stores user-defined allow/deny/ask rules.
 	// Loaded by MindxPermissionRuleStore and injected into goreact's PermissionChain.
@@ -61,7 +61,7 @@ func (c *MindxConfig) HasEmbedder() bool {
 
 func DefaultMindxConfig(workspaceDir string) *MindxConfig {
 	return &MindxConfig{
-		Version: 1,
+		Version:  1,
 		filePath: filepath.Join(workspaceDir, "mindx.json"),
 	}
 }

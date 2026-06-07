@@ -12,9 +12,10 @@ import (
 )
 
 // logReadParams — 逆向分页读取日志
-//   offset: 从文件末尾向前的偏移行数（0 = 从最后开始）
-//   limit:  每次返回的行数（默认 10）
-//   stream: "main" (默认) 或 "error" — 选择读取哪个日志流
+//
+//	offset: 从文件末尾向前的偏移行数（0 = 从最后开始）
+//	limit:  每次返回的行数（默认 10）
+//	stream: "main" (默认) 或 "error" — 选择读取哪个日志流
 type logReadParams struct {
 	Offset int    `json:"offset,omitempty"` // 从末尾向前的偏移（行数）
 	Limit  int    `json:"limit,omitempty"`  // 每页行数，默认 10

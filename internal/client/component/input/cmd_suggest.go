@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	"github.com/DotNetAge/mindx/internal/client/style"
-	lipgloss "charm.land/lipgloss/v2"
 )
 
 // Suggestion holds common suggestion state and is embedded by concrete suggestion types.

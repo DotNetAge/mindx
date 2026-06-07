@@ -1263,7 +1263,7 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 			tokenUsage.TotalTokens += d.TotalTokens
 			tokenUsage.Timestamp = d.Timestamp
 			m.program.Send(clientmsg.ExecutionSummaryMsg{
-				SessionID: sessionID,
+				SessionID:  sessionID,
 				TokensUsed: tokenUsage,
 			})
 		})

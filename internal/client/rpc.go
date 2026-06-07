@@ -15,7 +15,7 @@ import (
 const daemonConnectTimeout = 5 * time.Second
 
 type daemonRPCClient struct {
-	client   *gateway.Client
+	client    *gateway.Client
 	connected bool
 }
 

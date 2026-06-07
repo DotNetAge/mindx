@@ -64,8 +64,8 @@ func TestGetUnknown(t *testing.T) {
 
 func TestBuiltinCommands(t *testing.T) {
 	deps := client.CommandDeps{
-		OnClear: func() {},
-		OnExit:  func() {},
+		OnClear:  func() {},
+		OnExit:   func() {},
 		OnDoctor: func() {},
 	}
 	r := client.BuiltinCommands(deps)
@@ -80,8 +80,8 @@ func TestBuiltinCommands(t *testing.T) {
 
 func TestHelpCommand(t *testing.T) {
 	deps := client.CommandDeps{
-		OnClear: func() {},
-		OnExit:  func() {},
+		OnClear:  func() {},
+		OnExit:   func() {},
 		OnDoctor: func() {},
 	}
 	r := client.BuiltinCommands(deps)
@@ -98,8 +98,8 @@ func TestHelpCommand(t *testing.T) {
 func TestClearCommand(t *testing.T) {
 	cleared := false
 	deps := client.CommandDeps{
-		OnClear: func() { cleared = true },
-		OnExit:  func() {},
+		OnClear:  func() { cleared = true },
+		OnExit:   func() {},
 		OnDoctor: func() {},
 	}
 	r := client.BuiltinCommands(deps)

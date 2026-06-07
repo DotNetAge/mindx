@@ -28,9 +28,9 @@ type InputArea struct {
 	modelSuggest   ModelSuggestion
 	sessionSuggest SessionSuggestion
 
-	history      []string
-	historyIdx    int
-	historyTmp    string
+	history    []string
+	historyIdx int
+	historyTmp string
 }
 
 func New() *InputArea {

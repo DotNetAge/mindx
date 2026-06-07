@@ -4,11 +4,11 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
 	"github.com/google/uuid"
-	lipgloss "charm.land/lipgloss/v2"
 )
 
 type NotificationBar struct {
