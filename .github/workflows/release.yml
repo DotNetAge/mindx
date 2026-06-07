@@ -118,7 +118,7 @@ jobs:
             ext: ''
           - goos: darwin
             goarch: amd64
-            runner: macos-13
+            runner: macos-latest
             ext: ''
           - goos: darwin
             goarch: arm64
