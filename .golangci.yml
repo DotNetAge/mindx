@@ -18,6 +18,7 @@ linters:
     paths:
       - gort$
       - onnxruntime$
+      - tree-sitter$
 
 formatters:
   enable:
@@ -26,9 +27,6 @@ formatters:
     paths:
       - gort$
       - onnxruntime$
+      - tree-sitter$
 
-issues:
-  exclude-rules:
-    # Skip CGO-dependent packages that require native libraries not available in CI
-    - path: '(^|/)gort/'
-      text: '.*'
+# CGO-dependent packages excluded via linters.exclusions and formatters.exclusions above
