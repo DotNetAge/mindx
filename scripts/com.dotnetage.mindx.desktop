@@ -3,7 +3,7 @@ Name=MindX
 GenericName=AI Agent Platform
 Comment=AI-native multi-agent conversation platform with OPC capabilities
 Exec=mindx %F
-Icon=com.dotnetage.mindh
+Icon=com.dotnetage.mindx
 Terminal=true
 Type=Application
 Categories=Development;Utility;Network;Chat;
@@ -15,4 +15,4 @@ Actions=StartDaemon;
 [Desktop Action StartDaemon]
 Name=Start Daemon Mode
 Exec=mindx start
-Icon=com.dotnetage.mindh
+Icon=com.dotnetage.mindx
