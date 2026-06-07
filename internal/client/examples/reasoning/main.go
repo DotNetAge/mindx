@@ -35,8 +35,8 @@ func (m model) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.tick(), m.simulateThinkingDelta())
 		case "2":
 			m.thinking = conv.Thinking{
-				IsActive:  false,
-				Duration:  1200 * time.Millisecond,
+				IsActive: false,
+				Duration: 1200 * time.Millisecond,
 			}
 			return m, nil
 		case "3":
@@ -44,8 +44,8 @@ func (m model) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.tick(), m.simulateThinkingDelta())
 		case "4":
 			m.thinking = conv.Thinking{
-				IsActive:  false,
-				Duration:  800 * time.Millisecond,
+				IsActive: false,
+				Duration: 800 * time.Millisecond,
 			}
 			return m, nil
 		case "5":

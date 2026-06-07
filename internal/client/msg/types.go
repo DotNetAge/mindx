@@ -84,10 +84,10 @@ type LLMTimeoutMsg struct {
 // This is NOT an error - it's a normal boundary condition.
 // The UI should display this as an informational notice with a friendly suggestion.
 type MaxTurnsReachedMsg struct {
-	SessionID  string
+	SessionID      string
 	TurnsCompleted int
-	MaxTurns      int
-	Suggestion    string
+	MaxTurns       int
+	Suggestion     string
 }
 
 type SessionDoneMsg struct {

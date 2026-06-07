@@ -66,7 +66,7 @@ var providerListCmd = &cobra.Command{
 		tbl := table.New(
 			table.WithColumns(cols),
 			table.WithRows(rows),
-			table.WithHeight(len(rows) + 1),
+			table.WithHeight(len(rows)+1),
 			table.WithWidth(100),
 		)
 		fmt.Println(tbl.View())

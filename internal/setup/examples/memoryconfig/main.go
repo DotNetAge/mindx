@@ -13,9 +13,9 @@ import (
 
 type model struct {
 	memoryConfig *memoryconfig.Model
-	scene       int
-	simulating  bool
-	progress    float64
+	scene        int
+	simulating   bool
+	progress     float64
 }
 
 type tickMsg time.Time
@@ -114,7 +114,7 @@ func (m model) View() tea.View {
 func main() {
 	m := model{
 		memoryConfig: memoryconfig.New("/tmp/workspace", false),
-		scene:       0,
+		scene:        0,
 	}
 
 	p := tea.NewProgram(m)

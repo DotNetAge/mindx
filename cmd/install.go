@@ -30,9 +30,9 @@ Examples:
 }
 
 var (
-	installDir      string
-	installNoDaemon bool
-	installNoPath   bool
+	installDir        string
+	installNoDaemon   bool
+	installNoPath     bool
 	installNoShortcut bool
 )
 

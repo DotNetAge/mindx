@@ -2,9 +2,9 @@ package data
 
 // ModelPricing holds per-model pricing per 1M tokens.
 type ModelPricing struct {
-	InputPrice   float64
-	OutputPrice  float64
-	CachedPrice  float64
+	InputPrice  float64
+	OutputPrice float64
+	CachedPrice float64
 }
 
 var builtinPricing = map[string]ModelPricing{

@@ -129,7 +129,6 @@ func renderMarkdown(r *glamour.TermRenderer, src string) string {
 	return out
 }
 
-
 func contentWidth(w int) int {
 	if w > minContentWidth {
 		cw := w - 4

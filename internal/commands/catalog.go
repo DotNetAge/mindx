@@ -8,9 +8,9 @@ import (
 
 // CatalogDeps holds external dependencies for catalog commands.
 type CatalogDeps struct {
-	ListAgents  func() ([]map[string]string, error)
-	ListModels  func() ([]map[string]string, error)
-	ListSkills  func() ([]map[string]string, error)
+	ListAgents func() ([]map[string]string, error)
+	ListModels func() ([]map[string]string, error)
+	ListSkills func() ([]map[string]string, error)
 }
 
 var catalogDeps CatalogDeps

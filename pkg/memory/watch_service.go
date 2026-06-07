@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/DotNetAge/gorag"
 	"github.com/DotNetAge/gorag/logging"
+	"github.com/fsnotify/fsnotify"
 )
 
 // debounceWindow is the time window for coalescing repeated fsnotify events.
@@ -43,7 +43,7 @@ type FileWatchService struct {
 	watcher   *fsnotify.Watcher
 	indexers  map[string]*ProjectIndexer // keyed by abs dir
 	cacheBase string                     // base directory for per-dir indexing caches
-	logger   logging.Logger
+	logger    logging.Logger
 
 	// VersionRecorder is called for each changed file to persist version snapshots.
 	// Set by Daemon to integrate with FileVersionStore.

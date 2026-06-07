@@ -47,8 +47,8 @@ func (r *CostRegistry) List() []NamedCost {
 }
 
 type costModelEntry struct {
-	Name string `yaml:"name"`
-	ModelCost    `yaml:",inline"`
+	Name      string `yaml:"name"`
+	ModelCost `yaml:",inline"`
 }
 
 type costFile struct {

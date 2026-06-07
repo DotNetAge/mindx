@@ -65,7 +65,6 @@ func yesNoIndicator(yes bool) string {
 	return "  Yes  \n**> No**"
 }
 
-
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:

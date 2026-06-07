@@ -113,7 +113,9 @@ func WebDir(workspaceDir string) string {
 }
 
 // handleLogDownload 下载日志文件
-//   GET /api/log/download?stream=main|error
+//
+//	GET /api/log/download?stream=main|error
+//
 // 通过白名单选择文件名，禁止路径穿越
 func (ws *WebServer) handleLogDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

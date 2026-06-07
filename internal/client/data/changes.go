@@ -4,9 +4,9 @@ import "strings"
 
 // FileChange represents a single file modification detected in the project.
 type FileChange struct {
-	File      string `json:"file"`      // relative path from project root
-	Additions int    `json:"additions"` // lines added
-	Deletions int    `json:"deletions"` // lines removed
+	File      string `json:"file"`           // relative path from project root
+	Additions int    `json:"additions"`      // lines added
+	Deletions int    `json:"deletions"`      // lines removed
 	Diff      string `json:"diff,omitempty"` // unified diff content
 }
 

@@ -81,7 +81,7 @@ var modelListCmd = &cobra.Command{
 		tbl := table.New(
 			table.WithColumns(cols),
 			table.WithRows(rows),
-			table.WithHeight(len(rows) + 1),
+			table.WithHeight(len(rows)+1),
 			table.WithWidth(80),
 		)
 		fmt.Println(tbl.View())
@@ -143,16 +143,16 @@ var modelRmCmd = &cobra.Command{
 // ── model add ──────────────────────────────────────────────────
 
 var modelAddFlags struct {
-	name            string
-	title           string
-	provider        string
-	contextLength   int64
-	maxTokens       int64
-	enabled         bool
-	funcCalling     bool
-	webSearching    bool
-	temperature     float64
-	topP            float64
+	name              string
+	title             string
+	provider          string
+	contextLength     int64
+	maxTokens         int64
+	enabled           bool
+	funcCalling       bool
+	webSearching      bool
+	temperature       float64
+	topP              float64
 	repetitionPenalty float64
 }
 
