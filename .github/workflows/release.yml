@@ -444,21 +444,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Setup .NET SDK for wingetcreate
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.x'
-
-      - name: Install wingetcreate
-        run: dotnet tool install --global wingetcreate
-
       - name: Submit Winget package
-        run: |
-          wingetcreate submit \
-            --token ${{ secrets.GITHUB_TOKEN }} \
-            --url https://github.com/${{ env.GITHUB_REPO }}/releases/download/${{ needs.prepare.outputs.version }}/mindx-${{ needs.prepare.outputs.version_num }}-windows-amd64.zip \
-            --version ${{ needs.prepare.outputs.version_num }}
+        uses: vedantmgoyal9/winget-releaser@main
         continue-on-error: true
+        with:
+          identifier: DotNetAge.Mindx
+          token: ${{ secrets.WINGET_TOKEN }}
+          release-tag: ${{ needs.prepare.outputs.version }}
+          installers-regex: windows-amd64
 
       - name: Summary
         run: |
@@ -529,8 +522,8 @@ jobs:
           chmod +x dist/AppDir/AppRun
 
           # Copy desktop entry & icon
-          cp scripts/com.dotnetage.mindh.desktop dist/AppDir/usr/share/applications/
-          cp scripts/com.dotnetage.mindh.svg dist/AppDir/usr/share/icons/hicolor/scalable/apps/ 2>/dev/null || true
+          cp scripts/com.dotnetage.mindx.desktop dist/AppDir/usr/share/applications/
+          cp scripts/com.dotnetage.mindx.svg dist/AppDir/usr/share/icons/hicolor/scalable/apps/ 2>/dev/null || true
 
           # Download linuxdeploy
           curl -sL \
@@ -543,8 +536,8 @@ jobs:
           ./linuxdeploy \
             --appdir dist/AppDir \
             --output appimage \
-            --desktop-file dist/AppDir/usr/share/applications/com.dotnetage.mindh.desktop \
-            --icon-file scripts/com.dotnetage.mindh.svg \
+            --desktop-file dist/AppDir/usr/share/applications/com.dotnetage.mindx.desktop \
+            --icon-file scripts/com.dotnetage.mindx.svg \
             2>&1 || {
             echo "WARNING: linuxdeploy failed, creating minimal AppImage..."
             # Minimal fallback: just bundle the binary
@@ -703,7 +696,7 @@ jobs:
   # Flatpak — submit PR to Flathub (stable only)
   #
   # NOTE: First-time setup required:
-  #   1. Fork https://github.com/flathub/com.dotnetage.mindh
+  #   1. Fork https://github.com/flathub/com.dotnetage.mindx
   #      (or create it via Flathub submission process)
   #   2. Add FLATPUBBot_TOKEN secret (GitHub PAT with repo access)
   # ==========================================================================
@@ -741,15 +734,15 @@ jobs:
           sed \
             -e "s|__RELEASE_URL__|${{ steps.sha256.outputs.release_url }}|g" \
             -e "s|__SHA256_AMD64__|${{ steps.sha256.outputs.sha256 }}|g" \
-            scripts/flatpak-manifest.yml.tpl > com.dotnetage.mindh.flatpak-ref.yml
+            scripts/flatpak-manifest.yml.tpl > com.dotnetage.mindx.flatpak-ref.yml
 
-          cat com.dotnetage.mindh.flatpak-ref.yml
+          cat com.dotnetage.mindx.flatpak-ref.yml
 
       - name: Submit to Flathub
         continue-on-error: true
         run: |
           echo "Flatpak submission requires manual setup:"
-          echo "  1. Fork https://github.com/flathub/com.dotnetage.mindh"
+          echo "  1. Fork https://github.com/flathub/com.dotnetage.mindx"
           echo "  2. Add FLATPUBBot_TOKEN secret"
           echo "Skipping automated submission for now."
 
@@ -757,9 +750,9 @@ jobs:
         run: |
           echo "## Flatpak" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "PR submitted to Flathub (\`com.dotnetage.mindh\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "PR submitted to Flathub (\`com.dotnetage.mindx\`)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Install:" >> "$GITHUB_STEP_SUMMARY"
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "flatpak install flathub com.dotnetage.mindh" >> "$GITHUB_STEP_SUMMARY"
+          echo "flatpak install flathub com.dotnetage.mindx" >> "$GITHUB_STEP_SUMMARY"
           echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"

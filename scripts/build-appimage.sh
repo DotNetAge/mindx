@@ -54,7 +54,7 @@ cat > "${APPDIR}/usr/share/applications/com.dotnetage.mindx.desktop" << 'DESKTOP
 Name=MindX
 Comment=AI-native multi-agent conversation platform
 Exec=mindx %F
-Icon=com.dotnetage.mindh
+Icon=com.dotnetage.mindx
 Terminal=true
 Type=Application
 Categories=Development;Utility;Network;
@@ -89,8 +89,8 @@ export VERSION="${VERSION}"
 "${LINUXDEPLOY}" \
   --appdir "${APPDIR}" \
   --output appimage \
-  -d "${APPDIR}/usr/share/applications/com.dotnetage.mindh.desktop" \
-  -i scripts/com.dotnetage.mindh.svg 2>/dev/null || true
+  -d "${APPDIR}/usr/share/applications/com.dotnetage.mindx.desktop" \
+  -i scripts/com.dotnetage.mindx.svg 2>/dev/null || true
 
 # ── Rename output ──────────────────────────────────────────────────────────
 if [ -f "Mindx-${VERSION}-x86_64.AppImage" ]; then

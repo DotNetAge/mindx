@@ -19,8 +19,8 @@ func TestSettings_Directories(t *testing.T) {
 	}{
 		{"SkillsDir", s.SkillsDir(), filepath.Join(tmpDir, "skills")},
 		{"ModelsFile", s.ModelsFile(), filepath.Join(tmpDir, "settings", "models.yml")},
-		// {"ProgramDir", s.ProgramDir(), "/tmp/mindh-test/programs"},
-		// {"DocumentDir", s.DocumentDir(), "/tmp/mindh-test/documents"},
+		// {"ProgramDir", s.ProgramDir(), "/tmp/mindx-test/programs"},
+		// {"DocumentDir", s.DocumentDir(), "/tmp/mindx-test/documents"},
 		{"DataDir", s.DataDir(), filepath.Join(tmpDir, "data")},
 		{"AgentsDir", s.AgentsDir(), filepath.Join(tmpDir, "agents")},
 		{"RulesFile", s.RulesFile(), filepath.Join(tmpDir, "settings", "rules.yml")},

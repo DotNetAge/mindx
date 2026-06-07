@@ -12,7 +12,6 @@ grade: stable
 apps:
   mindx:
     command: bin/mindx
-    completer: bash-completion/mindx
     plugs:
       - network
       - network-bind
