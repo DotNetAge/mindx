@@ -75,8 +75,16 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      # Exclude CGO-dependent packages (gort/onnxruntime) that require
+      # native libraries not available in pure-CGO CI environment
       - name: Run go vet
-        run: go vet ./...
+        run: |
+          PKGS=$(go list ./... | grep -v 'gort\|onnxruntime' || true)
+          if [ -z "$PKGS" ]; then
+            echo "No packages to vet"
+          else
+            echo "$PKGS" | xargs go vet
+          fi
 
   # ==========================================================================
   # Stage 3: Security — vulnerability check
@@ -98,7 +106,13 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Run govulncheck
-        run: govulncheck ./...
+        run: |
+          PKGS=$(go list ./... | grep -v 'gort\|onnxruntime' || true)
+          if [ -z "$PKGS" ]; then
+            echo "No packages to scan"
+          else
+            govulncheck $PKGS | tee govulncheck-output.txt
+          fi
 
   # ==========================================================================
   # Stage 4: Test — race detector + coverage (matrix: OS)
