@@ -175,6 +175,7 @@ jobs:
           ls -lh dist/
 
       - name: Package (tar.gz / zip)
+        shell: bash
         run: |
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
           cd dist
