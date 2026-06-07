@@ -1,5 +1,3 @@
-version: "2"
-
 linters:
   enable:
     - govet
@@ -13,5 +11,25 @@ linters:
     - nilerr
     - unconvert
 
+issues:
+  exclude-rules:
+    # Skip CGO-dependent packages that require native libraries not available in CI
+    - path: '(^|/)gort/'
+      text: '.*'
+      linters:
+        - govet
+        - errcheck
+        - staticcheck
+        - unused
+        - gosec
+        - bodyclose
+        - nilerr
+        - unconvert
+
 run:
   timeout: 5m
+  # Skip CGO-dependent packages that require native libraries not available in CI
+  skip-dirs:
+    - gort
+    - onnxruntime
+    - vendor$
