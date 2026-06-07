@@ -44,8 +44,8 @@ chmod +x "${APPDIR}/usr/bin/mindx"
 
 # ── Copy runtime (if exists) ────────────────────────────────────────────────
 if [ -d "runtime" ]; then
-  mkdir -p "${APPDIR}/usr/share/mindr/runtime"
-  cp -r runtime/* "${APPDIR}/usr/share/mindr/runtime/"
+  mkdir -p "${APPDIR}/usr/share/mindx/runtime"
+  cp -r runtime/* "${APPDIR}/usr/share/mindx/runtime/"
 fi
 
 # ── Desktop entry ───────────────────────────────────────────────────────────
