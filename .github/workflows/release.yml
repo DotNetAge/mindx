@@ -142,9 +142,9 @@ jobs:
         if: matrix.goos == 'linux' && matrix.goarch == 'arm64'
         run: sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      - name: Setup MinGW (Windows CGO)
+      - name: Setup MinGW + zip (Windows CGO)
         if: matrix.goos == 'windows'
-        run: choco install mingw -y --no-progress
+        run: choco install mingw zip -y --no-progress
 
       - name: Build
         shell: bash
