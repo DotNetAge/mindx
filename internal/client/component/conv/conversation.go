@@ -74,7 +74,7 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 		if m.Status == StatusDone || m.Status == StatusError {
 			return m, nil
 		}
-		if curr := m.currentRound(); curr != nil && curr.ThoughtContent != "" && m.Thinking.IsActive == false {
+		if curr := m.currentRound(); curr != nil && curr.ThoughtContent != "" && !m.Thinking.IsActive {
 			m.Rounds = append(m.Rounds, ConversationRound{})
 		}
 		m.ensureCurrentRound()
@@ -151,7 +151,7 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 		if m.Status == StatusDone {
 			return m, nil
 		}
-		switch e.(type) {
+		switch e := e.(type) {
 		case msg.AgentErrorMsg:
 			newError, _ := UpdateErrorMsg(m.Error, e)
 			m.Error = newError
@@ -162,7 +162,7 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 			m.Status = StatusError
 			return m, cmd
 		case msg.MaxTurnsReachedMsg:
-			m.MaxTurnsNotice = e.(msg.MaxTurnsReachedMsg).Suggestion
+			m.MaxTurnsNotice = e.Suggestion
 			m.Status = StatusDone  // 正常完成（只是到达边界）
 			return m, nil
 		default:

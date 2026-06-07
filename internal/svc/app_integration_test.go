@@ -217,10 +217,11 @@ func dialTestWS(t *testing.T, url string) *websocket.Conn {
 
 	header := http.Header{"Origin": {url}}
 
-	conn, _, err := websocket.DefaultDialer.Dial(url, header)
+	conn, resp, err := websocket.DefaultDialer.Dial(url, header)
 	if err != nil {
 		t.Fatalf("failed to dial websocket: %v", err)
 	}
+	t.Cleanup(func() { resp.Body.Close() })
 
 	return conn
 }

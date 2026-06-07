@@ -17,7 +17,6 @@ var (
 	colLine   = lipgloss.NewStyle().Foreground(style.ThemeDim)
 	colHdrOld = lipgloss.NewStyle().Foreground(style.ThemeRed).Bold(true)
 	colHdrNew = lipgloss.NewStyle().Foreground(style.ThemeGreen).Bold(true)
-	hunkStyle = lipgloss.NewStyle().Foreground(style.ThemeDarkGray).Italic(true)
 	numStyle  = lipgloss.NewStyle().Foreground(style.ThemeDarkGray)
 )
 

@@ -81,10 +81,6 @@ func (d *Daemon) handlePermissionReply(_ context.Context, raw json.RawMessage) (
 	return map[string]string{"status": "ok"}, nil
 }
 
-type cancelParams struct {
-	SessionID string `json:"session_id,omitempty"`
-}
-
 func (d *Daemon) handleMessageCancel(_ context.Context, _ json.RawMessage) (any, error) {
 	d.logger.Info("message.cancel called, cancelling all running executions")
 	d.clientCancels.Range(func(key, value any) bool {

@@ -73,14 +73,6 @@ func renderMarkdown(r *glamour.TermRenderer, src string) string {
 	return out
 }
 
-func paddedView(content string, height int) string {
-	lines := strings.Count(content, "\n") + 1
-	if height > lines+1 {
-		return content + strings.Repeat("\n", height-lines)
-	}
-	return content + "\n"
-}
-
 func contentWidth(w int) int {
 	if w > minContentWidth {
 		cw := w - 4

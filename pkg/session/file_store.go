@@ -160,10 +160,6 @@ func (s *FileSessionStore) sessionFilePath(agentName, sessionID string) string {
 	return filepath.Join(s.sessionDir(agentName, sessionID), "session.yml")
 }
 
-func (s *FileSessionStore) usageFilePath(agentName, sessionID string) string {
-	return filepath.Join(s.sessionDir(agentName, sessionID), "usages.yml")
-}
-
 func (s *FileSessionStore) findSessionDir(sessionID string) string {
 	var result string
 	_ = filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {

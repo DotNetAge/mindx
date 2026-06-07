@@ -236,7 +236,7 @@ func ViewActionStep(step ActionStep, blinkOn bool, width int) string {
 }
 
 func formatParams(params map[string]any) string {
-	if params == nil || len(params) == 0 {
+	if len(params) == 0 {
 		return ""
 	}
 	keys := make([]string, 0, len(params))

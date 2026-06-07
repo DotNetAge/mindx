@@ -101,7 +101,7 @@ func (s *FileVersionStore) CountChanges(sessionDir, filePath string) (additions,
 	if err != nil {
 		return 0, 0, err
 	}
-	_, add, del := computeSimpleDiff(string(initial), string(latest))
+	_, add, del := computeSimpleDiff(initial, latest)
 	return add, del, nil
 }
 

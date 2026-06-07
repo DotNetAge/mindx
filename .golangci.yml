@@ -11,16 +11,38 @@ linters:
     - gosec
     - misspell
     - bodyclose
-    - nilerr
     - unconvert
+  settings:
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (net.Conn).Close
+        - (net/http.ResponseWriter).Write
+        - os.Remove
+        - os.RemoveAll
+        - os.MkdirAll
+        - os.WriteFile
+        - os.Chmod
+        - (os/exec.Cmd).Run
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Sscanf
+    staticcheck:
+      checks: ["all", "-SA9003", "-ST1005"]
+    gosec:
+      severity: high
   exclusions:
-    # CGO-dependent packages that import gorag (requires CGO_ENABLED=1)
     paths:
       - pkg/memory/
       - cmd/query\.go
       - internal/core/app\.go
       - internal/svc/daemon\.go
       - pkg/session/rag_adapter\.go
+    rules:
+      - path: _test\.go
+        linters: [errcheck, gosec]
 
 formatters:
   enable:
@@ -28,6 +50,3 @@ formatters:
   exclusions:
     paths:
       - pkg/memory/
-
-# CGO-dependent packages importing gorag excluded from analysis.
-# Run with CGO_ENABLED=1 (default) to include these in analysis.

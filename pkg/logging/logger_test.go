@@ -42,9 +42,8 @@ func TestDefaultConsoleLogger(t *testing.T) {
 }
 
 func TestDefaultConsoleLogger_ImplementsInterface(t *testing.T) {
-	logger := DefaultConsoleLogger()
-	_, ok := logger.(Logger)
-	assert.True(t, ok)
+	t.Helper()
+	var _ Logger = DefaultConsoleLogger()
 }
 
 func TestDefaultFileLogger_Success(t *testing.T) {
@@ -70,8 +69,7 @@ func TestDefaultFileLogger_InvalidPath(t *testing.T) {
 func TestDefaultNoopLogger(t *testing.T) {
 	logger := DefaultNoopLogger()
 	assert.NotNil(t, logger)
-	_, ok := logger.(Logger)
-	assert.True(t, ok)
+	var _ Logger = logger
 }
 
 func TestNoopLogger_AllMethodsNoOp(t *testing.T) {
