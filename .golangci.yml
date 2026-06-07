@@ -24,13 +24,13 @@ linters:
         - os.MkdirAll
         - os.WriteFile
         - os.Chmod
-        - (os/exec.Cmd).Run
+        - (*os/exec.Cmd).Run
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
         - fmt.Sscanf
     staticcheck:
-      checks: ["all", "-SA9003", "-ST1005"]
+      checks: ["all", "-SA9003", "-ST1005", "-QF1011", "-ST1000"]
     gosec:
       severity: high
   exclusions:

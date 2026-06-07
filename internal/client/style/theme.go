@@ -1,3 +1,4 @@
+// Package style provides color themes and styling utilities for the MindX TUI.
 package style
 
 import (

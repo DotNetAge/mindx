@@ -10,12 +10,12 @@ import (
 )
 
 type OptionsDialog struct {
-	Visible  bool
-	Title    string
-	Prompt   string
-	Options  []string
-	panel    *choices.ChoicesPanel
-	width    int
+	Visible bool
+	Title   string
+	Prompt  string
+	Options []string
+	panel   *choices.ChoicesPanel
+	width   int
 }
 
 func NewOptionsDialog(title string) *OptionsDialog {
@@ -72,7 +72,7 @@ func (d *OptionsDialog) Update(msg any) (*OptionsDialog, tea.Cmd) {
 						return OptionsDialogResult{
 							Indices:    sel.Indices,
 							CustomText: sel.CustomText,
-							Cancelled:   len(sel.Indices) == 0 && sel.CustomText == "",
+							Cancelled:  len(sel.Indices) == 0 && sel.CustomText == "",
 						}
 					}
 				}
@@ -119,5 +119,5 @@ func (d *OptionsDialog) dialogWidth() int {
 type OptionsDialogResult struct {
 	Indices    []int
 	CustomText string
-	Cancelled   bool
+	Cancelled  bool
 }
