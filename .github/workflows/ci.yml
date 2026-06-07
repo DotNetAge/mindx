@@ -75,11 +75,11 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      # Exclude CGO-dependent packages (gort/onnxruntime) that require
+      # Exclude CGO-dependent packages (gort/onnxruntime/tree-sitter) that require
       # native libraries not available in pure-CGO CI environment
       - name: Run go vet
         run: |
-          PKGS=$(go list ./... | grep -v 'gort\|onnxruntime' || true)
+          PKGS=$(go list ./... | grep -v 'gort\|onnxruntime\|tree-sitter' || true)
           if [ -z "$PKGS" ]; then
             echo "No packages to vet"
           else
@@ -107,7 +107,7 @@ jobs:
 
       - name: Run govulncheck
         run: |
-          PKGS=$(go list ./... | grep -v 'gort\|onnxruntime' || true)
+          PKGS=$(go list ./... | grep -v 'gort\|onnxruntime\|tree-sitter' || true)
           if [ -z "$PKGS" ]; then
             echo "No packages to scan"
           else

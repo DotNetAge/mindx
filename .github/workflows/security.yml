@@ -106,7 +106,7 @@ jobs:
 
       - name: Run govulncheck
         run: |
-          PKGS=$(go list ./... | grep -v 'gort\|onnxruntime' || true)
+          PKGS=$(go list ./... | grep -v 'gort\|onnxruntime\|tree-sitter' || true)
           if [ -z "$PKGS" ]; then
             echo "No packages to scan"
           else
