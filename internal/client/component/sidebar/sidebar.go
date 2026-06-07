@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
 
 	"github.com/DotNetAge/mindx/internal/client/component/welcome"
@@ -54,7 +54,7 @@ type Sidebar struct {
 func New() *Sidebar {
 	return &Sidebar{
 		welcome: welcome.New(),
-		vp:     viewport.New(),
+		vp:      viewport.New(),
 	}
 }
 

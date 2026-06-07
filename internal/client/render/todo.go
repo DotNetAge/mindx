@@ -73,7 +73,7 @@ func (tl *TodoList) renderItem(item TodoItem) string {
 	icon := tl.statusIcon(item.Status)
 	iconStyle := tl.statusIconStyle(item.Status)
 
-	textStyle := style.WhiteStyle
+	var textStyle lipgloss.Style
 	switch item.Status {
 	case TodoCompleted:
 		textStyle = style.GrayStyle
