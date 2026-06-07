@@ -52,3 +52,6 @@ bin/
 dev-dist/
 .tmp/
 .qoder/
+test-output.txt
+.claude/scheduled_tasks.lock
+docs/docker-hub-readme.md
