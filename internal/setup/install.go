@@ -25,10 +25,10 @@ type InstallOptions struct {
 
 // InstallResult reports what was done during installation.
 type InstallResult struct {
-	BinaryDest    string // where the binary was installed
-	DaemonSetup   bool   // whether daemon was registered
-	PathConfigured bool  // whether PATH was updated
-	ShortcutCreated bool // whether desktop shortcut was created
+	BinaryDest      string // where the binary was installed
+	DaemonSetup     bool   // whether daemon was registered
+	PathConfigured  bool   // whether PATH was updated
+	ShortcutCreated bool   // whether desktop shortcut was created
 }
 
 // Install performs a full platform-aware installation of MindX.

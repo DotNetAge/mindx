@@ -61,7 +61,7 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 		cfg.DefaultModel = result.SelectedModel
 		cfg.LastModel = result.SelectedModel
 	}
-	
+
 	if result.SelectedProvider != "" {
 		cfg.DefaultProvider = result.SelectedProvider
 	}
