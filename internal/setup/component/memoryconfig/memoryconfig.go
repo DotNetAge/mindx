@@ -86,13 +86,6 @@ func yesNoIndicator(yes bool) string {
 	return "  Yes  \n**> No**"
 }
 
-func paddedView(content string, height int) string {
-	lines := strings.Count(content, "\n") + 1
-	if height > lines+1 {
-		return content + strings.Repeat("\n", height-lines)
-	}
-	return content + "\n"
-}
 
 func contentWidth(w int) int {
 	if w > minContentWidth {
