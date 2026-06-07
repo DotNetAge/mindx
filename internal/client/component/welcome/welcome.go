@@ -51,9 +51,9 @@ func (w *WelcomePanel) View() string {
 	}
 
 	return lipgloss.NewStyle().
-			Padding(0, 1).
-			Width(w.Width).
-			Render(strings.TrimRight(b.String(), "\n"))
+		Padding(0, 1).
+		Width(w.Width).
+		Render(strings.TrimRight(b.String(), "\n"))
 }
 
 func (w *WelcomePanel) renderGradientTitle() string {
