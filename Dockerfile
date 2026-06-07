@@ -2,35 +2,13 @@
 # MindX Docker Image — Alpine (musl) base, matches musl-cross compiled binary
 # =============================================================================
 # Build:
-#   1. Pre-compile: CGO_ENABLED=1 CC=x86_64-linux-musl-gcc GOOS=linux \
-#      GOARCH=amd64 go build -o runtime/bin/mindx .
-#   2. docker compose build
+#   Local:  make docker  →  pre-compile + docker compose build
+#   CI:     build job   →  cross-compile artifacts → docker build-push
 #
-# Version injection (optional):
-#   docker build --build-arg VERSION=v2.2.0 --build-arg COMMIT=abc1234 .
+# Binary source: runtime/bin/mindx (pre-compiled, NOT built inside Docker)
 # =============================================================================
 
-# ---- Build stage (optional: compile from source) ----
-FROM golang:1.26-alpine AS builder
-
-WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-
-ARG VERSION=dev
-ARG COMMIT=unknown
-ARG BUILD_TIME=unknown
-
-RUN CGO_ENABLED=0 go build \
-    -trimpath \
-    -ldflags="-s -w \
-      -X github.com/DotNetAge/mindx/cmd.Version=${VERSION#v} \
-      -X github.com/DotNetAge/mindx/cmd.Commit=${COMMIT} \
-      -X github.com/DotNetAge/mindx/cmd.BuildTime=${BUILD_TIME}" \
-    -o /mindx .
-
-# ---- Runtime stage ----
+# ---- Runtime image ----
 FROM alpine:3.19
 
 LABEL maintainer="DotNetAge <ray@dotnetage.com>"
@@ -57,12 +35,11 @@ RUN adduser -D -s /bin/bash mindx
 USER mindx
 WORKDIR /home/mindx
 
-# Deploy runtime environment + binary (prefer pre-built, fallback to builder)
+# Deploy runtime environment + pre-built binary
 COPY --chown=mindx:mindx runtime/ /home/mindx/.mindx/
-COPY --from=builder --chown=mindx:mindx /mindx /home/mindx/.mindx/bin/mindx
 
 # Ensure binary is executable
-RUN chmod +x /home/mindx/.mindx/bin/mindx 2>/dev/null || true
+RUN [ -f /home/mindx/.mindx/bin/mindx ] && chmod +x /home/mindx/.mindx/bin/mindx || true
 
 # Runtime directories
 RUN mkdir -p /home/mindx/.mindx/logs \
@@ -70,6 +47,8 @@ RUN mkdir -p /home/mindx/.mindx/logs \
 
 # Python venv
 RUN python3 -m venv /home/mindx/.mindx/.venv
+RUN /home/mindx/.mindx/.venv/bin/pip freeze > /home/mindx/.mindx/requirements.txt
+RUN /home/mindx/.mindx/.venv/bin/pip install -r /home/mindx/.mindx/requirements.txt
 
 # Fix venv path in mindx.json for container
 RUN sed -i 's|/Users/ray/.mindx/.venv|/home/mindx/.mindx/.venv|g' \
