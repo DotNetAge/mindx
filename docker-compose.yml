@@ -1,28 +1,64 @@
+# =============================================================================
+# MindX Docker Compose — Development & Production
+# =============================================================================
+#
+# Version is auto-generated from git tag by `make docker` (writes .env):
+#   MINDX_VERSION  = $(git describe --tags)   e.g. v2.2.0 or dev
+#   MINDX_COMMIT   = $(git rev-parse --short) e.g. a1b2c3d
+#   MINDX_BUILD_TIME = UTC timestamp
+#
+# Usage:
+#   make docker              # Generate .env from git → Build + Up
+#   docker compose up -d     # Start daemon (reads .env)
+#   docker compose down      # Stop and remove
+#   docker compose logs -f   # Tail logs
+#
+# Manual .env example:
+#   MINDX_VERSION=v2.2.0
+#   DEEPSEEK_API_KEY=sk-xxx
+# =============================================================================
+
 services:
   mindx:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: mindx-daemon
+      args:
+        VERSION: ${MINDX_VERSION:-dev}
+        COMMIT: ${MINDX_COMMIT:-unknown}
+        BUILD_TIME: ${MINDX_BUILD_TIME:-unknown}
+    image: mindx:${MINDX_VERSION:-dev}
+    container_name: ${COMPOSE_PROJECT_NAME:-mindx}-daemon
     ports:
-      - "1313:1313"   # Web UI
-      - "1314:1314"   # WebSocket
+      - "${MINDX_WEB_PORT:-1313}:1313" # Web UI (HTTP)
+      - "${MINDX_WS_PORT:-1314}:1314" # WebSocket Gateway
     environment:
-      # 在此设置 API Key（变量名定义在 runtime/settings/providers.yml 中）
+      # LLM Provider API Keys (see runtime/settings/providers.yml)
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ZHIPU_API_KEY=${ZHIPU_API_KEY:-}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+      - ARK_API_KEY=${ARK_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
     volumes:
-      # 持久化会话历史、日志
+      # Persistent sessions & logs
       - mindx-data:/home/mindx/.mindx/sessions
       - mindx-logs:/home/mindx/.mindx/logs
-      # 工作区目录（与宿主机共享）
-      # Agent 可在该目录下读写文件，宿主机直接访问
-      # 例: Windows 上映射 D:\workspaces
+      # Workspace shared with host
       - ./workspaces:/home/mindx/workspaces
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:1313/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
 volumes:
   mindx-data:
+    name: ${COMPOSE_PROJECT_NAME:-mindx}-data
   mindx-logs:
+    name: ${COMPOSE_PROJECT_NAME:-mindx}-logs
