@@ -231,6 +231,7 @@ jobs:
 
       - name: Get version info
         id: version
+        shell: bash
         run: |
           echo "version=$(git describe --tags --abbrev=0 2>/dev/null || echo 'dev')" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
