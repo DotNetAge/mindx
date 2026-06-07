@@ -32,7 +32,7 @@ concurrency:
 # ==========================================================================
 env:
   GO_VERSION: '1.26'
-  CGO_ENABLED: 0
+  CGO_ENABLED: 1
   GOLANGCI_LINT_VERSION: v2.9
   MINDX_WORKSPACE: ${{ github.workspace }}/.test
 
@@ -75,8 +75,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      # Exclude CGO-dependent packages (gort/onnxruntime/tree-sitter) that require
-      # native libraries not available in pure-CGO CI environment
+      # Note: vet runs with CGO_ENABLED=1 (set globally) so CGO-dependent
+      # packages (gorag/go-tree-sitter/onnxruntime_go) compile correctly.
       - name: Run go vet
         run: |
           PKGS=$(go list ./... | grep -v 'gort\|onnxruntime\|tree-sitter' || true)
@@ -192,16 +192,11 @@ jobs:
             goarch: arm64
             runner: ubuntu-latest
           - goos: darwin
-            goarch: amd64
-            runner: ubuntu-latest
-          - goos: darwin
             goarch: arm64
-            runner: ubuntu-latest
+            runner: macos-latest
           - goos: windows
             goarch: amd64
-            runner: ubuntu-latest
-    env:
-      CGO_ENABLED: 0
+            runner: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -212,6 +207,14 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      - name: Install C cross-compiler (linux/arm64)
+        if: matrix.goos == 'linux' && matrix.goarch == 'arm64'
+        run: sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Setup MinGW (Windows CGO)
+        if: matrix.goos == 'windows'
+        run: choco install mingw -y --no-progress
+
       - name: Get version info
         id: version
         run: |
@@ -220,10 +223,15 @@ jobs:
           echo "build_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
       - name: Build
+        shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
+          # Set C cross-compiler for linux/arm64 (CGO requires matching CC)
+          if [ "$GOOS" = "linux" ] && [ "$GOARCH" = "arm64" ]; then
+            export CC=aarch64-linux-gnu-gcc
+          fi
           BINARY_NAME=mindx
           VERSION=${{ steps.version.outputs.version }}
           COMMIT=${{ steps.version.outputs.commit }}

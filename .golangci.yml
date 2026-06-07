@@ -14,19 +14,20 @@ linters:
     - nilerr
     - unconvert
   exclusions:
-    # Skip CGO-dependent packages that require native libraries not available in CI
+    # CGO-dependent packages that import gorag (requires CGO_ENABLED=1)
     paths:
-      - gort$
-      - onnxruntime$
-      - tree-sitter$
+      - pkg/memory/
+      - cmd/query\.go
+      - internal/core/app\.go
+      - internal/svc/daemon\.go
+      - pkg/session/rag_adapter\.go
 
 formatters:
   enable:
     - gofmt
   exclusions:
     paths:
-      - gort$
-      - onnxruntime$
-      - tree-sitter$
+      - pkg/memory/
 
-# CGO-dependent packages excluded via linters.exclusions and formatters.exclusions above
+# CGO-dependent packages importing gorag excluded from analysis.
+# Run with CGO_ENABLED=1 (default) to include these in analysis.
