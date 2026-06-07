@@ -28,7 +28,7 @@ parts:
       - go/latest/stable
     override-build: |
       cd $CRAFT_PART_SRC_WORK
-      CGO_ENABLED=0 go build \
+      CGO_ENABLED=1 go build \
         -trimpath \
         -ldflags="-s -w -X github.com/DotNetAge/mindx/cmd.Version=__VERSION__" \
         -o $CRAFT_PART_INSTALL/bin/mindx .
