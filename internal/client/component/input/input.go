@@ -198,6 +198,15 @@ func (i *InputArea) handleKey(k tea.KeyPressMsg) (*InputArea, tea.Cmd) {
 		}
 		return i, nil
 
+	case i.isExitShortcut(key):
+		if i.TextBuffer.Len() == 0 {
+			return i, func() tea.Msg { return clientmsg.ExitMsg{} }
+		}
+		i.TextBuffer.Reset()
+		i.CursorPos = 0
+		i.resetSuggestions()
+		return i, func() tea.Msg { return nil }
+
 	case i.isDeleteWord(key):
 		i.deleteWordBeforeCursor()
 		return i, nil
@@ -232,6 +241,13 @@ func (i *InputArea) isClearScreenShortcut(k tea.Key) bool {
 		return k.Mod.Contains(tea.ModSuper) && (k.Code == 'l' || k.Code == 'L')
 	}
 	return k.Mod.Contains(tea.ModCtrl) && (k.Code == 'l' || k.Code == 'L')
+}
+
+func (i *InputArea) isExitShortcut(k tea.Key) bool {
+	if isDarwin {
+		return k.Mod.Contains(tea.ModSuper) && (k.Code == 'c' || k.Code == 'C')
+	}
+	return k.Mod.Contains(tea.ModCtrl) && (k.Code == 'c' || k.Code == 'C')
 }
 
 func (i *InputArea) isHomeShortcut(k tea.Key) bool {
