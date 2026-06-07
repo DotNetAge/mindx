@@ -571,36 +571,36 @@ jobs:
             chmod +x "dist/mindx_${ARCH}"
 
             # Generate nfpm config for this arch
-            cat > dist/nfpm-${ARCH}.yaml << NFPMEOF
-name: mindx
-arch: "${ARCH}"
-version: "${VERSION_NUM}"
-section: utils
-priority: optional
-maintainer: "DotNetAge <ray@dotnetage.com>"
-description: |
-  MindX - AI-native multi-agent conversation platform with OPC capabilities.
-  A powerful CLI tool for managing AI agents, providers, and conversations.
-homepage: "https://github.com/${{ env.GITHUB_REPO }}"
-license: MIT
-vendor: DotNetAge
-
-contents:
-  - src: dist/mindx_${ARCH}
-    dst: /usr/local/bin/mindx
-    file_info:
-      mode: 0755
-
-scripts:
-  postinstall: |
-    #!/bin/bash
-    echo "MindX ${VERSION_NUM} installed!"
-    echo "Run 'mindx --help' to get started."
-  preremove: |
-    #!/bin/bash
-    echo "Removing MindX..."
-    echo "User data (~/.mindx/) is preserved."
-NFPM
+            {
+              echo "name: mindx"
+              echo "arch: \"${ARCH}\""
+              echo "version: \"${VERSION_NUM}\""
+              echo "section: utils"
+              echo "priority: optional"
+              echo "maintainer: \"DotNetAge <ray@dotnetage.com>\""
+              echo "description: |"
+              echo "  MindX - AI-native multi-agent conversation platform with OPC capabilities."
+              echo "  A powerful CLI tool for managing AI agents, providers, and conversations."
+              echo "homepage: \"https://github.com/${GITHUB_REPO}\""
+              echo "license: MIT"
+              echo "vendor: DotNetAge"
+              echo ""
+              echo "contents:"
+              echo "  - src: dist/mindx_${ARCH}"
+              echo "    dst: /usr/local/bin/mindx"
+              echo "    file_info:"
+              echo "      mode: 0755"
+              echo ""
+              echo "scripts:"
+              echo "  postinstall: |"
+              echo "    #!/bin/bash"
+              echo "    echo \"MindX ${VERSION_NUM} installed!\""
+              echo "    echo \"Run 'mindx --help' to get started.\""
+              echo "  preremove: |"
+              echo "    #!/bin/bash"
+              echo "    echo \"Removing MindX...\""
+              echo "    echo \"User data (~/.mindx/) is preserved.\""
+            } > "dist/nfpm-${ARCH}.yaml"
 
             nfpm pkg --config "dist/nfpm-${ARCH}.yaml" --target dist/ --packager deb
 
