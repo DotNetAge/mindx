@@ -45,7 +45,7 @@ type Check struct {
 
 func runDoctor(cmd *cobra.Command, args []string) error {
 	fmt.Println("🔍 MindX Health Check")
-	fmt.Println(strings.Repeat("─", 50)
+	fmt.Println(strings.Repeat("─", 50))
 
 	checks := runAllChecks()
 
@@ -64,7 +64,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println()
-	fmt.Println(strings.Repeat("─", 50)
+	fmt.Println(strings.Repeat("─", 50))
 
 	if !hasIssues {
 		fmt.Println("✅ All systems healthy!")
