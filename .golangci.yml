@@ -1,4 +1,8 @@
+# golangci-lint v2 configuration
+version: "2"
+
 linters:
+  default: none
   enable:
     - govet
     - errcheck
@@ -6,30 +10,25 @@ linters:
     - unused
     - gosec
     - misspell
-    - gofmt
     - bodyclose
     - nilerr
     - unconvert
+  exclusions:
+    # Skip CGO-dependent packages that require native libraries not available in CI
+    paths:
+      - gort$
+      - onnxruntime$
+
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    paths:
+      - gort$
+      - onnxruntime$
 
 issues:
   exclude-rules:
     # Skip CGO-dependent packages that require native libraries not available in CI
     - path: '(^|/)gort/'
       text: '.*'
-      linters:
-        - govet
-        - errcheck
-        - staticcheck
-        - unused
-        - gosec
-        - bodyclose
-        - nilerr
-        - unconvert
-
-run:
-  timeout: 5m
-  # Skip CGO-dependent packages that require native libraries not available in CI
-  skip-dirs:
-    - gort
-    - onnxruntime
-    - vendor$
