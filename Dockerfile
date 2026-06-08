@@ -11,7 +11,7 @@
 # ---- Runtime image ----
 FROM alpine:3.19
 
-LABEL maintainer="DotNetAge <ray@dotnetage.com>"
+LABEL maintainer="DotNetAge <ray@raya.cn>"
 LABEL org.opencontainers.image.source="https://github.com/DotNetAge/mindx"
 LABEL org.opencontainers.image.description="MindX AI-native multi-agent conversation platform"
 
@@ -20,15 +20,15 @@ ENV MINDX_VERSION=${VERSION}
 
 # Install runtime dependencies
 RUN apk add --no-cache \
-        ca-certificates \
-        curl \
-        git \
-        python3 \
-        py3-pip \
-        py3-virtualenv \
-        nodejs \
-        tini \
-        bash
+    ca-certificates \
+    curl \
+    git \
+    python3 \
+    py3-pip \
+    py3-virtualenv \
+    nodejs \
+    tini \
+    bash
 
 # Non-root user
 RUN adduser -D -s /bin/bash mindx
@@ -43,7 +43,7 @@ RUN [ -f /home/mindx/.mindx/bin/mindx ] && chmod +x /home/mindx/.mindx/bin/mindx
 
 # Runtime directories
 RUN mkdir -p /home/mindx/.mindx/logs \
-             /home/mindx/.mindx/sessions
+    /home/mindx/.mindx/sessions
 
 # Python venv
 RUN python3 -m venv /home/mindx/.mindx/.venv
@@ -52,7 +52,7 @@ RUN /home/mindx/.mindx/.venv/bin/pip install -r /home/mindx/.mindx/requirements.
 
 # Fix venv path in mindx.json for container
 RUN sed -i 's|/Users/ray/.mindx/.venv|/home/mindx/.mindx/.venv|g' \
-       /home/mindx/.mindx/mindx.json 2>/dev/null || true
+    /home/mindx/.mindx/mindx.json 2>/dev/null || true
 
 # Workspace directory (shared with host)
 RUN mkdir -p /home/mindx/workspaces
