@@ -6,6 +6,10 @@
 [![Homebrew](https://img.shields.io/homebrew/v/mindx)](https://formulae.brew.sh/formula/mindx)
 [![Docker Pulls](https://img.shields.io/docker/pulls/dotnetage/mindx)](https://hub.docker.com/r/dotnetage/mindx)
 
+<p>
+  <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
+</p>
+
 > MindX is an open-source AI Agent orchestration platform (Agent Harness) that leverages hybrid orchestration modes, intelligent memory systems, and a proprietary tech stack to help you efficiently build, manage, and run AI Agent workflows. Whether for day-to-day coding assistance or complex multi-step task automation, MindX delivers professional-grade agent orchestration capabilities.
 
 <p align="center">
