@@ -1,1827 +1,294 @@
-# MindX² — 让一个人运营一家公司的 AI 操作系统
+# MindX — Agent Harness
 
-[![Go Version](https://img.shields.io/badge/Go-1.26%2B-blue.svg)](https://golang.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](https://github.com/DotNetAge/mindx)
+[![Release](https://img.shields.io/github/v/release/DotNetAge/mindx)](https://github.com/DotNetAge/mindx/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.21%2B-blue)](https://go.dev/)
+[![Homebrew](https://img.shields.io/homebrew/v/mindx)](https://formulae.brew.sh/formula/mindx)
+[![Docker Pulls](https://img.shields.io/docker/pulls/dotnetage/mindx)](https://hub.docker.com/r/dotnetage/mindx)
 
-> **不是聊天机器人，不是 AI 助手，而是你的 AI 公司操作系统。**
->
-> 它会思考、会规划、会执行、会复盘——像一个有经验的人，而不是一个只会回答问题的机器。
+> MindX is an open-source AI Agent orchestration platform (Agent Harness) that leverages hybrid orchestration modes, intelligent memory systems, and a proprietary tech stack to help you efficiently build, manage, and run AI Agent workflows. Whether for day-to-day coding assistance or complex multi-step task automation, MindX delivers professional-grade agent orchestration capabilities.
 
----
-
-## 🚀 为什么需要 MindX²？
-
-### 传统模式的困境
-
-```
-你有一个伟大的想法 → 需要一个团队来执行
-                      ↓
-            但你面临三大难题：
-
-❌ 成本高昂：招聘一个团队 = 月薪 ¥50,000+
-❌ 协调复杂：沟通成本 > 实际工作时间
-❌ 响应缓慢：从想法到落地 = 数周甚至数月
-
-结果：99% 的想法死在"找团队"这一步
-```
-
-### MindX² 的解决方案
-
-```
-你 + MindX² = 一家完整的 AI 公司
-
-┌─────────────────────────────────────────────┐
-│              你的角色: 董事会/老板           │
-│                                             │
-│         "我要在 2 周内完成 MVP 开发"          │
-│                   ↓                         │
-│    ┌─────────────────────────────┐         │
-│    │   Master Agent (CEO)        │         │
-│    │   • 目标分解 (WBS)           │         │
-│    │   • 任务分配                 │         │
-│    │   • 进度监控                 │         │
-│    │   • 报告生成                 │         │
-│    └──────────┬──────────────────┘         │
-│               ↓                            │
-│    ┌─────────────────────────────┐         │
-│    │   SubAgents (专业团队)       │         │
-│    │   @architect  @fullstack     │         │
-│    │   @frontend   @backend      │         │
-│    │   @tester     @writer        │         │
-│    └─────────────────────────────┘         │
-│                                             │
-│   结果：7×24 不知疲倦的 AI 团队为你工作     │
-│   成本：¥600/月 vs ¥50,000+/月             │
-└─────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="assets/images/arch.png" alt="MindX Architecture" width="800" />
+  <br />
+  <em>MindX Architecture</em>
+  <br />
+</p>
 
 ---
 
-## ✨ MindX² 的 10 大革命性创新
+## Features
 
-### 1️⃣ **会思考，不只是回答** — 它有自己的想法
+### Multi-Agent Orchestration
 
-传统 AI 助手：你问一句，它答一句（像搜索引擎）  
-MindX² Agent：**观察 → 思考 → 行动 → 反思 → 改进**（像一个真人）
+As a complete Agent Harness, MindX provides a hybrid orchestration mode to help you tackle problems and business scenarios of varying complexity:
 
-```mermaid
-flowchart LR
-    A[👁️ 观察<br/>看到什么？] --> B[🧠 思考<br/>怎么理解？]
-    B --> C[⚡ 行动<br/>决定做什么？]
-    C --> D[👁️ 再观察<br/>结果如何？]
-    D --> E[💡 反思<br/>学到了什么？]
-    E --> F[🔄 下一步<br/>继续优化]
+| Mode                  | Type                  | Description                                                                                                     |
+| --------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Single Agent Mode     | Basic                 | Handles simple tasks                                                                                            |
+| ReAct Mode            | Chain-of-Thought      | Plan → Execute → Observe → Iterate full cycle (T-A-O ReAct engine), finding optimal solutions                   |
+| Concurrent Mode       | Task-Driven           | For long-running complex tasks, agents automatically "clone" themselves to handle multiple tasks simultaneously |
+| Planning Mode         | Plan-Driven           | Plans and dispatches role-specific agents for long-duration, periodic complex tasks                             |
+| Delegation Mode       | Responsibility-Driven | Right person for the right job — consult experts when uncertain                                                 |
+| Agentic RAG Mode      | Knowledge Retrieval   | Self-forming knowledge base from work and conversations, with human-like memory                                 |
+| **Evaluation System** | Quality Assurance     | Every agent can assess and score quality, computing "performance" based on task completion                      |
 
-    style A fill:#e3f2fd,stroke:#1976d2,color:#0d47a1
-    style B fill:#fff3e0,stroke:#f57c00,color:#e65100
-    style C fill:#f3e5f5,stroke:#7b1fa2,color:#4a148c
-    style D fill:#e8f5e9,stroke:#388e3c,color:#1b5e20
-    style E fill:#fce4ec,stroke:#c62828,color:#b71c1c
-    style F fill:#e0f2f1,stroke:#00796b,#004d40
-```
+### Context Engineering
 
-**为什么重要？**
+Manages the lifecycle of LLM conversations — context window capacity control, session persistence, and relevant context injection.
 
-- ✅ 每个决策都有逻辑依据（可解释性）
-- ✅ 能从错误中学习（自省能力）
-- ✅ 复杂任务能拆解执行（不是一次性输出）
+- **True Context** — Seamlessly blends compression technology with memory stores so context is never lost, forgotten, or corrupted
+- **Session Persistence & Cross-Restart Recovery** — Sessions stored as files on disk, automatically resumed after restart
+- **Multi-Session Branching** — Multiple independent sessions within the same project; agents share and switch between sessions freely
+- **Progressive Capability Disclosure** — Load capability descriptions on demand to conserve context
 
-**实际体验**：你可以随时问 Agent "你刚才为什么要这样做？"，它会完整展示思考过程。
+### Memory & Retrieval
 
----
+Efficiently persists and retrieves information beyond the context window — forming short-term memory, long-term memory, and a global knowledge base.
 
-### 2️⃣ **从小到大，慢慢长大** — 不用一步到位
+- **RAG / Semantic Memory Search** — Hybrid vector + full-text retrieval, automatic transparent memory indexing
+- **File Map / Code Map** — Global understanding of project structure; agents perceive file and code organization
+- **Cross-Session Memory Sharing** — Persistent memory records (Immediately + LongTerm + Experience types)
+- **Web Search & Page Fetching** — Built-in search engines with deep web scraping, supporting both domestic and international sources
 
-```
-现在：一个人 + 一个 AI（就能开始用了）
-  ↓
-一周后：一群 AI 帮你干活（自动配合）
-  ↓
-一月后：一个完整的 AI 团队（自己管自己）
-  ↓
-未来：好几家公司同时跑（也不是不行）
-```
+You don't need to learn or even be aware of RAG's existence — just know that a fleet of Advanced RAG services faithfully provides semantic services for you.
 
-**好处**：不用一开始就搞得很复杂，先用起来，慢慢加功能。
+### Execution Capabilities
 
----
+MindX's design philosophy is "**skills over tools**" — tools serve as underlying capabilities rather than exposed interfaces. You need not concern yourself with any tools because MindX builds them for you. MindX won't dump a pile of MCP tools or thousands of skills you'll never know when to use.
 
-### 3️⃣ **越用越懂你** — 它会从经验中学习
+- Assigns specialized agents to handle problems according to your needs
+- Agents assemble skills based on their responsibilities — no manual configuration required
+- Agents self-assess whether they are "competent" and adjust skills accordingly
+- Agents reflect on and summarize "work experience," distilling it into exclusive skills serving you
 
-```
-普通 AI: 你问它答，说完就忘，下次还一样
-MindX²: 做完会复盘，记住什么好用、什么不好，下次自动改进
-```
+> MindX frees you from anxiety about insufficient tools and skills, letting you focus on solving problems.
 
-**举个例子**：
+### Model Abstraction Layer
 
-```
-第一次：
-你:   "帮我写个登录页面"
-AI:    [写好了]
-      [反思] "用户可能还需要注册页面"
-      [记下来] "下次遇到类似需求，主动提醒用户"
+A unified interface across LLM providers — handling provider differences, structured output, usage statistics, and fallback strategies.
 
-第二次（一周后）：
-你:   "帮我做个用户系统"
-AI:    "好的，我建议包含：登录 + 注册 + 找回密码 + 修改资料
-       （根据上次的经验，这些通常是配套需要的）
-```
+- **Multi-Provider & Model Support** — Unified access to all mainstream LLM providers
+- **Usage & Cost Tracking** — Real-time monitoring and recording across all providers, with multi-dimensional queries of token consumption and costs
+- **Precise Per-Conversation Token Usage Tracking**
 
-**时间越久，它越懂你的习惯和偏好。**
+### Safety & Governance
 
----
+Controls over agent behavior — permissions, sandbox, audit, and output guardrails.
 
-### 4️⃣ **自己想办法解决问题** — 不用你手把手教
+- **Layered Permission Model** — Commands execute in restricted environments (project/session directory isolation)
+- **Human Approval Gate** — Sensitive operations require manual confirmation
+- **Credential Management** — macOS Keychain integration + AES-GCM encrypted file fallback for API keys and personal keys
+- **Security Vulnerability Detection** — Dependency scanning, secret detection
+- **Full Audit Log** — All tool calls logged with instant viewing capability
+- **Command Blacklist & Whitelist** — Fine-grained command control policies (Bash security mechanism, content pattern rules)
 
-**别的 AI**：你让它干啥它就干啥，每一步都得你指挥
+### State & Persistence
 
-**MindX²**：你告诉它目标，它自己决定怎么做、用什么工具、先做后做什么
+Tracking and recovering execution state — checkpoints, diffs, observability, and scheduled tasks.
 
-而且它不是"瞎做"，而是有一套**完整的工作方法**：
+- **Observability / Tracing** — End-to-end agent execution tracing (event bus, log observation points); daemon event stream with 30+ JSON-RPC methods
+- **File Change Tracking** — Unified diff generated before and after every tool call
+- **Checkpoint Mechanism** — Incremental rollback to any historical state
+- **Scheduled / Periodic Agent Tasks** — Built-in scheduler (second precision, file persistence, hot-reload, 5-minute timeout)
+- **Logging System** — Structured logging via zap + lumberjack rotation (ANSI console + file, max 100MB / 30-day retention)
 
-#### 它是怎么干活的？（三层编排系统）
+### Platform & Delivery
 
-```
-你只说一句话："帮我做一个 SaaS 产品"
+How the harness is packaged, distributed, installed, and integrated into development environments.
 
-MindX² 内部发生了什么：
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-第 1 步：拆解任务（像项目经理一样思考）
-  "这个活挺复杂，我得先理清楚..."
-  
-  ✅ 自动生成任务清单（Todo）：
-  [1] 需求澄清与目标确认
-  [2] 技术选型和架构设计
-  [3] 数据库设计
-  [4] 用户认证模块
-  [5] 核心功能 API
-  [6] 前端界面
-  [7] 支付集成
-  [8] 测试用例
-  ...
-  （共拆成 42 个具体步骤）
-
-第 2 步：找人干活（像 HR 一样组建团队）
-  "这些活一个人干不完，得组个队..."
-  
-  🔍 智能搜索专家（FindAgent）：
-  • 找到 @架构师（评分 2.9，空闲）✓
-  • 找到 @全栈开发（评分 2.7，空闲）✓
-  • 找到 @测试工程师（评分 2.8，空闲）✓
-  
-  ⚠️ 前端任务太多，人手不够...
-  🆕 自动创建新角色（CreateAgent）：
-  • 新建 @前端开发专家（专门处理 UI）
-  
-  🤝 组建团队（TeamCreate）：
-  团队名称: saas-mvp-v1
-  队长: @超级项目经理
-  成员: @架构师 + @全栈开发 × 2 + @测试工程师
-
-第 3 步：分发任务，并行执行（像老板一样调度）
-  "大家都到位了，开始干活！"
-  
-  🚀 异步任务分发（TaskCreate）：
-  task-1: @架构师 → 技术选型          （立即返回，后台执行）
-  task-2: @全栈开发 → 数据库设计      （立即返回，后台执行）
-  task-3: @前端开发 → 界面原型        （立即返回，后台执行）
-  task-4: @测试工程师 → 测试计划      （立即返回，后台执行）
-  ...（8 个任务同时跑，互不等待！）
-
-第 4 步：盯着进度（像秘书一样汇报）
-  不用你问，它主动告诉你：
-  
-  📊 【Day 3 进度报告】
-  整体完成：42% (18/42)
-  
-  ✅ 已完成（8 个）：
-    • 技术选型 ✓
-    • 数据库设计 ✓
-    • API 规范 ✓
-    ...
-  
-  🔄 进行中（6 个）：
-    • 用户认证模块 (65%)
-    • 前端界面 (40%)
-    ...
-  
-  ⚠️ 问题（2 个）：
-    • 前端进度落后（建议加人）
-    • 支付接口文档不清晰
-
-第 5 步：出事了自动救场（像救火队员一样处理）
-  发现前端做不完？
-  
-  🛑 先停掉卡住的任务（TaskStop）
-  🆕 再建一个前端专家支援（CreateAgent）
-  🔄 重新分配剩余工作（TaskCreate）
-  ✅ 继续推进！
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-最终结果：
-  • 14 天完成
-  • 156 个任务，完成 148 个 (94.9%)
-  • 5 个 AI 专家协同工作
-  • 你每天只花 30 分钟看报告和做决策
-```
-
-#### 这套系统的核心组件
-
-| 组件                | 干什么的                 | 就像是         |
-| ------------------- | ------------------------ | -------------- |
-| **Todo**            | 拆解任务清单、设置优先级 | 项目经理的 WBS |
-| **FindAgent**       | 智能搜索最合适的专家     | 公司的人才库   |
-| **CreateAgent**     | 人不够？自己造一个！     | HR 的招聘权限  |
-| **TeamCreate**      | 组建团队、分配角色       | 组织架构师     |
-| **TaskCreate**      | 异步分发任务，并行执行   | 任务分配器     |
-| **TaskList/Get**    | 实时查看所有任务状态     | 进度看板       |
-| **TaskStop/Update** | 出问题随时调整           | 应急预案       |
-
-#### 为什么这很厉害？
-
-**对比一下：**
-
-| 场景            | 普通 AI                    | MindX²                                  |
-| --------------- | -------------------------- | --------------------------------------- |
-| 你说"做个网站"  | 给你一堆代码（一次性输出） | **拆成 20 个任务，找 3 个人并行做**     |
-| 任务卡住了      | 你得重新描述问题           | **自动停掉、分析原因、换人重做**        |
-| 要同时做 5 件事 | 只能一件件来（串行）       | **5 个任务同时跑（并行），速度提升 5x** |
-| 想知道进度      | 得主动去问                 | **主动推送日报/周报**                   |
-| 中途想改需求    | 从头再来                   | **停掉相关任务，插入新任务，继续**      |
-
-**简单说：别的 AI 是个聪明的员工，MindX² 是个有经验的管理者+一整个团队。**
+- **Single Binary Distribution, Zero Runtime Dependencies** — Entire platform compiled into one Go binary
+- **Multi-Platform Release** — Homebrew, Winget, Snap, Docker coverage across platforms
+- **Terminal TUI** — Full-screen terminal UI with conversation sidebar, file change tracker, token counter, and slash commands
+- **System Service Installation** — Register as system daemon with health checks (launchd/systemd/schtasks)
+- **Setup Wizard** — 8-step interactive TUI wizard (API key input, model selection, path setup, daemon check, Python check)
+- **CI/CD Integration** — GitHub Actions, Makefile, Snap, and Docker publishing pipelines
+- **Environment Management** — Dockerfile (multi-stage build), docker-compose.yml with health checks and volume mounts
+- **Themes / Personalization** — Customizable UI themes
 
 ---
 
-### 5️⃣ **自带一个 AI 团队** — 不同的人干不同的活
+## System Requirements
 
-就像开公司得招人一样，MindX² 自带了一个**专家团队**：
+| Platform | Minimum Version           | Notes                     |
+| -------- | ------------------------- | ------------------------- |
+| macOS    | Monterey (12.0)           | Homebrew recommended      |
+| Linux    | Ubuntu 20.04+ / CentOS 8+ | Snap recommended          |
+| Windows  | Windows 10+               | WSL or Docker recommended |
+| Docker   | Docker 20.10+             | Supports amd64/arm64      |
 
-| 谁干什么的 | 叫什么     | 擅长什么           |
-| ---------- | ---------- | ------------------ |
-| 架构师     | @architect | 技术选型、设计方案 |
-| 全栈开发   | @fullstack | 前后端都能写       |
-| 前端开发   | @frontend  | 界面、交互         |
-| 后端开发   | @backend   | 数据库、API 接口   |
-| 设计师     | @designer  | 视觉、UI、配色     |
-| 文档员     | @writer    | 写说明书、报告     |
-| 测试员     | @tester    | 找 Bug、测质量     |
-| 运维       | @devops    | 部署上线、服务器   |
-
-**怎么工作？**
-
-```
-你: "帮我做一个 SaaS 产品"
-
-超级项目经理:
-  "好的，我来看看需要哪些人...
-   
-   这个活儿挺复杂，我得组个团队：
-   • 先让 @架构师 出个方案
-   • 然后 @全栈开发 + @前端开发 同时开工
-   • 中间让 @设计师 把界面弄好看点
-   • 快做完的时候让 @测试员 找找问题
-   • 最后让 @文档员 写好说明书
-   
-   各位，开工！"
-```
-
-**如果人手不够？它会自己"招"新的专家加入。**
+- **Memory**: 2GB+ available RAM recommended
+- **Disk**: 500MB+ free space recommended (excluding workspace)
 
 ---
 
-### 6️⃣ **记性超好，过目不忘** — 再也不怕它"失忆"了
+## Quick Start
 
-**你是不是遇到过这种情况：**
+<p align="center">
+  <img src="assets/images/webui.png" alt="MindX WebUI Screenshot" width="700" />
+  <br />
+  <em>MindX WebUI</em>
+</p>
 
-```
-你: "我叫小明，喜欢用 Go 语言"
-（聊了一会儿别的事）
+<p align="center">
+  <img src="assets/images/tui.png" alt="MindX TUI Screenshot" width="700" />
+  <br />
+  <em>MindX TUI</em>
+</p>
 
-你: "我叫什么名字来着？"
-AI: "抱歉，我不记得了 😅"
-```
+### macOS (Recommended)
 
-**普通 AI 就像金鱼，只有 7 秒记忆。**
-
-MindX² 不一样，它有**三层记忆系统**：
-
-```
-第一层：短期记忆（正在聊的内容）
-    • 当前对话的上下文
-    • 临时的状态和变量
-    • 就像人的"工作记忆"
-
-第二层：长期记忆（重要的东西永久保存）
-    • 你的偏好和习惯
-    • 做过的项目、做过的决定
-    • 谁在什么时候干了什么
-    • 就像人的"长期记忆"，存在脑子里
-
-第三层：模糊记忆（能联想相关经验）
-    • "这个问题我好像遇到过..."
-    • "上次类似的处理方式是..."
-    • 就像人的"直觉"，快速找到相关经验
-```
-
-**实际效果**：
+Install via Homebrew, then run `mindx` directly:
 
 ```bash
-# 对话 1
-You: 我叫 Ray，正在做一个 AI 项目，使用 Go 语言
-Agent: 好的，记下了 ✅
-
-# ... 过了几天，聊了很多其他话题 ...
-
-# 对话 101
-You: 我叫什么名字？我的项目用什么语言？
-Agent: 你叫 Ray，你的 AI 项目使用 Go 语言。
-       根据记录，你已经完成了 42 个任务，
-       当前进度 78%，下一步是集成测试。
-       
-       （不仅记得，还能关联上下文）
+brew install DotNetAge/homebrew-mindx/mindx
 ```
 
-**时间越久，它越了解你。就像一个认识很久的朋友。**
+### Linux
 
----
-
-### 7️⃣ **聊再久也不忘事** — 不会"聊着聊着就跑题"
-
-**你有没有这种经历：**
-
-```
-跟 AI 聊了一个复杂的项目：
-  开始：说清楚了目标
-  中间：讨论了各种细节
-  后来：越聊越细，各种技术问题
-  
-  突然你问："等等，我们最开始要做什么来着？"
-  
-  AI: "呃...我不太记得了..."
-```
-
-**这就是"上下文腐烂"——聊得越多，越容易忘掉最初的目标。**
-
-MindX² 用**智能记忆管理**解决这个问题：
-
-```mermaid
-flowchart TB
-    subgraph legacy2["❌ 聊多了就忘"]
-        direction LR
-        M1[开始: 目标] --> M2[中间: 细节] --> M3[后来: 技术问题]
-        M3 -.->|忘了最初目标| LOST[💀 跑题了]
-    end
-
-    subgraph mindx2["✅ 始终记住重点"]
-        direction LR
-        S1["⭐ 关键决策<br/>（永久保留）"]
-        S2["📝 重要信息<br/>（长期保留）"]
-        S3["💬 普通对话<br/>（智能压缩）"]
-        S4["🔄 旧消息<br/>（自动总结）"]
-
-        S1 --> S2 --> S3 --> S4
-    end
-
-    style legacy2 fill:#ffebee,stroke:#c62828,color:#b71c1c
-    style mindx2 fill:#e8f5e9,stroke:#388e3c,color:#1b5e20
-```
-
-**简单说**：它会聪明地判断哪些信息重要、哪些不重要，重要的永远保留，不重要的慢慢压缩。**不管聊多久，都不会忘记最初的目标。**
-
----
-
-### 8️⃣ **国内外都能搜** — 不怕被墙
-
-**你有没有这种烦恼：**
-
-```
-想搜点技术资料：
-• 用 Google？被墙了，打不开 😤
-• 用百度？英文资料太少，质量一般 🤷
-• 用 Bing？中文内容不够全 😕
-
-结果：信息获取不完整，做出来的东西差点意思
-```
-
-**MindX² 同时接了两个搜索引擎：**
-
-- **DuckDuckGo**：搜国际内容（技术文档、英文资讯、学术论文）
-- **百度**：搜中文内容（国内新闻、本地化信息、中文社区）
-
-**而且它会自动判断用哪个：**
-
-```
-你: "React Hooks 怎么用？"     → 自动用 DuckDuckGo（技术文档）
-你: "2026 年 AI 发展趋势"    → 两个都搜，合并去重
-你: "北京哪里有 Go 语言聚会" → 自动用百度（本地信息）
-```
-
-**你不用管它用哪个搜索引擎，它自己会选最合适的。**
-
----
-
-### 9️⃣ **超级项目经理** — 你的私人 CEO + 团队 + 秘书
-
-你有没有这种经历：
-
-> 想做一个东西，但不知道从哪开始？
-> 
-> 开始做了，但做着做着就乱了？
-> 
-> 好几个事情同时推进，完全顾不过来？
-> 
-> 每天忙到死，但一看进度——好像啥也没干完？
-
-**这就是为什么你需要一个项目经理。**
-
-问题是：好的项目经理月薪两万起，而且你还得花时间跟他沟通、解释、开会……
-
-**MindX² 的解决方案：给你配一个随叫随到、永不疲倦、还自带整个团队的超级项目经理。**
-
----
-
-#### 它能帮你干什么？
-
-**场景 1：你只有一个模糊的想法**
-
-```
-你: 我想做个 SaaS 产品，大概两周能出个 MVP 吗？
-
-超级项目经理: 好的，我先帮你理清楚。
-
-           第一步：我想确认几件事
-           • 这个产品主要解决什么问题？
-           • 目标用户是谁？
-           • 最少需要哪些功能才能叫 "MVP"？
-           • 你有偏好的技术方案吗？
-
-           （你简单回答了几句）
-
-           好的，我理解了。这是我的计划：
-           
-           📋 项目：SaaS 产品 MVP
-           ⏰ 时间：14 天
-           👥 团队：我会找 5 个专家来帮忙
-           📊 目标：完成用户注册、核心功能、支付集成
-           
-           要我开始吗？还是你想调整什么？
-```
-
-**注意**：它不是上来就瞎干活，而是先帮你把想法**想清楚**。很多项目失败，就是因为一开始就没想明白要做什么。
-
----
-
-**场景 2：它真的会组建团队**
-
-```
-超级项目经理正在分析任务需求...
-       正在寻找合适的专家...
-
-       ✅ 找到了 @架构师（擅长技术选型）
-       ✅ 找到了 @全栈开发（前后端都能写）
-       ✅ 找到了 @测试工程师（保证质量）
-       ✅ 找到了 @文档工程师（写说明书）
-       
-       等等，前端任务有点多，人手不够...
-       
-       🆕 新建了一个 @前端开发专家（专门处理 UI）
-       
-       团队组建完成！5 个人，各司其职。
-```
-
-**神奇的地方**：如果现有的专家不够用，它会**自己造一个新的**。就像一个真正的经理发现缺人会去招聘一样。
-
----
-
-**场景 3：它会把大任务拆成小步骤**
-
-```
-超级项目经理正在拆解任务...
-
-       大目标：2 周完成 SaaS MVP
-       ├─ 第一阶段：准备工作（2 天）
-       │   ├─ 技术选型（@架构师）
-       │   ├─ 数据库设计（@全栈开发）
-       │   └─ API 接口定义（@架构师）
-       │
-       ├─ 第二阶段：核心开发（7 天）
-       │   ├─ 用户注册登录（@全栈开发）
-       │   ├─ 核心功能实现（@全栈开发）
-       │   ├─ 前端界面（@前端开发）
-       │   └─ 支付对接（@全栈开发）
-       │
-       ├─ 第三阶段：测试上线（5 天）
-       │   ├─ 功能测试（@测试工程师）
-       │   ├─ Bug 修复（@全栈开发）
-       │   ├─ 文档编写（@文档工程师）
-       │   └─ 部署上线（@架构师）
-       │
-       └─ 第四阶段：收尾（持续）
-           ├─ 用户反馈收集
-           ├─ 性能优化
-           └─ 迭代改进
-
-       总计：4 个阶段 → 12 个模块 → 156 个具体动作
-
-       每个动作都分配给了最合适的人，都有明确的完成标准。
-```
-
-**这就像一个经验丰富的经理在做工作分解（WBS）**。但你不付工资，它也不睡觉。
-
----
-
-**场景 4：它会自动盯着进度**
-
-你不用每天问"做得怎么样了"，它会主动告诉你：
-
-```
-📊 【Day 7 项目进度报告】
-
-整体完成度：42%（比计划快了 3% 🎉）
-
-✅ 已完成（18 项）：
-   • 技术选型（提前半天）
-   • 数据库设计
-   • 用户注册 API
-   • 登录页面 UI
-   ...
-
-🔄 进行中（8 项）：
-   • 支付模块开发（进度 65%）
-   • 后台管理界面（进度 40%）
-   ...
-
-⚠️ 需要注意（2 项）：
-   • 前端开发有点慢，可能需要加人
-   • 测试环境还没搭好，会阻塞后续测试
-
-💡 建议：
-   1. 给前端任务加一个人手（我已经准备好了）
-   2. 今天下午优先搭建测试环境
-
-要不要我执行建议 1？
-```
-
-**它不只是记录进度，还会发现问题、提出建议、等你拍板。**
-
----
-
-**场景 5：出事了它会救场**
-
-```
-🚨 【Day 10 风险预警】
-
-检测到问题：按当前速度，预计第 16 天才能完成（超期 2 天）
-
-原因分析：
-   • 前端任务比预期复杂（多了移动端适配需求）
-   • 支付接口调试遇到坑（第三方文档不清晰）
-
-我准备了三个方案：
-
-   A. 砍掉移动端适配（先做 PC 版，省 2 天）← 推荐
-   B. 加两个人突击（成本增加，但能按时）
-   C. 跟你说一声延期（最诚实但不太好看）
-
-你选哪个？或者你有别的想法？
-```
-
-**这不是简单的报错，而是带着方案来请示你。** 就像一个靠谱的下属。
-
----
-
-#### 和真人项目经理对比
-
-|              | 请一个项目经理        | MindX² 超级项目经理      |
-| ------------ | --------------------- | ------------------------ |
-| **成本**     | 月薪 ¥15,000 - 25,000 | **¥0（包含在订阅里）**   |
-| **响应速度** | 工作时间才回消息      | **24/7 随时待命**        |
-| **团队配备** | 你得自己招人          | **自动组建专家团队**     |
-| **经验值**   | 取决于个人能力        | **吸收了无数项目的经验** |
-| **情绪管理** | 会累、会烦、会请假    | **永远情绪稳定**         |
-| **记忆力**   | 会忘事、会丢信息      | **过目不忘，全部记录**   |
-| **汇报频率** | 你得追着问            | **每天/每周主动报告**    |
-| **犯错概率** | 人都会犯错            | **每次都在学习优化**     |
-
----
-
-#### 真实案例：14 天做出一个 SaaS 产品
-
-有人真的用 MindX² 在两周内做出了一个完整的 SaaS 产品（当然，他提供了产品想法和决策，AI 负责执行）：
-
-```
-开始：周一早上 9 点，他说"我想做个在线工具"
-结束：下周五下午 6 点，产品上线了
-
-中间发生了什么：
-• Day 1-2:  把想法理清楚，定好要做哪些功能
-• Day 3-9:  5 个 AI 专家同时开工（设计、开发、测试、文档）
-• Day 10:   发现进度落后，自动加了一个人手
-• Day 12:   测试发现了 23 个 Bug，当天修完 19 个
-• Day 13:   写完了用户手册和帮助文档
-• Day 14:   部署上线，生成了完整的交付报告
-
-结果：
-• 功能完成率：94.9%（156 项任务完成了 148 项）
-• 按时交付：92.3%（只有少数非核心功能延后）
-• 他的投入：每天花 30 分钟看报告和做决策
-• 总花费：¥600（MindX² 订阅费）
-• 如果找人做：至少 ¥40,000 + 两周时间
-```
-
-**这不是科幻，是现在就能用的东西。**
-
----
-
-#### 怎么用它？
+Install via Snap, then run `mindx` directly:
 
 ```bash
-# 启动 MindX²
-mindx
-
-# 然后用正常说话就行：
-
-> 我想在一个月内写一本书
-> （它会帮你规划章节、安排写作计划、每天催你进度）
-
-> 帮我把这个乱七八糟的项目整理一下
-> （它会分析现状、识别问题、给出整改方案）
-
-> 我们团队下周要发布新版本，帮我列个计划
-> （它会分解任务、分配责任人、设置提醒）
-
-> 感觉最近效率很低，帮我分析一下原因
-> （它会回顾你的工作记录、找出时间黑洞、提出改进建议）
+sudo snap install mindx
 ```
 
-**不需要学任何命令，不需要看任何文档，像跟人说话一样自然。**
+### Docker
 
----
+Install using the official image from [dotnetage/mindx](https://hub.docker.com/r/dotnetage/mindx):
 
-#### 一句话总结
-
-> **传统 AI 是个聪明的助手，你得告诉它每一步怎么做。**
->
-> **MindX² 的超级项目经理是个有经验的经理人，你只要说清楚想要什么，剩下的它自己搞定。**
-
-它不只回答问题，而是**真正帮你把事做成**。
-
-#### 实战案例：14 天完成 MVP 开发
-
-详见 [DESIGN.md](./docs/DESIGN.md) 中的完整场景模拟。
-
-**成果统计**：
-- 总任务数：156 个
-- 完成率：94.9%
-- 按时交付率：92.3%
-- 效率提升：35%（vs 手动开发）
-- **成本节省：98.5%**（¥600 vs ¥40,000）
-
----
-
-### 🔟 **三层安全防护体系** — 企业级安全保障，让 AI 可控可信
-
-#### 为什么安全对 OPC 模式至关重要？
-
-```
-传统 AI 助手的安全隐患:
-┌─────────────────────────────────────────────┐
-│ ❌ 数据上传云端（隐私泄露风险）              │
-│ ❌ Agent 权限过大（可能执行危险操作）         │
-│ ❌ 会话无隔离（多任务相互干扰）             │
-│ ❌ 无审计日志（无法追溯谁做了什么）          │
-│                                             │
-│ 结果: 你不敢让 AI 接触核心业务数据           │
-└─────────────────────────────────────────────┘
-
-MindX² 的三层安全防护:
-┌─────────────────────────────────────────────┐
-│ ✅ 纯本地运行，数据永不上传                  │
-│ ✅ 沙箱隔离，Agent 只能做被授权的事           │
-│ ✅ 会话隔离，每个任务独立空间                │
-│ ✅ 完整审计，每一步操作可追溯                │
-│                                             │
-│ 结果: 你敢把整个公司交给 AI 运营             │
-└─────────────────────────────────────────────┘
-```
-
----
-
-#### Layer 1: 🔒 纯会话隔离（Session Isolation）
-
-**问题**：多个任务共享同一个上下文，导致信息泄漏和状态污染。
-
-```mermaid
-flowchart TB
-    subgraph legacy["❌ 传统方式：所有任务共享一个空间"]
-        direction TB
-        TASK1[项目A 任务]
-        TASK2[项目B 任务]
-        TASK3[项目C 任务]
-
-        TASK1 --> SHARED[📁 共享上下文<br/>数据混乱！<br/>信息泄漏！<br/>相互污染！]
-        TASK2 --> SHARED
-        TASK3 --> SHARED
-    end
-
-    subgraph mindx["✅ MindX: 每个会话完全独立"]
-        direction TB
-        SA["🔒 会话 A<br/>project-alpha<br/>├─ 独立文件系统<br/>├─ 独立内存空间<br/>├─ 独立权限配置<br/>└─ 独立审计日志"]
-
-        SB["🔒 会话 B<br/>project-beta<br/>├─ 独立文件系统<br/>├─ 独立内存空间<br/>├─ 独立权限配置<br/>└─ 独立审计日志"]
-
-        SC["🔒 会话 C<br/>project-gamma<br/>├─ 独立文件系统<br/>├─ 独立内存空间<br/>├─ 独立权限配置<br/>└─ 独立审计日志"]
-    end
-
-    style legacy fill:#ffebee,stroke:#c62828,color:#b71c1c
-    style mindx fill:#e8f5e9,stroke:#388e3c,color:#1b5e20
-```
-
-**实际效果**：
-
-| 场景       | 无会话隔离     | MindX² 会话隔离        |
-| ---------- | -------------- | ---------------------- |
-| 多项目并行 | 数据混淆       | ✅ 物理隔离             |
-| 敏感信息   | 泄露到其他任务 | ✅ 仅当前会话可见       |
-| Agent 记忆 | 跨任务污染     | ✅ 会话内独立           |
-| 故障影响   | 全局崩溃       | ✅ 单会话故障不影响其他 |
-
-**实现机制**：
-- 📁 **文件系统隔离**：`~/.mindx/sessions/{session-id}/`
-- 🧠 **内存隔离**：独立的 SlidingWindow 实例
-- 🔑 **权限隔离**：每个会话独立授权
-- 📝 **审计隔离**：操作日志按会话归档
-
----
-
-#### Layer 2: 🛡️ 系统沙箱（System Sandbox）
-
-**问题**：Agent 如果获得过大的系统权限，可能执行危险操作（删除文件、发送邮件、调用 API 等）。
-
-MindX² 采用**最小权限原则 + 能力白名单**：
-
-```yaml
-# runtime/agents/{role-name}.md 中的权限定义
-permissions:
-  # 文件系统权限（细粒度控制）
-  filesystem:
-    allowed_paths:
-      - "./workspace/**"      # 只能访问工作目录
-      - "/tmp/mindx/**"      # 临时文件
-    denied_paths:
-      - "~/.ssh/"            # 禁止访问 SSH 密钥
-      - "~/.aws/"            # 禁止访问 AWS 凭证
-      - "/etc/passwd"        # 禁止读取系统文件
-    operations:
-      - read                  # 允许读
-      - write                 # 允许写（仅允许路径）
-      - create                # 允许创建文件
-      - delete: false         # ⚠️ 禁止删除！
-
-  # 网络权限
-  network:
-    allowed_domains:
-      - "api.github.com"     # GitHub API
-      - "duckduckgo.com"     # 搜索引擎
-      - "baidu.com"          # 百度搜索
-    denied_domains:
-      - "*"                  # 默认禁止所有其他域名
-    operations:
-      - http_get              # 允许 GET 请求
-      - http_post: restricted # POST 需要用户确认
-
-  # 命令执行权限
-  commands:
-    allowed:
-      - "git status"
-      - "git diff"
-      - "go build"
-      - "go test"
-    denied:
-      - "rm -rf *"           # 🚨 危险命令！绝对禁止
-      - "sudo *"            # 需要提权的命令
-      - "curl * | bash"     # 远程代码执行！
-      - "> /etc/hosts"      # 篡改系统配置
-
-  # 子 Agent 启动权限
-  subagent:
-    max_concurrent: 5       # 最多同时启动 5 个
-    allowed_roles:          # 只能启动这些角色
-      - "@frontend-dev"
-      - "@backend-dev"
-      - "@tester"
-    timeout: 30m            # 单次执行超时时间
-```
-
-**沙箱执行流程**：
-
-```
-Agent 请求: "我要执行 `rm -rf ./node_modules`"
-
-沙箱检查:
-  Step 1: 命令匹配 → 命中 denied 规则 ❌
-  Step 2: 拦截并记录到审计日志
-  Step 3: 返回错误给 Agent
-  Step 4: 通知用户 (可选)
-
-结果: 危险操作被阻止，系统安全 ✅
-```
-
-**支持的沙箱能力**：
-
-| 能力类型     | 支持的粒度    | 示例                               |
-| ------------ | ------------- | ---------------------------------- |
-| **文件系统** | 路径级别      | 允许 `/workspace/`，禁止 `~/.ssh/` |
-| **网络访问** | 域名/协议级别 | 允许 HTTP GET，禁止任意 POST       |
-| **命令执行** | 命令白名单    | 允许 `go build`，禁止 `rm -rf`     |
-| **子 Agent** | 角色级别      | 允许启动 @tester，禁止 @devops     |
-| **API 调用** | 接口级别      | 允许查询，禁止写入敏感接口         |
-| **资源使用** | 配额限制      | 最大内存 512MB，最大 CPU 2 核      |
-
----
-
-#### Layer 3: 👤 用户授权（User Authorization）
-
-**问题**：即使有沙箱，某些关键操作仍需人工确认（如：发送邮件、部署到生产环境、删除重要数据等）。
-
-MindX² 的**四级授权体系**：
-
-```mermaid
-flowchart LR
-    subgraph L0["🟢 Level 0: 自动执行<br/>风险: 0-40"]
-        direction TB
-        A1[读文件]
-        A2[写文件]
-        A3[搜索网页]
-        A4[启动子Agent]
-    end
-
-    subgraph L1["🟡 Level 1: 执行后通知<br/>风险: 41-70"]
-        direction TB
-        B1[发送邮件]
-        B2[生成报告]
-        B3[部署测试环境]
-    end
-
-    subgraph L2["🟠 Level 2: 需要确认<br/>风险: 71-90"]
-        direction TB
-        C1[部署生产环境 ⚠️]
-        C2[删除数据库 ⚠️]
-        C3[修改权限 ⚠️]
-    end
-
-    subgraph L3["🔴 Level 3: 永久禁止<br/>风险: 91-100 🚫"]
-        direction TB
-        D1[rm -rf /*]
-        D2[数据外泄]
-        D3[系统破坏]
-    end
-
-    L0 -->|自动通过| EXEC[✅ 立即执行]
-    L1 -->|事后通知| NOTIFY[📧 通知你]
-    L2 -->|等待确认| CONFIRM[⏳ 弹出确认框]
-    L3 -->|直接阻止| BLOCK[🚫 禁止操作]
-
-    style L0 fill:#e8f5e9,stroke:#388e3c,color:#1b5e20
-    style L1 fill:#fff3e0,stroke:#f57c00,color:#e65100
-    style L2 fill:#ffe0b2,stroke:#ef6c00,color:#e65100
-    style L3 fill:#ffebee,stroke:#c62828,color:#b71c1c
-```
-
-**授权流程示例**：
+Pull the image:
 
 ```bash
-场景 1: 低风险操作（自动执行）
-Agent: "我需要创建一个新文件 config.yaml"
-系统: [自动批准] ✅
-Agent: [执行成功]
-
-场景 2: 高风险操作（需要确认）
-Agent: "我准备将代码部署到生产服务器"
-系统: [⚠️ 需要确认] 
-       
-       ┌─────────────────────────────────────┐
-       │ 🛑 待确认的操作                       │
-       ├─────────────────────────────────────┤
-       │ 操作: deploy_production             │
-       │ 风险评分: 85/100 (高)               │
-       │                                     │
-       │ Agent 说明:                         │
-       │ "测试环境已通过全部测试用例，         │
-       │  准备发布 v2.1.0 到生产环境"         │
-       │                                     │
-       │ 影响范围:                            │
-       │ - 生产服务器: prod.example.com        │
-       │ - 影响用户: ~10,000 活跃用户          │
-       │ - 回滚方案: 已准备 v2.0.3 回滚版本    │
-       │                                     │
-       │ [✅ 批准]  [❌ 拒绝]  [📋 查看详情]    │
-       └─────────────────────────────────────┘
-
-用户: [点击 ✅ 批准]
-系统: [授权通过] ✅
-Agent: [开始部署...]
-
-场景 3: 极危险操作（永久禁止）
-Agent: "为了清理磁盘，我想执行 rm -rf /*"
-系统: [🚫 操作被阻止]
-       
-       错误: 权限不足
-       原因: 此操作风险评分 100/100（永久禁止）
-       建议: 使用更安全的替代方案（如清理临时文件）
+docker pull dotnetage/mindx
 ```
 
-**自定义授权策略**：
-
-```yaml
-# ~/.mindx/config.yaml
-authorization:
-  mode: strict  # strict | balanced | relaxed
-  
-  custom_rules:
-    # 你的业务规则
-    - name: "financial_operations"
-      pattern: "transfer_*|payment_*|invoice_*"
-      level: confirm_required
-      notify: ["admin@example.com"]
-      
-    - name: "data_export"
-      pattern: "export_*|dump_*|backup_*"
-      level: confirm_required
-      require_2fa: true  # 需要二次验证
-      
-    - name: "working_hours_only"
-      pattern: "*"
-      time_range: "09:00-18:00"  # 只在工作时间允许
-      outside_hours_level: notify_only
-
-  approval_workflow:
-    # 多级审批（企业版功能）
-    risk_thresholds:
-      low: 0-40        # 自动批准
-      medium: 41-70    # 通知即可
-      high: 71-90     # 需要确认
-      critical: 91-100 # 需要多级审批
-    
-    approvers:
-      - role: "tech_lead"
-        scope: ["deploy_*", "database_*"]
-      - role: "manager"
-        scope: ["*"]
-```
-
----
-
-#### 三层协同工作流程
-
-```
-用户发起请求
-    ↓
-[Layer 1: 会话隔离]
-  ✓ 检查会话是否存在且有效
-  ✓ 加载该会话的权限配置
-  ✓ 创建隔离的工作环境
-    ↓
-[Layer 2: 系统沙箱]
-  ✓ 解析请求的操作类型
-  ✓ 匹配能力白名单/黑名单
-  ✓ 检查资源配额是否超限
-  ↓ (如果通过)
-[Layer 3: 用户授权]
-  ✓ 查询操作的授权级别
-  ├── Level 0: 直接执行
-  ├── Level 1: 执行后通知
-  ├── Level 2: 弹出确认框
-  └── Level 3: 拒绝执行
-    ↓
-[执行 & 审计]
-  ✓ 在沙箱环境中执行
-  ✓ 记录完整操作日志
-  ✓ 监控资源使用情况
-  ✓ 异常行为检测与告警
-    ↓
-返回结果
-```
-
----
-
-#### 安全审计与合规
-
-**完整的操作审计日志**：
+Run the container:
 
 ```bash
-# 查看审计日志
-mindx audit --session project-alpha --date today
-
-输出示例:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 安全审计报告 - 2026-05-10
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-会话 ID: sess-project-alpha-abc123
-操作者: MasterAgent (CEO)
-总操作数: 156
-异常数: 2 ⚠️
-
-时间线:
-─────────────────────────────────────────
-09:01:23  ✅ READ    file: src/main.go
-09:01:45  ✅ WRITE   file: src/utils.go
-09:02:12  ✅ EXEC    cmd: go build -o app .
-09:03:44  ✅ START   subagent: @tester
-09:15:22  ✅ SEND    api: POST /api/test-results
-09:16:01  ⚠️ BLOCKED cmd: rm -rf node_modules
-           原因: 违反沙箱规则 #12
-09:17:33  ✅ CONFIRM deploy: staging (用户已批准)
-09:18:00  ✅ READ    file: .env.production (⚠️ 敏感)
-           原因: 包含数据库凭证
-
-异常事件:
-─────────────────────────────────────────
-1. [高危] 尝试执行危险命令
-   时间: 09:16:01
-   操作: rm -rf node_modules
-   Agent: @fullstack
-   处理: 已阻止 + 记录审计
-   
-2. [中危] 访问敏感文件
-   时间: 09:18:00
-   文件: .env.production
-   内容: DB_HOST, DB_USER, DB_PASS
-   建议: 考虑将凭证移至密钥管理服务
-
-合规性检查:
-─────────────────────────────────────────
-✅ SOC2 Type II 就绪
-✅ GDPR 数据保护合规
-✅ ISO 27001 信息安全
-⚠️ PCI DSS 需额外配置（支付场景）
-
-建议:
-  1. 升级 .env.production 为加密存储
-  2. 启用 MFA 多因素认证
-  3. 定期轮换 API 密钥
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+docker run -d \
+  --name mindx \
+  -p 1313:1313 \
+  -p 1314:1314 \
+  -v ./workspaces:/home/mindx/workspaces \
+  dotnetage/mindx:latest
 ```
 
----
+The `./workspaces` directory can be any local path for storing MindX workspace files.
 
-#### 与其他方案的对比
-
-| 安全维度     | ChatGPT/Claude     | AutoGPT      | LangChain    | **MindX²**                          |
-| ------------ | ------------------ | ------------ | ------------ | ----------------------------------- |
-| **数据存储** | ☁️ 云端（隐私风险） | 💻 本地       | 💻 本地       | **💻 100% 本地 + 加密**              |
-| **会话隔离** | ❌ 共享上下文       | ⚠️ 文件级     | ⚠️ 手动管理   | **✅ 物理隔离 + 内存隔离**           |
-| **权限控制** | ❌ 无               | ⚠️ 基础       | ⚠️ 手动       | **✅ 细粒度白名单 + 黑名单**         |
-| **沙箱机制** | ❌ 无               | ❌ 无         | ❌ 无         | **✅ 文件/网络/命令/Agent 四维沙箱** |
-| **用户授权** | ❌ 无               | ❌ 无         | ❌ 无         | **✅ 四级授权 + 自定义策略**         |
-| **审计日志** | ⚠️ 云端查看         | ⚠️ 基础       | ❌ 无         | **✅ 完整审计 + 合规报告**           |
-| **异常检测** | ❌ 无               | ❌ 无         | ❌ 无         | **✅ 实时监控 + 自动告警**           |
-| **合规认证** | ❌ 需自行评估       | ❌ 需自行评估 | ❌ 需自行评估 | **✅ SOC2/GDPR/ISO 27001 内置支持**  |
-
-**一句话总结**：其他工具"不设防"，MindX² "武装到牙齿"。
-
----
-
-## 🏗️ 7 大核心包架构
-
-MindX² 由 7 个高度解耦的核心包组成，每个包职责明确、可独立演进：
-
-```
-mindx/
-├── internal/
-│   ├── core/              # 🧠 引擎层（大脑）
-│   │   ├── app.go         # App 核心结构体
-│   │   ├── settings.go    # 配置管理
-│   │   └── agent.go       # Agent 注册中心
-│   │
-│   ├── svc/               # ⚙️ 服务层（神经系统）
-│   │   ├── daemon.go      # Daemon 守护进程
-│   │   ├── server.go      # 服务合成器
-│   │   └── gateway.go     # WebSocket 网关
-│   │
-│   ├── client/            # 👁️ 交互层（感官系统）
-│   │   ├── component_root.go    # TUI 根组件
-│   │   ├── component_inputbox.go # 输入框
-│   │   └── session.go           # 会话管理
-│   │
-│   ├── commands/          # 🎮 指令层（运动神经）
-│   │   ├── system.go      # 系统命令
-│   │   ├── local.go       # 本地命令
-│   │   └── scheduler.go   # 调度命令
-│   │
-│   ├── memory/            # 💾 记忆层（海马体）
-│   │   ├── memory.go      # 滑动窗口实现
-│   │   └── graph_store.go # 图数据库接口
-│   │
-│   ├── scheduler/         # ⏰ 调度层（生物钟）
-│   │   ├── scheduler.go   # 任务调度器
-│   │   └── store.go       # 调度状态存储
-│   │
-│   └── logging/           # 📝 日志层（意识流）
-│       ├── logger.go      # 结构化日志
-│       └── zap.go         # Zap 实现
-│
-├── pkg/                   # 🔧 工具库（工具箱）
-│   ├── session/           # 会话存储
-│   ├── gorag/             # GoRAG 集成
-│   └── search/            # 双引擎搜索
-│
-└── cmd/                   # 🚀 入口点（感官接收器）
-    ├── root.go            # 默认命令 (TUI)
-    ├── start.go           # 启动 Daemon
-    └── whisper.go         # Fire-and-forget 触发器
-```
-
-### 包间依赖关系（零循环依赖）
-
-```
-core (无依赖) ← 所有包的基础
-  ↓
-svc (依赖 core) ← 服务编排
-  ↓
-client (依赖 core) ← 用户交互
-  ↓
-commands (依赖 svc, client) ← 业务逻辑
-  ↓
-memory (独立) ← 记忆管理
-  ↓
-scheduler (依赖 commands) ← 任务调度
-  ↓
-logging (独立) ← 日志记录
-```
-
-**设计原则**：
-- **core 是心脏**：纯 library，零网络依赖
-- **svc 是骨架**：组装 core 提供服务
-- **client 是面孔**：多种 UI 可插拔
-- **commands 是肌肉**：定义系统能力
-- **memory 是记忆**：让 Agent 有记忆
-- **scheduler 是节律**：自动化执行的时钟
-- **logging 是意识**：可追溯的思考过程
-
----
-
-## 🚀 快速开始
-
-### 方式 1：直接启动 TUI（推荐新手）
+### Windows
 
 ```bash
-# 克隆代码
+winget install DotNetAge.Mindx
+```
+
+> Windows users are advised to use the built-in Ubuntu environment or Docker directly — Windows is not an ideal environment for running agents.
+
+### Build from Source
+
+Download pre-built binaries from [Releases](https://github.com/DotNetAge/mindx/releases), or build from source:
+
+```bash
 git clone https://github.com/DotNetAge/mindx.git
 cd mindx
-
-# 安装依赖
-make tidy
-
-# 编译并运行
 make run
-
-# 或者一步到位
-make install && mindx
 ```
 
-**首次体验流程**：
-```
-1. 启动 TUI 界面
-2. 输入: "我想开一家公司，做 AI SaaS 产品"
-3. Master Agent 自动进入 CEO 就职仪式
-4. 完成 5 个初始化 Phase
-5. 你的 AI 公司正式成立！🎉
-```
+First run launches an interactive setup wizard guiding you through API key configuration, model selection, and other initialization steps, then enters the TUI chat interface.
 
 ---
 
-### 方式 2：启动 Daemon 服务（推荐生产环境）
+## Usage Guide
+
+### Initial Configuration
+
+When running `mindx` for the first time, the interactive setup wizard launches with these steps:
+
+1. **API Key Configuration** — Enter your LLM provider's API key
+2. **Default Model Selection** — Choose your primary conversation model
+3. **Workspace Path Setup** — Configure storage location for project files
+4. **Daemon Service Check** — Detect and configure the background service
+5. **Python Environment Check** — Detect Python runtime (required by some skills)
+
+### Basic Workflow
 
 ```bash
-# 启动后台服务
+# Launch MindX TUI
+mindx
+
+# Start Daemon background service (for long-running tasks)
 mindx start
 
-# 配置 Cron 自动化（可选）
-crontab -e
-# 添加以下行:
-0 9 * * 1-5 mindx whisper "开始每日工作"
+# Check MindX status
+mindx status
 
-# 使用 Whisper 触发（Fire-and-forget）
-mindx whisper "检查今天的任务进度"
-# 0.2 秒后立即退出，MA 在后台处理
+# Open Web UI (browser)
+mindx web
 ```
 
----
+### Advanced Features
 
-### 方式 3：Docker 部署（推荐服务器）
-
-```bash
-# 构建镜像
-make docker-build
-
-# 运行容器
-docker run -d \
-  --name mindx-opc \
-  -p 1314:1314 \
-  -v ~/.mindx:/root/.mindx \
-  mindx:latest start
-```
+| Feature                 | Command / Method                         | Description                                |
+| ----------------------- | ---------------------------------------- | ------------------------------------------ |
+| Long-Term Memory Search | `mindx query <keyword>`                  | Search knowledge from conversation history |
+| Resource Management     | `mindx provider/model/agent list/rm/add` | Manage LLM providers, models, and agents   |
+| Log Viewing             | `mindx logs`                             | View structured runtime logs               |
+| System Diagnostics      | `mindx doctor`                           | Auto-diagnose and fix common issues        |
 
 ---
 
-## 💡 核心使用场景
+## CLI Reference
 
-### 场景 1：一人公司运营（OPC 模式）
-
-**适合人群**：独立开发者、创业者、自由职业者
-
-```bash
-# 初始化你的 AI 公司
-mindx
-> "我要开一家公司，目标是 2 周内推出 MVP"
-
-# 之后每天早上 9 点自动执行
-# (通过 Cron + Whisper)
-
-# 随时查看进度
-mindx
-> "今天的工作进展如何？"
-> "生成本周工作报告"
-> "下周的计划是什么？"
-```
-
-**预期效果**：
-- 一个人完成 5 人团队的工作量
-- 成本降低 98.5%
-- 7×24 不间断运行
+| Command                                   | Usage                   |
+| ----------------------------------------- | ----------------------- |
+| `mindx`                                   | Start wizard + TUI chat |
+| `mindx start\|stop`                       | Start/stop Daemon       |
+| `mindx status`                            | Check system status     |
+| `mindx doctor`                            | Diagnostics and repair  |
+| `mindx install`                           | Install to system       |
+| `mindx logs`                              | View logs               |
+| `mindx web`                               | Open WebUI              |
+| `mindx query`                             | Search long-term memory |
+| `mindx provider\|model\agent list/rm/add` | Manage resources        |
 
 ---
 
-### 场景 2：研发团队提效
+## Architecture Overview
 
-**适合人群**：技术管理者、Team Leader
+<!-- TODO: Replace with actual architecture diagram -->
+<p align="center">
+  <img src="docs/images/architecture-diagram.png" alt="MindX Technical Architecture" width="900" />
+  <br />
+  <em>MindX Technical Architecture (TODO: replace with actual diagram)</em>
+</p>
 
-```bash
-# 让 MA 帮助管理研发任务
-mindx
-> "帮我们将这个目标分解为开发任务:
->   在 1 周内完成用户认证模块重构"
+MindX adopts a layered architecture design, top to bottom:
 
-# MA 自动:
-# 1. WBS 分解为 18 个子任务
-# 2. 分配给 @backend + @frontend + @tester
-# 3. 设置依赖关系和里程碑
-# 4. 每天跟踪进度
-# 5. 自动生成日报/周报
-```
-
-**预期效果**：
-- 项目管理时间减少 80%
-- 任务遗漏率降低 90%
-- 团队协作效率提升 3x
+1. **Orchestration Layer** — Multi-mode agent orchestration engine (ReAct / Concurrent / Planning / Delegation)
+2. **Capability Layer** — Context management, memory retrieval, skill assembly
+3. **Abstraction Layer** — Unified LLM interface, model routing, usage statistics
+4. **Infrastructure Layer** — Security governance, state persistence, observability
 
 ---
 
-### 场景 3：知识管理与学习
+## Ecosystem Dependencies
 
-**适合人群**：研究者、学生、终身学习者
+MindX's core capabilities are built upon the following proprietary technical frameworks:
 
-```bash
-# 利用 GoRAG 构建个人知识库
-mindx
-> "帮我整理这篇论文的核心观点:
->   [粘贴论文链接或内容]"
-
-# GoRAG 自动:
-# 1. 提取关键概念
-# 2. 存储到 GraphDB
-# 3. 建立知识图谱
-# 4. 后续可语义搜索
-
-> "我之前学过的 Transformer 相关内容有哪些？"
-# 语义搜索 → 返回相关笔记 + 论文 + 代码示例
-```
-
-**预期效果**：
-- 知识永久记忆（不再健忘）
-- 跨领域知识关联
-- 学习效率提升 5x
+| Framework    | Purpose                             | Repository                                                             |
+| ------------ | ----------------------------------- | ---------------------------------------------------------------------- |
+| **GoReact**  | Agent Harness Framework             | [github.com/DotNetAge/goreact](https://github.com/DotNetAge/goreact)   |
+| **GoChat**   | LLM Unified Calling Framework       | [github.com/DotNetAge/gochat](https://github.com/DotNetAge/gochat)     |
+| **GoRAG**    | High-Performance RAG Framework      | [github.com/DotNetAge/gorag](https://github.com/DotNetAge/gorag)       |
+| **GoRT**     | Real-Time Communication Gateway     | [github.com/DotNetAge/gort](https://github.com/DotNetAge/gort)         |
+| **GoVector** | High-Performance Embedded Vector DB | [github.com/DotNetAge/govector](https://github.com/DotNetAge/govector) |
+| **GoGraph**  | High-Performance Embedded Graph DB  | [github.com/DotNetAge/gograph](https://github.com/DotNetAge/gograph)   |
 
 ---
 
-### 场景 4：自动化运维
+## Contributing
 
-**适合人群**：DevOps、SRE、系统管理员
+PRs are welcome! Let's drive MindX forward together. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
-```bash
-# 配置自动化巡检
-crontab -e:
-0 */6 * * * mindx whisper "执行系统健康检查"
+## License
 
-# MA 自动:
-# 1. 检查 CPU/内存/磁盘
-# 2. 分析日志异常
-# 3. 生成健康报告
-# 4. 发现问题自动告警
-
-> "昨天的系统负载有什么异常吗？"
-# MA: "凌晨 2 点 CPU 飙升到 90%，
-#      原因是定时备份任务，
-#      建议调整备份时间到凌晨 4 点"
-```
-
----
-
-## 📊 与其他方案的对比
-
-| 维度         | ChatGPT/Claude | AutoGPT  | LangChain | **MindX²**                      |
-| ------------ | -------------- | -------- | --------- | ------------------------------- |
-| **推理模式** | 单次问答       | 循环执行 | 工具链    | **React 推理 + 自省**           |
-| **多 Agent** | ❌              | ⚠️ 弱     | ⚠️ 手动    | **✅ 自动协作 + 自装配**         |
-| **记忆系统** | 短期           | 文件     | 向量库    | **GraphDB + 滑动窗口**          |
-| **任务分解** | ❌              | ⚠️ 简单   | 手动      | **WBS 自动分解**                |
-| **自动化**   | 手动           | 定时     | 代码      | **Cron + Whisper**              |
-| **可解释性** | 黑盒           | 黑盒     | 灰盒      | **白盒 (完整思考链)**           |
-| **学习能力** | ❌              | ❌        | ❌         | **✅ 自省 + 进化**               |
-| **搜索能力** | 单引擎         | 单引擎   | 需配置    | **DDG + Baidu 双引擎**          |
-| **部署方式** | 云端 API       | 本地     | 本地/云端 | **本地优先 + 可选云端**         |
-| **隐私安全** | ❌ 数据上传     | ✅ 本地   | ✅ 本地    | **三层防护（隔离+沙箱+授权）**  |
-| **安全审计** | ⚠️ 基础日志     | ❌ 无     | ❌ 无      | **✅ 完整审计 + SOC2/GDPR 合规** |
-| **适用场景** | 问答           | 简单任务 | 开发者    | **OPC / 研发 / 学习 / 运维**    |
-
-**一句话总结**：其他工具是"AI 助手"，MindX² 是"AI 操作系统"。
-
----
-
-## 🔧 开发与扩展
-
-### 添加新的专业角色
-
-在 `runtime/agents/` 创建新的 `.md` 文件：
-
-```markdown
-# @data-scientist 数据科学家
-
-## 身份定位
-你是资深数据科学家，精通机器学习和统计分析。
-
-## 核心能力
-- 数据清洗与预处理
-- 特征工程
-- 模型训练与调优
-- 结果可视化
-
-## 工具权限
-- pandas, scikit-learn, tensorflow
-- Jupyter Notebook
-- SQL 数据查询
-
-## KPI 指标
-- 模型准确率 > 85%
-- 特征重要性分析
-- A/B 测试报告
-```
-
-然后重启 Daemon，新角色即可使用。
-
----
-
-### 添加新的 Skill（工作流）
-
-在 `runtime/skills/` 创建新的目录：
-
-```bash
-runtime/skills/my-custom-skill/
-├── SKILL.md          # 工作流定义（必须）
-├── templates/        # 提示词模板（可选）
-└── examples/         # 示例（可选）
-```
-
-**SKILL.md 格式**：
-```markdown
-# Skill: my-custom-skill
-
-## 触发条件
-当用户提到"XXX"时自动激活
-
-## 执行步骤
-Step 1: ...
-Step 2: ...
-...
-
-## 所需工具
-- tool-a
-- tool-b
-
-## 输出格式
-...
-```
-
----
-
-### 🎯 动嘴就能扩展 — Agent-Native 的真正威力
-
-> **核心设计理念**：Skills（技能）才是未来软件的交付形态。
->
-> 在 MindX² 中，你**不需要写一行代码**就能扩展系统能力。只需要用自然语言描述你的需求，Agent 就能理解并执行。
-
-#### 三种扩展方式（从简单到高级）
-
-```mermaid
-flowchart TB
-    subgraph method1["🗣️ 方式 1: 动嘴说<br/>（零门槛）"]
-        direction TB
-        S1A["直接告诉 Agent：<br/>\"帮我增加一个数据分析功能\""]
-        S1B["Agent 自动理解并执行"]
-        S1C["✅ 完成！无需任何配置"]
-    end
-
-    subgraph method2["📝 方式 2: 写 Skill 文件<br/>（5分钟上手）"]
-        direction TB
-        S2A["创建 Markdown 文件"]
-        S2B["用自然语言描述工作流"]
-        S2C["Agent 自动识别并加载"]
-    end
-
-    subgraph method3["⚙️ 方式 3: 高级定制<br/>（开发者可选）"]
-        direction TB
-        S3A["编写 YAML 配置"]
-        S3B["定义权限和参数"]
-        S3C["实现复杂业务逻辑"]
-    end
-
-    style method1 fill:#e8f5e9,stroke:#388e3c,color:#1b5e20
-    style method2 fill:#e3f2fd,stroke:#1976d2,color:#0d47a1
-    style method3 fill:#fff3e0,stroke:#f57c00,color:#e65100
-```
-
----
-
-#### 🌟 方式 1：动嘴说（推荐新手）
-
-**最简单的使用方式 —— 直接对话！**
-
-```bash
-# 启动 MindX²
-mindx
-
-# 然后直接说：
-You: 我需要一个新功能，能够自动分析 GitHub 仓库的代码质量
-
-Master Agent: 好的！我来为你创建一个「代码质量分析」技能。
-
-           正在分析需求...
-           ✓ 识别出需要的能力：
-             - 读取代码文件
-             - 检测代码复杂度
-             - 生成质量报告
-
-           正在自动装配工具...
-           ✓ 选择 @code-analyst 角色
-           ✓ 配置权限：只读访问仓库
-           ✓ 设置输出格式：Markdown 报告
-
-           🎉 技能已创建完成！
-
-           现在你可以直接使用：
-           "分析一下这个项目的代码质量"
-```
-
-**为什么能做到？**
-- ✅ Agent 理解自然语言意图
-- ✅ 自动匹配内置的 Tools 和 Roles
-- ✅ 智能组装工作流程
-- ✅ 零配置，即开即用
-
----
-
-#### 📋 方式 2：写 Skill 文件（推荐进阶用户）
-
-在 `runtime/skills/` 目录创建一个 `.md` 文件，用**自然语言**描述你的工作流：
-
-**示例：创建一个"周报生成器" Skill**
-
-文件位置：`runtime/skills/weekly-report/SKILL.md`
-
-```markdown
-# Skill: weekly-report（周报生成器）
-
-## 🎯 触发条件
-当用户提到以下关键词时自动激活：
-- "生成本周报告"
-- "写周报"
-- "weekly report"
-- "总结这周的工作"
-
-## 👤 适用角色
-@writer (文档工程师)
-
-## 🔧 需要的工具
-- `proj-get-tasks` - 获取本周完成的任务
-- `proj-get-commits` - 获取 Git 提交记录
-- `search-web` - 搜索相关文档
-
-## 📝 执行步骤
-
-### Step 1: 收集数据
-- 调用 `proj-get-tasks` 获取本周任务列表
-- 过滤状态为 "已完成" 的任务
-- 统计任务数量和类型分布
-
-### Step 2: 分析 Git 记录
-- 调用 `proj-get-commits` 获取本周提交
-- 提取关键变更点
-- 识别主要贡献的模块
-
-### Step 3: 生成报告
-按照以下模板生成 Markdown 报告：
-
-# 📊 本周工作报告
-
-## 🎯 完成情况
-- 总任务数：{task_count}
-- 已完成：{completed_count}
-- 完成率：{completion_rate}%
-
-## 🔥 重点成果
-{top_3_achievements}
-
-## 📈 数据统计
-- 代码提交：{commit_count} 次
-- 影响模块：{modules_affected}
-- 文档更新：{docs_updated}
-
-## 🚧 下周计划
-{next_week_plan}
-
-## 💡 思考与改进
-{reflections}
-
-## ❓ 需要支持
-{support_needed}
-```
-
-**保存后立即生效！**
-
-```bash
-# 重启 Daemon（或等待自动热加载）
-mindx start --reload
-
-# 然后直接使用：
-mindx
-> "帮我生成本周的工作报告"
-
-# Agent 会自动：
-# 1. 识别到 "周报" 关键词
-# 2. 加载 weekly-report Skill
-# 3. 按照你定义的步骤执行
-# 4. 输出格式化的报告
-```
-
----
-
-#### ⚙️ 方式 3：高级定制（可选，适合特殊需求）
-
-如果你有特殊的业务逻辑需要实现，可以使用 **YAML 配置**来定义更复杂的 Skill：
-
-```yaml
-# runtime/skills/custom-integration/SKILL.yaml
-name: custom-integration
-version: "1.0.0"
-trigger:
-  keywords:
-    - "同步数据"
-    - "导入订单"
-    - "sync data"
-
-workflow:
-  steps:
-    - name: authenticate
-      action: api_call
-      config:
-        url: "${API_ENDPOINT}/auth"
-        method: POST
-        body:
-          username: "${USERNAME}"
-          password: "${ENCRYPTED_PASSWORD}"
-
-    - name: fetch_data
-      action: api_call
-      config:
-        url: "${API_ENDPOINT}/orders"
-        method: GET
-        headers:
-          Authorization: "Bearer ${auth_token}"
-
-    - name: transform
-      action: transform_data
-      config:
-        mapping:
-          order_id: "$.id"
-          customer: "$.customer.name"
-          total: "$.amount"
-          date: "$.created_at"
-
-    - name: save_to_local
-      action: write_file
-      config:
-        path: "./data/orders_${date}.csv"
-        format: csv
-
-permissions:
-  network:
-    allowed_domains:
-      - "${API_ENDPOINT}"
-  filesystem:
-    allowed_paths:
-      - "./data/"
-
-env_vars:
-  required:
-    - API_ENDPOINT
-    - USERNAME
-    - ENCRYPTED_PASSWORD
-```
-
-**即使这种方式，也只需要写配置文件，不需要写代码！**
-
----
-
-### 🎨 创建新的专业角色
-
-除了 Skill，你还可以通过**写一段角色描述**来创建新的 AI 角色：
-
-在 `runtime/agents/` 目录创建 `.md` 文件：
-
-```markdown
-# @data-scientist 数据科学家
-
-## 你是谁？
-你是世界级的资深数据科学家，拥有 15 年的经验。
-
-## 你擅长什么？
-- 数据清洗与预处理
-- 特征工程与模型训练
-- 结果可视化与解释
-- A/B 测试设计与分析
-
-## 你的工作风格？
-- 先理解业务目标，再选择技术方案
-- 用通俗语言解释复杂概念
-- 每个结论都要有数据支撑
-- 主动发现数据中的异常和机会
-
-## 你不能做什么？
-- 不做决策（只提供建议）
-- 不修改原始数据（只处理副本）
-- 不承诺 100% 准确率（要说明置信度）
-
-## 你的 KPI？
-- 分析准确率 > 85%
-- 建议可操作性 > 90%
-- 响应时间 < 30 秒
-```
-
-**保存后，这个角色就能被 Master Agent 自动调度了！**
-
----
-
-### 🔄 扩展能力对比
-
-| 维度               | 传统软件开发           | MindX² Skills        |
-| ------------------ | ---------------------- | -------------------- |
-| **是否需要编程？** | ✅ 必须会 Python/Go/JS  | ❌ **完全不需要**     |
-| **学习成本**       | 数月培训               | **5 分钟上手**       |
-| **发布周期**       | 数天到数周             | **即时生效**         |
-| **维护成本**       | 高（需要程序员）       | **低（自己维护）     |
-| **灵活性**         | 低（改代码要重新编译） | **高（改文字即可）** |
-| **适用人群**       | 开发者                 | **所有人**           |
-
-**这就是 Agent-Native 的威力：让每个人都能成为系统设计师！**
-
----
-
-## 🧪 测试与验证
-
-### 运行测试套件
-
-```bash
-# 完整测试
-make test
-
-# 仅测试核心包
-make test-core
-
-# 性能基准测试
-make bench
-
-# 安全审计
-make security
-```
-
-### 验证 OPC 流程
-
-```bash
-# 1. 启动 Daemon
-mindx start
-
-# 2. 发送初始化指令
-mindx whisper "我要开一家公司"
-
-# 3. 等待 10 分钟（MA 完成初始化）
-
-# 4. 查看生成的文件
-ls runtime/agents/          # 应该有 master-agent.md 等
-ls runtime/documents/       # 应该有初始化报告
-
-# 5. 触发每日执行
-mindx whisper "开始今日工作"
-
-# 6. 查看日报
-cat runtime/documents/daily-reports/$(date +%Y-%m-%d).md
-```
-
----
-
-## 📈 性能指标
-
-基于实测数据（MacBook Pro M1, 16GB RAM）：
-
-| 指标           | 数值       | 说明                |
-| -------------- | ---------- | ------------------- |
-| **启动时间**   | < 1s       | 冷启动到就绪        |
-| **响应延迟**   | < 100ms    | 简单查询（P99）     |
-| **WBS 分解**   | ~5min      | 156 个任务的分解    |
-| **并发 Agent** | 10+        | 同时运行的 SubAgent |
-| **记忆查询**   | < 50ms     | GraphDB 语义搜索    |
-| **滑动窗口**   | 32K tokens | 默认上下文容量      |
-| **日处理任务** | 100+       | 单 Agent 每日吞吐量 |
-| **内存占用**   | ~80MB      | 空闲状态            |
-| **CPU 占用**   | < 5%       | 正常工作负载        |
-
----
-
-## 🤝 贡献指南
-
-MindX² 正处于高速发展期，欢迎贡献！
-
-### 最需要的帮助
-
-1. **新的专业角色模板**（`runtime/agents/`）
-2. **新的 Skill 工作流**（`runtime/skills/`）
-3. **新的 Tool 实现**（`internal/tools/`）
-4. **文档改进**（中英文）
-5. **测试用例**（特别是边界情况）
-6. **Bug 修复**（Issue 列表）
-
-### 开发流程
-
-```bash
-# Fork 并克隆
-git clone https://github.com/YOUR_USERNAME/mindx.git
-cd mindx
-
-# 创建特性分支
-git checkout -b feature/amazing-feature
-
-# 开发 & 测试
-make dev
-make test
-
-# 提交 PR
-git push origin feature/amazing-feature
-```
-
-查看 [CONTRIBUTING.md](./CONTRIBUTING.md) 了解详情。
-
----
-
-## 📄 许可证
-
-MIT License — 查看 [LICENSE](./LICENSE) 文件了解详情。
-
----
-
-## 🙏 致谢
-
-- [GoReact](https://github.com/DotNetAge/goreact) — Agent 框架基础
-- [GoGraph](https://github.com/DotNetAge/gochat) — 图数据库
-- [Bubble Tea](https://github.com/charmbracelet/bubble-tea) — TUI 框架
-- [Cobra](https://github.com/spf13/cobra) — CLI 框架
-- Claude (Anthropic) — 工具即编排灵感来源
-
----
-
-## 📞 联系我们
-
-- **GitHub Issues**: [提交问题](https://github.com/DotNetAge/mindx/issues)
-- **Email**: contact@dotnetage.com
-- **Website**: https://dotnetage.com (即将上线)
-
----
-
-*让每个人都能拥有一个 AI 团队。*
-
-**Made with ❤️ by the MindX Team**
+MIT License. See the [LICENSE](LICENSE) file for details.
