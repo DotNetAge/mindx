@@ -365,7 +365,7 @@ jobs:
 
       - name: Push to Homebrew tap
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           TAP_REPO="${{ env.HOMEBREW_TAP }}"
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}

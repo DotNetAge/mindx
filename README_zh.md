@@ -6,6 +6,10 @@
 [![Homebrew](https://img.shields.io/homebrew/v/mindx)](https://formulae.brew.sh/formula/mindx)
 [![Docker Pulls](https://img.shields.io/docker/pulls/dotnetage/mindx)](https://hub.docker.com/r/dotnetage/mindx)
 
+<p>
+  <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
+</p>
+
 > MindX 是一个开源的 AI Agent 平台（Agent Harness），通过混合编排模式、智能记忆系统和自研技术栈，帮助你高效地构建、管理和运行 AI Agent 工作流。无论是日常编码辅助，还是复杂的多步骤任务自动化，MindX 都能提供专业级的AI处理能力。
 
 <p align="center">
