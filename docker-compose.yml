@@ -32,21 +32,7 @@ services:
     ports:
       - "${MINDX_WEB_PORT:-1313}:1313" # Web UI (HTTP)
       - "${MINDX_WS_PORT:-1314}:1314" # WebSocket Gateway
-    environment:
-      # LLM Provider API Keys (see runtime/settings/providers.yml)
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - ZHIPU_API_KEY=${ZHIPU_API_KEY:-}
-      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
-      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
-      - ARK_API_KEY=${ARK_API_KEY:-}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
     volumes:
-      # Persistent sessions & logs
-      - mindx-data:/home/mindx/.mindx/sessions
-      - mindx-logs:/home/mindx/.mindx/logs
       # Workspace shared with host
       - ./workspaces:/home/mindx/workspaces
     restart: unless-stopped
@@ -56,9 +42,3 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
-
-volumes:
-  mindx-data:
-    name: ${COMPOSE_PROJECT_NAME:-mindx}-data
-  mindx-logs:
-    name: ${COMPOSE_PROJECT_NAME:-mindx}-logs
