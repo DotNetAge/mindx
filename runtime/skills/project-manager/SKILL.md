@@ -4,111 +4,81 @@ description: >
   Turns vague ideas into structured projects with recurring tasks —
   decompose goals, assign recurring work to agents considering
   dependencies and priorities, track progress, adjust the plan
-  continuously, and proactively report. Use for any long-running,
-  multi-agent, or periodic work.
+  continuously, and proactively report.
 ---
 
-# When to Use This Skill
+# When to Use
 
-- The user has a long-term or recurring need (运营小红书、每日简报、定期报告)
-- The user says "项目", "计划", "manage", "run", "operate"
-- The task is too large or ongoing for one-shot execution
-- You need to decompose a vague goal into concrete recurring tasks
-- You receive a message asking you to check a project's status
+- User has a long-running or recurring need (social media ops, periodic reports, project management)
+- Task is too large or ongoing for one-shot execution
+- Need to decompose a vague goal into concrete recurring tasks
 
-**Do NOT use** for tasks you can complete directly in one response.
+**Do NOT use** for tasks you can complete in one response.
 
 ---
 
 ## Workflow
 
-### Phase 1: Plan — Understand and Decompose
+### Phase 1: Plan — Understand & Decompose
 
-Talk to the user. Extract a **measurable** goal before writing anything down.
+Talk to the user. Extract measurable goals before writing anything.
 
-| Ask | Purpose |
-|-----|---------|
-| "What does success look like?" | Define the finish line |
-| "How will you measure it?" | Make it quantifiable |
-| "Any deadlines?" | Set time boundaries |
-| "Does any part repeat?" | Identify recurring work |
+| Ask                            | Why                 |
+| ------------------------------ | ------------------- |
+| "What does success look like?" | Define finish line  |
+| "How will you measure it?"     | Quantifiable        |
+| "Any deadlines?"               | Time boundaries     |
+| "Does any part repeat?"        | Find recurring work |
 
-Confirm the plan with the user. Then decompose the goal into deliverables,
-each deliverable into concrete recurring tasks. Every task answers three
-questions: **who does it, when do they do it, what do they do**.
-
-Tasks may depend on each other and have different priorities. This is why
-they're recorded in a graph database — dependencies, priorities, and
-assignments are all connected and queryable.
-
-Record the project structure. **Each task gets a unique task ID — this ID
-will become the session_id for all communication about this task with the
-assigned agent.**
+Confirm plan. Decompose goal into tasks. Each task = **who does it, when, what**.
 
 ```bash
-python3 scripts/graph_client.py create-project --name "..." ...
-python3 scripts/graph_client.py create-goal --project-id "..." ...
-# Save the returned task ID — it's your session_id for talking to this agent
-# about this specific work.
-python3 scripts/graph_client.py create-task --goal-id "..." --agent "@x" --prompt "..." ...
+graph_client.py create-project --name "..." --description "..."
+graph_client.py create-goal --project-id "..." --title "..." --weight N
+
+# Save task_id — it becomes the session_id for all future communication
+task_id=$(graph_client.py create-task --goal-id "..." --title "..." --agent "@x" --prompt "..." | python3 -c "import sys,json;print(json.load(sys.stdin)[0].get('t.id',''))")
 ```
+
+---
 
 ### Phase 2: Assign — Set Recurring Work
 
-For each recurring task, assign it to the agent with its timing and prompt.
-This tells the system: every Monday at 9 AM, @writer writes a blog post.
+For each task, link it to the scheduler. **task_id = session_id**.
 
 ```bash
-python3 scripts/assign-task.py --agent "@writer" --task "..." --cron "0 0 9 * * 1"
+assign-task.py assign --agent "@x" --task "..." --cron "0 0 9 * * 1" --session-id "$task_id"
 ```
 
-**Important:** The task prompt must include a reporting instruction. Without it,
-the agent finishes its work silently and you never hear back. Add this to
-every task prompt:
+**Critical:** Every task prompt must include a reporting instruction, or the agent works silently and you never hear back:
 
-> When you finish, use AgentTalk to report the result to project-manager
-> in session "{task_id}" with a summary of what was done.
+> When you finish, use AgentTalk to report the result to project-manager in session "{task_id}" with a summary.
 
-Use the **task ID** as the session_id — not the project ID. Each task has its
-own conversation thread so multiple discussions with the same agent stay
-separate. The task_id is returned by both `create-task` and `assign-task`.
+This closes the loop — agent reports back autonomously after each execution, and you know which session to use for follow-up.
 
-This closes the loop — the agent reports back autonomously after each execution,
-and you know exactly which session to use when following up.
+---
 
-### Phase 3: Track — Review Progress
+### Phase 3: Track — Review & Adjust
 
-Agents report back automatically via AgentTalk after each execution,
-using the **task ID as session_id**. When you receive a report, you
-know exactly which task it belongs to.
-
-To follow up or give feedback on a specific task, use AgentTalk with
-the same task_id as the session:
+Agents report back via AgentTalk(session=task_id). Follow up with the same session:
 
 ```
-AgentTalk(agent_name="@writer", session_id="{task_id}", message="Good work. Next week focus on Kubernetes.")
+AgentTalk(agent_name="@writer", session_id="{task_id}", message="Focus on Kubernetes next week.")
 ```
 
-This keeps each task's conversation in its own thread — @writer sees
-the full history of that task, not mixed with other tasks.
-
-You can also proactively check on any project:
+Proactively check progress:
 
 ```bash
-python3 scripts/query-progress.py --project-id "..."
+query-progress.py --project-id "..."
 ```
 
-Review and **adjust**:
-
-- Report received? → Acknowledge, give feedback, or assign next steps via AgentTalk.
-- Tasks succeeding? → Keep going. Consider giving positive feedback via AgentTalk.
-- Tasks failing? → Fix the prompt, change the agent, or adjust the plan.
+Adjust as needed:
+- Report received? → Acknowledge, give feedback, assign next steps via AgentTalk.
+- Failing? → Fix prompt, change agent, adjust plan.
 - Dependencies blocked? → Reschedule or reorder.
-- Priorities changed? → Update task priorities in the project.
-- On track? → Report. Off track? → Tell the user why and propose changes.
+- Priorities changed? → Update task priorities.
 
-The plan is never static. Every report or check-in is an opportunity to rebalance.
-This is the hardest but most valuable part of being a PM.
+---
 
 ### Phase 4: Report — Proactively Communicate
 
@@ -116,9 +86,7 @@ Tell the user what happened before they ask:
 
 ```
 {name} — {X}% complete
-
 {goal}: {completed}/{total} tasks
-
 Recent: {task} — {summary}
 Issues: {what needs attention}
 Next: {plan for next period}
@@ -128,13 +96,13 @@ Next: {plan for next period}
 
 ## Command Reference
 
-| What | Command |
-|------|---------|
-| Create project | `graph_client.py create-project --name ... --description ...` |
-| Create goal | `graph_client.py create-goal --project-id ... --title ... --weight N` |
-| Create task | `graph_client.py create-task --goal-id ... --title ... --agent @x --prompt "..."` |
-| Update task status | `graph_client.py update-task --task-id ... --status ...` |
-| Assign recurring | `assign-task.py --agent @x --task "..." --cron "..."` |
-| List assignments | `assign-task.py list` |
-| Query progress | `query-progress.py --project-id ...` |
-| Talk to agent | Use **AgentTalk** tool: `agent_name`, `session_id`, `message` |
+| What             | Command                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| Create project   | `graph_client.py create-project --name ... --description ...`                          |
+| Create goal      | `graph_client.py create-goal --project-id ... --title ... --weight N`                  |
+| Create task      | `graph_client.py create-task --goal-id ... --title ... --agent @x --prompt "..."`      |
+| Update task      | `graph_client.py update-task --task-id ... --status ... [--result "..."]`              |
+| Assign recurring | `assign-task.py assign --agent @x --task "..." --cron "..." [--session-id "task-xxx"]` |
+| List assignments | `assign-task.py list`                                                                  |
+| Query progress   | `query-progress.py --project-id ...`                                                   |
+| Talk to agent    | **AgentTalk** tool: `agent_name`, `session_id`, `message`                              |

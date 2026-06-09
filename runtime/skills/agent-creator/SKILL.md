@@ -6,59 +6,48 @@ description: >
   and no existing agent fits the requirement.
 ---
 
-# When to Use This Skill
+## When to Use
 
-- The user says "I need a XXX expert", "I need someone who knows XXX",
-  "I need a specialist in XXX", "create an agent for XXX"
-- The user needs a professional capability no existing agent has
-- You're executing a workflow that requires a specialist, and no existing
-  agent is suitable
+- User says "I need a XXX expert", "I need someone who knows XXX", "create an agent for XXX"
+- A workflow requires a specialist and no existing agent is suitable
 
-**Do NOT use** when a suitable agent already exists — check existing agents first.
-
----
+**Do NOT use** when a suitable agent already exists.
 
 ## Workflow
 
-### Step 1: Review Best Practices
+### 1. Check existing agents
 
-Read `references/agent-best-practices.md` for guidance on name, role,
-description, model, and skills fields before defining the agent.
+```bash
+python3 -c "
+import sys; sys.path.insert(0,'scripts')
+from rpc_client import rpc_call
+import json; print(json.dumps(rpc_call('agent.list'), indent=2))
+"
+```
 
-### Step 2: List Available Skills
+### 2. Review field rules
 
-See what skills are installable:
+Read `references/agent-best-practices.md` — name format, required fields, anti-patterns.
+
+### 3. List available skills & models
 
 ```bash
 python3 scripts/list_skills.py
-```
-
-Select skills that match the expert's domain. Only assign relevant skills —
-over-equipping inflates context overhead.
-
-### Step 3: List Available Models
-
-See what models are available:
-
-```bash
 python3 scripts/list_models.py
 ```
 
-Choose the model best suited to the task type.
+Select only relevant skills — each adds context overhead.
 
-### Step 4: Create the Agent
-
-Craft a clear system prompt (body) that defines the agent's identity and
-responsibilities. Use the agent's role and description as a starting point.
+### 4. Create the agent
 
 ```bash
 python3 scripts/create_agent.py \
-    --name "<agent_name>" \
-    --role "<agent_role>" \
-    --description "<description>" \
-    --body "<system_prompt>" \
-    --model "<model_name>" \
+    --name "agent-name" \
+    --role "Senior Role Title" \
+    --description "What the agent does..." \
+    --body "Full system prompt..." \
+    --model "model-name" \
     --skills "skill1,skill2"
 ```
 
-The agent is now registered in the system and ready for delegation.
+The agent is now registered and ready for delegation.

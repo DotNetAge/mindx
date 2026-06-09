@@ -55,11 +55,15 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 
 	gw.RegisterMethod("user.config", r.daemon.handleUserConfig)
 
+	gw.RegisterMethod("server.version", r.daemon.handleServerVersion)
+
 	gw.RegisterMethod("token.usage.overview", r.daemon.handleTokenUsageOverview)
 	gw.RegisterMethod("token.usage.monthly", r.daemon.handleTokenUsageMonthly)
 	gw.RegisterMethod("token.usage.by_model", r.daemon.handleTokenUsageByModel)
 
 	gw.RegisterMethod("schedule.list", r.daemon.handleScheduleList)
+	gw.RegisterMethod("schedule.add", r.daemon.handleScheduleAdd)
+	gw.RegisterMethod("schedule.del", r.daemon.handleScheduleDelete)
 
 	gw.RegisterMethod("log.read", r.daemon.handleLogRead)
 	gw.RegisterMethod("log.clear", r.daemon.handleLogClear)

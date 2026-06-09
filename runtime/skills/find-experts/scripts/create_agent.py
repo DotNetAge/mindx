@@ -24,6 +24,7 @@ def main():
     parser.add_argument("--name", required=True, help="Agent identifier")
     parser.add_argument("--role", required=True, help="Short role title")
     parser.add_argument("--description", required=True, help="Detailed role description")
+    parser.add_argument("--body", required=True, help="System prompt / core instructions for the agent")
     parser.add_argument("--model", required=True, help="Model name to use")
     parser.add_argument("--skills", type=str, default="", help="Comma-separated skill names")
     args = parser.parse_args()
@@ -36,6 +37,7 @@ def main():
         "name": args.name,
         "role": args.role,
         "description": args.description,
+        "body": args.body,
         "model": args.model,
     }
     if skills_list:

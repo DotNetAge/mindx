@@ -108,7 +108,7 @@ setup-cross:
 build-debug:
 	@echo "$(YELLOW)🔧 Building debug binary...$(NC)"
 	@mkdir -p $(BUILD_DIR)
-	$(GO) build -gcflags="all=-N -l" -o $(BUILD_DIR)/$(BINARY_NAME)-debug .
+	$(GO) build $(GOFLAGS) -gcflags="all=-N -l" -o $(BUILD_DIR)/$(BINARY_NAME)-debug .
 	@echo "$(GREEN)✅ Debug build complete: $(BUILD_DIR)/$(BINARY_NAME)-debug$(NC)"
 
 ## install: 构建并部署到 ~/.mindx（含 runtime 资源 + PATH + 系统服务配置）

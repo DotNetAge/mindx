@@ -2,9 +2,19 @@
 """
 Assign a recurring task to an agent — who, when, what.
 
+Links schedule entries to graph tasks: pass the graph task_id as --session-id
+so the agent can report back to the correct conversation thread.
+
 Usage:
-  assign-task.py --agent @writer --task "Write blog post about X" --cron "0 0 9 * * 1"
-  assign-task.py list
+  python3 scripts/assign-task.py assign \\
+      --agent @writer --task "Write blog post" --cron "0 0 9 * * 1"
+
+  # Link to an existing graph task (recommended):
+  python3 scripts/assign-task.py assign \\
+      --agent @writer --task "Write blog post" --cron "0 0 9 * * 1" \\
+      --session-id "task-a1b2c3d4" --project-dir /path/to/project
+
+  python3 scripts/assign-task.py list
 """
 
 import argparse
@@ -21,8 +31,8 @@ def cmd_assign(args):
         agent=args.agent,
         content=args.task,
         cron_expr=args.cron,
-        session_id="new",
-        project_dir=args.dir or "",
+        session_id=args.session_id,
+        project_dir=args.project_dir or "",
     )
     with MindXSchedulerClient(host=args.host, port=args.port) as client:
         result = client.add_job(params)
@@ -45,10 +55,26 @@ def cmd_list(args):
     with MindXSchedulerClient(host=args.host, port=args.port) as client:
         result = client.list_jobs()
     if result.success:
-        if args.json:
-            print(json.dumps({"success": True, "data": result.data}, indent=2))
+        entries = result.data
+        if isinstance(entries, list):
+            if args.json:
+                print(json.dumps(entries, indent=2, ensure_ascii=False))
+            elif not entries:
+                print("No assignments.")
+            else:
+                print(f"\nScheduled tasks ({len(entries)}):")
+                print("=" * 60)
+                for entry in entries:
+                    status = "active" if entry.get("enabled", False) else "paused"
+                    print(f"  ID:      {entry.get('id', '')}")
+                    print(f"  Agent:   {entry.get('agent', '')}")
+                    print(f"  Content: {entry.get('content', '')[:80]}")
+                    print(f"  Cron:    {entry.get('cron_expr', '')}")
+                    print(f"  Status:  {status}")
+                    print(f"  Session: {entry.get('session_id', '') or 'N/A'}")
+                    print("-" * 60)
         else:
-            print(result.data or "No assignments.")
+            print(entries)
         return 0
     else:
         print(f"Failed: {result.error}", file=sys.stderr)
@@ -63,7 +89,9 @@ def main():
     p.add_argument("--agent", required=True, help="Target agent (e.g. @writer)")
     p.add_argument("--task", required=True, help="Task description / prompt")
     p.add_argument("--cron", required=True, help="6-field cron expression")
-    p.add_argument("--dir", default="", help="Project directory")
+    p.add_argument("--session-id", default="",
+                   help="Graph task_id to use as session (recommended; omit to auto-generate)")
+    p.add_argument("--project-dir", default="", help="Project directory")
     p.add_argument("--host", default=DEFAULT_GATEWAY_HOST)
     p.add_argument("--port", type=int, default=DEFAULT_GATEWAY_PORT)
 
