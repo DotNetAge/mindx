@@ -11,10 +11,12 @@ import (
 	"strings"
 	"sync"
 
+	graphapi "github.com/DotNetAge/gograph/pkg/api"
 	"github.com/DotNetAge/goreact/events"
 	"github.com/DotNetAge/goreact/hooks/action"
 	goreactmemory "github.com/DotNetAge/goreact/memory"
 	goreactsession "github.com/DotNetAge/goreact/session"
+	"go.etcd.io/bbolt"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
@@ -246,6 +248,13 @@ type Daemon struct {
 
 	pendingInteractions map[string]*pendingInteraction
 	interactMu          sync.Mutex
+
+	// knowledge-graph database (gograph)
+	graphDB    *graphapi.DB
+	graphStore *graphapi.GraphStore
+
+	// global key-value store (bbolt)
+	kvStore *bbolt.DB
 }
 
 func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
@@ -339,10 +348,35 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 		logger.Info("scheduler instance created")
 	}
 
-	logger.Info("=== Daemon initialization complete ===",
+	// Initialize knowledge-graph database (gograph)
+	graphDB, graphStore, graphErr := initGraphDB(app.Settings().DataDir())
+	if graphErr != nil {
+		logger.Warn("failed to initialize knowledge-graph database", "error", graphErr)
+	} else {
+		d.graphDB = graphDB
+		d.graphStore = graphStore
+		logger.Info("knowledge-graph database initialized",
+			"path", filepath.Join(app.Settings().DataDir(), "knowledge-graph.db"),
+		)
+	}
+
+	// Initialize global KV store (bbolt)
+	kvDB, kvErr := initKVStore(app.Settings().DataDir())
+	if kvErr != nil {
+		logger.Warn("failed to initialize kvstore", "error", kvErr)
+	} else {
+		d.kvStore = kvDB
+		logger.Info("kvstore initialized",
+			"path", filepath.Join(app.Settings().DataDir(), "kvstore.db"),
+		)
+	}
+
+	d.logger.Info("=== Daemon initialization complete ===",
 		"has_scheduler", d.scheduler != nil,
 		"has_memory_watch", d.memoryWatch != nil,
 		"has_shared_memory", d.sharedMemory != nil,
+		"has_graph_db", d.graphDB != nil,
+		"has_kvstore", d.kvStore != nil,
 	)
 	return d
 }
@@ -421,6 +455,22 @@ func (d *Daemon) stopBackgroundServices() {
 		d.logger.Info("stopping scheduler service")
 		d.scheduler.Stop()
 		d.logger.Info("scheduler service stopped")
+	}
+	if d.graphDB != nil {
+		d.logger.Info("closing knowledge-graph database")
+		if err := d.graphDB.Close(); err != nil {
+			d.logger.Warn("failed to close knowledge-graph database", "error", err)
+		} else {
+			d.logger.Info("knowledge-graph database closed")
+		}
+	}
+	if d.kvStore != nil {
+		d.logger.Info("closing kvstore")
+		if err := d.kvStore.Close(); err != nil {
+			d.logger.Warn("failed to close kvstore", "error", err)
+		} else {
+			d.logger.Info("kvstore closed")
+		}
 	}
 	d.logger.Info("all background services stopped")
 }
@@ -926,4 +976,16 @@ func (d *Daemon) Addr() string {
 
 func (d *Daemon) WSPath() string {
 	return d.wsPath
+}
+
+func (d *Daemon) GraphDB() *graphapi.DB {
+	return d.graphDB
+}
+
+func (d *Daemon) GraphStore() *graphapi.GraphStore {
+	return d.graphStore
+}
+
+func (d *Daemon) KVStore() *bbolt.DB {
+	return d.kvStore
 }
