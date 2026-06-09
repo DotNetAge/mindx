@@ -11,6 +11,9 @@ description: >
 model: "qwen3.6-plus"
 skills:
   - humanizer
+  - content-factory
+  - copywriting
+  - kg-manager
   - find-experts
 ---
 
