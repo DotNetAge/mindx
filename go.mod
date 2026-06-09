@@ -11,7 +11,7 @@ require (
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.3
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/joho/godotenv v1.5.1
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/robfig/cron/v3 v3.0.1
@@ -24,7 +24,8 @@ require (
 
 require (
 	github.com/DotNetAge/gochat v0.2.7
-	github.com/DotNetAge/gorag v1.2.0
+	github.com/DotNetAge/gograph v0.2.4
+	github.com/DotNetAge/gorag v1.3.1
 	github.com/DotNetAge/goreact v0.1.5
 	golang.org/x/text v0.37.0
 )
@@ -32,7 +33,6 @@ require (
 require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/DataDog/zstd v1.5.7 // indirect
-	github.com/DotNetAge/gograph v0.2.4 // indirect
 	github.com/DotNetAge/govector v0.1.7 // indirect
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0 // indirect
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect

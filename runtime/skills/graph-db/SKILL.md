@@ -1,0 +1,177 @@
+---
+name: graph-db
+description: >
+  Use when you need to query, read from, write to, or manage a graph database (gograph).
+  Covers Cypher queries, node/edge CRUD, and neighbor traversal.
+  This is the low-level graph DB skill — use kg-manager for knowledge graph construction workflows.
+---
+
+# Protocol: Graph Database Operations
+
+## Trigger
+
+Activate when the user asks to:
+- Query or search the **knowledge graph** / **graph database**
+- Create, update, or delete **nodes** or **edges** in a graph
+- Find neighbors, paths, or connections between entities
+- Run **Cypher** queries against the graph
+- Inspect graph schema, count nodes/edges, check what's stored
+
+**Do NOT use** for: RAG memory queries (use `memory.query`), key-value storage (use `kv-store`).
+
+## Available Operations
+
+Each operation maps to one JSON-RPC method. Execute via `python3 scripts/graph_client.py`.
+
+### Read Operations
+
+#### 1. Query (Cypher READ)
+
+Execute a read-only Cypher query. Returns columns + rows.
+
+```bash
+python3 scripts/graph_client.py query --cypher "MATCH (n) RETURN labels(n), count(*)"
+```
+
+Params:
+- `--cypher` (required): Cypher SELECT/MATCH...RETURN query
+- `--params` (optional): JSON object for parameterized query variables
+
+Returns: `{columns: [...], rows: [[...], ...]}`
+
+#### 2. Get Node
+
+Fetch a single node by ID.
+
+```bash
+python3 scripts/graph_client.py get-node --id "ent-abc123def456"
+```
+
+Params:
+- `--id` (required): Node ID
+
+Returns: Node object with id, labels, properties.
+
+#### 3. Get Neighbors
+
+Find connected nodes around a given node.
+
+```bash
+python3 scripts/graph_client.py neighbors --id "ent-abc123def456" --depth 2 --limit 20
+```
+
+Params:
+- `--id` (required): Center node ID
+- `--depth` (optional, default=1): Hop depth (1=direct, 2=friends-of-friends)
+- `--limit` (optional, default=50): Max neighbors to return
+- `--types` (optional, comma-separated): Filter by edge types, e.g., "DESCRIBES,DEPENDS_ON"
+
+Returns: List of neighbor nodes with connecting edges.
+
+### Write Operations
+
+#### 4. Exec (Cypher WRITE)
+
+Execute a write Cypher query (CREATE, SET, DELETE, MERGE).
+
+```bash
+python3 scripts/graph_client.py exec --cypher "MATCH (n) WHERE n.name = 'old' SET n.name = 'new'"
+```
+
+Params:
+- `--cypher` (required): Cypher write query
+- `--params` (optional): JSON object for parameterized variables
+
+Returns: `{affected: N}` — number of modified records.
+
+#### 5. Upsert Nodes
+
+Create or update nodes in batch. If a node with same ID exists, its properties are merged.
+
+```bash
+python3 scripts/graph_client.py upsert-nodes --nodes '[{"id":"n1","labels":["Concept","Term"],"properties":{"name":"ML","level":"core"}}]'
+```
+
+Params:
+- `--nodes` (required): JSON array of node objects. Each node:
+  - `id` (string, required): Unique node identifier
+  - `labels` (string array): Type labels (e.g., ["Concept", "CoreTheory"])
+  - `properties` (object): Key-value properties (e.g., name, level, summary)
+
+Returns: `{created: N, updated: M}`
+
+#### 6. Upsert Edges
+
+Create or update edges in batch. If an edge with same (from, to, type) exists, properties are merged.
+
+```bash
+python3 scripts/graph_client.py upsert-edges --edges '[{"from_node_id":"n1","to_node_id":"n2","type":"DEPENDS_ON","properties":{}}]'
+```
+
+Params:
+- `--edges` (required): JSON array of edge objects. Each edge:
+  - `from_node_id` (string, required): Source node ID
+  - `to_node_id` (string, required): Target node ID
+  - `type` (string, required): Edge/relation type
+  - `properties` (object, optional): Key-value properties on the edge
+
+Returns: `{created: N, updated: M}`
+
+## Common Patterns
+
+### Pattern A: Check if entity exists before creating
+
+```bash
+# Step 1: Try to find by property
+python3 scripts/graph_client.py query --cypher "MATCH (n {name:'Microservice'}) RETURN n.id, labels(n)"
+
+# Step 2: If empty result → upsert; else → use existing ID
+python3 scripts/graph_client.py upsert-nodes --nodes '[...]'
+```
+
+### Pattern B: Explore neighborhood
+
+```bash
+# What is this entity connected to?
+python3 scripts/graph_client.py neighbors --id "ent-xxx" --depth 1 --limit 30
+
+# What connects two specific entities?
+python3 scripts/graph_client.py query --cypher "MATCH p=(a)-[*1..3]-(b) WHERE a.id='x' AND b.id='y' RETURN relationships(p)"
+```
+
+### Pattern C: Aggregate statistics
+
+```bash
+# Count everything
+python3 scripts/graph_client.py query --cypher "MATCH (n) RETURN labels(n)[0] as label, count(*) as cnt ORDER BY cnt DESC"
+
+# Relation type distribution
+python3 scripts/graph_client.py query --cypher "MATCH ()-[r]->() RETURN type(r) as t, count(*) as cnt ORDER BY cnt DESC"
+
+# Entities at each knowledge level
+python3 scripts/graph_client.py query --cypher "MATCH (n) WHERE n.level IS NOT NULL RETURN n.level as lvl, count(*) as cnt ORDER BY cnt DESC"
+```
+
+### Pattern D: Bulk delete (use with caution)
+
+```bash
+# Delete all edges of a specific type
+python3 scripts/graph_client.py exec --cypher "MATCH ()-[r:DESCRIBES]->() DELETE r"
+
+# Delete nodes matching criteria (edges must be deleted first)
+python3 scripts/graph_client.py exec --cypher "MATCH (n:Concept) WHERE n.name = 'Obsolete' DETACH DELETE n"
+```
+
+## Error Handling
+
+| Error | Meaning | Action |
+|-------|---------|--------|
+| `connection failed` | Daemon not running | Check mindx daemon status |
+| `query parse error` | Invalid Cypher syntax | Fix the Cypher string |
+| `node not found` | ID does not exist | Verify ID or use query to find it |
+| `duplicate key` on upsert | Should not happen (upsert merges) | Report as bug |
+
+## Data Location
+
+Graph data file: `~/.mindx/data/knowledge-graph.db`
+Engine: gograph (Pebble-based embedded graph store)

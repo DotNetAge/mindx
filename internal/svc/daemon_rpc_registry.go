@@ -24,6 +24,8 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("memory.query", r.daemon.handleMemoryQuery)
 	gw.RegisterMethod("memory.store", r.daemon.handleMemoryStore)
 	gw.RegisterMethod("memory.delete", r.daemon.handleMemoryDelete)
+	gw.RegisterMethod("memory.chunks", r.daemon.handleMemoryChunks)
+	gw.RegisterMethod("memory.get_chunks", r.daemon.handleMemoryGetChunks)
 
 	gw.RegisterMethod("agent.list", r.daemon.handleAgentList)
 	gw.RegisterMethod("agent.get", r.daemon.handleAgentGet)
@@ -72,4 +74,18 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("i18n.get", r.daemon.handleI18nGet)
 	gw.RegisterMethod("i18n.switch", r.daemon.handleI18nSwitch)
 	gw.RegisterMethod("i18n.list", r.daemon.handleI18nList)
+
+	gw.RegisterMethod("graph.query", r.daemon.handleGraphQuery)
+	gw.RegisterMethod("graph.exec", r.daemon.handleGraphExec)
+	gw.RegisterMethod("graph.upsert_nodes", r.daemon.handleGraphUpsertNodes)
+	gw.RegisterMethod("graph.upsert_edges", r.daemon.handleGraphUpsertEdges)
+	gw.RegisterMethod("graph.get_node", r.daemon.handleGraphGetNode)
+	gw.RegisterMethod("graph.get_neighbors", r.daemon.handleGraphGetNeighbors)
+
+	gw.RegisterMethod("kvstore.get", r.daemon.handleKVGet)
+	gw.RegisterMethod("kvstore.set", r.daemon.handleKVSet)
+	gw.RegisterMethod("kvstore.delete", r.daemon.handleKVDelete)
+	gw.RegisterMethod("kvstore.list", r.daemon.handleKVList)
+	gw.RegisterMethod("kvstore.batch_set", r.daemon.handleKVBatchSet)
+	gw.RegisterMethod("kvstore.clear", r.daemon.handleKVClear)
 }
