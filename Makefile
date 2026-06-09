@@ -34,6 +34,7 @@
 
 # 项目信息
 BINARY_NAME    ?= mindx
+DOCKER_USER    ?= dotnetage
 VERSION        ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v2.1.0")
 BUILD_TIME     ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 GIT_COMMIT     ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -788,13 +789,13 @@ docker-build:
 	@echo "$(GREEN)🐳 Building Docker image...$(NC)"
 	@_VER=${VERSION}; \
 	docker build \
-		-t $(BINARY_NAME):$${_VER} \
-		-t $(BINARY_NAME):latest \
+		-t $(DOCKER_USER)/$(BINARY_NAME):$${_VER} \
+		-t $(DOCKER_USER)/$(BINARY_NAME):latest \
 		--build-arg VERSION=$${_VER} \
 		--build-arg COMMIT=${GIT_COMMIT} \
 		--build-arg BUILD_TIME="${BUILD_TIME}" \
 		. ; \
-	echo "$(GREEN)✅ Docker image built: $(BINARY_NAME):$${_VER}$(NC)"
+	echo "$(GREEN)✅ Docker image built: $(DOCKER_USER)/$(BINARY_NAME):$${_VER}$(NC)"
 
 ## docker-run: 运行 Docker 容器（TUI 模式）
 docker-run:
@@ -802,7 +803,7 @@ docker-run:
 	docker run -it --rm \
 		-v ~/.mindx:/home/mindx/.mindx \
 		--name $(BINARY_NAME)-tui \
-		$(BINARY_NAME):latest
+		$(DOCKER_USER)/$(BINARY_NAME):latest
 
 ## docker-run-daemon: 运行 Docker 容器（Daemon 模式，端口映射完整）
 docker-run-daemon:
@@ -813,13 +814,13 @@ docker-run-daemon:
 		-p 1314:1314 \
 		-v ~/.mindx:/home/mindx/.mindx \
 		--restart unless-stopped \
-		$(BINARY_NAME):latest start
+		$(DOCKER_USER)/$(BINARY_NAME):latest start
 
 ## docker-push: 推送 Docker 镜像到仓库
 docker-push:
 	@echo "$(GREEN)📤 Pushing Docker image...$(NC)"
-	docker push $(BINARY_NAME):$(VERSION)
-	docker push $(BINARY_NAME):latest
+	docker push $(DOCKER_USER)/$(BINARY_NAME):$(VERSION)
+	docker push $(DOCKER_USER)/$(BINARY_NAME):latest
 	@echo "$(GREEN)✅ Images pushed successfully!$(NC)"
 
 ## docker-release: 本地构建并推送 Docker 镜像（版本跟随最新 git tag）
@@ -908,27 +909,27 @@ docker-release:
 	@_TAG=$$(git describe --tags --abbrev=0 2>/dev/null); \
 	_COMMIT=$$(git rev-parse --short HEAD 2>/dev/null); \
 	_BUILD_TIME=$$(date -u '+%Y-%m-%dT%H:%M:%SZ'); \
-	echo "$(GREEN)🐳 Building Docker image mindx:$$_TAG ...$(NC)"; \
+	echo "$(GREEN)🐳 Building Docker image $(DOCKER_USER)/$(BINARY_NAME):$$_TAG ...$(NC)"; \
 	docker build \
-		-t $(BINARY_NAME):$$_TAG \
-		-t $(BINARY_NAME):latest \
+		-t $(DOCKER_USER)/$(BINARY_NAME):$$_TAG \
+		-t $(DOCKER_USER)/$(BINARY_NAME):latest \
 		--build-arg VERSION=$$_TAG \
 		--build-arg COMMIT=$$_COMMIT \
 		--build-arg BUILD_TIME="$$_BUILD_TIME" \
 		. && \
-	echo "$(GREEN)✅ Image built: $(BINARY_NAME):$$_TAG$(NC)" && \
+	echo "$(GREEN)✅ Image built: $(DOCKER_USER)/$(BINARY_NAME):$$_TAG$(NC)" && \
 	echo "" && \
 	echo "$(GREEN)📤 Pushing to Docker Hub...$(NC)" && \
-	docker push $(BINARY_NAME):$$_TAG && \
-	docker push $(BINARY_NAME):latest && \
+	docker push $(DOCKER_USER)/$(BINARY_NAME):$$_TAG && \
+	docker push $(DOCKER_USER)/$(BINARY_NAME):latest && \
 	echo "" && \
 	echo "$(GREEN)═══════════════════════════════════════════════════════════════$(NC)" && \
 	echo "$(GREEN)  🎉 Docker Release Complete!$(NC)" && \
 	echo "$(GREEN)═══════════════════════════════════════════════════════════════$(NC)" && \
 	echo "" && \
-	echo "  Image:    $(CYAN)$(BINARY_NAME):$$_TAG$(NC)" && \
-	echo "  Latest:   $(CYAN)$(BINARY_NAME):latest$(NC)" && \
-	echo "  Pull:     $(CYAN)docker pull $(BINARY_NAME):$$_TAG$(NC)" && \
+	echo "  Image:    $(CYAN)$(DOCKER_USER)/$(BINARY_NAME):$$_TAG$(NC)" && \
+	echo "  Latest:   $(CYAN)$(DOCKER_USER)/$(BINARY_NAME):latest$(NC)" && \
+	echo "  Pull:     $(CYAN)docker pull $(DOCKER_USER)/$(BINARY_NAME):$$_TAG$(NC)" && \
 	echo ""
 
 ## docker-clean: 清理 Docker 资源
