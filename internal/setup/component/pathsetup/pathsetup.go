@@ -8,6 +8,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/DotNetAge/mindx/internal/i18n"
 	setupmsg "github.com/DotNetAge/mindx/internal/setup/msg"
 	"github.com/DotNetAge/mindx/internal/setup/style"
 )
@@ -110,7 +111,7 @@ func (m *Model) View() string {
 	var b strings.Builder
 	if m.pathInPath {
 		b.WriteString(renderMarkdown(m.renderer, fmt.Sprintf(
-			"📌 系统 PATH 配置\n\n✅ **mindx 已在系统 PATH 中**\n\n当前安装路径: `%s`\n\n**Enter** 继续  **S** 跳过",
+			i18n.T("setup.path.already.in.format"),
 			m.installDir,
 		)))
 	} else {

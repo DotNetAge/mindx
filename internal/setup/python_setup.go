@@ -2,6 +2,7 @@ package setup
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 func DetectPython() core.PythonConfig {
@@ -44,7 +46,7 @@ func SetupPython(workspaceDir string) (core.PythonConfig, error) {
 		}
 		info = DetectPython()
 		if !info.Detected {
-			return info, fmt.Errorf("Python 安装后仍无法检测到，请手动安装")
+			return info, errors.New(i18n.T("setup.python.install.detect.failed"))
 		}
 	}
 
@@ -58,7 +60,7 @@ func SetupPython(workspaceDir string) (core.PythonConfig, error) {
 
 		cmd := exec.Command(pythonCmd, "-m", "venv", venvPath)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return info, fmt.Errorf("create virtual environment: %w\n%s", err, string(out))
+			return info, fmt.Errorf(i18n.T("setup.python.venv.create.failed"), err, string(out))
 		}
 	}
 
@@ -68,7 +70,7 @@ func SetupPython(workspaceDir string) (core.PythonConfig, error) {
 	reqFiles := findRequirementsFiles(skillsDir)
 	if len(reqFiles) > 0 {
 		if err := InstallPipRequirements(venvPath, reqFiles...); err != nil {
-			return info, fmt.Errorf("安装 skill 依赖失败: %w", err)
+			return info, fmt.Errorf(i18n.T("setup.python.skill.install.failed"), err)
 		}
 	}
 
@@ -128,13 +130,13 @@ func InstallPython() error {
 	case "windows":
 		return installPythonWindows()
 	default:
-		return fmt.Errorf("不支持自动安装 Python 的平台: %s", runtime.GOOS)
+		return fmt.Errorf(i18n.T("setup.python.unsupported.platform"), runtime.GOOS)
 	}
 }
 
 func installPythonMacOS() error {
 	if _, err := exec.LookPath("brew"); err != nil {
-		return fmt.Errorf("Homebrew 未安装，请访问 python.org 手动安装 Python")
+		return errors.New(i18n.T("setup.python.homebrew.missing"))
 	}
 	cmd := exec.Command("brew", "install", "python3")
 	cmd.Stdout = os.Stdout
@@ -154,7 +156,7 @@ func installPythonLinux() error {
 		pkgManager = "dnf"
 		pkgArgs = "install -y python3 python3-pip"
 	} else {
-		return fmt.Errorf("未找到支持的包管理器 (apt-get, yum, dnf)")
+		return errors.New(i18n.T("setup.linux.pkgmanager.missing"))
 	}
 
 	parts := strings.Split(pkgArgs, " ")
@@ -164,7 +166,7 @@ func installPythonLinux() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("需要 root 权限手动安装: sudo %s %s", pkgManager, pkgArgs)
+		return fmt.Errorf(i18n.T("setup.linux.root.required"), pkgManager, pkgArgs)
 	}
 	return nil
 }
@@ -178,7 +180,7 @@ func installPythonWindows() error {
 			return nil
 		}
 	}
-	return fmt.Errorf("请访问 python.org 手动安装 Python")
+	return errors.New(i18n.T("setup.python.manual.install"))
 }
 
 func execCmd(name string, args ...string) error {

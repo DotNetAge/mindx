@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/timer"
 	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/mindx/internal/client/msg"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 const tickInterval = 800 * time.Millisecond
@@ -75,7 +76,7 @@ func (l ConversationList) Update(e tea.Msg) (ConversationList, tea.Cmd) {
 			return l, func() tea.Msg {
 				return msg.AgentErrorMsg{
 					SessionID: sessionID,
-					Error:     fmt.Errorf("事件 SessionID %q 未找到匹配的会话 (当前有 %d 个会话)", sessionID, len(l.Conversations)),
+					Error:     fmt.Errorf(i18n.T("error.session.notfound"), sessionID, len(l.Conversations)),
 				}
 			}
 		}

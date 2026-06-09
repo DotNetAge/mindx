@@ -7,6 +7,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/DotNetAge/mindx/internal/i18n"
 	setupmsg "github.com/DotNetAge/mindx/internal/setup/msg"
 	"github.com/DotNetAge/mindx/internal/setup/style"
 )
@@ -105,25 +106,28 @@ func (m *Model) View() string {
 	var b strings.Builder
 	if m.installed {
 		b.WriteString(renderMarkdown(m.renderer,
-			"⚙️ Daemon 后台服务\n\n✅ **已安装**\n\nDaemon 已注册为开机自启动服务。\n\n**Enter** 继续  **S** 跳过",
+			i18n.T("setup.daemon.check.title")+"\n\n"+
+				i18n.T("setup.daemon.check.installed")+"\n\n"+
+				i18n.T("setup.daemon.check.installed.desc")+"\n\n"+
+				"**Enter** "+i18n.T("setup.daemon.check.continue")+"  **S** "+i18n.T("setup.daemon.check.skip"),
 		))
 	} else {
-		md := `⚙️ Daemon 后台服务
+		md := i18n.T("setup.daemon.check.title") + `
 
-🔴 **未安装**
+` + i18n.T("setup.daemon.check.not_installed") + `
 
-Daemon 是后台常驻服务，用于接收定时任务和 WebSocket 连接。
+` + i18n.T("setup.daemon.check.not_installed.desc") + `
 
-未安装不影响本地对话，但以下功能不可用：
-  - 定时任务自动触发
-  - WebSocket 远程连接
-  - 系统托盘常驻
+` + i18n.T("setup.daemon.check.not_installed.warning") + `:
+  - ` + i18n.T("setup.daemon.check.feature.scheduled") + `
+  - ` + i18n.T("setup.daemon.check.feature.websocket") + `
+  - ` + i18n.T("setup.daemon.check.feature.tray") + `
 
-是否注册为开机自启动服务?
+` + i18n.T("setup.daemon.check.not_installed.question") + `?
 
 ` + yesNoIndicator(m.choice) + `
 
-← → 切换  **Enter** 确认  **Esc** 退出`
+← → ` + i18n.T("setup.daemon.check.toggle") + `  **Enter** ` + i18n.T("setup.daemon.check.confirm") + `  **Esc** ` + i18n.T("setup.daemon.check.quit")
 		b.WriteString(renderMarkdown(m.renderer, md))
 	}
 	content := style.Border.Render(b.String())

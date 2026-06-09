@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DotNetAge/mindx/internal/i18n"
 	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/render"
@@ -65,9 +66,9 @@ func UpdateOutput(m Output, e tea.Msg) (Output, tea.Cmd) {
 		return m, nil
 
 	case msg.LLMTimeoutMsg:
-		timeoutMsg := fmt.Sprintf("⚠️ LLM 响应超时 (限制: %v, 已用: %v)", e.Timeout.Round(time.Second), e.Elapsed.Round(time.Second))
+		timeoutMsg := fmt.Sprintf(i18n.T("output.timeout.llm"), e.Timeout.Round(time.Second), e.Elapsed.Round(time.Second))
 		if e.Error != "" {
-			timeoutMsg += "\n原因: " + e.Error
+			timeoutMsg += "\n" + i18n.T("output.timeout.reason") + ": " + e.Error
 		}
 		m.Entries = append(m.Entries, OutputEntry{Role: "timeout", Content: timeoutMsg})
 		return m, nil

@@ -8,27 +8,21 @@ import (
 	"runtime"
 
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/spf13/cobra"
 )
 
 var webCmd = &cobra.Command{
 	Use:   "web",
-	Short: "打开 MindX WebUI",
-	Long: `在浏览器中打开 MindX Web 界面。
-
-如果 Daemon 尚未启动，会先提示启动。
-WebUI 通过 localhost:1313 提供服务。
-
-示例:
-  mindx web           # 打开默认 WebUI
-  mindx web --port 8080 # 指定端口（需配合 mindx start 使用）`,
-	RunE: runWeb,
+	Short: i18n.T("cmd.web.short"),
+	Long:  i18n.T("cmd.web.long"),
+	RunE:  runWeb,
 }
 
 var webPort string
 
 func init() {
-	webCmd.Flags().StringVarP(&webPort, "port", "p", ":1313", "WebUI 服务端口")
+	webCmd.Flags().StringVarP(&webPort, "port", "p", ":1313", "WebUI service port")
 	rootCmd.AddCommand(webCmd)
 }
 
@@ -37,7 +31,7 @@ func runWeb(cmd *cobra.Command, args []string) error {
 	webDir := filepath.Join(workspaceDir, "web")
 
 	if _, err := os.Stat(webDir); os.IsNotExist(err) {
-		return fmt.Errorf("WebUI 文件未找到 (%s)，请运行 'mindx start' 启动 Daemon 或重新运行安装向导", webDir)
+		return fmt.Errorf("%s: %s", i18n.T("cmd.web.error.webui.notfound"), webDir)
 	}
 
 	port := webPort
@@ -46,8 +40,8 @@ func runWeb(cmd *cobra.Command, args []string) error {
 	}
 	url := fmt.Sprintf("http://localhost%s", port)
 
-	fmt.Printf("🌐 正在打开 MindX WebUI: %s\n\n", url)
-	fmt.Printf("   如果页面无法访问，请确保 Daemon 已运行:\n")
+	fmt.Printf("%s %s\n", i18n.T("cmd.web.output.opening"), url)
+	fmt.Printf("   If the page is not accessible, make sure Daemon is running:\n")
 	fmt.Printf("     mindx start\n\n")
 
 	var openCmd *exec.Cmd

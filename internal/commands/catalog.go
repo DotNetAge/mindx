@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/DotNetAge/gort/pkg/gateway"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 // CatalogDeps holds external dependencies for catalog commands.
@@ -23,7 +24,7 @@ func SetCatalogDeps(deps CatalogDeps) {
 func registerCatalogCommands(r *Registry) {
 	r.Register(Meta{
 		Name:        "agents",
-		Description: "显示智能体列表",
+		Description: i18n.T("cmd.catalog.agents.desc"),
 		Category:    "agent",
 		Scope:       gateway.ScopeRemote,
 		Example:     "/agents",
@@ -33,7 +34,7 @@ func registerCatalogCommands(r *Registry) {
 
 	r.Register(Meta{
 		Name:        "models",
-		Description: "列出所有可用模型",
+		Description: i18n.T("cmd.catalog.models.desc"),
 		Category:    "agent",
 		Scope:       gateway.ScopeRemote,
 		Example:     "/models",
@@ -43,7 +44,7 @@ func registerCatalogCommands(r *Registry) {
 
 	r.Register(Meta{
 		Name:        "skills",
-		Description: "列出所有可用技能",
+		Description: i18n.T("cmd.catalog.skills.desc"),
 		Category:    "agent",
 		Scope:       gateway.ScopeRemote,
 		Example:     "/skills",
@@ -100,8 +101,8 @@ func handleModels(ctx *gateway.CommandContext) (any, error) {
 	}
 
 	// Send structured notification for TUI rendering
-	ctx.RespondWithType(gateway.RespTable, "可用模型", map[string]interface{}{
-		"headers": []string{"名称", "描述"},
+	ctx.RespondWithType(gateway.RespTable, i18n.T("cmd.catalog.models.title"), map[string]interface{}{
+		"headers": []string{i18n.T("cmd.table.name"), i18n.T("cmd.table.description")},
 		"rows":    toTableRows(list, "name", "description"),
 	})
 
@@ -127,8 +128,8 @@ func handleSkills(ctx *gateway.CommandContext) (any, error) {
 	}
 
 	// Send structured notification for TUI rendering
-	ctx.RespondWithType(gateway.RespTable, "可用技能", map[string]interface{}{
-		"headers": []string{"名称", "描述"},
+	ctx.RespondWithType(gateway.RespTable, i18n.T("cmd.catalog.skills.title"), map[string]interface{}{
+		"headers": []string{i18n.T("cmd.table.name"), i18n.T("cmd.table.description")},
 		"rows":    toTableRows(list, "name", "description"),
 	})
 

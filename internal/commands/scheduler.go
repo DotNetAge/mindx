@@ -2,10 +2,12 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/DotNetAge/gort/pkg/gateway"
+	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
@@ -27,18 +29,18 @@ func SetSchedulerDeps(deps SchedulerDeps) {
 func registerSchedulerCommands(r *Registry) {
 	r.Register(Meta{
 		Name:        "job.add",
-		Description: "添加计划任务",
+		Description: i18n.T("cmd.scheduler.job.add.desc"),
 		Category:    "system",
 		Scope:       gateway.ScopeRemote,
-		Example:     `/job-add @writer sess_abc123 每日博客文章 expr="0 0 9 * * 1" dir="/Users/ray/workspaces/my-project"`,
-		Params:      `@<agent-name> <session_id|new> <content> expr="<cron表达式>" [dir="<项目目录>"]`,
+		Example:     i18n.T("cmd.scheduler.example"),
+		Params:      i18n.T("cmd.scheduler.usage"),
 	}, func(ctx *gateway.CommandContext) (any, error) {
 		return handleJobAdd(ctx)
 	})
 
 	r.Register(Meta{
 		Name:        "job.list",
-		Description: "列出所有计划任务",
+		Description: i18n.T("cmd.scheduler.job.list.desc"),
 		Category:    "system",
 		Scope:       gateway.ScopeRemote,
 	}, func(ctx *gateway.CommandContext) (any, error) {
@@ -47,10 +49,10 @@ func registerSchedulerCommands(r *Registry) {
 
 	r.Register(Meta{
 		Name:        "job.del",
-		Description: "删除计划任务",
+		Description: i18n.T("cmd.scheduler.job.del.desc"),
 		Category:    "system",
 		Scope:       gateway.ScopeRemote,
-		Params:      `id=<任务ID>`,
+		Params:      i18n.T("cmd.scheduler.job.del.param"),
 	}, func(ctx *gateway.CommandContext) (any, error) {
 		return handleJobDel(ctx)
 	})
@@ -63,7 +65,7 @@ func handleJobAdd(ctx *gateway.CommandContext) (any, error) {
 
 	argsStr := strings.TrimSpace(ctx.Args)
 	if argsStr == "" {
-		return nil, fmt.Errorf("用法: /job-add @<agent-name> <session_id|new> <content> expr=\"<cron表达式>\"\n示例: /job-add @writer sess_abc123 每日博客文章 expr=\"0 0 9 * * 1\"")
+		return nil, errors.New(i18n.T("cmd.scheduler.usage") + "\n" + i18n.T("cmd.scheduler.example"))
 	}
 
 	agent, sessionID, content, cronExpr, projectDir, err := parseJobAddArgs(argsStr)
@@ -73,7 +75,7 @@ func handleJobAdd(ctx *gateway.CommandContext) (any, error) {
 
 	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 	if _, err := parser.Parse(cronExpr); err != nil {
-		return nil, fmt.Errorf("无效的 cron 表达式: %w", err)
+		return nil, fmt.Errorf(i18n.T("cmd.scheduler.invalid.cron"), err)
 	}
 
 	entry := &scheduler.ScheduleEntry{
@@ -87,7 +89,7 @@ func handleJobAdd(ctx *gateway.CommandContext) (any, error) {
 	}
 
 	if err := schedulerDeps.SchedulerDB().Save(context.Background(), entry); err != nil {
-		return nil, fmt.Errorf("保存任务失败: %w", err)
+		return nil, fmt.Errorf(i18n.T("cmd.scheduler.save.failed"), err)
 	}
 
 	sessInfo := sessionID
@@ -98,7 +100,7 @@ func handleJobAdd(ctx *gateway.CommandContext) (any, error) {
 	if dirInfo == "" {
 		dirInfo = "(daemon default)"
 	}
-	return fmt.Sprintf("✅ 定时消息已创建:\n  ID: %s\n  目标: @%s\n  Session: %s\n  项目目录: %s\n  内容: %s\n  调度: %s",
+	return fmt.Sprintf(i18n.T("cmd.scheduler.job.created")+"\n  ID: %s\n  "+i18n.T("cmd.scheduler.job.target")+": @%s\n  Session: %s\n  "+i18n.T("cmd.scheduler.job.projectdir")+": %s\n  "+i18n.T("cmd.scheduler.job.content")+": %s\n  "+i18n.T("cmd.scheduler.job.schedule")+": %s",
 		entry.ID, entry.Agent, sessInfo, dirInfo, truncateString(entry.Content, 50), entry.CronExpr), nil
 }
 
@@ -109,20 +111,20 @@ func handleJobList(ctx *gateway.CommandContext) (any, error) {
 
 	entries, err := schedulerDeps.Scheduler().List()
 	if err != nil {
-		return nil, fmt.Errorf("获取任务列表失败: %w", err)
+		return nil, fmt.Errorf(i18n.T("cmd.scheduler.list.fetch.failed"), err)
 	}
 
 	if len(entries) == 0 {
-		return "(暂无定时消息任务)", nil
+		return i18n.T("cmd.scheduler.list.empty"), nil
 	}
 
-	headers := []string{"ID", "目标Agent", "Session", "项目目录", "发送内容", "调度规则", "状态", "成功/失败"}
+	headers := []string{i18n.T("cmd.scheduler.table.id"), i18n.T("cmd.scheduler.table.agent"), i18n.T("cmd.scheduler.table.session"), i18n.T("cmd.scheduler.table.projectdir"), i18n.T("cmd.scheduler.table.content"), i18n.T("cmd.scheduler.table.schedule"), i18n.T("cmd.scheduler.table.status"), i18n.T("cmd.scheduler.table.stats")}
 	rows := make([][]string, 0, len(entries))
 
 	for _, entry := range entries {
-		status := "❌ 已禁用"
+		status := i18n.T("cmd.scheduler.status.disabled")
 		if entry.Enabled {
-			status = "✅ 启用"
+			status = i18n.T("cmd.scheduler.status.enabled")
 		}
 		sessDisplay := entry.SessionID
 		if sessDisplay == "" || sessDisplay == "new" {
@@ -144,7 +146,7 @@ func handleJobList(ctx *gateway.CommandContext) (any, error) {
 		})
 	}
 
-	ctx.RespondWithType(gateway.RespTable, "定时消息任务列表", map[string]interface{}{
+	ctx.RespondWithType(gateway.RespTable, i18n.T("cmd.scheduler.list.title"), map[string]interface{}{
 		"headers": headers,
 		"rows":    rows,
 	})
@@ -159,19 +161,19 @@ func handleJobDel(ctx *gateway.CommandContext) (any, error) {
 	args := parseCommandArgs(ctx.Args)
 	id := args["id"]
 	if id == "" {
-		return nil, fmt.Errorf("缺少必要参数: id (任务ID)\n用法: /job-del id=<任务ID>")
+		return nil, errors.New(i18n.T("cmd.scheduler.missing.id") + "\n" + i18n.T("cmd.scheduler.del.usage"))
 	}
 
 	entry, err := schedulerDeps.SchedulerDB().Load(context.Background(), id)
 	if err != nil {
-		return nil, fmt.Errorf("任务不存在: %s", id)
+		return nil, fmt.Errorf(i18n.T("cmd.scheduler.job.notfound"), id)
 	}
 
 	if err := schedulerDeps.SchedulerDB().Delete(context.Background(), id); err != nil {
-		return nil, fmt.Errorf("删除任务失败: %w", err)
+		return nil, fmt.Errorf(i18n.T("cmd.scheduler.delete.failed"), err)
 	}
 
-	return fmt.Sprintf("🗑️ 定时消息已删除:\n  ID: %s\n  目标: @%s\n  内容: %s", id, entry.Agent, truncateString(entry.Content, 50)), nil
+	return fmt.Sprintf(i18n.T("cmd.scheduler.job.deleted")+"\n  ID: %s\n  "+i18n.T("cmd.scheduler.job.target")+": @%s\n  "+i18n.T("cmd.scheduler.job.content")+": %s", id, entry.Agent, truncateString(entry.Content, 50)), nil
 }
 
 func generateID() string {
@@ -256,11 +258,11 @@ func parseJobAddArgs(argsStr string) (agent string, sessionID string, content st
 	}
 
 	if agent == "" {
-		return "", "", "", "", "", fmt.Errorf("缺少目标智能体: 请使用 @<agent-name> 格式指定\n示例: /job-add @writer sess_abc123 每日博客文章 expr=\"0 0 9 * * 1\" dir=\"/path/to/project\"")
+		return "", "", "", "", "", errors.New(i18n.T("cmd.scheduler.missing.agent") + "\n" + i18n.T("cmd.scheduler.add.example"))
 	}
 
 	if exprValue == "" {
-		return "", "", "", "", "", fmt.Errorf("缺少 cron 表达式: 请使用 expr=\"<cron表达式>\" 指定\n示例: /job-add @writer sess_abc123 每日提醒 expr=\"0 0 9 * * 1\"")
+		return "", "", "", "", "", errors.New(i18n.T("cmd.scheduler.missing.cron") + "\n" + i18n.T("cmd.scheduler.add.example"))
 	}
 
 	var contentParts []string
@@ -272,7 +274,7 @@ func parseJobAddArgs(argsStr string) (agent string, sessionID string, content st
 	}
 
 	if len(contentParts) == 0 {
-		return "", "", "", "", "", fmt.Errorf("缺少发送内容: 请指定要定时发送给 @%s 的消息内容", agent)
+		return "", "", "", "", "", fmt.Errorf(i18n.T("cmd.scheduler.missing.content"), agent)
 	}
 
 	sessionID = contentParts[0]

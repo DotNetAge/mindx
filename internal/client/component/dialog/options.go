@@ -7,6 +7,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/client/component/choices"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 type OptionsDialog struct {
@@ -90,7 +91,7 @@ func (d *OptionsDialog) View() string {
 
 	titleLine := style.BoldWhite.Render("  " + d.Title)
 	content := d.panel.View()
-	footer := style.DimStyle.Render(" Enter 确认 │ Esc 取消")
+	footer := style.DimStyle.Render(" " + i18n.T("dialog.footer.confirm"))
 
 	w := d.dialogWidth()
 	innerW := w - 4

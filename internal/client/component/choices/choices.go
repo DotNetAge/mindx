@@ -10,6 +10,7 @@ import (
 
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 type choiceItem string
@@ -300,16 +301,16 @@ func (p *ChoicesPanel) View() string {
 }
 
 func viewCustomInput(p *ChoicesPanel) string {
-	label := style.BoldWhite.Render("  其他: ")
+	label := style.BoldWhite.Render("  " + i18n.T("choices.input.other") + ": ")
 	if p.inputActive {
 		input := style.CyanStyle.Render(p.CustomText) + style.DimStyle.Render("▌")
-		hint := style.GrayStyle.Render("  (↑/Tab 返回列表 | Enter 确认 | Esc 取消)")
+		hint := style.GrayStyle.Render("  (" + i18n.T("choices.hint.input.active") + ")")
 		return label + input + "\n" + hint
 	}
 	input := style.DimStyle.Render(p.CustomText)
 	if input == "" {
-		input = style.DimStyle.Render("(不在上述选项中时输入)")
+		input = style.DimStyle.Render("(" + i18n.T("choices.input.placeholder") + ")")
 	}
-	hint := style.GrayStyle.Render("  (Tab 激活输入 | Space 选择 | Enter 确认)")
+	hint := style.GrayStyle.Render("  (" + i18n.T("choices.hint.select") + ")")
 	return label + input + "\n" + hint
 }

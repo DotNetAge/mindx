@@ -8,6 +8,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 var isDarwin = runtime.GOOS == "darwin"
@@ -532,7 +533,7 @@ func (i *InputArea) View() string {
 	buf.WriteByte('\n')
 	buf.WriteString(prompt)
 	if text == "" {
-		buf.WriteString(style.GrayStyle.Render("发送消息或\"/\"选择指令..."))
+		buf.WriteString(style.GrayStyle.Render(i18n.T("client.ui.input.placeholder")))
 	} else {
 		pos := i.CursorPos
 		if pos > len(runes) {

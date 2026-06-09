@@ -7,6 +7,7 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 // Suggestion holds common suggestion state and is embedded by concrete suggestion types.
@@ -108,7 +109,7 @@ func (s *ModelSuggestion) View(width int) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(style.BoldWhite.Render("📦 可用模型\n"))
+	b.WriteString(style.BoldWhite.Render(i18n.T("client.ui.suggest.model.title") + "\n"))
 	for i, m := range list {
 		line := fmt.Sprintf("  %s  %s", m.Name, m.Description)
 		if i == s.SelIdx {
@@ -151,15 +152,15 @@ func (s *SessionSuggestion) View(width int) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(style.BoldWhite.Render("💬 会话管理\n"))
+	b.WriteString(style.BoldWhite.Render(i18n.T("client.ui.suggest.session.title") + "\n"))
 	for i, sess := range list {
 		var line string
 		if sess.IsSpecial {
 			switch sess.SpecialType {
 			case "new":
-				line = fmt.Sprintf("  [%s]  新建会话", style.GreenStyle.Render("new"))
+				line = fmt.Sprintf("  [%s]  %s", style.GreenStyle.Render("new"), i18n.T("client.ui.suggest.session.new"))
 			case "clear":
-				line = fmt.Sprintf("  [%s]  清除当前会话", style.RedStyle.Render("clear"))
+				line = fmt.Sprintf("  [%s]  %s", style.RedStyle.Render("clear"), i18n.T("client.ui.suggest.session.clear"))
 			default:
 				line = fmt.Sprintf("  [%s]", sess.SpecialType)
 			}

@@ -11,6 +11,7 @@ import (
 
 	setupmsg "github.com/DotNetAge/mindx/internal/setup/msg"
 	"github.com/DotNetAge/mindx/internal/setup/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 const minContentWidth = 60
@@ -26,7 +27,7 @@ type Model struct {
 
 func New(modelName string, skipMode bool) *Model {
 	ti := textinput.New()
-	ti.Placeholder = fmt.Sprintf("请输入 %s 的 API Key...", modelName)
+	ti.Placeholder = fmt.Sprintf(i18n.T("setup.apikey.input.placeholder"), modelName)
 	ti.EchoMode = textinput.EchoPassword
 	ti.CharLimit = 256
 	ti.Focus()
@@ -43,7 +44,7 @@ func New(modelName string, skipMode bool) *Model {
 
 func (m *Model) SetModelName(name string) {
 	m.modelName = name
-	m.input.Placeholder = fmt.Sprintf("请输入 %s 的 API Key...", name)
+	m.input.Placeholder = fmt.Sprintf(i18n.T("setup.apikey.input.placeholder"), name)
 }
 
 func (m *Model) Value() string { return m.input.Value() }
@@ -119,14 +120,14 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 func (m *Model) View() string {
 	var b strings.Builder
-	b.WriteString(renderMarkdown(m.renderer, "API Key 配置\n\n"))
-	b.WriteString(fmt.Sprintf("模型: **%s**\n\n", m.modelName))
-	b.WriteString("输入你的 API Key：\n\n")
+	b.WriteString(renderMarkdown(m.renderer, i18n.T("setup.apikey.view.title")))
+	b.WriteString(fmt.Sprintf(i18n.T("setup.apikey.view.model"), m.modelName))
+	b.WriteString(i18n.T("setup.apikey.view.prompt"))
 	b.WriteString(m.input.View())
 	b.WriteString("\n\n")
-	help := "**Enter** 确认  **Esc** 返回上一步"
+	help := i18n.T("setup.apikey.view.help")
 	if m.skipMode {
-		help = "**Enter** 确认  **S** 跳过 (使用已有 Key)  **Esc** 返回上一步"
+		help = i18n.T("setup.apikey.view.help.skip")
 	}
 	b.WriteString(renderMarkdown(m.renderer, help))
 	content := style.Border.Render(b.String())

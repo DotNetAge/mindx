@@ -31,6 +31,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	appcore "github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 const (
@@ -126,9 +127,9 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 		notifBar:         notify.New(),
 		selectDlg:        dialog.NewSelectDialog(""),
 		optionsDlg:       dialog.NewOptionsDialog(""),
-		providerDlg:      dialog.NewListDialog("连接提供商"),
+		providerDlg:      dialog.NewListDialog(i18n.T("client.ui.dialog.provider.select")),
 		apiKeyDlg:        dialog.NewInputDialog("API key", "API key"),
-		modelDlg:         dialog.NewListDialog("选择模型"),
+		modelDlg:         dialog.NewListDialog(i18n.T("client.ui.dialog.model.select")),
 		viewport:         viewport.New(),
 		daemonAddr:       ":1314",
 	}
@@ -136,7 +137,7 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 	var err error
 	m.app, err = appcore.DefaultApp(cfg)
 	if err != nil {
-		m.notifBar.Add(data.Notification{Message: fmt.Sprintf("初始化失败: %v", err), Level: data.NotifError})
+		m.notifBar.Add(data.Notification{Message: fmt.Sprintf(i18n.T("client.notify.init.failed"), err), Level: data.NotifError})
 	} else {
 		m.registry = BuiltinCommands(CommandDeps{
 			App:     m.app,
@@ -186,17 +187,17 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 	}
 
 	if pendingPostExitCmd == "doctor" {
-		fmt.Print("\n🔧 正在启动诊断向导...\n\n")
+		fmt.Print("\n🔧 " + i18n.T("client.doctor.starting") + "\n\n")
 		self, err := os.Executable()
 		if err != nil {
-			return fmt.Errorf("获取可执行路径失败: %w", err)
+			return fmt.Errorf(i18n.T("error.executable.path"), err)
 		}
 		cmd := exec.Command(self, "doctor")
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("诊断向导执行失败: %w", err)
+			return fmt.Errorf(i18n.T("error.doctor.execute"), err)
 		}
 	}
 
@@ -722,7 +723,7 @@ func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, cust
 
 func (m *rootModel) startConnectFlow() {
 	if m.app == nil {
-		m.notifBar.Add(data.Notification{Message: "系统未初始化", Level: data.NotifError})
+		m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.system.uninitialized"), Level: data.NotifError})
 		return
 	}
 	providers := m.app.Models().Providers()
@@ -733,7 +734,7 @@ func (m *rootModel) startConnectFlow() {
 		m.connectProviderNames = append(m.connectProviderNames, p.Name)
 	}
 	if len(displayNames) == 0 {
-		m.notifBar.Add(data.Notification{Message: "没有可用的提供商配置", Level: data.NotifWarning})
+		m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.no.provider"), Level: data.NotifWarning})
 		return
 	}
 	m.providerDlg.SetItems(displayNames)
@@ -797,7 +798,7 @@ func (m *rootModel) saveConnectResult(modelName string) {
 		}
 	}
 
-	label := fmt.Sprintf("已连接 %s", m.connectProvider)
+	label := fmt.Sprintf(i18n.T("client.notify.connected"), m.connectProvider)
 	if modelName != "" {
 		label += fmt.Sprintf(" / %s", modelName)
 	}
@@ -918,12 +919,12 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	case clientmsg.SessionDoneMsg:
 		m.executing = false
 		m.currentCancel = nil
-		return m.updateWithState(msg, "空闲", true)
+		return m.updateWithState(msg, i18n.T("client.status.idle"), true)
 
 	case clientmsg.AgentErrorMsg:
 		m.executing = false
 		if !errors.Is(msg.Error, context.Canceled) {
-			m.statusBar.CurrentState = "出错"
+			m.statusBar.CurrentState = i18n.T("client.status.error")
 		}
 		return m.updateConversation(msg, false)
 
@@ -936,10 +937,10 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		return m, checkDaemonCmd(m.daemonAddr)
 
 	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg:
-		return m.updateWithState(msg, "思考中", true)
+		return m.updateWithState(msg, i18n.T("client.status.thinking"), true)
 
 	case clientmsg.ToolExecStartMsg, clientmsg.ToolExecEndMsg:
-		return m.updateWithState(msg, "执行中", true)
+		return m.updateWithState(msg, i18n.T("client.status.executing"), true)
 
 	case clientmsg.ExecutionSummaryMsg:
 		m.statusBar.Update(msg)
@@ -953,7 +954,7 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateConversation(msg, true)
 
 	case clientmsg.FinalAnswerMsg:
-		m.statusBar.CurrentState = "完成"
+		m.statusBar.CurrentState = i18n.T("client.status.complete")
 		m.statusBar.Update(msg)
 		return m.updateConversation(msg, true)
 
@@ -961,24 +962,24 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateConversation(msg, false)
 
 	case clientmsg.ClearScreenMsg:
-		return m.updateWithState(msg, "空闲", false)
+		return m.updateWithState(msg, i18n.T("client.status.idle"), false)
 
 	// --- Dialog overlay: AskUser questions from the LLM ---
 
 	case clientmsg.AskUserEventMsg:
-		m.statusBar.CurrentState = "等待回答"
+		m.statusBar.CurrentState = i18n.T("client.status.waiting.answer")
 		m.activateAskUserOverlay()
 		return m, nil
 
 	case dialog.SelectDialogResult:
 		m.activeOverlay = overlayNone
-		m.statusBar.CurrentState = "空闲"
+		m.statusBar.CurrentState = i18n.T("client.status.idle")
 		m.mapAskUserReply(false, msg.Index, nil, msg.CustomText, msg.Cancelled)
 		return m, nil
 
 	case dialog.OptionsDialogResult:
 		m.activeOverlay = overlayNone
-		m.statusBar.CurrentState = "空闲"
+		m.statusBar.CurrentState = i18n.T("client.status.idle")
 		m.mapAskUserReply(true, 0, msg.Indices, msg.CustomText, msg.Cancelled)
 		return m, nil
 
@@ -1010,7 +1011,7 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 				m.connectAPIKey = msg.Value
 				m.connectModels = m.modelsForProvider(m.connectProvider)
 				if len(m.connectModels) > 0 {
-					m.modelDlg = dialog.NewListDialog("选择模型")
+					m.modelDlg = dialog.NewListDialog(i18n.T("client.ui.dialog.model.select"))
 					m.modelDlg.SetItems(m.connectModels)
 					m.modelDlg.Update(m.windowSizeMsg())
 					m.activeOverlay = overlayConnectModel
@@ -1024,13 +1025,13 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	// --- Permission request (tool security) ---
 
 	case clientmsg.PermissionRequestMsg:
-		m.statusBar.CurrentState = "等待选择"
+		m.statusBar.CurrentState = i18n.T("client.status.waiting.choice")
 		newBar, _ := permission.UpdatePermissionBar(m.permBar, msg)
 		m.permBar = newBar
 		return m, nil
 
 	case clientmsg.ChoiceSelectedMsg:
-		m.statusBar.CurrentState = "空闲"
+		m.statusBar.CurrentState = i18n.T("client.status.idle")
 		if m.rpcConnected {
 			params := m.pendingPermParams
 			m.pendingPermParams = nil
@@ -1067,7 +1068,7 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.ExecutionCancelMsg:
 		m.executing = false
-		m.statusBar.CurrentState = "已取消"
+		m.statusBar.CurrentState = i18n.T("client.status.cancelled")
 		if m.rpcConnected {
 			m.rpcCancelExecution()
 		} else if m.currentCancel != nil {
@@ -1125,7 +1126,7 @@ func (m *rootModel) resizeViewport(termWidth, termHeight int) {
 
 func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 	if m.executing {
-		return m, m.notifBar.Add(data.Notification{Message: "已有消息正在处理", Level: data.NotifWarning})
+		return m, m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.message.processing"), Level: data.NotifWarning})
 	}
 
 	agentName := m.app.CurrentAgentName()
@@ -1157,7 +1158,7 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 
 	// Fallback: in-process execution
 	m.executing = true
-	m.statusBar.CurrentState = "思考中"
+	m.statusBar.CurrentState = i18n.T("client.status.thinking")
 	m.statusBar.SessionStart = time.Now()
 	m.statusBar.SessionDuration = 0
 
@@ -1188,14 +1189,14 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 
 		rt, err := m.app.CurrentRuntime()
 		if err != nil {
-			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: fmt.Errorf("runtime不可用: %w", err)})
+			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: fmt.Errorf(i18n.T("client.notify.runtime.unavailable"), err)})
 			m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
 			return
 		}
 
 		s := m.app.NewSessionFromMeta()
 		if s == nil {
-			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: fmt.Errorf("会话创建失败")})
+			m.program.Send(clientmsg.AgentErrorMsg{SessionID: sessionID, Error: fmt.Errorf("%s", i18n.T("client.notify.session.create.failed"))})
 			m.program.Send(clientmsg.SessionDoneMsg{SessionID: sessionID})
 			return
 		}
@@ -1327,7 +1328,7 @@ func (m *rootModel) handleAgentSwitch(e clientmsg.AgentSwitchMsg) (tea.Model, te
 	}
 
 	return m, m.notifBar.Add(data.Notification{
-		Message: fmt.Sprintf("已切换到 Agent: %s", e.AgentName),
+		Message: fmt.Sprintf(i18n.T("client.notify.agent.switched"), e.AgentName),
 		Level:   data.NotifInfo,
 	})
 }
@@ -1335,7 +1336,7 @@ func (m *rootModel) handleAgentSwitch(e clientmsg.AgentSwitchMsg) (tea.Model, te
 func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, tea.Cmd) {
 	cmd := m.registry.Get(e.Name)
 	if cmd == nil {
-		return m, m.notifBar.Add(data.Notification{Message: fmt.Sprintf("未知命令: /%s", e.Name), Level: data.NotifWarning})
+		return m, m.notifBar.Add(data.Notification{Message: fmt.Sprintf(i18n.T("client.notify.command.unknown"), e.Name), Level: data.NotifWarning})
 	}
 
 	result := cmd.Run(e.Args)

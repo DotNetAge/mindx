@@ -174,7 +174,7 @@ docker run -d \
   -p 1313:1313 \
   -p 1314:1314 \
   -v ./workspaces:/home/mindx/workspaces \
-  dotnetage/mindx:latest
+  dotnetage/mindx
 ```
 
 `./workspaces` 目录可以是你本机任意的目录路径，用于存放 MindX 的工作空间文件。
@@ -259,13 +259,6 @@ mindx web
 ---
 
 ## 架构概览
-
-<!-- TODO: 替换为实际的技术架构图 -->
-<p align="center">
-  <img src="docs/images/architecture-diagram.png" alt="MindX 技术架构图" width="900" />
-  <br />
-  <em>MindX 技术架构（TODO: 替换为实际架构图）</em>
-</p>
 
 MindX 采用分层架构设计，从上至下分为：
 
