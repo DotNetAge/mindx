@@ -25,7 +25,7 @@ require (
 require (
 	github.com/DotNetAge/gochat v0.2.7
 	github.com/DotNetAge/gorag v1.2.0
-	github.com/DotNetAge/goreact v0.1.4
+	github.com/DotNetAge/goreact v0.1.5
 	golang.org/x/text v0.37.0
 )
 

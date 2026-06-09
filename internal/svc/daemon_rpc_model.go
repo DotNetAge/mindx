@@ -28,13 +28,22 @@ func (d *Daemon) handleProviderList(_ context.Context, _ json.RawMessage) (any, 
 	if providers == nil {
 		return []any{}, nil
 	}
+
+	credStore := core.NewCredentialStore(d.app.Settings().UserPreferences())
+
 	result := make([]any, 0, len(providers))
 	for _, p := range providers {
+		configured := false
+		if p.APIKey != "" {
+			resolved := core.ResolveAPIKey(credStore, p.APIKey)
+			configured = resolved != ""
+		}
+
 		result = append(result, map[string]any{
 			"name":     p.Name,
 			"title":    p.Title,
 			"base_url": p.BaseURL,
-			"api_key":  len(p.APIKey) > 0,
+			"api_key":  configured,
 			"is_local": p.IsLocal,
 		})
 	}

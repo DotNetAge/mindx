@@ -3,9 +3,9 @@
   "initialized": true,
   "last_agent": "personal-assistant",
   "last_session_id": "",
-  "last_model": "deepseek-v4-flash",
-  "default_model": "deepseek-v4-flash",
-  "default_provider": "deepseek",
+  "last_model": "",
+  "default_model": "",
+  "default_provider": "",
   "embedder_model": "model_q4.onnx",
   "daemon": {
     "enabled": false
