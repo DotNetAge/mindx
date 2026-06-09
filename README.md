@@ -174,7 +174,7 @@ docker run -d \
   -p 1313:1313 \
   -p 1314:1314 \
   -v ./workspaces:/home/mindx/workspaces \
-  dotnetage/mindx:latest
+  dotnetage/mindx
 ```
 
 The `./workspaces` directory can be any local path for storing MindX workspace files.
@@ -257,13 +257,6 @@ mindx web
 ---
 
 ## Architecture Overview
-
-<!-- TODO: Replace with actual architecture diagram -->
-<p align="center">
-  <img src="docs/images/architecture-diagram.png" alt="MindX Technical Architecture" width="900" />
-  <br />
-  <em>MindX Technical Architecture (TODO: replace with actual diagram)</em>
-</p>
 
 MindX adopts a layered architecture design, top to bottom:
 

@@ -64,4 +64,8 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("log.read", r.daemon.handleLogRead)
 	gw.RegisterMethod("log.clear", r.daemon.handleLogClear)
 	gw.RegisterMethod("log.count", r.daemon.handleLogCount)
+
+	gw.RegisterMethod("i18n.get", r.daemon.handleI18nGet)
+	gw.RegisterMethod("i18n.switch", r.daemon.handleI18nSwitch)
+	gw.RegisterMethod("i18n.list", r.daemon.handleI18nList)
 }

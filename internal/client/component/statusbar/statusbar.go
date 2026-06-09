@@ -10,6 +10,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 var (
@@ -41,7 +42,7 @@ type StatusBar struct {
 }
 
 func New() *StatusBar {
-	return &StatusBar{CurrentState: "空闲"}
+	return &StatusBar{CurrentState: i18n.T("client.status.idle")}
 }
 
 func (s *StatusBar) Update(msg any) (*StatusBar, tea.Cmd) {
@@ -114,7 +115,7 @@ func formatDuration(d time.Duration) string {
 }
 
 func stateStyle(state string, blinkOn bool) string {
-	if state == "空闲" {
+	if state == i18n.T("client.status.idle") {
 		return style.DimStyle.Render("● " + state)
 	}
 	dot := " "
@@ -178,9 +179,9 @@ func (s *StatusBar) View() string {
 	line1 := strings.Join(parts, sep)
 
 	if s.Width > 0 {
-		hint := "↑↓ 滚动"
-		if s.CurrentState != "空闲" {
-			hint = "esc 打断 • ↑↓ 滚动"
+		hint := i18n.T("client.status.hint.scroll")
+		if s.CurrentState != i18n.T("client.status.idle") {
+			hint = i18n.T("client.status.hint.interrupt")
 		}
 		hintRendered := style.GrayStyle.Render(hint)
 		l1w := lipgloss.Width(line1)

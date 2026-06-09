@@ -2,11 +2,13 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/DotNetAge/goreact/rule"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 type DaemonConfig struct {
@@ -37,9 +39,10 @@ type MindxConfig struct {
 	Python          PythonConfig `json:"python"`
 
 	// PermissionRules stores user-defined allow/deny/ask rules.
-	// Loaded by MindxPermissionRuleStore and injected into goreact's PermissionChain.
-	// This is a low-frequency "秘籍" feature — most users configure via Skill AllowedTools instead.
 	PermissionRules *rule.PermissionRules `json:"permission_rules,omitempty"`
+
+	// Language is the UI language (e.g. "zh", "en"). Defaults to system locale.
+	Language string `json:"language,omitempty"`
 
 	filePath string `json:"-"`
 }
@@ -74,12 +77,12 @@ func LoadMindxConfig(workspaceDir string) (*MindxConfig, error) {
 		if os.IsNotExist(err) {
 			return DefaultMindxConfig(workspaceDir), nil
 		}
-		return nil, fmt.Errorf("读取 mindx.json 失败: %w", err)
+		return nil, fmt.Errorf(i18n.T("config.error.read.failed"), err)
 	}
 
 	cfg := &MindxConfig{filePath: filePath}
 	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, fmt.Errorf("解析 mindx.json 失败: %w", err)
+		return nil, fmt.Errorf(i18n.T("config.error.parse.failed"), err)
 	}
 
 	return cfg, nil
@@ -87,17 +90,17 @@ func LoadMindxConfig(workspaceDir string) (*MindxConfig, error) {
 
 func (c *MindxConfig) Save() error {
 	if c.filePath == "" {
-		return fmt.Errorf("mindx.json 路径未设置")
+		return errors.New(i18n.T("config.error.path.unset"))
 	}
 
 	dir := filepath.Dir(c.filePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("创建配置目录失败: %w", err)
+		return fmt.Errorf(i18n.T("config.error.mkdir.failed"), err)
 	}
 
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
-		return fmt.Errorf("序列化 mindx.json 失败: %w", err)
+		return fmt.Errorf(i18n.T("config.error.serialize.failed"), err)
 	}
 
 	return os.WriteFile(c.filePath, data, 0644)

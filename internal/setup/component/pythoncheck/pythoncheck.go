@@ -10,6 +10,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/DotNetAge/mindx/internal/i18n"
 	setupdata "github.com/DotNetAge/mindx/internal/setup/data"
 	setupmsg "github.com/DotNetAge/mindx/internal/setup/msg"
 	"github.com/DotNetAge/mindx/internal/setup/style"
@@ -130,7 +131,7 @@ func (m *Model) View() string {
 
 	if m.pythonInfo.Detected && venvExists == nil {
 		b.WriteString(renderMarkdown(m.renderer, fmt.Sprintf(
-			"🐍 Python 环境\n\n✅ **Python %s · 虚拟环境已就绪**\n\n虚拟环境用于隔离 Python 依赖，技能系统可正常使用。\n\n**Enter** 继续  **S** 跳过",
+			i18n.T("setup.python.check.ready.format"),
 			m.pythonInfo.Version,
 		)))
 	} else if m.pythonInfo.Detected {

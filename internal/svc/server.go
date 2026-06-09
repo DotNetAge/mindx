@@ -17,6 +17,7 @@ func NewServer(addr, wsPath string) (*Server, error) {
 	if err != nil {
 		fmt.Printf("[svc] warning: failed to load config, using defaults: %v\n", err)
 	}
+	cfg.AppVersion = core.Version
 	app, err := core.DefaultApp(cfg)
 	if err != nil {
 		return nil, err

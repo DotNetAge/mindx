@@ -50,10 +50,10 @@ VERSION_NUM    := $(VERSION:v%=%)
 
 # 构建标志
 LDFLAGS        ?= -s -w \
-                 -X github.com/DotNetAge/mindx/cmd.Version=$(VERSION_NUM) \
-                 -X github.com/DotNetAge/mindx/cmd.Commit=$(GIT_COMMIT) \
-                 -X github.com/DotNetAge/mindx/cmd.BuildTime=$(BUILD_TIME) \
-                 -X github.com/DotNetAge/mindx/cmd.Dirty=$(GIT_DIRTY)
+                 -X github.com/DotNetAge/mindx/internal/core.Version=$(VERSION_NUM) \
+                 -X github.com/DotNetAge/mindx/internal/core.Commit=$(GIT_COMMIT) \
+                 -X github.com/DotNetAge/mindx/internal/core.BuildTime=$(BUILD_TIME) \
+                 -X github.com/DotNetAge/mindx/internal/core.Dirty=$(GIT_DIRTY)
 
 GOFLAGS        ?= -trimpath -ldflags "$(LDFLAGS)"
 
@@ -861,24 +861,34 @@ docker-release:
 	echo "$(CYAN)  Commit:    $$_COMMIT$(NC)"; \
 	echo "$(CYAN)  BuildTime: $$_BUILD_TIME$(NC)"
 	@echo ""
-	@# ── 检查 runtime/bin/mindx ──
-	@if [ ! -f runtime/bin/mindx ]; then \
-		echo "$(YELLOW)⚠  runtime/bin/mindx 不存在，开始编译 linux/amd64...$(NC)"; \
-		mkdir -p $(BUILD_DIR)/linux-amd64 runtime/bin; \
-		if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then \
-			echo "$(GREEN)➡ Compiling linux/amd64 (musl, CGO)...$(NC)"; \
-			CGO_ENABLED=1 CC=x86_64-linux-musl-gcc GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) .; \
-		else \
-			echo "$(GREEN)➡ Compiling linux/amd64 (pure Go, CGO_ENABLED=0)...$(NC)"; \
-			echo "$(YELLOW)  提示: 安装 musl-cross 可获得更好的兼容性: brew install FiloSottile/musl-cross/musl-cross$(NC)"; \
-			CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) .; \
-		fi; \
-		cp $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) runtime/bin/mindx; \
-		chmod +x runtime/bin/mindx; \
-		echo "$(GREEN)✅ runtime/bin/mindx 已生成$(NC)"; \
+	@# ── 编译 linux/amd64 二进制 → runtime/bin/mindx ──
+	@echo "$(GREEN)➡ Building linux/amd64 → runtime/bin/mindx ...$(NC)"
+	@mkdir -p $(BUILD_DIR)/linux-amd64 runtime/bin; \
+	if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then \
+		echo "$(CYAN)   Using musl cross-compiler (CGO)$(NC)"; \
+		CGO_ENABLED=1 CC=x86_64-linux-musl-gcc GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) .; \
 	else \
-		echo "$(GREEN)✅ runtime/bin/mindx 已存在$(NC)"; \
+		echo "$(CYAN)   Using pure Go (CGO_ENABLED=0)$(NC)"; \
+		echo "$(YELLOW)   Tip: brew install FiloSottile/musl-cross/musl-cross for better compatibility$(NC)"; \
+		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) .; \
+	fi && \
+	cp $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) runtime/bin/mindx && \
+	chmod +x runtime/bin/mindx && \
+	echo "$(GREEN)✅ Binary built → runtime/bin/mindx$(NC)"
+	@echo ""
+	@# ── 校验二进制版本与 git tag 一致 ──
+	@echo "$(GREEN)🔍 Verifying binary version against git tag ...$(NC)"; \
+	_BUILT_VER=$$(runtime/bin/mindx version 2>&1 | grep "Version:" | awk '{print $$2}'); \
+	_EXPECTED_VER="$(VERSION_NUM)"; \
+	echo "$(CYAN)   Built version : $$_BUILT_VER$(NC)"; \
+	echo "$(CYAN)   Expected (tag): $$_EXPECTED_VER$(NC)"; \
+	if [ "$$_BUILT_VER" = "$$_EXPECTED_VER" ] || [ "$$_BUILT_VER" = "$$_TAG" ]; then \
+		echo "$(GREEN)✅ Version match confirmed!$(NC)"; \
+	else \
+		echo "$(RED)❌ Version mismatch! Binary reports '$$_BUILT_VER' but git tag is '$$_TAG' ($$_EXPECTED_VER)$(NC)"; \
+		exit 1; \
 	fi
+	@echo ""
 	@# ── 检查 runtime/data ──
 	@if [ ! -d runtime/data ] || [ -z "$$(ls -A runtime/data 2>/dev/null)" ]; then \
 		echo "$(YELLOW)⚠  runtime/data/ 为空或不存在（模型文件缺失），镜像将不包含本地模型$(NC)"; \

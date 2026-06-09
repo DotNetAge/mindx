@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 type ListDialog struct {
@@ -181,7 +182,7 @@ func (d *ListDialog) View() string {
 
 func (d *ListDialog) renderList(items []string) string {
 	if len(items) == 0 {
-		return style.DimStyle.Render("  (无匹配项)")
+		return style.DimStyle.Render("  (" + i18n.T("dialog.list.no.match") + ")")
 	}
 
 	var lines []string

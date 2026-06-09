@@ -18,6 +18,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/setup/style"
 
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 const minContentWidth = 60
@@ -157,9 +158,9 @@ func (m *firstRunModel) renderMarkdown(src string) string {
 
 func (m *firstRunModel) yesNoIndicator(yes bool) string {
 	if yes {
-		return "**> Yes**  \n  No"
+		return i18n.T("wizard.yesno.yes")
 	}
-	return "  Yes  \n**> No**"
+	return i18n.T("wizard.yesno.no")
 }
 
 func initGlamour(width int) *glamour.TermRenderer {
@@ -221,14 +222,14 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 
 	providerList, modelList, err := parseProviderAndModels(providersPath, modelsPath, providerKeys)
 	if err != nil {
-		return firstRunResult{Err: fmt.Errorf("解析配置失败: %w", err)}
+		return firstRunResult{Err: fmt.Errorf("%s: %w", i18n.T("wizard.error.parse.config"), err)}
 	}
 	if len(providerList) == 0 {
-		return firstRunResult{Err: fmt.Errorf("配置文件中没有可用提供商")}
+		return firstRunResult{Err: fmt.Errorf("%s", i18n.T("wizard.error.no.provider"))}
 	}
 
 	ti := textinput.New()
-	ti.Placeholder = "请输入 API Key..."
+	ti.Placeholder = i18n.T("wizard.step.apikey.placeholder")
 	ti.EchoMode = textinput.EchoPassword
 	ti.CharLimit = 256
 	ti.Focus()
@@ -334,7 +335,7 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 
 	fm := finalModel.(*firstRunModel)
 	if fm.quitting {
-		return firstRunResult{Err: fmt.Errorf("用户取消配置")}
+		return firstRunResult{Err: fmt.Errorf("%s", i18n.T("wizard.error.user.cancelled"))}
 	}
 
 	return firstRunResult{
@@ -519,7 +520,7 @@ func (m *firstRunModel) updateProviderSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.step = 2
 						return m, nil
 					}
-					m.apiKeyInput.Placeholder = fmt.Sprintf("请输入 %s 的 API Key...", pi.Title())
+				m.apiKeyInput.Placeholder = fmt.Sprintf(i18n.T("wizard.step.apikey.placeholder.provider"), pi.Title())
 					m.apiKeyInput.Focus()
 					m.step = 1
 					return m, textinput.Blink
@@ -784,12 +785,14 @@ func (m *firstRunModel) updateWebUIComplete(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *firstRunModel) renderProviderSelect() string {
 	var b strings.Builder
-	b.WriteString(m.renderMarkdown("选择提供商\n\n请选择一个 AI 提供商。\n\n"))
+	b.WriteString(m.renderMarkdown(fmt.Sprintf("%s\n\n%s\n\n",
+		i18n.T("wizard.step.provider.title"),
+		i18n.T("wizard.step.provider.desc"))))
 	b.WriteString(m.providerList.View())
 	b.WriteString("\n")
-	help := "↑↓ 选择  **Enter** 确认  **Esc** 退出"
+	help := i18n.T("wizard.help.provider.select")
 	if m.apiKeyConfigured {
-		help = "↑↓ 选择  **Enter** 确认  **S** 跳过 (使用已有 Key)  **Esc** 退出"
+		help = i18n.T("wizard.help.provider.select.skip")
 	}
 	b.WriteString(m.renderMarkdown(help))
 	return m.paddedView(borderStyle.Render(b.String()))
@@ -797,14 +800,14 @@ func (m *firstRunModel) renderProviderSelect() string {
 
 func (m *firstRunModel) renderAPIKeyInput() string {
 	var b strings.Builder
-	b.WriteString(m.renderMarkdown("API Key 配置\n\n"))
-	b.WriteString(fmt.Sprintf("提供商: **%s**\n\n", m.selectedProvider.DisplayName))
-	b.WriteString("输入你的 API Key：\n\n")
+	b.WriteString(m.renderMarkdown(fmt.Sprintf("%s\n\n", i18n.T("wizard.step.apikey.title"))))
+	b.WriteString(fmt.Sprintf("%s: **%s**\n\n", i18n.T("wizard.step.apikey.provider.label"), m.selectedProvider.DisplayName))
+	b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.step.apikey.prompt")))
 	b.WriteString(m.apiKeyInput.View())
 	b.WriteString("\n\n")
-	help := "**Enter** 确认  **Esc** 返回上一步"
+	help := i18n.T("wizard.help.apikey.confirm")
 	if m.apiKeyConfigured {
-		help = "**Enter** 确认  **S** 跳过 (使用已有 Key)  **Esc** 返回上一步"
+		help = i18n.T("wizard.help.apikey.confirm.skip")
 	}
 	b.WriteString(m.renderMarkdown(help))
 	return m.paddedView(borderStyle.Render(b.String()))
@@ -812,12 +815,16 @@ func (m *firstRunModel) renderAPIKeyInput() string {
 
 func (m *firstRunModel) renderModelSelect() string {
 	var b strings.Builder
-	b.WriteString(m.renderMarkdown(fmt.Sprintf("选择模型\n\n提供商: **%s**\n\n请选择一个 AI 模型作为默认对话模型。\n\n", m.selectedProvider.DisplayName)))
+	b.WriteString(m.renderMarkdown(fmt.Sprintf("%s\n\n%s: **%s**\n\n%s\n\n",
+		i18n.T("wizard.step.model.title"),
+		i18n.T("wizard.step.apikey.provider.label"),
+		m.selectedProvider.DisplayName,
+		i18n.T("wizard.step.model.desc"))))
 	b.WriteString(m.modelList.View())
 	b.WriteString("\n")
-	help := "↑↓ 选择  **Enter** 确认  **Esc** 返回上一步"
+	help := i18n.T("wizard.help.model.select")
 	if m.modelConfigured {
-		help = "↑↓ 选择  **Enter** 确认  **S** 跳过 (使用已有配置)  **Esc** 返回上一步"
+		help = i18n.T("wizard.help.model.select.skip")
 	}
 	b.WriteString(m.renderMarkdown(help))
 	return m.paddedView(borderStyle.Render(b.String()))
@@ -826,22 +833,22 @@ func (m *firstRunModel) renderModelSelect() string {
 func (m *firstRunModel) renderDaemonCheck() string {
 	var b strings.Builder
 	if m.daemonState == 1 {
-		b.WriteString(m.renderMarkdown("⚙️ **正在注册 Daemon 自启动服务...**\n\n请稍候..."))
+		b.WriteString(m.renderMarkdown(i18n.T("wizard.daemon.installing.wait")))
 		return m.paddedView(borderStyle.Render(b.String()))
 	}
 	if m.daemonState == 2 {
 		if m.daemonInstallErr != nil {
 			b.WriteString(m.renderMarkdown(fmt.Sprintf(
-				"⚙️ Daemon 后台服务\n\n❌ **安装失败**\n\n错误: %s\n\n你可以稍后运行 `mindx doctor` 重新配置。\n\n**Enter** 继续",
+				i18n.T("wizard.daemon.install.error.format"),
 				m.daemonInstallErr.Error(),
 			)))
 		} else {
 			restartHint := ""
 			if runtime.GOOS == "windows" {
-				restartHint = "\n\nDaemon 已成功安装到系统，请**重新启动电脑**使其生效。"
+				restartHint = i18n.T("wizard.daemon.restart.hint.installed")
 			}
 			b.WriteString(m.renderMarkdown(fmt.Sprintf(
-				"⚙️ Daemon 后台服务\n\n✅ **安装完成**\n\nDaemon 已注册为开机自启动服务。%s\n\n**Enter** 继续", restartHint,
+				i18n.T("wizard.daemon.installed.success.format"), restartHint,
 			)))
 		}
 		return m.paddedView(borderStyle.Render(b.String()))
@@ -850,29 +857,13 @@ func (m *firstRunModel) renderDaemonCheck() string {
 	if installed {
 		restartHint := ""
 		if runtime.GOOS == "windows" {
-			restartHint = "\n\nDaemon 已成功安装到系统，请**重新启动电脑**使其生效。"
+			restartHint = i18n.T("wizard.daemon.restart.hint.installed")
 		}
 		b.WriteString(m.renderMarkdown(fmt.Sprintf(
-			"⚙️ Daemon 后台服务\n\n✅ **已安装**\n\nDaemon 已注册为开机自启动服务。%s\n\n**Enter** 继续  **S** 跳过", restartHint,
+			i18n.T("wizard.daemon.already.installed.format"), restartHint,
 		)))
 	} else {
-		md := `⚙️ Daemon 后台服务
-
-🔴 **未安装**
-
-Daemon 是 MindX 的核心服务，提供多 Agent 协作与友好的 Web 界面，
-如跳过则只能使用基于命令行的 TUI。
-
-未安装不影响本地对话，但以下功能不可用：
-  - 多 Agent 协作调度
-  - WebSocket 远程连接
-  - 系统托盘常驻
-
-是否注册为开机自启动服务?
-
-` + m.yesNoIndicator(m.daemonChoice) + `
-
-← → 切换  **Enter** 确认  **Esc** 退出`
+		md := i18n.T("wizard.daemon.notinstalled.desc") + "\n\n" + m.yesNoIndicator(m.daemonChoice) + "\n\n" + i18n.T("wizard.daemon.toggle.nav")
 		b.WriteString(m.renderMarkdown(md))
 	}
 	return m.paddedView(borderStyle.Render(b.String()))
@@ -885,59 +876,24 @@ func (m *firstRunModel) renderPythonCheck() string {
 
 	if m.pythonDetected && venvExists == nil {
 		b.WriteString(m.renderMarkdown(fmt.Sprintf(
-			"🐍 Python 环境\n\n✅ **Python %s · 虚拟环境已就绪**\n\n虚拟环境用于隔离 Python 依赖，技能系统可正常使用。\n\n**Enter** 继续  **S** 跳过",
+			i18n.T("wizard.python.ready.format"),
 			m.pythonVersion,
 		)))
 	} else if m.pythonDetected {
-		md := fmt.Sprintf(`🐍 Python 环境
-
-🟢 **Python %s** 已检测
-🔴 **虚拟环境未创建**
-
-虚拟环境用于隔离技能所需的 Python 依赖。
-创建后将自动安装 skills/ 下所有 requirements.txt。
-不创建则 Python 技能不可用，但核心对话功能正常。
-
-是否创建虚拟环境?
-
-%s
-
-← → 切换  **Enter** 确认  **Esc** 退出`,
+		md := fmt.Sprintf(
+			i18n.T("wizard.python.detected.no.venv.format"),
 			m.pythonVersion, m.yesNoIndicator(m.pythonChoice),
 		)
 		b.WriteString(m.renderMarkdown(md))
 	} else {
-		md := `🐍 Python 环境
-
-🔴 **Python 未安装**
-
-Python 是必需组件，技能系统依赖 Python 运行。
-
-配置完成后将自动尝试安装 Python 3.12。
-
-你也可以手动安装：
-
-  1. 访问 python.org 下载 Python 3.10+
-  2. 安装时勾选 "Add Python to PATH"
-  3. 完成后重新运行配置向导
-
-**Enter** 继续  **Esc** 跳过  **q** 退出`
+		md := i18n.T("wizard.python.notinstalled.desc")
 		b.WriteString(m.renderMarkdown(md))
 	}
 	return m.paddedView(borderStyle.Render(b.String()))
 }
 
 func (m *firstRunModel) renderMemoryConfig() string {
-	md := `💾 记忆体配置
-
-✅ **Embedder 模型已内嵌**
-
-Chinese-CLIP (model_q4.onnx) 已打包在程序内部，
-启动时自动释放到工作目录，无需单独下载。
-
-记忆体功能默认启用，支持语义搜索和 RAG 跨会话检索。
-
-**Enter** 继续  **S** 跳过`
+	md := i18n.T("wizard.memory.embedder.ready.detail")
 	return m.paddedView(borderStyle.Render(m.renderMarkdown(md)))
 }
 
@@ -945,22 +901,12 @@ func (m *firstRunModel) renderPathSetup() string {
 	var b strings.Builder
 	if m.pathInPath {
 		b.WriteString(m.renderMarkdown(fmt.Sprintf(
-			"📌 系统 PATH 配置\n\n✅ **mindx 已在系统 PATH 中**\n\n当前安装路径: `%s`\n\n**Enter** 继续  **S** 跳过",
+			i18n.T("wizard.path.already.in.format"),
 			m.installDir,
 		)))
 	} else {
-		md := fmt.Sprintf(`📌 系统 PATH 配置
-
-安装路径: %s
-
-将 mindx 所在目录添加到系统 PATH 环境变量后，你可以在任意终端窗口中直接运行 mindx 命令。
-（修改用户级 PATH，无需管理员权限）
-
-是否添加到 PATH?
-
-%s
-
-← → 切换  **Enter** 确认  **Esc** 退出`,
+		md := fmt.Sprintf(
+			i18n.T("wizard.path.add.desc.format"),
 			m.installDir, m.yesNoIndicator(m.pathChoice),
 		)
 		b.WriteString(m.renderMarkdown(md))
@@ -973,21 +919,21 @@ func (m *firstRunModel) renderWebUIComplete() string {
 
 	// Provider
 	if m.selectedProvider.Name != "" {
-		items = append(items, fmt.Sprintf("✅ 提供商 · **%s**", m.selectedProvider.DisplayName))
+		items = append(items, fmt.Sprintf(i18n.T("wizard.complete.item.provider"), m.selectedProvider.DisplayName))
 	}
 
 	// Model
 	if m.selectedModel.Name != "" {
-		items = append(items, fmt.Sprintf("✅ 模型 · **%s**", m.selectedModel.Name))
+		items = append(items, fmt.Sprintf(i18n.T("wizard.complete.item.model"), m.selectedModel.Name))
 	}
 
 	// Daemon - re-check
 	if DaemonInstalled(m.workspaceDir) {
-		items = append(items, "✅ Daemon · 已注册为开机自启动服务")
+		items = append(items, i18n.T("wizard.complete.item.daemon.installed"))
 	} else if m.daemonState == 2 && m.daemonInstallErr != nil {
-		items = append(items, "❌ Daemon · 安装失败")
+		items = append(items, i18n.T("wizard.complete.item.daemon.failed"))
 	} else {
-		items = append(items, "⏭️ Daemon · 未安装")
+		items = append(items, i18n.T("wizard.complete.item.daemon.skipped"))
 	}
 
 	// Python + venv - re-check
@@ -995,56 +941,56 @@ func (m *firstRunModel) renderWebUIComplete() string {
 	_, venvExists := os.Stat(venvPath)
 	if m.pythonDetected {
 		if venvExists == nil {
-			items = append(items, fmt.Sprintf("✅ Python · %s · 虚拟环境已创建", m.pythonVersion))
+			items = append(items, fmt.Sprintf(i18n.T("wizard.complete.item.python.ready"), m.pythonVersion))
 		} else {
-			items = append(items, fmt.Sprintf("✅ Python · %s (未创建虚拟环境)", m.pythonVersion))
+			items = append(items, fmt.Sprintf(i18n.T("wizard.complete.item.python.no.venv"), m.pythonVersion))
 		}
 	} else {
-		items = append(items, "❌ Python · 未检测到")
+		items = append(items, i18n.T("wizard.complete.item.python.missing"))
 	}
 
 	// Embedder model - re-check
 	modelPath := filepath.Join(m.workspaceDir, "data", "models", "model_q4.onnx")
 	if _, err := os.Stat(modelPath); err == nil {
-		items = append(items, "✅ Embedder · Chinese-CLIP 模型已就绪")
+		items = append(items, i18n.T("wizard.complete.item.embedder.ready"))
 	} else {
-		items = append(items, "⏭️ Embedder · 待启动时自动释放")
+		items = append(items, i18n.T("wizard.complete.item.embedder.pending"))
 	}
 
 	// PATH - re-check (Windows only)
 	if runtime.GOOS == "windows" && m.installDir != "" {
 		if CheckInPath(m.installDir) {
-			items = append(items, "✅ PATH · 已添加到系统 PATH")
+			items = append(items, i18n.T("wizard.complete.item.path.added"))
 		} else if m.pathChoice {
-			items = append(items, "❌ PATH · 添加失败")
+			items = append(items, i18n.T("wizard.complete.item.path.failed"))
 		} else {
-			items = append(items, "⏭️ PATH · 未配置")
+			items = append(items, i18n.T("wizard.complete.item.path.skipped"))
 		}
 	}
 
 	// WebUI
 	webDir := filepath.Join(m.workspaceDir, "web")
 	if _, err := os.Stat(webDir); err == nil {
-		items = append(items, "✅ WebUI · 资源文件已就绪")
+		items = append(items, i18n.T("wizard.complete.item.webui.ready"))
 	} else {
-		items = append(items, "❌ WebUI · 资源文件未检测到")
+		items = append(items, i18n.T("wizard.complete.item.webui.missing"))
 	}
 
 	// Build markdown output
 	var b strings.Builder
-	b.WriteString("🎉 **配置完成！**\n\n")
-	b.WriteString("安装状态：\n\n")
+	b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.title")))
+	b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.status.header")))
 	for _, item := range items {
 		b.WriteString(item + "\n\n")
 	}
 	b.WriteString("---\n\n")
-	b.WriteString("**使用方式：**\n\n")
-	b.WriteString("1. **终端 TUI**：直接运行 `mindx` 进入命令行界面\n\n")
-	b.WriteString("2. **浏览器 WebUI**：访问 http://localhost:1313\n\n")
+	b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.header")))
+	b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.tui.detail")))
+	b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.webui.detail")))
 	if runtime.GOOS == "windows" {
-		b.WriteString("💡 Windows 用户请**重新启动终端**后使用 `mindx` 命令\n\n")
+		b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.windows.restart")))
 	}
-	b.WriteString("**Enter** 完成 退出向导")
+	b.WriteString(i18n.T("wizard.complete.finish"))
 
 	return m.paddedView(borderStyle.Render(m.renderMarkdown(b.String())))
 }

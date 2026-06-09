@@ -10,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 // RunWizard runs the interactive setup wizard and applies the results.
@@ -18,7 +19,7 @@ import (
 func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *core.MindxConfig, embeddedFS fs.FS) error {
 	// 强制将内置的 providers.yml 同步到用户设置目录（覆盖旧版本）
 	if err := core.SyncEmbeddedFile(embeddedFS, "runtime/settings/providers.yml", providersPath); err != nil {
-		return fmt.Errorf("同步 providers.yml 失败: %w", err)
+		return fmt.Errorf(i18n.T("setup.sync.providers.failed"), err)
 	}
 
 	result := runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg)
@@ -31,7 +32,7 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 	// no key is left orphaned in the credential store.
 	if result.SelectedProvider != "" {
 		if err := updateProviderCredRef(providersPath, result.SelectedProvider); err != nil {
-			return fmt.Errorf("更新提供商配置失败: %w", err)
+			return fmt.Errorf(i18n.T("setup.update.provider.config.failed"), err)
 		}
 	}
 
@@ -40,7 +41,7 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 	credStore := core.NewCredentialStore(workspaceDir)
 	if result.APIKey != "" {
 		if err := credStore.Set(result.SelectedProvider, result.APIKey); err != nil {
-			return fmt.Errorf("存储 API Key 失败: %w", err)
+			return fmt.Errorf(i18n.T("setup.store.apikey.failed"), err)
 		}
 	}
 
@@ -49,14 +50,14 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 		if key != "" && providerName != result.SelectedProvider {
 			if err := credStore.Set(providerName, key); err != nil {
 				// 单个写入失败不阻断流程，仅记录警告
-				fmt.Printf("⚠️  存储 %s 的 API Key 失败: %v\n", providerName, err)
+				fmt.Printf("⚠️  "+i18n.T("setup.store.apikey.provider.failed")+"\n", providerName, err)
 			}
 		}
 	}
 
 	if result.SelectedModel != "" {
 		if err := updateAllAgentsModel(agentsDir, result.SelectedModel); err != nil {
-			return fmt.Errorf("更新 Agent 模型配置失败: %w", err)
+			return fmt.Errorf(i18n.T("setup.update.agent.model.failed"), err)
 		}
 		cfg.DefaultModel = result.SelectedModel
 		cfg.LastModel = result.SelectedModel
@@ -69,37 +70,37 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 
 	// Setup PATH: copy binary and configure shell RC (must run before daemon)
 	if result.PathSetup {
-		fmt.Print("📌 安装 mindx 到系统并配置 PATH...\n")
+		fmt.Print(i18n.T("setup.path.installing") + "\n")
 		exe, err := os.Executable()
 		if err != nil {
-			fmt.Printf("⚠️  无法获取可执行文件路径: %v\n", err)
+			fmt.Printf("⚠️  "+i18n.T("setup.exe.path.failed")+"\n", err)
 		} else {
 			installDir, err := resolveInstallDir("")
 			if err != nil {
-				fmt.Printf("⚠️  无法确定安装目录: %v\n", err)
+				fmt.Printf("⚠️  "+i18n.T("setup.install.dir.unknown")+"\n", err)
 			} else {
 				if err := os.MkdirAll(installDir, 0755); err != nil {
-					fmt.Printf("⚠️  创建安装目录失败: %v\n", err)
+					fmt.Printf("⚠️  "+i18n.T("setup.mkdir.install.failed")+"\n", err)
 				} else {
 					destExe := filepath.Join(installDir, filepath.Base(exe))
 					if destExe != exe {
 						if err := copyFile(exe, destExe); err != nil {
-							fmt.Printf("⚠️  复制二进制失败: %v\n", err)
+							fmt.Printf("⚠️  "+i18n.T("setup.copy.binary.failed")+"\n", err)
 						} else {
-							fmt.Printf("✅ 二进制已安装到: %s\n", destExe)
+							fmt.Printf(i18n.T("setup.binary.installed")+"\n", destExe)
 						}
 					} else {
-						fmt.Printf("✅ 二进制已存在于: %s\n", destExe)
+						fmt.Printf(i18n.T("setup.binary.exists")+"\n", destExe)
 					}
 
 					// add install directory to shell RC PATH
 					if already, err := AddToSystemPath(installDir); err != nil {
-						fmt.Printf("⚠️  PATH 设置失败 (可稍后手动配置): %v\n", err)
+						fmt.Printf("⚠️  "+i18n.T("setup.path.set.failed")+"\n", err)
 					} else if !already {
-						fmt.Printf("✅ mindx 已添加到系统 PATH: %s\n", installDir)
-						fmt.Print("\033[31m⚠️  必须重启终端后生效\033[0m\n\n")
+						fmt.Printf(i18n.T("setup.path.added")+"\n", installDir)
+						fmt.Print("\033[31m" + i18n.T("setup.path.restart.hint") + "\033[0m\n\n")
 					} else {
-						fmt.Println("✅ mindx 已存在于系统 PATH")
+						fmt.Println(i18n.T("setup.path.already.exists"))
 					}
 				}
 			}
@@ -108,29 +109,29 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 
 	// Setup daemon if user requested
 	if result.DaemonSetup {
-		fmt.Print("⚙️  注册 Daemon 自启动服务...\n")
+		fmt.Print(i18n.T("setup.daemon.registering") + "\n")
 		if err := SetupDaemon(workspaceDir); err != nil {
 			cfg.Daemon.Installed = false
 			cfg.Daemon.AutoStart = false
-			fmt.Printf("⚠️  Daemon 注册失败 (可稍后手动配置): %v\n", err)
+			fmt.Printf("⚠️  "+i18n.T("setup.daemon.register.failed")+"\n", err)
 		} else {
 			cfg.Daemon.Installed = true
 			cfg.Daemon.AutoStart = true
-			fmt.Println("✅ Daemon 自启动服务已注册")
+			fmt.Println(i18n.T("setup.daemon.registered"))
 		}
 	}
 
 	// Setup Python virtual environment if user requested
 	// SetupPython internally detects Python and attempts InstallPython if missing
 	if result.PythonSetup {
-		fmt.Print("🐍 检查 Python 环境...\n")
+		fmt.Print(i18n.T("setup.python.checking") + "\n")
 		pyInfo, err := SetupPython(workspaceDir)
 		if err != nil {
-			fmt.Printf("⚠️  Python 配置失败 (可稍后手动配置): %v\n", err)
+			fmt.Printf("⚠️  "+i18n.T("setup.python.config.failed")+"\n", err)
 			cfg.Python = result.PythonInfo
 		} else {
 			cfg.Python = pyInfo
-			fmt.Printf("✅ Python 环境已就绪: %s\n", pyInfo.VenvPath)
+			fmt.Printf(i18n.T("setup.python.ready")+"\n", pyInfo.VenvPath)
 		}
 	} else {
 		cfg.Python = result.PythonInfo
@@ -141,15 +142,15 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 	}
 
 	if err := cfg.Save(); err != nil {
-		return fmt.Errorf("保存 mindx.json 失败: %w", err)
+		return fmt.Errorf(i18n.T("config.error.serialize.failed"), err)
 	}
 
 	if result.WebUIReady {
-		fmt.Print("\n🌐 WebUI 已就绪\n\n")
-		fmt.Printf("   启动 Daemon 后访问: http://localhost:1313\n")
-		fmt.Printf("   或直接运行: mindx web\n\n")
+		fmt.Print("\n" + i18n.T("setup.webui.ready") + "\n\n")
+		fmt.Println("   " + i18n.T("setup.webui.access"))
+		fmt.Println("   " + i18n.T("setup.webui.cmd.hint") + "\n")
 	} else {
-		fmt.Print("\n💡 提示: 运行 'mindx web' 可打开 WebUI 界面 (需 Daemon 运行中)\n\n")
+		fmt.Print("\n" + i18n.T("setup.webui.hint") + "\n\n")
 	}
 
 	return nil
@@ -158,14 +159,14 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 func updateProviderCredRef(providersPath, providerName string) error {
 	data, err := os.ReadFile(providersPath)
 	if err != nil {
-		return fmt.Errorf("读取 providers.yml 失败: %w", err)
+		return fmt.Errorf(i18n.T("setup.read.providers.failed"), err)
 	}
 
 	var provConfig struct {
 		Providers []config.ProviderConfig `yaml:"providers"`
 	}
 	if err := yaml.Unmarshal(data, &provConfig); err != nil {
-		return fmt.Errorf("解析 providers.yml 失败: %w", err)
+		return fmt.Errorf(i18n.T("setup.parse.providers.failed"), err)
 	}
 
 	var found *config.ProviderConfig
@@ -176,7 +177,7 @@ func updateProviderCredRef(providersPath, providerName string) error {
 		}
 	}
 	if found == nil {
-		return fmt.Errorf("提供商 %q 未在配置中找到", providerName)
+		return fmt.Errorf(i18n.T("setup.provider.notfound"), providerName)
 	}
 
 	// 将 api_key 设为 provider name（作为 CredentialStore 的引用 key）
@@ -184,7 +185,7 @@ func updateProviderCredRef(providersPath, providerName string) error {
 
 	out, err := yaml.Marshal(provConfig)
 	if err != nil {
-		return fmt.Errorf("序列化配置失败: %w", err)
+		return fmt.Errorf(i18n.T("setup.serialize.config.failed"), err)
 	}
 
 	return os.WriteFile(providersPath, out, 0644)
@@ -199,7 +200,7 @@ func updateAllAgentsModel(agentsDir, modelName string) error {
 	for _, agent := range registry.List() {
 		agent.Model = modelName
 		if err := registry.SaveTo(agent); err != nil {
-			return fmt.Errorf("保存 Agent %q 模型配置失败: %w", agent.Name, err)
+			return fmt.Errorf(i18n.T("setup.save.agent.model.failed"), agent.Name, err)
 		}
 	}
 

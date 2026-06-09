@@ -8,6 +8,7 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 type ErrorMsg struct {
@@ -55,13 +56,13 @@ func ViewErrorMsg(m ErrorMsg, width int) string {
 
 func extractPhase(errMsg string) string {
 	if strings.HasPrefix(errMsg, "think error:") {
-		return "思考阶段"
+		return i18n.T("error.phase.thinking")
 	}
 	if strings.HasPrefix(errMsg, "act error:") {
-		return "执行阶段"
+		return i18n.T("error.phase.executing")
 	}
 	if strings.HasPrefix(errMsg, "observe error:") {
-		return "反思阶段"
+		return i18n.T("error.phase.reflecting")
 	}
 	return ""
 }

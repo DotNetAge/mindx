@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 // Thinking tracks the thinking phase blink state.
@@ -57,14 +58,14 @@ func ViewThinking(m Thinking) string {
 	}
 
 	if m.IsActive {
-		return ViewBlink(Blink{Symbol: "● 深度思考", BlinkOn: m.BlinkOn}, style.GrayStyle)
+		return ViewBlink(Blink{Symbol: i18n.T("client.ui.thinking.active"), BlinkOn: m.BlinkOn}, style.GrayStyle)
 	}
 
 	d := m.Duration
 	if d < time.Millisecond {
 		d = 0
 	}
-	return style.GrayStyle.Render(fmt.Sprintf("⏺ 深度思考 %s", d))
+	return style.GrayStyle.Render(fmt.Sprintf(i18n.T("client.ui.thinking.done"), d))
 }
 
 const (
@@ -80,7 +81,7 @@ func ViewThought(content string, tokensIn, tokensOut int, collapsed bool, tokens
 	var b strings.Builder
 	indent := " "
 
-	b.WriteString(style.GrayStyle.Render(" ⏺ 深度思考"))
+	b.WriteString(style.GrayStyle.Render(" ⏺ " + i18n.T("client.ui.thinking.label")))
 	b.WriteByte('\n')
 
 	if content != "" {

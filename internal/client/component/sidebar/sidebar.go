@@ -12,6 +12,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 var (
@@ -153,7 +154,7 @@ func (s *Sidebar) buildContent() string {
 	if view != "" {
 		parts = append(parts, view)
 	} else {
-		parts = append(parts, style.DimStyle.Render("  Welcome Panel"))
+		parts = append(parts, style.DimStyle.Render(i18n.T("client.ui.sidebar.welcome.fallback")))
 	}
 
 	sep := borderStyle.Render(strings.Repeat("─", max(s.width-4, 4)))
@@ -174,13 +175,13 @@ func (s *Sidebar) buildContent() string {
 		}
 
 		var costParts []string
-		costParts = append(costParts, boldLabel.Render("费用明细"))
-		costParts = append(costParts, fmt.Sprintf("  输入: %s • %s", formatTokens(s.InputTokens), formatCost(inputCost)))
-		costParts = append(costParts, fmt.Sprintf("  输出: %s • %s", formatTokens(s.OutputTokens), formatCost(outputCost)))
+		costParts = append(costParts, boldLabel.Render(i18n.T("client.ui.sidebar.cost.detail")))
+		costParts = append(costParts, fmt.Sprintf(i18n.T("client.ui.sidebar.cost.input"), formatTokens(s.InputTokens), formatCost(inputCost)))
+		costParts = append(costParts, fmt.Sprintf(i18n.T("client.ui.sidebar.cost.output"), formatTokens(s.OutputTokens), formatCost(outputCost)))
 		if s.CachedTokens > 0 {
-			costParts = append(costParts, fmt.Sprintf("  缓存: %s • %s", formatTokens(s.CachedTokens), formatCost(cachedCost)))
+			costParts = append(costParts, fmt.Sprintf(i18n.T("client.ui.sidebar.cost.cached"), formatTokens(s.CachedTokens), formatCost(cachedCost)))
 		}
-		costParts = append(costParts, fmt.Sprintf("  合计: %s", formatCost(totalCost)))
+		costParts = append(costParts, fmt.Sprintf(i18n.T("client.ui.sidebar.cost.total"), formatCost(totalCost)))
 
 		padding := lipgloss.NewStyle().Padding(0, 1).Width(s.width)
 		parts = append(parts, padding.Render(strings.Join(costParts, "\n")))
@@ -193,7 +194,7 @@ func (s *Sidebar) buildContent() string {
 
 		// Blank line before new section
 		fcParts = append(fcParts, "")
-		fcParts = append(fcParts, boldLabel.Render("文件变更"))
+		fcParts = append(fcParts, boldLabel.Render(i18n.T("client.ui.sidebar.changes.title")))
 
 		for _, c := range s.FileChanges {
 			path := style.GrayStyle.Render(c.TruncatedPath())

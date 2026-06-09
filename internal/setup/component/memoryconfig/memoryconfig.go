@@ -14,6 +14,7 @@ import (
 	goragutils "github.com/DotNetAge/gorag/utils"
 
 	setupmsg "github.com/DotNetAge/mindx/internal/setup/msg"
+	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/internal/setup/style"
 )
 
@@ -146,12 +147,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			if msg.Err != nil {
 				m.downloadErr = msg.Err
 				m.embedderModel = ""
-				m.downloadStatus = "下载失败"
+				m.downloadStatus = i18n.T("setup.memory.download.failed")
 				m.state = 2
 				return m, nil
 			}
 			if msg.Done {
-				m.downloadStatus = "处理中..."
+				m.downloadStatus = i18n.T("setup.memory.processing")
 				m.state = 2
 				return m, nil
 			}
@@ -193,17 +194,17 @@ func (o *downloadObserver) OnEvent(event goragutils.DownloadEvent) {
 	}
 	switch event.Type {
 	case goragutils.EventStart:
-		msg.Status = fmt.Sprintf("正在下载 %s...", event.File)
+		msg.Status = fmt.Sprintf(i18n.T("setup.memory.downloading"), event.File)
 	case goragutils.EventProgress:
 		downloadedMB := float64(event.Current) / (1024 * 1024)
 		if event.Total > 0 {
 			totalMB := float64(event.Total) / (1024 * 1024)
-			msg.Status = fmt.Sprintf("下载中  %.0f / %.0f MB", downloadedMB, totalMB)
+			msg.Status = fmt.Sprintf(i18n.T("setup.memory.download.progress"), downloadedMB, totalMB)
 		} else {
-			msg.Status = fmt.Sprintf("下载中  %.0f MB", downloadedMB)
+			msg.Status = fmt.Sprintf(i18n.T("setup.memory.download.progress.mb"), downloadedMB)
 		}
 	case goragutils.EventComplete:
-		msg.Status = fmt.Sprintf("%s 下载完成", event.File)
+		msg.Status = fmt.Sprintf(i18n.T("setup.memory.download.complete"), event.File)
 	}
 	o.ch <- msg
 }
@@ -226,14 +227,14 @@ func runModelDownload(cacheDir string, ch chan<- setupmsg.DownloadProgressMsg) {
 
 	downloader, err := goragutils.NewModelDownloader(cacheDir)
 	if err != nil {
-		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf("创建下载器失败: %w", err)}
+		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.downloader.create.failed"), err)}
 		return
 	}
 	downloader.WithObserver(observer)
 
 	files := []string{modelFile}
 	if _, err := downloader.Download(modelID, files); err != nil {
-		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf("下载失败: %w", err)}
+		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.download.failed.err"), err)}
 		return
 	}
 
@@ -241,20 +242,20 @@ func runModelDownload(cacheDir string, ch chan<- setupmsg.DownloadProgressMsg) {
 
 	src, err := os.Open(srcPath)
 	if err != nil {
-		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf("打开下载模型失败: %w", err)}
+		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.open.failed"), err)}
 		return
 	}
 	defer src.Close()
 
 	dst, err := os.Create(dstPath)
 	if err != nil {
-		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf("创建模型文件失败: %w", err)}
+		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.create.failed"), err)}
 		return
 	}
 	defer dst.Close()
 
 	if _, err := io.Copy(dst, src); err != nil {
-		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf("复制模型文件失败: %w", err)}
+		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.copy.failed"), err)}
 		return
 	}
 
@@ -263,7 +264,7 @@ func runModelDownload(cacheDir string, ch chan<- setupmsg.DownloadProgressMsg) {
 
 	ch <- setupmsg.DownloadProgressMsg{
 		Done:   true,
-		Status: "模型下载完成",
+		Status: i18n.T("setup.memory.model.download.complete"),
 	}
 }
 
@@ -288,23 +289,23 @@ Embedder 模型用于将文本向量化，实现语义搜索和 RAG 记忆。
 		b.WriteString(renderMarkdown(m.renderer, md))
 
 	case 1:
-		b.WriteString(renderMarkdown(m.renderer, "⏳ 正在下载 Embedder 模型...\n\n"))
+		b.WriteString(renderMarkdown(m.renderer, i18n.T("setup.memory.view.downloading")))
 		if m.downloadStatus != "" {
 			b.WriteString(renderMarkdown(m.renderer, m.downloadStatus))
 			b.WriteString("\n\n")
 		}
 		b.WriteString(m.progressBar.View())
 		b.WriteString("\n\n")
-		b.WriteString(renderMarkdown(m.renderer, "请等待下载完成..."))
+		b.WriteString(renderMarkdown(m.renderer, i18n.T("setup.memory.view.waiting")))
 
 	case 2:
 		if m.downloadErr != nil {
 			b.WriteString(renderMarkdown(m.renderer, fmt.Sprintf(
-				"❌ 模型下载失败\n\n错误: %s\n\n你可以稍后运行 `mindx doctor` 重新尝试下载。\n\n**Enter** 继续",
+				i18n.T("setup.memory.view.error"),
 				m.downloadErr.Error(),
 			)))
 		} else {
-			b.WriteString(renderMarkdown(m.renderer, "💾 记忆体配置\n\n✅ **Embedder 模型已就绪**\n\n记忆体功能已启用，支持语义搜索和 RAG 跨会话检索。\n\n**Enter** 继续  **S** 跳过"))
+			b.WriteString(renderMarkdown(m.renderer, i18n.T("setup.memory.view.success")))
 		}
 	}
 	content := style.Border.Render(b.String())

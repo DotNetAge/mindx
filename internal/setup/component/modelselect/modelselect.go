@@ -10,6 +10,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/DotNetAge/mindx/internal/i18n"
 	setupdata "github.com/DotNetAge/mindx/internal/setup/data"
 	setupmsg "github.com/DotNetAge/mindx/internal/setup/msg"
 	"github.com/DotNetAge/mindx/internal/setup/style"
@@ -184,11 +185,11 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 func (m *Model) View() string {
 	var b strings.Builder
-	md := "选择默认模型\n\n"
-	md += "请选择一个 AI 模型作为默认对话模型。\n\n"
-	help := "↑↓ 选择  **Enter** 确认  **Esc** 退出"
+	md := i18n.T("setup.model.select.title") + "\n\n"
+	md += i18n.T("setup.model.select.desc") + "\n\n"
+	help := i18n.T("setup.model.select.help")
 	if m.skipMode {
-		help = "↑↓ 选择  **Enter** 确认  **S** 跳过 (使用已有配置)  **Esc** 退出"
+		help = i18n.T("setup.model.select.help.skip")
 	}
 	b.WriteString(renderMarkdown(m.renderer, md))
 	b.WriteString(m.list.View())

@@ -10,6 +10,7 @@ import (
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 const daemonConnectTimeout = 5 * time.Second
@@ -40,7 +41,7 @@ func (m *rootModel) connectDaemon() {
 
 	if err := c.Connect(ctx); err != nil {
 		m.notifBar.Add(data.Notification{
-			Message: fmt.Sprintf("无法连接到后台服务 (%s): %v", m.daemonAddr, err),
+			Message: fmt.Sprintf(i18n.T("client.notify.rpc.connect.failed"), m.daemonAddr, err),
 			Level:   data.NotifWarning,
 		})
 		m.rpc = &daemonRPCClient{}
@@ -325,7 +326,7 @@ func toString(v any) string {
 func (m *rootModel) rpcSendMessage(text string) {
 	if !m.rpcIsConnected() {
 		m.notifBar.Add(data.Notification{
-			Message: "后台服务未连接，无法发送消息",
+			Message: i18n.T("client.notify.rpc.disconnected"),
 			Level:   data.NotifError,
 		})
 		return
@@ -337,14 +338,14 @@ func (m *rootModel) rpcSendMessage(text string) {
 	}
 	if err := m.rpc.client.Notify("user.message", payload); err != nil {
 		m.notifBar.Add(data.Notification{
-			Message: fmt.Sprintf("发送消息失败: %v", err),
+			Message: fmt.Sprintf(i18n.T("client.notify.rpc.send.failed"), err),
 			Level:   data.NotifError,
 		})
 		return
 	}
 
 	m.executing = true
-	m.statusBar.CurrentState = "思考中"
+	m.statusBar.CurrentState = i18n.T("client.status.thinking")
 	m.statusBar.SessionStart = time.Now()
 	m.statusBar.SessionDuration = 0
 }

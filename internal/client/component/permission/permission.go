@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/DotNetAge/mindx/internal/i18n"
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
@@ -32,7 +33,12 @@ const (
 	PermissionDeny  = 1
 )
 
-var permissionLabels = [2]string{" 同意 ", " 拒绝 "}
+func permissionLabel(idx int) string {
+	if idx == 0 {
+		return " " + i18n.T("client.ui.permission.allow") + " "
+	}
+	return " " + i18n.T("client.ui.permission.deny") + " "
+}
 
 func UpdatePermissionBar(m PermissionBar, e tea.Msg) (PermissionBar, tea.Cmd) {
 	switch e := e.(type) {
@@ -77,8 +83,8 @@ func ViewPermissionBar(m PermissionBar, width int) string {
 		promptLine += style.GrayStyle.Render(" — " + m.Reason)
 	}
 
-	allowBtn := renderButton(permissionLabels[0], m.SelectedIndex == PermissionAllow)
-	denyBtn := renderButton(permissionLabels[1], m.SelectedIndex == PermissionDeny)
+	allowBtn := renderButton(permissionLabel(0), m.SelectedIndex == PermissionAllow)
+	denyBtn := renderButton(permissionLabel(1), m.SelectedIndex == PermissionDeny)
 
 	gap := "  "
 	buttonsRow := " " + allowBtn + gap + denyBtn

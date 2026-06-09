@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	goreactevents "github.com/DotNetAge/goreact/events"
+	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/gort/pkg/gateway"
 )
 
@@ -27,7 +28,7 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreac
 			{"metric": "Termination", "value": summary.TerminationReason},
 		},
 	}
-	_ = d.gw.SendResponse(clientID, gateway.RespExecutionSummary, "执行摘要", tableData,
+	_ = d.gw.SendResponse(clientID, gateway.RespExecutionSummary, i18n.T("svc.event.execution.summary"), tableData,
 		gateway.WithSessionID(sessionID),
 		gateway.WithResponseMeta(map[string]any{
 			"tokens_used": map[string]any{
@@ -46,9 +47,9 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreac
 // Markdown builders for event messages
 
 func buildSubtaskSpawnedMarkdown(info goreactevents.SubtaskInfo) string {
-	md := fmt.Sprintf("### 🌿 子任务生成: `%s`\n\n**Agent**: %s\n**描述**: %s\n", info.TaskID, info.AgentName, info.Description)
+	md := fmt.Sprintf("### %s: `%s`\n\n**Agent**: %s\n**%s**: %s\n", i18n.T("svc.md.subtask.spawned"), info.TaskID, info.AgentName, i18n.T("svc.md.subtask.description"), info.Description)
 	if info.Timeout != "" {
-		md += fmt.Sprintf("**超时**: %s\n", info.Timeout)
+		md += fmt.Sprintf(i18n.T("svc.md.subtask.timeout"), info.Timeout)
 	}
 	return md
 }
@@ -56,15 +57,19 @@ func buildSubtaskSpawnedMarkdown(info goreactevents.SubtaskInfo) string {
 func buildSubtaskCompletedMarkdown(result goreactevents.SubtaskResult) string {
 	var b strings.Builder
 	if result.Success {
-		b.WriteString(fmt.Sprintf("### ✅ 子任务完成: `%s`\n\n", result.TaskID))
-		b.WriteString(fmt.Sprintf("**回答**: %s\n", truncate(result.Answer, 300)))
+		b.WriteString(fmt.Sprintf("### %s: `%s`\n\n", i18n.T("svc.md.subtask.completed"), result.TaskID))
+		b.WriteString(fmt.Sprintf("**%s**: %s\n", i18n.T("svc.md.subtask.answer"), truncate(result.Answer, 300)))
 	} else {
-		b.WriteString(fmt.Sprintf("### ❌ 子任务失败: `%s`\n\n", result.TaskID))
-		b.WriteString(fmt.Sprintf("**错误**: %s\n", result.Error))
+		b.WriteString(fmt.Sprintf("### %s: `%s`\n\n", i18n.T("svc.md.subtask.failed"), result.TaskID))
+		b.WriteString(fmt.Sprintf(i18n.T("svc.md.subtask.error"), result.Error))
 	}
 	return b.String()
 }
 
 func buildTaskSummaryMarkdown(ts goreactevents.TaskSummaryData) string {
-	return fmt.Sprintf("### 📋 任务总结\n\n%s\n\n**Token**: 输入 %d / 输出 %d / 总计 %d\n", ts.Summary, ts.TokenUsage.InputTokens, ts.TokenUsage.OutputTokens, ts.TokenUsage.TotalTokens)
+	return fmt.Sprintf("### %s\n\n%s\n\n**%s**: %s %d / %s %d / %s %d\n",
+		i18n.T("svc.md.task.summary"), ts.Summary,
+		i18n.T("svc.md.task.token"), i18n.T("svc.md.token.input"), ts.TokenUsage.InputTokens,
+		i18n.T("svc.md.token.output"), ts.TokenUsage.OutputTokens,
+		i18n.T("svc.md.token.total"), ts.TokenUsage.TotalTokens)
 }

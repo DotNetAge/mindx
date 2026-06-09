@@ -7,20 +7,16 @@ import (
 	"syscall"
 
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/internal/svc"
 	"github.com/spf13/cobra"
 )
 
 var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "启动 MindX Daemon 服务（含 Gateway + Scheduler）",
-	Long: `启动后台守护进程，提供 WebSocket 网关服务供 WebUI/MacUI 接入。
-同时运行 Scheduler 执行定时任务。
-
-示例:
-  mindx start              # 使用默认配置 (:1314)
-  mindx start --port 8080  # 指定端口`,
-	RunE: runStart,
+	Short: i18n.T("cmd.start.short"),
+	Long:  i18n.T("cmd.start.long"),
+	RunE:  runStart,
 }
 
 var (
@@ -29,23 +25,23 @@ var (
 )
 
 func init() {
-	startCmd.Flags().StringVarP(&startPort, "port", "p", ":1314", "WebSocket 监听地址")
-	startCmd.Flags().StringVar(&startPath, "path", "", "WebSocket 路径 (默认: /ws)")
+	startCmd.Flags().StringVarP(&startPort, "port", "p", ":1314", i18n.T("cmd.start.flag.port.desc"))
+	startCmd.Flags().StringVar(&startPath, "path", "", i18n.T("cmd.start.flag.path.desc"))
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
 	workspaceDir := core.DefaultUserPrefsDir()
 
 	if err := core.ExtractWorkspace(RuntimeFS, workspaceDir); err != nil {
-		return fmt.Errorf("初始化工作目录失败: %w", err)
+		return fmt.Errorf("%s: %w", i18n.T("cmd.start.error.workspace.init"), err)
 	}
 
 	cfg, err := core.LoadMindxConfig(workspaceDir)
 	if err != nil {
-		return fmt.Errorf("加载配置失败: %w", err)
+		return fmt.Errorf("%s: %w", i18n.T("cmd.start.error.config.load"), err)
 	}
 	if !cfg.Initialized {
-		return fmt.Errorf("MindX 尚未配置，请先运行 'mindx' 完成首次配置后再启动 Daemon 服务")
+		return fmt.Errorf("%s", i18n.T("cmd.start.error.notconfigured"))
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

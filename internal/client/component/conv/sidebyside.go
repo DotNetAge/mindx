@@ -6,6 +6,7 @@ import (
 
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 type diffLine struct {
@@ -53,8 +54,8 @@ func ViewSideBySideDiff(diff string, width int) string {
 			started = true
 
 			// Top border + column headers
-			top := colLine.Render("╭─ ") + colHdrOld.Render("旧") +
-				colLine.Render(" ──── ") + colHdrNew.Render("新") +
+			top := colLine.Render("╭─ ") + colHdrOld.Render(i18n.T("diff.old")) +
+				colLine.Render(" ──── ") + colHdrNew.Render(i18n.T("diff.new")) +
 				colLine.Render(" ─╮")
 			b.WriteString(top)
 			b.WriteByte('\n')

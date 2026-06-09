@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 type ActionStep struct {
@@ -213,14 +214,14 @@ func ViewActionStep(step ActionStep, blinkOn bool, width int) string {
 			}
 		}
 
-		summary := fmt.Sprintf("完成 (%d lines)", len(lines))
+		summary := fmt.Sprintf(i18n.T("action.step.complete"), len(lines))
 		if step.EstimatedTok > 0 || step.Duration > 0 {
 			var parts []string
 			if step.EstimatedTok > 0 {
-				parts = append(parts, fmt.Sprintf("Token 消耗 %s", formatNumber(step.EstimatedTok)))
+				parts = append(parts, fmt.Sprintf(i18n.T("action.step.tokens"), formatNumber(step.EstimatedTok)))
 			}
 			if step.Duration > 0 {
-				parts = append(parts, fmt.Sprintf("用时 %s", formatDuration(step.Duration)))
+				parts = append(parts, fmt.Sprintf(i18n.T("action.step.duration"), formatDuration(step.Duration)))
 			}
 			summary += " • " + strings.Join(parts, " • ")
 		}

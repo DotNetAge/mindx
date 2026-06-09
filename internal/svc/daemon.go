@@ -17,6 +17,7 @@ import (
 	goreactsession "github.com/DotNetAge/goreact/session"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
@@ -485,7 +486,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			"client_id", msg.ClientID,
 			"requested_agent", agentName,
 		)
-		d.sendEvent(msg.ClientID, msg.SessionID, gateway.RespError, "错误", err.Error())
+		d.sendEvent(msg.ClientID, msg.SessionID, gateway.RespError, i18n.T("svc.event.error"), err.Error())
 		return
 	}
 
@@ -541,7 +542,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			if r := recover(); r != nil {
 				d.logger.Error("defaultHandler: AskBuilder panic", fmt.Errorf("%v", r),
 					"client_id", clientID, "session_id", sid)
-				d.sendEvent(clientID, sid, gateway.RespError, "错误", fmt.Sprintf("执行异常: %v", r))
+				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.error"), fmt.Sprintf(i18n.T("svc.event.execution.exception"), r))
 			}
 		}()
 		defer func() {
@@ -552,26 +553,26 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		_, err := rt.Ask(resolvedAgentName, content, s).
 			WithContext(ctx).
 			OnThinking(func(chunk string) {
-				gw.SendResponse(clientID, gateway.RespThinkingDelta, "思考中", chunk, gateway.WithSessionID(sid))
+				gw.SendResponse(clientID, gateway.RespThinkingDelta, i18n.T("svc.event.thinking"), chunk, gateway.WithSessionID(sid))
 			}).
 			OnContent(func(chunk string) {
-				d.sendEvent(clientID, sid, gateway.RespMarkdown, "输出中", chunk)
+				d.sendEvent(clientID, sid, gateway.RespMarkdown, i18n.T("svc.event.outputting"), chunk)
 			}).
 			OnToolUseDelta(func(data events.ToolUseDeltaData) {
-				gw.SendResponse(clientID, gateway.RespToolUseDelta, "工具调用参数", map[string]any{
+				gw.SendResponse(clientID, gateway.RespToolUseDelta, i18n.T("svc.event.tool.use.delta"), map[string]any{
 					"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
 				}, gateway.WithSessionID(sid))
 			}).
 			OnThinkingDone(func() {
-				d.sendEvent(clientID, sid, gateway.RespThinkingDone, "思考完成", "思考阶段已完成")
+				d.sendEvent(clientID, sid, gateway.RespThinkingDone, i18n.T("svc.event.thinking.done"), i18n.T("svc.event.thinking.done.detail"))
 			}).
 			OnToolStart(func(data events.ToolExecStartData) {
-				gw.SendResponse(clientID, gateway.RespToolExecStart, "工具执行开始", map[string]any{
+				gw.SendResponse(clientID, gateway.RespToolExecStart, i18n.T("svc.event.tool.start"), map[string]any{
 					"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
 				}, gateway.WithSessionID(sid))
 			}).
 			OnToolEnd(func(data events.ToolExecEndData) {
-				gw.SendResponse(clientID, gateway.RespToolExecEnd, "工具执行结束", map[string]any{
+				gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.end"), map[string]any{
 					"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
 					"success": data.Success, "result": data.Result, "error": data.Error,
 					"duration_ms": int(data.Duration.Milliseconds()),
@@ -584,14 +585,14 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 					for _, fp := range modFiles {
 						fileInfos = append(fileInfos, computeFileDiff(s, fp))
 					}
-					gw.SendResponse(clientID, gateway.RespFileModified, "文件已修改", map[string]any{
+					gw.SendResponse(clientID, gateway.RespFileModified, i18n.T("svc.event.file.modified"), map[string]any{
 						"files":  fileInfos,
 						"action": "tracked",
 					}, gateway.WithSessionID(sid))
 				}
 			}).
 			OnAnswer(func(answer string) {
-				d.sendEvent(clientID, sid, gateway.RespFinalAnswer, "最终答案", answer)
+				d.sendEvent(clientID, sid, gateway.RespFinalAnswer, i18n.T("svc.event.final.answer"), answer)
 			}).
 			OnExecutionSummary(func(data events.ExecutionSummaryData) {
 				d.logger.Info("[DAEMON] OnExecutionSummary FIRED: total_tokens=" + fmt.Sprint(data.TokensUsed.TotalTokens) +
@@ -601,40 +602,40 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				d.sendExecutionSummary(clientID, sid, data)
 			}).
 			OnCycleEnd(func(data events.CycleInfo) {
-				gw.SendResponse(clientID, gateway.RespCycleEnd, "循环结束", map[string]any{
+				gw.SendResponse(clientID, gateway.RespCycleEnd, i18n.T("svc.event.cycle.end"), map[string]any{
 					"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
 				}, gateway.WithSessionID(sid))
 			}).
 			OnAgentTalkStart(func(data events.AgentTalkInfo) {
-				gw.SendResponse(clientID, gateway.RespAgentTalkStart, "Agent对话开始", map[string]any{
+				gw.SendResponse(clientID, gateway.RespAgentTalkStart, i18n.T("svc.event.agent.talk.start"), map[string]any{
 					"to": data.To, "message": data.Message,
 				}, gateway.WithSessionID(sid))
 			}).
 			OnAgentTalkEnd(func(data events.AgentTalkResult) {
-				gw.SendResponse(clientID, gateway.RespAgentTalkEnd, "Agent对话结束", map[string]any{
+				gw.SendResponse(clientID, gateway.RespAgentTalkEnd, i18n.T("svc.event.agent.talk.end"), map[string]any{
 					"to": data.To, "reply": data.Reply, "error": data.Error,
 				}, gateway.WithSessionID(sid))
 			}).
 			OnCompaction(func(data events.CompactionData) {
-				gw.SendResponse(clientID, gateway.RespCompaction, "上下文压缩", map[string]any{
+				gw.SendResponse(clientID, gateway.RespCompaction, i18n.T("svc.event.compaction"), map[string]any{
 					"session_id": data.SessionID, "messages_slid": data.MessagesSlid, "remaining_after": data.RemainingAfter, "window_size": data.WindowSize,
 				}, gateway.WithSessionID(sid))
 			}).
 			OnMaxTurnsReached(func(data events.MaxTurnsReachedData) {
-				gw.SendResponse(clientID, gateway.RespMaxTurnsReached, "达到最大轮次", map[string]any{
+				gw.SendResponse(clientID, gateway.RespMaxTurnsReached, i18n.T("svc.event.max.turns.reached"), map[string]any{
 					"turns_completed": data.TurnsCompleted, "max_turns": data.MaxTurns, "suggestion": data.Suggestion,
 				}, gateway.WithSessionID(sid))
 			}).
 			OnError(func(errMsg string) {
-				d.sendEvent(clientID, sid, gateway.RespError, "错误", errMsg)
+				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.error"), errMsg)
 			}).
 			OnSubtaskSpawned(func(data events.SubtaskInfo) {
 				md := buildSubtaskSpawnedMarkdown(data)
-				d.sendEvent(clientID, sid, gateway.RespSubtaskSpawned, "子任务生成", md)
+				d.sendEvent(clientID, sid, gateway.RespSubtaskSpawned, i18n.T("svc.event.subtask.spawned"), md)
 			}).
 			OnSubtaskCompleted(func(data events.SubtaskResult) {
 				md := buildSubtaskCompletedMarkdown(data)
-				d.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, "子任务完成", md)
+				d.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, i18n.T("svc.event.subtask.completed"), md)
 			}).
 			OnAskUser(func(data events.AskUserRequestData) {
 				correlationID := uuid.New().String()
@@ -643,7 +644,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 					replyFn: data.Reply,
 				}
 				d.interactMu.Unlock()
-				gw.SendResponse(clientID, gateway.RespForm, "需要澄清", map[string]any{
+				gw.SendResponse(clientID, gateway.RespForm, i18n.T("svc.event.ask.user"), map[string]any{
 					"correlation_id": correlationID,
 					"questions":      data.Questions,
 				}, gateway.WithSessionID(sid))
@@ -656,7 +657,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 					denyFn:  data.Deny,
 				}
 				d.interactMu.Unlock()
-				gw.SendResponse(clientID, gateway.RespPermissionRequest, "权限请求", map[string]any{
+				gw.SendResponse(clientID, gateway.RespPermissionRequest, i18n.T("svc.event.permission.request"), map[string]any{
 					"correlation_id": correlationID,
 					"tool_name":      data.ToolName,
 					"reason":         data.Reason,
@@ -665,11 +666,11 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				}, gateway.WithSessionID(sid))
 			}).
 			OnPermissionDenied(func(reason string) {
-				d.sendEvent(clientID, sid, gateway.RespPermissionDenied, "权限拒绝", reason)
+				d.sendEvent(clientID, sid, gateway.RespPermissionDenied, i18n.T("svc.event.permission.denied"), reason)
 			}).
 			OnTaskSummary(func(data events.TaskSummaryData) {
 				md := buildTaskSummaryMarkdown(data)
-				gw.SendResponse(clientID, gateway.RespTaskSummary, "任务总结", md,
+				gw.SendResponse(clientID, gateway.RespTaskSummary, i18n.T("svc.event.task.summary"), md,
 					gateway.WithSessionID(sid),
 					gateway.WithResponseMeta(map[string]any{
 						"input_tokens":  data.TokenUsage.InputTokens,
@@ -677,11 +678,11 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 					}))
 			}).
 			OnLLMTimeout(func(data events.LLMTimeoutData) {
-				msg := fmt.Sprintf("LLM 超时 (已耗时 %s): %s", data.Elapsed, data.Error)
-				d.sendEvent(clientID, sid, gateway.RespError, "超时", msg)
+				msg := fmt.Sprintf(i18n.T("svc.event.llm.timeout"), data.Elapsed, data.Error)
+				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.timeout"), msg)
 			}).
 			OnTokenUsageRecorded(func(record goreactsession.TokenUsageRecord) {
-				gw.SendResponse(clientID, gateway.RespTokenUsageRecorded, "Token用量", map[string]any{
+				gw.SendResponse(clientID, gateway.RespTokenUsageRecorded, i18n.T("svc.event.token.usage"), map[string]any{
 					"id":                record.ID,
 					"session_id":        record.SessionID,
 					"conversation_id":   record.ConversationID,
@@ -704,7 +705,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				"session_id", sid,
 				"agent", resolvedAgentName,
 			)
-			d.sendEvent(clientID, sid, gateway.RespError, "错误", "request failed")
+			d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.error"), i18n.T("svc.event.request.failed"))
 		}
 
 		d.logger.Info("request done",
