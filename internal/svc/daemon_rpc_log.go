@@ -163,6 +163,7 @@ func countLogFile(path string) map[string]int64 {
 
 	buf := make([]byte, 64*1024)
 	var lines int64
+	var endsWithNewline bool
 	for {
 		n, rerr := f.Read(buf)
 		for i := 0; i < n; i++ {
@@ -170,16 +171,16 @@ func countLogFile(path string) map[string]int64 {
 				lines++
 			}
 		}
+		if n > 0 {
+			endsWithNewline = buf[n-1] == '\n'
+		}
 		if rerr != nil {
 			break
 		}
 	}
 	// 如果文件不以换行结尾，最后一行也算一行
-	if info.Size() > 0 {
-		lastByte := make([]byte, 1)
-		if _, rerr := f.ReadAt(lastByte, info.Size()-1); rerr == nil && lastByte[0] != '\n' {
-			lines++
-		}
+	if info.Size() > 0 && !endsWithNewline {
+		lines++
 	}
 	result["lines"] = lines
 	return result

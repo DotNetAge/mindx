@@ -189,11 +189,13 @@ func (d *Daemon) handleMemoryChunks(_ context.Context, params json.RawMessage) (
 
 	chunks := make([]chunkItem, 0, len(hits))
 	for _, h := range hits {
+		parentID, _ := h.Metadata["parent_id"].(string)
+		mimeType, _ := h.Metadata["mime_type"].(string)
 		chunks = append(chunks, chunkItem{
 			ID:       h.ID,
-			ParentID: h.Metadata["parent_id"].(string),
+			ParentID: parentID,
 			DocID:    h.DocID,
-			MIMEType: h.Metadata["mime_type"].(string),
+			MIMEType: mimeType,
 			Content:  h.Content,
 			Metadata: h.Metadata,
 			ChunkMeta: chunkMetaItem{

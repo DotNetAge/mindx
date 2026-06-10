@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
 	"github.com/DotNetAge/goreact/events"
@@ -223,9 +224,10 @@ func splitLines(content string) []string {
 }
 
 type pendingInteraction struct {
-	replyFn func(answers map[string]string)
-	grantFn func(params map[string]any)
-	denyFn  func(reason string)
+	replyFn   func(answers map[string]string)
+	grantFn   func(params map[string]any)
+	denyFn    func(reason string)
+	createdAt time.Time
 }
 
 type Daemon struct {
@@ -378,7 +380,41 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 		"has_graph_db", d.graphDB != nil,
 		"has_kvstore", d.kvStore != nil,
 	)
+
+	// 定期清理超时的 pending interactions，防止客户端断线后内存泄漏
+	go d.cleanupStaleInteractionsLoop(30*time.Minute, 5*time.Minute)
+
 	return d
+}
+
+// cleanupStaleInteractionsLoop 定期清理超时的 pending interactions，
+// 防止客户端断线或超时未回复导致内存泄漏。
+func (d *Daemon) cleanupStaleInteractionsLoop(timeout, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		d.cleanupStaleInteractions(timeout)
+	}
+}
+
+// cleanupStaleInteractions 清理所有超过 timeout 时间的 pending interactions。
+func (d *Daemon) cleanupStaleInteractions(timeout time.Duration) {
+	d.interactMu.Lock()
+	defer d.interactMu.Unlock()
+
+	now := time.Now()
+	var staleKeys []string
+	for key, pi := range d.pendingInteractions {
+		if now.Sub(pi.createdAt) > timeout {
+			staleKeys = append(staleKeys, key)
+		}
+	}
+	for _, key := range staleKeys {
+		delete(d.pendingInteractions, key)
+	}
+	if len(staleKeys) > 0 {
+		d.logger.Info("cleaned up stale pending interactions", "count", len(staleKeys))
+	}
 }
 
 func (d *Daemon) Start(ctx context.Context) error {
@@ -691,7 +727,8 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				correlationID := uuid.New().String()
 				d.interactMu.Lock()
 				d.pendingInteractions[correlationID] = &pendingInteraction{
-					replyFn: data.Reply,
+					replyFn:   data.Reply,
+					createdAt: time.Now(),
 				}
 				d.interactMu.Unlock()
 				gw.SendResponse(clientID, gateway.RespForm, i18n.T("svc.event.ask.user"), map[string]any{
@@ -703,8 +740,9 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				correlationID := uuid.New().String()
 				d.interactMu.Lock()
 				d.pendingInteractions[correlationID] = &pendingInteraction{
-					grantFn: data.Grant,
-					denyFn:  data.Deny,
+					grantFn:   data.Grant,
+					denyFn:    data.Deny,
+					createdAt: time.Now(),
 				}
 				d.interactMu.Unlock()
 				gw.SendResponse(clientID, gateway.RespPermissionRequest, i18n.T("svc.event.permission.request"), map[string]any{

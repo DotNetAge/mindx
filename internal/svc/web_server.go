@@ -3,6 +3,7 @@ package svc
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -69,31 +70,33 @@ func (ws *WebServer) Start(ctx context.Context) error {
 	// 返回 Content-Disposition: attachment，浏览器原生下载
 	mux.HandleFunc("/api/log/download", ws.handleLogDownload)
 
+	// 先尝试监听端口，如果端口被占用立即返回错误
+	listener, err := net.Listen("tcp", ws.addr)
+	if err != nil {
+		return fmt.Errorf("web server listen on %s: %w", ws.addr, err)
+	}
+
 	ws.server = &http.Server{
 		Addr:    ws.addr,
 		Handler: mux,
 	}
 
 	go func() {
-		errChan := make(chan error, 1)
-		go func() {
-			errChan <- ws.server.ListenAndServe()
-		}()
-
-		select {
-		case <-ctx.Done():
-			ws.logger.Info("shutting down WebUI server...")
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := ws.server.Shutdown(shutdownCtx); err != nil {
-				ws.logger.Warn("WebUI server shutdown error", "error", fmt.Errorf("%w", err))
-			}
-			ws.logger.Info("WebUI server stopped")
-		case err := <-errChan:
-			if err != nil && err != http.ErrServerClosed {
-				ws.logger.Error("WebUI server error", fmt.Errorf("%w", err))
-			}
+		// 使用 listener 的 Serve（同步阻塞），监听错误由 ctx 管理
+		if serveErr := ws.server.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {
+			ws.logger.Error("WebUI server error", fmt.Errorf("%w", serveErr))
 		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+		ws.logger.Info("shutting down WebUI server...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := ws.server.Shutdown(shutdownCtx); err != nil {
+			ws.logger.Warn("WebUI server shutdown error", "error", fmt.Errorf("%w", err))
+		}
+		ws.logger.Info("WebUI server stopped")
 	}()
 
 	ws.logger.Info("WebUI server started", "addr", fmt.Sprintf("http://localhost%s", ws.addr), "root", ws.root)

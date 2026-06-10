@@ -62,7 +62,9 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	// Initialize i18n with language from config (defaults to system locale)
 	if err := i18n.Init(cfg.Language); err != nil {
 		fmt.Fprintf(os.Stderr, "⚠️  i18n init failed: %v (using default language)\n", err)
-		i18n.MustInit("zh")
+		if fallbackErr := i18n.Init("zh"); fallbackErr != nil {
+			return fmt.Errorf("i18n init fallback failed: %w", fallbackErr)
+		}
 	}
 
 	// Set localized help text after i18n is initialized

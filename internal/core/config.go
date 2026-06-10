@@ -103,7 +103,12 @@ func (c *MindxConfig) Save() error {
 		return fmt.Errorf(i18n.T("config.error.serialize.failed"), err)
 	}
 
-	return os.WriteFile(c.filePath, data, 0644)
+	// 原子写入：先写临时文件再 rename，避免进程崩溃导致配置文件损坏
+	tmpPath := c.filePath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("write temp config: %w", err)
+	}
+	return os.Rename(tmpPath, c.filePath)
 }
 
 func (c *MindxConfig) MarkInitialized() error {

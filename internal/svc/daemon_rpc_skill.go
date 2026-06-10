@@ -16,8 +16,6 @@ func (d *Daemon) handleSkillList(_ context.Context, params json.RawMessage) (any
 		return nil, err
 	}
 
-	skills := d.app.SkillRegistry().ListSkills()
-
 	type skillEntry struct {
 		Name         string            `json:"name"`
 		Description  string            `json:"description"`
@@ -27,6 +25,12 @@ func (d *Daemon) handleSkillList(_ context.Context, params json.RawMessage) (any
 		Paths        []string          `json:"paths,omitempty"`
 		Metadata     map[string]string `json:"metadata,omitempty"`
 	}
+
+	skillReg := d.app.SkillRegistry()
+	if skillReg == nil {
+		return []skillEntry{}, nil
+	}
+	skills := skillReg.ListSkills()
 
 	result := make([]skillEntry, len(skills))
 	for i, s := range skills {
@@ -57,7 +61,12 @@ func (d *Daemon) handleSkillGet(_ context.Context, params json.RawMessage) (any,
 		return nil, fmt.Errorf("name is required")
 	}
 
-	sk, err := d.app.SkillRegistry().GetSkill(p.Name)
+	skillReg := d.app.SkillRegistry()
+	if skillReg == nil {
+		return nil, fmt.Errorf("skill registry not available")
+	}
+
+	sk, err := skillReg.GetSkill(p.Name)
 	if err != nil {
 		return nil, fmt.Errorf("skill %q not found: %w", p.Name, err)
 	}
