@@ -43,8 +43,8 @@ logs/
 *.db
 
 # Workspace data (keep bundled assets)
+runtime/bin/
 runtime/data/
-!runtime/data/models/
 
 .dev/
 .test/

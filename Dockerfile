@@ -18,20 +18,21 @@ LABEL org.opencontainers.image.description="MindX AI-native multi-agent conversa
 ARG VERSION=dev
 ENV MINDX_VERSION=${VERSION}
 
-# Install runtime dependencies
+# Install runtime dependencies (minimal set)
 RUN apk add --no-cache \
     ca-certificates \
-    curl \
-    git \
     python3 \
     py3-pip \
-    py3-virtualenv \
-    nodejs \
     tini \
-    bash
+    bash \
+    wget
 
-# Non-root user
-RUN adduser -D -s /bin/bash mindx
+# Non-root user + runtime directories (single layer)
+RUN adduser -D -s /bin/bash mindx && \
+    mkdir -p /home/mindx/.mindx/logs \
+           /home/mindx/.mindx/sessions \
+           /home/mindx/workspaces
+
 USER mindx
 WORKDIR /home/mindx
 
@@ -41,21 +42,16 @@ COPY --chown=mindx:mindx runtime/ /home/mindx/.mindx/
 # Ensure binary is executable
 RUN [ -f /home/mindx/.mindx/bin/mindx ] && chmod +x /home/mindx/.mindx/bin/mindx || true
 
-# Runtime directories
-RUN mkdir -p /home/mindx/.mindx/logs \
-    /home/mindx/.mindx/sessions
-
-# Python venv
-RUN python3 -m venv /home/mindx/.mindx/.venv
-RUN /home/mindx/.mindx/.venv/bin/pip freeze > /home/mindx/.mindx/requirements.txt
-RUN /home/mindx/.mindx/.venv/bin/pip install -r /home/mindx/.mindx/requirements.txt
+# Python venv (only install if requirements.txt exists with content)
+RUN python3 -m venv /home/mindx/.mindx/.venv && \
+    if [ -s /home/mindx/.mindx/requirements.txt 2>/dev/null ]; then \
+        /home/mindx/.mindx/.venv/bin/pip install --no-cache-dir -r /home/mindx/.mindx/requirements.txt && \
+        /home/mindx/.mindx/.venv/bin/pip cache purge; \
+    fi
 
 # Fix venv path in mindx.json for container
 RUN sed -i 's|/Users/ray/.mindx/.venv|/home/mindx/.mindx/.venv|g' \
-    /home/mindx/.mindx/mindx.json 2>/dev/null || true
-
-# Workspace directory (shared with host)
-RUN mkdir -p /home/mindx/workspaces
+    /home/mindx/.mindx/mindh.json 2>/dev/null || true
 
 # Ports
 # 1313: Web UI (HTTP)

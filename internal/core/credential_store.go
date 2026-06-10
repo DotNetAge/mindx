@@ -32,15 +32,12 @@ func NewCredentialStore(workspaceDir string) CredentialStore {
 }
 
 func ResolveAPIKey(store CredentialStore, ref string) string {
-	if v := os.Getenv(ref); v != "" {
-		return v
-	}
 	if store != nil {
 		if v, err := store.Get(ref); err == nil && v != "" {
 			return v
 		}
 	}
-	return ref
+	return ""
 }
 
 type macKeychainStore struct {

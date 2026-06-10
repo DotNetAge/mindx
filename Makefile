@@ -26,7 +26,7 @@
         pre-commit version info changelog \
         build-debug dev-watch test-verbose test-specific \
         vulnerability-check deps-graph \
-        docs-serve readme clean-all setup-hooks
+        docs-serve readme clean-all setup-hooks clear-creds
 
 # =============================================================================
 # 配置变量
@@ -750,6 +750,8 @@ docker:
 	echo "MINDX_BUILD_TIME=$$_BUILD_TIME" >> .env; \
 	echo "$(GREEN)📝 .env generated from git → MINDX_VERSION=$$_TAG$(NC)"; \
 	echo ""; \
+	@# ── 清理旧二进制，防止 //go:embed 递归嵌套打包 ── \
+	rm -f runtime/bin/mindx; \
 	mkdir -p $(BUILD_DIR)/linux-amd64 runtime/bin; \
 	if [ -n "$$CC" ] && command -v $$CC >/dev/null 2>&1; then \
 		echo "$(GREEN)➡ Compiling linux/amd64 (CGO, $$CC)...$(NC)"; \
@@ -864,6 +866,8 @@ docker-release:
 	@echo ""
 	@# ── 编译 linux/amd64 二进制 → runtime/bin/mindx ──
 	@echo "$(GREEN)➡ Building linux/amd64 → runtime/bin/mindx ...$(NC)"
+	@# ── 清理旧二进制，防止 //go:embed 递归嵌套打包 ──
+	@rm -f runtime/bin/mindx
 	@mkdir -p $(BUILD_DIR)/linux-amd64 runtime/bin; \
 	if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then \
 		echo "$(CYAN)   Using musl cross-compiler (CGO)$(NC)"; \
@@ -1100,6 +1104,33 @@ clear:
 	else \
 		echo "$(RED)❌ Aborted.$(NC)"; \
 	fi
+
+## clear-creds: 清空密钥存储中所有 provider API Key（macOS Keychain 或 Linux 加密文件）
+clear-creds:
+	@echo "$(YELLOW)🔑 Clearing provider credentials...$(NC)"
+	@_PROVIDER_KEYS="DASHSCOPE_API_KEY DEEPSEEK_API_KEY ZHIPU_API_KEY MOONSHOT_API_KEY MINIMAX_API_KEY ARK_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY"; \
+	if [ "$$(uname -s)" = "Darwin" ]; then \
+		echo "$(CYAN)   Platform: macOS (Keychain)$(NC)"; \
+		for _key in $$_PROVIDER_KEYS; do \
+			if security find-generic-password -s mindx -a "$$_key" -w >/dev/null 2>&1; then \
+				security delete-generic-password -s mindx -a "$$_key" >/dev/null 2>&1 && \
+					echo "     $(GREEN)✓ Deleted: $$_key$(NC)" || \
+					echo "     $(YELLOW)⚠ Failed to delete: $$_key$(NC)"; \
+			else \
+				echo "     - Skipped (not found): $$_key"; \
+			fi; \
+		done; \
+	else \
+		echo "$(CYAN)   Platform: Linux (encrypted file)$(NC)"; \
+		_CRED_FILE="$${HOME}/.mindx/settings/.credentials"; \
+		if [ -f "$$_CRED_FILE" ]; then \
+			rm -f "$$_CRED_FILE" && echo "     $(GREEN)✓ Removed: $$_CRED_FILE$(NC)" || \
+				echo "     $(RED)✗ Failed to remove credentials file$(NC)"; \
+		else \
+			echo "     - No credentials file found"; \
+		fi; \
+	fi; \
+	echo "$(GREEN)✅ Provider credentials cleared.$(NC)"
 
 # =============================================================================
 # 内部目标（辅助功能）
