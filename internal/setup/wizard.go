@@ -520,7 +520,7 @@ func (m *firstRunModel) updateProviderSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.step = 2
 						return m, nil
 					}
-				m.apiKeyInput.Placeholder = fmt.Sprintf(i18n.T("wizard.step.apikey.placeholder.provider"), pi.Title())
+					m.apiKeyInput.Placeholder = fmt.Sprintf(i18n.T("wizard.step.apikey.placeholder.provider"), pi.Title())
 					m.apiKeyInput.Focus()
 					m.step = 1
 					return m, textinput.Blink

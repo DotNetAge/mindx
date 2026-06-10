@@ -9,7 +9,7 @@ import (
 
 func Bootstrap(embeddedFS fs.FS, workspaceDir string) (*MindxConfig, error) {
 	if err := ExtractWorkspace(embeddedFS, workspaceDir); err != nil {
-			return nil, fmt.Errorf(i18n.T("error.workspace.init"), err)
+		return nil, fmt.Errorf(i18n.T("error.workspace.init"), err)
 	}
 
 	cfg, err := LoadMindxConfig(workspaceDir)

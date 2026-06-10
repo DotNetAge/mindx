@@ -13,8 +13,8 @@ import (
 	"charm.land/lipgloss/v2"
 	goragutils "github.com/DotNetAge/gorag/utils"
 
-	setupmsg "github.com/DotNetAge/mindx/internal/setup/msg"
 	"github.com/DotNetAge/mindx/internal/i18n"
+	setupmsg "github.com/DotNetAge/mindx/internal/setup/msg"
 	"github.com/DotNetAge/mindx/internal/setup/style"
 )
 

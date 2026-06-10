@@ -128,17 +128,17 @@ func (d *Daemon) handleMemoryDelete(_ context.Context, params json.RawMessage) (
 // ---------------------------------------------------------------------------
 
 type memoryChunksParams struct {
-	Page     int    `json:"page,omitempty"`     // 页码，从 1 开始
+	Page     int    `json:"page,omitempty"`      // 页码，从 1 开始
 	PageSize int    `json:"page_size,omitempty"` // 每页条数，默认 50
-	DocID    string `json:"doc_id,omitempty"`   // 按文档过滤，"all" 表示全部
+	DocID    string `json:"doc_id,omitempty"`    // 按文档过滤，"all" 表示全部
 }
 
 type memoryChunksResult struct {
-	Chunks    []chunkItem `json:"chunks"`
-	Page      int         `json:"page"`
-	PageSize  int         `json:"page_size"`
-	Total     int         `json:"total"`
-	HasMore   bool        `json:"has_more"`
+	Chunks   []chunkItem `json:"chunks"`
+	Page     int         `json:"page"`
+	PageSize int         `json:"page_size"`
+	Total    int         `json:"total"`
+	HasMore  bool        `json:"has_more"`
 }
 
 type chunkItem struct {
@@ -197,7 +197,7 @@ func (d *Daemon) handleMemoryChunks(_ context.Context, params json.RawMessage) (
 			Content:  h.Content,
 			Metadata: h.Metadata,
 			ChunkMeta: chunkMetaItem{
-				Index:        int(h.ChunkMeta.Index),
+				Index:        h.ChunkMeta.Index,
 				StartPos:     h.ChunkMeta.StartPos,
 				EndPos:       h.ChunkMeta.EndPos,
 				HeadingLevel: h.ChunkMeta.HeadingLevel,
@@ -267,7 +267,7 @@ func (d *Daemon) handleMemoryGetChunks(_ context.Context, params json.RawMessage
 			Content:  c.Content,
 			Metadata: meta,
 			ChunkMeta: chunkMetaItem{
-				Index:        int(c.ChunkMeta.Index),
+				Index:        c.ChunkMeta.Index,
 				StartPos:     c.ChunkMeta.StartPos,
 				EndPos:       c.ChunkMeta.EndPos,
 				HeadingLevel: c.ChunkMeta.HeadingLevel,

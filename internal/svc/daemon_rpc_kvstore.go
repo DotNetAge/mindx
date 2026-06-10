@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"go.etcd.io/bbolt"
@@ -377,60 +376,9 @@ func initKVStore(dataDir string) (*bbolt.DB, error) {
 		return err
 	})
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to create default bucket: %w", err)
 	}
 
 	return db, nil
-}
-
-// kvStats returns basic stats about the kvstore for debugging/monitoring.
-func kvStats(db *bbolt.DB) (map[string]interface{}, error) {
-	var totalKeys int64
-	var bucketSize int64
-
-	err := db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(kvStoreBucket))
-		if b == nil {
-			return nil
-		}
-		totalKeys = int64(b.Stats().KeyN)
-		bucketSize = int64(b.Stats().LeafInuse)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]interface{}{
-		"total_keys":  totalKeys,
-		"bucket_size": bucketSize,
-	}, nil
-}
-
-// Helper to validate that a key does not contain illegal characters.
-// Keys must be printable ASCII strings, no null bytes or control chars.
-func isValidKVKey(key string) bool {
-	if key == "" || len(key) > 512 {
-		return false
-	}
-	for i := 0; i < len(key); i++ {
-		r := key[i]
-		if r < 32 && r != '\t' && r != '\n' && r != '\r' {
-			return false
-		}
-	}
-	return true
-}
-
-// normalizeKey trims whitespace and ensures consistent separators.
-func normalizeKey(parts ...string) string {
-	cleaned := make([]string, 0, len(parts))
-	for _, p := range parts {
-		s := strings.TrimSpace(p)
-		if s != "" {
-			cleaned = append(cleaned, s)
-		}
-	}
-	return strings.Join(cleaned, ":")
 }

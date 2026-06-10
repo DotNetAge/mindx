@@ -75,7 +75,7 @@ func (d *Daemon) handleGraphQuery(_ context.Context, params json.RawMessage) (an
 	if err != nil {
 		return nil, fmt.Errorf("graph query failed: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []map[string]interface{}
 	for rows.Next() {
@@ -123,10 +123,10 @@ func (d *Daemon) handleGraphExec(_ context.Context, params json.RawMessage) (any
 	)
 
 	return map[string]interface{}{
-		"nodes_created":   result.NodesCreated,
-		"rels_created":    result.RelsCreated,
-		"affected_nodes":  result.AffectedNodes,
-		"affected_rels":   result.AffectedRels,
+		"nodes_created":  result.NodesCreated,
+		"rels_created":   result.RelsCreated,
+		"affected_nodes": result.AffectedNodes,
+		"affected_rels":  result.AffectedRels,
 	}, nil
 }
 
@@ -159,8 +159,8 @@ func (d *Daemon) handleGraphUpsertNodes(_ context.Context, params json.RawMessag
 
 	d.logger.Info("graph.upsert_nodes called", "count", len(nodes))
 	return map[string]interface{}{
-		"status":     "ok",
-		"upserted":   len(nodes),
+		"status":   "ok",
+		"upserted": len(nodes),
 	}, nil
 }
 

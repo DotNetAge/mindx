@@ -13,9 +13,9 @@ var (
 
 	// supported is the set of languages we have translations for.
 	supported = map[language.Tag]struct{}{
-		language.Chinese:          {},
+		language.Chinese:            {},
 		language.TraditionalChinese: {},
-		language.English:          {},
+		language.English:            {},
 	}
 )
 

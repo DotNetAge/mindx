@@ -16,7 +16,6 @@ import (
 	"github.com/DotNetAge/goreact/hooks/action"
 	goreactmemory "github.com/DotNetAge/goreact/memory"
 	goreactsession "github.com/DotNetAge/goreact/session"
-	"go.etcd.io/bbolt"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
@@ -25,6 +24,7 @@ import (
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 	"github.com/google/uuid"
+	"go.etcd.io/bbolt"
 )
 
 var (

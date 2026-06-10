@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	goreactevents "github.com/DotNetAge/goreact/events"
-	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/gort/pkg/gateway"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.ResponseType, title string, data string) {
