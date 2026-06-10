@@ -33,21 +33,22 @@ RUN adduser -D -s /bin/bash mindx && \
            /home/mindx/.mindx/sessions \
            /home/mindx/workspaces
 
+# Python venv (create as root, then chown to mindx)
+RUN python3 -m venv /home/mindh/.mindx/.venv && \
+    if [ -s /home/mindh/.mindx/requirements.txt 2>/dev/null ]; then \
+        /home/mindh/.mindx/.venv/bin/pip install --no-cache-dir -r /home/mindh/.mindx/requirements.txt && \
+        /home/mindh/.mindx/.venv/bin/pip cache purge; \
+    fi && \
+    chown -R mindx:mindh /home/mindh/.mindx/.venv
+
 USER mindx
-WORKDIR /home/mindx
+WORKDIR /home/mindh
 
 # Deploy runtime environment + pre-built binary
-COPY --chown=mindx:mindx runtime/ /home/mindx/.mindx/
+COPY --chown=mindx:mindh runtime/ /home/mindh/.mindx/
 
 # Ensure binary is executable
-RUN [ -f /home/mindx/.mindx/bin/mindx ] && chmod +x /home/mindx/.mindx/bin/mindx || true
-
-# Python venv (only install if requirements.txt exists with content)
-RUN python3 -m venv /home/mindx/.mindx/.venv && \
-    if [ -s /home/mindx/.mindx/requirements.txt 2>/dev/null ]; then \
-        /home/mindx/.mindx/.venv/bin/pip install --no-cache-dir -r /home/mindx/.mindx/requirements.txt && \
-        /home/mindx/.mindx/.venv/bin/pip cache purge; \
-    fi
+RUN [ -f /home/mindh/.mindx/bin/mindx ] && chmod +x /home/mindh/.mindx/bin/mindx || true
 
 # Fix venv path in mindx.json for container
 RUN sed -i 's|/Users/ray/.mindx/.venv|/home/mindx/.mindx/.venv|g' \
