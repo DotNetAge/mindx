@@ -364,12 +364,25 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		return nil, fmt.Errorf("agent %q: %w", agent.Name, err)
 	}
 	resolvedModel := *modelCfg
-	resolvedModel.APIKey = a.resolveAPIKey(resolvedModel.APIKey)
-	// 单会话最大思考/交互轮次：覆盖 ModelConfig 中可能存在的 max_turns，
-	// 引擎在 [goreact/agents/runtime.go] 中以 <=0 兜底为 20，这里显式抬到 50。
-	if resolvedModel.MaxTurns <= 0 || resolvedModel.MaxTurns < 50 {
-		resolvedModel.MaxTurns = 50
+
+	// 规则5: 优先以 model.provider 为键从 CredentialStore 中读取 APIKey。
+	// 这是 APIKey 的主要来源（TUI/Daemon/WebUI 均以此键存储）。
+	if resolvedModel.Provider != "" {
+		if key, err := a.credStore.Get(resolvedModel.Provider); err == nil && key != "" {
+			resolvedModel.APIKey = key
+		} else {
+			resolvedModel.APIKey = a.resolveAPIKey(resolvedModel.APIKey)
+		}
+	} else {
+		resolvedModel.APIKey = a.resolveAPIKey(resolvedModel.APIKey)
 	}
+
+	// 单会话最大思考/交互轮次：覆盖 ModelConfig 中可能存在的 max_turns，
+	// 引擎在 [goreact/agents/runtime.go] 中以 <=0 兜底为 20，这里显式抬到 100。
+	if resolvedModel.MaxTurns <= 0 || resolvedModel.MaxTurns < 100 {
+		resolvedModel.MaxTurns = 100
+	}
+
 	a.logger.Info("createRuntime: model resolved", "agent", agentName, "model", resolvedModel.Name, "max_turns", resolvedModel.MaxTurns)
 
 	cacheDir := filepath.Join(a.settings.DataDir(), "cache")
