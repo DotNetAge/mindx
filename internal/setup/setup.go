@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/DotNetAge/goreact/config"
-	"gopkg.in/yaml.v3"
 
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
@@ -27,14 +26,9 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 		return result.Err
 	}
 
-	// Update provider's api_key to credential reference and persist.
-	// Runs before storing the actual key so that if file update fails,
-	// no key is left orphaned in the credential store.
-	if result.SelectedProvider != "" {
-		if err := updateProviderCredRef(providersPath, result.SelectedProvider); err != nil {
-			return fmt.Errorf(i18n.T("setup.update.provider.config.failed"), err)
-		}
-	}
+	// 规则3: TUI不应修改providers.yml中Provider的APIKey字段。
+	// 原updateProviderCredRef调用已移除，YAML中的api_key保持为环境变量引用名。
+	// 实际APIKey仅通过CredentialStore安全存储（下方代码）。
 
 	// Store the actual API key in credential store (not in YAML).
 	// Runs after models.yml is confirmed updated to avoid inconsistent state.
@@ -154,41 +148,6 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 	}
 
 	return nil
-}
-
-func updateProviderCredRef(providersPath, providerName string) error {
-	data, err := os.ReadFile(providersPath)
-	if err != nil {
-		return fmt.Errorf(i18n.T("setup.read.providers.failed"), err)
-	}
-
-	var provConfig struct {
-		Providers []config.ProviderConfig `yaml:"providers"`
-	}
-	if err := yaml.Unmarshal(data, &provConfig); err != nil {
-		return fmt.Errorf(i18n.T("setup.parse.providers.failed"), err)
-	}
-
-	var found *config.ProviderConfig
-	for i := range provConfig.Providers {
-		if provConfig.Providers[i].Name == providerName {
-			found = &provConfig.Providers[i]
-			break
-		}
-	}
-	if found == nil {
-		return fmt.Errorf(i18n.T("setup.provider.notfound"), providerName)
-	}
-
-	// 将 api_key 设为 provider name（作为 CredentialStore 的引用 key）
-	found.APIKey = providerName
-
-	out, err := yaml.Marshal(provConfig)
-	if err != nil {
-		return fmt.Errorf(i18n.T("setup.serialize.config.failed"), err)
-	}
-
-	return os.WriteFile(providersPath, out, 0644)
 }
 
 func updateAllAgentsModel(agentsDir, modelName string) error {

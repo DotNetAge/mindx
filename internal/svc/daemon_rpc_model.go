@@ -34,10 +34,8 @@ func (d *Daemon) handleProviderList(_ context.Context, _ json.RawMessage) (any, 
 	result := make([]any, 0, len(providers))
 	for _, p := range providers {
 		configured := false
-		if p.APIKey != "" {
-			resolved := core.ResolveAPIKey(credStore, p.APIKey)
-			configured = resolved != ""
-		}
+		resolved := core.ResolveAPIKey(credStore, p.Name)
+		configured = resolved != ""
 
 		result = append(result, map[string]any{
 			"name":     p.Name,
@@ -195,8 +193,12 @@ func (d *Daemon) handleProviderUpdate(_ context.Context, params json.RawMessage)
 			if p.BaseURL != "" {
 				existing[i].BaseURL = p.BaseURL
 			}
+			// 规则4: WebUI设置api_key时，先从环境变量尝试读取实际值，
+			// 有值则以provider name为键存CredentialStore；无值则以用户输入为值存CredentialStore。
+			// 绝不将原始值明文写入YAML配置文件。
 			if paramsContainsKey(params, "api_key") {
-				existing[i].APIKey = p.APIKey
+				storeAndResolveProviderAPIKey(d, existing[i].Name, p.APIKey)
+				existing[i].APIKey = existing[i].Name // YAML中只存引用（provider name）
 			}
 			if paramsContainsKey(params, "auth_token") {
 				existing[i].AuthToken = p.AuthToken
@@ -402,8 +404,16 @@ func (d *Daemon) handleModelUpdate(_ context.Context, params json.RawMessage) (a
 	if p.BaseURL != "" {
 		updated.BaseURL = p.BaseURL
 	}
+	// 规则4: WebUI设置api_key时，先从环境变量尝试读取实际值，
+	// 有值则以model.provider为键存CredentialStore；无值则以用户输入为值存CredentialStore。
+	// 绝不将原始值明文写入YAML配置文件。
 	if paramsContainsKey(params, "api_key") {
-		updated.APIKey = p.APIKey
+		storeKey := updated.Provider
+		if storeKey == "" {
+			storeKey = updated.Name
+		}
+		storeAndResolveAPIKey(d, storeKey, p.APIKey)
+		updated.APIKey = storeKey // YAML中只存引用（provider name 或 model name）
 	}
 	if paramsContainsKey(params, "auth_token") {
 		updated.AuthToken = p.AuthToken
@@ -558,4 +568,27 @@ func providerIndex(providers []*goreactconfig.ProviderConfig, name string) int {
 		}
 	}
 	return -1
+}
+
+// storeAndResolveProviderAPIKey 实现规则4：处理 WebUI/Daemon RPC 设置 Provider APIKey 的请求。
+// 先以用户输入值为键尝试从环境变量读取实际值，有值则存CredentialStore；
+// 无值则直接以用户输入值作为实际值存入CredentialStore（以providerName为键）。
+func storeAndResolveProviderAPIKey(d *Daemon, providerName, userInput string) {
+	if userInput == "" || providerName == "" {
+		return
+	}
+	credStore := core.NewCredentialStore(d.app.Settings().UserPreferences())
+	// 规则4: 先尝试从环境变量中以用户提供的值作为键读取
+	var actualValue string
+	if v := os.Getenv(userInput); v != "" {
+		actualValue = v
+	} else {
+		actualValue = userInput
+	}
+	_ = credStore.Set(providerName, actualValue)
+}
+
+// storeAndResolveAPIKey 通用版本：以指定storeKey为键将解析后的APIKey存入CredentialStore。
+func storeAndResolveAPIKey(d *Daemon, storeKey, userInput string) {
+	storeAndResolveProviderAPIKey(d, storeKey, userInput)
 }

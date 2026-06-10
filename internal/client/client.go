@@ -765,11 +765,11 @@ func (m *rootModel) saveConnectResult(modelName string) {
 	}
 
 	reg := m.app.Models()
-	provider := reg.GetProvider(m.connectProvider)
 
-	if provider != nil && m.connectAPIKey != "" {
-		provider.APIKey = m.connectAPIKey
-		reg.RegisterProvider(m.connectProvider, provider)
+	// 规则3: TUI不应修改Provider的APIKey字段，应将实际值存入CredentialStore。
+	if m.connectAPIKey != "" {
+		credStore := appcore.NewCredentialStore(m.app.Settings().UserPreferences())
+		_ = credStore.Set(m.connectProvider, m.connectAPIKey)
 	}
 
 	cfg := m.app.Config()
@@ -791,11 +791,8 @@ func (m *rootModel) saveConnectResult(modelName string) {
 			}
 			_ = reg.Save(modelCfg)
 		}
-	} else if provider != nil && m.connectAPIKey != "" {
-		for _, raw := range reg.ListRaw() {
-			_ = reg.Save(raw)
-			break
-		}
+	} else if m.connectAPIKey != "" {
+		// APIKey已存入CredentialStore（上方），无需再持久化模型配置
 	}
 
 	label := fmt.Sprintf(i18n.T("client.notify.connected"), m.connectProvider)
