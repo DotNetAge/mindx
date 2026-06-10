@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/DotNetAge/mindx/internal/i18n"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 func TestNewChoicesPanel(t *testing.T) {
