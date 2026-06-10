@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 func TestNewStatusBar(t *testing.T) {
