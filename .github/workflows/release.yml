@@ -5,14 +5,12 @@
 #
 # Pipeline:
 #   prepare → build(5 platforms) → release(GH Release)
+#     ├── docker         → GHCR + Docker Hub (stable only)
 #     ├── homebrew      → DotNetAge/homebrew-mindx tap
 #     ├── winget        → microsoft/winget-pkgs PR
 #     ├── linux-packages→ AppImage + .deb (attached to GH Release)
 #     ├── snap          → Snap Store (stable only)
 #     └── flatpak       → Flathub PR (stable only)
-#
-# Note: Docker image is built locally via `make docker-release` (requires runtime/bin/mindx
-#       and runtime/data which are .gitignored and not available in CI context)
 #
 # Usage:
 #   git tag v2.2.0 && git push origin v2.2.0
@@ -235,6 +233,105 @@ jobs:
             packages/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ==========================================================================
+  # Docker — build & push to Docker Hub (public) + GHCR (stable only)
+  #
+  # Requires Secrets:
+  #   DOCKERHUB_USERNAME  — Your Docker Hub username
+  #   DOCKERHUB_TOKEN     — Access Token (not password!)
+  #                         Get: https://hub.docker.com/settings/security
+  #                         → New Access Token → Read & Write → Generate
+  # ==========================================================================
+  docker:
+    name: Docker Image
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    if: needs.prepare.outputs.is_prerelease == 'false'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Download linux/amd64 artifact & extract binary
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-linux-amd64
+          path: packages
+          merge-multiple: true
+
+      - name: Prepare runtime environment
+        run: |
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+
+          # Extract linux/amd64 binary from build job artifact
+          mkdir -p runtime/bin
+          tar xzf "packages/mindx-${VERSION_NUM}-linux-amd64.tar.gz" -C runtime/bin/
+          chmod +x runtime/bin/mindx
+          echo "Binary ready:"
+          ls -lh runtime/bin/mindx
+          runtime/bin/mindx version || true
+
+          # Ensure model file is present (LFS checkout should have pulled it)
+          if [ ! -f "runtime/data/models/model_q4.onnx" ]; then
+            echo "WARNING: model_q4.onnx not found, fetching via LFS..."
+            git lfs pull --include="*.onnx" || true
+          fi
+          echo "Model file:"
+          ls -lh runtime/data/models/model_q4.onnx 2>/dev/null || echo "  NOT FOUND"
+
+          # Verify runtime structure
+          echo "Runtime layout:"
+          find runtime/ -maxdepth 3 -type f | head -20
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub (public)
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/mindx
+            ghcr.io/${{ env.GITHUB_REPO }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.prepare.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
 
   # ==========================================================================
   # Homebrew — generate formula from Release assets & push to tap

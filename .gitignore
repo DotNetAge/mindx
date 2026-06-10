@@ -13,6 +13,7 @@
 
 # ONNX models (except bundled embedder model)
 *.onnx
+!runtime/data/models/model_q4.onnx
 
 # Dependency directories
 node_modules/
@@ -45,6 +46,7 @@ logs/
 # Workspace data (keep bundled assets)
 runtime/bin/
 runtime/data/
+!runtime/data/models/
 
 .dev/
 .test/
