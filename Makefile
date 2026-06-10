@@ -26,7 +26,8 @@
         pre-commit version info changelog \
         build-debug dev-watch test-verbose test-specific \
         vulnerability-check deps-graph \
-        docs-serve readme clean-all setup-hooks clear-creds
+        docs-serve readme clean-all setup-hooks clear-creds \
+        lint fmt
 
 # =============================================================================
 # 配置变量
@@ -78,19 +79,49 @@ NC             := \033[0m
 BOLD           := \033[1m
 
 # =============================================================================
+# 代码质量门禁（所有 build 前自动执行）
+# =============================================================================
+
+## fmt: 检查并自动修复 Go 代码格式（gofmt）
+fmt:
+	@echo "$(CYAN)📐 Checking Go formatting (gofmt)...$(NC)"
+	@UNFORMATTED=$$(find . -name '*.go' -not -path './vendor/*' -not -path './.git/*' | xargs gofmt -l 2>/dev/null); \
+	if [ -n "$$UNFORMATTED" ]; then \
+		echo "$(YELLOW)⚠  Formatting issues found, auto-fixing:$(NC)"; \
+		echo "$$UNFORMATTED" | while read f; do echo "  fixing $$f"; done; \
+		find . -name '*.go' -not -path './vendor/*' -not -path './.git/*' | xargs gofmt -w; \
+		echo "$(GREEN)✅ All files formatted.$(NC)"; \
+	else \
+		echo "$(GREEN)✅ All .go files properly formatted.$(NC)"; \
+	fi
+
+## lint: 运行 golangci-lint 静态分析
+lint:
+	@echo "$(CYAN)🔍 Running golangci-lint...$(NC)"
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --timeout=5m; \
+		echo "$(GREEN)✅ Lint passed.$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠  golangci-lint not found, installing...$(NC)"; \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+		golangci-lint run --timeout=5m; \
+		echo "$(GREEN)✅ Lint passed.$(NC)"; \
+	fi
+
+# =============================================================================
 # 主要构建目标
 # =============================================================================
 
-## build: 编译当前平台二进制至 dist/
-build: pre-build
+## build: 编译当前平台二进制至 dist/ (前置: fmt → lint → pre-build)
+build: fmt lint pre-build
 	@echo "$(GREEN)➡ Building $(BINARY_NAME) v$(VERSION_NUM) for $(shell $(GO) env GOOS)/$(shell $(GO) env GOARCH)...$(NC)"
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=1 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
 	@echo "$(GREEN)✅ Build complete!$(NC)"
 	@ls -lh $(BUILD_DIR)/$(BINARY_NAME)
 
-## build-all: 编译所有主流平台二进制至 dist/
-build-all: pre-build build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 build-windows-amd64
+## build-all: 编译所有主流平台二进制至 dist/ (前置: fmt → lint)
+build-all: fmt lint pre-build build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 build-windows-amd64
 	@echo "$(GREEN)✅ All platforms built! Check $(BUILD_DIR)/$(NC)"
 
 ## setup-cross: 安装交叉编译工具链（用于 Linux/Windows 目标）
@@ -105,15 +136,15 @@ setup-cross:
 	fi
 	@echo "$(GREEN)✅ Cross-compilation toolchains installed! Run 'make build-all' for all platforms.$(NC)"
 
-## build-debug: 编译调试版本（带符号信息）
-build-debug:
+## build-debug: 编译调试版本（带符号信息，前置: fmt → lint）
+build-debug: fmt lint pre-build
 	@echo "$(YELLOW)🔧 Building debug binary...$(NC)"
 	@mkdir -p $(BUILD_DIR)
 	$(GO) build $(GOFLAGS) -gcflags="all=-N -l" -o $(BUILD_DIR)/$(BINARY_NAME)-debug .
 	@echo "$(GREEN)✅ Debug build complete: $(BUILD_DIR)/$(BINARY_NAME)-debug$(NC)"
 
-## install: 构建并部署到 ~/.mindx（含 runtime 资源 + PATH + 系统服务配置）
-install:
+## install: 构建并部署到 ~/.mindx（含 runtime 资源 + PATH + 系统服务配置，前置: fmt → lint）
+install: fmt lint
 	@echo "$(GREEN)➡ Building $(BINARY_NAME) → ~/.mindx/bin/$(BINARY_NAME)...$(NC)"
 	@mkdir -p ~/.mindx/bin ~/.mindx/settings
 	@rm -f ~/.mindx/bin/$(BINARY_NAME)
@@ -825,7 +856,7 @@ docker-push:
 	docker push $(DOCKER_USER)/$(BINARY_NAME):latest
 	@echo "$(GREEN)✅ Images pushed successfully!$(NC)"
 
-## docker-release: 本地构建并推送 Docker 镜像（版本跟随最新 git tag）
+## docker-release: 本地构建并推送 Docker 镜像（版本跟随最新 git tag，前置: fmt → lint）
 ## 前置条件:
 ##   1. 已打 tag 且已 push 到远程（git tag v2.x.x && git push origin v2.x.x）
 ##   2. 工作区干净（无未提交变更）
@@ -833,7 +864,7 @@ docker-push:
 ##   4. runtime/bin/mindx 和 runtime/data/ 存在（本地构建产物 / .gitignored 文件）
 ##
 ## 流程: 校验 → 编译 linux/amd64 → 填充 runtime/bin/ → 生成 .env → docker build → 推送
-docker-release:
+docker-release: fmt lint
 	@echo "$(GREEN)═══════════════════════════════════════════════════════════════$(NC)"
 	@echo "$(GREEN)  🐳 MindX Docker Release (Local Build & Push)$(NC)"
 	@echo "$(GREEN)═══════════════════════════════════════════════════════════════$(NC)"
@@ -1051,6 +1082,10 @@ help:
 	@echo "  $(GREEN)ci$(NC)               Full CI pipeline"
 	@echo "  $(GREEN)cd$(NC)               Full CD pipeline"
 	@echo "  $(GREEN)pre-commit$(NC)       Git pre-commit hook"
+	@echo ""
+	@echo "$(YELLOW)🔍 Code Quality Gates (run before every build):$(NC)"
+	@echo "  $(GREEN)fmt$(NC)              Check & auto-fix Go formatting (gofmt)"
+	@echo "  $(GREEN)lint$(NC)             Run golangci-lint static analysis"
 	@echo ""
 	@echo "$(YELLOW)ℹ️ Info Targets:$(NC)"
 	@echo "  $(GREEN)version$(NC)          Show version information"

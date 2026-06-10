@@ -30,7 +30,7 @@ func DefaultUserPrefsDir() string {
 
 func ExtractWorkspace(embeddedFS fs.FS, workspaceDir string) error {
 	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
-			return fmt.Errorf(i18n.T("error.workspace.init"), workspaceDir, err)
+		return fmt.Errorf(i18n.T("error.workspace.init"), workspaceDir, err)
 	}
 
 	return fs.WalkDir(embeddedFS, "runtime", func(path string, d fs.DirEntry, err error) error {
@@ -58,7 +58,7 @@ func ExtractWorkspace(embeddedFS fs.FS, workspaceDir string) error {
 
 		data, err := fs.ReadFile(embeddedFS, path)
 		if err != nil {
-				return fmt.Errorf(i18n.T("error.embedded.file.read"), path, err)
+			return fmt.Errorf(i18n.T("error.embedded.file.read"), path, err)
 		}
 
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {

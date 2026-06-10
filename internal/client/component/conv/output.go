@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DotNetAge/mindx/internal/i18n"
 	tea "charm.land/bubbletea/v2"
 	"github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 type OutputEntry struct {

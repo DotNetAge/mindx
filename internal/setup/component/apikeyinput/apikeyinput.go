@@ -9,9 +9,9 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/DotNetAge/mindx/internal/i18n"
 	setupmsg "github.com/DotNetAge/mindx/internal/setup/msg"
 	"github.com/DotNetAge/mindx/internal/setup/style"
-	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 const minContentWidth = 60

@@ -4,10 +4,10 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/DotNetAge/mindx/internal/i18n"
 	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 type PermissionBar struct {

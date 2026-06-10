@@ -33,9 +33,9 @@ func needsDoctor(cfg *core.MindxConfig, workspaceDir string) bool {
 var RuntimeFS fs.FS
 
 var rootCmd = &cobra.Command{
-	Use:   "mindx",
-	Short: "MindX - AI Agent CLI",
-	Long: "", // Set dynamically in runTUI after i18n.Init()
+	Use:          "mindx",
+	Short:        "MindX - AI Agent CLI",
+	Long:         "", // Set dynamically in runTUI after i18n.Init()
 	RunE:         runTUI,
 	SilenceUsage: true,
 }
