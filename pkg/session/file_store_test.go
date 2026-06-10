@@ -2,8 +2,10 @@ package session
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -186,5 +188,125 @@ func TestFileStoreYAMLFormat(t *testing.T) {
 	if retrieved[0].Content != markdownContent {
 		t.Errorf("content mismatch\nExpected:\n%s\n\nGot:\n%s",
 			markdownContent, retrieved[0].Content)
+	}
+}
+
+// TestFileStoreConcurrentAppend 验证并发 Append 不会导致数据损坏（ioMu 保护）。
+func TestFileStoreConcurrentAppend(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewFileSessionStore(tmpDir)
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	sessionID := "concurrent-test"
+	agentName := "test-agent"
+
+	const goroutines = 10
+	const msgsPerGoroutine = 20
+
+	var wg sync.WaitGroup
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < msgsPerGoroutine; j++ {
+				msg := goreactsession.Message{
+					Role:      "user",
+					Content:   fmt.Sprintf("goroutine-%d-msg-%d", id, j),
+					Timestamp: time.Now().UnixMilli() + int64(id*msgsPerGoroutine+j),
+				}
+				if err := store.Append(ctx, sessionID, agentName, msg); err != nil {
+					t.Errorf("Append failed: %v", err)
+					return
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// 验证所有消息都正确写入
+	msgs, err := store.Get(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+
+	expectedCount := goroutines * msgsPerGoroutine
+	if len(msgs) != expectedCount {
+		t.Errorf("expected %d messages, got %d", expectedCount, len(msgs))
+	}
+
+	// 验证所有消息内容完整
+	seen := make(map[string]int)
+	for _, m := range msgs {
+		seen[m.Content]++
+	}
+	for i := 0; i < goroutines; i++ {
+		for j := 0; j < msgsPerGoroutine; j++ {
+			key := fmt.Sprintf("goroutine-%d-msg-%d", i, j)
+			if seen[key] != 1 {
+				t.Errorf("message %q: expected 1 occurrence, got %d", key, seen[key])
+			}
+		}
+	}
+}
+
+// TestFileStoreDeleteSession 验证 DeleteSession 正确删除并返回错误。
+func TestFileStoreDeleteSession(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewFileSessionStore(tmpDir)
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+	agentName := "test-agent"
+
+	// 创建 session
+	info, err := store.Create(ctx, agentName)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	// 存入一条消息
+	msg := goreactsession.Message{
+		Role:      "user",
+		Content:   "hello",
+		Timestamp: time.Now().UnixMilli(),
+	}
+	if err := store.Append(ctx, info.SessionID, agentName, msg); err != nil {
+		t.Fatalf("Append failed: %v", err)
+	}
+
+	// 删除 session
+	if err := store.DeleteSession(ctx, info.SessionID); err != nil {
+		t.Fatalf("DeleteSession failed: %v", err)
+	}
+
+	// 确认 session 已删除
+	msgs, err := store.Get(ctx, info.SessionID)
+	if err != nil {
+		t.Fatalf("Get after DeleteSession failed: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Errorf("expected 0 messages after DeleteSession, got %d", len(msgs))
+	}
+}
+
+// TestFileStoreDeleteSessionNotFound 验证删除不存在的 session 返回 ErrSessionNotFound。
+func TestFileStoreDeleteSessionNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewFileSessionStore(tmpDir)
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	defer store.Close()
+
+	err = store.DeleteSession(context.Background(), "nonexistent-session")
+	if err != goreactsession.ErrSessionNotFound {
+		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
 }

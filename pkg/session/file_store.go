@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -96,8 +97,16 @@ func newYamlMessage(msg goreactsession.Message) yamlMessage {
 }
 
 func (ym yamlMessage) toCoreMessage() goreactsession.Message {
-	decoded, _ := base64.StdEncoding.DecodeString(ym.Content)
-	reasoningDecoded, _ := base64.StdEncoding.DecodeString(ym.ReasoningContent)
+	decoded, base64Err := base64.StdEncoding.DecodeString(ym.Content)
+	if base64Err != nil {
+		log.Printf("[WARN] session: failed to base64-decode content for role=%q: %v", ym.Role, base64Err)
+		decoded = []byte(ym.Content) // fallback: use raw string
+	}
+	reasoningDecoded, reasoningErr := base64.StdEncoding.DecodeString(ym.ReasoningContent)
+	if reasoningErr != nil && ym.ReasoningContent != "" {
+		log.Printf("[WARN] session: failed to base64-decode reasoning_content for role=%q: %v", ym.Role, reasoningErr)
+		reasoningDecoded = []byte(ym.ReasoningContent)
+	}
 	var tcs []goreactsession.ToolCall
 	for _, ytc := range ym.ToolCalls {
 		tcs = append(tcs, goreactsession.ToolCall{
@@ -123,6 +132,7 @@ type FileSessionStore struct {
 	slideMu        sync.RWMutex
 	slideHandler   goreactsession.SlideHandler
 	tokenEstimator TokenEstimator
+	ioMu           sync.Mutex // 保护所有文件 I/O 操作，防止并发读写导致数据损坏
 }
 
 func NewFileSessionStore(rootDir string) (*FileSessionStore, error) {
@@ -179,6 +189,9 @@ func (s *FileSessionStore) findSessionDir(sessionID string) string {
 }
 
 func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentName string, msg goreactsession.Message) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
 	if msg.Role == "system" {
 		return nil
 	}
@@ -225,7 +238,9 @@ func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentNa
 				title = title[:77] + "..."
 			}
 			existingMeta.Title = title
-			_ = existingMeta.Save(dir)
+			if saveErr := existingMeta.Save(dir); saveErr != nil {
+				log.Printf("[WARN] session: failed to save title meta for session dir %s: %v", dir, saveErr)
+			}
 		}
 	}
 
@@ -235,6 +250,9 @@ func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentNa
 }
 
 func (s *FileSessionStore) Get(ctx context.Context, sessionID string) ([]goreactsession.Message, error) {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
 	var msgs []goreactsession.Message
 
 	err := filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {
@@ -248,6 +266,7 @@ func (s *FileSessionStore) Get(ctx context.Context, sessionID string) ([]goreact
 
 		parsed, parseErr := parseMessagesFromFile(path)
 		if parseErr != nil {
+			log.Printf("[WARN] session: failed to parse session file %s: %v", path, parseErr)
 			return nil
 		}
 		msgs = parsed
@@ -304,6 +323,9 @@ func (s *FileSessionStore) CurrentContext(ctx context.Context, agentName string,
 }
 
 func (s *FileSessionStore) Delete(ctx context.Context, timestamp int64, sessionID string) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
 	path := ""
 
 	_ = filepath.Walk(s.rootDir, func(p string, info os.FileInfo, err error) error {
@@ -338,6 +360,9 @@ func (s *FileSessionStore) Delete(ctx context.Context, timestamp int64, sessionI
 }
 
 func (s *FileSessionStore) Clear(ctx context.Context, sessionID string) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
 	var dirPath string
 	_ = filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || info.Name() != "session.yml" {
@@ -359,12 +384,18 @@ func (s *FileSessionStore) Clear(ctx context.Context, sessionID string) error {
 // DeleteSession removes the entire session directory and all its contents.
 // This permanently deletes the session and cannot be undone.
 func (s *FileSessionStore) DeleteSession(_ context.Context, sessionID string) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
 		return goreactsession.ErrSessionNotFound
 	}
 
-	_ = os.RemoveAll(dirPath)
+	if rmErr := os.RemoveAll(dirPath); rmErr != nil {
+		log.Printf("[WARN] session: failed to remove session directory %s: %v", dirPath, rmErr)
+		return fmt.Errorf("delete session %q: %w", sessionID, rmErr)
+	}
 	return nil
 }
 
@@ -404,6 +435,9 @@ func fromYamlUsage(yu yamlUsage) goreactsession.TokenUsage {
 }
 
 func (s *FileSessionStore) AppendTokenUsage(_ context.Context, sessionID string, usage goreactsession.TokenUsage) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
 		return fmt.Errorf("session %q not found", sessionID)
@@ -457,6 +491,9 @@ func (s *FileSessionStore) GetTokenUsages(_ context.Context, sessionID string) (
 }
 
 func (s *FileSessionStore) GetByRole(ctx context.Context, agent string) (*goreactsession.SessionInfo, error) {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
 	var bestInfo *goreactsession.SessionInfo
 
 	agentDir := s.agentDir(agent)
@@ -469,6 +506,7 @@ func (s *FileSessionStore) GetByRole(ctx context.Context, agent string) (*goreac
 		sessionID := filepath.Base(filepath.Dir(path))
 		si, statErr := statSessionInfo(agent, sessionID, filepath.Dir(path))
 		if statErr != nil {
+			log.Printf("[WARN] session: failed to stat session info for agent=%q id=%q dir=%s: %v", agent, sessionID, filepath.Dir(path), statErr)
 			return nil
 		}
 
@@ -488,6 +526,9 @@ func (s *FileSessionStore) GetByRole(ctx context.Context, agent string) (*goreac
 }
 
 func (s *FileSessionStore) ListSessions(ctx context.Context) ([]goreactsession.SessionInfo, error) {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
 	var infos []goreactsession.SessionInfo
 
 	_ = filepath.Walk(s.rootDir, func(path string, info os.FileInfo, err error) error {
@@ -510,6 +551,7 @@ func (s *FileSessionStore) ListSessions(ctx context.Context) ([]goreactsession.S
 
 		si, statErr := statSessionInfo(agentName, sessionID, sessionDirPath)
 		if statErr != nil {
+			log.Printf("[WARN] session: failed to stat session info for agent=%q id=%q dir=%s: %v", agentName, sessionID, sessionDirPath, statErr)
 			return nil
 		}
 		infos = append(infos, *si)
@@ -646,7 +688,9 @@ func (s *FileSessionStore) updateSessionMeta(sessionDir string) {
 	meta.UpdatedAt = time.Now()
 	meta.LastActivityAt = time.Now()
 	meta.MessageCount++
-	_ = meta.Save(sessionDir)
+	if saveErr := meta.Save(sessionDir); saveErr != nil {
+		log.Printf("[WARN] session: failed to update session meta for %s: %v", sessionDir, saveErr)
+	}
 }
 
 // === Session Lifecycle Management (Framework-level directory control) ===
@@ -746,6 +790,9 @@ func (s *FileSessionStore) modifyFilesPath(dirPath string) string {
 // SaveModifyFiles persists the tracked modified file paths list to disk.
 // Files are stored as a YAML string array in the session directory.
 func (s *FileSessionStore) SaveModifyFiles(sessionID string, files []string) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
 		return fmt.Errorf("session %q not found", sessionID)
@@ -772,6 +819,9 @@ func (s *FileSessionStore) SaveModifyFiles(sessionID string, files []string) err
 // GetModifyFiles loads the tracked modified file paths list from disk.
 // Returns nil if no file exists (session has no tracked modifications).
 func (s *FileSessionStore) GetModifyFiles(sessionID string) ([]string, error) {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
 		return nil, nil

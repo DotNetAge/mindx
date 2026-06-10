@@ -187,6 +187,10 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 }
 
 func resolveCurrentAgentName(cfg *MindxConfig, agents *config.AgentRegistry, logger logging.Logger) string {
+	if agents == nil {
+		return ""
+	}
+
 	if cfg != nil && cfg.LastAgent != "" {
 		if agents.Get(cfg.LastAgent) != nil {
 			return cfg.LastAgent
@@ -517,28 +521,28 @@ func (a *App) ResolveRuntime(name string) (*agents.Runtime, error) {
 
 // EnsureSession ensures a valid session exists for the current agent and returns its ID.
 // This handles smart session matching (CWD changes) and auto-creates sessions.
-func (a *App) EnsureSession() string {
+func (a *App) EnsureSession() (string, error) {
 	if a.sessDB == nil {
-		panic("FATAL: EnsureSession called but sessDB is nil")
+		return "", fmt.Errorf("EnsureSession called but sessDB is nil")
 	}
 	if a.mindxConfig == nil {
-		panic("FATAL: EnsureSession called but mindxConfig is nil")
+		return "", fmt.Errorf("EnsureSession called but mindxConfig is nil")
 	}
 
 	agentName := a.CurrentAgentName()
 	if agentName == "" {
-		panic("FATAL: EnsureSession called but no agent available")
+		return "", fmt.Errorf("EnsureSession called but no agent available")
 	}
 
 	cwd, cwdErr := os.Getwd()
 	if cwdErr != nil {
-		panic(fmt.Sprintf("FATAL: os.Getwd failed: %v", cwdErr))
+		return "", fmt.Errorf("os.Getwd failed: %w", cwdErr)
 	}
 
 	// If we have a current session meta, check if CWD matches
 	if a.currentSessionMeta != nil && a.currentSessionMeta.ProjectDir != "" {
 		if sameDirectory(cwd, a.currentSessionMeta.ProjectDir) {
-			return a.currentSessionMeta.SessionID
+			return a.currentSessionMeta.SessionID, nil
 		}
 
 		// CWD changed — find or create a matching session
@@ -554,8 +558,10 @@ func (a *App) EnsureSession() string {
 			)
 			a.currentSessionMeta = matched
 			a.mindxConfig.LastSessionID = matched.SessionID
-			_ = a.mindxConfig.Save()
-			return matched.SessionID
+			if saveErr := a.mindxConfig.Save(); saveErr != nil {
+				a.logger.Warn("failed to save config after session match", "error", saveErr)
+			}
+			return matched.SessionID, nil
 		}
 
 		a.logger.Info("no matching session found, creating new session for current directory",
@@ -566,16 +572,18 @@ func (a *App) EnsureSession() string {
 			a.logger.Error("failed to create new session", createErr)
 			a.currentSessionMeta = nil
 			a.mindxConfig.LastSessionID = ""
-			return ""
+			return "", createErr
 		}
 		a.currentSessionMeta = newSession
 		a.mindxConfig.LastSessionID = newSession.SessionID
-		_ = a.mindxConfig.Save()
+		if saveErr := a.mindxConfig.Save(); saveErr != nil {
+			a.logger.Warn("failed to save config after session create (cwd changed)", "error", saveErr)
+		}
 		a.logger.Info("new session created",
 			"session_id", newSession.SessionID,
 			"project_dir", newSession.ProjectDir,
 		)
-		return newSession.SessionID
+		return newSession.SessionID, nil
 	}
 
 	// No current session meta — try to find existing or create new
@@ -588,19 +596,23 @@ func (a *App) EnsureSession() string {
 		)
 		a.currentSessionMeta = matched
 		a.mindxConfig.LastSessionID = matched.SessionID
-		_ = a.mindxConfig.Save()
-		return matched.SessionID
+		if saveErr := a.mindxConfig.Save(); saveErr != nil {
+			a.logger.Warn("failed to save config after session match (no current meta)", "error", saveErr)
+		}
+		return matched.SessionID, nil
 	}
 
 	a.logger.Info("no existing session found, creating new session", "cwd", cwd)
 	newSession, createErr := a.CreateSession(agentName)
 	if createErr != nil {
-		panic(fmt.Sprintf("FATAL: CreateSession failed for agent=%q cwd=%q: %v", agentName, cwd, createErr))
+		return "", fmt.Errorf("CreateSession failed for agent=%q cwd=%q: %w", agentName, cwd, createErr)
 	}
 	a.currentSessionMeta = newSession
 	a.mindxConfig.LastSessionID = newSession.SessionID
-	_ = a.mindxConfig.Save()
-	return newSession.SessionID
+	if saveErr := a.mindxConfig.Save(); saveErr != nil {
+		a.logger.Warn("failed to save config after new session creation", "error", saveErr)
+	}
+	return newSession.SessionID, nil
 }
 
 // NewSessionFromMeta creates a goreact session.Session from the current session metadata.
@@ -619,8 +631,8 @@ func (a *App) NewSessionFromMeta() *session.Session {
 		if agentName == "" {
 			return nil
 		}
-		_ = a.EnsureSession()
-		if a.currentSessionMeta == nil {
+		_, err := a.EnsureSession()
+		if err != nil || a.currentSessionMeta == nil {
 			return nil
 		}
 	}
@@ -732,7 +744,9 @@ func (a *App) SwitchSession(sessionID string) (*session.SessionInfo, error) {
 
 	if a.mindxConfig != nil {
 		a.mindxConfig.LastSessionID = sessionID
-		_ = a.mindxConfig.Save()
+		if saveErr := a.mindxConfig.Save(); saveErr != nil {
+			a.logger.Warn("failed to save config after session switch", "error", saveErr)
+		}
 	}
 
 	a.logger.Info("session switched",

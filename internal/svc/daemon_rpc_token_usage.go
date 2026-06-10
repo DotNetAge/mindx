@@ -143,12 +143,12 @@ func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessa
 
 func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 	store := d.app.TokenUsageStore()
-	d.logger.Info("[TOKEN-DEBUG] buildMonthlyStats called",
+	d.logger.Debug("buildMonthlyStats called",
 		"year", year, "month", month,
 		"store_is_nil", store == nil,
 	)
 	if store == nil {
-		d.logger.Warn("[TOKEN-DEBUG] TokenUsageStore is NIL!")
+		d.logger.Warn("TokenUsageStore is nil", "year", year, "month", month)
 		return emptyMonthlyResult(year, month), nil
 	}
 
@@ -174,7 +174,7 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 	}
 
 	records, err := store.Query(context.Background(), filter)
-	d.logger.Info("[TOKEN-DEBUG] query result",
+	d.logger.Debug("query result",
 		"record_count", len(records),
 		"query_err", err,
 	)

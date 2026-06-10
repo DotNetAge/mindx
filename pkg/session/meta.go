@@ -1,17 +1,23 @@
 package session
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/oklog/ulid/v2"
 )
 
-// generateSessionID generates a unique session identifier.
-// Format: sess_<nanosecond_timestamp_mod_100000000>
+// ulidEntropy is a shared entropy source for ULID generation (monotonic safe).
+var ulidEntropy = ulid.Monotonic(rand.Reader, 0)
+
+// generateSessionID generates a unique session identifier using ULID.
+// ULID provides: sortability by time + cryptographic randomness + collision resistance.
 func generateSessionID() string {
-	return fmt.Sprintf("sess_%d", time.Now().UnixNano()%100000000)
+	return ulid.MustNew(ulid.Timestamp(time.Now()), ulidEntropy).String()
 }
 
 // SessionMeta represents session-level metadata persisted to <session_dir>/meta.json.

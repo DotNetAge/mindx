@@ -151,15 +151,10 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 		m.loadCommands()
 
 		if m.app != nil {
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						fmt.Fprintf(os.Stderr, "\nFATAL: EnsureSession failed at startup: %v\n", r)
-						os.Exit(1)
-					}
-				}()
-				m.app.EnsureSession()
-			}()
+			if _, err := m.app.EnsureSession(); err != nil {
+				fmt.Fprintf(os.Stderr, "\nFATAL: EnsureSession failed at startup: %v\n", err)
+				os.Exit(1)
+			}
 		}
 		m.populateWelcome()
 
