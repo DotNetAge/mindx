@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 )
@@ -13,8 +14,8 @@ func TestNewStatusBar(t *testing.T) {
 	if s == nil {
 		t.Fatal("New() returned nil")
 	}
-	if s.CurrentState != "空闲" {
-		t.Errorf("expected CurrentState %q, got %q", "空闲", s.CurrentState)
+	if s.CurrentState != i18n.T("client.status.idle") {
+		t.Errorf("expected CurrentState %q, got %q", i18n.T("client.status.idle"), s.CurrentState)
 	}
 	if s.SessionName != "" {
 		t.Errorf("expected empty SessionName, got %q", s.SessionName)
@@ -32,7 +33,7 @@ func TestNewStatusBar(t *testing.T) {
 
 func TestStatusBarViewIdle(t *testing.T) {
 	s := New()
-	s.CurrentState = "空闲"
+	s.CurrentState = i18n.T("client.status.idle")
 	view := s.View()
 	if view == "" {
 		t.Fatal("View() returned empty string")
@@ -40,8 +41,8 @@ func TestStatusBarViewIdle(t *testing.T) {
 	if !strings.Contains(view, "●") {
 		t.Errorf("View() should contain ●, got %q", view)
 	}
-	if !strings.Contains(view, "空闲") {
-		t.Errorf("View() should contain 空闲, got %q", view)
+	if !strings.Contains(view, i18n.T("client.status.idle")) {
+		t.Errorf("View() should contain %s, got %q", i18n.T("client.status.idle"), view)
 	}
 }
 

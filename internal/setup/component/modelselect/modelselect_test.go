@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DotNetAge/mindx/internal/i18n"
 	setupdata "github.com/DotNetAge/mindx/internal/setup/data"
 )
 
@@ -25,7 +26,7 @@ func TestViewContainsGradientTitle(t *testing.T) {
 	t.Logf("\n=== View Output ===\n%s\n=== End ===", view)
 
 	plain := stripANSI(view)
-	if !strings.Contains(plain, "选择一个 AI 模型") {
+	if !strings.Contains(plain, i18n.T("setup.model.select.title")) {
 		t.Error("View output does NOT contain '选择一个 AI 模型'")
 	} else {
 		t.Log("✅ View output contains '选择一个 AI 模型'")
