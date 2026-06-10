@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/DotNetAge/mindx/internal/i18n"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 )
 
@@ -293,7 +294,7 @@ func TestMultiSelectWithTextInput(t *testing.T) {
 	}
 
 	view := p.View()
-	if !strings.Contains(view, "其他:") {
+	if !strings.Contains(view, i18n.T("choices.input.other")) {
 		t.Errorf("view should show custom input field, got %q", view)
 	}
 }

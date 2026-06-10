@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 )
@@ -45,7 +46,7 @@ func TestInputAreaViewEmpty(t *testing.T) {
 	if !strings.Contains(v, "❯") {
 		t.Error("View() should contain prompt '❯'")
 	}
-	if !strings.Contains(v, "发送消息或") {
+	if !strings.Contains(v, i18n.T("client.ui.input.placeholder")) {
 		t.Error("View() should contain placeholder '发送消息或...'")
 	}
 }
