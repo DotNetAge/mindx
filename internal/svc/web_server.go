@@ -14,10 +14,11 @@ import (
 )
 
 type WebServer struct {
-	server *http.Server
-	addr   string
-	root   string
-	logger logging.Logger
+	server      *http.Server
+	addr        string
+	root        string
+	faviconPath string
+	logger      logging.Logger
 }
 
 const DefaultWebPort = ":1313"
@@ -31,6 +32,12 @@ func NewWebServer(webDir string, logger logging.Logger) *WebServer {
 		root:   webDir,
 		logger: logger,
 	}
+}
+
+// SetFavicon sets an optional external favicon file path.
+// When set, /favicon.ico will serve this file even if not present in webDir.
+func (ws *WebServer) SetFavicon(path string) {
+	ws.faviconPath = path
 }
 
 func (ws *WebServer) Start(ctx context.Context) error {
@@ -64,6 +71,10 @@ func (ws *WebServer) Start(ctx context.Context) error {
 
 		fileServer.ServeHTTP(w, r)
 	}))
+
+	// Favicon: serve from configured icon path or fallback to webDir
+	mux.HandleFunc("/favicon.ico", ws.handleFavicon)
+	mux.HandleFunc("/favicon.png", ws.handleFavicon)
 
 	// API: 下载日志文件
 	// GET /api/log/download?stream=main|error
@@ -113,6 +124,33 @@ func (ws *WebServer) URL() string {
 
 func WebDir(workspaceDir string) string {
 	return filepath.Join(workspaceDir, "web")
+}
+
+// handleFavicon serves the app icon as favicon.
+// Priority: configured iconPath → webDir/favicon.ico → webDir/favicon.png → 404
+func (ws *WebServer) handleFavicon(w http.ResponseWriter, r *http.Request) {
+	// Try configured external icon path first
+	if ws.faviconPath != "" {
+		if info, err := os.Stat(ws.faviconPath); err == nil && !info.IsDir() {
+			w.Header().Set("Content-Type", "image/png")
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+			http.ServeFile(w, r, ws.faviconPath)
+			return
+		}
+	}
+
+	// Fallback: look in webDir
+	candidates := []string{"favicon.ico", "favicon.png"}
+	for _, name := range candidates {
+		candidate := filepath.Join(ws.root, name)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+			http.ServeFile(w, r, candidate)
+			return
+		}
+	}
+
+	http.NotFound(w, r)
 }
 
 // handleLogDownload 下载日志文件

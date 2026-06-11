@@ -88,4 +88,10 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("kvstore.list", r.daemon.handleKVList)
 	gw.RegisterMethod("kvstore.batch_set", r.daemon.handleKVBatchSet)
 	gw.RegisterMethod("kvstore.clear", r.daemon.handleKVClear)
+
+	gw.RegisterMethod("rule.list", r.daemon.handleRuleList)
+	gw.RegisterMethod("rule.get", r.daemon.handleRuleGet)
+	gw.RegisterMethod("rule.create", r.daemon.handleRuleCreate)
+	gw.RegisterMethod("rule.update", r.daemon.handleRuleUpdate)
+	gw.RegisterMethod("rule.delete", r.daemon.handleRuleDelete)
 }

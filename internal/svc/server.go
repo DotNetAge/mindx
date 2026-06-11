@@ -3,6 +3,7 @@ package svc
 import (
 	"context"
 	"fmt"
+	"io/fs"
 
 	"github.com/DotNetAge/mindx/internal/core"
 )
@@ -12,7 +13,7 @@ type Server struct {
 	daemon *Daemon
 }
 
-func NewServer(addr, wsPath string) (*Server, error) {
+func NewServer(addr, wsPath string, iconFS fs.FS) (*Server, error) {
 	cfg, err := core.LoadMindxConfig(core.DefaultUserPrefsDir())
 	if err != nil {
 		fmt.Printf("[svc] warning: failed to load config, using defaults: %v\n", err)
@@ -21,6 +22,9 @@ func NewServer(addr, wsPath string) (*Server, error) {
 	app, err := core.DefaultApp(cfg)
 	if err != nil {
 		return nil, err
+	}
+	if iconFS != nil {
+		app.SetIconFS(iconFS)
 	}
 
 	daemon := NewDaemon(app, addr, wsPath)

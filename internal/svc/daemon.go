@@ -18,6 +18,7 @@ import (
 	goreactmemory "github.com/DotNetAge/goreact/memory"
 	goreactsession "github.com/DotNetAge/goreact/session"
 	"github.com/DotNetAge/gort/pkg/gateway"
+	"github.com/DotNetAge/mindx/internal/appicon"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/pkg/logging"
@@ -343,6 +344,15 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 		webServer:           NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
 		logger:              logger,
 		pendingInteractions: make(map[string]*pendingInteraction),
+	}
+
+	// Extract embedded app icon for favicon
+	if iconFS := app.IconFS(); iconFS != nil {
+		iconDest := filepath.Join(app.Settings().DataDir(), "mindx.png")
+		if err := appicon.Write(iconFS, iconDest); err == nil {
+			d.webServer.SetFavicon(iconDest)
+			logger.Info("app icon extracted", "path", iconDest)
+		}
 	}
 
 	if schedulerDB != nil {
