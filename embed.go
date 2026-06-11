@@ -9,3 +9,6 @@ import "embed"
 //go:embed runtime/web
 //go:embed runtime/mindx.json
 var runtimeFS embed.FS
+
+//go:embed assets/images/mindx.png
+var appIconFS embed.FS

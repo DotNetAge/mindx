@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"github.com/DotNetAge/goreact/store"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
+	"github.com/DotNetAge/mindx/pkg/rules"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 	"github.com/joho/godotenv"
 )
@@ -51,6 +53,9 @@ type App struct {
 
 	// Optional components
 	embedder goragcore.Embedder
+
+	// Embedded app icon filesystem (for favicon / .app bundle)
+	iconFS fs.FS
 
 	// Runtime cache (keyed by agent name)
 	runtimeCache map[string]*agents.Runtime
@@ -131,10 +136,10 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		return nil, fmt.Errorf("failed to load model costs: %w", err)
 	}
 
-	logger.Info("Loading rules", "file", settings.RulesFile())
-	rulesReg, err := rule.NewYAMLRuleRegistry(settings.RulesFile())
+	logger.Info("Loading rules", "file", settings.DataRulesFile())
+	rulesReg, err := rules.NewFileRuleRegistry(settings.DataRulesFile())
 	if err != nil {
-		logger.Warn("Failed to load rules", "file", settings.RulesFile(), "error", err)
+		logger.Warn("Failed to load rules", "file", settings.DataRulesFile(), "error", err)
 	}
 
 	logger.Info("Loading skills", "dir", settings.SkillsDir())
@@ -212,6 +217,16 @@ func (a *App) Settings() *Settings {
 
 func (a *App) Embedder() goragcore.Embedder {
 	return a.embedder
+}
+
+// IconFS returns the embedded filesystem containing the app icon, or nil if not set.
+func (a *App) IconFS() fs.FS {
+	return a.iconFS
+}
+
+// SetIconFS sets the embedded app icon filesystem.
+func (a *App) SetIconFS(fs fs.FS) {
+	a.iconFS = fs
 }
 
 const defaultDaemonAddr = ":1314"

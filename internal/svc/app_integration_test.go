@@ -21,7 +21,7 @@ func TestIntegration_CommandMetas(t *testing.T) {
 		t.Fatalf("failed to load env: %v", err)
 	}
 
-	_, err = svc.NewServer(":0", "/ws")
+	_, err = svc.NewServer(":0", "/ws", nil)
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}

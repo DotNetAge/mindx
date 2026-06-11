@@ -50,6 +50,12 @@ func (s *Settings) RulesFile() string {
 	return filepath.Join(s.UserPreferences(), "settings", "rules.yml")
 }
 
+// DataRulesFile returns the path for the persistent rule store used at runtime
+// by the FileRuleRegistry (CRUD via JSON-RPC). Default: ~/.mindx/data/rules.yml.
+func (s *Settings) DataRulesFile() string {
+	return filepath.Join(s.DataDir(), "rules.yml")
+}
+
 func (s *Settings) SessionsDir() string {
 	return filepath.Join(s.UserPreferences(), "sessions")
 }
