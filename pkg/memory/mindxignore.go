@@ -27,6 +27,18 @@ var DefaultIgnorePatterns = []string{
 	"*.bin",
 	".mindxignore",
 	".mindx/",
+	// 临时文件/日志 — 不可能产生有意义的文本
+	"*.tmp",
+	"*.temp",
+	"*.swp",
+	"*.swo",
+	"*.swn",
+	"*.bak",
+	"*.log",
+	"*.output",
+	"*.pid",
+	"*.lock",
+	"*.cache",
 }
 
 // IgnoreRules evaluates exclusion rules for project file scanning.

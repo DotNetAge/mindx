@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/DotNetAge/gorag"
@@ -58,6 +59,9 @@ type FileWatchService struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 	wg     sync.WaitGroup
+
+	// isRunning is set to true when eventLoop starts and false when it exits.
+	isRunning atomic.Bool
 }
 
 // NewFileWatchService creates a FileWatchService.
@@ -73,7 +77,6 @@ func NewFileWatchService(
 	cacheBaseDir string,
 	logger logging.Logger,
 ) *FileWatchService {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &FileWatchService{
 		indexer:   indexer,
 		store:     store,
@@ -81,16 +84,18 @@ func NewFileWatchService(
 		cacheBase: cacheBaseDir,
 		logger:    logger,
 		debounce:  make(map[string]time.Time),
-		ctx:       ctx,
-		cancel:    cancel,
-		done:      make(chan struct{}),
 	}
 }
 
 // Start begins monitoring all directories in the watchlist.
 // It blocks until ctx is cancelled or an error occurs.
 // Returns nil immediately if no directories are being watched.
+// Safe to call multiple times; previous internal state is reset.
 func (s *FileWatchService) Start(ctx context.Context) error {
+	// Recreate internal context and done channel for restart support.
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.done = make(chan struct{})
+
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("filewatch: create watcher: %w", err)
@@ -140,13 +145,72 @@ func (s *FileWatchService) Start(ctx context.Context) error {
 }
 
 // Stop gracefully shuts down the file watch service.
+// Safe to call even if the service was never started.
 func (s *FileWatchService) Stop() {
-	s.cancel()
+	if s.cancel != nil {
+		s.cancel()
+	}
 	if s.watcher != nil {
 		_ = s.watcher.Close()
 	}
-	<-s.done
-	s.wg.Wait()
+	// Only wait for eventLoop to finish if it was actually started.
+	if s.isRunning.Load() {
+		<-s.done
+		s.wg.Wait()
+	}
+}
+
+// IsRunning returns true if the file watch event loop is active.
+func (s *FileWatchService) IsRunning() bool {
+	return s.isRunning.Load()
+}
+
+// FileWatchStatus summarizes the current state of the FileWatchService.
+type FileWatchStatus struct {
+	Running   bool     `json:"running"`
+	Watched   []string `json:"watched,omitempty"`
+	CacheBase string   `json:"cache_base,omitempty"`
+}
+
+// Status returns the current running state and list of watched directories.
+func (s *FileWatchService) Status() FileWatchStatus {
+	status := FileWatchStatus{
+		Running:   s.isRunning.Load(),
+		CacheBase: s.cacheBase,
+	}
+	if s.store != nil {
+		for _, e := range s.store.List() {
+			status.Watched = append(status.Watched, e.Dir)
+		}
+	}
+	return status
+}
+
+// systemDirPrefixes lists path prefixes that should never be added to the file
+// watchlist. Watching system-level directories can result in indexing garbage
+// or transient data (temp files, logs, kernel pseudo-filesystems, …).
+var systemDirPrefixes = []string{
+	"/tmp",
+	"/private/tmp",
+	"/var/tmp",
+	"/dev",
+	"/proc",
+	"/sys",
+	"/etc",
+	"/var/log",
+}
+
+// isSystemDir returns true when absPath is a system directory that should not
+// be watched for file indexing. The check is case-sensitive (macOS /tmp is
+// the only common form); Linux paths are already lowercase.
+func isSystemDir(absPath string) bool {
+	clean := filepath.Clean(absPath)
+	for _, prefix := range systemDirPrefixes {
+		if clean == prefix || strings.HasPrefix(clean, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // AddWatch registers a single directory for monitoring. If the directory is
@@ -155,6 +219,12 @@ func (s *FileWatchService) AddWatch(dir, agent string) error {
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		return fmt.Errorf("filewatch: resolve path: %w", err)
+	}
+
+	// Reject system directories — watching /tmp, /dev, /proc etc. would index
+	// transient / non-text content that pollutes the knowledge base.
+	if isSystemDir(absDir) {
+		return fmt.Errorf("filewatch: refusing to watch system directory: %s", absDir)
 	}
 
 	if err := s.store.Add(absDir, agent); err != nil {
@@ -221,6 +291,8 @@ func (s *FileWatchService) watchDir(absDir string) error {
 // eventLoop reads events from the fsnotify watcher and processes them.
 func (s *FileWatchService) eventLoop() {
 	defer close(s.done)
+	defer s.isRunning.Store(false)
+	s.isRunning.Store(true)
 
 	// Timer for debounce flushing
 	ticker := time.NewTicker(debounceWindow)

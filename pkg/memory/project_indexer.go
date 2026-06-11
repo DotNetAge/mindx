@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/DotNetAge/gorag"
 	"github.com/DotNetAge/gorag/logging"
@@ -98,6 +99,28 @@ type ProjectSyncResult struct {
 	Errors  []string // non-fatal errors grouped by file
 	Err     error    // fatal error (operation aborted)
 	Elapsed time.Duration
+}
+
+// FileState describes the indexing status of a single file.
+type FileState string
+
+const (
+	FileStateIndexed FileState = "indexed"  // exists on disk and matches cache
+	FileStateChanged FileState = "changed"  // exists on disk but mtime/size differs from cache
+	FileStateNew     FileState = "new"      // exists on disk but not in cache
+	FileStateRemoved FileState = "removed"  // in cache but no longer on disk
+	FileStateSkipped FileState = "skipped"  // excluded by ignore rules, size limit, or content check
+)
+
+// FileStateInfo holds per-file scanning result from ScanFileStates.
+type FileStateInfo struct {
+	Path        string `json:"path"`
+	State       FileState `json:"state"`
+	Size        int64     `json:"size,omitempty"`
+	Mtime       int64     `json:"mtime,omitempty"`
+	CachedSize  int64     `json:"cached_size,omitempty"`
+	CachedMtime int64     `json:"cached_mtime,omitempty"`
+	Error       string    `json:"error,omitempty"`
 }
 
 // NewProjectIndexer creates a ProjectIndexer.
@@ -349,6 +372,139 @@ func (p *ProjectIndexer) SyncFiles(ctx context.Context, projectDir string, relFi
 	return result
 }
 
+// ScanFileStates performs a read-only scan of projectDir and returns the
+// indexing state of each discoverable file without performing any actual
+// indexing. This allows the UI to show which files are indexed, changed,
+// new, or removed before the user decides to start the indexing service.
+func (p *ProjectIndexer) ScanFileStates(ctx context.Context, projectDir string) ([]FileStateInfo, error) {
+	absDir, err := filepath.Abs(projectDir)
+	if err != nil {
+		return nil, fmt.Errorf("project_indexer: resolve project dir: %w", err)
+	}
+
+	ignore := LoadMindxIgnore(absDir)
+
+	// Load cache (best-effort — may not exist yet)
+	if err := p.loadCache(); err != nil && p.logger != nil {
+		p.logger.Warn("project_indexer.scan: failed to load cache", "error", err)
+	}
+
+	// Walk project dir collecting current files
+	currentFiles := make(map[string]os.FileInfo)
+	if walkErr := filepath.Walk(absDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		relPath, rErr := filepath.Rel(absDir, path)
+		if rErr != nil {
+			return nil
+		}
+		if info.IsDir() {
+			if isDirIgnored(relPath, info, ignore) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if ignore.IsIgnored(relPath) {
+			return nil
+		}
+		currentFiles[relPath] = info
+		return nil
+	}); walkErr != nil {
+		return nil, fmt.Errorf("project_indexer: walk project dir: %w", walkErr)
+	}
+
+	var states []FileStateInfo
+
+	// Check current files against cache
+	for relPath, info := range currentFiles {
+		entry := p.cache.Get(relPath)
+		state := FileStateInfo{
+			Path:  relPath,
+			Size:  info.Size(),
+			Mtime: info.ModTime().UnixNano(),
+		}
+
+		if info.Size() > MaxFileSize || !isValidFileContentForScan(absDir, relPath) {
+			state.State = FileStateSkipped
+			if info.Size() > MaxFileSize {
+				state.Error = fmt.Sprintf("file exceeds max size (%d > %d bytes)", info.Size(), MaxFileSize)
+			} else {
+				state.Error = "content quality check failed (binary or too short)"
+			}
+		} else if entry == nil {
+			state.State = FileStateNew
+		} else if entry.Mtime == info.ModTime().UnixNano() && entry.Size == info.Size() {
+			state.State = FileStateIndexed
+		} else {
+			state.State = FileStateChanged
+			state.CachedSize = entry.Size
+			state.CachedMtime = entry.Mtime
+		}
+		states = append(states, state)
+	}
+
+	// Check for removed files (in cache but not on disk)
+	for relPath, entry := range p.cache.Files {
+		if _, exists := currentFiles[relPath]; !exists {
+			states = append(states, FileStateInfo{
+				Path:        relPath,
+				State:       FileStateRemoved,
+				CachedSize:  entry.Size,
+				CachedMtime: entry.Mtime,
+			})
+		}
+	}
+
+	return states, nil
+}
+
+// isValidFileContentForScan performs a quick content check (size + null bytes)
+// without reading the entire file. Returns false for binary or empty files.
+func isValidFileContentForScan(baseDir, relPath string) bool {
+	// Quick check: if the file is likely binary, skip the full read
+	fullPath := filepath.Join(baseDir, relPath)
+	// Read a small header to detect null bytes (binary indicator)
+	header := make([]byte, 512)
+	f, err := os.Open(fullPath)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	n, _ := f.Read(header)
+	if n == 0 {
+		return false
+	}
+	for _, b := range header[:n] {
+		if b == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// isDirIgnored checks whether a directory should be skipped during walking.
+// This is a package-level helper (no ProjectIndexer receiver needed).
+func isDirIgnored(relPath string, info os.FileInfo, ignore *IgnoreRules) bool {
+	if strings.HasPrefix(info.Name(), ".") && info.Name() != "." {
+		if relPath != "." {
+			return true
+		}
+	}
+	if DefaultIgnoredDirs[info.Name()] {
+		return true
+	}
+	if ignore.IsIgnored(relPath + "/") {
+		return true
+	}
+	return false
+}
+
 // removeCachedFile removes a file's chunks from the index and cache.
 func (p *ProjectIndexer) removeCachedFile(ctx context.Context, relPath string, result *ProjectSyncResult) {
 	entry := p.cache.Get(relPath)
@@ -361,8 +517,90 @@ func (p *ProjectIndexer) removeCachedFile(ctx context.Context, relPath string, r
 	}
 }
 
+// minReadableContentChars is the minimum number of printable text characters
+// a file must contain to be considered indexable. Files below this threshold
+// (e.g., lock files, one-line logs, editor swaps) are skipped.
+const minReadableContentChars = 20
+
+// minPrintableRatio is the minimum ratio of printable Unicode text characters
+// (letters, digits, CJK ideographs, etc.) above which file content is
+// considered non-binary / non-garbage. Files with too many control characters
+// or non-text bytes (e.g., binary blobs) are skipped.
+const minPrintableRatio = 0.50
+
+// isValidFileContent performs lightweight content-quality checks on raw file
+// content before it enters the indexing pipeline. Returns true when the
+// content looks like readable text worth indexing.
+//
+// Checks performed:
+//  1. Binary detection — null bytes indicate a non-text file.
+//  2. Printable ratio — the fraction of printable Unicode categories in the
+//     decoded string must meet minPrintableRatio.
+//  3. Minimum meaningful characters — after stripping whitespace and symbols,
+//     the remaining text must be at least minReadableContentChars long.
+func isValidFileContent(raw []byte) bool {
+	if len(raw) == 0 {
+		return false
+	}
+
+	// 1. Binary detection: null byte present → treat as binary
+	for _, b := range raw {
+		if b == 0 {
+			return false
+		}
+	}
+
+	// 2. Printable ratio check
+	s := string(raw)
+	totalRunes := 0
+	printableRunes := 0
+
+	for _, r := range s {
+		totalRunes++
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsPunct(r) ||
+			unicode.IsSymbol(r) || r == ' ' || r == '\n' || r == '\t' || r == '\r' {
+			printableRunes++
+		}
+	}
+
+	if totalRunes == 0 {
+		return false
+	}
+
+	ratio := float64(printableRunes) / float64(totalRunes)
+	if ratio < minPrintableRatio {
+		return false
+	}
+
+	// 3. Minimum meaningful characters (letters + digits)
+	meaningful := 0
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			meaningful++
+		}
+	}
+
+	return meaningful >= minReadableContentChars
+}
+
 // indexFile reads and indexes a single file, returning all chunk IDs.
 func (p *ProjectIndexer) indexFile(ctx context.Context, absPath string) ([]chunkInfo, error) {
+	// Content quality gate: skip binary / garbage files before they reach the
+	// chunker & embedder pipeline.
+	raw, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+	if !isValidFileContent(raw) {
+		if p.logger != nil {
+			p.logger.Warn("project_indexer: content quality check failed, skipped",
+				"path", absPath,
+				"bytes", len(raw),
+			)
+		}
+		return nil, nil
+	}
+
 	chunks, err := p.indexer.AddFile(ctx, absPath)
 	if err != nil {
 		return nil, fmt.Errorf("add file: %w", err)

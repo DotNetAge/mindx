@@ -25,15 +25,16 @@ require (
 require (
 	github.com/DotNetAge/gochat v0.2.7
 	github.com/DotNetAge/gograph v0.2.4
-	github.com/DotNetAge/gorag v1.3.1
+	github.com/DotNetAge/gorag v1.6.1
 	github.com/DotNetAge/goreact v0.1.5
+	go.etcd.io/bbolt v1.4.3
 	golang.org/x/text v0.37.0
 )
 
 require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/DataDog/zstd v1.5.7 // indirect
-	github.com/DotNetAge/govector v0.1.7 // indirect
+	github.com/DotNetAge/govector v0.1.8 // indirect
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0 // indirect
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/RoaringBitmap/roaring v1.9.4 // indirect
@@ -125,7 +126,6 @@ require (
 	github.com/yuin/goldmark v1.7.8 // indirect
 	github.com/yuin/goldmark-emoji v1.0.5 // indirect
 	github.com/zoomio/stopwords v0.11.0 // indirect
-	go.etcd.io/bbolt v1.4.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
@@ -138,3 +138,5 @@ require (
 )
 
 replace github.com/coder/hnsw => ./third_party/hnsw
+
+replace github.com/DotNetAge/gorag => ../gorag

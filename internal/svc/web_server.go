@@ -19,6 +19,15 @@ type WebServer struct {
 	root        string
 	faviconPath string
 	logger      logging.Logger
+	// extraHandlers stores additional HTTP handlers registered before Start().
+	// They are mounted onto the mux at startup, taking precedence over the
+	// catch-all "/" SPA handler.
+	extraHandlers []handlerRegistration
+}
+
+type handlerRegistration struct {
+	pattern string
+	handler http.HandlerFunc
 }
 
 const DefaultWebPort = ":1313"
@@ -40,6 +49,18 @@ func (ws *WebServer) SetFavicon(path string) {
 	ws.faviconPath = path
 }
 
+// HandleFunc registers an additional HTTP handler to be mounted when the
+// server starts. Patterns are matched in the order they are registered and
+// take precedence over the default SPA catch-all ("/") handler.
+//
+// Must be called before Start().
+func (ws *WebServer) HandleFunc(pattern string, handler http.HandlerFunc) {
+	ws.extraHandlers = append(ws.extraHandlers, handlerRegistration{
+		pattern: pattern,
+		handler: handler,
+	})
+}
+
 func (ws *WebServer) Start(ctx context.Context) error {
 	if ws.root == "" {
 		return fmt.Errorf("web directory is empty")
@@ -51,6 +72,13 @@ func (ws *WebServer) Start(ctx context.Context) error {
 	}
 
 	mux := http.NewServeMux()
+
+	// Mount extra API handlers before the SPA catch-all so they take
+	// precedence on matched paths (e.g. /api/health, /api/log/download).
+	for _, h := range ws.extraHandlers {
+		mux.HandleFunc(h.pattern, h.handler)
+		ws.logger.Info("web server: registered handler", "pattern", h.pattern)
+	}
 
 	fileServer := http.FileServer(http.Dir(ws.root))
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
