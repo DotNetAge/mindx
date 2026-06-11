@@ -26,6 +26,9 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("memory.delete", r.daemon.handleMemoryDelete)
 	gw.RegisterMethod("memory.chunks", r.daemon.handleMemoryChunks)
 	gw.RegisterMethod("memory.get_chunks", r.daemon.handleMemoryGetChunks)
+	gw.RegisterMethod("memory.count", r.daemon.handleMemoryCount)
+	gw.RegisterMethod("memory.stats", r.daemon.handleMemoryStats)
+	gw.RegisterMethod("memory.sync_project", r.daemon.handleMemorySyncProject)
 
 	gw.RegisterMethod("agent.list", r.daemon.handleAgentList)
 	gw.RegisterMethod("agent.get", r.daemon.handleAgentGet)
@@ -94,4 +97,10 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("rule.create", r.daemon.handleRuleCreate)
 	gw.RegisterMethod("rule.update", r.daemon.handleRuleUpdate)
 	gw.RegisterMethod("rule.delete", r.daemon.handleRuleDelete)
+
+	gw.RegisterMethod("filewatch.start", r.daemon.handleFilewatchStart)
+	gw.RegisterMethod("filewatch.stop", r.daemon.handleFilewatchStop)
+	gw.RegisterMethod("filewatch.status", r.daemon.handleFilewatchStatus)
+
+	gw.RegisterMethod("memory.file_states", r.daemon.handleMemoryFileStates)
 }

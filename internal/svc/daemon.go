@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,6 +14,9 @@ import (
 	"time"
 
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
+	goragcore "github.com/DotNetAge/gorag/core"
+	goragindexer "github.com/DotNetAge/gorag/indexer"
+	goraggograph "github.com/DotNetAge/gorag/store/graph/gograph"
 	"github.com/DotNetAge/goreact/events"
 	"github.com/DotNetAge/goreact/hooks/action"
 	goreactmemory "github.com/DotNetAge/goreact/memory"
@@ -258,6 +262,12 @@ type Daemon struct {
 
 	// global key-value store (bbolt)
 	kvStore *bbolt.DB
+
+	// watchCancel cancels the currently running filewatch goroutine (if any).
+	watchCancel context.CancelFunc
+
+	// startTime records when the daemon started, used for uptime reporting.
+	startTime time.Time
 }
 
 func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
@@ -282,6 +292,49 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 		logger.Info("scheduler store created", "dir", app.Settings().SchedulesDir())
 	}
 
+	// ── 知识图谱数据库 (gograph) ──────────────────────────────────
+	// 必须在 memory 初始化之前创建，以便共享同一个 GraphDB 实例。
+	var graphDB *graphapi.DB
+	var graphStore *graphapi.GraphStore
+	var graphErr error
+	var coreGS goragcore.GraphStore
+	var llmModelCfg *goragindexer.ModelConfig
+
+	graphDB, graphStore, graphErr = initGraphDB(app.Settings().DataDir())
+	if graphErr != nil {
+		logger.Warn("failed to initialize knowledge-graph database", "error", graphErr)
+	} else {
+		coreGS = goraggograph.WrapGraphStore(graphDB, graphStore)
+		logger.Info("knowledge-graph database initialized",
+			"path", filepath.Join(app.Settings().DataDir(), "knowledge-graph.db"),
+		)
+	}
+
+	// ── LLMIndexer 模型配置 ──────────────────────────────────────
+	if defaultModel := app.ResolveDefaultModel(); defaultModel != nil {
+		lang := "Chinese"
+		if c := app.Config(); c != nil {
+			switch c.Language {
+			case "en", "en-US", "en-GB":
+				lang = "English"
+			}
+		}
+		llmModelCfg = &goragindexer.ModelConfig{
+			APIKey:    defaultModel.APIKey,
+			BaseURL:   defaultModel.BaseURL,
+			Model:     defaultModel.Name,
+			Language:  lang,
+			MaxTokens: int(defaultModel.MaxTokens),
+			Ontology:  "general",
+		}
+		logger.Info("LLMIndexer model config resolved",
+			"model", defaultModel.Name,
+			"provider", defaultModel.Provider,
+			"lang", lang,
+		)
+	}
+
+	// ── Shared LongTerm Memory ──────────────────────────────────
 	var memoryWatch *memory.FileWatchService
 	var sharedMemory *memory.RAGMemory
 	if emb := app.Embedder(); emb != nil {
@@ -291,6 +344,8 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 			AgentName:  "_shared",
 			MemoryDir:  filepath.Join(app.Settings().UserPreferences(), "memory"),
 			Embedder:   emb,
+			GraphStore: coreGS,
+			LLMConfig:  llmModelCfg,
 			Logger:     logger,
 		})
 		if memErr != nil {
@@ -346,6 +401,14 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 		pendingInteractions: make(map[string]*pendingInteraction),
 	}
 
+	// Wire graphDB to daemon fields (deferred because d is needed)
+	if graphDB != nil {
+		d.graphDB = graphDB
+		d.graphStore = graphStore
+	} else {
+		logger.Warn("knowledge-graph database unavailable, graph RPC disabled")
+	}
+
 	// Extract embedded app icon for favicon
 	if iconFS := app.IconFS(); iconFS != nil {
 		iconDest := filepath.Join(app.Settings().DataDir(), "mindx.png")
@@ -358,18 +421,6 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 	if schedulerDB != nil {
 		d.scheduler = scheduler.NewScheduler(schedulerDB, d.executeScheduleCommand, logger)
 		logger.Info("scheduler instance created")
-	}
-
-	// Initialize knowledge-graph database (gograph)
-	graphDB, graphStore, graphErr := initGraphDB(app.Settings().DataDir())
-	if graphErr != nil {
-		logger.Warn("failed to initialize knowledge-graph database", "error", graphErr)
-	} else {
-		d.graphDB = graphDB
-		d.graphStore = graphStore
-		logger.Info("knowledge-graph database initialized",
-			"path", filepath.Join(app.Settings().DataDir(), "knowledge-graph.db"),
-		)
 	}
 
 	// Initialize global KV store (bbolt)
@@ -428,6 +479,7 @@ func (d *Daemon) cleanupStaleInteractions(timeout time.Duration) {
 }
 
 func (d *Daemon) Start(ctx context.Context) error {
+	d.startTime = time.Now()
 	d.logger.Info("daemon start called", "addr", d.addr, "wsPath", d.wsPath)
 
 	if d.gw == nil {
@@ -447,15 +499,13 @@ func (d *Daemon) Start(ctx context.Context) error {
 	}
 
 	if d.memoryWatch != nil {
-		d.logger.Info("starting filewatch service in background goroutine")
-		go func() {
-			if err := d.memoryWatch.Start(ctx); err != nil {
-				d.logger.Warn("FileWatch service exited with error", "error", err)
-			}
-		}()
+		d.logger.Info("filewatch service configured but not started (user must call filewatch.start to activate)")
 	} else {
 		d.logger.Info("no filewatch configured, skipping")
 	}
+
+	// Register system health / diagnostics endpoint.
+	d.webServer.HandleFunc("/api/health", d.handleHealth)
 
 	if err := d.webServer.Start(ctx); err != nil {
 		d.logger.Warn("WebUI server failed to start", "error", err)
@@ -494,6 +544,12 @@ func (d *Daemon) stopBackgroundServices() {
 	d.logger.Info("stopping background services...")
 	if d.memoryWatch != nil {
 		d.logger.Info("stopping filewatch service")
+		// Cancel the external watch context first so the Start() goroutine
+		// can unblock, then stop the internal eventLoop.
+		if d.watchCancel != nil {
+			d.watchCancel()
+			d.watchCancel = nil
+		}
 		d.memoryWatch.Stop()
 		d.logger.Info("filewatch service stopped")
 	}
@@ -519,6 +575,107 @@ func (d *Daemon) stopBackgroundServices() {
 		}
 	}
 	d.logger.Info("all background services stopped")
+}
+
+// ---------------------------------------------------------------------------
+// Health / Diagnostics — GET /api/health
+// ---------------------------------------------------------------------------
+
+// healthResponse is the JSON payload returned by /api/health.
+type healthResponse struct {
+	Status   string         `json:"status"`
+	Version  string         `json:"version"`
+	Commit   string         `json:"commit"`
+	Build    string         `json:"build"`
+	Dirty    string         `json:"dirty"`
+	Uptime   string         `json:"uptime"`
+	Services map[string]any `json:"services"`
+}
+
+func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
+	uptime := time.Since(d.startTime).Truncate(time.Second).String()
+	if d.startTime.IsZero() {
+		uptime = "starting…"
+	}
+
+	services := map[string]any{}
+
+	// WebSocket gateway
+	if d.gw != nil {
+		services["websocket"] = map[string]any{
+			"status": "running",
+			"addr":   d.addr,
+			"path":   d.wsPath,
+		}
+	} else {
+		services["websocket"] = map[string]any{"status": "not initialized"}
+	}
+
+	// Memory / RAG
+	if d.sharedMemory != nil {
+		idx := d.sharedMemory.Indexer()
+		var totalChunks int
+		if idx != nil {
+			if cnt, err := idx.Count(context.Background()); err == nil {
+				totalChunks = cnt
+			}
+		}
+		services["memory"] = map[string]any{
+			"status":       "running",
+			"total_chunks": totalChunks,
+			"agent":        "_shared",
+		}
+	} else {
+		services["memory"] = map[string]any{"status": "not configured"}
+	}
+
+	// FileWatch
+	if d.memoryWatch != nil {
+		fwStatus := "stopped"
+		if d.memoryWatch.IsRunning() {
+			fwStatus = "running"
+		}
+		services["filewatch"] = map[string]any{"status": fwStatus}
+	} else {
+		services["filewatch"] = map[string]any{"status": "disabled"}
+	}
+
+	// Scheduler
+	if d.scheduler != nil {
+		services["scheduler"] = map[string]any{"status": "running"}
+	} else {
+		services["scheduler"] = map[string]any{"status": "disabled"}
+	}
+
+	// Knowledge graph
+	if d.graphDB != nil {
+		services["knowledge_graph"] = map[string]any{"status": "running"}
+	} else {
+		services["knowledge_graph"] = map[string]any{"status": "disabled"}
+	}
+
+	overall := "ok"
+	for _, svc := range services {
+		m, ok := svc.(map[string]any)
+		if ok && m["status"] == "not initialized" {
+			overall = "degraded"
+		}
+	}
+
+	resp := healthResponse{
+		Status:   overall,
+		Version:  core.Version,
+		Commit:   core.Commit,
+		Build:    core.BuildTime,
+		Dirty:    core.Dirty,
+		Uptime:   uptime,
+		Services: services,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (d *Daemon) initGateway() {

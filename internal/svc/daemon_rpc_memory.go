@@ -4,10 +4,29 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	goreactmemory "github.com/DotNetAge/goreact/memory"
+
+	"github.com/DotNetAge/mindx/pkg/memory"
 )
+
+// sanitizeDirName converts a filesystem path to a safe directory name (same logic as memory package).
+func sanitizeDirName(absPath string) string {
+	replacer := strings.NewReplacer(
+		string(filepath.Separator), "_",
+		":", "_",
+		"~", "_",
+	)
+	name := replacer.Replace(absPath)
+	if len(name) > 200 {
+		name = name[len(name)-200:]
+	}
+	return name
+}
 
 type memoryQueryParams struct {
 	Query    string  `json:"query"`
@@ -210,13 +229,19 @@ func (d *Daemon) handleMemoryChunks(_ context.Context, params json.RawMessage) (
 
 	hasMore := len(chunks) == p.PageSize
 
-	d.logger.Info("memory.chunks called", "page", p.Page, "page_size", p.PageSize, "returned", len(chunks), "has_more", hasMore)
+	// Get the total count for proper pagination
+	total, err := indexer.Count(context.Background())
+	if err != nil {
+		total = offset + len(chunks) // fallback estimate
+	}
+
+	d.logger.Info("memory.chunks called", "page", p.Page, "page_size", p.PageSize, "returned", len(chunks), "total", total, "has_more", hasMore)
 
 	return memoryChunksResult{
 		Chunks:   chunks,
 		Page:     p.Page,
 		PageSize: p.PageSize,
-		Total:    offset + len(chunks), // 近似值，List 接口不返回总数
+		Total:    total,
 		HasMore:  hasMore,
 	}, nil
 }
@@ -288,5 +313,276 @@ func (d *Daemon) handleMemoryGetChunks(_ context.Context, params json.RawMessage
 		DocID:  p.DocID,
 		Chunks: items,
 		Count:  len(items),
+	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// memory.count — 获取 RAG 索引中的分块总数
+// ---------------------------------------------------------------------------
+
+type memoryCountResult struct {
+	Count int `json:"count"`
+}
+
+func (d *Daemon) handleMemoryCount(_ context.Context, _ json.RawMessage) (any, error) {
+	mem := d.sharedMemory
+	if mem == nil {
+		return nil, fmt.Errorf("memory service not available (embedder not configured)")
+	}
+
+	indexer := mem.Indexer()
+	if indexer == nil {
+		return nil, fmt.Errorf("indexer not initialized")
+	}
+
+	count, err := indexer.Count(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("memory count failed: %w", err)
+	}
+
+	d.logger.Info("memory.count called", "count", count)
+
+	return memoryCountResult{Count: count}, nil
+}
+
+// ---------------------------------------------------------------------------
+// memory.stats — 获取 RAG 索引进度统计
+// ---------------------------------------------------------------------------
+
+type memoryStatsResult struct {
+	TotalFiles   int `json:"total_files"`
+	IndexedFiles int `json:"indexed_files"`
+	TotalChunks  int `json:"total_chunks"`
+}
+
+func (d *Daemon) handleMemoryStats(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		ProjectDir string `json:"project_dir"`
+	}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.ProjectDir == "" {
+		return nil, fmt.Errorf("project_dir is required")
+	}
+
+	mem := d.sharedMemory
+	if mem == nil {
+		return nil, fmt.Errorf("memory service not available (embedder not configured)")
+	}
+
+	// Determine cache dir from FileWatchService (same convention)
+	var cacheDir string
+	if d.memoryWatch != nil {
+		cacheBase := filepath.Join(d.app.Settings().DataDir(), "memory-cache")
+		cacheDir = filepath.Join(cacheBase, sanitizeDirName(p.ProjectDir))
+	}
+
+	stats := mem.Stats(context.Background(), p.ProjectDir, cacheDir)
+
+	d.logger.Info("memory.stats called",
+		"project_dir", p.ProjectDir,
+		"total_files", stats.TotalFiles,
+		"indexed_files", stats.IndexedFiles,
+		"total_chunks", stats.TotalChunks,
+	)
+
+	return memoryStatsResult{
+		TotalFiles:   stats.TotalFiles,
+		IndexedFiles: stats.IndexedFiles,
+		TotalChunks:  stats.TotalChunks,
+	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// memory.sync_project — 对指定目录执行全量文件扫描和索引
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleMemorySyncProject(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		ProjectDir string `json:"project_dir"`
+	}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.ProjectDir == "" {
+		return nil, fmt.Errorf("project_dir is required")
+	}
+
+	mem := d.sharedMemory
+	if mem == nil {
+		return nil, fmt.Errorf("memory service not available (embedder not configured)")
+	}
+
+	// Determine cache dir from FileWatchService (same convention as Stats)
+	var cacheDir string
+	if d.memoryWatch != nil {
+		cacheBase := filepath.Join(d.app.Settings().DataDir(), "memory-cache")
+		cacheDir = filepath.Join(cacheBase, sanitizeDirName(p.ProjectDir))
+		// Remove cache to force full re-index
+		if cacheDir != "" {
+			if err := os.RemoveAll(cacheDir); err != nil {
+				d.logger.Warn("failed to remove cache dir, re-index may be partial", "cache_dir", cacheDir, "error", err)
+			} else {
+				d.logger.Info("cache cleared, forcing full re-index", "cache_dir", cacheDir)
+			}
+		}
+	}
+
+	result := mem.SyncProjectDir(context.Background(), p.ProjectDir, cacheDir)
+
+	d.logger.Info("memory.sync_project completed",
+		"project_dir", p.ProjectDir,
+		"indexed", result.Indexed,
+		"updated", result.Updated,
+		"removed", result.Removed,
+		"errors", result.Errors,
+	)
+
+	return result, nil
+}
+
+// ---------------------------------------------------------------------------
+// filewatch.start — 启动文件监控服务
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleFilewatchStart(_ context.Context, params json.RawMessage) (any, error) {
+	if d.memoryWatch == nil {
+		return nil, fmt.Errorf("filewatch service not available")
+	}
+
+	if d.memoryWatch.IsRunning() {
+		return map[string]string{"status": "already_running"}, nil
+	}
+
+	// Create a cancellable context for this watch session.
+	ctx, cancel := context.WithCancel(context.Background())
+	d.watchCancel = cancel
+
+	d.logger.Info("filewatch.start: starting filewatch service")
+
+	go func() {
+		if err := d.memoryWatch.Start(ctx); err != nil {
+			d.logger.Warn("filewatch.start: service exited with error", "error", err)
+		}
+	}()
+
+	return map[string]string{"status": "started"}, nil
+}
+
+// ---------------------------------------------------------------------------
+// filewatch.stop — 停止文件监控服务
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleFilewatchStop(_ context.Context, _ json.RawMessage) (any, error) {
+	if d.memoryWatch == nil {
+		return nil, fmt.Errorf("filewatch service not available")
+	}
+
+	if !d.memoryWatch.IsRunning() {
+		return map[string]string{"status": "already_stopped"}, nil
+	}
+
+	d.logger.Info("filewatch.stop: stopping filewatch service")
+
+	// Cancel the watch context to unblock Start().
+	if d.watchCancel != nil {
+		d.watchCancel()
+		d.watchCancel = nil
+	}
+	d.memoryWatch.Stop()
+
+	d.logger.Info("filewatch.stop: filewatch service stopped")
+
+	return map[string]string{"status": "stopped"}, nil
+}
+
+// ---------------------------------------------------------------------------
+// filewatch.status — 查询文件监控服务状态
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (any, error) {
+	if d.memoryWatch == nil {
+		return map[string]any{
+			"available": false,
+			"running":   false,
+		}, nil
+	}
+
+	status := d.memoryWatch.Status()
+
+	return map[string]any{
+		"available": true,
+		"running":   status.Running,
+		"watched":   status.Watched,
+		"cache_dir": status.CacheBase,
+	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// memory.file_states — 扫描项目目录文件状态（只读，不索引）
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleMemoryFileStates(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		ProjectDir string `json:"project_dir"`
+	}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.ProjectDir == "" {
+		return nil, fmt.Errorf("project_dir is required")
+	}
+
+	mem := d.sharedMemory
+	if mem == nil {
+		return nil, fmt.Errorf("memory service not available (embedder not configured)")
+	}
+
+	// Determine cache dir from FileWatchService (same convention as Stats)
+	var cacheDir string
+	if d.memoryWatch != nil {
+		cacheBase := filepath.Join(d.app.Settings().DataDir(), "memory-cache")
+		cacheDir = filepath.Join(cacheBase, sanitizeDirName(p.ProjectDir))
+	}
+
+	// Create a temporary ProjectIndexer for scanning (no indexing performed)
+	indexer := mem.Indexer()
+	if indexer == nil {
+		return nil, fmt.Errorf("indexer not initialized")
+	}
+
+	pi := memory.NewProjectIndexer(indexer, cacheDir, d.logger)
+	states, err := pi.ScanFileStates(context.Background(), p.ProjectDir)
+	if err != nil {
+		return nil, fmt.Errorf("file states scan failed: %w", err)
+	}
+
+	// Count by state
+	counts := map[string]int{
+		"indexed": 0,
+		"changed": 0,
+		"new":     0,
+		"removed": 0,
+		"skipped": 0,
+		"total":   len(states),
+	}
+	for _, s := range states {
+		counts[string(s.State)]++
+	}
+
+	d.logger.Info("memory.file_states completed",
+		"project_dir", p.ProjectDir,
+		"total", len(states),
+		"indexed", counts["indexed"],
+		"changed", counts["changed"],
+		"new", counts["new"],
+		"removed", counts["removed"],
+		"skipped", counts["skipped"],
+	)
+
+	return map[string]any{
+		"states": states,
+		"counts": counts,
 	}, nil
 }

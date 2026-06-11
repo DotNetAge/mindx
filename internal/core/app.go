@@ -247,6 +247,28 @@ func (a *App) Config() *MindxConfig {
 	return a.mindxConfig
 }
 
+// ResolveDefaultModel 返回解析后的默认模型配置，包含从 Provider 继承的连接参数
+// 和从 CredentialStore 解析的 API 密钥。未配置默认模型时返回 nil。
+func (a *App) ResolveDefaultModel() *config.ModelConfig {
+	if a.mindxConfig == nil || a.mindxConfig.DefaultModel == "" {
+		return nil
+	}
+	modelCfg := a.Models().Get(a.mindxConfig.DefaultModel)
+	if modelCfg == nil {
+		return nil
+	}
+	resolved := modelCfg.ResolveProvider(a.providerReg)
+	if resolved.Provider != "" {
+		if key, err := a.credStore.Get(resolved.Provider); err == nil && key != "" {
+			resolved.APIKey = key
+		}
+	}
+	if resolved.APIKey == "" {
+		resolved.APIKey = ResolveAPIKey(a.credStore, resolved.APIKey)
+	}
+	return resolved
+}
+
 func (a *App) CurrentAgentName() string {
 	return resolveCurrentAgentName(a.mindxConfig, a.agents, a.logger)
 }

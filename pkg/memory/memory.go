@@ -12,9 +12,11 @@ import (
 	"github.com/DotNetAge/gorag"
 	goragcore "github.com/DotNetAge/gorag/core"
 	"github.com/DotNetAge/gorag/embedder"
+	goragindexer "github.com/DotNetAge/gorag/indexer"
 	"github.com/DotNetAge/gorag/logging"
 	querypkg "github.com/DotNetAge/gorag/query"
 	"github.com/DotNetAge/gorag/store/doc/bleve"
+	graphgograph "github.com/DotNetAge/gorag/store/graph/gograph"
 	"github.com/DotNetAge/gorag/store/vector/govector"
 	"github.com/DotNetAge/goreact/memory"
 )
@@ -26,6 +28,7 @@ type RAGMemory struct {
 	indexer    *gorag.HybridIndexer
 	embedder   goragcore.Embedder
 	memoryType memory.MemoryType
+	graphStore goragcore.GraphStore
 	logger     logging.Logger
 }
 
@@ -45,6 +48,15 @@ type MemoryConfig struct {
 	Embedder goragcore.Embedder
 
 	ReadOnly bool
+
+	// GraphStore 可选。提供外部已创建的图数据库实例，用于 LLMIndexer 的实体/关系写入，
+	// 也供外部直接查询（GetNode, GetNeighbors, GetMultiHopPaths 等）。
+	// 当 LLMConfig 配置且此项为空时，会自动创建。
+	GraphStore goragcore.GraphStore
+
+	// LLMConfig 可选。非空时启用 LLMIndexer，在语义索引基础上增加知识图谱
+	// 实体/关系索引与标签系统（tags, summary, entity_ids）。
+	LLMConfig *goragindexer.ModelConfig
 }
 
 func (c MemoryConfig) dataDir() string {
@@ -140,10 +152,50 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 		return nil, fmt.Errorf("memory: create hybrid indexer: %w", err)
 	}
 
+	// ── LLMIndexer 模式（取代 semanticIndexer + graphIndexer）─────────
+	var graphStore goragcore.GraphStore
+	if cfg.LLMConfig != nil {
+		// 使用外部已创建的 GraphStore，或自动创建
+		if cfg.GraphStore != nil {
+			graphStore = cfg.GraphStore
+			logger.Info("memory: using external GraphStore for LLMIndexer")
+		} else {
+			graphDir := filepath.Join(dataDir, "knowledge-graph")
+			if mkErr := os.MkdirAll(graphDir, 0755); mkErr != nil {
+				return nil, fmt.Errorf("memory: create graph directory: %w", mkErr)
+			}
+			gs, gErr := graphgograph.NewGraphStore(filepath.Join(graphDir, "graph.db"))
+			if gErr != nil {
+				return nil, fmt.Errorf("memory: create graph store: %w", gErr)
+			}
+			graphStore = gs
+		}
+
+		// 删除 semanticIndexer（LLMIndexer 替代语义分块 + 实体提取）
+		indexer.RemoveIndexer("semantic")
+
+		llmIdx := goragindexer.New(
+			*cfg.LLMConfig,
+			cfg.Embedder,
+			vs,
+			graphStore,
+			goragindexer.WithLLMLogger(logger),
+		)
+		indexer.AddIndexer(llmIdx, 0.8)
+
+		logger.Info("memory: LLMIndexer enabled (replaces semantic+graph)",
+			"model", cfg.LLMConfig.Model,
+			"lang", cfg.LLMConfig.Language,
+			"ontology", cfg.LLMConfig.Ontology,
+			"max_tokens", cfg.LLMConfig.MaxTokens,
+		)
+	}
+
 	return &RAGMemory{
 		indexer:    indexer,
 		embedder:   cfg.Embedder,
 		memoryType: cfg.MemoryType,
+		graphStore: graphStore,
 		logger:     logger,
 	}, nil
 }
@@ -166,6 +218,13 @@ func (m *RAGMemory) MemoryType() memory.MemoryType {
 
 func (m *RAGMemory) Indexer() *gorag.HybridIndexer {
 	return m.indexer
+}
+
+// GraphStore 返回 LLMIndexer 使用的图数据库实例。
+// 可用于直接执行图查询（GetNode, GetNeighbors, GetMultiHopPaths 等）。
+// 仅当 LLMIndexer 启用时非空。
+func (m *RAGMemory) GraphStore() goragcore.GraphStore {
+	return m.graphStore
 }
 
 func (m *RAGMemory) Retrieve(ctx context.Context, query string, opts ...memory.RetrieveOption) ([]memory.MemoryRecord, error) {
@@ -283,6 +342,58 @@ func (m *RAGMemory) Delete(ctx context.Context, id string) error {
 func (m *RAGMemory) SyncProjectDir(ctx context.Context, projectDir, cacheDir string) *ProjectSyncResult {
 	pi := NewProjectIndexer(m.indexer, cacheDir, m.logger)
 	return pi.Sync(ctx, projectDir)
+}
+
+// MemoryStats summarizes the RAG indexing progress.
+type MemoryStats struct {
+	TotalFiles   int `json:"total_files"`
+	IndexedFiles int `json:"indexed_files"`
+	TotalChunks  int `json:"total_chunks"`
+}
+
+// Stats returns indexing statistics for the given project directory.
+func (m *RAGMemory) Stats(ctx context.Context, projectDir, cacheDir string) *MemoryStats {
+	stats := &MemoryStats{}
+
+	// Count total discoverable files by walking the project dir
+	// (same ignore logic as ProjectIndexer)
+	_ = filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		relPath, _ := filepath.Rel(projectDir, path)
+		if info.IsDir() {
+			name := info.Name()
+			if name != "." && (strings.HasPrefix(name, ".") || DefaultIgnoredDirs[name]) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Skip ignored files (check via relative path)
+		if relPath == "" || strings.HasPrefix(relPath, ".") {
+			return nil
+		}
+		stats.TotalFiles++
+		return nil
+	})
+
+	// Count indexed files from the ProjectIndexer cache
+	if cacheDir != "" {
+		pi := NewProjectIndexer(m.indexer, cacheDir, m.logger)
+		if err := pi.loadCache(); err == nil {
+			stats.IndexedFiles = len(pi.cache.Files)
+		}
+	}
+
+	// Count total chunks via Indexer
+	if m.indexer != nil {
+		count, err := m.indexer.Count(ctx)
+		if err == nil {
+			stats.TotalChunks = count
+		}
+	}
+
+	return stats
 }
 
 func (m *RAGMemory) Close(ctx context.Context) error {
