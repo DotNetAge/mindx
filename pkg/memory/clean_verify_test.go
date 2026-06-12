@@ -142,7 +142,7 @@ func TestIndexFileRejectsBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// We can't easily create a ProjectIndexer without a full HybridIndexer,
+	// We can't easily create an IndexService without a full HybridIndexer,
 	// so we test the validation helper directly.
 	if isValidFileContent([]byte{0x00, 0x01, 0x02, 0xFF}) {
 		t.Error("isValidFileContent should reject binary content")
