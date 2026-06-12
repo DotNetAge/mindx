@@ -1,5 +1,5 @@
 // Package logging provides structured logging capabilities for the MindX framework.
-// It uses GoReact's core.Logger interface to ensure compatibility across the entire stack.
+// It uses goharness's core.Logger interface to ensure compatibility across the entire stack.
 //
 // The API follows uber-go/zap's calling convention:
 //
@@ -20,12 +20,12 @@ import (
 	"log"
 	"os"
 
-	goreactlogging "github.com/DotNetAge/goreact/logging"
+	goharnesslogging "github.com/DotNetAge/goharness/logging"
 )
 
-// Logger is an alias for GoReact's core.Logger interface.
-// This ensures type compatibility across MindX and GoReact.
-type Logger = goreactlogging.Logger
+// Logger is an alias for goharness's core.Logger interface.
+// This ensures type compatibility across MindX and goharness.
+type Logger = goharnesslogging.Logger
 
 // Level represents the severity level of a log message.
 // Log levels are ordered from least to most severe: DEBUG < INFO < WARN < ERROR.

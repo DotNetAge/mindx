@@ -1,7 +1,7 @@
 package core
 
 import (
-	"github.com/DotNetAge/goreact/rule"
+	"github.com/DotNetAge/goharness/rule"
 )
 
 // MindxPermissionRuleStore implements rule.PermissionRuleStore

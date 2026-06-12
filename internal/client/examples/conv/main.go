@@ -193,7 +193,7 @@ require (
     charm.land/bubbletea/v2 v2.0.6
     charm.land/bubbles/v2  v2.1.0
     charm.land/lipgloss/v2 v2.0.3
-    github.com/DotNetAge/goreact v0.5.0
+    github.com/DotNetAge/goharness v0.5.0
     github.com/charmbracelet/x/ansi latest
 )`,
 					Collapsed: false,
@@ -214,7 +214,7 @@ require (
 				"**核心技术栈**：\n" +
 				"- UI 框架：bubbletea v2 + lipgloss v2（终端渲染）\n" +
 				"- 组件库：bubbles v2（viewport、spinner 等）\n" +
-				"- AI 编排：goreact v0.5（Agent 框架）\n\n" +
+				"- AI 编排：goharness v0.5（Agent 框架）\n\n" +
 				"接下来需要深入查看 internal/client 和 internal/core 的具体实现，了解架构分层。",
 			TokensIn:  280,
 			TokensOut: 150,
@@ -254,7 +254,7 @@ type App struct {
     sessions  SessionStore
 }
 
-func (a *App) CurrentAgent() (*goreact.Agent, error) {...}
+func (a *App) CurrentAgent() (*goharness.Agent, error) {...}
 func (a *App) ResolveAgent(name string) error {...}`,
 					Collapsed: false,
 				},
@@ -320,7 +320,7 @@ func (a *App) ResolveAgent(name string) error {...}`,
 |------|------|------|
 | **UI 层** | bubbletea v2 + lipgloss v2 | 终端界面渲染 |
 | **组件** | bubbles v2 (viewport/spinner) | 可复用 UI 组件 |
-| **AI 引擎** | goreact v0.5 | Agent 编排与推理 |
+| **AI 引擎** | goharness v0.5 | Agent 编排与推理 |
 
 ### 架构分层
 ` +
@@ -360,7 +360,7 @@ bubbletea v2
     └── bubbles v2
         └── viewport (滚动)
 
-goreact v0.5
+goharness v0.5
     └── Event Bus (事件驱动)
 ` + "```" + `
 

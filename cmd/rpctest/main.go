@@ -22,7 +22,7 @@ func main() {
 	}
 	fmt.Fprintf(os.Stderr, "已连接到 %s\n", addr)
 
-	// Register handler for ALL known event types (GoReact aligned)
+	// Register handler for ALL known event types (goharness aligned)
 	types := []gateway.ResponseType{
 		gateway.RespThinkingDelta,
 		gateway.RespThinkingDone,

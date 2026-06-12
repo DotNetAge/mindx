@@ -271,14 +271,14 @@ MindX adopts a layered architecture design, top to bottom:
 
 MindX's core capabilities are built upon the following proprietary technical frameworks:
 
-| Framework    | Purpose                             | Repository                                                             |
-| ------------ | ----------------------------------- | ---------------------------------------------------------------------- |
-| **GoReact**  | Agent Harness Framework             | [github.com/DotNetAge/goreact](https://github.com/DotNetAge/goreact)   |
-| **GoChat**   | LLM Unified Calling Framework       | [github.com/DotNetAge/gochat](https://github.com/DotNetAge/gochat)     |
-| **GoRAG**    | High-Performance RAG Framework      | [github.com/DotNetAge/gorag](https://github.com/DotNetAge/gorag)       |
-| **GoRT**     | Real-Time Communication Gateway     | [github.com/DotNetAge/gort](https://github.com/DotNetAge/gort)         |
-| **GoVector** | High-Performance Embedded Vector DB | [github.com/DotNetAge/govector](https://github.com/DotNetAge/govector) |
-| **GoGraph**  | High-Performance Embedded Graph DB  | [github.com/DotNetAge/gograph](https://github.com/DotNetAge/gograph)   |
+| Framework     | Purpose                             | Repository                                                               |
+| ------------- | ----------------------------------- | ------------------------------------------------------------------------ |
+| **goharness** | Agent Harness Framework             | [github.com/DotNetAge/goharness](https://github.com/DotNetAge/goharness) |
+| **GoChat**    | LLM Unified Calling Framework       | [github.com/DotNetAge/gochat](https://github.com/DotNetAge/gochat)       |
+| **GoRAG**     | High-Performance RAG Framework      | [github.com/DotNetAge/gorag](https://github.com/DotNetAge/gorag)         |
+| **GoRT**      | Real-Time Communication Gateway     | [github.com/DotNetAge/gort](https://github.com/DotNetAge/gort)           |
+| **GoVector**  | High-Performance Embedded Vector DB | [github.com/DotNetAge/govector](https://github.com/DotNetAge/govector)   |
+| **GoGraph**   | High-Performance Embedded Graph DB  | [github.com/DotNetAge/gograph](https://github.com/DotNetAge/gograph)     |
 
 ---
 

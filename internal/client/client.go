@@ -15,10 +15,10 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
-	"github.com/DotNetAge/goreact/config"
-	"github.com/DotNetAge/goreact/events"
-	goreactlogging "github.com/DotNetAge/goreact/logging"
-	goreactsession "github.com/DotNetAge/goreact/session"
+	"github.com/DotNetAge/goharness/config"
+	"github.com/DotNetAge/goharness/events"
+	goharnesslogging "github.com/DotNetAge/goharness/logging"
+	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/client/component/changes"
 	"github.com/DotNetAge/mindx/internal/client/component/conv"
 	"github.com/DotNetAge/mindx/internal/client/component/dialog"
@@ -108,7 +108,7 @@ type rootModel struct {
 	currentSessionID string
 }
 
-func (m *rootModel) getLogger() goreactlogging.Logger {
+func (m *rootModel) getLogger() goharnesslogging.Logger {
 	if m.app != nil {
 		return m.app.Logger()
 	}
@@ -277,7 +277,7 @@ func loadRecentSessions(app *appcore.App) ([]input.SessionItem, error) {
 	return items, nil
 }
 
-func messagesToConversations(sessionID, agentName string, msgs []goreactsession.Message) []conv.Conversation {
+func messagesToConversations(sessionID, agentName string, msgs []goharnesssession.Message) []conv.Conversation {
 	var convs []conv.Conversation
 	var current *conv.Conversation
 
@@ -307,7 +307,7 @@ func messagesToConversations(sessionID, agentName string, msgs []goreactsession.
 					rnd.ThoughtContent = msg.ReasoningContent
 				}
 			}
-			// 2) 收集所有 tool_calls 到 Map（GoReact 扁平格式 {id, name, arguments}）
+			// 2) 收集所有 tool_calls 到 Map（goharness 扁平格式 {id, name, arguments}）
 			for _, tc := range msg.ToolCalls {
 				var argsMap map[string]any
 				if tc.Arguments != "" {
@@ -404,7 +404,7 @@ func (m *rootModel) loadSessionTokenUsage(sessionID, agentName string) {
 	}
 
 	ctx := context.Background()
-	records, err := m.app.TokenUsageStore().Query(ctx, goreactsession.TokenUsageFilter{
+	records, err := m.app.TokenUsageStore().Query(ctx, goharnesssession.TokenUsageFilter{
 		SessionID: sessionID,
 	})
 	if err != nil || len(records) == 0 {
@@ -1247,8 +1247,8 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		ask.OnCycleEnd(func(d events.CycleInfo) {
 			m.program.Send(clientmsg.IterationMsg{SessionID: sessionID, Iteration: d.Iteration})
 		})
-		var tokenUsage goreactsession.TokenUsage
-		ask.OnTokenUsageRecorded(func(d goreactsession.TokenUsageRecord) {
+		var tokenUsage goharnesssession.TokenUsage
+		ask.OnTokenUsageRecorded(func(d goharnesssession.TokenUsageRecord) {
 			tokenUsage.InputTokens += d.PromptTokens
 			tokenUsage.OutputTokens += d.CompletionTokens
 			tokenUsage.CachedTokens += d.CachedTokens

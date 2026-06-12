@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	goreactmemory "github.com/DotNetAge/goreact/memory"
+	goharnessmemory "github.com/DotNetAge/goharness/memory"
 	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/logging"
@@ -90,7 +90,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	})
 
 	mem, err := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-		MemoryType: goreactmemory.MemoryTypeLongTerm,
+		MemoryType: goharnessmemory.MemoryTypeLongTerm,
 		AgentName:  "_shared",
 		MemoryDir:  memDir,
 		Embedder:   emb,
@@ -106,12 +106,12 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	}()
 
 	query := strings.Join(args, " ")
-	opts := []goreactmemory.RetrieveOption{
-		goreactmemory.WithMemoryLimit(queryFlags.limit),
-		goreactmemory.WithMemoryTypes(goreactmemory.MemoryTypeLongTerm),
+	opts := []goharnessmemory.RetrieveOption{
+		goharnessmemory.WithMemoryLimit(queryFlags.limit),
+		goharnessmemory.WithMemoryTypes(goharnessmemory.MemoryTypeLongTerm),
 	}
 	if queryFlags.minScore > 0 {
-		opts = append(opts, goreactmemory.WithMinScore(queryFlags.minScore))
+		opts = append(opts, goharnessmemory.WithMinScore(queryFlags.minScore))
 	}
 
 	start := time.Now()

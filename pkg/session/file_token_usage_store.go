@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	goreactsession "github.com/DotNetAge/goreact/session"
+	goharnesssession "github.com/DotNetAge/goharness/session"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,7 +28,7 @@ type yamlTokenUsageRecord struct {
 	Timestamp        time.Time `yaml:"timestamp"`
 }
 
-func toYamlRecord(r goreactsession.TokenUsageRecord) yamlTokenUsageRecord {
+func toYamlRecord(r goharnesssession.TokenUsageRecord) yamlTokenUsageRecord {
 	return yamlTokenUsageRecord{
 		ID:               r.ID,
 		SessionID:        r.SessionID,
@@ -45,8 +45,8 @@ func toYamlRecord(r goreactsession.TokenUsageRecord) yamlTokenUsageRecord {
 	}
 }
 
-func fromYamlRecord(yr yamlTokenUsageRecord) goreactsession.TokenUsageRecord {
-	return goreactsession.TokenUsageRecord{
+func fromYamlRecord(yr yamlTokenUsageRecord) goharnesssession.TokenUsageRecord {
+	return goharnesssession.TokenUsageRecord{
 		ID:               yr.ID,
 		SessionID:        yr.SessionID,
 		ConversationID:   yr.ConversationID,
@@ -62,7 +62,7 @@ func fromYamlRecord(yr yamlTokenUsageRecord) goreactsession.TokenUsageRecord {
 	}
 }
 
-// FileTokenUsageStore implements goreact/session.TokenUsageStore with unified
+// FileTokenUsageStore implements goharness/session.TokenUsageStore with unified
 // file-backed persistence. ALL records from every agent, session, and model
 // are stored in a single YAML file, differentiated by the Provider / Model /
 // Agent / Session dimension fields on TokenUsageRecord.
@@ -121,7 +121,7 @@ func (s *FileTokenUsageStore) saveAll(records []yamlTokenUsageRecord) error {
 }
 
 // Append writes a single TokenUsageRecord to the unified store.
-func (s *FileTokenUsageStore) Append(_ context.Context, record goreactsession.TokenUsageRecord) error {
+func (s *FileTokenUsageStore) Append(_ context.Context, record goharnesssession.TokenUsageRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -135,7 +135,7 @@ func (s *FileTokenUsageStore) Append(_ context.Context, record goreactsession.To
 
 // Query retrieves TokenUsageRecords matching the given filter from the unified store.
 // All filtering is done in-memory on the flat record collection.
-func (s *FileTokenUsageStore) Query(_ context.Context, filter goreactsession.TokenUsageFilter) ([]goreactsession.TokenUsageRecord, error) {
+func (s *FileTokenUsageStore) Query(_ context.Context, filter goharnesssession.TokenUsageFilter) ([]goharnesssession.TokenUsageRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -147,7 +147,7 @@ func (s *FileTokenUsageStore) Query(_ context.Context, filter goreactsession.Tok
 		return nil, nil
 	}
 
-	var result []goreactsession.TokenUsageRecord
+	var result []goharnesssession.TokenUsageRecord
 	for _, yr := range yamlRecs {
 		r := fromYamlRecord(yr)
 		if filter.SessionID != "" && r.SessionID != filter.SessionID {
@@ -174,7 +174,7 @@ func (s *FileTokenUsageStore) Query(_ context.Context, filter goreactsession.Tok
 		result = append(result, r)
 	}
 
-	out := make([]goreactsession.TokenUsageRecord, len(result))
+	out := make([]goharnesssession.TokenUsageRecord, len(result))
 	copy(out, result)
 	return out, nil
 }

@@ -6,7 +6,7 @@ import (
 	"runtime"
 
 	"charm.land/bubbles/v2/table"
-	goreactconfig "github.com/DotNetAge/goreact/config"
+	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/spf13/cobra"
 )
@@ -162,7 +162,7 @@ Examples:
 			}
 		}
 		if !found {
-			providers = append(providers, &goreactconfig.ProviderConfig{
+			providers = append(providers, &goharnessconfig.ProviderConfig{
 				Name:    providerAddFlags.name,
 				Title:   providerAddFlags.title,
 				BaseURL: providerAddFlags.baseURL,
@@ -278,7 +278,7 @@ Example:
 	},
 }
 
-func providerNames(providers []*goreactconfig.ProviderConfig) []string {
+func providerNames(providers []*goharnessconfig.ProviderConfig) []string {
 	names := make([]string, 0, len(providers))
 	for _, p := range providers {
 		names = append(names, p.Name)

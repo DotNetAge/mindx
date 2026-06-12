@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/DotNetAge/goreact/rule"
+	"github.com/DotNetAge/goharness/rule"
 	"github.com/DotNetAge/mindx/internal/i18n"
 )
 

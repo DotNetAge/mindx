@@ -3,12 +3,12 @@ package session
 import (
 	"context"
 
-	goreactmemory "github.com/DotNetAge/goreact/memory"
-	goreactsession "github.com/DotNetAge/goreact/session"
+	goharnessmemory "github.com/DotNetAge/goharness/memory"
+	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/pkg/memory"
 )
 
-var _ goreactsession.MemoryStore = (*RAGMemoryAdapter)(nil)
+var _ goharnesssession.MemoryStore = (*RAGMemoryAdapter)(nil)
 
 type RAGMemoryAdapter struct {
 	rag *memory.RAGMemory
@@ -22,8 +22,8 @@ func (a *RAGMemoryAdapter) Store(_ context.Context, sessionID, title, content st
 	if a.rag == nil {
 		return nil
 	}
-	_, err := a.rag.Store(context.Background(), goreactmemory.MemoryRecord{
-		Type:      goreactmemory.MemoryTypeSession,
+	_, err := a.rag.Store(context.Background(), goharnessmemory.MemoryRecord{
+		Type:      goharnessmemory.MemoryTypeSession,
 		SessionID: sessionID,
 		Title:     title,
 		Content:   content,
@@ -36,9 +36,9 @@ func (a *RAGMemoryAdapter) Retrieve(ctx context.Context, query, sessionID string
 		return nil, nil
 	}
 	records, err := a.rag.Retrieve(ctx, query,
-		goreactmemory.WithMemoryTypes(goreactmemory.MemoryTypeSession),
-		goreactmemory.WithMemorySessionID(sessionID),
-		goreactmemory.WithMemoryLimit(limit),
+		goharnessmemory.WithMemoryTypes(goharnessmemory.MemoryTypeSession),
+		goharnessmemory.WithMemorySessionID(sessionID),
+		goharnessmemory.WithMemoryLimit(limit),
 	)
 	if err != nil || len(records) == 0 {
 		return nil, err

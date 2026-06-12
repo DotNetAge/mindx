@@ -13,7 +13,6 @@ skills:
   - humanizer
   - content-factory
   - copywriting
-  - kg-manager
   - find-experts
 ---
 

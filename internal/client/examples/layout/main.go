@@ -485,7 +485,7 @@ func multiRoundExample() conv.Conversation {
 
 	c.Output = conv.Output{
 		Entries: []conv.OutputEntry{
-			{Role: "assistant", Content: "## 项目架构分析\n\n### 技术栈\n| 层级 | 技术 |\n|------|------|\n| UI | bubbletea v2 |\n| AI | goreact v0.5 |\n\n这是一个设计精良的 AI 终端应用。"},
+			{Role: "assistant", Content: "## 项目架构分析\n\n### 技术栈\n| 层级 | 技术 |\n|------|------|\n| UI | bubbletea v2 |\n| AI | goharness v0.5 |\n\n这是一个设计精良的 AI 终端应用。"},
 		},
 	}
 	return c

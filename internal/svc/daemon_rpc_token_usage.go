@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	goreactsession "github.com/DotNetAge/goreact/session"
+	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
 )
 
@@ -94,7 +94,7 @@ func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessa
 	since := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
 	until := since.AddDate(0, 1, 0)
 
-	filter := goreactsession.TokenUsageFilter{
+	filter := goharnesssession.TokenUsageFilter{
 		ModelName: p.Model,
 		Since:     since,
 		Until:     until,
@@ -168,7 +168,7 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 		"local_tz", time.Local.String(),
 	)
 
-	filter := goreactsession.TokenUsageFilter{
+	filter := goharnesssession.TokenUsageFilter{
 		Since: since,
 		Until: until,
 	}
@@ -311,7 +311,7 @@ func emptyMonthlyResult(year, month int) map[string]any {
 	}
 }
 
-func calculateRecordCost(mc core.ModelCost, r goreactsession.TokenUsageRecord) float64 {
+func calculateRecordCost(mc core.ModelCost, r goharnesssession.TokenUsageRecord) float64 {
 	cost := 0.0
 	if mc.CostPer1MIn > 0 {
 		cost += mc.CostPer1MIn / 1_000_000 * float64(r.PromptTokens)
@@ -334,7 +334,7 @@ func roundCost(v float64) float64 {
 	return float64(int(v*10000)) / 10000
 }
 
-func resolveProvider(records []goreactsession.TokenUsageRecord) string {
+func resolveProvider(records []goharnesssession.TokenUsageRecord) string {
 	for _, r := range records {
 		if r.ProviderName != "" {
 			return r.ProviderName

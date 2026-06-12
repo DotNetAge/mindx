@@ -5,15 +5,15 @@ import (
 	"os"
 	"path/filepath"
 
-	goreactconfig "github.com/DotNetAge/goreact/config"
+	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"gopkg.in/yaml.v3"
 )
 
 type ProvidersConfig struct {
-	Providers []goreactconfig.ProviderConfig `yaml:"providers"`
+	Providers []goharnessconfig.ProviderConfig `yaml:"providers"`
 }
 
-func LoadProvidersFile(path string) ([]*goreactconfig.ProviderConfig, error) {
+func LoadProvidersFile(path string) ([]*goharnessconfig.ProviderConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -27,7 +27,7 @@ func LoadProvidersFile(path string) ([]*goreactconfig.ProviderConfig, error) {
 		return nil, fmt.Errorf("failed to parse provider file: %w", err)
 	}
 
-	result := make([]*goreactconfig.ProviderConfig, 0, len(cfg.Providers))
+	result := make([]*goharnessconfig.ProviderConfig, 0, len(cfg.Providers))
 	for i := range cfg.Providers {
 		if cfg.Providers[i].Name == "" {
 			return nil, fmt.Errorf("provider config missing name")
@@ -37,14 +37,14 @@ func LoadProvidersFile(path string) ([]*goreactconfig.ProviderConfig, error) {
 	return result, nil
 }
 
-func SaveProvidersFile(path string, providers []*goreactconfig.ProviderConfig) error {
+func SaveProvidersFile(path string, providers []*goharnessconfig.ProviderConfig) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create provider directory: %w", err)
 	}
 
 	wrapper := ProvidersConfig{
-		Providers: make([]goreactconfig.ProviderConfig, 0, len(providers)),
+		Providers: make([]goharnessconfig.ProviderConfig, 0, len(providers)),
 	}
 	for _, p := range providers {
 		if p != nil {

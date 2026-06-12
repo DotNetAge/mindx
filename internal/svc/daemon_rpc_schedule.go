@@ -48,7 +48,7 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 	}
 
 	// Strip @ prefix if present — agent names are stored without @ in the
-	// agent registry (goreact convention). MindX uses @ as a display prefix.
+	// agent registry (goharness convention). MindX uses @ as a display prefix.
 	p.Agent = strings.TrimPrefix(p.Agent, "@")
 
 	if p.Agent == "" {

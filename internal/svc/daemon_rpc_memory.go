@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	goreactmemory "github.com/DotNetAge/goreact/memory"
+	goharnessmemory "github.com/DotNetAge/goharness/memory"
 
 	"github.com/DotNetAge/mindx/pkg/memory"
 )
@@ -49,19 +49,19 @@ func (d *Daemon) handleMemoryQuery(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("memory service not available (embedder not configured)")
 	}
 
-	opts := []goreactmemory.RetrieveOption{}
+	opts := []goharnessmemory.RetrieveOption{}
 	if p.Limit > 0 {
-		opts = append(opts, goreactmemory.WithMemoryLimit(p.Limit))
+		opts = append(opts, goharnessmemory.WithMemoryLimit(p.Limit))
 	}
 	if p.MinScore > 0 {
-		opts = append(opts, goreactmemory.WithMinScore(p.MinScore))
+		opts = append(opts, goharnessmemory.WithMinScore(p.MinScore))
 	}
 	if p.Type != "" {
 		switch p.Type {
 		case "longterm":
-			opts = append(opts, goreactmemory.WithMemoryTypes(goreactmemory.MemoryTypeLongTerm))
+			opts = append(opts, goharnessmemory.WithMemoryTypes(goharnessmemory.MemoryTypeLongTerm))
 		case "session":
-			opts = append(opts, goreactmemory.WithMemoryTypes(goreactmemory.MemoryTypeSession))
+			opts = append(opts, goharnessmemory.WithMemoryTypes(goharnessmemory.MemoryTypeSession))
 		}
 	}
 
@@ -71,7 +71,7 @@ func (d *Daemon) handleMemoryQuery(_ context.Context, params json.RawMessage) (a
 	}
 
 	if records == nil {
-		return []goreactmemory.MemoryRecord{}, nil
+		return []goharnessmemory.MemoryRecord{}, nil
 	}
 	return records, nil
 }
@@ -97,16 +97,16 @@ func (d *Daemon) handleMemoryStore(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("memory service not available (embedder not configured)")
 	}
 
-	record := goreactmemory.MemoryRecord{
+	record := goharnessmemory.MemoryRecord{
 		Title:     p.Title,
 		Content:   p.Content,
 		Tags:      p.Tags,
 		CreatedAt: time.Now(),
 	}
 	if p.Type == "session" {
-		record.Type = goreactmemory.MemoryTypeSession
+		record.Type = goharnessmemory.MemoryTypeSession
 	} else {
-		record.Type = goreactmemory.MemoryTypeLongTerm
+		record.Type = goharnessmemory.MemoryTypeLongTerm
 	}
 
 	id, err := mem.Store(context.Background(), record)

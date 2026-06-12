@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	goreactconfig "github.com/DotNetAge/goreact/config"
-	goreactsession "github.com/DotNetAge/goreact/session"
+	goharnessconfig "github.com/DotNetAge/goharness/config"
+	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
@@ -51,7 +51,7 @@ func mustCreateSession(t *testing.T, sessDB *mindxses.FileSessionStore, agentNam
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	msg := goreactsession.Message{
+	msg := goharnesssession.Message{
 		Role:      "user",
 		Content:   "init",
 		Timestamp: time.Now().UnixMilli(),
@@ -75,7 +75,7 @@ func TestHandleSessionList_Empty(t *testing.T) {
 		t.Fatalf("handleSessionList error = %v", err)
 	}
 
-	sessions, ok := result.([]goreactsession.SessionInfo)
+	sessions, ok := result.([]goharnesssession.SessionInfo)
 	if !ok {
 		t.Fatalf("expected []SessionInfo, got %T", result)
 	}
@@ -102,7 +102,7 @@ func TestHandleSessionList_WithSessions(t *testing.T) {
 		t.Fatalf("handleSessionList error = %v", err)
 	}
 
-	sessions, ok := result.([]goreactsession.SessionInfo)
+	sessions, ok := result.([]goharnesssession.SessionInfo)
 	if !ok {
 		t.Fatalf("expected []SessionInfo, got %T", result)
 	}
@@ -126,7 +126,7 @@ func TestHandleSessionList_FilterByAgent(t *testing.T) {
 		t.Fatalf("handleSessionList error = %v", err)
 	}
 
-	sessions, ok := result.([]goreactsession.SessionInfo)
+	sessions, ok := result.([]goharnesssession.SessionInfo)
 	if !ok {
 		t.Fatalf("expected []SessionInfo, got %T", result)
 	}
@@ -217,7 +217,7 @@ func TestHandleSessionGet_NotFound(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected map, got %T", result)
 	}
-	msgs, ok := m["messages"].([]goreactsession.Message)
+	msgs, ok := m["messages"].([]goharnesssession.Message)
 	if !ok {
 		t.Fatalf("expected messages to be []Message, got %T", m["messages"])
 	}
@@ -531,7 +531,7 @@ func TestHandleAgentUpdate_OK(t *testing.T) {
 	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
 	mustCreateAgentFile(t, agentsDir, "test-updater")
 
-	reloaded, _ := goreactconfig.LoadAgentsFrom(agentsDir)
+	reloaded, _ := goharnessconfig.LoadAgentsFrom(agentsDir)
 	if reloaded != nil {
 		d.app.SetAgentsRegistry(reloaded)
 	}
@@ -584,7 +584,7 @@ func TestHandleAgentUpdate_PartialFieldsOnly(t *testing.T) {
 	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
 	mustCreateAgentFile(t, agentsDir, "partial-agent")
 
-	reloaded, _ := goreactconfig.LoadAgentsFrom(agentsDir)
+	reloaded, _ := goharnessconfig.LoadAgentsFrom(agentsDir)
 	if reloaded != nil {
 		d.app.SetAgentsRegistry(reloaded)
 	}
@@ -622,7 +622,7 @@ func TestHandleAgentUpdate_UpdateBody(t *testing.T) {
 	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
 	mustCreateAgentFile(t, agentsDir, "body-agent")
 
-	reloaded, _ := goreactconfig.LoadAgentsFrom(agentsDir)
+	reloaded, _ := goharnessconfig.LoadAgentsFrom(agentsDir)
 	if reloaded != nil {
 		d.app.SetAgentsRegistry(reloaded)
 	}

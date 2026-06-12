@@ -3,7 +3,7 @@ package msg
 import (
 	"time"
 
-	"github.com/DotNetAge/goreact/session"
+	"github.com/DotNetAge/goharness/session"
 )
 
 type ThinkingDeltaMsg struct {

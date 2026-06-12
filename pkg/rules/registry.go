@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/DotNetAge/goreact/rule"
+	"github.com/DotNetAge/goharness/rule"
 	"gopkg.in/yaml.v3"
 )
 

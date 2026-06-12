@@ -49,7 +49,7 @@ func main() {
 						"| 依赖 | 版本 | 用途 |\n" +
 						"|------|------|------|\n" +
 						"| bubbletea | v2 | 终端 UI 框架 |\n" +
-						"| goreact | v0.5 | AI Agent 编排 |\n" +
+						"| goharness | v0.5 | AI Agent 编排 |\n" +
 						"| chromadb | v0.3 | 向量存储 |\n\n" +
 						"### 建议\n\n" +
 						"- 所有依赖版本兼容\n" +

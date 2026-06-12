@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/gorag"
 	goragindexer "github.com/DotNetAge/gorag/indexer"
 	"github.com/DotNetAge/gorag/logging"
-	"github.com/DotNetAge/goreact/session"
 )
 
 // IndexService synchronizes a project directory into a HybridIndexer.
@@ -24,7 +24,7 @@ import (
 //	if result.Err != nil { ... }
 type IndexService struct {
 	indexer    *gorag.HybridIndexer
-	cache      *projectFileCache
+	cache      *fileCache
 	cacheDir   string
 	ignore     *IgnoreRules
 	logger     logging.Logger
@@ -70,24 +70,24 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 
 	absDir, err := filepath.Abs(projectDir)
 	if err != nil {
-		result.Err = fmt.Errorf("project_indexer: resolve project dir: %w", err)
+		result.Err = fmt.Errorf("index-service: resolve project dir: %w", err)
 		return result
 	}
 
 	if p.logger != nil {
-		p.logger.Info("project_indexer.sync.start", "dir", absDir)
+		p.logger.Info("index-service.sync.start", "dir", absDir)
 	}
 
 	// Load rules and cache
 	p.ignore = LoadMindxIgnore(absDir)
 	if err := p.cache.LoadFromFile(p.cacheDir); err != nil && p.logger != nil {
-		p.logger.Warn("project_indexer: failed to load cache, starting fresh", "error", err)
+		p.logger.Warn("index-service: failed to load cache, starting fresh", "error", err)
 	}
 
 	// Walk project dir, collect files
 	currentFiles, walkErr := walkProjectDir(ctx, absDir, p.ignore)
 	if walkErr != nil {
-		result.Err = fmt.Errorf("project_indexer: walk project dir: %w", walkErr)
+		result.Err = fmt.Errorf("index-service: walk project dir: %w", walkErr)
 		return result
 	}
 
@@ -96,7 +96,7 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 		if info.Size() > MaxFileSize {
 			result.Skipped++
 			if p.logger != nil {
-				p.logger.Warn("project_indexer: file too large, skipped", "path", relPath, "size", info.Size())
+				p.logger.Warn("index-service: file too large, skipped", "path", relPath, "size", info.Size())
 			}
 			continue
 		}
@@ -112,7 +112,7 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 		if idxErr != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", relPath, idxErr))
 			if p.logger != nil {
-				p.logger.Warn("project_indexer: index failed", "path", relPath, "error", idxErr)
+				p.logger.Warn("index-service: index failed", "path", relPath, "error", idxErr)
 			}
 			continue
 		}
@@ -143,12 +143,12 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 
 	// Persist cache
 	if saveErr := p.cache.SaveToFile(p.cacheDir); saveErr != nil && p.logger != nil {
-		p.logger.Warn("project_indexer: failed to save cache", "error", saveErr)
+		p.logger.Warn("index-service: failed to save cache", "error", saveErr)
 	}
 
 	result.Elapsed = time.Since(start)
 	if p.logger != nil {
-		p.logger.Info("project_indexer.sync.done",
+		p.logger.Info("index-service.sync.done",
 			"dir", absDir,
 			"indexed", result.Indexed,
 			"updated", result.Updated,
@@ -174,14 +174,14 @@ func (p *IndexService) SyncFiles(ctx context.Context, projectDir string, relFile
 
 	absDir, err := filepath.Abs(projectDir)
 	if err != nil {
-		result.Err = fmt.Errorf("project_indexer: resolve project dir: %w", err)
+		result.Err = fmt.Errorf("index-service: resolve project dir: %w", err)
 		return result
 	}
 
 	// Load rules and cache
 	p.ignore = LoadMindxIgnore(absDir)
 	if err := p.cache.LoadFromFile(p.cacheDir); err != nil && p.logger != nil {
-		p.logger.Warn("project_indexer: failed to load cache, starting fresh", "error", err)
+		p.logger.Warn("index-service: failed to load cache, starting fresh", "error", err)
 	}
 
 	for _, relPath := range relFiles {
@@ -213,7 +213,7 @@ func (p *IndexService) SyncFiles(ctx context.Context, projectDir string, relFile
 		if info.Size() > MaxFileSize {
 			result.Skipped++
 			if p.logger != nil {
-				p.logger.Warn("project_indexer: file too large, skipped", "path", relPath, "size", info.Size())
+				p.logger.Warn("index-service: file too large, skipped", "path", relPath, "size", info.Size())
 			}
 			continue
 		}
@@ -228,7 +228,7 @@ func (p *IndexService) SyncFiles(ctx context.Context, projectDir string, relFile
 		if idxErr != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", relPath, idxErr))
 			if p.logger != nil {
-				p.logger.Warn("project_indexer: index failed", "path", relPath, "error", idxErr)
+				p.logger.Warn("index-service: index failed", "path", relPath, "error", idxErr)
 			}
 			continue
 		}
@@ -249,7 +249,7 @@ func (p *IndexService) SyncFiles(ctx context.Context, projectDir string, relFile
 	}
 
 	if saveErr := p.cache.SaveToFile(p.cacheDir); saveErr != nil && p.logger != nil {
-		p.logger.Warn("project_indexer: failed to save cache", "error", saveErr)
+		p.logger.Warn("index-service: failed to save cache", "error", saveErr)
 	}
 
 	result.Elapsed = time.Since(start)
@@ -263,20 +263,20 @@ func (p *IndexService) SyncFiles(ctx context.Context, projectDir string, relFile
 func (p *IndexService) ScanFileStates(ctx context.Context, projectDir string) ([]FileStateInfo, error) {
 	absDir, err := filepath.Abs(projectDir)
 	if err != nil {
-		return nil, fmt.Errorf("project_indexer: resolve project dir: %w", err)
+		return nil, fmt.Errorf("index-service: resolve project dir: %w", err)
 	}
 
 	ignore := LoadMindxIgnore(absDir)
 
 	// Load cache (best-effort — may not exist yet)
 	if err := p.cache.LoadFromFile(p.cacheDir); err != nil && p.logger != nil {
-		p.logger.Warn("project_indexer.scan: failed to load cache", "error", err)
+		p.logger.Warn("index-service.scan: failed to load cache", "error", err)
 	}
 
 	// Walk project dir collecting current files
 	currentFiles, walkErr := walkProjectDir(ctx, absDir, ignore)
 	if walkErr != nil {
-		return nil, fmt.Errorf("project_indexer: walk project dir: %w", walkErr)
+		return nil, fmt.Errorf("index-service: walk project dir: %w", walkErr)
 	}
 
 	var states []FileStateInfo
@@ -345,7 +345,7 @@ func (p *IndexService) indexFile(ctx context.Context, absPath string) ([]chunkIn
 	}
 	if !isValidFileContent(raw) {
 		if p.logger != nil {
-			p.logger.Warn("project_indexer: content quality check failed, skipped",
+			p.logger.Warn("index-service: content quality check failed, skipped",
 				"path", absPath,
 				"bytes", len(raw),
 			)
@@ -399,7 +399,7 @@ func (p *IndexService) recordTokenUsage(ctx context.Context) {
 		Timestamp:        time.Now(),
 	}
 	if err := p.usageStore.Append(ctx, record); err != nil && p.logger != nil {
-		p.logger.Warn("project_indexer: failed to record token usage", "error", err)
+		p.logger.Warn("index-service: failed to record token usage", "error", err)
 	}
 }
 
@@ -407,7 +407,7 @@ func (p *IndexService) recordTokenUsage(ctx context.Context) {
 func (p *IndexService) removeChunks(ctx context.Context, chunks []chunkInfo) {
 	for _, ci := range chunks {
 		if err := p.indexer.Remove(ctx, ci.ID); err != nil && p.logger != nil {
-			p.logger.Warn("project_indexer: failed to remove chunk", "id", ci.ID, "error", err)
+			p.logger.Warn("index-service: failed to remove chunk", "id", ci.ID, "error", err)
 		}
 	}
 }

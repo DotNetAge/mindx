@@ -273,14 +273,14 @@ MindX 采用分层架构设计，从上至下分为：
 
 MindX 的核心能力建立在以下全自研技术框架之上：
 
-| 框架         | 定位                   | 仓库                                                                   |
-| ------------ | ---------------------- | ---------------------------------------------------------------------- |
-| **GoReact**  | Agent Harness 框架     | [github.com/DotNetAge/goreact](https://github.com/DotNetAge/goreact)   |
-| **GoChat**   | LLM 统一调用框架       | [github.com/DotNetAge/gochat](https://github.com/DotNetAge/gochat)     |
-| **GoRAG**    | 高性能 RAG 框架        | [github.com/DotNetAge/gorag](https://github.com/DotNetAge/gorag)       |
-| **GoRT**     | 实时通信网关框架       | [github.com/DotNetAge/gort](https://github.com/DotNetAge/gort)         |
-| **GoVector** | 高性能嵌入式向量数据库 | [github.com/DotNetAge/govector](https://github.com/DotNetAge/govector) |
-| **GoGraph**  | 高性能嵌入式图数据库   | [github.com/DotNetAge/gograph](https://github.com/DotNetAge/gograph)   |
+| 框架          | 定位                   | 仓库                                                                     |
+| ------------- | ---------------------- | ------------------------------------------------------------------------ |
+| **goharness** | Agent Harness 框架     | [github.com/DotNetAge/goharness](https://github.com/DotNetAge/goharness) |
+| **GoChat**    | LLM 统一调用框架       | [github.com/DotNetAge/gochat](https://github.com/DotNetAge/gochat)       |
+| **GoRAG**     | 高性能 RAG 框架        | [github.com/DotNetAge/gorag](https://github.com/DotNetAge/gorag)         |
+| **GoRT**      | 实时通信网关框架       | [github.com/DotNetAge/gort](https://github.com/DotNetAge/gort)           |
+| **GoVector**  | 高性能嵌入式向量数据库 | [github.com/DotNetAge/govector](https://github.com/DotNetAge/govector)   |
+| **GoGraph**   | 高性能嵌入式图数据库   | [github.com/DotNetAge/gograph](https://github.com/DotNetAge/gograph)     |
 
 ---
 

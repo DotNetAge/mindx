@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	goreactconfig "github.com/DotNetAge/goreact/config"
+	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/mindx/internal/core"
 	"gopkg.in/yaml.v3"
 )
@@ -14,11 +14,11 @@ import (
 func (d *Daemon) handleModelList(_ context.Context, _ json.RawMessage) (any, error) {
 	models := d.app.Models()
 	if models == nil {
-		return []goreactconfig.ModelConfig{}, nil
+		return []goharnessconfig.ModelConfig{}, nil
 	}
 	list := models.List()
 	if list == nil {
-		return []goreactconfig.ModelConfig{}, nil
+		return []goharnessconfig.ModelConfig{}, nil
 	}
 	return list, nil
 }
@@ -140,7 +140,7 @@ func (d *Daemon) handleProviderCreate(_ context.Context, params json.RawMessage)
 		}
 	}
 
-	newProvider := &goreactconfig.ProviderConfig{
+	newProvider := &goharnessconfig.ProviderConfig{
 		Name:      p.Name,
 		Title:     p.Title,
 		BaseURL:   p.BaseURL,
@@ -245,7 +245,7 @@ func (d *Daemon) handleProviderDelete(_ context.Context, params json.RawMessage)
 	}
 
 	existing := d.app.ProviderConfigs()
-	filtered := make([]*goreactconfig.ProviderConfig, 0, len(existing))
+	filtered := make([]*goharnessconfig.ProviderConfig, 0, len(existing))
 	for _, ep := range existing {
 		if ep.Name != p.Name {
 			filtered = append(filtered, ep)
@@ -309,7 +309,7 @@ func (d *Daemon) handleModelCreate(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("model %q already exists", p.Name)
 	}
 
-	newCfg := &goreactconfig.ModelConfig{
+	newCfg := &goharnessconfig.ModelConfig{
 		Name:              p.Name,
 		Title:             p.Title,
 		Description:       p.Description,
@@ -513,7 +513,7 @@ func (d *Daemon) handleModelDelete(_ context.Context, params json.RawMessage) (a
 // --- Helpers ---
 
 func deleteModelFromFile(models interface {
-	GetRaw(string) *goreactconfig.ModelConfig
+	GetRaw(string) *goharnessconfig.ModelConfig
 }, settingPath string, name string) error {
 	data, err := os.ReadFile(settingPath)
 	if err != nil {
@@ -521,14 +521,14 @@ func deleteModelFromFile(models interface {
 	}
 
 	var wrapper struct {
-		Models    []goreactconfig.ModelConfig    `yaml:"models"`
-		Providers []goreactconfig.ProviderConfig `yaml:"providers,omitempty"`
+		Models    []goharnessconfig.ModelConfig    `yaml:"models"`
+		Providers []goharnessconfig.ProviderConfig `yaml:"providers,omitempty"`
 	}
 	if err := yaml.Unmarshal(data, &wrapper); err != nil {
 		return fmt.Errorf("parse yaml: %w", err)
 	}
 
-	filtered := make([]goreactconfig.ModelConfig, 0, len(wrapper.Models))
+	filtered := make([]goharnessconfig.ModelConfig, 0, len(wrapper.Models))
 	for _, m := range wrapper.Models {
 		if m.Name != name {
 			filtered = append(filtered, m)
@@ -561,7 +561,7 @@ func paramsContainsKey(raw json.RawMessage, key string) bool {
 	return ok
 }
 
-func providerIndex(providers []*goreactconfig.ProviderConfig, name string) int {
+func providerIndex(providers []*goharnessconfig.ProviderConfig, name string) int {
 	for i, p := range providers {
 		if p.Name == name {
 			return i

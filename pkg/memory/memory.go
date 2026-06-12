@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DotNetAge/goharness/memory"
 	"github.com/DotNetAge/gorag"
 	goragcore "github.com/DotNetAge/gorag/core"
 	"github.com/DotNetAge/gorag/embedder"
@@ -18,7 +19,6 @@ import (
 	"github.com/DotNetAge/gorag/store/doc/bleve"
 	graphgograph "github.com/DotNetAge/gorag/store/graph/gograph"
 	"github.com/DotNetAge/gorag/store/vector/govector"
-	"github.com/DotNetAge/goreact/memory"
 )
 
 var _ memory.Memory = (*RAGMemory)(nil)

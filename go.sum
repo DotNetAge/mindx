@@ -15,12 +15,10 @@ github.com/DotNetAge/gochat v0.2.7 h1:W06T9dRx46QlWkFDlpRSGtpdgNb8m9meTPxycRX/xZ
 github.com/DotNetAge/gochat v0.2.7/go.mod h1:w7m36rMZoDwmReJNTLUGHhok6DSqnIidg9wFKwYM1dM=
 github.com/DotNetAge/gograph v0.2.4 h1:u+JDwtY8in2xRSvcf8b7aWCCMFuXL97vJ0jfEiQTOKM=
 github.com/DotNetAge/gograph v0.2.4/go.mod h1:Ia2wvbkpdJvFJEZ1vw+IklbhNbWjPli2dnU21jbmy7I=
-github.com/DotNetAge/goreact v0.1.5 h1:nDdDANjNlqrVl6pm7F1JRsG2/V4qjSab4iiZVcEsxZE=
-github.com/DotNetAge/goreact v0.1.5/go.mod h1:TVUMEphPUWunCCtOw6iI9hvobsbp7m6fuN7wQKo4JVo=
+github.com/DotNetAge/goharness v0.1.6 h1:fGjts8lrzWDbeEtS7snD+7tlJSpbrSXZS4nL2OKM3f4=
+github.com/DotNetAge/goharness v0.1.6/go.mod h1:+kx9N2I5nkKquSD8xcN1JR9U1mHOpVtMTcGQbV1NGQ4=
 github.com/DotNetAge/gort v0.1.3 h1:7B937eD1HH4H996sFeTIr43fq7S91OArhD7YYmJS7Dg=
 github.com/DotNetAge/gort v0.1.3/go.mod h1:m6mjzyaP/Ufx+Uv7uh51BSK7N4LVR/viWEHV9ZQ3OM8=
-github.com/DotNetAge/govector v0.1.7 h1:go8k0rwAjVtX3wYZ4flsQZXe1QquGqnD/hQLTH5Re94=
-github.com/DotNetAge/govector v0.1.7/go.mod h1:0/jnt1Xnghs6V7zr8iZ22QDO0a0ulpkn2cl8orXt6DY=
 github.com/DotNetAge/govector v0.1.8 h1:LwNJecCbLgj0ISXBRUCQziPYBbYxtr+3jVEKvXzK7wo=
 github.com/DotNetAge/govector v0.1.8/go.mod h1:0/jnt1Xnghs6V7zr8iZ22QDO0a0ulpkn2cl8orXt6DY=
 github.com/JohannesKaufmann/html-to-markdown v1.6.0 h1:04VXMiE50YYfCfLboJCLcgqF5x+rHJnb1ssNmqpLH/k=
