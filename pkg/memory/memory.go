@@ -340,7 +340,7 @@ func (m *RAGMemory) Delete(ctx context.Context, id string) error {
 }
 
 func (m *RAGMemory) SyncProjectDir(ctx context.Context, projectDir, cacheDir string) *ProjectSyncResult {
-	pi := NewProjectIndexer(m.indexer, cacheDir, m.logger)
+	pi := NewIndexService(m.indexer, cacheDir, m.logger)
 	return pi.Sync(ctx, projectDir)
 }
 
@@ -356,7 +356,7 @@ func (m *RAGMemory) Stats(ctx context.Context, projectDir, cacheDir string) *Mem
 	stats := &MemoryStats{}
 
 	// Count total discoverable files by walking the project dir
-	// (same ignore logic as ProjectIndexer)
+	// (same ignore logic as IndexService)
 	_ = filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
@@ -377,10 +377,10 @@ func (m *RAGMemory) Stats(ctx context.Context, projectDir, cacheDir string) *Mem
 		return nil
 	})
 
-	// Count indexed files from the ProjectIndexer cache
+	// Count indexed files from the IndexService cache
 	if cacheDir != "" {
-		pi := NewProjectIndexer(m.indexer, cacheDir, m.logger)
-		if err := pi.loadCache(); err == nil {
+		pi := NewIndexService(m.indexer, cacheDir, m.logger)
+		if err := pi.cache.LoadFromFile(pi.cacheDir); err == nil {
 			stats.IndexedFiles = len(pi.cache.Files)
 		}
 	}

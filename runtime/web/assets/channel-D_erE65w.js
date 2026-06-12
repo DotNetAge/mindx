@@ -1,1 +1,0 @@
-import{Dn as e,On as t}from"./index-DeQuu01v.js";var n=(n,r)=>t.lang.round(e.parse(n)[r]);export{n as t};

@@ -357,7 +357,7 @@ func decodeKVItem(key string, data []byte) *kvItem {
 // initKVStore opens (or creates) the bbolt KV database under ~/.mindx/data/.
 // Returns (*bbolt.DB, error). Callers should close db on shutdown.
 func initKVStore(dataDir string) (*bbolt.DB, error) {
-	dbPath := filepath.Join(dataDir, "kvstore.db")
+	dbPath := filepath.Join(dataDir, "kv.db")
 
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
 		return nil, fmt.Errorf("failed to create kvstore dir: %w", err)

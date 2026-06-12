@@ -546,13 +546,13 @@ func (d *Daemon) handleMemoryFileStates(_ context.Context, params json.RawMessag
 		cacheDir = filepath.Join(cacheBase, sanitizeDirName(p.ProjectDir))
 	}
 
-	// Create a temporary ProjectIndexer for scanning (no indexing performed)
+	// Create a temporary IndexService for scanning (no indexing performed)
 	indexer := mem.Indexer()
 	if indexer == nil {
 		return nil, fmt.Errorf("indexer not initialized")
 	}
 
-	pi := memory.NewProjectIndexer(indexer, cacheDir, d.logger)
+	pi := memory.NewIndexService(indexer, cacheDir, d.logger)
 	states, err := pi.ScanFileStates(context.Background(), p.ProjectDir)
 	if err != nil {
 		return nil, fmt.Errorf("file states scan failed: %w", err)

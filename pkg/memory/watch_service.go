@@ -35,15 +35,17 @@ type pendingChange struct {
 //	         ↓
 //	FileWatchService (reads watchlist, registers fsnotify watchers)
 //	         ↓
-//	ProjectIndexer.SyncFiles() (incremental index)
+//
+// IndexService.SyncFiles() (incremental index)
+//
 //	         ↓
 //	LongTerm RAG Index (shared knowledge base)
 type FileWatchService struct {
 	indexer   *gorag.HybridIndexer
 	store     *WatchListStore
 	watcher   *fsnotify.Watcher
-	indexers  map[string]*ProjectIndexer // keyed by abs dir
-	cacheBase string                     // base directory for per-dir indexing caches
+	indexers  map[string]*IndexService // keyed by abs dir
+	cacheBase string                   // base directory for per-dir indexing caches
 	logger    logging.Logger
 
 	// VersionRecorder is called for each changed file to persist version snapshots.
@@ -80,7 +82,7 @@ func NewFileWatchService(
 	return &FileWatchService{
 		indexer:   indexer,
 		store:     store,
-		indexers:  make(map[string]*ProjectIndexer),
+		indexers:  make(map[string]*IndexService),
 		cacheBase: cacheBaseDir,
 		logger:    logger,
 		debounce:  make(map[string]time.Time),
@@ -272,7 +274,7 @@ func (s *FileWatchService) watchDir(absDir string) error {
 		if !info.IsDir() {
 			return nil
 		}
-		// Skip hidden and ignored directories (same logic as project_indexer)
+		// Skip hidden and ignored directories (same logic as index_service)
 		if path != realDir {
 			base := info.Name()
 			if strings.HasPrefix(base, ".") {
@@ -402,7 +404,7 @@ func (s *FileWatchService) processChanges(pending map[string][]pendingChange) {
 			continue
 		}
 
-		// Get or create a ProjectIndexer for this directory
+		// Get or create an IndexService for this directory
 		pi := s.getIndexer(absDir)
 
 		// Separate deletes from creates
@@ -499,15 +501,15 @@ func (s *FileWatchService) findRootDir(absPath string) string {
 	return ""
 }
 
-// getIndexer returns a ProjectIndexer for the given directory, creating one if needed.
-func (s *FileWatchService) getIndexer(absDir string) *ProjectIndexer {
+// getIndexer returns an IndexService for the given directory, creating one if needed.
+func (s *FileWatchService) getIndexer(absDir string) *IndexService {
 	if pi, ok := s.indexers[absDir]; ok {
 		return pi
 	}
 
 	// Each dir gets its own cache directory named by sanitized path
 	cacheDir := filepath.Join(s.cacheBase, sanitizeDirName(absDir))
-	pi := NewProjectIndexer(s.indexer, cacheDir, s.logger)
+	pi := NewIndexService(s.indexer, cacheDir, s.logger)
 	s.indexers[absDir] = pi
 	return pi
 }

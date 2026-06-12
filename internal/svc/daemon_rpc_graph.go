@@ -279,7 +279,7 @@ func (d *Daemon) handleGraphGetNeighbors(_ context.Context, params json.RawMessa
 // initGraphDB opens (or creates) the knowledge-graph database under ~/.mindx/data/.
 // Returns (db, graphStore, error). Callers should close db on shutdown.
 func initGraphDB(dataDir string) (*graphapi.DB, *graphapi.GraphStore, error) {
-	dbPath := filepath.Join(dataDir, "knowledge-graph.db")
+	dbPath := filepath.Join(dataDir, "kb.db")
 
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {

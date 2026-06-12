@@ -306,7 +306,7 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 	} else {
 		coreGS = goraggograph.WrapGraphStore(graphDB, graphStore)
 		logger.Info("knowledge-graph database initialized",
-			"path", filepath.Join(app.Settings().DataDir(), "knowledge-graph.db"),
+			"path", filepath.Join(app.Settings().DataDir(), "kb.db"),
 		)
 	}
 
