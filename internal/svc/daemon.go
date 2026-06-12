@@ -14,13 +14,13 @@ import (
 	"time"
 
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
+	"github.com/DotNetAge/goharness/events"
+	"github.com/DotNetAge/goharness/hooks/action"
+	goharnessmemory "github.com/DotNetAge/goharness/memory"
+	goharnesssession "github.com/DotNetAge/goharness/session"
 	goragcore "github.com/DotNetAge/gorag/core"
 	goragindexer "github.com/DotNetAge/gorag/indexer"
 	goraggograph "github.com/DotNetAge/gorag/store/graph/gograph"
-	"github.com/DotNetAge/goreact/events"
-	"github.com/DotNetAge/goreact/hooks/action"
-	goreactmemory "github.com/DotNetAge/goreact/memory"
-	goreactsession "github.com/DotNetAge/goreact/session"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/appicon"
 	"github.com/DotNetAge/mindx/internal/core"
@@ -48,7 +48,7 @@ type fileDiffInfo struct {
 }
 
 // computeFileDiff reads the current file and its backup (if exists) to compute diff stats.
-func computeFileDiff(sess *goreactsession.Session, filePath string) fileDiffInfo {
+func computeFileDiff(sess *goharnesssession.Session, filePath string) fileDiffInfo {
 	info := fileDiffInfo{Path: filePath}
 
 	current, err := os.ReadFile(filePath)
@@ -340,7 +340,7 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 	if emb := app.Embedder(); emb != nil {
 		logger.Info("embedder found, initializing shared memory service")
 		sharedMem, memErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-			MemoryType: goreactmemory.MemoryTypeLongTerm,
+			MemoryType: goharnessmemory.MemoryTypeLongTerm,
 			AgentName:  "_shared",
 			MemoryDir:  filepath.Join(app.Settings().UserPreferences(), "memory"),
 			Embedder:   emb,
@@ -750,7 +750,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		if !ok {
 			return nil, false
 		}
-		sess := val.(*goreactsession.Session)
+		sess := val.(*goharnesssession.Session)
 		return sess.TrackModify, true
 	})
 
@@ -775,8 +775,8 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	d.clientCancels.Store(msg.ClientID, cancel)
 
 	// Create session backed by the file store (lazy-loading: auto-loads on first access)
-	s := goreactsession.NewSession(sessionID, resolvedAgentName,
-		goreactsession.WithStore(d.app.SessDB()),
+	s := goharnesssession.NewSession(sessionID, resolvedAgentName,
+		goharnesssession.WithStore(d.app.SessDB()),
 	)
 	d.activeSessions.Store(sessionID, s)
 
@@ -936,7 +936,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				msg := fmt.Sprintf(i18n.T("svc.event.llm.timeout"), data.Elapsed, data.Error)
 				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.timeout"), msg)
 			}).
-			OnTokenUsageRecorded(func(record goreactsession.TokenUsageRecord) {
+			OnTokenUsageRecorded(func(record goharnesssession.TokenUsageRecord) {
 				gw.SendResponse(clientID, gateway.RespTokenUsageRecorded, i18n.T("svc.event.token.usage"), map[string]any{
 					"id":                record.ID,
 					"session_id":        record.SessionID,
@@ -1088,8 +1088,8 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 				"agent", agent,
 			)
 
-			s := goreactsession.NewSession(sessionID, agent,
-				goreactsession.WithStore(d.app.SessDB()),
+			s := goharnesssession.NewSession(sessionID, agent,
+				goharnesssession.WithStore(d.app.SessDB()),
 			)
 			_, err = rt.Ask(agent, content, s).Run()
 
@@ -1125,8 +1125,8 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		"agent", agent,
 	)
 
-	s := goreactsession.NewSession(sessionID, agent,
-		goreactsession.WithStore(d.app.SessDB()),
+	s := goharnesssession.NewSession(sessionID, agent,
+		goharnesssession.WithStore(d.app.SessDB()),
 	)
 	_, err = rt.Ask(agent, content, s).Run()
 	if err != nil {

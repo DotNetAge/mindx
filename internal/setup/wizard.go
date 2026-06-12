@@ -12,7 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
-	goreactconfig "github.com/DotNetAge/goreact/config"
+	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"gopkg.in/yaml.v3"
 
 	"github.com/DotNetAge/mindx/internal/setup/style"
@@ -186,7 +186,7 @@ func resolveAllProviderKeys(providersPath, workspaceDir string) (map[string]stri
 	}
 
 	var provConfig struct {
-		Providers []goreactconfig.ProviderConfig `yaml:"providers"`
+		Providers []goharnessconfig.ProviderConfig `yaml:"providers"`
 	}
 	if err := yaml.Unmarshal(data, &provConfig); err != nil {
 		return nil, err
@@ -358,7 +358,7 @@ func parseProviderAndModels(providersPath, modelsPath string, providerKeys map[s
 	// Load providers from providers.yml (if exists)
 	if data, err := os.ReadFile(providersPath); err == nil {
 		var provConfig struct {
-			Providers []goreactconfig.ProviderConfig `yaml:"providers"`
+			Providers []goharnessconfig.ProviderConfig `yaml:"providers"`
 		}
 		if err := yaml.Unmarshal(data, &provConfig); err == nil {
 			for _, p := range provConfig.Providers {
@@ -379,8 +379,8 @@ func parseProviderAndModels(providersPath, modelsPath string, providerKeys map[s
 		}
 
 		var config struct {
-			Providers []goreactconfig.ProviderConfig `yaml:"providers"`
-			Models    []goreactconfig.ModelConfig    `yaml:"models"`
+			Providers []goharnessconfig.ProviderConfig `yaml:"providers"`
+			Models    []goharnessconfig.ModelConfig    `yaml:"models"`
 		}
 		if err := yaml.Unmarshal(data, &config); err != nil {
 			return nil, nil, err
@@ -402,7 +402,7 @@ func parseProviderAndModels(providersPath, modelsPath string, providerKeys map[s
 	}
 
 	var modelConfig struct {
-		Models []goreactconfig.ModelConfig `yaml:"models"`
+		Models []goharnessconfig.ModelConfig `yaml:"models"`
 	}
 	if err := yaml.Unmarshal(data, &modelConfig); err != nil {
 		return nil, nil, err
@@ -434,7 +434,7 @@ func enableModelsForProvider(modelsPath, providerName string) error {
 		return err
 	}
 
-	var cfg goreactconfig.ModelsConfig
+	var cfg goharnessconfig.ModelsConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return err
 	}

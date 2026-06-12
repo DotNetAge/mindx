@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/DotNetAge/goreact/rule"
+	"github.com/DotNetAge/goharness/rule"
 )
 
 // ---------------------------------------------------------------------------

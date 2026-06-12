@@ -4,7 +4,7 @@ import "time"
 
 // MaxFileSize is the maximum file size (in bytes) allowed for indexing.
 // Files larger than this are skipped with a warning.
-const MaxFileSize = 1 << 20 // 1MB
+const MaxFileSize = 2202010 // ~2.1MB
 
 // DefaultIgnoredDirs lists directories excluded by default from project indexing.
 var DefaultIgnoredDirs = map[string]bool{

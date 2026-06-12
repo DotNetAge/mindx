@@ -28,7 +28,7 @@ All notable changes to MindX will be documented in this file.
 - **Internationalization (i18n)**: 新增完整的国际化框架，支持简体中文、繁体中文、英文三种语言；所有硬编码文本已重构为 i18n 多语言键值对；新增语言获取/切换/列出的 RPC 接口
 
 ### Changes
-- **Dependency Upgrade**: 核心依赖 goreact 升级至 v0.1.5，同步替换前端静态资源文件，更新 mermaid 解析器引用路径
+- **Dependency Upgrade**: 核心依赖 goharness 升级至 v0.1.5，同步替换前端静态资源文件，更新 mermaid 解析器引用路径
 - **Frontend Refresh**: 清理过期前端 chunk 和 diagram 文件，调整版本注入逻辑，新增 `server.version` RPC 接口及调度相关接口
 - **Agent & Task Optimization**: 优化 agent 创建逻辑与任务分配脚本
 - **Configuration Cleanup**: 移除废弃的 `server.yml` 配置文件；README 文档更新，移除旧架构图占位内容

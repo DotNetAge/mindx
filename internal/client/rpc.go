@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DotNetAge/goreact/session"
+	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"

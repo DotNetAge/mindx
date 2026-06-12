@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	goreactevents "github.com/DotNetAge/goreact/events"
+	goharnessevents "github.com/DotNetAge/goharness/events"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/i18n"
 )
@@ -13,7 +13,7 @@ func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.Response
 	_ = d.gw.SendResponse(clientID, respType, title, data, gateway.WithSessionID(sessionID))
 }
 
-func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreactevents.ExecutionSummaryData) {
+func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharnessevents.ExecutionSummaryData) {
 	d.logger.Info("[SSE-TRACE L5] sendExecutionSummary: total_tokens=" + fmt.Sprint(summary.TokensUsed.TotalTokens) +
 		" input=" + fmt.Sprint(summary.TokensUsed.InputTokens) +
 		" output=" + fmt.Sprint(summary.TokensUsed.OutputTokens))
@@ -46,7 +46,7 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goreac
 
 // Markdown builders for event messages
 
-func buildSubtaskSpawnedMarkdown(info goreactevents.SubtaskInfo) string {
+func buildSubtaskSpawnedMarkdown(info goharnessevents.SubtaskInfo) string {
 	md := fmt.Sprintf("### %s: `%s`\n\n**Agent**: %s\n**%s**: %s\n", i18n.T("svc.md.subtask.spawned"), info.TaskID, info.AgentName, i18n.T("svc.md.subtask.description"), info.Description)
 	if info.Timeout != "" {
 		md += fmt.Sprintf(i18n.T("svc.md.subtask.timeout"), info.Timeout)
@@ -54,7 +54,7 @@ func buildSubtaskSpawnedMarkdown(info goreactevents.SubtaskInfo) string {
 	return md
 }
 
-func buildSubtaskCompletedMarkdown(result goreactevents.SubtaskResult) string {
+func buildSubtaskCompletedMarkdown(result goharnessevents.SubtaskResult) string {
 	var b strings.Builder
 	if result.Success {
 		b.WriteString(fmt.Sprintf("### %s: `%s`\n\n", i18n.T("svc.md.subtask.completed"), result.TaskID))
@@ -66,7 +66,7 @@ func buildSubtaskCompletedMarkdown(result goreactevents.SubtaskResult) string {
 	return b.String()
 }
 
-func buildTaskSummaryMarkdown(ts goreactevents.TaskSummaryData) string {
+func buildTaskSummaryMarkdown(ts goharnessevents.TaskSummaryData) string {
 	return fmt.Sprintf("### %s\n\n%s\n\n**%s**: %s %d / %s %d / %s %d\n",
 		i18n.T("svc.md.task.summary"), ts.Summary,
 		i18n.T("svc.md.task.token"), i18n.T("svc.md.token.input"), ts.TokenUsage.InputTokens,

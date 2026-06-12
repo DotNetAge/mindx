@@ -11,15 +11,15 @@ import (
 	"time"
 
 	"github.com/DotNetAge/gochat"
+	"github.com/DotNetAge/goharness/agents"
+	"github.com/DotNetAge/goharness/config"
+	"github.com/DotNetAge/goharness/constants"
+	goharnessmemory "github.com/DotNetAge/goharness/memory"
+	"github.com/DotNetAge/goharness/rule"
+	"github.com/DotNetAge/goharness/session"
+	"github.com/DotNetAge/goharness/skill"
+	"github.com/DotNetAge/goharness/store"
 	goragcore "github.com/DotNetAge/gorag/core"
-	"github.com/DotNetAge/goreact/agents"
-	"github.com/DotNetAge/goreact/config"
-	"github.com/DotNetAge/goreact/constants"
-	goreactmemory "github.com/DotNetAge/goreact/memory"
-	"github.com/DotNetAge/goreact/rule"
-	"github.com/DotNetAge/goreact/session"
-	"github.com/DotNetAge/goreact/skill"
-	"github.com/DotNetAge/goreact/store"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/rules"
@@ -419,7 +419,7 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	}
 
 	// 单会话最大思考/交互轮次：覆盖 ModelConfig 中可能存在的 max_turns，
-	// 引擎在 [goreact/agents/runtime.go] 中以 <=0 兜底为 20，这里显式抬到 100。
+	// 引擎在 [goharness/agents/runtime.go] 中以 <=0 兜底为 20，这里显式抬到 100。
 	if resolvedModel.MaxTurns <= 0 || resolvedModel.MaxTurns < 100 {
 		resolvedModel.MaxTurns = 100
 	}
@@ -499,7 +499,7 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		} else {
 			a.logger.Info("createRuntime: creating long-term memory", "agent", agentName)
 			ltMem, ltErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-				MemoryType: goreactmemory.MemoryTypeLongTerm,
+				MemoryType: goharnessmemory.MemoryTypeLongTerm,
 				AgentName:  "_shared",
 				MemoryDir:  filepath.Join(a.settings.UserPreferences(), "memory"),
 				Embedder:   a.embedder,
@@ -652,7 +652,7 @@ func (a *App) EnsureSession() (string, error) {
 	return newSession.SessionID, nil
 }
 
-// NewSessionFromMeta creates a goreact session.Session from the current session metadata.
+// NewSessionFromMeta creates a goharness session.Session from the current session metadata.
 // The session uses lazy-loading: historical messages are automatically loaded
 // from the persistent store on first access (Current() or Append()), so there's
 // no need for an explicit Restore() call here.
@@ -685,7 +685,7 @@ func (a *App) NewSessionFromMeta() *session.Session {
 			sessionDir, _ = a.sessDB.ResolveSessionDir(a.currentSessionMeta.SessionID)
 		}
 		sessRAG, ragErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-			MemoryType: goreactmemory.MemoryTypeSession,
+			MemoryType: goharnessmemory.MemoryTypeSession,
 			AgentName:  agentName,
 			SessionDir: sessionDir,
 			Embedder:   a.embedder,

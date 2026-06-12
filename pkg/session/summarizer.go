@@ -8,11 +8,11 @@ import (
 
 	gochat "github.com/DotNetAge/gochat"
 	gochatcore "github.com/DotNetAge/gochat/core"
-	"github.com/DotNetAge/goreact/config"
-	goreactsession "github.com/DotNetAge/goreact/session"
+	"github.com/DotNetAge/goharness/config"
+	goharnesssession "github.com/DotNetAge/goharness/session"
 )
 
-var _ goreactsession.Summarizer = (*LLMSummarizer)(nil)
+var _ goharnesssession.Summarizer = (*LLMSummarizer)(nil)
 
 type LLMSummarizer struct {
 	model config.ModelConfig
@@ -22,7 +22,7 @@ func NewLLMSummarizer(model config.ModelConfig) *LLMSummarizer {
 	return &LLMSummarizer{model: model}
 }
 
-func (s *LLMSummarizer) Summarize(ctx context.Context, msgs []goreactsession.Message) (string, error) {
+func (s *LLMSummarizer) Summarize(ctx context.Context, msgs []goharnesssession.Message) (string, error) {
 	if len(msgs) == 0 {
 		return "", nil
 	}

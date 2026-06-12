@@ -22,7 +22,7 @@ func generateSessionID() string {
 
 // SessionMeta represents session-level metadata persisted to <session_dir>/meta.json.
 // This struct is defined and used by MindX (application layer).
-// GoReact (framework layer) does not depend on this type.
+// goharness (framework layer) does not depend on this type.
 type SessionMeta struct {
 	SessionID string    `json:"session_id"`
 	AgentName string    `json:"agent_name"`

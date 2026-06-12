@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"charm.land/bubbles/v2/table"
-	goreactconfig "github.com/DotNetAge/goreact/config"
+	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -31,7 +31,7 @@ var modelListCmd = &cobra.Command{
 	Short: "List all configured models",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := modelsFilePath()
-		registry, err := goreactconfig.LoadModels(path)
+		registry, err := goharnessconfig.LoadModels(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				fmt.Println("No models configured yet.")
@@ -108,7 +108,7 @@ var modelRmCmd = &cobra.Command{
 			return fmt.Errorf("cannot read models file: %w", err)
 		}
 
-		var cfg goreactconfig.ModelsConfig
+		var cfg goharnessconfig.ModelsConfig
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
 			return fmt.Errorf("cannot parse models file: %w", err)
 		}
@@ -175,14 +175,14 @@ Examples:
 		}
 
 		path := modelsFilePath()
-		registry, err := goreactconfig.LoadModels(path)
+		registry, err := goharnessconfig.LoadModels(path)
 		if err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("cannot load models: %w", err)
 		}
 
 		// Check the provider exists
 		existing := registry.GetRaw(modelAddFlags.name)
-		model := goreactconfig.ModelConfig{
+		model := goharnessconfig.ModelConfig{
 			Name:              modelAddFlags.name,
 			Title:             modelAddFlags.title,
 			Provider:          modelAddFlags.provider,
@@ -260,7 +260,7 @@ Example:
 		workspaceDir := core.DefaultUserPrefsDir()
 
 		// Verify the model exists
-		registry, err := goreactconfig.LoadModels(modelsFilePath())
+		registry, err := goharnessconfig.LoadModels(modelsFilePath())
 		if err != nil {
 			return fmt.Errorf("cannot load models: %w", err)
 		}

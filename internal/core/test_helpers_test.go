@@ -3,7 +3,7 @@ package core
 import (
 	"testing"
 
-	"github.com/DotNetAge/goreact/config"
+	"github.com/DotNetAge/goharness/config"
 )
 
 // NewTestModelRegistry 创建一个包含指定模型名称的 ModelRegistry（测试辅助函数）。

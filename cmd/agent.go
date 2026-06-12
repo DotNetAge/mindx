@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	goreactconfig "github.com/DotNetAge/goreact/config"
-	"github.com/DotNetAge/goreact/logging"
+	goharnessconfig "github.com/DotNetAge/goharness/config"
+	"github.com/DotNetAge/goharness/logging"
 	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/spf13/cobra"
@@ -31,7 +31,7 @@ var agentListCmd = &cobra.Command{
 	Short: "List all configured agents",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := agentDir()
-		registry, err := goreactconfig.LoadAgentsFrom(dir)
+		registry, err := goharnessconfig.LoadAgentsFrom(dir)
 		if err != nil {
 			return fmt.Errorf("cannot load agents: %w", err)
 		}
@@ -74,7 +74,7 @@ var agentRmCmd = &cobra.Command{
 		name := args[0]
 		dir := agentDir()
 
-		registry, err := goreactconfig.LoadAgentsFrom(dir, goreactconfig.WithRegistryLogger(logging.DefaultLogger()))
+		registry, err := goharnessconfig.LoadAgentsFrom(dir, goharnessconfig.WithRegistryLogger(logging.DefaultLogger()))
 		if err != nil {
 			return fmt.Errorf("cannot load agents: %w", err)
 		}
@@ -117,14 +117,14 @@ Examples:
 			return fmt.Errorf("cannot create agents directory: %w", err)
 		}
 
-		registry, err := goreactconfig.LoadAgentsFrom(dir, goreactconfig.WithRegistryLogger(logging.DefaultLogger()))
+		registry, err := goharnessconfig.LoadAgentsFrom(dir, goharnessconfig.WithRegistryLogger(logging.DefaultLogger()))
 		if err != nil {
 			return fmt.Errorf("cannot load agents: %w", err)
 		}
 
 		existing := registry.Get(name)
 
-		agent := &goreactconfig.AgentConfig{
+		agent := &goharnessconfig.AgentConfig{
 			Name:        name,
 			Role:        agentAddFlags.role,
 			Description: agentAddFlags.description,

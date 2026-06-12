@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DotNetAge/goreact/config"
-	"github.com/DotNetAge/goreact/session"
+	"github.com/DotNetAge/goharness/config"
+	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )

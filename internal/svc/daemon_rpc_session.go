@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	goreactsession "github.com/DotNetAge/goreact/session"
+	goharnesssession "github.com/DotNetAge/goharness/session"
 )
 
 type sessionListParams struct {
@@ -29,7 +29,7 @@ func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (a
 	}
 
 	if p.Agent != "" {
-		filtered := make([]goreactsession.SessionInfo, 0)
+		filtered := make([]goharnesssession.SessionInfo, 0)
 		for i := range sessions {
 			if sessions[i].AgentName == p.Agent {
 				filtered = append(filtered, sessions[i])
@@ -166,9 +166,9 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 	}
 
 	// Pass project_dir as a session option so it gets persisted to session meta
-	var opts []goreactsession.SessionOption
+	var opts []goharnesssession.SessionOption
 	if p.ProjectDir != "" {
-		opts = append(opts, goreactsession.WithProjectDirOption(p.ProjectDir))
+		opts = append(opts, goharnesssession.WithProjectDirOption(p.ProjectDir))
 	}
 
 	info, err := sessDB.Create(context.Background(), p.Agent, opts...)
@@ -204,18 +204,18 @@ type sessionFileActionParams struct {
 // 如果会话已结束（goroutine 已退出），则从持久化存储重建。
 // 如果存储不可用或 session 在磁盘上也不存在，则创建一个空 session
 // 兜底（后续 ConfirmModify/Rollback 会返回空列表而非报错）。
-func (d *Daemon) getOrLoadSession(sessionID string) (*goreactsession.Session, error) {
+func (d *Daemon) getOrLoadSession(sessionID string) (*goharnesssession.Session, error) {
 	val, ok := d.activeSessions.Load(sessionID)
 	if ok {
-		return val.(*goreactsession.Session), nil
+		return val.(*goharnesssession.Session), nil
 	}
 
-	sess := goreactsession.NewSession(sessionID, "")
+	sess := goharnesssession.NewSession(sessionID, "")
 	sessDB := d.app.SessDB()
 	if sessDB != nil {
 		// 从持久化存储重建 session，触发 lazy-load 以恢复 modifyFiles
-		sess = goreactsession.NewSession(sessionID, "",
-			goreactsession.WithStore(sessDB),
+		sess = goharnesssession.NewSession(sessionID, "",
+			goharnesssession.WithStore(sessDB),
 		)
 		// 触发懒加载：加载历史消息和 modify_files
 		//

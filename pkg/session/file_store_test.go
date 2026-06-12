@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	goreactsession "github.com/DotNetAge/goreact/session"
+	goharnesssession "github.com/DotNetAge/goharness/session"
 )
 
 func TestFileStoreWithComplexContent(t *testing.T) {
@@ -66,7 +66,7 @@ func TestFileStoreWithComplexContent(t *testing.T) {
 	t.Run("append and retrieve all formats", func(t *testing.T) {
 		for i, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				msg := goreactsession.Message{
+				msg := goharnesssession.Message{
 					Role:      "user",
 					Content:   tc.content,
 					Timestamp: time.Now().UnixMilli() + int64(i),
@@ -157,7 +157,7 @@ func TestFileStoreYAMLFormat(t *testing.T) {
 
 	markdownContent := "# Complex Markdown\n\n## Features\n- **Bold** and *italic*\n- `code inline`\n- [links](http://example.com)\n\n```json\n{ \"key\": \"value\" }\n```\n\n> Blockquote with \"quotes\" and 'apostrophes'"
 
-	msg := goreactsession.Message{
+	msg := goharnesssession.Message{
 		Role:      "assistant",
 		Content:   markdownContent,
 		Timestamp: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC).UnixMilli(),
@@ -213,7 +213,7 @@ func TestFileStoreConcurrentAppend(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < msgsPerGoroutine; j++ {
-				msg := goreactsession.Message{
+				msg := goharnesssession.Message{
 					Role:      "user",
 					Content:   fmt.Sprintf("goroutine-%d-msg-%d", id, j),
 					Timestamp: time.Now().UnixMilli() + int64(id*msgsPerGoroutine+j),
@@ -272,7 +272,7 @@ func TestFileStoreDeleteSession(t *testing.T) {
 	}
 
 	// 存入一条消息
-	msg := goreactsession.Message{
+	msg := goharnesssession.Message{
 		Role:      "user",
 		Content:   "hello",
 		Timestamp: time.Now().UnixMilli(),
@@ -306,7 +306,7 @@ func TestFileStoreDeleteSessionNotFound(t *testing.T) {
 	defer store.Close()
 
 	err = store.DeleteSession(context.Background(), "nonexistent-session")
-	if err != goreactsession.ErrSessionNotFound {
+	if err != goharnesssession.ErrSessionNotFound {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
 }
