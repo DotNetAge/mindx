@@ -54,6 +54,12 @@ type MemoryConfig struct {
 	// 当 LLMConfig 配置且此项为空时，会自动创建。
 	GraphStore goragcore.GraphStore
 
+	// EntityDefs 可选。用户自定义的实体类型定义行列表。
+	// 每行格式为 "**Name** — Description"。
+	// 从 entity_tags.yml 中读取并在初始化时注入 LLMIndexer。
+	// 如果为空，LLMIndexer 将使用一组通用的默认实体类型。
+	EntityDefs []string
+
 	// LLMConfig 可选。非空时启用 LLMIndexer，在语义索引基础上增加知识图谱
 	// 实体/关系索引与标签系统（tags, summary, entity_ids）。
 	LLMConfig *goragindexer.ModelConfig
@@ -174,19 +180,25 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 		// 删除 semanticIndexer（LLMIndexer 替代语义分块 + 实体提取）
 		indexer.RemoveIndexer("semantic")
 
+		var llmOpts []goragindexer.LLMOption
+		llmOpts = append(llmOpts, goragindexer.WithLLMLogger(logger))
+		if len(cfg.EntityDefs) > 0 {
+			// 从 saved entity_tags.yml 加载用户自定义实体类型定义
+			llmOpts = append(llmOpts, goragindexer.WithEntities(cfg.EntityDefs...))
+			logger.Info("memory: loaded saved entity defs", "count", len(cfg.EntityDefs))
+		}
 		llmIdx := goragindexer.New(
 			*cfg.LLMConfig,
 			cfg.Embedder,
 			vs,
 			graphStore,
-			goragindexer.WithLLMLogger(logger),
+			llmOpts...,
 		)
 		indexer.AddIndexer(llmIdx, 0.8)
 
 		logger.Info("memory: LLMIndexer enabled (replaces semantic+graph)",
 			"model", cfg.LLMConfig.Model,
 			"lang", cfg.LLMConfig.Language,
-			"ontology", cfg.LLMConfig.Ontology,
 			"max_tokens", cfg.LLMConfig.MaxTokens,
 		)
 	}

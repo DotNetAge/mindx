@@ -103,4 +103,7 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("filewatch.status", r.daemon.handleFilewatchStatus)
 
 	gw.RegisterMethod("memory.file_states", r.daemon.handleMemoryFileStates)
+
+	gw.RegisterMethod("entity_tags.get", r.daemon.handleEntityTagsGet)
+	gw.RegisterMethod("entity_tags.save", r.daemon.handleEntityTagsSave)
 }

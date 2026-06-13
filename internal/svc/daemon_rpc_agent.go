@@ -26,6 +26,7 @@ func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any
 		Introduction string         `json:"introduction,omitempty"`
 		Model        string         `json:"model"`
 		Skills       []string       `json:"skills,omitempty"`
+		ExcludeTools []string       `json:"exclude_tools,omitempty"`
 		Body         string         `json:"body,omitempty"`
 		Meta         map[string]any `json:"meta,omitempty"`
 	}
@@ -39,7 +40,8 @@ func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any
 			Introduction: a.Introduction,
 			Model:        a.Model,
 			Skills:       a.Skills,
-			Body:         a.Body,
+			ExcludeTools: a.ExcludeTools,
+			Body:         a.Introduction,
 			Meta:         a.Meta,
 		}
 	}
@@ -125,8 +127,10 @@ func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (a
 		Introduction: p.Introduction,
 		Model:        p.Model,
 		Skills:       p.Skills,
-		Body:         p.Body,
 		Meta:         p.Meta,
+	}
+	if p.Body != "" && newAgent.Introduction == "" {
+		newAgent.Introduction = p.Body
 	}
 
 	if err := agents.SaveTo(&newAgent); err != nil {
@@ -147,6 +151,7 @@ type agentUpdateParams struct {
 	Introduction string         `json:"introduction,omitempty"`
 	Model        string         `json:"model,omitempty"`
 	Skills       []string       `json:"skills,omitempty"`
+	ExcludeTools []string       `json:"exclude_tools,omitempty"`
 	Body         string         `json:"body,omitempty"`
 	Meta         map[string]any `json:"meta,omitempty"`
 }
@@ -184,11 +189,14 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 	if p.Skills != nil {
 		updated.Skills = p.Skills
 	}
+	if p.ExcludeTools != nil {
+		updated.ExcludeTools = p.ExcludeTools
+	}
 	if p.Introduction != "" {
 		updated.Introduction = p.Introduction
 	}
 	if p.Body != "" {
-		updated.Body = p.Body
+		updated.Introduction = p.Body
 	}
 	if p.Meta != nil {
 		updated.Meta = p.Meta

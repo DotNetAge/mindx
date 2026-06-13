@@ -52,7 +52,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		wsPath = "/ws"
 	}
 
-	server, err := svc.NewServer(startPort, wsPath, AppIconFS)
+	server, err := svc.NewServer(startPort, wsPath, AppIconFS, RuntimeFS)
 	if err != nil {
 		return fmt.Errorf("failed to create server: %w", err)
 	}
