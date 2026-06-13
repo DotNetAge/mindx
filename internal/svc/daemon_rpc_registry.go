@@ -120,4 +120,6 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("terminal.resize", r.daemon.handleTerminalResize)
 	gw.RegisterMethod("terminal.kill", r.daemon.handleTerminalKill)
 	gw.RegisterMethod("terminal.list", r.daemon.handleTerminalList)
+
+	gw.RegisterMethod("translate.rpc", r.daemon.handleTranslate)
 }
