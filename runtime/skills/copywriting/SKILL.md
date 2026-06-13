@@ -2,6 +2,10 @@
 name: copywriting
 description: When the user wants to write, rewrite, or improve marketing copy for any page — including homepage, landing pages, pricing pages, feature pages, about pages, or product pages. Also use when the user says "write copy for," "improve this copy," "rewrite this page," "marketing copy," "headline help," "CTA copy," "value proposition," "tagline," "subheadline," "hero section copy," "above the fold," "this copy is weak," "make this more compelling," or "help me describe my product." Use this whenever someone is working on website text that needs to persuade or convert. For email copy, see email-sequence. For popup copy, see popup-cro. For editing existing copy, see copy-editing.
 metadata:
+  name_zh: 营销文案撰写
+  name_zh-tw: 行銷文案撰寫
+  description_zh: 为各种网页编写、改写或优化营销文案，包括首页、落地页、定价页、功能页和关于页等
+  description_zh-tw: 為各種網頁編寫、改寫或優化行銷文案，包括首頁、落地頁、定價頁、功能頁和關於頁等
   version: 1.1.0
 ---
 

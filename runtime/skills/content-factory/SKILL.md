@@ -1,7 +1,11 @@
 ---
 name: content-factory
 description: "Multi-agent content production system. One piece of source content becomes many formats — social posts, email, scripts, headlines, and more. Five specialized agent personas: Writer, Remixer, Editor, Scriptwriter, and Headline Machine."
-description_zh: "多智能体内容生产系统，一份素材生成多种格式"
+metadata:
+  name_zh: 内容工厂
+  name_zh-tw: 內容工廠
+  description_zh: 多智能体内容生产系统，一份源内容可生成社交帖子、邮件、脚本、标题等多种格式，配备五个专业智能体角色
+  description_zh-tw: 多智慧體內容生產系統，一份源內容可產生社交貼文、郵件、腳本、標題等多種格式，配備五個專業智慧體角色
 version: 1.0.0
 ---
 

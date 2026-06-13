@@ -4,6 +4,11 @@ description: >
   Strategy to break free when the agent is repeating actions or failing.
   Use when the user mentions stuck, loop, repeat, or failing.
 allowed-tools: grep glob bash
+metadata:
+  name_zh: 卡住诊断
+  name_zh-tw: 卡住診斷
+  description_zh: 当智能体重复操作或失败时突破困境的策略
+  description_zh-tw: 當智慧體重複操作或失敗時突破困境的策略
 ---
 
 # Stuck: Diagnose Frozen/Slow State

@@ -4,6 +4,11 @@ description: >
   Creates and registers a new agent with a specific role, expertise,
   or capability. Use when you need a specialist in a particular domain
   and no existing agent fits the requirement.
+metadata:
+  name_zh: 创建智能体
+  name_zh-tw: 建立智慧體
+  description_zh: 创建和注册具有特定角色、专业知识或能力的新智能体
+  description_zh-tw: 建立和註冊具有特定角色、專業知識或能力的新智慧體
 ---
 
 ## When to Use

@@ -5,6 +5,11 @@ description: >
   decompose goals, assign recurring work to agents considering
   dependencies and priorities, track progress, adjust the plan
   continuously, and proactively report.
+metadata:
+  name_zh: 项目管理
+  name_zh-tw: 專案管理
+  description_zh: 将模糊想法转化为结构化项目并设置重复任务，分解目标、分配工作、跟踪进度和主动报告
+  description_zh-tw: 將模糊想法轉化為結構化專案並設定重複任務，分解目標、分配工作、追蹤進度和主動報告
 ---
 
 # When to Use

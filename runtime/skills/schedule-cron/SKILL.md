@@ -4,6 +4,11 @@ description: >
   Register, list, and delete recurring tasks via the MindX Scheduler.
   Handles cron-based scheduling for agent tasks.
 allowed-tools: bash read write
+metadata:
+  name_zh: 定时任务
+  name_zh-tw: 定時任務
+  description_zh: 通过 MindX 调度器注册、列出和删除基于 cron 的定时重复任务
+  description_zh-tw: 透過 MindX 排程器註冊、列出和刪除基於 cron 的定時重複任務
 ---
 
 ## When to Use

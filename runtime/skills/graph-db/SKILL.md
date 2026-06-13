@@ -4,6 +4,11 @@ description: >
   Use when you need to query, read from, write to, or manage a graph database (gograph).
   Covers Cypher queries, node/edge CRUD, and neighbor traversal.
   This is the low-level graph DB skill — use kg-manager for knowledge graph construction workflows.
+metadata:
+  name_zh: 图数据库
+  name_zh-tw: 圖資料庫
+  description_zh: 查询、读取、写入和管理图数据库，支持 Cypher 查询、节点/边 CRUD 和邻居遍历
+  description_zh-tw: 查詢、讀取、寫入和管理圖資料庫，支援 Cypher 查詢、節點/邊 CRUD 和鄰居遍歷
 ---
 
 # Protocol: Graph Database Operations

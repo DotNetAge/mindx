@@ -56,11 +56,19 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("message.cancel", r.daemon.handleMessageCancel)
 
 	gw.RegisterMethod("fs.list", r.daemon.handleFSList)
+	gw.RegisterMethod("fs.read", r.daemon.handleFSRead)
+	gw.RegisterMethod("fs.write", r.daemon.handleFSWrite)
 	gw.RegisterMethod("fs.home", r.daemon.handleFSHome)
+	gw.RegisterMethod("fs.mkdir", r.daemon.handleFSMkdir)
+	gw.RegisterMethod("fs.rm", r.daemon.handleFSRm)
+	gw.RegisterMethod("fs.mv", r.daemon.handleFSMv)
 
 	gw.RegisterMethod("user.config", r.daemon.handleUserConfig)
 
 	gw.RegisterMethod("server.version", r.daemon.handleServerVersion)
+	gw.RegisterMethod("server.check_update", r.daemon.handleServerCheckUpdate)
+	gw.RegisterMethod("server.apply_update", r.daemon.handleServerApplyUpdate)
+	gw.RegisterMethod("server.restart_daemon", r.daemon.handleServerRestartDaemon)
 
 	gw.RegisterMethod("token.usage.overview", r.daemon.handleTokenUsageOverview)
 	gw.RegisterMethod("token.usage.monthly", r.daemon.handleTokenUsageMonthly)
@@ -106,4 +114,10 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 
 	gw.RegisterMethod("entity_tags.get", r.daemon.handleEntityTagsGet)
 	gw.RegisterMethod("entity_tags.save", r.daemon.handleEntityTagsSave)
+
+	gw.RegisterMethod("terminal.start", r.daemon.handleTerminalStart)
+	gw.RegisterMethod("terminal.input", r.daemon.handleTerminalInput)
+	gw.RegisterMethod("terminal.resize", r.daemon.handleTerminalResize)
+	gw.RegisterMethod("terminal.kill", r.daemon.handleTerminalKill)
+	gw.RegisterMethod("terminal.list", r.daemon.handleTerminalList)
 }

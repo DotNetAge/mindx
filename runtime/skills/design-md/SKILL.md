@@ -6,6 +6,11 @@ allowed-tools:
   - "Read"
   - "Write"
   - "web_fetch"
+metadata:
+  name_zh: 设计系统分析
+  name_zh-tw: 設計系統分析
+  description_zh: 分析 Stitch 项目并将语义设计系统综合生成 DESIGN.md 文件
+  description_zh-tw: 分析 Stitch 專案並將語意設計系統綜合生成 DESIGN.md 檔案
 ---
 
 # Stitch DESIGN.md Skill

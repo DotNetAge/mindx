@@ -1,7 +1,11 @@
 ---
 name: humanizer
 description: "Remove signs of AI-generated writing from text. Use when editing or reviewing text to make it sound more natural and human-written. Detects and fixes patterns including: inflated symbolism, promotional language, superficial analyses, vague attributions, em dash overuse, rule of three, AI vocabulary words, negative parallelisms, and excessive conjunctive phrases."
-description_zh: "去除文本中的 AI 写作痕迹"
+metadata:
+  name_zh: 人性化润色
+  name_zh-tw: 人性化潤色
+  description_zh: 去除文本中的 AI 写作痕迹，使文字更自然更人性化，检测并修复过度象征、宣传语气、空洞分析、AI 词汇等多种模式
+  description_zh-tw: 去除文字中的 AI 寫作痕跡，使文字更自然更人性化，偵測並修復過度象徵、宣傳語氣、空洞分析、AI 詞彙等多種模式
 description_en: "Remove AI writing patterns from text"
 version: 2.1.1
 allowed-tools:

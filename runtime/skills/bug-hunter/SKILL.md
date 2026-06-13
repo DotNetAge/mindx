@@ -4,6 +4,11 @@ description: >
   Expert SOP for locating, isolating and fixing complex bugs.
   Use when the user mentions bugs, errors, crashes, debugging, or fixing issues.
 allowed-tools: grep glob bash subagent read
+metadata:
+  name_zh: Bug 猎手
+  name_zh-tw: Bug 獵手
+  description_zh: 定位、隔离和修复复杂 Bug 的专家标准流程
+  description_zh-tw: 定位、隔離和修復複雜 Bug 的專家標準流程
 ---
 
 # Debug: Session & Bug Analysis

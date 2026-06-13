@@ -24,6 +24,7 @@ func (d *Daemon) handleSkillList(_ context.Context, params json.RawMessage) (any
 		Instructions string            `json:"instructions,omitempty"`
 		Paths        []string          `json:"paths,omitempty"`
 		Metadata     map[string]string `json:"metadata,omitempty"`
+		License      string            `json:"license,omitempty"`
 	}
 
 	skillReg := d.app.SkillRegistry()
@@ -42,6 +43,7 @@ func (d *Daemon) handleSkillList(_ context.Context, params json.RawMessage) (any
 			Instructions: s.Instructions,
 			Paths:        s.Paths,
 			Metadata:     s.Metadata,
+			License:      s.License,
 		}
 	}
 	return result, nil

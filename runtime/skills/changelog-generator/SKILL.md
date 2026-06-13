@@ -1,6 +1,11 @@
 ---
 name: changelog-generator
 description: Automatically creates user-facing changelogs from git commits by analyzing commit history, categorizing changes, and transforming technical commits into clear, customer-friendly release notes. Turns hours of manual changelog writing into minutes of automated generation.
+metadata:
+  name_zh: 变更日志生成
+  name_zh-tw: 變更日誌生成
+  description_zh: 从 Git 提交历史自动生成用户友好的发布日志，对变更进行分类并将技术提交转化为清晰的发布说明
+  description_zh-tw: 從 Git 提交歷史自動產生使用者友好的發布日誌，對變更進行分類並將技術提交轉化為清晰的發布說明
 ---
 
 # Changelog Generator

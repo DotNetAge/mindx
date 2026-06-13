@@ -44,6 +44,10 @@ type MindxConfig struct {
 	// Language is the UI language (e.g. "zh", "en"). Defaults to system locale.
 	Language string `json:"language,omitempty"`
 
+	// InstalledVersion records the version that was last installed/updated.
+	// Used by the auto-updater to track which version is on disk.
+	InstalledVersion string `json:"installed_version,omitempty"`
+
 	filePath string `json:"-"`
 }
 

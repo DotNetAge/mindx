@@ -12,6 +12,11 @@ description: >
   containers with hot reload. Provides comprehensive Docker expertise including multi-stage
   build optimization, security hardening, image size reduction, and production-ready patterns.
 allowed-tools: bash read_file write_file
+metadata:
+  name_zh: Docker 专家
+  name_zh-tw: Docker 專家
+  description_zh: Docker 容器化优化、多阶段构建、安全加固与生产级部署配置
+  description_zh-tw: Docker 容器化優化、多階段建置、安全加固與生產級部署配置
 ---
 
 # Docker Expert Skill

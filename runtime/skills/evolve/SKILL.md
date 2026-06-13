@@ -5,6 +5,11 @@ description: >
   Create new SKILL.md files encoding those patterns as executable procedures.
   Use when the user asks you to learn from experience or improve yourself.
 allowed-tools: bash write
+metadata:
+  name_zh: 进化学习
+  name_zh-tw: 進化學習
+  description_zh: 分析过往会话，提取重复工作流模式并创建可执行的 SKILL.md 技能文件
+  description_zh-tw: 分析過往會話，擷取重複工作流模式並建立可執行的 SKILL.md 技能檔案
 ---
 
 # Evolve

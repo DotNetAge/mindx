@@ -2,6 +2,11 @@
 name: canvas-design
 description: Create beautiful visual art in .png and .pdf documents using design philosophy. You should use this skill when the user asks to create a poster, piece of art, design, or other static piece. Create original visual designs, never copying existing artists' work to avoid copyright violations.
 license: Complete terms in LICENSE.txt
+metadata:
+  name_zh: 画布设计
+  name_zh-tw: 畫布設計
+  description_zh: 运用设计理念创建 PNG 和 PDF 格式的视觉艺术作品，包括海报、艺术作品和静态设计
+  description_zh-tw: 運用設計理念建立 PNG 和 PDF 格式的視覺藝術作品，包括海報、藝術作品和靜態設計
 ---
 
 These are instructions for creating design philosophies - aesthetic movements that are then EXPRESSED VISUALLY. Output only .md files, .pdf files, and .png files.

@@ -4,6 +4,11 @@ description: >
   Parallel orchestration of large-scale mechanical changes.
   Use when the user mentions batch, bulk, replace all, or migrate all.
 allowed-tools: grep subagent subagent-list subagent-result bash
+metadata:
+  name_zh: 批量操作
+  name_zh-tw: 批次操作
+  description_zh: 并行编排大规模机械性代码变更，批量处理替换或迁移
+  description_zh-tw: 並行編排大規模機械性程式碼變更，批次處理替換或遷移
 ---
 
 # Batch: Parallel Work Orchestration
