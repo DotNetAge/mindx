@@ -141,7 +141,7 @@ func isDirIgnored(relPath string, info os.FileInfo, ignore *IgnoreRules) bool {
 	if DefaultIgnoredDirs[info.Name()] {
 		return true
 	}
-	if ignore.IsIgnored(relPath+"/") {
+	if ignore.IsIgnored(relPath + "/") {
 		return true
 	}
 	return false

@@ -25,8 +25,8 @@ require (
 require (
 	github.com/DotNetAge/gochat v0.2.7
 	github.com/DotNetAge/gograph v0.2.4
-	github.com/DotNetAge/goharness v0.1.6
-	github.com/DotNetAge/gorag v1.6.2
+	github.com/DotNetAge/goharness v0.1.7
+	github.com/DotNetAge/gorag v1.8.0
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/text v0.37.0
 )
@@ -140,3 +140,5 @@ require (
 replace github.com/coder/hnsw => ./third_party/hnsw
 
 replace github.com/DotNetAge/gorag => ../gorag
+
+replace github.com/DotNetAge/goharness => ../goharness

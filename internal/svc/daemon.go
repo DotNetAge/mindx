@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -31,6 +32,7 @@ import (
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 	"github.com/google/uuid"
 	"go.etcd.io/bbolt"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -268,9 +270,12 @@ type Daemon struct {
 
 	// startTime records when the daemon started, used for uptime reporting.
 	startTime time.Time
+
+	// runtimeFS 是嵌入式文件系统，包含 runtime/ 目录下的资源文件。
+	runtimeFS fs.FS
 }
 
-func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
+func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	logDir := logging.ResolveLogDir()
 	logger := logging.DefaultZapLogger(&logging.ZapConfig{
 		Filename:   filepath.Join(logDir, "mindx.log"),
@@ -325,7 +330,6 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 			Model:     defaultModel.Name,
 			Language:  lang,
 			MaxTokens: int(defaultModel.MaxTokens),
-			Ontology:  "general",
 		}
 		logger.Info("LLMIndexer model config resolved",
 			"model", defaultModel.Name,
@@ -339,6 +343,27 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 	var sharedMemory *memory.RAGMemory
 	if emb := app.Embedder(); emb != nil {
 		logger.Info("embedder found, initializing shared memory service")
+
+		// 尝试从 entity_tags.yml 加载用户之前保存的实体标签定义
+		var entityDefs []string
+		entityTagsPath := filepath.Join(app.Settings().DataDir(), "entity_tags.yml")
+		if etData, etErr := os.ReadFile(entityTagsPath); etErr == nil {
+			var etFile struct {
+				Types []struct {
+					Name string `yaml:"name"`
+					Desc string `yaml:"desc"`
+				} `yaml:"types"`
+			}
+			if yaml.Unmarshal(etData, &etFile) == nil {
+				for _, t := range etFile.Types {
+					if t.Name != "" {
+						entityDefs = append(entityDefs, "**"+t.Name+"** — "+t.Desc)
+					}
+				}
+				logger.Info("memory: loaded saved entity tags from file", "path", entityTagsPath, "count", len(entityDefs))
+			}
+		}
+
 		sharedMem, memErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
 			MemoryType: goharnessmemory.MemoryTypeLongTerm,
 			AgentName:  "_shared",
@@ -346,6 +371,7 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 			Embedder:   emb,
 			GraphStore: coreGS,
 			LLMConfig:  llmModelCfg,
+			EntityDefs: entityDefs,
 			Logger:     logger,
 		})
 		if memErr != nil {
@@ -396,6 +422,7 @@ func NewDaemon(app *core.App, addr, wsPath string) *Daemon {
 		schedulerDB:         schedulerDB,
 		memoryWatch:         memoryWatch,
 		sharedMemory:        sharedMemory,
+		runtimeFS:           runtimeFS,
 		webServer:           NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
 		logger:              logger,
 		pendingInteractions: make(map[string]*pendingInteraction),
