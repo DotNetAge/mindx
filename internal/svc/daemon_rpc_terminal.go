@@ -165,6 +165,11 @@ func (d *Daemon) handleTerminalInput(ctx context.Context, params json.RawMessage
 		return nil, fmt.Errorf("terminal session not found: %s", req.SessionID)
 	}
 
+	clientID := gateway.ClientIDFromContext(ctx)
+	if clientID == "" || clientID != ts.clientID {
+		return nil, fmt.Errorf("permission denied: not your terminal")
+	}
+
 	if _, err := ts.pty.Write([]byte(req.Data)); err != nil {
 		return nil, fmt.Errorf("failed to write to pty: %w", err)
 	}
@@ -188,6 +193,11 @@ func (d *Daemon) handleTerminalResize(ctx context.Context, params json.RawMessag
 	ts := termMgr.get(req.SessionID)
 	if ts == nil {
 		return nil, fmt.Errorf("terminal session not found: %s", req.SessionID)
+	}
+
+	clientID := gateway.ClientIDFromContext(ctx)
+	if clientID == "" || clientID != ts.clientID {
+		return nil, fmt.Errorf("permission denied: not your terminal")
 	}
 
 	if err := pty.Setsize(ts.pty, &pty.Winsize{
@@ -214,6 +224,11 @@ func (d *Daemon) handleTerminalKill(ctx context.Context, params json.RawMessage)
 	ts := termMgr.get(req.SessionID)
 	if ts == nil {
 		return nil, fmt.Errorf("terminal session not found: %s", req.SessionID)
+	}
+
+	clientID := gateway.ClientIDFromContext(ctx)
+	if clientID == "" || clientID != ts.clientID {
+		return nil, fmt.Errorf("permission denied: not your terminal")
 	}
 
 	ts.close()

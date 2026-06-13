@@ -827,6 +827,7 @@ func (d *Daemon) initGateway() {
 				"client_id", clientID,
 			)
 			d.cancelClientExecution(clientID)
+			termMgr.cleanupClient(clientID)
 		}),
 	)
 	d.logger.Info("gateway instance created")
