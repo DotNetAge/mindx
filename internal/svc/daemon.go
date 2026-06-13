@@ -26,6 +26,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/appicon"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
+	"github.com/DotNetAge/mindx/internal/update"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
@@ -273,6 +274,12 @@ type Daemon struct {
 
 	// runtimeFS 是嵌入式文件系统，包含 runtime/ 目录下的资源文件。
 	runtimeFS fs.FS
+
+	// updater 负责自动升级检查与安装。
+	updater *update.Updater
+
+	// restartCh 接收重启信号；Start() 主循环通过 select 监听。
+	restartCh chan struct{}
 }
 
 func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
@@ -426,6 +433,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		webServer:           NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
 		logger:              logger,
 		pendingInteractions: make(map[string]*pendingInteraction),
+		restartCh:           make(chan struct{}, 1),
 	}
 
 	// Wire graphDB to daemon fields (deferred because d is needed)
@@ -460,6 +468,26 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			"path", filepath.Join(app.Settings().DataDir(), "kvstore.db"),
 		)
 	}
+
+	// ── 自动升级 ──────────────────────────────────────────────
+	// 确保 config.InstalledVersion 不为空（首次启动时设置）
+	cfg := app.Config()
+	if cfg.InstalledVersion == "" && core.Version != "" {
+		cfg.InstalledVersion = core.Version
+		if err := cfg.Save(); err != nil {
+			logger.Warn("failed to save initial installed version", "error", err)
+		}
+	}
+	d.updater = update.NewUpdater(
+		core.Version,
+		cfg.InstalledVersion,
+		app.Settings().UserPreferences(),
+		func(version string) error {
+			cfg.InstalledVersion = version
+			return cfg.Save()
+		},
+		func(msg string, args ...any) { logger.Info(fmt.Sprintf("updater: "+msg, args...)) },
+	)
 
 	d.logger.Info("=== Daemon initialization complete ===",
 		"has_scheduler", d.scheduler != nil,
@@ -505,6 +533,43 @@ func (d *Daemon) cleanupStaleInteractions(timeout time.Duration) {
 	}
 }
 
+// autoUpdateLoop 在启动时进行一次检查，之后每 24 小时检查一次。
+func (d *Daemon) autoUpdateLoop(ctx context.Context) {
+	// 启动后稍等 10 秒再检查，避免启动流程堵塞
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-timer.C:
+			d.logger.Info("auto-update: checking for updates...")
+			info := d.updater.Check(true)
+			if info.Error != "" {
+				d.logger.Warn("auto-update: check failed", "error", info.Error)
+			} else if info.UpdateAvailable {
+				d.logger.Info("auto-update: update available!",
+					"current", info.CurrentVersion,
+					"latest", info.LatestVersion,
+				)
+				// 自动下载并安装新二进制（但不要重启，只记录日志通知用户）
+				if err := d.updater.DownloadAndInstall(ctx); err != nil {
+					d.logger.Warn("auto-update: download and install failed", "error", err)
+				} else {
+					d.logger.Info("auto-update: update installed. User should restart the daemon.")
+				}
+			} else {
+				d.logger.Info("auto-update: already up-to-date", "version", info.CurrentVersion)
+			}
+			// 检查完毕后，每 24 小时检查一次
+			timer.Reset(24 * time.Hour)
+
+		case <-ctx.Done():
+			d.logger.Info("auto-update: stopping")
+			return
+		}
+	}
+}
+
 func (d *Daemon) Start(ctx context.Context) error {
 	d.startTime = time.Now()
 	d.logger.Info("daemon start called", "addr", d.addr, "wsPath", d.wsPath)
@@ -525,6 +590,9 @@ func (d *Daemon) Start(ctx context.Context) error {
 		d.logger.Info("no scheduler configured, skipping")
 	}
 
+	// ── 自动升级检查（启动时 + 每日一次） ─────────────────
+	go d.autoUpdateLoop(ctx)
+
 	if d.memoryWatch != nil {
 		d.logger.Info("filewatch service configured but not started (user must call filewatch.start to activate)")
 	} else {
@@ -533,6 +601,8 @@ func (d *Daemon) Start(ctx context.Context) error {
 
 	// Register system health / diagnostics endpoint.
 	d.webServer.HandleFunc("/api/health", d.handleHealth)
+	// Register file download handler for binary file access.
+	d.webServer.HandleFunc("/api/fs/download", d.handleFSDownload)
 
 	if err := d.webServer.Start(ctx); err != nil {
 		d.logger.Warn("WebUI server failed to start", "error", err)
@@ -553,9 +623,15 @@ func (d *Daemon) Start(ctx context.Context) error {
 	d.logger.Info("gateway started successfully, daemon is now running")
 	d.logger.Info("daemon running, waiting for shutdown signal...")
 
-	// 阻塞等待 shutdown 信号（SIGINT/SIGTERM），响应 Ctrl+C
-	<-ctx.Done()
-	d.logger.Info("received shutdown signal, cleaning up...")
+	// 监听 shutdown 或 restart 信号
+	var restart bool
+	select {
+	case <-ctx.Done():
+		d.logger.Info("received shutdown signal, cleaning up...")
+	case <-d.restartCh:
+		d.logger.Info("restart requested, cleaning up...")
+		restart = true
+	}
 
 	d.stopBackgroundServices()
 
@@ -564,7 +640,39 @@ func (d *Daemon) Start(ctx context.Context) error {
 	}
 
 	d.logger.Info("shutting down gateway")
+
+	if restart {
+		d.logger.Info("starting new daemon process...")
+		execPath, err := os.Executable()
+		if err != nil {
+			d.logger.Error("failed to get executable path", err)
+			return fmt.Errorf("get executable: %w", err)
+		}
+
+		proc, err := os.StartProcess(execPath, os.Args, &os.ProcAttr{
+			Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+		})
+		if err != nil {
+			d.logger.Error("failed to start new daemon process", err)
+			// The daemon is already shut down, so we return an error
+			// (the caller will handle it via the original ctx.Done())
+			return fmt.Errorf("restart: start new process: %w", err)
+		}
+		d.logger.Info("new daemon process started", "pid", proc.Pid)
+		os.Exit(0)
+	}
+
 	return d.gw.Shutdown(ctx)
+}
+
+// Restart 触发 daemon 优雅重启：关闭服务 → 启动新进程 → os.Exit(0)
+func (d *Daemon) Restart() {
+	d.logger.Info("restart signal sent")
+	select {
+	case d.restartCh <- struct{}{}:
+	default:
+		d.logger.Warn("restart already requested")
+	}
 }
 
 func (d *Daemon) stopBackgroundServices() {

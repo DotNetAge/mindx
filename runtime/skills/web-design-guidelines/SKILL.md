@@ -2,6 +2,10 @@
 name: web-design-guidelines
 description: Review UI code for Web Interface Guidelines compliance. Use when asked to "review my UI", "check accessibility", "audit design", "review UX", or "check my site against best practices".
 metadata:
+  name_zh: 网页设计审核
+  name_zh-tw: 網頁設計審核
+  description_zh: 审查 UI 代码是否符合 Web 界面设计规范的合规性
+  description_zh-tw: 審查 UI 程式碼是否符合 Web 介面設計規範的合規性
   author: vercel
   version: "1.0.0"
   argument-hint: <file-or-pattern>

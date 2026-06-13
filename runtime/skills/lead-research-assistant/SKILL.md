@@ -1,6 +1,11 @@
 ---
 name: lead-research-assistant
 description: Identifies high-quality leads for your product or service by analyzing your business, searching for target companies, and providing actionable contact strategies. Perfect for sales, business development, and marketing professionals.
+metadata:
+  name_zh: 线索研究助手
+  name_zh-tw: 線索研究助手
+  description_zh: 通过分析你的业务、搜索目标公司并提供可操作的联络策略，识别高质量销售线索
+  description_zh-tw: 透過分析你的業務、搜尋目標公司並提供可操作的聯絡策略，辨識高品質銷售線索
 ---
 
 # Lead Research Assistant

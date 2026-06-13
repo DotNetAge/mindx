@@ -4,6 +4,11 @@ description: >
   Use when you need to store, retrieve, or manage key-value data persistently.
   Covers CRUD operations, prefix scanning, batch writes, TTL expiry, and namespace cleanup.
   This is the low-level KV storage skill — use kg-manager for knowledge graph workflows that need KV.
+metadata:
+  name_zh: 键值存储
+  name_zh-tw: 鍵值儲存
+  description_zh: 持久化键值数据的 CRUD 操作、前缀扫描、批量写入、TTL 过期和命名空间清理
+  description_zh-tw: 持久化鍵值資料的 CRUD 操作、前綴掃描、批次寫入、TTL 過期和命名空間清理
 ---
 
 # Protocol: Key-Value Store Operations

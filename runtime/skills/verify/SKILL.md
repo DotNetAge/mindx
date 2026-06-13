@@ -4,6 +4,11 @@ description: >
   Rigorous verification of changes through testing and execution.
   Use when the user mentions verify, test, check, or QA.
 allowed-tools: bash todo-write
+metadata:
+  name_zh: 代码验证
+  name_zh-tw: 程式碼驗證
+  description_zh: 通过测试和运行严格验证代码变更是否按预期工作
+  description_zh-tw: 透過測試和執行嚴格驗證程式碼變更是否按預期運作
 ---
 
 # Verify: Code Change QA

@@ -4,6 +4,11 @@ description: >
   High-level orchestration for system design and major migrations.
   Use when the user mentions architecture, design, refactoring, or migration.
 allowed-tools: glob grep subagent subagent-list subagent-result todo-write
+metadata:
+  name_zh: 架构师
+  name_zh-tw: 架構師
+  description_zh: 系统设计和大型迁移的高层编排与协调
+  description_zh-tw: 系統設計和大型遷移的高層編排與協調
 ---
 
 # Architect: System Design & Refactoring

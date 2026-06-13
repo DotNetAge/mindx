@@ -5,6 +5,11 @@ description: |
 allowed-tools:
   - Bash(firecrawl *)
   - Bash(npx firecrawl *)
+metadata:
+  name_zh: 网页搜索抓取
+  name_zh-tw: 網頁搜尋抓取
+  description_zh: 通过 Firecrawl CLI 搜索、抓取和交互式浏览网页内容，搜文章、查资料、抓取 URL 内容
+  description_zh-tw: 透過 Firecrawl CLI 搜尋、抓取和互動式瀏覽網頁內容，搜文章、查資料、抓取 URL 內容
 ---
 
 # Firecrawl CLI

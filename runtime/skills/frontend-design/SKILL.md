@@ -2,6 +2,11 @@
 name: frontend-design
 description: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, or applications. Generates creative, polished code that avoids generic AI aesthetics.
 license: Complete terms in LICENSE.txt
+metadata:
+  name_zh: 前端设计
+  name_zh-tw: 前端設計
+  description_zh: 创建独具特色的生产级前端界面，具有高质量设计，避免通用 AI 审美
+  description_zh-tw: 建立獨具特色的生產級前端介面，具有高品質設計，避免通用 AI 審美
 ---
 
 This skill guides creation of distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Implement real working code with exceptional attention to aesthetic details and creative choices.

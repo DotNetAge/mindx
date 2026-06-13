@@ -67,9 +67,26 @@ func buildSubtaskCompletedMarkdown(result goharnessevents.SubtaskResult) string 
 }
 
 func buildTaskSummaryMarkdown(ts goharnessevents.TaskSummaryData) string {
-	return fmt.Sprintf("### %s\n\n%s\n\n**%s**: %s %d / %s %d / %s %d\n",
+	return fmt.Sprintf("### %s\n\n%s\n\n**%s**: %s %s / %s %s / %s %s\n",
 		i18n.T("svc.md.task.summary"), ts.Summary,
-		i18n.T("svc.md.task.token"), i18n.T("svc.md.token.input"), ts.TokenUsage.InputTokens,
-		i18n.T("svc.md.token.output"), ts.TokenUsage.OutputTokens,
-		i18n.T("svc.md.token.total"), ts.TokenUsage.TotalTokens)
+		i18n.T("svc.md.task.token"), i18n.T("svc.md.token.input"), formatTokenCount(ts.TokenUsage.InputTokens),
+		i18n.T("svc.md.token.output"), formatTokenCount(ts.TokenUsage.OutputTokens),
+		i18n.T("svc.md.token.total"), formatTokenCount(ts.TokenUsage.TotalTokens))
+}
+
+// formatTokenCount converts a large number to a human-readable K/M format.
+//
+//	25858 → "25.9K"
+//	271   → "271"
+//	1500000 → "1.5M"
+func formatTokenCount(n int) string {
+	if n >= 1_000_000 {
+		m := float64(n) / 1_000_000
+		return fmt.Sprintf("%.1fM", m)
+	}
+	if n >= 1_000 {
+		k := float64(n) / 1_000
+		return fmt.Sprintf("%.1fK", k)
+	}
+	return fmt.Sprintf("%d", n)
 }

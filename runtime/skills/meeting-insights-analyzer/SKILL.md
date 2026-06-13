@@ -1,6 +1,11 @@
 ---
 name: meeting-insights-analyzer
 description: Analyzes meeting transcripts and recordings to uncover behavioral patterns, communication insights, and actionable feedback. Identifies when you avoid conflict, use filler words, dominate conversations, or miss opportunities to listen. Perfect for professionals seeking to improve their communication and leadership skills.
+metadata:
+  name_zh: 会议洞察分析
+  name_zh-tw: 會議洞察分析
+  description_zh: 分析会议记录和录音，发现行为模式、沟通洞察和可操作的反馈
+  description_zh-tw: 分析會議記錄和錄音，發現行為模式、溝通洞察和可操作的回饋
 ---
 
 # Meeting Insights Analyzer

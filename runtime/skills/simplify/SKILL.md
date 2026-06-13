@@ -4,6 +4,11 @@ description: >
   Post-implementation cleanup to ensure code quality and simplicity.
   Use when the user mentions simplify, cleanup, refactor, or polish.
 allowed-tools: file-edit bash read replace
+metadata:
+  name_zh: 代码简化
+  name_zh-tw: 程式碼簡化
+  description_zh: 实现后的代码质量检查与清理，确保代码复用性、质量和效率
+  description_zh-tw: 實作後的程式碼品質檢查與清理，確保程式碼複用性、品質和效率
 ---
 
 # Simplify: Code Review and Cleanup

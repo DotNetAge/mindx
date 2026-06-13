@@ -5,6 +5,11 @@ description: >
   request falls outside your expertise, your tools/skills are insufficient,
   or the task needs multi-domain parallel work.
 allowed-tools: sub-agent collect-results task-create team-create team-list bash
+metadata:
+  name_zh: 寻找专家
+  name_zh-tw: 尋找專家
+  description_zh: 发现并与专业智能体协作——当任务超出你的专业范围、工具或技能不足，或需要多领域并行工作时使用
+  description_zh-tw: 發現並與專業智慧體協作——當任務超出你的專業範圍、工具或技能不足，或需要多領域並行工作時使用
 ---
 
 ## When to Use

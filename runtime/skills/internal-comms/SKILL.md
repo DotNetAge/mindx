@@ -2,6 +2,11 @@
 name: internal-comms
 description: A set of resources to help me write all kinds of internal communications, using the formats that my company likes to use. Claude should use this skill whenever asked to write some sort of internal communications (status reports, leadership updates, 3P updates, company newsletters, FAQs, incident reports, project updates, etc.).
 license: Complete terms in LICENSE.txt
+metadata:
+  name_zh: 内部沟通
+  name_zh-tw: 內部溝通
+  description_zh: 使用公司格式撰写各类内部沟通文档，包括状态报告、领导层更新、新闻稿、FAQ 和事件报告
+  description_zh-tw: 使用公司格式撰寫各類內部溝通文件，包括狀態報告、領導層更新、新聞稿、FAQ 和事件報告
 ---
 
 ## When to use this skill
