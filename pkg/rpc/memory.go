@@ -19,7 +19,7 @@ type MemoryStoreParams struct {
 
 // MemoryDeleteParams are the params for memory.delete.
 type MemoryDeleteParams struct {
-	IDs []string `json:"ids"`
+	ID string `json:"id"`
 }
 
 // MemoryChunksParams are the params for memory.chunks.
@@ -56,8 +56,8 @@ func (c *Client) MemoryStore(content, title, description, source string) (json.R
 	})
 }
 
-func (c *Client) MemoryDelete(ids []string) (json.RawMessage, error) {
-	return c.CallWithTimeout("memory.delete", MemoryDeleteParams{IDs: ids})
+func (c *Client) MemoryDelete(id string) (json.RawMessage, error) {
+	return c.CallWithTimeout("memory.delete", MemoryDeleteParams{ID: id})
 }
 
 func (c *Client) MemoryStats() (json.RawMessage, error) {
