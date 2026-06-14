@@ -118,23 +118,6 @@ The `introduction` is the agent's full system prompt / working instructions. It 
 mindx agent add <agent-name> \
     --role "Senior Role Title" \
     --description "description for LLM routing" \
-    --model "model-name" \
-    --skills "skill1,skill2"
-```
-
-If you have a detailed introduction file, first write it to a file, then create the agent:
-
-```bash
-# Write the introduction to a file
-cat <<'INTRO' > /tmp/<agent-name>-intro.md
-Full system prompt for the agent (see best-practices for format)
-INTRO
-
-# Create the agent
-mindx agent add <agent-name> \
-    --role "Senior Role Title" \
-    --description "description for LLM routing" \
-    --model "model-name" \
     --skills "skill1,skill2"
 ```
 

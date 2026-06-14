@@ -233,8 +233,8 @@ The agent is stored as a Markdown file with YAML frontmatter
 in the agents directory (~/.mindx/agents/{name}.md).
 
 Examples:
-  mindx agent add my-agent --role "Assistant" --model gpt-4 --description "My custom agent"
-  mindx agent add helper --role "Helper" --model qwen3.6-plus --skills "file-organizer,pdf"`,
+  mindx agent add my-agent --role "Assistant" --description "My custom agent"
+  mindx agent add helper --role "Helper" --skills "file-organizer,pdf"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
@@ -255,7 +255,6 @@ Examples:
 			Name:        name,
 			Role:        agentAddFlags.role,
 			Description: agentAddFlags.description,
-			Model:       agentAddFlags.model,
 		}
 		if agentAddFlags.skills != "" {
 			agent.Skills = strings.Split(agentAddFlags.skills, ",")
@@ -287,7 +286,6 @@ func init() {
 	agentScoreCmd.Flags().StringVar(&agentScoreFlags.notes, "notes", "", "Optional evaluation notes")
 	agentAddCmd.Flags().StringVar(&agentAddFlags.role, "role", "", "Agent role/title")
 	agentAddCmd.Flags().StringVar(&agentAddFlags.description, "description", "", "Agent description")
-	agentAddCmd.Flags().StringVar(&agentAddFlags.model, "model", "", "Default model name")
 	agentAddCmd.Flags().StringVar(&agentAddFlags.skills, "skills", "", "Comma-separated skill names")
 
 	agentCmd.AddCommand(agentListCmd)
