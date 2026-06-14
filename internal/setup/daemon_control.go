@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -48,6 +49,22 @@ func CheckDaemon() (DaemonStatus, error) {
 	}
 }
 
+// StartDaemon starts the registered daemon service.
+// Returns an error if the daemon is not installed or cannot be started.
+func StartDaemon() error {
+	workspaceDir := core.DefaultUserPrefsDir()
+	switch runtime.GOOS {
+	case "darwin":
+		return startDaemonMacOS(workspaceDir)
+	case "linux":
+		return startDaemonLinux()
+	case "windows":
+		return startDaemonWindows()
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+}
+
 // StopDaemon stops the currently running daemon service.
 // Returns an error if the daemon cannot be stopped or was not installed.
 func StopDaemon() error {
@@ -66,7 +83,36 @@ func StopDaemon() error {
 
 // ── macOS ───────────────────────────────────────────────────────────────────
 
-const macosLaunchdLabel = "com.dotnetage.mindx"
+const macosLaunchdLabel = "com.mindx.daemon"
+
+func startDaemonMacOS(workspaceDir string) error {
+	agentPlist := filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", "com.mindx.daemon.plist")
+	if _, err := os.Stat(agentPlist); os.IsNotExist(err) {
+		return fmt.Errorf("daemon plist not found at %s — run 'mindx install' first", agentPlist)
+	}
+	cmd := exec.Command("launchctl", "bootstrap", fmt.Sprintf("gui/%d", os.Getuid()), agentPlist)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("launchctl bootstrap: %w\n%s", err, string(out))
+	}
+	return nil
+}
+
+func startDaemonLinux() error {
+	cmd := exec.Command("systemctl", "--user", "start", linuxServiceName+".service")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("systemctl start: %w\n%s", err, string(out))
+	}
+	return nil
+}
+
+func startDaemonWindows() error {
+	cmd := exec.Command("schtasks", "/run", "/tn", "MindXDaemon")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("schtasks run: %w\n%s", err, decodeWindowsOutput(out))
+	}
+	return nil
+}
 
 func checkDaemonMacOS(workspaceDir string) (DaemonStatus, error) {
 	cfg, err := core.LoadMindxConfig(workspaceDir)

@@ -95,16 +95,16 @@ fmt:
 		echo "$(GREEN)✅ All .go files properly formatted.$(NC)"; \
 	fi
 
-## lint: 运行 golangci-lint 静态分析
+## lint: 运行 golint 代码检查
 lint:
-	@echo "$(CYAN)🔍 Running golangci-lint...$(NC)"
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run --timeout=5m; \
+	@echo "$(CYAN)🔍 Running golint...$(NC)"
+	@if command -v golint >/dev/null 2>&1; then \
+		golint ./...; \
 		echo "$(GREEN)✅ Lint passed.$(NC)"; \
 	else \
-		echo "$(YELLOW)⚠  golangci-lint not found, installing...$(NC)"; \
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
-		golangci-lint run --timeout=5m; \
+		echo "$(YELLOW)⚠  golint not found, installing...$(NC)"; \
+		go install golang.org/x/lint/golint@latest; \
+		golint ./...; \
 		echo "$(GREEN)✅ Lint passed.$(NC)"; \
 	fi
 
@@ -176,8 +176,8 @@ install: fmt lint
 	HOME_DIR=$$HOME; \
 	UNAME_S=$$(uname -s); \
 	if [ "$$UNAME_S" = "Darwin" ]; then \
-		PLIST="$$HOME/.mindx/settings/com.dotnetage.$(BINARY_NAME).plist"; \
-		LABEL="com.dotnetage.$(BINARY_NAME)"; \
+		PLIST="$$HOME/.mindx/settings/com.mindx.daemon.plist"; \
+		LABEL="com.mindx.daemon"; \
 		LAUNCH_AGENTS="$$HOME/Library/LaunchAgents"; \
 		mkdir -p "$$LAUNCH_AGENTS" "$$HOME/.mindx/logs"; \
 		echo "$(CYAN)  ⟳ Cleaning up old services...$(NC)" && \
@@ -198,7 +198,7 @@ install: fmt lint
 			'    <key>ProgramArguments</key>' \
 			'    <array>' \
 			"        <string>$$MINDX_BIN</string>" \
-			'        <string>start</string>' \
+			'        <string>daemon</string>' \
 			'    </array>' \
 			'    <key>RunAtLoad</key>' \
 			'    <true/>' \
@@ -271,7 +271,7 @@ uninstall:
 	@echo "$(CYAN)  ⟳ Stopping daemon...$(NC)"
 	@UNAME_S=$$(uname -s); \
 	if [ "$$UNAME_S" = "Darwin" ]; then \
-		SERVICE="gui/$$(id -u)/com.dotnetage.$(BINARY_NAME)"; \
+		SERVICE="gui/$$(id -u)/com.mindx.daemon"; \
 		(launchctl bootout "$$SERVICE" 2>/dev/null && \
 			echo "     stopped launchd service" || echo "     (no launchd service)"); \
 	elif [ "$$UNAME_S" = "Linux" ]; then \
@@ -279,7 +279,7 @@ uninstall:
 			echo "     stopped systemd service" || echo "     (no systemd service)"; \
 		systemctl --user disable $(BINARY_NAME) 2>/dev/null || true; \
 	fi; \
-	pkill -f "$(BINARY_NAME) start" 2>/dev/null && echo "     killed mindx start" || true; \
+	pkill -f "$(BINARY_NAME) daemon" 2>/dev/null && echo "     killed mindx daemon" || true; \
 	lsof -ti:1313 -ti:1314 2>/dev/null | xargs kill 2>/dev/null && echo "     freed ports 1313/1314" || true
 	@sleep 1
 	@echo ""
@@ -287,14 +287,16 @@ uninstall:
 	@echo "$(CYAN)  ⟳ Removing service files...$(NC)"
 	@UNAME_S=$$(uname -s); \
 	if [ "$$UNAME_S" = "Darwin" ]; then \
-		rm -f ~/Library/LaunchAgents/com.dotnetage.$(BINARY_NAME).plist && \
+		rm -f ~/Library/LaunchAgents/com.mindx.daemon.plist && \
 			echo "     removed launchd plist" || true; \
+		rm -f ~/Library/LaunchAgents/com.dotnetage.mindx.plist 2>/dev/null || true; \
 	elif [ "$$UNAME_S" = "Linux" ]; then \
 		rm -f ~/.config/systemd/user/$(BINARY_NAME).service && \
 			systemctl --user daemon-reload 2>/dev/null && \
 			echo "     removed systemd unit" || true; \
 	fi
-	@rm -f ~/.mindx/settings/com.dotnetage.$(BINARY_NAME).plist 2>/dev/null || true
+	@rm -f ~/.mindx/settings/com.mindx.daemon.plist 2>/dev/null || true
+	@rm -f ~/.mindx/settings/com.dotnetage.mindx.plist 2>/dev/null || true
 	@rm -f ~/.mindx/settings/$(BINARY_NAME).service 2>/dev/null || true
 	@echo ""
 	@# ── 从 shell rc 中移除 PATH ──
@@ -345,7 +347,7 @@ run-daemon: build
 	@echo "  • WebSocket: ws://localhost:1314/ws"
 	@echo "  • Press Ctrl+C to stop"
 	@echo ""
-	./$(BUILD_DIR)/$(BINARY_NAME) start
+	./$(BUILD_DIR)/$(BINARY_NAME) daemon
 
 ## restart: 编译并重启 daemon（通过系统服务管理器，非阻塞）
 restart: build
@@ -365,7 +367,7 @@ restart: build
 	fi
 	@UNAME_S=$$(uname -s); \
 	if [ "$$UNAME_S" = "Darwin" ]; then \
-		LABEL="com.dotnetage.$(BINARY_NAME)"; \
+		LABEL="com.mindx.daemon"; \
 		SERVICE="gui/$$(id -u)/$$LABEL"; \
 		PLIST="$$HOME/Library/LaunchAgents/$$LABEL.plist"; \
 		if launchctl print "$$SERVICE" >/dev/null 2>&1; then \
@@ -382,7 +384,7 @@ restart: build
 			launchctl bootstrap gui/$$(id -u) "$$PLIST" && \
 			echo "$(GREEN)✅ Daemon started via launchd.$(NC)" || \
 			echo "$(YELLOW)⚠ Bootstrap failed, starting directly...$(NC)" && \
-			$(BUILD_DIR)/$(BINARY_NAME) start & \
+			$(BUILD_DIR)/$(BINARY_NAME) daemon & \
 			echo "$(GREEN)✅ Daemon started in background.$(NC)"; \
 		fi; \
 	elif [ "$$UNAME_S" = "Linux" ]; then \
@@ -396,10 +398,10 @@ stop:
 	@echo "$(YELLOW)🛑 Stopping mindx daemon...$(NC)"
 	@UNAME_S=$$(uname -s); \
 	if [ "$$UNAME_S" = "Darwin" ]; then \
-		SERVICE="gui/$$(id -u)/com.dotnetage.$(BINARY_NAME)"; \
+		SERVICE="gui/$$(id -u)/com.mindx.daemon"; \
 		launchctl bootout "$$SERVICE" 2>/dev/null && echo "     stopped launchd service" || true; \
 	fi; \
-	pkill -f "$(BINARY_NAME) start" 2>/dev/null || \
+	pkill -f "$(BINARY_NAME) daemon" 2>/dev/null || \
 	 (lsof -ti:1313 -ti:1314 2>/dev/null | xargs kill 2>/dev/null) || \
 	 echo "$(GREEN)  ✅ No running daemon found.$(NC)"
 	@sleep 1
@@ -1085,7 +1087,7 @@ help:
 	@echo ""
 	@echo "$(YELLOW)🔍 Code Quality Gates (run before every build):$(NC)"
 	@echo "  $(GREEN)fmt$(NC)              Check & auto-fix Go formatting (gofmt)"
-	@echo "  $(GREEN)lint$(NC)             Run golangci-lint static analysis"
+	@echo "  $(GREEN)lint$(NC)             Run golint code analysis"
 	@echo ""
 	@echo "$(YELLOW)ℹ️ Info Targets:$(NC)"
 	@echo "  $(GREEN)version$(NC)          Show version information"
