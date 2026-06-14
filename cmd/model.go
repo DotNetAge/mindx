@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/table"
 	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -30,6 +32,29 @@ var modelListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all configured models",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		useJSON, _ := cmd.Flags().GetBool("json")
+
+		if useJSON {
+			cl, err := rpc.Dial(daemonAddr)
+			if err != nil {
+				return fmt.Errorf("cannot connect to daemon: %w", err)
+			}
+			defer cl.Close()
+
+			result, err := cl.ModelList()
+			if err != nil {
+				return err
+			}
+			var pretty interface{}
+			if err := json.Unmarshal(result, &pretty); err == nil {
+				formatted, _ := json.MarshalIndent(pretty, "", "  ")
+				fmt.Println(string(formatted))
+				return nil
+			}
+			fmt.Println(string(result))
+			return nil
+		}
+
 		path := modelsFilePath()
 		registry, err := goharnessconfig.LoadModels(path)
 		if err != nil {
@@ -222,6 +247,7 @@ Examples:
 }
 
 func init() {
+	modelListCmd.Flags().Bool("json", false, "Output JSON via daemon (requires mindx start)")
 	modelAddCmd.Flags().StringVar(&modelAddFlags.name, "name", "", "Model name (required)")
 	modelAddCmd.Flags().StringVar(&modelAddFlags.title, "title", "", "Display title")
 	modelAddCmd.Flags().StringVar(&modelAddFlags.provider, "provider", "", "Provider name (required)")
@@ -233,11 +259,14 @@ func init() {
 	modelAddCmd.Flags().Float64Var(&modelAddFlags.temperature, "temperature", 0.7, "Temperature (0.0–2.0)")
 	modelAddCmd.Flags().Float64Var(&modelAddFlags.topP, "top-p", 0, "Top-p sampling")
 	modelAddCmd.Flags().Float64Var(&modelAddFlags.repetitionPenalty, "repetition-penalty", 0, "Repetition penalty")
+	modelSwitchCmd.Flags().String("name", "", "Model name (required)")
+	modelSwitchCmd.Flags().String("provider", "", "Provider name")
 
 	modelCmd.AddCommand(modelListCmd)
 	modelCmd.AddCommand(modelRmCmd)
 	modelCmd.AddCommand(modelAddCmd)
 	modelCmd.AddCommand(modelSetCmd)
+	modelCmd.AddCommand(modelSwitchCmd)
 	rootCmd.AddCommand(modelCmd)
 }
 
@@ -281,6 +310,34 @@ Example:
 		}
 
 		fmt.Printf("Default model set to %q.\n", modelName)
+		return nil
+	},
+}
+
+// ── model switch ──────────────────────────────────────────────
+
+var modelSwitchCmd = &cobra.Command{
+	Use:   "switch",
+	Short: "Switch to a different model for the active session (via daemon)",
+	Example: `  mindx model switch --name gpt-4
+  mindx model switch --name deepseek-v4-flash --provider deepseek`,
+	PersistentPreRunE: requireDaemon,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name, _ := cmd.Flags().GetString("name")
+		provider, _ := cmd.Flags().GetString("provider")
+		if name == "" {
+			return fmt.Errorf("--name is required")
+		}
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer cl.Close()
+		result, err := cl.ModelSwitch(name, provider)
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(result))
 		return nil
 	},
 }

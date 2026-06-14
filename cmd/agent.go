@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/DotNetAge/goharness/logging"
 	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
 )
 
@@ -18,10 +20,17 @@ import (
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Manage AI agents",
-	Long: `List, add, or remove AI agents.
+	Long: `List, inspect, add, remove or score AI agents.
 
-Each agent is stored as a Markdown file with YAML frontmatter
-in the agents directory (~/.mindx/agents/).`,
+By default reads agents from local config files.
+Use --json to query the daemon and output JSON (for LLM consumption).
+
+Examples:
+  mindx agent list
+  mindx agent list --json
+  mindx agent get writer
+  mindx agent add writer --role "Writer"
+  mindx agent rm writer`,
 }
 
 // ── agent list ─────────────────────────────────────────────────
@@ -30,6 +39,30 @@ var agentListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all configured agents",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		useJSON, _ := cmd.Flags().GetBool("json")
+
+		if useJSON {
+			cl, err := rpc.Dial(daemonAddr)
+			if err != nil {
+				return fmt.Errorf("cannot connect to daemon: %w", err)
+			}
+			defer cl.Close()
+
+			result, err := cl.AgentList()
+			if err != nil {
+				return err
+			}
+			// Pretty-print the JSON for LLM readability
+			var pretty interface{}
+			if err := json.Unmarshal(result, &pretty); err == nil {
+				formatted, _ := json.MarshalIndent(pretty, "", "  ")
+				fmt.Println(string(formatted))
+				return nil
+			}
+			fmt.Println(string(result))
+			return nil
+		}
+
 		dir := agentDir()
 		registry, err := goharnessconfig.LoadAgentsFrom(dir)
 		if err != nil {
@@ -60,6 +93,100 @@ var agentListCmd = &cobra.Command{
 		}
 		fmt.Println(table.Render())
 		fmt.Printf("\n%d agent(s) configured.\n", len(agents))
+		return nil
+	},
+}
+
+// ── agent get ──────────────────────────────────────────────────
+
+var agentGetCmd = &cobra.Command{
+	Use:   "get <name>",
+	Short: "Show agent details via daemon (JSON output)",
+	Long: `Query the daemon for a single agent's full configuration.
+Outputs rich JSON suitable for LLM consumption.
+
+Example:
+  mindx agent get writer
+  mindx agent get project-manager`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name := args[0]
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer cl.Close()
+
+		result, err := cl.AgentGet(name)
+		if err != nil {
+			return err
+		}
+
+		var pretty interface{}
+		if err := json.Unmarshal(result, &pretty); err == nil {
+			formatted, _ := json.MarshalIndent(pretty, "", "  ")
+			fmt.Println(string(formatted))
+			return nil
+		}
+		fmt.Println(string(result))
+		return nil
+	},
+}
+
+// ── agent score ────────────────────────────────────────────────
+
+var agentScoreFlags struct {
+	agentName string
+	task      string
+	score     int
+	notes     string
+}
+
+var agentScoreCmd = &cobra.Command{
+	Use:   "score",
+	Short: "Score an agent's task performance (via daemon)",
+	Long: `Record a performance score for an agent on a specific task.
+
+Score 1-10: 9-10 exceptional, 7-8 good, 5-6 adequate, 3-4 gaps, 1-2 unusable.
+
+Example:
+  mindx agent score --agent-name writer --task "Write blog post" --score 8
+  mindx agent score --agent-name researcher --task "Research topic" --score 6 --notes "Missed key sources"`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if agentScoreFlags.agentName == "" {
+			return fmt.Errorf("--agent-name is required")
+		}
+		if agentScoreFlags.task == "" {
+			return fmt.Errorf("--task is required")
+		}
+		if agentScoreFlags.score < 1 || agentScoreFlags.score > 10 {
+			return fmt.Errorf("--score must be between 1 and 10")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer cl.Close()
+
+		result, err := cl.AgentScore(rpc.AgentScoreParams{
+			AgentName: agentScoreFlags.agentName,
+			Task:      agentScoreFlags.task,
+			Score:     agentScoreFlags.score,
+			Notes:     agentScoreFlags.notes,
+		})
+		if err != nil {
+			return err
+		}
+
+		var pretty interface{}
+		if err := json.Unmarshal(result, &pretty); err == nil {
+			formatted, _ := json.MarshalIndent(pretty, "", "  ")
+			fmt.Println(string(formatted))
+			return nil
+		}
+		fmt.Println(string(result))
 		return nil
 	},
 }
@@ -150,13 +277,22 @@ Examples:
 	},
 }
 
+// ── init ───────────────────────────────────────────────────────
+
 func init() {
+	agentListCmd.Flags().Bool("json", false, "Output JSON via daemon (requires mindx start)")
+	agentScoreCmd.Flags().StringVar(&agentScoreFlags.agentName, "agent-name", "", "Agent name (required)")
+	agentScoreCmd.Flags().StringVar(&agentScoreFlags.task, "task", "", "Task description (required)")
+	agentScoreCmd.Flags().IntVar(&agentScoreFlags.score, "score", 0, "Score 1-10 (required)")
+	agentScoreCmd.Flags().StringVar(&agentScoreFlags.notes, "notes", "", "Optional evaluation notes")
 	agentAddCmd.Flags().StringVar(&agentAddFlags.role, "role", "", "Agent role/title")
 	agentAddCmd.Flags().StringVar(&agentAddFlags.description, "description", "", "Agent description")
 	agentAddCmd.Flags().StringVar(&agentAddFlags.model, "model", "", "Default model name")
 	agentAddCmd.Flags().StringVar(&agentAddFlags.skills, "skills", "", "Comma-separated skill names")
 
 	agentCmd.AddCommand(agentListCmd)
+	agentCmd.AddCommand(agentGetCmd)
+	agentCmd.AddCommand(agentScoreCmd)
 	agentCmd.AddCommand(agentRmCmd)
 	agentCmd.AddCommand(agentAddCmd)
 	rootCmd.AddCommand(agentCmd)

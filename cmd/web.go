@@ -14,9 +14,11 @@ import (
 
 var webCmd = &cobra.Command{
 	Use:   "web",
-	Short: i18n.T("cmd.web.short"),
-	Long:  i18n.T("cmd.web.long"),
-	RunE:  runWeb,
+	Short: "Open MindX WebUI in browser",
+	Long: `Open the MindX WebUI in the default browser.
+
+Requires the daemon to be running (use 'mindx start' first).`,
+	RunE: runWeb,
 }
 
 var webPort string

@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/table"
 	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
 )
 
@@ -185,16 +186,29 @@ Examples:
 }
 
 func init() {
+	providerListCmd.Flags().Bool("json", false, "Output JSON via daemon (requires mindx start)")
 	providerAddCmd.Flags().StringVar(&providerAddFlags.name, "name", "", "Provider name (required)")
 	providerAddCmd.Flags().StringVar(&providerAddFlags.title, "title", "", "Display title")
 	providerAddCmd.Flags().StringVar(&providerAddFlags.baseURL, "base-url", "", "API base URL (required)")
 	providerAddCmd.Flags().StringVar(&providerAddFlags.apiKey, "api-key", "", "Environment variable name for the API key")
 	providerAddCmd.Flags().BoolVar(&providerAddFlags.local, "local", false, "Mark as a local provider")
+	providerCreateCmd.Flags().String("name", "", "Provider name (required)")
+	providerCreateCmd.Flags().String("title", "", "Display title (required)")
+	providerCreateCmd.Flags().String("base-url", "", "API base URL (required)")
+	providerCreateCmd.Flags().String("api-key", "", "API key")
+	providerUpdateCmd.Flags().String("name", "", "Provider name (required)")
+	providerUpdateCmd.Flags().String("title", "", "Display title")
+	providerUpdateCmd.Flags().String("base-url", "", "API base URL")
+	providerUpdateCmd.Flags().String("api-key", "", "API key")
+	providerDeleteCmd.Flags().String("name", "", "Provider name (required)")
 
 	providerCmd.AddCommand(providerListCmd)
 	providerCmd.AddCommand(providerRmCmd)
 	providerCmd.AddCommand(providerAddCmd)
 	providerCmd.AddCommand(providerSetkeyCmd)
+	providerCmd.AddCommand(providerCreateCmd)
+	providerCmd.AddCommand(providerUpdateCmd)
+	providerCmd.AddCommand(providerDeleteCmd)
 	rootCmd.AddCommand(providerCmd)
 }
 
@@ -284,4 +298,104 @@ func providerNames(providers []*goharnessconfig.ProviderConfig) []string {
 		names = append(names, p.Name)
 	}
 	return names
+}
+
+// ── provider create ───────────────────────────────────────────
+
+var providerCreateCmd = &cobra.Command{
+	Use:               "create",
+	Short:             "Create a new provider (via daemon)",
+	Example:           `  mindx provider create --name my-provider --title "My Provider" --base-url https://api.example.com/v1 --api-key sk-xxx`,
+	PersistentPreRunE: requireDaemon,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name, _ := cmd.Flags().GetString("name")
+		title, _ := cmd.Flags().GetString("title")
+		baseURL, _ := cmd.Flags().GetString("base-url")
+		apiKey, _ := cmd.Flags().GetString("api-key")
+		if name == "" {
+			return fmt.Errorf("--name is required")
+		}
+		if title == "" {
+			return fmt.Errorf("--title is required")
+		}
+		if baseURL == "" {
+			return fmt.Errorf("--base-url is required")
+		}
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer cl.Close()
+		result, err := cl.ProviderCreate(rpc.ProviderCreateParams{
+			Name:    name,
+			Title:   title,
+			BaseURL: baseURL,
+			APIKey:  apiKey,
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(result))
+		return nil
+	},
+}
+
+// ── provider update ───────────────────────────────────────────
+
+var providerUpdateCmd = &cobra.Command{
+	Use:               "update",
+	Short:             "Update an existing provider (via daemon)",
+	Example:           `  mindx provider update --name my-provider --title "New Title" --base-url https://new-api.example.com`,
+	PersistentPreRunE: requireDaemon,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name, _ := cmd.Flags().GetString("name")
+		title, _ := cmd.Flags().GetString("title")
+		baseURL, _ := cmd.Flags().GetString("base-url")
+		apiKey, _ := cmd.Flags().GetString("api-key")
+		if name == "" {
+			return fmt.Errorf("--name is required")
+		}
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer cl.Close()
+		result, err := cl.ProviderUpdate(rpc.ProviderUpdateParams{
+			Name:    name,
+			Title:   title,
+			BaseURL: baseURL,
+			APIKey:  apiKey,
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(result))
+		return nil
+	},
+}
+
+// ── provider delete ───────────────────────────────────────────
+
+var providerDeleteCmd = &cobra.Command{
+	Use:               "delete",
+	Short:             "Delete a provider (via daemon)",
+	Example:           `  mindx provider delete --name my-provider`,
+	PersistentPreRunE: requireDaemon,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		name, _ := cmd.Flags().GetString("name")
+		if name == "" {
+			return fmt.Errorf("--name is required")
+		}
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer cl.Close()
+		result, err := cl.ProviderDelete(name)
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(result))
+		return nil
+	},
 }

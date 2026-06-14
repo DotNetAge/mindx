@@ -38,11 +38,13 @@ Talk to the user. Extract measurable goals before writing anything.
 Confirm plan. Decompose goal into tasks. Each task = **who does it, when, what**.
 
 ```bash
-graph_client.py create-project --name "..." --description "..."
-graph_client.py create-goal --project-id "..." --title "..." --weight N
+python3 scripts/graph_client.py create-project --name "..." --description "..."
 
-# Save task_id — it becomes the session_id for all future communication
-task_id=$(graph_client.py create-task --goal-id "..." --title "..." --agent "x" --prompt "..." | python3 -c "import sys,json;print(json.load(sys.stdin)[0].get('t.id',''))")
+# Save the returned project-id for next steps
+python3 scripts/graph_client.py create-goal --project-id "proj-xxx" --title "..." --weight N
+
+# create-task outputs the task_id — use it as session_id for agent communication
+task_id=$(python3 scripts/graph_client.py create-task --goal-id "goal-xxx" --title "..." --agent "x" --prompt "..." | python3 -c "import sys,json;print(json.load(sys.stdin)[0].get('t.id',''))")
 ```
 
 ---
@@ -52,7 +54,7 @@ task_id=$(graph_client.py create-task --goal-id "..." --title "..." --agent "x" 
 For each task, link it to the scheduler. **task_id = session_id**.
 
 ```bash
-assign-task.py assign --agent "x" --task "..." --cron "0 0 9 * * 1" --session-id "$task_id"
+python3 scripts/scheduler_client.py add-job --agent "x" --content "..." --cron "0 0 9 * * 1" --session-id "$task_id"
 ```
 
 **Critical:** Every task prompt must include a reporting instruction, or the agent works silently and you never hear back:
@@ -74,7 +76,7 @@ AgentTalk(agent_name="writer", session_id="{task_id}", message="Focus on Kuberne
 Proactively check progress:
 
 ```bash
-query-progress.py --project-id "..."
+python3 scripts/query-progress.py --project-id "..."
 ```
 
 Adjust as needed:
@@ -101,13 +103,28 @@ Next: {plan for next period}
 
 ## Command Reference
 
-| What             | Command                                                                                |
-| ---------------- | -------------------------------------------------------------------------------------- |
-| Create project   | `graph_client.py create-project --name ... --description ...`                          |
-| Create goal      | `graph_client.py create-goal --project-id ... --title ... --weight N`                  |
-| Create task      | `graph_client.py create-task --goal-id ... --title ... --agent x --prompt "..."`      |
-| Update task      | `graph_client.py update-task --task-id ... --status ... [--result "..."]`              |
-| Assign recurring | `assign-task.py assign --agent x --task "..." --cron "..." [--session-id "task-xxx"]` |
-| List assignments | `assign-task.py list`                                                                  |
-| Query progress   | `query-progress.py --project-id ...`                                                   |
-| Talk to agent    | **AgentTalk** tool: `agent_name`, `session_id`, `message`                              |
+| What             | Command                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------ |
+| Create project   | `python3 scripts/graph_client.py create-project --name ... --description ...`              |
+| Query project    | `python3 scripts/graph_client.py query-project --project-id ...`                           |
+| List projects    | `python3 scripts/graph_client.py list-projects`                                            |
+| Update project   | `python3 scripts/graph_client.py update-project --project-id ... --status ...`             |
+| Create goal      | `python3 scripts/graph_client.py create-goal --project-id ... --title ... --weight N`      |
+| Query goals      | `python3 scripts/graph_client.py query-goals --project-id ...`                             |
+| Update goal      | `python3 scripts/graph_client.py update-goal --goal-id ... --status ...`                   |
+| Create task      | `python3 scripts/graph_client.py create-task --goal-id ... --title ... --agent x --prompt "..."` |
+| Update task      | `python3 scripts/graph_client.py update-task --task-id ... --status ... [--result "..."]`  |
+| Record execution | `python3 scripts/graph_client.py record-execution --task-id ... --status ... --result "..." --duration N` |
+| Query tasks      | `python3 scripts/graph_client.py query-tasks --goal-id ... [--status ...]`                 |
+| Get task         | `python3 scripts/graph_client.py get-task --task-id ...`                                   |
+| Add dependency   | `python3 scripts/graph_client.py add-dependency --task-id ... --depends-on ...`            |
+| Remove dependency| `python3 scripts/graph_client.py remove-dependency --task-id ... --depends-on ...`         |
+| Register session | `python3 scripts/graph_client.py register-session --task-id ... --agent x`                 |
+| Get session      | `python3 scripts/graph_client.py get-session --session-id ...`                             |
+| Query sessions   | `python3 scripts/graph_client.py query-sessions [--status ...] [--stale-threshold ...]`    |
+| Progress report  | `python3 scripts/graph_client.py progress-report --project-id ...`                         |
+| Schedule add     | `python3 scripts/scheduler_client.py add-job --agent x --content "..." --cron "..." [--session-id ...]` |
+| Schedule list    | `python3 scripts/scheduler_client.py list-jobs`                                            |
+| Schedule delete  | `python3 scripts/scheduler_client.py del-job --id ...`                                     |
+| Assign task      | `python3 scripts/assign-task.py assign ...`                                                |
+| Talk to agent    | **AgentTalk** tool: `agent_name`, `session_id`, `message`                                  |

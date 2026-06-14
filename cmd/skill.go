@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/DotNetAge/mindx/internal/core"
-	"github.com/DotNetAge/mindx/internal/i18n"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -22,15 +23,54 @@ type skillFrontmatter struct {
 
 var skillCmd = &cobra.Command{
 	Use:   "skill list|get <name>",
-	Short: i18n.T("cmd.skill.short"),
-	Long:  i18n.T("cmd.skill.long") + "\n\nExamples:\n  mindx skill list\n  mindx skill get batch",
-	Args:  cobra.MinimumNArgs(1),
-	RunE:  runSkill,
+	Short: "Manage installed skills",
+	Long: `List or inspect installed MindX skills.
+
+By default reads skills from local SKILL.md files.
+Use --json to query the daemon and output rich JSON (for LLM consumption).
+
+Examples:
+  mindx skill list
+  mindx skill list --json
+  mindx skill get batch`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: runSkill,
+}
+
+var skillListJSONCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List all installed skills",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		useJSON, _ := cmd.Flags().GetBool("json")
+
+		if useJSON {
+			cl, err := rpc.Dial(daemonAddr)
+			if err != nil {
+				return fmt.Errorf("cannot connect to daemon: %w", err)
+			}
+			defer cl.Close()
+
+			result, err := cl.SkillList("")
+			if err != nil {
+				return err
+			}
+			var pretty interface{}
+			if err := json.Unmarshal(result, &pretty); err == nil {
+				formatted, _ := json.MarshalIndent(pretty, "", "  ")
+				fmt.Println(string(formatted))
+				return nil
+			}
+			fmt.Println(string(result))
+			return nil
+		}
+
+		return listSkills(cmd)
+	},
 }
 
 var skillGetCmd = &cobra.Command{
 	Use:   "get <name>",
-	Short: i18n.T("cmd.skill.get.short"),
+	Short: "Show details of a specific skill",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return showSkillDetail(cmd, args[0])
@@ -38,6 +78,8 @@ var skillGetCmd = &cobra.Command{
 }
 
 func init() {
+	skillListJSONCmd.Flags().Bool("json", false, "Output JSON via daemon (requires mindx start)")
+	skillCmd.AddCommand(skillListJSONCmd)
 	skillCmd.AddCommand(skillGetCmd)
 	rootCmd.AddCommand(skillCmd)
 }
@@ -45,7 +87,8 @@ func init() {
 func runSkill(cmd *cobra.Command, args []string) error {
 	switch args[0] {
 	case "list":
-		return listSkills(cmd)
+		// Re-run the list subcommand's RunE
+		return skillListJSONCmd.RunE(cmd, args)
 	case "get":
 		if len(args) < 2 {
 			return fmt.Errorf("usage: mindx skill get <name>")
@@ -135,7 +178,6 @@ func showSkillDetail(cmd *cobra.Command, name string) error {
 		fmt.Printf("Allowed Tools: %s\n", fm.AllowedTools)
 	}
 	if fm.Metadata != nil {
-		// Display metadata keys sorted for consistency
 		var keys []string
 		for k := range fm.Metadata {
 			keys = append(keys, k)

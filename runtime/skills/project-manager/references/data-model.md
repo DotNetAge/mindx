@@ -31,7 +31,7 @@
 
 ## Essential Cypher Patterns
 
-### Create everything (done by scripts, but good to understand the structure)
+### Create everything (done by commands, but good to understand the structure)
 
 ```
 Project -[:HAS_GOAL]-> Goal -[:CONTAINS]-> Task -[:HAS_EXECUTION]-> Execution
@@ -75,4 +75,4 @@ RETURN e.status, e.result, e.executed_at ORDER BY e.executed_at DESC
 
 - All IDs use 8-char hex UUID suffix: `task-a1b2c3d4`
 - `task_id` doubles as `session_id` for agent communication
-- Always use `progress-report` script for structured queries — it handles the aggregation logic
+- Always use `mindx project progress-report --project-id ...` for structured queries — it handles the aggregation logic

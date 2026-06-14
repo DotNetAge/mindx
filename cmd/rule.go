@@ -1,135 +1,305 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
-	"strings"
 
-	"github.com/DotNetAge/goharness/rule"
-	"github.com/DotNetAge/mindx/internal/core"
-	"github.com/DotNetAge/mindx/internal/i18n"
+	"github.com/DotNetAge/mindx/internal/client/render"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
 )
 
-var ruleCmd = &cobra.Command{
-	Use:   "rule list|get <id>",
-	Short: i18n.T("cmd.rule.short"),
-	Long:  i18n.T("cmd.rule.long") + "\n\nExamples:\n  mindx rule list\n  mindx rule get fs.write",
-	Args:  cobra.MinimumNArgs(1),
-	RunE:  runRule,
-}
+// ── rule parent ───────────────────────────────────────────────
 
-var ruleGetCmd = &cobra.Command{
-	Use:   "get <id>",
-	Short: i18n.T("cmd.rule.get.short"),
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return showRule(cmd, args[0])
-	},
+var ruleCmd = &cobra.Command{
+	Use:   "rule",
+	Short: "Behavior rule management (requires daemon)",
+	Long: `Create, list, get, update, and delete behavior rules.
+
+Behavior rules define what an AI agent should or must not do.
+They are injected into the system prompt as MUST-follow norms.
+
+All operations require the daemon to be running (mindx start).
+
+Examples:
+  mindx rule list
+  mindx rule get --id "no-delete-prod"
+  mindx rule create --id "my-rule" --intro "Always ask before destructive actions"
+  mindx rule update --id "my-rule" --priority 50 --enabled false
+  mindx rule delete --id "my-rule"`,
+	PersistentPreRunE: requireDaemon,
 }
 
 func init() {
-	ruleCmd.AddCommand(ruleGetCmd)
 	rootCmd.AddCommand(ruleCmd)
 }
 
-func runRule(cmd *cobra.Command, args []string) error {
-	switch args[0] {
-	case "list":
-		return listRules(cmd)
-	case "get":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: mindx rule get <id>")
-		}
-		return showRule(cmd, args[1])
-	default:
-		return fmt.Errorf("unknown subcommand %q — use list or get", args[0])
-	}
+// ── response types (aligned with RPC) ─────────────────────────
+
+type ruleEntry struct {
+	ID       string `json:"id"`
+	Intro    string `json:"intro"`
+	Scope    string `json:"scope"`
+	Priority int    `json:"priority"`
+	Enabled  bool   `json:"enabled"`
 }
 
-func loadPermissionRules() (*rule.PermissionRules, error) {
-	workspaceDir := core.DefaultUserPrefsDir()
-	if !core.WorkspaceExists(workspaceDir) {
-		return &rule.PermissionRules{}, nil
-	}
+// ── rule list ─────────────────────────────────────────────────
 
-	cfg, err := core.LoadMindxConfig(workspaceDir)
-	if err != nil {
-		return nil, fmt.Errorf("cannot load config: %w", err)
-	}
-	if cfg.PermissionRules == nil {
-		return &rule.PermissionRules{}, nil
-	}
-	return cfg.PermissionRules, nil
-}
-
-func listRules(cmd *cobra.Command) error {
-	rules, err := loadPermissionRules()
-	if err != nil {
-		return err
-	}
-
-	total := len(rules.AlwaysAllow) + len(rules.AlwaysDeny) + len(rules.AlwaysAsk)
-	if total == 0 {
-		fmt.Println("No permission rules configured.")
-		return nil
-	}
-
-	printRuleGroup("Always Allow", rules.AlwaysAllow)
-	printRuleGroup("Always Deny", rules.AlwaysDeny)
-	printRuleGroup("Always Ask", rules.AlwaysAsk)
-
-	return nil
-}
-
-func printRuleGroup(header string, group []rule.PermissionRule) {
-	if len(group) == 0 {
-		return
-	}
-	fmt.Printf("%s:\n", header)
-	fmt.Println(strings.Repeat("─", 50))
-	for _, r := range group {
-		desc := r.Description
-		if desc == "" {
-			desc = "(no description)"
+var ruleListCmd = &cobra.Command{
+	Use:     "list",
+	Short:   "List all behavior rules",
+	Example: `  mindx rule list`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
 		}
-		source := r.Source
-		if source != "" {
-			source = " [" + source + "]"
+		defer cl.Close()
+
+		result, err := cl.RuleList()
+		if err != nil {
+			return err
 		}
-		pattern := r.ContentPattern
-		if pattern != "" {
-			pattern = " (pattern: " + pattern + ")"
+
+		var resp struct {
+			Count int         `json:"count"`
+			Rules []ruleEntry `json:"rules"`
 		}
-		fmt.Printf("  %s%s%s\n", desc, source, pattern)
-	}
-	fmt.Println()
-}
-
-func showRule(cmd *cobra.Command, id string) error {
-	rules, err := loadPermissionRules()
-	if err != nil {
-		return err
-	}
-
-	// Search across all groups
-	candidates := append(rules.AlwaysAllow, rules.AlwaysDeny...)
-	candidates = append(candidates, rules.AlwaysAsk...)
-
-	for _, r := range candidates {
-		if r.ToolName == id {
-			fmt.Printf("Tool:      %s\n", r.ToolName)
-			fmt.Printf("Behavior:  %s\n", r.Behavior)
-			if r.Description != "" {
-				fmt.Printf("Desc:      %s\n", r.Description)
-			}
-			if r.ContentPattern != "" {
-				fmt.Printf("Pattern:   %s\n", r.ContentPattern)
-			}
-			if r.Source != "" {
-				fmt.Printf("Source:    %s\n", r.Source)
-			}
+		if err := json.Unmarshal(result, &resp); err != nil {
+			fmt.Println(string(result))
 			return nil
 		}
-	}
-	return fmt.Errorf("no permission rule found with tool name %q", id)
+
+		if resp.Count == 0 {
+			fmt.Println("No rules configured.")
+			return nil
+		}
+
+		table := render.NewTable([]string{"ID", "Intro", "Scope", "Priority", "Enabled"}, 100)
+		for _, r := range resp.Rules {
+			enabled := "yes"
+			if !r.Enabled {
+				enabled = "no"
+			}
+			table.AddRow([]string{
+				truncateStr(r.ID, 20),
+				truncateStr(r.Intro, 50),
+				r.Scope,
+				fmt.Sprintf("%d", r.Priority),
+				enabled,
+			})
+		}
+		fmt.Println(table.Render())
+		fmt.Printf("\n%d rule(s)\n", resp.Count)
+		return nil
+	},
+}
+
+// ── rule get ──────────────────────────────────────────────────
+
+var ruleGetCmd = &cobra.Command{
+	Use:     "get",
+	Short:   "Show details for a behavior rule",
+	Example: `  mindx rule get --id "no-delete-prod"`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, _ := cmd.Flags().GetString("id")
+		if id == "" {
+			return fmt.Errorf("--id is required")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer cl.Close()
+
+		result, err := cl.RuleGet(id)
+		if err != nil {
+			return err
+		}
+
+		var resp struct {
+			Found bool       `json:"found"`
+			Rule  *ruleEntry `json:"rule,omitempty"`
+		}
+		if err := json.Unmarshal(result, &resp); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		if !resp.Found || resp.Rule == nil {
+			return fmt.Errorf("rule %q not found", id)
+		}
+
+		r := resp.Rule
+		enabled := "yes"
+		if !r.Enabled {
+			enabled = "no"
+		}
+		fmt.Printf("ID:       %s\n", r.ID)
+		fmt.Printf("Intro:    %s\n", r.Intro)
+		fmt.Printf("Scope:    %s\n", r.Scope)
+		fmt.Printf("Priority: %d\n", r.Priority)
+		fmt.Printf("Enabled:  %s\n", enabled)
+		return nil
+	},
+}
+
+// ── rule create ───────────────────────────────────────────────
+
+var ruleCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new behavior rule",
+	Example: `  mindx rule create --id "my-rule" --intro "Always ask before destructive actions"
+  mindx rule create --id "my-rule" --intro "Be concise" --scope global --priority 10`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, _ := cmd.Flags().GetString("id")
+		intro, _ := cmd.Flags().GetString("intro")
+		scope, _ := cmd.Flags().GetString("scope")
+		priority, _ := cmd.Flags().GetInt("priority")
+		enabled, _ := cmd.Flags().GetBool("enabled")
+
+		if id == "" {
+			return fmt.Errorf("--id is required")
+		}
+		if intro == "" {
+			return fmt.Errorf("--intro is required")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer cl.Close()
+
+		result, err := cl.RuleCreate(rpc.RuleCreateParams{
+			ID:       id,
+			Intro:    intro,
+			Scope:    scope,
+			Priority: priority,
+			Enabled:  enabled,
+		})
+		if err != nil {
+			return err
+		}
+
+		// Parse response to show rule ID
+		var resp map[string]interface{}
+		if json.Unmarshal(result, &resp) == nil {
+			if rid, ok := resp["id"].(string); ok {
+				fmt.Printf("Rule created: %s\n", rid)
+				return nil
+			}
+		}
+		fmt.Println(string(result))
+		return nil
+	},
+}
+
+// ── rule update ───────────────────────────────────────────────
+
+var ruleUpdateCmd = &cobra.Command{
+	Use:   "update",
+	Short: "Update an existing behavior rule",
+	Example: `  mindx rule update --id "my-rule" --intro "Updated description"
+  mindx rule update --id "my-rule" --priority 50 --enabled false`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, _ := cmd.Flags().GetString("id")
+		if id == "" {
+			return fmt.Errorf("--id is required")
+		}
+
+		params := rpc.RuleUpdateParams{ID: id}
+
+		if cmd.Flags().Changed("intro") {
+			v, _ := cmd.Flags().GetString("intro")
+			params.Intro = &v
+		}
+		if cmd.Flags().Changed("scope") {
+			v, _ := cmd.Flags().GetString("scope")
+			params.Scope = &v
+		}
+		if cmd.Flags().Changed("priority") {
+			v, _ := cmd.Flags().GetInt("priority")
+			params.Priority = &v
+		}
+		if cmd.Flags().Changed("enabled") {
+			v, _ := cmd.Flags().GetBool("enabled")
+			params.Enabled = &v
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer cl.Close()
+
+		result, err := cl.RuleUpdate(params)
+		if err != nil {
+			return err
+		}
+
+		// Parse response to show rule ID
+		var resp map[string]interface{}
+		if json.Unmarshal(result, &resp) == nil {
+			if rid, ok := resp["id"].(string); ok {
+				fmt.Printf("Rule updated: %s\n", rid)
+				return nil
+			}
+		}
+		fmt.Println(string(result))
+		return nil
+	},
+}
+
+// ── rule delete ───────────────────────────────────────────────
+
+var ruleDeleteCmd = &cobra.Command{
+	Use:     "delete",
+	Short:   "Delete a behavior rule by ID",
+	Example: `  mindx rule delete --id "my-rule"`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, _ := cmd.Flags().GetString("id")
+		if id == "" {
+			return fmt.Errorf("--id is required")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer cl.Close()
+
+		result, err := cl.RuleDelete(id)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(string(result))
+		return nil
+	},
+}
+
+// ── init subcommands ──────────────────────────────────────────
+
+func init() {
+	ruleGetCmd.Flags().String("id", "", "Rule ID (required)")
+	ruleCreateCmd.Flags().String("id", "", "Unique rule identifier (required)")
+	ruleCreateCmd.Flags().String("intro", "", "Behavioral description (required)")
+	ruleCreateCmd.Flags().String("scope", "global", "Scope: global, local, or conversation")
+	ruleCreateCmd.Flags().Int("priority", 0, "Priority (higher = more important)")
+	ruleCreateCmd.Flags().Bool("enabled", true, "Enable the rule immediately")
+	ruleUpdateCmd.Flags().String("id", "", "Rule ID to update (required)")
+	ruleUpdateCmd.Flags().String("intro", "", "New behavioral description")
+	ruleUpdateCmd.Flags().String("scope", "", "New scope: global, local, or conversation")
+	ruleUpdateCmd.Flags().Int("priority", 0, "New priority")
+	ruleUpdateCmd.Flags().Bool("enabled", true, "New enabled state")
+	ruleDeleteCmd.Flags().String("id", "", "Rule ID to delete (required)")
+
+	ruleCmd.AddCommand(ruleListCmd)
+	ruleCmd.AddCommand(ruleGetCmd)
+	ruleCmd.AddCommand(ruleCreateCmd)
+	ruleCmd.AddCommand(ruleUpdateCmd)
+	ruleCmd.AddCommand(ruleDeleteCmd)
 }

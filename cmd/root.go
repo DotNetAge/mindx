@@ -47,24 +47,23 @@ func Execute() error {
 	if err := i18n.Init(""); err != nil {
 		// Non-fatal: T() falls back to returning keys as-is
 	}
-	// Re-apply Short/Long text after i18n init (commands set Short/Long at package
-	// init time when translations were still uninitialized).
-	daemonCmd.Short = i18n.T("cmd.daemon.short")
-	daemonCmd.Long = i18n.T("cmd.daemon.long")
-	webCmd.Short = i18n.T("cmd.web.short")
-	skillCmd.Short = i18n.T("cmd.skill.short")
-	skillCmd.Long = i18n.T("cmd.skill.long") + "\n\nExamples:\n  mindx skill list\n  mindx skill get batch"
-	ruleCmd.Short = i18n.T("cmd.rule.short")
-	ruleCmd.Long = i18n.T("cmd.rule.long") + "\n\nExamples:\n  mindx rule list\n  mindx rule get fs.write"
-	scheduleCmd.Short = i18n.T("cmd.schedule.short")
-	scheduleCmd.Long = i18n.T("cmd.schedule.long") + "\n\nExamples:\n  mindx schedule list\n  mindx schedule add --agent notes \"Daily standup summary\" \"0 9 * * 1-5\"\n  mindx schedule del abc12345"
 	return rootCmd.Execute()
+}
+
+var daemonAddr string
+
+// requireDaemon is a PersistentPreRunE that can be used by commands that
+// need the daemon to be running. It currently just returns nil (the actual
+// connection check happens in each command's rpc.Dial call for
+// better error messages). It exists so that these commands can have a
+// consistent PersistentPreRunE set.
+func requireDaemon(cmd *cobra.Command, args []string) error {
+	return nil
 }
 
 func init() {
 	rootCmd.AddCommand(daemonCmd)
-	rootCmd.AddCommand(doctorCmd)
-	rootCmd.AddCommand(webCmd)
+	rootCmd.PersistentFlags().StringVar(&daemonAddr, "daemon-addr", "", "Daemon WebSocket address (default: ws://localhost:1314/ws)")
 }
 
 func runTUI(cmd *cobra.Command, args []string) error {

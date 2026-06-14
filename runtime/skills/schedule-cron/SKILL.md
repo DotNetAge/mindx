@@ -16,13 +16,20 @@ metadata:
 - User asks to schedule recurring agent work ("every day at 9", "weekly on Monday")
 - User wants to list, delete, or check scheduled tasks
 
+## Prerequisite
+
+The daemon must be running:
+
+```bash
+mindx start
+```
+
 ## Commands
 
 ### Add a single recurring task
 
 ```bash
-python3 scripts/scheduler_client.py add-job \
-    --agent "writer" --content "..." --cron "0 0 9 * * 1"
+mindx schedule add --agent "writer" --content "..." --cron "0 0 9 * * 1"
 ```
 
 Optional: `--session-id <id>` (auto-generated if omitted), `--project-dir <path>`
@@ -30,20 +37,13 @@ Optional: `--session-id <id>` (auto-generated if omitted), `--project-dir <path>
 ### List all tasks
 
 ```bash
-python3 scripts/scheduler_client.py list-jobs
-python3 scripts/scheduler_client.py list-jobs --json   # machine-readable
+mindx schedule list
 ```
 
 ### Delete a task
 
 ```bash
-python3 scripts/scheduler_client.py del-job --id a1b2c3d4
-```
-
-### Test connection
-
-```bash
-python3 scripts/scheduler_client.py test-conn
+mindx schedule delete --id a1b2c3d4
 ```
 
 ## Requirements
