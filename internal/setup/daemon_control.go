@@ -90,6 +90,10 @@ func startDaemonMacOS(workspaceDir string) error {
 	if _, err := os.Stat(agentPlist); os.IsNotExist(err) {
 		return fmt.Errorf("daemon plist not found at %s — run 'mindx install' first", agentPlist)
 	}
+	service := fmt.Sprintf("gui/%d/%s", os.Getuid(), macosLaunchdLabel)
+	// Always bootout first to handle stale registrations (already loaded, crash-loop, etc.)
+	// Ignore error — it's expected when the service isn't currently registered.
+	_ = exec.Command("launchctl", "bootout", service).Run()
 	cmd := exec.Command("launchctl", "bootstrap", fmt.Sprintf("gui/%d", os.Getuid()), agentPlist)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("launchctl bootstrap: %w\n%s", err, string(out))

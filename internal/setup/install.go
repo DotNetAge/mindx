@@ -43,7 +43,7 @@ type InstallResult struct {
 func Install(opts InstallOptions) (*InstallResult, error) {
 	result := &InstallResult{}
 
-	// Step 1: Determine install directory and copy binary
+	// Step 1: Determine install directory
 	installDir, err := resolveInstallDir(opts.InstallDir)
 	if err != nil {
 		return nil, fmt.Errorf("resolve install dir: %w", err)
@@ -58,6 +58,16 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 		return nil, fmt.Errorf("get executable path: %w", err)
 	}
 
+	// Step 2: Stop old daemon before replacing binary or config
+	if !opts.SkipDaemon {
+		if err := StopDaemon(); err != nil {
+			fmt.Printf("ℹ️  Stopping old daemon: %v\n", err)
+		} else {
+			fmt.Println("✅ Stopped old daemon")
+		}
+	}
+
+	// Step 3: Copy binary
 	destExe := filepath.Join(installDir, filepath.Base(exePath))
 	if err := copyFile(exePath, destExe); err != nil {
 		return nil, fmt.Errorf("copy binary: %w", err)
@@ -68,7 +78,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 	// Note: Runtime assets (agents, prompts, models) are extracted at startup
 	// by core.ExtractWorkspace() from the embedded FS. No need to duplicate here.
 
-	// Step 2: Configure system PATH
+	// Step 4: Configure system PATH
 	if !opts.SkipPath {
 		pathOk, pathErr := AddToSystemPath(installDir)
 		if pathErr != nil {
@@ -88,7 +98,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 		}
 	}
 
-	// Step 4: Create desktop shortcut (Windows only)
+	// Step 5: Create desktop shortcut (Windows only)
 	if !opts.SkipShortcut && runtime.GOOS == "windows" {
 		scOk, scErr := CreateDesktopShortcut(destExe)
 		if scErr != nil {
@@ -101,14 +111,14 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 		}
 	}
 
-	// Step 5: Register daemon / auto-start service
+	// Step 6: Register daemon with updated plist/config and start it
 	if !opts.SkipDaemon {
 		workspaceDir := resolveWorkspaceDir(installDir)
 		if err := SetupDaemon(workspaceDir); err != nil {
 			fmt.Printf("⚠️  Daemon registration: %v\n", err)
 		} else {
 			result.DaemonSetup = true
-			fmt.Println("✅ Daemon auto-start registered")
+			fmt.Println("✅ Daemon auto-start registered and started")
 		}
 	}
 
