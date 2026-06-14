@@ -7,11 +7,11 @@ so the agent can report back to the correct conversation thread.
 
 Usage:
   python3 scripts/assign-task.py assign \\
-      --agent @writer --task "Write blog post" --cron "0 0 9 * * 1"
+      --agent writer --task "Write blog post" --cron "0 0 9 * * 1"
 
   # Link to an existing graph task (recommended):
   python3 scripts/assign-task.py assign \\
-      --agent @writer --task "Write blog post" --cron "0 0 9 * * 1" \\
+      --agent writer --task "Write blog post" --cron "0 0 9 * * 1" \\
       --session-id "task-a1b2c3d4" --project-dir /path/to/project
 
   python3 scripts/assign-task.py list
@@ -86,7 +86,7 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("assign", help="Assign a recurring task")
-    p.add_argument("--agent", required=True, help="Target agent (e.g. @writer)")
+    p.add_argument("--agent", required=True, help="Target agent (e.g. writer)")
     p.add_argument("--task", required=True, help="Task description / prompt")
     p.add_argument("--cron", required=True, help="6-field cron expression")
     p.add_argument("--session-id", default="",

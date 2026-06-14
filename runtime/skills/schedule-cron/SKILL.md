@@ -16,19 +16,9 @@ metadata:
 - User asks to schedule recurring agent work ("every day at 9", "weekly on Monday")
 - User wants to list, delete, or check scheduled tasks
 
-## How It Works
-
-```
-schedule.add    → Register a recurring task
-schedule.list   → List all scheduled tasks
-schedule.del    → Delete a task
-```
-
-All methods go through `scripts/scheduler_client.py` — never construct JSON-RPC manually.
-
 ## Commands
 
-### Add a single task
+### Add a single recurring task
 
 ```bash
 python3 scripts/scheduler_client.py add-job \
@@ -56,15 +46,9 @@ python3 scripts/scheduler_client.py del-job --id a1b2c3d4
 python3 scripts/scheduler_client.py test-conn
 ```
 
-## Input Validation Checklist
+## Requirements
 
-- **Agent**: must be a registered agent name (no `@` prefix needed, stripped automatically)
-- **Cron**: 6-field format required (`0 0 9 * * 1`, includes seconds)
+- **Agent**: must be a registered agent name (no `@` prefix)
+- **Cron**: 6-field format (`0 0 9 * * 1`, seconds minute hour day month weekday)
 - **Content**: specific enough for the agent to produce good output
-- **Session ID**: omit for auto-generated UUID, or provide to link to existing session
-
-## Notes
-
-- Gateway runs on `ws://localhost:1314/ws` (port 1314, not 8081)
-- Task responses include `id`, `agent`, `cron_expr`, `enabled`, `success_count`, `failure_count`
-- Always save the returned task ID for later management
+- **Session ID**: omit for auto-generated UUID, or provide to link to an existing session

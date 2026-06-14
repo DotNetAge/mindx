@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-List available models via daemon RPC.
+List available models.
 
 Usage:
     python list_models.py

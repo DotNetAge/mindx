@@ -15,10 +15,10 @@ Protocol:
 
 Usage Examples:
     # Add a scheduled task
-    python scheduler_client.py add-job --agent @writer --content "Daily blog post" --cron "0 0 9 * * 1"
+    python scheduler_client.py add-job --agent writer --content "Daily blog post" --cron "0 0 9 * * 1"
 
     # Add a scheduled task with session and project directory
-    python scheduler_client.py add-job --agent @writer --content "Daily blog post" \
+    python scheduler_client.py add-job --agent writer --content "Daily blog post" \
         --cron "0 0 9 * * 1" --session-id "550e8400-e29b-41d4-a716-446655440000" \
         --project-dir /Users/ray/workspaces/my-project
 
@@ -73,7 +73,7 @@ class SchedulerResult:
 @dataclass
 class JobAddParams:
     """Parameters for adding a scheduled task"""
-    agent: str          # Target agent (e.g., @writer)
+    agent: str          # Target agent (e.g., writer)
     content: str        # Message content to send
     cron_expr: str       # 6-field Cron expression
     session_id: str = ""    # Optional session UUID to resume
@@ -207,7 +207,7 @@ class MindXSchedulerClient:
         Returns:
             Operation result containing the created schedule entry
         """
-        agent = params.agent[1:] if params.agent.startswith("@") else params.agent
+        agent = params.agent
 
         # Client-managed session ID: generate UUID v4 when "new" or empty
         raw_session_id = params.session_id if params.session_id else "new"
@@ -324,7 +324,7 @@ class MindXSchedulerClient:
 def cmd_add_job(args):
     """Add a single scheduled task"""
     parser = argparse.ArgumentParser(description="Add a scheduled task to MindX Scheduler")
-    parser.add_argument("--agent", required=True, help="Target agent (e.g., @writer)")
+    parser.add_argument("--agent", required=True, help="Target agent (e.g., writer)")
     parser.add_argument("--content", required=True, help="Message content to send")
     parser.add_argument("--cron", required=True, help="Cron expression (6 fields)")
     parser.add_argument("--session-id", default="",
@@ -428,14 +428,14 @@ def cmd_batch_add(args):
 JSON file format example:
 [
     {
-        "agent": "@writer",
+        "agent": "writer",
         "content": "Every Monday: Write a technical blog post",
         "cron_expr": "0 0 9 * * 1",
         "session_id": "",
         "project_dir": "/Users/ray/workspaces/my-blog"
     },
     {
-        "agent": "@analyst",
+        "agent": "analyst",
         "content": "Every Friday: Analyze data and generate report",
         "cron_expr": "0 0 16 * * 5",
         "session_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -534,10 +534,10 @@ Available Commands:
 
 Examples:
   # Add a task
-  %(prog)s add-job --agent @writer --content "Daily reminder" --cron "0 0 9 * * *"
+  %(prog)s add-job --agent writer --content "Daily reminder" --cron "0 0 9 * * *"
 
   # Add a task with project directory
-  %(prog)s add-job --agent @writer --content "Project task" --cron "0 0 9 * * *" \\
+  %(prog)s add-job --agent writer --content "Project task" --cron "0 0 9 * * *" \\
       --project-dir /Users/ray/workspaces/my-project
 
   # List tasks

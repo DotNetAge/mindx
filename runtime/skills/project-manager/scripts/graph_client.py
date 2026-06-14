@@ -1,31 +1,103 @@
 #!/usr/bin/env python3
 """
-graph_client.py - MindX Project Manager graph database operations
-Uses cypherdb (Python binding for CypherDB/GoGraph) for cross-platform compatibility.
-Replaces gograph.sh (Go/brew) with a pure Python implementation.
+graph_client.py - MindX Project Manager graph database operations.
+
+CLI commands for managing projects, goals, tasks, sessions, and dependencies.
+All data is stored via the MindX Daemon's Graph API.
 """
 
 import argparse
 import json
+import os
 import sys
 import uuid
 from datetime import datetime, timezone
 
 try:
-    import cypherdb
+    import websocket
 except ImportError:
-    print("❌ Error: cypherdb package not found")
-    print("   Install with: pip install cypherdb")
+    print("Error: websocket-client package is required")
+    print("   Install with: pip install websocket-client")
     sys.exit(1)
 
 
 # ====== Configuration ======
-DEFAULT_DB_PATH = "runtime/data/project-graph.db"
+
+DEFAULT_WS_HOST = os.environ.get("MINDX_WS_HOST", "localhost")
+DEFAULT_WS_PORT = int(os.environ.get("MINDX_WS_PORT", "1314"))
+DEFAULT_WS_PATH = os.environ.get("MINDX_WS_PATH", "/ws")
+RPC_TIMEOUT = 30
 
 
-def get_db_path(args):
-    return getattr(args, 'db_path', None) or DEFAULT_DB_PATH
+# ====== RPC Client ======
 
+def rpc_call(method, params=None):
+    """Send a JSON-RPC 2.0 request to the Daemon via WebSocket."""
+    url = f"ws://{DEFAULT_WS_HOST}:{DEFAULT_WS_PORT}{DEFAULT_WS_PATH}"
+    try:
+        ws = websocket.create_connection(url, timeout=RPC_TIMEOUT)
+    except Exception as e:
+        print(f'{{"error": "daemon connection failed: {e}"}}', file=sys.stderr)
+        sys.exit(1)
+
+    request_id = str(uuid.uuid4())
+    request = {"jsonrpc": "2.0", "id": request_id, "method": method}
+    if params is not None:
+        request["params"] = params
+
+    try:
+        ws.send(json.dumps(request))
+        response_str = ws.recv()
+        ws.close()
+    except Exception as e:
+        ws.close()
+        print(f'{{"error": "rpc call failed: {e}"}}', file=sys.stderr)
+        sys.exit(1)
+
+    response = json.loads(response_str)
+    if response.get("error"):
+        err = response["error"]
+        msg = err.get("message", str(err))
+        print(f'{{"error": "rpc error [{method}]: {msg}"}}', file=sys.stderr)
+        sys.exit(1)
+
+    result = response.get("result")
+    return result
+
+
+# ====== Graph Operations (via Daemon) ======
+
+def graph_query(cypher, params_map=None):
+    """Execute a read Cypher query via daemon graph.query"""
+    rpc_params = {"query": cypher}
+    if params_map:
+        rpc_params["params"] = params_map
+    result = rpc_call("graph.query", rpc_params)
+
+    # graph.query returns {columns: [...], rows: [{col: val, ...}, ...]}
+    return (result or {}).get("rows", [])
+
+
+def graph_exec(cypher, params_map=None):
+    """Execute a write Cypher query via daemon graph.exec"""
+    rpc_params = {"query": cypher}
+    if params_map:
+        rpc_params["params"] = params_map
+    result = rpc_call("graph.exec", rpc_params)
+    return result
+
+
+def upsert_nodes(nodes):
+    """Batch upsert nodes via daemon graph.upsert_nodes"""
+    return rpc_call("graph.upsert_nodes", {"nodes": nodes})
+
+
+def upsert_edges(edges):
+    """Batch upsert edges via daemon graph.upsert_edges"""
+    return rpc_call("graph.upsert_edges", {"edges": edges})
+
+
+# ====== Helpers ======
 
 def generate_id(prefix):
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
@@ -35,85 +107,50 @@ def timestamp():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def json_val(val):
-    if val is None:
-        return "NULL"
-    if isinstance(val, (dict, list)):
-        raw = json.dumps(val)
-        escaped = raw.replace("\\", "\\\\").replace("'", "\\'")
-        return "'" + escaped + "'"
-    cleaned = str(val).replace("'", "''")
-    return "'" + cleaned + "'"
-
-
-# ====== Database Helper ======
-
-class GraphDB:
-    def __init__(self, db_path):
-        self.db_path = db_path
-        self.db = cypherdb.Database(db_path)
-
-    def query(self, cypher):
-        result = list(self.db.transaction(lambda tx: tx.query(cypher)))
-        return result
-
-    def exec(self, cypher):
-        with self.db.transaction() as tx:
-            result = tx.exec(cypher)
-        return result
-
-    def create_node(self, label, properties):
-        props_str = ", ".join(f"{k}: {json_val(v)}" for k, v in properties.items())
-        cypher = f"CREATE (n:{label} {{{props_str}}}) RETURN n"
-        with self.db.transaction() as tx:
-            result = tx.query(cypher)
-        return result[0] if result else None
-
-
 # ====== Project Management Commands ======
 
 def cmd_create_project(args):
-    db = GraphDB(get_db_path(args))
     proj_id = generate_id("proj")
     now = timestamp()
+    metrics_json = json.loads(args.metrics) if args.metrics else {}
+    timeline_json = json.loads(args.timeline) if args.timeline else {}
 
-    cypher = f"""
-        CREATE (p:Project {{
-            id: '{proj_id}',
-            name: {json_val(args.name)},
-            description: {json_val(args.description or args.name)},
-            status: 'active',
-            progress: 0.0,
-            created_at: '{now}',
-            updated_at: '{now}',
-            metrics: {json_val(json.loads(args.metrics) if args.metrics else {})},
-            timeline: {json_val(json.loads(args.timeline) if args.timeline else {})}
-        }})
-        RETURN p.id as id, p.name as name, p.status as status
-    """
-    db.exec(cypher)
-    print(f"✅ Project created:")
+    nodes = [{
+        "id": proj_id,
+        "labels": ["Project"],
+        "properties": {
+            "name": args.name,
+            "description": args.description or args.name,
+            "status": "active",
+            "progress": 0.0,
+            "created_at": now,
+            "updated_at": now,
+            "metrics": json.dumps(metrics_json, ensure_ascii=False),
+            "timeline": json.dumps(timeline_json, ensure_ascii=False),
+        }
+    }]
+    upsert_nodes(nodes)
+
+    print(f"Project created:")
     print(f"   ID: {proj_id}")
     print(f"   Name: {args.name}")
     print(f"   Status: active")
 
 
 def cmd_query_project(args):
-    db = GraphDB(get_db_path(args))
-    cypher = f"""
-        MATCH (p:Project {{id: '{args.project_id}'}})
+    cypher = """
+        MATCH (p:Project {id: $project_id})
         OPTIONAL MATCH (p)-[:HAS_GOAL]->(g:Goal)
         OPTIONAL MATCH (g)-[:CONTAINS]->(t:Task)
         RETURN p,
                collect(DISTINCT g) as goals,
                collect(DISTINCT t) as tasks
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"project_id": args.project_id})
+    print(json.dumps(result, indent=2, default=str))
 
 
 def cmd_list_projects(args):
-    db = GraphDB(get_db_path(args))
     cypher = """
         MATCH (p:Project)
         OPTIONAL MATCH (p)-[:HAS_GOAL]->(g:Goal)
@@ -124,200 +161,232 @@ def cmd_list_projects(args):
                count(g) as goal_count
         ORDER BY p.updated_at DESC
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher)
+    print(json.dumps(result, indent=2, default=str))
 
 
 def cmd_update_project(args):
-    db = GraphDB(get_db_path(args))
     now = timestamp()
-    updates = []
+    set_parts = [f"p.updated_at = '{now}'"]
     if args.status:
-        updates.append(f"status: '{args.status}'")
+        set_parts.append(f"p.status = '{args.status}'")
     if args.progress is not None:
-        updates.append(f"progress: {float(args.progress)}")
-    updates.append(f"updated_at: '{now}'")
+        set_parts.append(f"p.progress = {args.progress}")
 
-    set_clause = ", ".join(updates)
+    set_clause = ", ".join(set_parts)
     cypher = f"""
-        MATCH (p:Project {{id: '{args.project_id}'}})
+        MATCH (p:Project {{id: $project_id}})
         SET {set_clause}
         RETURN p.id, p.name, p.status, p.progress
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"project_id": args.project_id})
+    print(json.dumps(result, indent=2, default=str))
 
-
-# ====== Goal Management Commands ======
 
 def cmd_create_goal(args):
-    db = GraphDB(get_db_path(args))
     goal_id = generate_id("goal")
     now = timestamp()
     weight = float(args.weight) if args.weight else 0.0
-    metrics = json.loads(args.metrics) if args.metrics else {}
+    metrics_json = json.loads(args.metrics) if args.metrics else {}
 
-    cypher = f"""
-        MATCH (p:Project {{id: '{args.project_id}'}})
-        CREATE (g:Goal {{
-            id: '{goal_id}',
-            title: {json_val(args.title)},
-            description: {json_val(args.description or args.title)},
-            weight: {weight},
-            status: 'pending',
-            progress: 0.0,
-            created_at: '{now}',
-            updated_at: '{now}',
-            metrics: {json_val(metrics)}
-        }})
-        CREATE (p)-[:HAS_GOAL {{order: timestamp()}}]->(g)
-        RETURN g.id as id, g.title as title, g.weight as weight
-    """
-    db.exec(cypher)
+    nodes = [{
+        "id": goal_id,
+        "labels": ["Goal"],
+        "properties": {
+            "title": args.title,
+            "description": args.description or args.title,
+            "weight": weight,
+            "status": "pending",
+            "progress": 0.0,
+            "created_at": now,
+            "updated_at": now,
+            "metrics": json.dumps(metrics_json, ensure_ascii=False),
+        }
+    }]
+    upsert_nodes(nodes)
+
+    edges = [{
+        "from_node_id": args.project_id,
+        "to_node_id": goal_id,
+        "type": "HAS_GOAL",
+        "properties": {"order": now},
+    }]
+    upsert_edges(edges)
 
 
 def cmd_query_goals(args):
-    db = GraphDB(get_db_path(args))
-    cypher = f"""
-        MATCH (p:Project {{id: '{args.project_id}'}})-[:HAS_GOAL]->(g:Goal)
+    cypher = """
+        MATCH (p:Project {id: $project_id})-[:HAS_GOAL]->(g:Goal)
         OPTIONAL MATCH (g)-[:CONTAINS]->(t:Task)
         RETURN g.id, g.title, g.status, g.progress, g.weight,
                count(t) as task_count,
                count(CASE WHEN t.status = 'completed' THEN 1 END) as completed_count
         ORDER BY g.created_at
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"project_id": args.project_id})
+    print(json.dumps(result, indent=2, default=str))
 
 
 def cmd_update_goal(args):
-    db = GraphDB(get_db_path(args))
     now = timestamp()
-    updates = []
+    set_parts = [f"g.updated_at = '{now}'"]
     if args.status:
-        updates.append(f"status: '{args.status}'")
+        set_parts.append(f"g.status = '{args.status}'")
         if args.status == "completed":
-            updates.append("progress: 1.0")
+            set_parts.append("g.progress = 1.0")
     if args.progress is not None:
-        updates.append(f"progress: {float(args.progress)}")
-    updates.append(f"updated_at: '{now}'")
+        set_parts.append(f"g.progress = {args.progress}")
 
-    set_clause = ", ".join(updates)
+    set_clause = ", ".join(set_parts)
     cypher = f"""
-        MATCH (g:Goal {{id: '{args.goal_id}'}})
+        MATCH (g:Goal {{id: $goal_id}})
         SET {set_clause}
         RETURN g.id, g.title, g.status, g.progress
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"goal_id": args.goal_id})
+    print(json.dumps(result, indent=2, default=str))
 
-
-# ====== Task Management Commands ======
 
 def cmd_create_task(args):
-    db = GraphDB(get_db_path(args))
     task_id = generate_id("task")
     now = timestamp()
 
-    cypher = f"""
-        MATCH (g:Goal {{id: '{args.goal_id}'}})
-        CREATE (t:Task {{
-            id: '{task_id}',
-            title: {json_val(args.title)},
-            agent: {json_val(args.agent or '@assistant')},
-            cron_expr: {json_val(args.cron_expr or '')},
-            prompt: {json_val(args.prompt or args.title)},
-            status: 'pending',
-            priority: {json_val(args.priority or 'normal')},
-            progress: 0.0,
-            success_count: 0,
-            failure_count: 0,
-            created_at: '{now}',
-            updated_at: '{now}'
-        }})
-        CREATE (g)-[:CONTAINS {{order: timestamp()}}]->(t)
-        RETURN t.id as id, t.title as title, t.agent as agent, t.status as status
-    """
-    db.exec(cypher)
+    nodes = [{
+        "id": task_id,
+        "labels": ["Task"],
+        "properties": {
+            "title": args.title,
+            "agent": args.agent or "assistant",
+            "cron_expr": args.cron_expr or "",
+            "prompt": args.prompt or args.title,
+            "status": "pending",
+            "priority": args.priority or "normal",
+            "progress": 0.0,
+            "success_count": 0,
+            "failure_count": 0,
+            "created_at": now,
+            "updated_at": now,
+        }
+    }]
+    upsert_nodes(nodes)
+
+    edges = [{
+        "from_node_id": args.goal_id,
+        "to_node_id": task_id,
+        "type": "CONTAINS",
+        "properties": {"order": now},
+    }]
+    upsert_edges(edges)
 
 
 def cmd_update_task(args):
-    db = GraphDB(get_db_path(args))
     now = timestamp()
-    updates = []
+    set_parts = ["t.updated_at = $now"]
+
+    params = {"task_id": args.task_id, "now": now}
 
     if args.status:
-        updates.append(f"status: '{args.status}'")
+        set_parts.append("t.status = $status")
+        params["status"] = args.status
         if args.status == "completed":
-            updates.append("success_count: coalesce(success_count, 0) + 1")
-            updates.append("progress: 1.0")
+            set_parts.append("t.success_count = coalesce(t.success_count, 0) + 1")
+            set_parts.append("t.progress = 1.0")
         elif args.status == "failed":
-            updates.append("failure_count: coalesce(failure_count, 0) + 1")
+            set_parts.append("t.failure_count = coalesce(t.failure_count, 0) + 1")
     if args.result:
-        updates.append(f"summary: {json_val(args.result)}")
+        set_parts.append("t.summary = $result")
+        params["result"] = args.result
     if args.scheduler_id:
-        updates.append(f"scheduler_id: '{args.scheduler_id}'")
+        set_parts.append("t.scheduler_id = $scheduler_id")
+        params["scheduler_id"] = args.scheduler_id
     if args.progress is not None:
-        updates.append(f"progress: {float(args.progress)}")
+        set_parts.append("t.progress = $progress")
+        params["progress"] = args.progress
     if args.session_id:
-        updates.append(f"session_id: '{args.session_id}'")
+        set_parts.append("t.session_id = $session_id")
+        params["session_id"] = args.session_id
     if args.interruption_type:
-        updates.append(f"interruption_type: '{args.interruption_type}'")
+        set_parts.append("t.interruption_type = $interruption_type")
+        params["interruption_type"] = args.interruption_type
     if args.interruption_context:
         ctx = json.loads(args.interruption_context) if args.interruption_context.startswith('{') else args.interruption_context
-        updates.append(f"interruption_context: {json_val(ctx)}")
+        set_parts.append("t.interruption_context = $interruption_context")
+        params["interruption_context"] = ctx
     if args.verification_note:
-        updates.append(f"verification_note: {json_val(args.verification_note)}")
+        set_parts.append("t.verification_note = $verification_note")
+        params["verification_note"] = args.verification_note
 
-    updates.append(f"updated_at: '{now}'")
-    set_clause = ", ".join(updates)
-
+    set_clause = ", ".join(set_parts)
     cypher = f"""
-        MATCH (t:Task {{id: '{args.task_id}'}})
+        MATCH (t:Task {{id: $task_id}})
         SET {set_clause}
         RETURN t.id, t.title, t.status, t.progress, t.success_count, t.failure_count, t.session_id
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, params)
+    print(json.dumps(result, indent=2, default=str))
 
 
 def cmd_record_execution(args):
-    db = GraphDB(get_db_path(args))
     exec_id = generate_id("exec")
     now = timestamp()
     duration = int(args.duration) if args.duration else 0
 
-    cypher_exec = f"""
-        MATCH (t:Task {{id: '{args.task_id}'}})
-        CREATE (e:Execution {{
-            id: '{exec_id}',
-            status: '{args.status}',
-            result: {json_val(args.result or '')},
-            duration_seconds: {duration},
-            executed_at: '{now}'
-        }})
-        CREATE (t)-[:HAS_EXECUTION]->(e)
-    """
-    db.exec(cypher_exec)
-    cmd_update_task(args)
+    nodes = [{
+        "id": exec_id,
+        "labels": ["Execution"],
+        "properties": {
+            "status": args.status,
+            "result": args.result or "",
+            "duration_seconds": duration,
+            "executed_at": now,
+        }
+    }]
+    upsert_nodes(nodes)
+
+    edges = [{
+        "from_node_id": args.task_id,
+        "to_node_id": exec_id,
+        "type": "HAS_EXECUTION",
+        "properties": {},
+    }]
+    upsert_edges(edges)
+
+    # Also update the task status
+    class UpdateArgs:
+        task_id = args.task_id
+        status = args.status
+        result = args.result
+        scheduler_id = getattr(args, 'scheduler_id', '')
+        progress = getattr(args, 'progress', None)
+        session_id = getattr(args, 'session_id', '')
+        interruption_type = getattr(args, 'interruption_type', '')
+        interruption_context = getattr(args, 'interruption_context', '')
+        verification_note = getattr(args, 'verification_note', '')
+
+    cmd_update_task(UpdateArgs())
 
 
 def cmd_query_tasks(args):
-    db = GraphDB(get_db_path(args))
     where_parts = ["TRUE"]
-    if args.goal_id:
-        where_parts.append(f"g.id = '{args.goal_id}'")
+    params = {}
 
-    status_filter = ""
+    if args.goal_id:
+        where_parts.append("g.id = $goal_id")
+        params["goal_id"] = args.goal_id
+
     if args.status:
         statuses = [s.strip() for s in args.status.split(",")]
         conditions = []
-        for s in statuses:
+        for i, s in enumerate(statuses):
+            key = f"status_{i}"
             if s == "awaiting_*":
-                conditions.append("t.status STARTS WITH 'awaiting_'")
+                conditions.append(f"t.status STARTS WITH 'awaiting_'")
             else:
-                conditions.append(f"t.status = '{s}'")
+                conditions.append(f"t.status = ${key}")
+                params[key] = s
         status_filter = f"AND ({' OR '.join(conditions)})"
+    else:
+        status_filter = ""
 
     where_clause = " AND ".join(where_parts)
 
@@ -334,14 +403,13 @@ def cmd_query_tasks(args):
                t.created_at, t.updated_at
         ORDER BY t.updated_at DESC
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, params)
+    print(json.dumps(result, indent=2, default=str))
 
 
 def cmd_query_by_status(args):
-    db = GraphDB(get_db_path(args))
-    cypher = f"""
-        MATCH (t:Task {{status: '{args.status}'}})
+    cypher = """
+        MATCH (t:Task {status: $status})
         OPTIONAL MATCH (g:Goal)-[:CONTAINS]->(t)
         OPTIONAL MATCH (p:Project)-[:HAS_GOAL]->(g)
         RETURN t.id, t.title, t.agent, t.status, t.progress,
@@ -350,14 +418,13 @@ def cmd_query_by_status(args):
         ORDER BY t.updated_at DESC
         LIMIT 50
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"status": args.status})
+    print(json.dumps(result, indent=2, default=str))
 
 
 def cmd_get_task(args):
-    db = GraphDB(get_db_path(args))
-    cypher = f"""
-        MATCH (t:Task {{id: '{args.task_id}'}})
+    cypher = """
+        MATCH (t:Task {id: $task_id})
         OPTIONAL MATCH (t)-[dep:DEPENDS_ON]->(pre:Task)
         OPTIONAL MATCH (g:Goal)-[:CONTAINS]->(t)
         OPTIONAL MATCH (t)-[:HAS_EXECUTION]->(e:Execution)
@@ -366,14 +433,13 @@ def cmd_get_task(args):
              collect(e) as executions
         RETURN t, g.title as goal_title, dependencies, executions
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"task_id": args.task_id})
+    print(json.dumps(result, indent=2, default=str))
 
 
 def cmd_get_task_output(args):
-    db = GraphDB(get_db_path(args))
-    cypher = f"""
-        MATCH (t:Task {{id: '{args.task_id}'}})
+    cypher = """
+        MATCH (t:Task {id: $task_id})
         OPTIONAL MATCH (t)-[:HAS_EXECUTION]->(e:Execution)
         OPTIONAL MATCH (t)-[dep:DEPENDS_ON]->(pre:Task)
         WITH t, e, pre
@@ -391,109 +457,127 @@ def cmd_get_task_output(args):
                latest_execution.executed_at as exec_time,
                latest_execution.duration_seconds as exec_duration
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"task_id": args.task_id})
+    print(json.dumps(result, indent=2, default=str))
 
 
 # ====== Session Management Commands ======
 
 def cmd_register_session(args):
-    db = GraphDB(get_db_path(args))
     sess_id = args.session_id.strip() if args.session_id and args.session_id.strip() else generate_id("sess")
     now = timestamp()
 
-    cypher = f"""
-        MATCH (t:Task {{id: '{args.task_id}'}})
-        CREATE (s:Session {{
-            id: '{sess_id}',
-            task_id: '{args.task_id}',
-            agent: {json_val(args.agent)},
-            status: {json_val(args.session_status or 'initialized')},
-            created_by: {json_val(args.created_by or 'system')},
-            interruption_type: NULL,
-            interruption_context: NULL,
-            resolution: NULL,
-            resolved_at: NULL,
-            replacement_session_id: NULL,
-            loss_reason: NULL,
-            timeout_reason: NULL,
-            created_at: '{now}',
-            updated_at: '{now}'
-        }})
-        CREATE (t)-[:HAS_SESSION]->(s)
-        SET t.session_id = '{sess_id}', t.updated_at = '{now}'
-        RETURN s.id as session_id, s.status as status, t.id as task_id, t.title as task_title
+    session_nodes = [{
+        "id": sess_id,
+        "labels": ["Session"],
+        "properties": {
+            "task_id": args.task_id,
+            "agent": args.agent,
+            "status": args.session_status or "initialized",
+            "created_by": args.created_by or "system",
+            "interruption_type": None,
+            "interruption_context": None,
+            "resolution": None,
+            "resolved_at": None,
+            "replacement_session_id": None,
+            "loss_reason": None,
+            "timeout_reason": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+    }]
+    upsert_nodes(session_nodes)
+
+    edges = [{
+        "from_node_id": args.task_id,
+        "to_node_id": sess_id,
+        "type": "HAS_SESSION",
+        "properties": {},
+    }]
+    upsert_edges(edges)
+
+    # Update task's session_id
+    cypher = """
+        MATCH (t:Task {id: $task_id})
+        SET t.session_id = $sess_id, t.updated_at = $now
+        RETURN t.id as task_id, t.title as task_title, t.session_id as session_id
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"task_id": args.task_id, "sess_id": sess_id, "now": now})
+    print(json.dumps(result, indent=2, default=str))
 
 
 def cmd_get_session(args):
-    db = GraphDB(get_db_path(args))
-    cypher = f"""
-        MATCH (s:Session {{id: '{args.session_id}'}})
+    cypher = """
+        MATCH (s:Session {id: $session_id})
         OPTIONAL MATCH (t:Task)-[:HAS_SESSION]->(s)
         OPTIONAL MATCH (g:Goal)-[:CONTAINS]->(t)
         OPTIONAL MATCH (p:Project)-[:HAS_GOAL]->(g)
         OPTIONAL MATCH (s)-[:HAS_EXECUTION]->(e:Execution)
         WITH s, t, g, p,
              collect(e) as executions
-        RETURN s.*,
+        RETURN s,
                t.id as task_id, t.title as task_title, t.agent as task_agent, t.status as task_status,
                g.title as goal_title, p.name as project_name,
                executions
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"session_id": args.session_id})
+    print(json.dumps(result, indent=2, default=str))
 
 
 def cmd_update_session(args):
-    db = GraphDB(get_db_path(args))
     now = timestamp()
-    updates = []
+    set_parts = ["s.updated_at = $now"]
+    params = {"session_id": args.session_id, "now": now}
 
     if args.status:
-        updates.append(f"status: '{args.status}'")
+        set_parts.append("s.status = $status")
+        params["status"] = args.status
     if args.resolution:
-        updates.append(f"resolution: '{args.resolution}'")
+        set_parts.append("s.resolution = $resolution")
+        params["resolution"] = args.resolution
     if args.resolved_at:
-        updates.append(f"resolved_at: '{args.resolved_at}'")
+        set_parts.append("s.resolved_at = $resolved_at")
+        params["resolved_at"] = args.resolved_at
     if args.replacement_session_id:
-        updates.append(f"replacement_session_id: '{args.replacement_session_id}'")
+        set_parts.append("s.replacement_session_id = $replacement_session_id")
+        params["replacement_session_id"] = args.replacement_session_id
     if args.loss_reason:
-        updates.append(f"loss_reason: '{args.loss_reason}'")
+        set_parts.append("s.loss_reason = $loss_reason")
+        params["loss_reason"] = args.loss_reason
     if args.timeout_reason:
-        updates.append(f"timeout_reason: '{args.timeout_reason}'")
+        set_parts.append("s.timeout_reason = $timeout_reason")
+        params["timeout_reason"] = args.timeout_reason
     if args.interruption_context:
         ctx = json.loads(args.interruption_context) if args.interruption_context.startswith('{') else args.interruption_context
-        updates.append(f"interruption_context: {json_val(ctx)}")
+        set_parts.append("s.interruption_context = $interruption_context")
+        params["interruption_context"] = ctx
 
-    updates.append(f"updated_at: '{now}'")
-    set_clause = ", ".join(updates)
-
+    set_clause = ", ".join(set_parts)
     cypher = f"""
-        MATCH (s:Session {{id: '{args.session_id}'}})
+        MATCH (s:Session {{id: $session_id}})
         SET {set_clause}
         RETURN s.id, s.status, s.resolution, s.task_id
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, params)
+    print(json.dumps(result, indent=2, default=str))
 
 
 def cmd_query_sessions(args):
-    db = GraphDB(get_db_path(args))
     where_parts = []
+    params = {}
 
     if args.status:
         if args.status == "awaiting_*":
             where_parts.append("s.status STARTS WITH 'awaiting_'")
         else:
             statuses = [s.strip() for s in args.status.split(",")]
-            for s in statuses:
+            for i, s in enumerate(statuses):
+                key = f"status_{i}"
                 if s == "awaiting_*":
                     where_parts.append("s.status STARTS WITH 'awaiting_'")
                 else:
-                    where_parts.append(f"s.status = '{s}'")
+                    where_parts.append(f"s.status = ${key}")
+                    params[key] = s
 
     if args.stale_threshold:
         threshold = args.stale_threshold
@@ -520,55 +604,53 @@ def cmd_query_sessions(args):
         ORDER BY s.updated_at ASC
         LIMIT 50
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, params)
+    print(json.dumps(result, indent=2, default=str))
 
 
 # ====== Relationship Management Commands ======
 
 def cmd_add_dependency(args):
-    db = GraphDB(get_db_path(args))
-    cypher = f"""
-        MATCH (t:Task {{id: '{args.task_id}'}})
-        MATCH (pre:Task {{id: '{args.depends_on}'}})
-        MERGE (t)-[:DEPENDS_ON]->(pre)
-        RETURN t.id as task, pre.id as depends_on
-    """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    edges = [{
+        "from_node_id": args.task_id,
+        "to_node_id": args.depends_on,
+        "type": "DEPENDS_ON",
+        "properties": {},
+    }]
+    upsert_edges(edges)
+    print(json.dumps({"task": args.task_id, "depends_on": args.depends_on}, indent=2))
 
 
 def cmd_remove_dependency(args):
-    db = GraphDB(get_db_path(args))
-    cypher = f"""
-        MATCH (t:Task {{id: '{args.task_id}'}})-[dep:DEPENDS_ON]->(pre:Task {{id: '{args.depends_on}'}})
+    cypher = """
+        MATCH (t:Task {id: $task_id})-[dep:DEPENDS_ON]->(pre:Task {id: $depends_on})
         DELETE dep
         RETURN 'dependency removed' as result
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"task_id": args.task_id, "depends_on": args.depends_on})
+    print(json.dumps(result, indent=2, default=str))
 
 
-# ====== Query Tool Commands ======
+# ====== Goal Query ======
 
 def cmd_get_goal(args):
-    db = GraphDB(get_db_path(args))
-    cypher = f"""
-        MATCH (g:Goal {{id: '{args.goal_id}'}})
+    cypher = """
+        MATCH (g:Goal {id: $goal_id})
         OPTIONAL MATCH (p:Project)-[:HAS_GOAL]->(g)
         OPTIONAL MATCH (g)-[:CONTAINS]->(t:Task)
         RETURN g, p.name as project_name,
                count(t) as total_tasks,
                count(CASE WHEN t.status = 'completed' THEN 1 END) as completed_tasks
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"goal_id": args.goal_id})
+    print(json.dumps(result, indent=2, default=str))
 
+
+# ====== Progress Report ======
 
 def cmd_progress_report(args):
-    db = GraphDB(get_db_path(args))
-    cypher = f"""
-        MATCH (p:Project {{id: '{args.project_id}'}})-[:HAS_GOAL]->(g:Goal)
+    cypher = """
+        MATCH (p:Project {id: $project_id})-[:HAS_GOAL]->(g:Goal)
         OPTIONAL MATCH (g)-[:CONTAINS]->(t:Task)
         WITH p, g,
              count(t) as total_tasks,
@@ -579,7 +661,7 @@ def cmd_progress_report(args):
              sum(t.success_count) as total_success,
              sum(t.failure_count) as total_failures
         RETURN p.id, p.name, p.status, p.progress,
-               collect({{
+               collect({
                  goal_id: g.id,
                  goal_title: g.title,
                  goal_weight: g.weight,
@@ -592,28 +674,27 @@ def cmd_progress_report(args):
                  failed: failed,
                  successes: total_success,
                  failures: total_failures
-               }}) as goals_data
+               }) as goals_data
     """
-    results = db.query(cypher)
-    print(json.dumps(results, indent=2, default=str))
+    result = graph_query(cypher, {"project_id": args.project_id})
+    print(json.dumps(result, indent=2, default=str))
 
 
 # ====== Argument Parser ======
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="MindX Project Manager - Graph Database Operations (cypherdb)",
+        description="MindX Project Manager - Graph Database Operations",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   %(prog)s create-project --name "Community Ops" --description "Increase engagement"
   %(prog)s create-goal --project-id proj001 --title "Content Creation" --weight 0.4
-  %(prog)s create-task --goal-id goal001 --agent @writer --cron-expr "0 0 9 * * 1" --prompt "Write article"
+  %(prog)s create-task --goal-id goal001 --agent writer --cron-expr "0 0 9 * * 1" --prompt "Write article"
   %(prog)s update-task --task-id task001 --status completed --scheduler-id sched123 --session-id sess456
-  %(prog)s register-session --task-id task001 --agent @writer --session-id 550e8400-e29b-41d4-a716-446655440000 --session-status initialized
+  %(prog)s register-session --task-id task001 --agent writer --session-id 550e8400-e29b-41d4-a716-446655440000 --session-status initialized
   %(prog)s progress-report --project-id proj001
         """)
-    parser.add_argument('--db-path', help=f'Database path (default: {DEFAULT_DB_PATH})')
 
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
 
@@ -773,13 +854,13 @@ def main():
 
     handler = COMMAND_MAP.get(args.command)
     if not handler:
-        print(f"❌ Unknown command: {args.command}")
+        print(f"Unknown command: {args.command}")
         sys.exit(1)
 
     try:
         handler(args)
     except Exception as e:
-        print(f"❌ Error: {e}", file=sys.stderr)
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
 

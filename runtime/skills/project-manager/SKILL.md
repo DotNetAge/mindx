@@ -42,7 +42,7 @@ graph_client.py create-project --name "..." --description "..."
 graph_client.py create-goal --project-id "..." --title "..." --weight N
 
 # Save task_id — it becomes the session_id for all future communication
-task_id=$(graph_client.py create-task --goal-id "..." --title "..." --agent "@x" --prompt "..." | python3 -c "import sys,json;print(json.load(sys.stdin)[0].get('t.id',''))")
+task_id=$(graph_client.py create-task --goal-id "..." --title "..." --agent "x" --prompt "..." | python3 -c "import sys,json;print(json.load(sys.stdin)[0].get('t.id',''))")
 ```
 
 ---
@@ -52,7 +52,7 @@ task_id=$(graph_client.py create-task --goal-id "..." --title "..." --agent "@x"
 For each task, link it to the scheduler. **task_id = session_id**.
 
 ```bash
-assign-task.py assign --agent "@x" --task "..." --cron "0 0 9 * * 1" --session-id "$task_id"
+assign-task.py assign --agent "x" --task "..." --cron "0 0 9 * * 1" --session-id "$task_id"
 ```
 
 **Critical:** Every task prompt must include a reporting instruction, or the agent works silently and you never hear back:
@@ -68,7 +68,7 @@ This closes the loop — agent reports back autonomously after each execution, a
 Agents report back via AgentTalk(session=task_id). Follow up with the same session:
 
 ```
-AgentTalk(agent_name="@writer", session_id="{task_id}", message="Focus on Kubernetes next week.")
+AgentTalk(agent_name="writer", session_id="{task_id}", message="Focus on Kubernetes next week.")
 ```
 
 Proactively check progress:
@@ -105,9 +105,9 @@ Next: {plan for next period}
 | ---------------- | -------------------------------------------------------------------------------------- |
 | Create project   | `graph_client.py create-project --name ... --description ...`                          |
 | Create goal      | `graph_client.py create-goal --project-id ... --title ... --weight N`                  |
-| Create task      | `graph_client.py create-task --goal-id ... --title ... --agent @x --prompt "..."`      |
+| Create task      | `graph_client.py create-task --goal-id ... --title ... --agent x --prompt "..."`      |
 | Update task      | `graph_client.py update-task --task-id ... --status ... [--result "..."]`              |
-| Assign recurring | `assign-task.py assign --agent @x --task "..." --cron "..." [--session-id "task-xxx"]` |
+| Assign recurring | `assign-task.py assign --agent x --task "..." --cron "..." [--session-id "task-xxx"]` |
 | List assignments | `assign-task.py list`                                                                  |
 | Query progress   | `query-progress.py --project-id ...`                                                   |
 | Talk to agent    | **AgentTalk** tool: `agent_name`, `session_id`, `message`                              |

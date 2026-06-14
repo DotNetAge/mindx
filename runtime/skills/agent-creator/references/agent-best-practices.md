@@ -1,37 +1,19 @@
 # Agent Definition Reference
 
-Every agent = single `.md` file with YAML frontmatter:
-
-```markdown
----
-name: <identifier>
-role: <short-title>
-description: >
-  Multi-line capabilities...
-model: "<model-name>"
-skills:
-  - skill-a
-  - skill-b
----
-
-## Identity (optional body)
-...system prompt...
-```
-
 ## Field Requirements
 
 | Field         | Format                       | Rule                                                                            |
 | ------------- | ---------------------------- | ------------------------------------------------------------------------------- |
 | `name`        | lowercase-hyphen             | Unique, noun-based, reflects role (e.g. `python-engineer`)                      |
 | `role`        | ~5 words                     | Human-readable, include seniority if helpful (e.g. `Senior Python Engineer`)    |
-| `description` | YAML folded `>`, <1024 chars | Covers: what agent does, technical domains, quality standards, scope boundaries |
+| `description` | <1024 chars                  | Covers: what agent does, technical domains, quality standards, scope boundaries |
 | `model`       | exact name from `model.list` | Match complexity to task — don't waste expensive models on trivial work         |
 | `skills`      | list from `skill.list`       | Only domain-relevant skills — each adds context overhead                        |
 
-## Body (Optional, after closing `---`)
+## Body (Optional)
 
 Structure if included:
-- **Introduction** — who the agent is
+- **Identity** — who the agent is
 - **Core Responsibilities** — tasks handled directly
 - **Scope Boundaries** — WITHIN scope / OUT OF scope (prevents misdelegation)
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Create a new agent via daemon RPC.
+Create a new agent.
 
 Usage:
     python create_agent.py --name <agent_name> --role <agent_role> \\
@@ -31,7 +31,7 @@ def build_default_body(name, role, description):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Create a new agent via daemon RPC")
+    parser = argparse.ArgumentParser(description="Create a new agent")
     parser.add_argument("--name", required=True, help="Agent identifier")
     parser.add_argument("--role", required=True, help="Short role title")
     parser.add_argument("--description", required=True, help="Detailed role description")

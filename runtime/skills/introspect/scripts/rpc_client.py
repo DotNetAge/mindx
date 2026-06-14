@@ -1,8 +1,5 @@
 """
-WebSocket JSON-RPC 2.0 client for MindX Daemon.
-
-Thin wrapper for find-experts scripts to call daemon RPC methods.
-Replaces direct file operations with daemon-managed RPC calls.
+JSON-RPC client for MindX Daemon.
 
 Usage:
     from rpc_client import rpc_call
