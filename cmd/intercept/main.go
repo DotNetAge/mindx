@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
@@ -62,35 +61,30 @@ func main() {
 	}))
 	defer server.Close()
 
-	app, err := core.DefaultApp(nil)
+	cfg, err := core.LoadMindxConfig(core.DefaultUserPrefsDir())
+	if err != nil {
+		fmt.Printf("Warning: failed to load config: %v\n", err)
+	}
+	app, err := core.DefaultApp(cfg)
 	if err != nil {
 		fmt.Printf("Error creating app: %v\n", err)
 		os.Exit(1)
 	}
 
-	for _, m := range app.Models().List() {
+	for _, m := range app.Models().ListRaw() {
 		m.BaseURL = server.URL
 	}
 
 	agentList := app.Agents().List()
-	if len(agentList) == 0 {
-		fmt.Println("Error: no agents defined")
-		os.Exit(1)
-	}
 
-	var agentCfg *config.AgentConfig
-	var modelCfg *config.ModelConfig
-	for _, a := range agentList {
-		modelCfg = app.Models().Get(a.Model)
-		if modelCfg != nil {
-			agentCfg = a
-			break
-		}
-	}
-
+	// Pick a specific agent for testing
+	agentCfg := app.Agents().Get("personal-assistant")
 	if agentCfg == nil {
-		fmt.Println("Error: no agent has a model matching the registry")
-		os.Exit(1)
+		if len(agentList) == 0 {
+			fmt.Println("Error: no agents defined")
+			os.Exit(1)
+		}
+		agentCfg = agentList[0]
 	}
 
 	// Isolate session storage — intercept is a one-shot debug tool and must not
@@ -113,8 +107,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Agent: %s (%s), Model: %s\n", agentCfg.Name, agentCfg.Role, modelCfg.Name)
-	fmt.Println("Sending: '我想开发一个AI系统'")
+	fmt.Printf("Agent: %s (%s)\n", agentCfg.Name, agentCfg.Role)
+	fmt.Println("Sending: '帮我审查下面这个Go代码，检查安全问题和性能瓶颈'")
 
 	s := session.NewSession("test-session", agentCfg.Name,
 		session.WithStore(tmpStore),
@@ -122,7 +116,7 @@ func main() {
 
 	done := make(chan struct{})
 	go func() {
-		result, err := rt.Ask(agentCfg.Name, "我想开发一个AI系统", s).Run()
+		result, err := rt.Ask(agentCfg.Name, "帮我审查下面这个Go代码，检查安全问题和性能瓶颈", s).Run()
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 		} else {

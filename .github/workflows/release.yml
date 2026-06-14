@@ -339,7 +339,7 @@ jobs:
   homebrew:
     name: Homebrew Formula
     runs-on: ubuntu-latest
-    needs: [prepare, release]
+    needs: [prepare, build, release]
     if: needs.prepare.outputs.is_prerelease == 'false'
     permissions:
       contents: write
@@ -347,22 +347,12 @@ jobs:
       - name: Checkout source (for formula template)
         uses: actions/checkout@v4
 
-      - name: Download darwin assets from Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG=${{ needs.prepare.outputs.version }}
-          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
-
-          echo "Downloading darwin assets from release ${TAG}..."
-          mkdir -p dist
-
-          gh release download "${TAG}" \
-            --pattern "mindx-*darwin-*.tar.gz" \
-            --dir dist \
-            --repo "${{ env.GITHUB_REPO }}"
-
-          ls -lh dist/
+      - name: Download darwin build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-darwin-*
+          path: dist
+          merge-multiple: true
 
       - name: Calculate SHA256
         id: sha256
