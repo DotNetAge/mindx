@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-List all skills via daemon RPC.
+List all skills.
 
 Usage:
     python list_skills.py

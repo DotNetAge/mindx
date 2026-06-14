@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Introspect helper — retrieves current agent profile and available skills
-from MindX daemon via RPC for self-assessment.
+for self-assessment.
 
 Usage:
   introspect whoami
@@ -57,7 +57,7 @@ def cmd_list_skills(json_output):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Introspect helper — retrieve agent profile and skills from daemon RPC",
+        description="Introspect helper",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

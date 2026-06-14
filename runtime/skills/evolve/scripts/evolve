@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 """
-Evolve helper — reads session data from MindX daemon via RPC.
-
-Design:
-  - All session data comes from daemon RPC (session.list, session.get).
-    No direct filesystem access to session storage.
-  - Default output is compact (context budget friendly).
-  - LLM progressively drills down (outline -> expand).
-  - All paths passed explicitly by LLM.
+Evolve helper — reads session data.
 
 Usage:
   evolve list
@@ -46,7 +39,7 @@ signal.signal(signal.SIGTERM, _signal_handler)
 
 
 # ---------------------------------------------------------------------------
-# RPC client — inline, no external dependency
+# RPC client
 # ---------------------------------------------------------------------------
 
 DEFAULT_HOST = "localhost"
@@ -126,7 +119,7 @@ def truncate(text, max_len=120):
 
 
 def cmd_list():
-    """List sessions retrieved from daemon via session.list RPC."""
+    """List sessions retrieved via session.list."""
     sessions = rpc_call("session.list") or []
     if not sessions:
         print("No sessions found.")
@@ -146,7 +139,7 @@ def cmd_list():
 
 
 def cmd_get(session_id, msg_num, msg_range):
-    """Get session content from daemon via session.get RPC."""
+    """Get session content via session.get."""
     result = rpc_call("session.get", {"session_id": session_id})
     if not result:
         print(f"Session '{session_id}' not found.")
@@ -288,12 +281,12 @@ def cmd_dedup(skills_dir):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Evolve helper — reads session data from daemon via RPC"
+        description="Evolve helper"
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("list", help="List sessions from daemon")
-    p = sub.add_parser("get", help="Get session content from daemon")
+    p = sub.add_parser("list", help="List sessions")
+    p = sub.add_parser("get", help="Get session content")
     p.add_argument("session_id", help="Session ID")
     p.add_argument("--msg", type=int, help="Show single message in full")
     p.add_argument("--range", metavar="M-N", help="Show message range in full")

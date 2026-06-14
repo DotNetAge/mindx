@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-MindX Scheduler WebSocket Client (JSON-RPC 2.0)
+MindX Scheduler Client
 
-Communicates with MindX Daemon via WebSocket using JSON-RPC 2.0
-to manage recurring tasks via schedule.add/list/del.
+Manages recurring tasks via schedule.add/list/del.
 
 Usage:
     python scheduler_client.py add-job --agent writer --content "..." --cron "0 0 9 * * 1"
@@ -42,7 +41,7 @@ class JobAddParams:
 
 
 class MindXSchedulerClient:
-    """WebSocket JSON-RPC 2.0 client for MindX Scheduler"""
+    """Client for MindX Scheduler"""
 
     def __init__(self, host=DEFAULT_GATEWAY_HOST, port=DEFAULT_GATEWAY_PORT,
                  path=DEFAULT_GATEWAY_PATH, timeout=DEFAULT_TIMEOUT):
@@ -93,7 +92,7 @@ class MindXSchedulerClient:
             return {"success": False, "error": str(e)}
 
     def add_job(self, params: JobAddParams) -> dict:
-        agent = params.agent.lstrip("@")
+        agent = params.agent
         session_id = params.session_id or str(uuid.uuid4())
         r = self._call("schedule.add", {
             "agent": agent,
@@ -195,7 +194,7 @@ def cmd_test_conn(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="MindX Scheduler Client (JSON-RPC 2.0 over WebSocket)")
+        description="MindX Scheduler Client")
     sub = parser.add_subparsers(dest="command")
     for name, help_text, func in [
         ("add-job", "Add a scheduled task", cmd_add_job),
