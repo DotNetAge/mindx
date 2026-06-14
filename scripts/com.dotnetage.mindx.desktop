@@ -14,5 +14,5 @@ Actions=StartDaemon;
 
 [Desktop Action StartDaemon]
 Name=Start Daemon Mode
-Exec=mindx start
+Exec=mindx daemon
 Icon=com.dotnetage.mindx

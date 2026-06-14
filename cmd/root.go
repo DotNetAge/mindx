@@ -42,11 +42,27 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() error {
+	// Pre-init i18n from system locale so subcommand Short/Long keys resolve
+	// before cobra displays help text. runTUI will re-init with config language.
+	if err := i18n.Init(""); err != nil {
+		// Non-fatal: T() falls back to returning keys as-is
+	}
+	// Re-apply Short/Long text after i18n init (commands set Short/Long at package
+	// init time when translations were still uninitialized).
+	daemonCmd.Short = i18n.T("cmd.daemon.short")
+	daemonCmd.Long = i18n.T("cmd.daemon.long")
+	webCmd.Short = i18n.T("cmd.web.short")
+	skillCmd.Short = i18n.T("cmd.skill.short")
+	skillCmd.Long = i18n.T("cmd.skill.long") + "\n\nExamples:\n  mindx skill list\n  mindx skill get batch"
+	ruleCmd.Short = i18n.T("cmd.rule.short")
+	ruleCmd.Long = i18n.T("cmd.rule.long") + "\n\nExamples:\n  mindx rule list\n  mindx rule get fs.write"
+	scheduleCmd.Short = i18n.T("cmd.schedule.short")
+	scheduleCmd.Long = i18n.T("cmd.schedule.long") + "\n\nExamples:\n  mindx schedule list\n  mindx schedule add --agent notes \"Daily standup summary\" \"0 9 * * 1-5\"\n  mindx schedule del abc12345"
 	return rootCmd.Execute()
 }
 
 func init() {
-	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(daemonCmd)
 	rootCmd.AddCommand(doctorCmd)
 	rootCmd.AddCommand(webCmd)
 }

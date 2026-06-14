@@ -188,11 +188,15 @@ func runAllChecks() []Check {
 			Message: fmt.Sprintf("Virtual environment found%s", pyVer),
 		})
 	} else {
+		wDir := workspaceDir
 		checks = append(checks, Check{
 			Name:    "Python Environment",
 			Status:  "⚠️",
 			Message: "No venv found — some skills may not work (e.g., xlsx, pdf)",
-			Fix:     nil, // Requires user interaction (version selection)
+			Fix: func() error {
+				_, err := setup.SetupPython(wDir)
+				return err
+			},
 		})
 	}
 

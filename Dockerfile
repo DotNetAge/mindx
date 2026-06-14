@@ -64,4 +64,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:1313/ || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--", "/home/mindx/.mindx/bin/mindx"]
-CMD ["start"]
+CMD ["daemon"]

@@ -54,7 +54,7 @@ func setupDaemonMacOS(workspaceDir string) error {
     <key>ProgramArguments</key>
     <array>
         <string>mindx</string>
-        <string>start</string>
+        <string>daemon</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
@@ -122,7 +122,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=mindx start
+ExecStart=mindx daemon
 WorkingDirectory=%s
 Environment=PATH=%s
 Restart=on-failure
@@ -170,7 +170,7 @@ func setupDaemonWindows(workspaceDir string) error {
 	if err := os.MkdirAll(filepath.Dir(vbsPath), 0755); err != nil {
 		return fmt.Errorf("create bin dir: %w", err)
 	}
-	vbsContent := `CreateObject("WScript.Shell").Run "mindx start", 0, False`
+	vbsContent := `CreateObject("WScript.Shell").Run "mindx daemon", 0, False`
 	if err := os.WriteFile(vbsPath, []byte(vbsContent), 0644); err != nil {
 		return fmt.Errorf("write vbs launcher: %w", err)
 	}
