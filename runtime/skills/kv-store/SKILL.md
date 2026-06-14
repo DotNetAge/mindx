@@ -24,16 +24,20 @@ Activate when the user asks to:
 
 **Do NOT use** for: Graph queries (use `graph-db`), RAG memory (use `memory.query`).
 
+## Prerequisite
+
+The daemon must be running: `mindx start`
+
 ## Available Operations
 
-Each operation maps to one JSON-RPC method. Execute via `python3 scripts/kv_client.py`.
+Each operation maps to one `mindx kv` subcommand.
 
 ### Basic CRUD
 
 #### 1. Get — Read a single key
 
 ```bash
-python3 scripts/kv_client.py get --key "app:settings:theme"
+mindx kv get --key "app:settings:theme"
 ```
 
 Params:
@@ -57,13 +61,13 @@ Returns when not found or expired: `{"found": false}`
 #### 2. Set — Write a single key
 
 ```bash
-python3 scripts/kv_client.py set --key "app:user:last_login" --value '{"ts":"2025-06-10T12:00:00Z"}'
-python3 scripts/kv_client.py set --key "session:abc123:data" --value '{"page":42}' --ttl 3600
+mindx kv set --key "app:user:last_login" --value '{"ts":"2025-06-10T12:00:00Z"}'
+mindx kv set --key "session:abc123:data" --value '{"page":42}' --ttl 3600
 ```
 
 Params:
 - `--key` (required): Full key path
-- `--value` (required): Any JSON-serializable value (string, number, object, array, bool, null)
+- `--value` (required): Any JSON-serializable value (string, number, object, array, bool, null). Must be valid JSON.
 - `--ttl` (optional): Time-to-live in seconds. After this duration, the key auto-expires. Default=0 (no expiry).
 
 Returns: `{"status": "ok", "key": "..."}`
@@ -71,7 +75,7 @@ Returns: `{"status": "ok", "key": "..."}`
 #### 3. Delete — Remove a single key
 
 ```bash
-python3 scripts/kv_client.py delete --key "app:cache:stale_entry"
+mindx kv delete --key "app:cache:stale_entry"
 ```
 
 Params:
@@ -87,10 +91,10 @@ List all keys under a namespace/prefix.
 
 ```bash
 # List keys only (fast, no values loaded)
-python3 scripts/kv_client.py list --prefix "kg:" --limit 50
+mindx kv list --prefix "kg:" --limit 50
 
 # List keys WITH their values (heavier)
-python3 scripts/kv_client.py list --prefix "app:settings:" --limit 20 --with-values
+mindx kv list --prefix "app:settings:" --limit 20 --with-values
 ```
 
 Params:
@@ -121,7 +125,7 @@ Returns (with values):
 Write multiple keys in a single transaction. All succeed or all fail.
 
 ```bash
-python3 scripts/kv_client.py batch-set --entries '
+mindx kv batch-set --entries '
 [
   {"key":"user:1:name","value":"Alice"},
   {"key":"user:1:email","value":"alice@example.com"},
@@ -148,10 +152,10 @@ Delete ALL keys matching a prefix. Irreversible.
 
 ```bash
 # Dangerous: clears entire session namespace
-python3 scripts/kv_client.py clear --prefix "kg:session-old:"
+mindx kv clear --prefix "kg:session-old:"
 
 # Safer: clear only temp cache entries
-python3 scripts/kv_client.py clear --prefix "temp:"
+mindx kv clear --prefix "temp:"
 ```
 
 Params:
@@ -178,10 +182,10 @@ Use colon (`:`) as separator to create hierarchical namespaces:
 
 ```bash
 # Check cache first
-python3 scripts/kv_client.py get --key "cache:llm:extract:$(echo 'doc-chunk-hash')"
+mindx kv get --key "cache:llm:extract:$(echo 'doc-chunk-hash')"
 
 # If miss → compute → store with short TTL
-python3 scripts/kv_client.py set \
+mindx kv set \
   --key "cache:llm:extract:doc-chunk-hash" \
   --value '{"entities":[...],"relations":[...]}' \
   --ttl 3600
@@ -193,11 +197,11 @@ KV Store has no native increment. Use get-modify-set pattern:
 
 ```bash
 # 1. Read current
-python3 scripts/kv_client.py get --key "counter:builds:total"
+mindx kv get --key "counter:builds:total"
 # → {"found":true,"item":{"value":42,...}}
 
 # 2. Write new value
-python3 scripts/kv_client.py set --key "counter:builds:total" --value 43
+mindx kv set --key "counter:builds:total" --value 43
 ```
 
 For high-concurrency counters, consider using `batch-set` within a transaction boundary.
@@ -206,11 +210,11 @@ For high-concurrency counters, consider using `batch-set` within a transaction b
 
 ```bash
 # All temp data lives under temp:{run_id}:
-python3 scripts/kv_client.py set --key "temp:run-001:x" --value 1
-python3 scripts/kv_client.py set --key "temp:run-001:y" --value 2
+mindx kv set --key "temp:run-001:x" --value 1
+mindx kv set --key "temp:run-001:y" --value 2
 
 # Cleanup entire run in one shot
-python3 scripts/kv_client.py clear --prefix "temp:run-001:"
+mindx kv clear --prefix "temp:run-001:"
 ```
 
 ### Pattern D: Structured state checkpoint
@@ -218,7 +222,7 @@ python3 scripts/kv_client.py clear --prefix "temp:run-001:"
 Store complex state as a single JSON value:
 
 ```bash
-python3 scripts/kv_client.py set \
+mindx kv set \
   --key "build:2025-06-10:checkpoint" \
   --value '{"page":23,"chunks_done":1150,"entities":340,"errors":[]}' \
   --ttl 604800  # 7 days
@@ -239,9 +243,9 @@ python3 scripts/kv_client.py set \
 
 | Error | Meaning | Action |
 |-------|---------|--------|
-| `connection failed` | Daemon not running | Check mindx daemon status |
+| `cannot connect to daemon` | Daemon not running | Run `mindx start` |
 | `key is required` | Missing `--key` argument | Provide the key |
-| `kvstore not initialized` | BBolt DB failed to open | Check ~/.mindx/data/ permissions |
+| `--value must be valid JSON` | Invalid JSON value | Wrap strings in quotes: `'"text"'` |
 | `entries is required` | Empty batch | Provide at least one entry |
 
 ## Data Location

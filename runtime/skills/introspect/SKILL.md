@@ -19,14 +19,22 @@ metadata:
 
 **Do NOT use** for tasks you can already handle with equipped skills.
 
+## Prerequisite
+
+The daemon must be running:
+
+```bash
+mindx start
+```
+
 ## Workflow
 
 ### 1. Get your profile
 
-All agents are returned — find your entry by matching your `name`:
+All agents are returned as JSON — find your entry by matching your `name`:
 
 ```bash
-python3 scripts/introspect whoami
+mindx agent list --json
 ```
 
 Note your current `role`, `description`, and already-equipped `skills`.
@@ -34,8 +42,7 @@ Note your current `role`, `description`, and already-equipped `skills`.
 ### 2. Discover available skills
 
 ```bash
-python3 scripts/introspect list-skills
-python3 scripts/introspect list-skills --json   # machine-readable
+mindx skill list --json
 ```
 
 ### 3. Match and recommend

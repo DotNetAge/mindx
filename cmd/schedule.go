@@ -1,188 +1,183 @@
 package cmd
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
-	"path/filepath"
-	"strings"
-	"time"
 
-	"github.com/DotNetAge/mindx/internal/core"
-	"github.com/DotNetAge/mindx/internal/i18n"
-	"github.com/DotNetAge/mindx/pkg/scheduler"
-	"github.com/google/uuid"
+	"github.com/DotNetAge/mindx/internal/client/render"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
 )
 
-var scheduleAddFlags struct {
-	Agent      string
-	SessionID  string
-	ProjectDir string
-	Enabled    bool
-	Disabled   bool
-}
+// ── schedule parent ───────────────────────────────────────────
 
 var scheduleCmd = &cobra.Command{
-	Use:   "schedule list|add|del",
-	Short: i18n.T("cmd.schedule.short"),
-	Long:  i18n.T("cmd.schedule.long") + "\n\nExamples:\n  mindx schedule list\n  mindx schedule add --agent notes \"Daily standup summary\" \"0 9 * * 1-5\"\n  mindx schedule del abc12345",
-	Args:  cobra.MinimumNArgs(1),
-	RunE:  runSchedule,
-}
+	Use:   "schedule",
+	Short: "Scheduled task operations (requires daemon)",
+	Long: `Manage recurring scheduled tasks.
 
-var scheduleAddCmd = &cobra.Command{
-	Use:   "add <content> <cron_expr>",
-	Short: i18n.T("cmd.schedule.add.short"),
-	Long: `Add a new scheduled task with the given content and cron expression.
-
-Content is the prompt/message to send to the agent when the schedule triggers.
-Cron expression follows the standard 5-field format (min hour dom mon dow).
+All operations require the daemon to be running (mindx start).
 
 Examples:
-  mindx schedule add --agent notes "Write daily summary" "0 18 * * 1-5"
-  mindx schedule add --agent reporter "Weekly report" "0 9 * * 1"`,
-	Args: cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return addSchedule(cmd, args[0], args[1])
-	},
-}
-
-var scheduleDelCmd = &cobra.Command{
-	Use:   "del <id>",
-	Short: i18n.T("cmd.schedule.del.short"),
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return delSchedule(cmd, args[0])
-	},
+  mindx schedule list
+  mindx schedule add --agent writer --content "Daily standup" --cron "0 0 9 * * *"
+  mindx schedule delete --id a1b2c3d4`,
+	PersistentPreRunE: requireDaemon,
 }
 
 func init() {
-	scheduleAddCmd.Flags().StringVar(&scheduleAddFlags.Agent, "agent", "", "Agent name (required)")
-	scheduleAddCmd.Flags().StringVar(&scheduleAddFlags.SessionID, "session", "", "Session ID")
-	scheduleAddCmd.Flags().StringVar(&scheduleAddFlags.ProjectDir, "project-dir", "", "Project directory")
-	scheduleAddCmd.Flags().BoolVar(&scheduleAddFlags.Enabled, "enabled", true, "Enable the schedule on creation")
-	scheduleAddCmd.Flags().BoolVar(&scheduleAddFlags.Disabled, "disabled", false, "Disable the schedule on creation")
-
-	scheduleCmd.AddCommand(scheduleAddCmd)
-	scheduleCmd.AddCommand(scheduleDelCmd)
 	rootCmd.AddCommand(scheduleCmd)
 }
 
-func runSchedule(cmd *cobra.Command, args []string) error {
-	switch args[0] {
-	case "list":
-		return listSchedules(cmd)
-	case "add":
-		return fmt.Errorf("usage: mindx schedule add <content> <cron_expr>")
-	case "del":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: mindx schedule del <id>")
+// ── response type (aligned with RPC) ──────────────────────────
+
+type scheduleEntry struct {
+	ID        string `json:"id"`
+	Agent     string `json:"agent"`
+	SessionID string `json:"session_id,omitempty"`
+	Content   string `json:"content"`
+	CronExpr  string `json:"cron_expr"`
+	Enabled   bool   `json:"enabled"`
+	CreatedAt string `json:"created_at"`
+}
+
+// ── schedule list ─────────────────────────────────────────────
+
+var scheduleListCmd = &cobra.Command{
+	Use:     "list",
+	Short:   "List all scheduled tasks",
+	Example: `  mindx schedule list`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
 		}
-		return delSchedule(cmd, args[1])
-	default:
-		return fmt.Errorf("unknown subcommand %q — use list, add, or del", args[0])
-	}
-}
+		defer cl.Close()
 
-func schedulesDir() string {
-	prefs := core.DefaultUserPrefsDir()
-	return filepath.Join(prefs, "data", "schedules")
-}
+		result, err := cl.ScheduleList()
+		if err != nil {
+			return err
+		}
 
-func openScheduleStore() (*scheduler.FileSchedulerStore, error) {
-	dir := schedulesDir()
-	return scheduler.NewFileSchedulerStore(dir)
-}
+		var entries []scheduleEntry
+		if err := json.Unmarshal(result, &entries); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
 
-func listSchedules(cmd *cobra.Command) error {
-	store, err := openScheduleStore()
-	if err != nil {
-		return fmt.Errorf("cannot open schedule store: %w", err)
-	}
+		if len(entries) == 0 {
+			fmt.Println("No scheduled tasks.")
+			return nil
+		}
 
-	entries, err := store.List(context.Background())
-	if err != nil {
-		return fmt.Errorf("cannot list schedules: %w", err)
-	}
-
-	if len(entries) == 0 {
-		fmt.Println("No scheduled tasks.")
+		table := render.NewTable([]string{"ID", "Agent", "Cron", "Enabled", "Created"}, 100)
+		for _, e := range entries {
+			enabled := "yes"
+			if !e.Enabled {
+				enabled = "no"
+			}
+			table.AddRow([]string{truncateStr(e.ID, 12), e.Agent, e.CronExpr, enabled, e.CreatedAt})
+		}
+		fmt.Println(table.Render())
+		fmt.Printf("\n%d scheduled task(s)\n", len(entries))
 		return nil
-	}
+	},
+}
 
-	// Column widths
-	fmt.Printf("%-10s %-12s %-20s %-12s %s\n", "ID", "Agent", "Cron", "Status", "Content")
-	fmt.Println(strings.Repeat("─", 100))
-	for _, e := range entries {
-		status := "enabled"
-		if !e.Enabled {
-			status = "disabled"
-		}
-		content := e.Content
-		if len(content) > 45 {
-			content = content[:42] + "..."
-		}
-		agent := e.Agent
+// ── schedule add ──────────────────────────────────────────────
+
+var scheduleAddCmd = &cobra.Command{
+	Use:   "add",
+	Short: "Add a new scheduled task",
+	Example: `  mindx schedule add --agent writer --content "Daily standup" --cron "0 0 9 * * *"
+  mindx schedule add --agent writer --content "Blog post" --cron "0 0 9 * * 1" --session-id "task-abc123" --project-dir /path/to/project`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agent, _ := cmd.Flags().GetString("agent")
+		content, _ := cmd.Flags().GetString("content")
+		cron, _ := cmd.Flags().GetString("cron")
+		sessionID, _ := cmd.Flags().GetString("session-id")
+		projectDir, _ := cmd.Flags().GetString("project-dir")
+		enabled, _ := cmd.Flags().GetBool("enabled")
+
 		if agent == "" {
-			agent = "(default)"
+			return fmt.Errorf("--agent is required")
 		}
-		fmt.Printf("%-10s %-12s %-20s %-12s %s\n", e.ID, agent, e.CronExpr, status, content)
-	}
+		if content == "" {
+			return fmt.Errorf("--content is required")
+		}
+		if cron == "" {
+			return fmt.Errorf("--cron is required")
+		}
 
-	return nil
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer cl.Close()
+
+		result, err := cl.ScheduleAdd(rpc.ScheduleAddParams{
+			Agent:      agent,
+			Content:    content,
+			CronExpr:   cron,
+			SessionID:  sessionID,
+			ProjectDir: projectDir,
+			Enabled:    enabled,
+		})
+		if err != nil {
+			return err
+		}
+		// Parse response to show schedule ID
+		var resp map[string]interface{}
+		if json.Unmarshal(result, &resp) == nil {
+			if id, ok := resp["id"].(string); ok {
+				fmt.Printf("Scheduled task created: %s\n", id)
+				return nil
+			}
+		}
+		fmt.Println(string(result))
+		return nil
+	},
 }
 
-func addSchedule(cmd *cobra.Command, content, cronExpr string) error {
-	if scheduleAddFlags.Agent == "" {
-		return fmt.Errorf("--agent is required")
-	}
+// ── schedule delete ───────────────────────────────────────────
 
-	enabled := scheduleAddFlags.Enabled
-	if scheduleAddFlags.Disabled {
-		enabled = false
-	}
+var scheduleDeleteCmd = &cobra.Command{
+	Use:     "delete",
+	Short:   "Delete a scheduled task",
+	Example: `  mindx schedule delete --id a1b2c3d4`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, _ := cmd.Flags().GetString("id")
+		if id == "" {
+			return fmt.Errorf("--id is required")
+		}
 
-	entry := &scheduler.ScheduleEntry{
-		ID:         uuid.NewString()[:8],
-		Agent:      scheduleAddFlags.Agent,
-		SessionID:  scheduleAddFlags.SessionID,
-		ProjectDir: scheduleAddFlags.ProjectDir,
-		Content:    content,
-		CronExpr:   cronExpr,
-		Enabled:    enabled,
-		CreatedAt:  time.Now(),
-	}
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer cl.Close()
 
-	store, err := openScheduleStore()
-	if err != nil {
-		return fmt.Errorf("cannot open schedule store: %w", err)
-	}
-
-	if err := store.Save(context.Background(), entry); err != nil {
-		return fmt.Errorf("cannot save schedule: %w", err)
-	}
-
-	fmt.Printf("Schedule %q created (ID: %s)\n", entry.Agent, entry.ID)
-	fmt.Println("Restart the daemon for the schedule to take effect: mindx restart")
-
-	return nil
+		result, err := cl.ScheduleDelete(id)
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(result))
+		return nil
+	},
 }
 
-func delSchedule(cmd *cobra.Command, id string) error {
-	store, err := openScheduleStore()
-	if err != nil {
-		return fmt.Errorf("cannot open schedule store: %w", err)
-	}
+// ── init subcommands ──────────────────────────────────────────
 
-	if err := store.Delete(context.Background(), id); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			return fmt.Errorf("schedule %q not found", id)
-		}
-		return fmt.Errorf("cannot delete schedule: %w", err)
-	}
+func init() {
+	scheduleAddCmd.Flags().String("agent", "", "Target agent name (e.g. writer)")
+	scheduleAddCmd.Flags().String("content", "", "Prompt content to send to the agent")
+	scheduleAddCmd.Flags().String("cron", "", "6-field cron expression")
+	scheduleAddCmd.Flags().String("session-id", "", "Session UUID or graph task ID to link")
+	scheduleAddCmd.Flags().String("project-dir", "", "Project working directory")
+	scheduleAddCmd.Flags().Bool("enabled", true, "Enable the schedule immediately")
+	scheduleDeleteCmd.Flags().String("id", "", "Schedule entry ID to delete")
 
-	fmt.Printf("Schedule %q deleted\n", id)
-	fmt.Println("Restart the daemon for the change to take effect: mindx restart")
-
-	return nil
+	scheduleCmd.AddCommand(scheduleListCmd)
+	scheduleCmd.AddCommand(scheduleAddCmd)
+	scheduleCmd.AddCommand(scheduleDeleteCmd)
 }

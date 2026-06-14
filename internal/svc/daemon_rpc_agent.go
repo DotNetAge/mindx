@@ -27,7 +27,6 @@ func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any
 		Model        string         `json:"model"`
 		Skills       []string       `json:"skills,omitempty"`
 		ExcludeTools []string       `json:"exclude_tools,omitempty"`
-		Body         string         `json:"body,omitempty"`
 		Meta         map[string]any `json:"meta,omitempty"`
 	}
 
@@ -41,7 +40,6 @@ func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any
 			Model:        a.Model,
 			Skills:       a.Skills,
 			ExcludeTools: a.ExcludeTools,
-			Body:         a.Introduction,
 			Meta:         a.Meta,
 		}
 	}
@@ -152,7 +150,6 @@ type agentUpdateParams struct {
 	Model        string         `json:"model,omitempty"`
 	Skills       []string       `json:"skills,omitempty"`
 	ExcludeTools []string       `json:"exclude_tools,omitempty"`
-	Body         string         `json:"body,omitempty"`
 	Meta         map[string]any `json:"meta,omitempty"`
 }
 
@@ -195,9 +192,7 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 	if p.Introduction != "" {
 		updated.Introduction = p.Introduction
 	}
-	if p.Body != "" {
-		updated.Introduction = p.Body
-	}
+
 	if p.Meta != nil {
 		updated.Meta = p.Meta
 	}

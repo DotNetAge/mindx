@@ -18,15 +18,23 @@ Distill repeated multi-step workflows from session history into reusable skills 
 
 Skills directory `{skill_dir}` is provided in system prompt.
 
+## Prerequisite
+
+The daemon must be running:
+
+```bash
+mindx start
+```
+
 ---
 
 ## Phase 1: List Sessions
 
 ```bash
-python3 scripts/evolve list
+mindx session list
 ```
 
-Output shows available sessions with ID, agent, title (first user message), and last activity time.
+Output shows available sessions with ID, agent, and details.
 
 Select sessions to analyze:
 - Default: 3-5 most recent sessions with meaningful conversation length
@@ -37,24 +45,13 @@ Select sessions to analyze:
 
 ## Phase 2: Read Session Content
 
-### Outline (one line per message)
+### Overview (all messages)
 
 ```bash
-python3 scripts/evolve get <session-id>
+mindx session get --id <session-id>
 ```
 
-Compact view showing message count, role distribution, and one line per message (role + truncated content).
-
-### Full message
-
-```bash
-python3 scripts/evolve get <session-id> --msg N
-python3 scripts/evolve get <session-id> --range M-N
-```
-
-Shows complete decoded content for specific messages.
-
-**Why progressive disclosure:** A 200-message session at full content is large. Start with outline, then expand specific sections you need.
+This returns the full session with all messages in JSON format — the LLM can analyze the content directly.
 
 ---
 
@@ -74,16 +71,7 @@ Do NOT extract generic one-off actions or trivial patterns. Be conservative.
 
 For each identified workflow:
 
-### 4.1 Check for duplicates
-
-```bash
-python3 scripts/evolve check <workflow-name> --skills-dir {skill_dir}
-python3 scripts/evolve dedup --skills-dir {skill_dir}
-```
-
-Skip if a skill with that name already exists.
-
-### 4.2 Create SKILL.md via `write` tool
+### 4.1 Create SKILL.md via `write` tool
 
 Path: `{skill_dir}/evolved/<workflow-name>/SKILL.md`
 
