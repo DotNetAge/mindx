@@ -67,6 +67,90 @@ func (d *Daemon) handleTokenUsageMonthly(_ context.Context, params json.RawMessa
 	return stats, nil
 }
 
+type tokenUsageSessionParams struct {
+	SessionID string `json:"session_id"`
+}
+
+func (d *Daemon) handleTokenUsageTotal(_ context.Context, _ json.RawMessage) (any, error) {
+	store := d.app.TokenUsageStore()
+	if store == nil {
+		return map[string]any{
+			"total_tokens":        0,
+			"total_cost":          0.0,
+			"total_conversations": 0,
+		}, nil
+	}
+
+	// Query all records (no time/session filter)
+	records, err := store.Query(context.Background(), goharnesssession.TokenUsageFilter{})
+	if err != nil {
+		return nil, fmt.Errorf("query all token usage: %w", err)
+	}
+
+	totalTokens := 0
+	totalCost := 0.0
+	convSet := make(map[string]struct{})
+
+	for _, r := range records {
+		totalTokens += r.TotalTokens
+		if r.ConversationID != "" {
+			key := r.SessionID + ":" + r.ConversationID
+			convSet[key] = struct{}{}
+		}
+		mc, hasMC := d.app.Costs().Get(r.ModelName)
+		if hasMC {
+			totalCost += calculateRecordCost(mc, r)
+		}
+	}
+
+	return map[string]any{
+		"total_tokens":        totalTokens,
+		"total_cost":          roundCost(totalCost),
+		"total_conversations": len(convSet),
+	}, nil
+}
+
+func (d *Daemon) handleTokenUsageSession(_ context.Context, params json.RawMessage) (any, error) {
+	var p tokenUsageSessionParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	store := d.app.TokenUsageStore()
+	if store == nil {
+		return map[string]any{
+			"tokens_used": 0,
+			"cost":        0.0,
+		}, nil
+	}
+
+	filter := goharnesssession.TokenUsageFilter{
+		SessionID: p.SessionID,
+	}
+	records, err := store.Query(context.Background(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("query session token usage: %w", err)
+	}
+
+	totalTokens := 0
+	totalCost := 0.0
+	for _, r := range records {
+		totalTokens += r.TotalTokens
+		mc, hasMC := d.app.Costs().Get(r.ModelName)
+		if hasMC {
+			totalCost += calculateRecordCost(mc, r)
+		}
+	}
+
+	return map[string]any{
+		"tokens_used": totalTokens,
+		"cost":        roundCost(totalCost),
+	}, nil
+}
+
 func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessage) (any, error) {
 	var p tokenUsageByModelParams
 	if err := unmarshalParams(params, &p); err != nil {

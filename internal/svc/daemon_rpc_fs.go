@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -98,18 +97,11 @@ func (d *Daemon) handleFSList(_ context.Context, params json.RawMessage) (any, e
 }
 
 func defaultFSHome() string {
-	if runtime.GOOS == "windows" {
-		systemDrive := os.Getenv("SystemDrive")
-		if systemDrive == "" {
-			systemDrive = "C:"
-		}
-		return filepath.Join(systemDrive, "mindx")
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "."
 	}
-	return filepath.Join(home, "mindx")
+	return home
 }
 
 func (d *Daemon) handleFSHome(_ context.Context, _ json.RawMessage) (any, error) {
