@@ -125,23 +125,19 @@ var memoryStoreCmd = &cobra.Command{
 
 var memoryDeleteCmd = &cobra.Command{
 	Use:     "delete",
-	Short:   "Delete memory records by ID",
-	Example: `  mindx memory delete --ids '["rec-abc123","rec-def456"]'`,
+	Short:   "Delete a memory record by ID",
+	Example: `  mindx memory delete --id "rec-abc123"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		idsRaw, _ := cmd.Flags().GetString("ids")
-		if idsRaw == "" {
-			return fmt.Errorf("--ids is required (JSON array of strings)")
-		}
-		var ids []string
-		if err := json.Unmarshal([]byte(idsRaw), &ids); err != nil {
-			return fmt.Errorf("--ids must be valid JSON array: %w", err)
+		id, _ := cmd.Flags().GetString("id")
+		if id == "" {
+			return fmt.Errorf("--id is required")
 		}
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
 		}
 		defer cl.Close()
-		result, err := cl.MemoryDelete(ids)
+		result, err := cl.MemoryDelete(id)
 		if err != nil {
 			return err
 		}
@@ -396,7 +392,7 @@ func init() {
 	memoryStoreCmd.Flags().String("title", "", "Title/summary")
 	memoryStoreCmd.Flags().String("description", "", "Description")
 	memoryStoreCmd.Flags().String("source", "", "Source identifier")
-	memoryDeleteCmd.Flags().String("ids", "", "JSON array of record IDs to delete")
+	memoryDeleteCmd.Flags().String("id", "", "Memory record ID to delete (required)")
 	memoryChunksCmd.Flags().Int("page", 1, "Page number")
 	memoryChunksCmd.Flags().Int("page-size", 20, "Page size")
 	memoryChunksCmd.Flags().String("doc-id", "", "Filter by document ID")
