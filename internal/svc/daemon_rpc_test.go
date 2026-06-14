@@ -31,14 +31,14 @@ func newTestDaemon(t *testing.T) (*Daemon, func()) {
 	os.WriteFile(filepath.Join(tmpDir, "settings", "models.yml"), []byte{}, 0644)
 	os.WriteFile(filepath.Join(tmpDir, "settings", "rules.yml"), []byte{}, 0644)
 
-	app, err := core.DefaultApp(nil)
+	app, err := core.DefaultApp(core.DefaultMindxConfig(tmpDir))
 	if err != nil {
 		t.Fatalf("DefaultApp() error = %v", err)
 	}
 
 	app.SetTestDir(tmpDir)
 
-	d := NewDaemon(app, ":0", "/ws")
+	d := NewDaemon(app, ":0", "/ws", nil)
 
 	cleanup := func() {}
 

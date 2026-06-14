@@ -7,7 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.6
 	charm.land/glamour/v2 v2.0.0
 	charm.land/lipgloss/v2 v2.0.3
-	github.com/DotNetAge/gort v0.1.3
+	github.com/DotNetAge/gort v0.1.4
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/uuid v1.6.0

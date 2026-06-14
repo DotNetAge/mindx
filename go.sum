@@ -19,8 +19,8 @@ github.com/DotNetAge/goharness v0.1.9 h1:nZTbhtlGXBIAowdkxVyzvRywJT3g0WK3wnyZU17
 github.com/DotNetAge/goharness v0.1.9/go.mod h1:+kx9N2I5nkKquSD8xcN1JR9U1mHOpVtMTcGQbV1NGQ4=
 github.com/DotNetAge/gorag v1.8.0 h1:jK2FcSlq+N7TaHPfG8l3JvkTFQgbY2UtjJF9mGSIii4=
 github.com/DotNetAge/gorag v1.8.0/go.mod h1:2ktOiwhGCXRDZbKGdQPVugqRaFNmWO1K8+floFmB2nQ=
-github.com/DotNetAge/gort v0.1.3 h1:7B937eD1HH4H996sFeTIr43fq7S91OArhD7YYmJS7Dg=
-github.com/DotNetAge/gort v0.1.3/go.mod h1:m6mjzyaP/Ufx+Uv7uh51BSK7N4LVR/viWEHV9ZQ3OM8=
+github.com/DotNetAge/gort v0.1.4 h1:nUZdy3cN3Kif21GWIYkxlIS/iFr62eN5boBmCzmI3xw=
+github.com/DotNetAge/gort v0.1.4/go.mod h1:m6mjzyaP/Ufx+Uv7uh51BSK7N4LVR/viWEHV9ZQ3OM8=
 github.com/DotNetAge/govector v0.1.8 h1:LwNJecCbLgj0ISXBRUCQziPYBbYxtr+3jVEKvXzK7wo=
 github.com/DotNetAge/govector v0.1.8/go.mod h1:0/jnt1Xnghs6V7zr8iZ22QDO0a0ulpkn2cl8orXt6DY=
 github.com/JohannesKaufmann/html-to-markdown v1.6.0 h1:04VXMiE50YYfCfLboJCLcgqF5x+rHJnb1ssNmqpLH/k=
