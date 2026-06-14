@@ -79,6 +79,19 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	// Confirm
 	fmt.Println("\n⬇️  Downloading and installing update...")
 
+	// Stop daemon before replacing the binary
+	daemonWasRunning := false
+	status, err := setup.CheckDaemon()
+	if err == nil && status == setup.DaemonRunning {
+		fmt.Println("  → Stopping daemon...")
+		if err := setup.StopDaemon(); err != nil {
+			fmt.Printf("⚠️  Failed to stop daemon: %v\n", err)
+		} else {
+			daemonWasRunning = true
+			fmt.Println("  ✅ Daemon stopped")
+		}
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
@@ -88,11 +101,17 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("✅ Update installed successfully.")
 
-	// Suggest restart if daemon is running
-	status, err := setup.CheckDaemon()
-	if err == nil && status == setup.DaemonRunning {
-		fmt.Println("ℹ️  Daemon is running. Restart it to apply the update:")
-		fmt.Println("   mindx restart")
+	// Restart daemon if it was running before
+	if daemonWasRunning {
+		fmt.Println("  → Restarting daemon...")
+		if err := setup.StartDaemon(); err != nil {
+			fmt.Printf("⚠️  Failed to restart daemon: %v\n", err)
+			fmt.Println("   Run 'mindx restart' manually.")
+		} else {
+			fmt.Println("  ✅ Daemon restarted")
+		}
+	} else {
+		fmt.Println("ℹ️  Daemon was not running. Start it with: mindx start")
 	}
 
 	return nil

@@ -145,14 +145,14 @@ build-debug: fmt lint pre-build
 
 ## install: 构建并部署到 ~/.mindx（含 runtime 资源 + PATH + 系统服务配置，前置: fmt → lint）
 install: fmt lint
+	@echo "$(GREEN)➡ Copying runtime files...$(NC)"
+	@cp -r runtime/* ~/.mindx/ && \
+		echo "$(GREEN)  ✅ runtime/ → ~/.mindx/$(NC)"
 	@echo "$(GREEN)➡ Building $(BINARY_NAME) → ~/.mindx/bin/$(BINARY_NAME)...$(NC)"
 	@mkdir -p ~/.mindx/bin ~/.mindx/settings
 	@rm -f ~/.mindx/bin/$(BINARY_NAME)
 	@CGO_ENABLED=1 $(GO) build $(GOFLAGS) -o ~/.mindx/bin/$(BINARY_NAME) . && \
 		echo "$(GREEN)  ✅ $(BINARY_NAME) → ~/.mindx/bin/$(BINARY_NAME)$(NC)"
-	@echo "$(GREEN)➡ Copying runtime files...$(NC)"
-	@cp -r runtime/* ~/.mindx/ && \
-		echo "$(GREEN)  ✅ runtime/ → ~/.mindx/$(NC)"
 	@# ── PATH 配置 ──
 	@SHELL_RC=""; \
 	if [ "$$SHELL" = "/bin/zsh" ] || [ "$$SHELL" = "/usr/bin/zsh" ]; then \

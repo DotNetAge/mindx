@@ -133,5 +133,3 @@ func showRule(cmd *cobra.Command, id string) error {
 	}
 	return fmt.Errorf("no permission rule found with tool name %q", id)
 }
-
-
