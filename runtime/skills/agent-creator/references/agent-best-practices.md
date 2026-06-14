@@ -133,18 +133,11 @@ Skills are **LLM operating instructions**, not feature flags. Each skill activat
 
 ## Creation Checklist
 
-Before running `agent_cli.py create`:
+Before running `mindx agent add`:
 - [ ] Confirmed name, domain, work scope with user
-- [ ] Checked `agent.list` — no duplicate or overlapping agent exists
-- [ ] Checked `skill.list` — identified relevant skills
-- [ ] Checked `model.list` — selected appropriate model
+- [ ] Checked `mindx agent list --json` — no duplicate or overlapping agent exists
+- [ ] Checked `mindx skill list --json` — identified relevant skills
 - [ ] `name` lowercase-hyphenated, unique, noun-based
 - [ ] `role` concise (~5 words), seniority if relevant
 - [ ] `description` written for LLM routing, <1024 chars, includes scope
-- [ ] `meta.name_zh` concise Chinese name (2-6 chars)
-- [ ] `meta.name_zh_tw` Traditional Chinese version
-- [ ] `introduction` follows: `I am a **{Role}** — ...` + Domain + Out of scope
-- [ ] `introduction` Domain uses parentheses for specific tools/technologies
-- [ ] `introduction` Out of scope clearly states boundaries
-- [ ] `model` matches task complexity
-- [ ] `skills` minimal — only domain-relevant, treated as LLM behavioral instructions
+- [ ] `skills` list is minimal — only domain-relevant skills included

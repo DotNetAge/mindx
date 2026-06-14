@@ -19,13 +19,6 @@ metadata:
 
 **Do NOT use** for tasks you can already handle with equipped skills.
 
-## Prerequisite
-
-The daemon must be running:
-
-```bash
-mindx start
-```
 
 ## Workflow
 

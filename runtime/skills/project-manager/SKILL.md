@@ -38,23 +38,61 @@ Talk to the user. Extract measurable goals before writing anything.
 Confirm plan. Decompose goal into tasks. Each task = **who does it, when, what**.
 
 ```bash
-python3 scripts/graph_client.py create-project --name "..." --description "..."
+# Generate IDs
+PROJ_ID=$(mindx utils uuid)
+GOAL_ID=$(mindx utils uuid)
 
-# Save the returned project-id for next steps
-python3 scripts/graph_client.py create-goal --project-id "proj-xxx" --title "..." --weight N
+# Create project node
+mindx graph upsert-nodes --nodes '[{
+  "id":"'"$PROJ_ID"'",
+  "labels":["Project"],
+  "properties":{"name":"Project Name","description":"...","status":"active","progress":0.0}
+}]'
 
-# create-task outputs the task_id — use it as session_id for agent communication
-task_id=$(python3 scripts/graph_client.py create-task --goal-id "goal-xxx" --title "..." --agent "x" --prompt "..." | python3 -c "import sys,json;print(json.load(sys.stdin)[0].get('t.id',''))")
+# Create goal node linked to project
+mindx graph upsert-nodes --nodes '[{
+  "id":"'"$GOAL_ID"'",
+  "labels":["Goal"],
+  "properties":{"title":"Goal Title","description":"...","weight":1.0,"status":"pending","progress":0.0}
+}]'
+mindx graph upsert-edges --edges '[{
+  "from_node_id":"'"$PROJ_ID"'",
+  "to_node_id":"'"$GOAL_ID"'",
+  "type":"HAS_GOAL",
+  "properties":{}
+}]'
+
+# Create task node under goal
+TASK_ID=$(mindx utils uuid)
+mindx graph upsert-nodes --nodes '[{
+  "id":"'"$TASK_ID"'",
+  "labels":["Task"],
+  "properties":{"title":"Task Title","agent":"agent-name","cron_expr":"","prompt":"...","status":"pending","priority":"normal","progress":0.0}
+}]'
+mindx graph upsert-edges --edges '[{
+  "from_node_id":"'"$GOAL_ID"'",
+  "to_node_id":"'"$TASK_ID"'",
+  "type":"CONTAINS",
+  "properties":{}
+}]'
+
+echo "Project: $PROJ_ID  Goal: $GOAL_ID  Task: $TASK_ID"
 ```
+
+> **task_id = session_id**: Save the task ID — use it as the session_id when setting up recurring work in Phase 2. This links the scheduled execution back to the graph task.
 
 ---
 
 ### Phase 2: Assign — Set Recurring Work
 
-For each task, link it to the scheduler. **task_id = session_id**.
+For each task, link it to the scheduler:
 
 ```bash
-python3 scripts/scheduler_client.py add-job --agent "x" --content "..." --cron "0 0 9 * * 1" --session-id "$task_id"
+mindx schedule add --agent "<agent-name>" \
+    --content "<prompt>" \
+    --cron "0 0 9 * * 1" \
+    --session-id "$TASK_ID" \
+    --enabled true
 ```
 
 **Critical:** Every task prompt must include a reporting instruction, or the agent works silently and you never hear back:
@@ -76,14 +114,52 @@ AgentTalk(agent_name="writer", session_id="{task_id}", message="Focus on Kuberne
 Proactively check progress:
 
 ```bash
-python3 scripts/query-progress.py --project-id "..."
+# Query full project progress
+mindx graph query --cypher "
+  MATCH (p:Project {id: '$PROJ_ID'})-[:HAS_GOAL]->(g:Goal)
+  OPTIONAL MATCH (g)-[:CONTAINS]->(t:Task)
+  RETURN p.id, p.name, p.status, p.progress,
+         g.id as goal_id, g.title as goal_title, g.status as goal_status,
+         count(t) as total_tasks,
+         count(CASE WHEN t.status = 'completed' THEN 1 END) as completed,
+         count(CASE WHEN t.status = 'in_progress' THEN 1 END) as in_progress,
+         count(CASE WHEN t.status = 'failed' THEN 1 END) as failed
+"
+
+# List tasks by status
+mindx graph query --cypher "
+  MATCH (g:Goal)-[:CONTAINS]->(t:Task)
+  WHERE g.id = '$GOAL_ID'
+  RETURN t.id, t.title, t.agent, t.status, t.priority, t.progress
+  ORDER BY t.updated_at DESC
+"
 ```
 
-Adjust as needed:
-- Report received? → Acknowledge, give feedback, assign next steps via AgentTalk.
-- Failing? → Fix prompt, change agent, adjust plan.
-- Dependencies blocked? → Reschedule or reorder.
-- Priorities changed? → Update task priorities.
+Update task status:
+
+```bash
+# Mark task completed
+mindx graph exec --cypher "
+  MATCH (t:Task {id: 'task-id-here'})
+  SET t.status = 'completed', t.progress = 1.0, t.updated_at = timestamp()
+  RETURN t.id, t.title, t.status
+"
+
+# Add dependency
+mindx graph upsert-edges --edges '[{
+  "from_node_id":"task-id-here",
+  "to_node_id":"depends-on-task-id",
+  "type":"DEPENDS_ON",
+  "properties":{}
+}]'
+```
+
+To query sessions assigned to a specific task or agent:
+
+```bash
+# Find sessions by task
+mindx session get --session-id "$TASK_ID"
+```
 
 ---
 
@@ -103,28 +179,20 @@ Next: {plan for next period}
 
 ## Command Reference
 
-| What             | Command                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------ |
-| Create project   | `python3 scripts/graph_client.py create-project --name ... --description ...`              |
-| Query project    | `python3 scripts/graph_client.py query-project --project-id ...`                           |
-| List projects    | `python3 scripts/graph_client.py list-projects`                                            |
-| Update project   | `python3 scripts/graph_client.py update-project --project-id ... --status ...`             |
-| Create goal      | `python3 scripts/graph_client.py create-goal --project-id ... --title ... --weight N`      |
-| Query goals      | `python3 scripts/graph_client.py query-goals --project-id ...`                             |
-| Update goal      | `python3 scripts/graph_client.py update-goal --goal-id ... --status ...`                   |
-| Create task      | `python3 scripts/graph_client.py create-task --goal-id ... --title ... --agent x --prompt "..."` |
-| Update task      | `python3 scripts/graph_client.py update-task --task-id ... --status ... [--result "..."]`  |
-| Record execution | `python3 scripts/graph_client.py record-execution --task-id ... --status ... --result "..." --duration N` |
-| Query tasks      | `python3 scripts/graph_client.py query-tasks --goal-id ... [--status ...]`                 |
-| Get task         | `python3 scripts/graph_client.py get-task --task-id ...`                                   |
-| Add dependency   | `python3 scripts/graph_client.py add-dependency --task-id ... --depends-on ...`            |
-| Remove dependency| `python3 scripts/graph_client.py remove-dependency --task-id ... --depends-on ...`         |
-| Register session | `python3 scripts/graph_client.py register-session --task-id ... --agent x`                 |
-| Get session      | `python3 scripts/graph_client.py get-session --session-id ...`                             |
-| Query sessions   | `python3 scripts/graph_client.py query-sessions [--status ...] [--stale-threshold ...]`    |
-| Progress report  | `python3 scripts/graph_client.py progress-report --project-id ...`                         |
-| Schedule add     | `python3 scripts/scheduler_client.py add-job --agent x --content "..." --cron "..." [--session-id ...]` |
-| Schedule list    | `python3 scripts/scheduler_client.py list-jobs`                                            |
-| Schedule delete  | `python3 scripts/scheduler_client.py del-job --id ...`                                     |
-| Assign task      | `python3 scripts/assign-task.py assign ...`                                                |
-| Talk to agent    | **AgentTalk** tool: `agent_name`, `session_id`, `message`                                  |
+| What                       | Command                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| Generate ID                | `mindx utils uuid` or `mindx utils ulid`                                                         |
+| Create node                | `mindx graph upsert-nodes --nodes '[...]'`                                                       |
+| Create edge                | `mindx graph upsert-edges --edges '[...]'`                                                       |
+| Execute graph write        | `mindx graph exec --cypher "MATCH (n {id:'x'}) SET n.status='completed'"`                        |
+| Query graph (read)         | `mindx graph query --cypher "MATCH (p:Project) RETURN p.id, p.name, p.status"`                    |
+| Get single node            | `mindx graph get-node --id "node-id"`                                                            |
+| Find neighbors             | `mindx graph neighbors --id "node-id" --depth 2`                                                 |
+| Schedule add               | `mindx schedule add --agent x --content "..." --cron "..." --session-id "..."`                    |
+| Schedule list              | `mindx schedule list`                                                                            |
+| Schedule delete            | `mindx schedule delete --id "..."`                                                               |
+| Session create             | `mindx session create --agent x --project-dir /path`                                             |
+| Session get                | `mindx session get --session-id "..."`                                                           |
+| Session list               | `mindx session list`                                                                             |
+| Semantic search            | `mindx query "search terms"`                                                                     |
+| Talk to agent              | **AgentTalk** tool: `agent_name`, `session_id`, `message`                                        |
