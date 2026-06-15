@@ -191,6 +191,77 @@ Example:
 	},
 }
 
+// ── agent update ────────────────────────────────────────────────
+
+var agentUpdateFlags struct {
+	agentName    string
+	role         string
+	description  string
+	introduction string
+	model        string
+	skills       string
+	excludeTools string
+}
+
+var agentUpdateCmd = &cobra.Command{
+	Use:   "update",
+	Short: "Update an existing agent's configuration (via daemon)",
+	Long: `Partially update an agent's configuration. Only specified fields are changed;
+unspecified fields preserve their current values.
+
+Examples:
+  mindx agent update --agent-name writer --role "Senior Writer"
+  mindx agent update --agent-name coder --model "claude-sonnet-4" --skills "find-experts,code-review"
+  mindx agent update --agent-name helper --exclude-tools "bash,sub-agent"`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if agentUpdateFlags.agentName == "" {
+			return fmt.Errorf("--agent-name is required")
+		}
+
+		params := rpc.AgentUpdateParams{
+			Name: agentUpdateFlags.agentName,
+		}
+		if agentUpdateFlags.role != "" {
+			params.Role = agentUpdateFlags.role
+		}
+		if agentUpdateFlags.description != "" {
+			params.Description = agentUpdateFlags.description
+		}
+		if agentUpdateFlags.introduction != "" {
+			params.Introduction = agentUpdateFlags.introduction
+		}
+		if agentUpdateFlags.model != "" {
+			params.Model = agentUpdateFlags.model
+		}
+		if agentUpdateFlags.skills != "" {
+			params.Skills = splitComma(agentUpdateFlags.skills)
+		}
+		if agentUpdateFlags.excludeTools != "" {
+			params.ExcludeTools = splitComma(agentUpdateFlags.excludeTools)
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer cl.Close()
+
+		result, err := cl.AgentUpdate(params)
+		if err != nil {
+			return err
+		}
+
+		var pretty interface{}
+		if err := json.Unmarshal(result, &pretty); err == nil {
+			formatted, _ := json.MarshalIndent(pretty, "", "  ")
+			fmt.Println(string(formatted))
+			return nil
+		}
+		fmt.Println(string(result))
+		return nil
+	},
+}
+
 // ── agent rm ───────────────────────────────────────────────────
 
 var agentRmCmd = &cobra.Command{
@@ -288,9 +359,18 @@ func init() {
 	agentAddCmd.Flags().StringVar(&agentAddFlags.description, "description", "", "Agent description")
 	agentAddCmd.Flags().StringVar(&agentAddFlags.skills, "skills", "", "Comma-separated skill names")
 
+	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.agentName, "agent-name", "", "Agent name (required)")
+	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.role, "role", "", "New role/title")
+	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.description, "description", "", "New description")
+	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.introduction, "introduction", "", "New introduction/prompt")
+	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.model, "model", "", "New model identifier")
+	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.skills, "skills", "", "New comma-separated skill names (replaces current)")
+	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.excludeTools, "exclude-tools", "", "New comma-separated tool names to exclude")
+
 	agentCmd.AddCommand(agentListCmd)
 	agentCmd.AddCommand(agentGetCmd)
 	agentCmd.AddCommand(agentScoreCmd)
+	agentCmd.AddCommand(agentUpdateCmd)
 	agentCmd.AddCommand(agentRmCmd)
 	agentCmd.AddCommand(agentAddCmd)
 	rootCmd.AddCommand(agentCmd)

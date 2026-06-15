@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+
+	"go.etcd.io/bbolt"
 
 	goharnessconfig "github.com/DotNetAge/goharness/config"
 )
@@ -230,92 +233,75 @@ func (d *Daemon) handleAgentScore(_ context.Context, params json.RawMessage) (an
 		return nil, fmt.Errorf("score must be between 1 and 10")
 	}
 
+	// Verify agent exists (but do NOT write to its config file)
 	agents := d.app.Agents()
 	if agents == nil {
 		return nil, fmt.Errorf("agent registry not available")
 	}
-
-	cfg := agents.Get(p.AgentName)
-	if cfg == nil {
+	if agents.Get(p.AgentName) == nil {
 		return nil, fmt.Errorf("agent %q not found", p.AgentName)
 	}
 
+	if d.kvStore == nil {
+		return nil, fmt.Errorf("kvstore not initialized")
+	}
+
 	timestamp := time.Now().UTC().Format(time.RFC3339)
+	scoreKey := fmt.Sprintf("score:%s:%d", p.AgentName, time.Now().UnixNano())
 
 	entry := map[string]any{
-		"task":      p.Task,
-		"score":     p.Score,
-		"timestamp": timestamp,
+		"agent_name": p.AgentName,
+		"task":       p.Task,
+		"score":      p.Score,
+		"timestamp":  timestamp,
 	}
 	if p.Notes != "" {
 		entry["notes"] = p.Notes
 	}
 
-	if cfg.Meta == nil {
-		cfg.Meta = make(map[string]any)
+	itemData, err := json.Marshal(kvItem{
+		Key:       scoreKey,
+		Value:     entry,
+		CreatedAt: time.Now().Unix(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal score entry: %w", err)
 	}
 
-	perf, _ := cfg.Meta["performance"].(map[string]any)
-	if perf == nil {
-		perf = map[string]any{
-			"scores":    []map[string]any{entry},
-			"completes": 1,
+	if err := d.kvStore.Update(func(tx *bbolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(kvStoreBucket))
+		if err != nil {
+			return err
 		}
-		cfg.Meta["performance"] = perf
-	} else {
-		scores, _ := perf["scores"].([]map[string]any)
-		// When deserialized from YAML, lists of maps come as []any
-		if rawScores, ok := perf["scores"].([]any); ok {
-			scores = make([]map[string]any, 0, len(rawScores)+1)
-			for _, s := range rawScores {
-				if m, ok := s.(map[string]any); ok {
-					scores = append(scores, m)
+		return b.Put([]byte(scoreKey), itemData)
+	}); err != nil {
+		return nil, fmt.Errorf("failed to store score in kvstore: %w", err)
+	}
+
+	// Read all historical scores for this agent via prefix scan
+	prefix := fmt.Sprintf("score:%s:", p.AgentName)
+	var allScores []int
+	var completes int
+
+	_ = d.kvStore.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(kvStoreBucket))
+		if b == nil {
+			return nil
+		}
+		c := b.Cursor()
+		for k, v := c.Seek([]byte(prefix)); k != nil && strings.HasPrefix(string(k), prefix); k, v = c.Next() {
+			var item kvItem
+			if json.Unmarshal(v, &item) == nil {
+				if m, ok := item.Value.(map[string]any); ok {
+					if sc, ok := m["score"].(int); ok {
+						allScores = append(allScores, sc)
+					}
 				}
 			}
+			completes++
 		}
-		scores = append(scores, entry)
-		perf["scores"] = scores
-
-		completes := 0
-		if c, ok := perf["completes"].(int); ok {
-			completes = c
-		}
-		perf["completes"] = completes + 1
-	}
-
-	if err := agents.SaveTo(cfg); err != nil {
-		return nil, fmt.Errorf("failed to save agent score: %w", err)
-	}
-
-	// Read back scores and completes for response
-	scores, _ := perf["scores"].([]map[string]any)
-	if rawScores, ok := perf["scores"].([]any); ok {
-		scoreValues := make([]int, 0, len(rawScores))
-		for _, s := range rawScores {
-			if m, ok := s.(map[string]any); ok {
-				if sc, ok := m["score"].(int); ok {
-					scoreValues = append(scoreValues, sc)
-				}
-			}
-		}
-		return map[string]any{
-			"status":    "scored",
-			"agent":     p.AgentName,
-			"task":      p.Task,
-			"score":     p.Score,
-			"notes":     p.Notes,
-			"timestamp": timestamp,
-			"scores":    scoreValues,
-			"completes": perf["completes"],
-		}, nil
-	}
-
-	scoreValues := make([]int, 0, len(scores))
-	for _, s := range scores {
-		if sc, ok := s["score"].(int); ok {
-			scoreValues = append(scoreValues, sc)
-		}
-	}
+		return nil
+	})
 
 	return map[string]any{
 		"status":    "scored",
@@ -324,7 +310,7 @@ func (d *Daemon) handleAgentScore(_ context.Context, params json.RawMessage) (an
 		"score":     p.Score,
 		"notes":     p.Notes,
 		"timestamp": timestamp,
-		"scores":    scoreValues,
-		"completes": perf["completes"],
+		"scores":    allScores,
+		"completes": completes,
 	}, nil
 }

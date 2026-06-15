@@ -69,14 +69,6 @@ Before proceeding, verify whether ALL of the following information has been coll
 
 > If the user's description is vague, do not guess blindly — propose specific role categories and let them choose.
 
-## Prerequisite
-
-The daemon must be running for all commands that query available resources:
-
-```bash
-mindx start
-```
-
 ## Workflow
 
 ### Step 1: Check for Existing Agents
