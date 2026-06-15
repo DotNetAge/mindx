@@ -78,7 +78,7 @@ func main() {
 	agentList := app.Agents().List()
 
 	// Pick a specific agent for testing
-	agentCfg := app.Agents().Get("personal-assistant")
+	agentCfg := app.Agents().Get("executive-assistant")
 	if agentCfg == nil {
 		if len(agentList) == 0 {
 			fmt.Println("Error: no agents defined")
