@@ -17,7 +17,7 @@ func TestFileStoreWithComplexContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, err := NewFileSessionStore(tmpDir)
 	if err != nil {
@@ -143,7 +143,7 @@ func TestFileStoreYAMLFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, err := NewFileSessionStore(tmpDir)
 	if err != nil {

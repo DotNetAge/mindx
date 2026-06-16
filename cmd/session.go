@@ -160,7 +160,7 @@ var sessionGetCmd = &cobra.Command{
 			// Count messages
 			var msgs []interface{}
 			if resp.Messages != nil {
-				json.Unmarshal(resp.Messages, &msgs)
+_ = json.Unmarshal(resp.Messages, &msgs)
 			}
 			fmt.Printf("Messages: %d\n", len(msgs))
 

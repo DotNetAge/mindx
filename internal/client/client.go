@@ -819,7 +819,7 @@ func checkDaemonCmd(addr string) tea.Cmd {
 }
 
 func probeDaemon(addr string) clientmsg.DaemonConnStatus {
-	host := "localhost"
+	var host string
 	if strings.HasPrefix(addr, ":") {
 		host = "localhost" + addr
 	} else if !strings.Contains(addr, ":") {

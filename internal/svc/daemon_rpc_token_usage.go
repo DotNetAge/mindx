@@ -410,6 +410,8 @@ func calculateRecordCost(mc core.ModelCost, r goharnesssession.TokenUsageRecord)
 		// CostPer1MOutCached is reserved for future use; the current TokenUsageRecord
 		// does not yet break out cached completion tokens separately, so it is not
 		// charged here to avoid double counting.
+		_ = mc
+		// charged here to avoid double counting.
 	}
 	return cost
 }

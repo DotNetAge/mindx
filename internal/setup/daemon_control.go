@@ -131,7 +131,7 @@ func startDaemonMacOS(workspaceDir string) error {
 		strings.Contains(outStr, "service already loaded")
 
 	if isBootstrapIOErr {
-		exec.Command("launchctl", "bootout", service).Run()
+		_ = exec.Command("launchctl", "bootout", service).Run()
 		time.Sleep(500 * time.Millisecond)
 
 		retryCmd := exec.Command("launchctl", "bootstrap", fmt.Sprintf("gui/%d", os.Getuid()), agentPlist)
@@ -139,7 +139,7 @@ func startDaemonMacOS(workspaceDir string) error {
 			return nil
 		}
 
-		exec.Command("launchctl", "unload", agentPlist).Run()
+		_ = exec.Command("launchctl", "unload", agentPlist).Run()
 		time.Sleep(500 * time.Millisecond)
 
 		finalCmd := exec.Command("launchctl", "bootstrap", fmt.Sprintf("gui/%d", os.Getuid()), agentPlist)
@@ -168,7 +168,7 @@ func startDaemonDirect(workspaceDir string) error {
 	}
 
 	logDir := filepath.Join(workspaceDir, "logs")
-	os.MkdirAll(logDir, 0755)
+_ = os.MkdirAll(logDir, 0755)
 
 	cmd := exec.Command(exePath, "daemon")
 	cmd.Env = append(os.Environ(), "MINDX_WORKSPACE="+workspaceDir)
@@ -232,6 +232,7 @@ func checkDaemonMacOS(workspaceDir string) (DaemonStatus, error) {
 	cfg, err := core.LoadMindxConfig(workspaceDir)
 	if err != nil || !cfg.Daemon.Installed {
 		// 即使配置标记未安装，也通过 launchctl 实际检查（plist 可能已被手动安装）
+		_ = cfg
 	}
 
 	// Primary check: launchd-managed service.
@@ -410,7 +411,7 @@ func parseIntSafe(s string) int {
 }
 
 // isRunningTask checks if the MindXDaemon scheduled task is currently running.
-func isRunningTask() (bool, error) {
+func _isRunningTask() (bool, error) {
 	cmd := exec.Command("schtasks", "/query", "/tn", "MindXDaemon", "/fo", "CSV", "/nh")
 	out, err := cmd.CombinedOutput()
 	if err != nil {

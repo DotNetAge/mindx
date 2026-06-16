@@ -70,7 +70,7 @@ func (s *FileSchedulerStore) Save(ctx context.Context, entry *ScheduleEntry) err
 		return fmt.Errorf("failed to write schedule entry: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
+_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to rename schedule entry: %w", err)
 	}
 	return nil
@@ -176,7 +176,7 @@ func (s *FileSchedulerStore) UpdateLastRun(id string, runID string, err error) e
 		return fmt.Errorf("failed to write updated entry: %w", writeErr)
 	}
 	if renameErr := os.Rename(tmpPath, path); renameErr != nil {
-		os.Remove(tmpPath)
+_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to rename updated entry: %w", renameErr)
 	}
 	return nil

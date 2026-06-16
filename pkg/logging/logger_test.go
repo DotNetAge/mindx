@@ -69,7 +69,7 @@ func TestDefaultFileLogger_InvalidPath(t *testing.T) {
 func TestDefaultNoopLogger(t *testing.T) {
 	logger := DefaultNoopLogger()
 	assert.NotNil(t, logger)
-	var _ Logger = logger
+_ = logger
 }
 
 func TestNoopLogger_AllMethodsNoOp(t *testing.T) {

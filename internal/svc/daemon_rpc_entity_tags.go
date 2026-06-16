@@ -134,7 +134,7 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 
 // parseEntityDefsFromSavedTags 从 entity_tags.yml 读取并解析为 entityDefs 字符串列表。
 // 用于初始化 LLMIndexer 时加载用户此前保存的实体标签。
-func (d *Daemon) parseEntityDefsFromSavedTags() []string {
+func (d *Daemon) _parseEntityDefsFromSavedTags() []string {
 	f, err := d.loadEntityTags()
 	if err != nil {
 		d.logger.Warn("entity_tags: failed to load saved tags, using defaults", "error", err)

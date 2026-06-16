@@ -504,7 +504,7 @@ func TestHandleAgentUpdate_InvalidJSON(t *testing.T) {
 
 func mustCreateAgentFile(t *testing.T, agentsDir string, name string) {
 	t.Helper()
-	os.MkdirAll(agentsDir, 0755)
+_ = os.MkdirAll(agentsDir, 0755)
 	content := fmt.Sprintf(`---
 name: %s
 role: Test Role
