@@ -2,6 +2,7 @@ package memory
 
 import (
 	"os"
+	"runtime"
 	"path/filepath"
 	"testing"
 )
@@ -97,6 +98,9 @@ func TestIsValidFileContent(t *testing.T) {
 // TestIsSystemDir verifies that system directories are rejected by the
 // watchlist path validation.
 func TestIsSystemDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("isSystemDir uses Unix paths, not applicable on Windows")
+	}
 	tests := []struct {
 		path   string
 		system bool
