@@ -20,3 +20,7 @@ func (c *Client) SkillList(agentName string) (json.RawMessage, error) {
 func (c *Client) SkillGet(name, agentName string) (json.RawMessage, error) {
 	return c.CallWithTimeout("skill.get", SkillGetParams{Name: name, AgentName: agentName})
 }
+
+func (c *Client) SkillReload() (json.RawMessage, error) {
+	return c.CallWithTimeout("skill.reload", nil)
+}

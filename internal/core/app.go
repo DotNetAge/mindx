@@ -304,6 +304,42 @@ func (a *App) SetAgentsRegistry(registry *config.AgentRegistry) {
 	a.agents = registry
 }
 
+// ReloadAgents re-scans the agents directory and atomically swaps the in-memory registry.
+// All cached runtimes for affected agents are invalidated so they pick up the new config
+// on next ResolveRuntime() call.
+func (a *App) ReloadAgents() error {
+	newReg, err := config.LoadAgentsFrom(a.settings.AgentsDir())
+	if err != nil {
+		return fmt.Errorf("reload agents: %w", err)
+	}
+	a.agents = newReg
+
+	// Invalidate runtime caches — stale runtimes hold old agent configs + skill refs
+	a.runtimeMu.Lock()
+	a.runtimeCache = make(map[string]*agents.Runtime)
+	a.runtimeMu.Unlock()
+
+	a.logger.Info("agents reloaded", "dir", a.settings.AgentsDir())
+	return nil
+}
+
+// ReloadSkills re-scans the skills directory and atomically swaps the in-memory registry.
+func (a *App) ReloadSkills() error {
+	newReg, err := skill.NewSkillRegistryFromDirectory(a.settings.SkillsDir())
+	if err != nil {
+		return fmt.Errorf("reload skills: %w", err)
+	}
+	a.skillReg = newReg
+
+	// Invalidate runtime caches — runtimes hold references to the old skill registry
+	a.runtimeMu.Lock()
+	a.runtimeCache = make(map[string]*agents.Runtime)
+	a.runtimeMu.Unlock()
+
+	a.logger.Info("skills reloaded", "dir", a.settings.SkillsDir())
+	return nil
+}
+
 func (a *App) Models() *config.ModelRegistry {
 	return a.models
 }

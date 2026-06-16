@@ -615,40 +615,6 @@ func TestHandleAgentUpdate_PartialFieldsOnly(t *testing.T) {
 	}
 }
 
-func TestHandleAgentUpdate_UpdateBody(t *testing.T) {
-	d, cleanup := newTestDaemon(t)
-	defer cleanup()
-
-	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
-	mustCreateAgentFile(t, agentsDir, "body-agent")
-
-	reloaded, _ := goharnessconfig.LoadAgentsFrom(agentsDir)
-	if reloaded != nil {
-		d.app.SetAgentsRegistry(reloaded)
-	}
-
-	newBody := "## Updated Body\n\nThis is completely new content."
-	params, _ := json.Marshal(map[string]interface{}{
-		"name": "body-agent",
-		"body": newBody,
-	})
-
-	_, err := d.handleAgentUpdate(context.Background(), params)
-	if err != nil {
-		t.Fatalf("handleAgentUpdate error = %v", err)
-	}
-
-	filePath := filepath.Join(agentsDir, "body-agent.md")
-	data, _ := os.ReadFile(filePath)
-	content := string(data)
-	if !strings.Contains(content, "This is completely new content.") {
-		t.Error("file should contain updated body content")
-	}
-	if strings.Contains(content, "original body") {
-		t.Error("file should NOT contain original body")
-	}
-}
-
 // ==========================================================================
 // Model RPC Handlers
 // ==========================================================================

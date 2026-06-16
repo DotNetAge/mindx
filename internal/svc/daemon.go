@@ -280,6 +280,10 @@ type Daemon struct {
 
 	// restartCh 接收重启信号；Start() 主循环通过 select 监听。
 	restartCh chan struct{}
+
+	// hotReload watches agents/ and skills/ directories for file changes
+	// and automatically reloads registries.
+	hotReload *HotReloadWatcher
 }
 
 func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
@@ -593,6 +597,14 @@ func (d *Daemon) Start(ctx context.Context) error {
 	// ── 自动升级检查（启动时 + 每日一次） ─────────────────
 	go d.autoUpdateLoop(ctx)
 
+	// ── Hot-reload: watch agents/skills directories for file changes ──
+	d.hotReload = NewHotReloadWatcher(d.app, d.logger)
+	go func() {
+		if err := d.hotReload.Start(ctx); err != nil && d.logger != nil {
+			d.logger.Warn("hot-reload watcher exited with error", "error", err)
+		}
+	}()
+
 	if d.memoryWatch != nil {
 		d.logger.Info("filewatch service configured but not started (user must call filewatch.start to activate)")
 	} else {
@@ -677,6 +689,11 @@ func (d *Daemon) Restart() {
 
 func (d *Daemon) stopBackgroundServices() {
 	d.logger.Info("stopping background services...")
+	if d.hotReload != nil {
+		d.logger.Info("stopping hot-reload watcher")
+		d.hotReload.Stop()
+		d.logger.Info("hot-reload watcher stopped")
+	}
 	if d.memoryWatch != nil {
 		d.logger.Info("stopping filewatch service")
 		// Cancel the external watch context first so the Start() goroutine

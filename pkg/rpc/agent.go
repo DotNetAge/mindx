@@ -58,3 +58,7 @@ func (c *Client) AgentScore(params AgentScoreParams) (json.RawMessage, error) {
 func (c *Client) AgentUpdate(params AgentUpdateParams) (json.RawMessage, error) {
 	return c.CallWithTimeout("agent.update", params)
 }
+
+func (c *Client) AgentReload() (json.RawMessage, error) {
+	return c.CallWithTimeout("agent.reload", nil)
+}
