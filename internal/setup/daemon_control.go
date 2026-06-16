@@ -173,7 +173,7 @@ func startDaemonDirect(workspaceDir string) error {
 	cmd := exec.Command(exePath, "daemon")
 	cmd.Env = append(os.Environ(), "MINDX_WORKSPACE="+workspaceDir)
 	cmd.Dir = workspaceDir
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setDetachAttrs(cmd)
 
 	stdoutF, _ := os.OpenFile(filepath.Join(logDir, "daemon.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	stderrF, _ := os.OpenFile(filepath.Join(logDir, "daemon.err.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
@@ -410,3 +410,11 @@ func parseIntSafe(s string) int {
 }
 
 // isRunningTask checks if the MindXDaemon scheduled task is currently running.
+func isRunningTask() (bool, error) {
+	cmd := exec.Command("schtasks", "/query", "/tn", "MindXDaemon", "/fo", "CSV", "/nh")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, err
+	}
+	return strings.Contains(string(out), "Running"), nil
+}
