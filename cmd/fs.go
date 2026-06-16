@@ -102,7 +102,7 @@ var fsReadCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.FSRead(args[0])
 		if err != nil {
 			return err
@@ -133,7 +133,7 @@ Examples:
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.FSWrite(args[0], content)
 		if err != nil {
 			return err
@@ -156,7 +156,7 @@ var fsMkdirCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.FSMkdir(args[0], all)
 		if err != nil {
 			return err
@@ -181,7 +181,7 @@ var fsRmCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.FSRm(args[0], recurse, force)
 		if err != nil {
 			return err
@@ -203,7 +203,7 @@ var fsMvCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.FSMv(args[0], args[1])
 		if err != nil {
 			return err
@@ -223,7 +223,7 @@ var fsHomeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.FSHome()
 		if err != nil {
 			return err
