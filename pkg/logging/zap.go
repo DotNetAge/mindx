@@ -204,18 +204,18 @@ func fixLogFilePermissions(filename string) {
 	}
 
 	if info.Mode().Perm() != 0755 {
-		os.Chmod(dir, 0755)
+		_ = os.Chmod(dir, 0755)
 	}
 
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		f, createErr := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if createErr == nil {
-			f.Close()
+				_ = f.Close()
 		}
 		return
 	}
 
-	os.Chmod(filename, 0644)
+	_ = os.Chmod(filename, 0644)
 
 	removeMacOSQuarantine(filename)
 
@@ -266,7 +266,7 @@ func cleanOldRotatedFiles(logDir, baseName string) {
 	matches, _ := filepath.Glob(filepath.Join(logDir, baseName+"-*"))
 	for _, m := range matches {
 		if info, err := os.Stat(m); err == nil && info.Mode().Perm() != 0644 {
-			os.Chmod(m, 0644)
+			_ = os.Chmod(m, 0644)
 		}
 		removeMacOSQuarantine(m)
 	}

@@ -416,7 +416,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 							continue
 						}
 						if s.SessionDir != "" {
-							app.FileVersions().Record(s.SessionDir, absPath)
+							_ = app.FileVersions().Record(s.SessionDir, absPath)
 						}
 					}
 				}

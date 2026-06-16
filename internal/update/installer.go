@@ -106,7 +106,7 @@ func (u *Updater) DownloadAndInstall(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	archivePath := filepath.Join(tmpDir, assetName)
 	if err := u.downloadFile(ctx, downloadURL, archivePath); err != nil {
@@ -152,7 +152,7 @@ func (u *Updater) DownloadAndInstall(ctx context.Context) error {
 
 	if err := os.Rename(binaryPath, execPath); err != nil {
 		// Try to restore
-		os.Rename(backupPath, execPath)
+		_ = os.Rename(backupPath, execPath)
 		return fmt.Errorf("install new binary: %w", err)
 	}
 
@@ -189,7 +189,7 @@ func (u *Updater) downloadFile(ctx context.Context, url, destPath string) error 
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	// Limit to ~200MB
 	limited := io.LimitReader(resp.Body, 200*1024*1024)
@@ -210,13 +210,13 @@ func extractTarGz(archivePath, destDir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	gzr, err := gzip.NewReader(f)
 	if err != nil {
 		return "", err
 	}
-	defer gzr.Close()
+	defer func() { _ = gzr.Close() }()
 
 	tarr := tar.NewReader(gzr)
 	for {
@@ -239,7 +239,7 @@ func extractTarGz(archivePath, destDir string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		defer out.Close()
+		defer func() { _ = out.Close() }()
 
 		if _, err := io.Copy(out, tarr); err != nil {
 			return "", err
@@ -265,7 +265,7 @@ func SHA256(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
