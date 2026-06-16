@@ -66,7 +66,7 @@ var sessionCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.SessionCreate(agent, projectDir)
 		if err != nil {
 			return err
@@ -98,7 +98,7 @@ var sessionListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.SessionList(agent)
 		if err != nil {
 			return err
@@ -146,7 +146,7 @@ var sessionGetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.SessionGet(id)
 		if err != nil {
 			return err
@@ -160,7 +160,7 @@ var sessionGetCmd = &cobra.Command{
 			// Count messages
 			var msgs []interface{}
 			if resp.Messages != nil {
-_ = json.Unmarshal(resp.Messages, &msgs)
+				_ = json.Unmarshal(resp.Messages, &msgs)
 			}
 			fmt.Printf("Messages: %d\n", len(msgs))
 
@@ -211,7 +211,7 @@ var sessionDeleteCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.SessionDelete(id)
 		if err != nil {
 			return err
@@ -236,7 +236,7 @@ var sessionMetaCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.SessionMeta(id)
 		if err != nil {
 			return err
@@ -267,7 +267,7 @@ var sessionConfirmCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.SessionConfirmFiles(id, files)
 		if err != nil {
 			return err
@@ -298,7 +298,7 @@ var sessionRollbackCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.SessionRollbackFiles(id, files)
 		if err != nil {
 			return err

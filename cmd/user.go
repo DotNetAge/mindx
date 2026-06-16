@@ -31,7 +31,7 @@ var userConfigCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.UserConfig()
 		if err != nil {
 			return err

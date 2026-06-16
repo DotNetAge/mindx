@@ -52,7 +52,7 @@ var graphQueryCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.GraphQuery(cypher, params)
 		if err != nil {
 			return err
@@ -85,7 +85,7 @@ var graphExecCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.GraphExec(cypher, params)
 		if err != nil {
 			return err
@@ -110,7 +110,7 @@ var graphGetNodeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.GraphGetNode(id)
 		if err != nil {
 			return err
@@ -146,7 +146,7 @@ var graphNeighborsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.GraphGetNeighbors(id, depth, limit, types)
 		if err != nil {
 			return err
@@ -177,7 +177,7 @@ var graphUpsertNodesCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.GraphUpsertNodes(nodes)
 		if err != nil {
 			return err
@@ -208,7 +208,7 @@ var graphUpsertEdgesCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.GraphUpsertEdges(edges)
 		if err != nil {
 			return err

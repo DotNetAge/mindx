@@ -56,7 +56,7 @@ var memoryQueryCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.MemoryQuery(args[0], limit, minScore)
 		if err != nil {
 			return err
@@ -102,7 +102,7 @@ var memoryStoreCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.MemoryStore(content, title, description, source)
 		if err != nil {
 			return err
@@ -136,7 +136,7 @@ var memoryDeleteCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.MemoryDelete(id)
 		if err != nil {
 			return err
@@ -157,7 +157,7 @@ var memoryStatsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.MemoryStats()
 		if err != nil {
 			return err
@@ -195,7 +195,7 @@ var memoryChunksCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.MemoryChunks(page, pageSize, docID)
 		if err != nil {
 			return err
@@ -246,7 +246,7 @@ var memoryGetChunksCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.MemoryGetChunks(docID)
 		if err != nil {
 			return err
@@ -293,7 +293,7 @@ var memoryCountCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.MemoryCount()
 		if err != nil {
 			return err
@@ -327,7 +327,7 @@ var memorySyncCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.MemorySyncProject(projectDir)
 		if err != nil {
 			return err
@@ -352,7 +352,7 @@ var memoryFileStatesCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.MemoryFileStates(projectDir)
 		if err != nil {
 			return err

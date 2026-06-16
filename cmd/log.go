@@ -54,7 +54,7 @@ var logReadCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.LogRead(offset, limit, stream)
 		if err != nil {
@@ -111,7 +111,7 @@ var logClearCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.LogClear(true)
 		if err != nil {
@@ -134,7 +134,7 @@ var logCountCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.LogCount()
 		if err != nil {

@@ -60,7 +60,7 @@ var kvGetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.KVGet(key)
 		if err != nil {
@@ -114,7 +114,7 @@ var kvSetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.KVSet(key, value, ttl)
 		if err != nil {
@@ -140,7 +140,7 @@ var kvDeleteCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.KVDelete(key)
 		if err != nil {
@@ -167,7 +167,7 @@ var kvListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.KVList(prefix, limit, withValues)
 		if err != nil {
@@ -237,7 +237,7 @@ var kvBatchSetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.KVBatchSet(entries)
 		if err != nil {
@@ -263,7 +263,7 @@ var kvClearCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.KVClear(prefix)
 		if err != nil {

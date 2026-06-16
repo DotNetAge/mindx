@@ -32,7 +32,7 @@ Examples:
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.Translate(text, lang)
 		if err != nil {
 			return err

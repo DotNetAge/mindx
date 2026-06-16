@@ -31,7 +31,7 @@ var fwStartCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.FilewatchStart()
 		if err != nil {
 			return err
@@ -51,7 +51,7 @@ var fwStopCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.FilewatchStop()
 		if err != nil {
 			return err
@@ -71,7 +71,7 @@ var fwStatusCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.FilewatchStatus()
 		if err != nil {
 			return err
