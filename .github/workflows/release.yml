@@ -138,9 +138,11 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Install C cross-compiler (linux/arm64)
-        if: matrix.goos == 'linux' && matrix.goarch == 'arm64'
-        run: sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Install musl cross-compiler
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools musl-dev
 
       - name: Setup MinGW + zip (Windows CGO)
         if: matrix.goos == 'windows'
@@ -153,9 +155,13 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
         run: |
-          # Set C cross-compiler for linux/arm64 (CGO requires matching CC)
-          if [ "$GOOS" = "linux" ] && [ "$GOARCH" = "arm64" ]; then
-            export CC=aarch64-linux-gnu-gcc
+          # Set musl cross-compiler for Linux (Alpine Docker image uses musl)
+          if [ "$GOOS" = "linux" ]; then
+            if [ "$GOARCH" = "amd64" ]; then
+              export CC=x86_64-linux-musl-gcc
+            elif [ "$GOARCH" = "arm64" ]; then
+              export CC=aarch64-linux-musl-gcc
+            fi
           fi
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
           COMMIT=$(git rev-parse --short HEAD)
@@ -257,24 +263,39 @@ jobs:
         with:
           lfs: true
 
-      - name: Download linux/amd64 artifact & extract binary
+      - name: Download linux/amd64 artifact
         uses: actions/download-artifact@v4
         with:
           pattern: package-linux-amd64
-          path: packages
+          path: packages-amd64
           merge-multiple: true
 
-      - name: Prepare runtime environment
+      - name: Download linux/arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-linux-arm64
+          path: packages-arm64
+          merge-multiple: true
+
+      - name: Prepare runtime environment (multi-platform)
         run: |
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
 
-          # Extract linux/amd64 binary from build job artifact
+          # Extract linux/amd64 binary → runtime/bin/mindx-amd64
           mkdir -p runtime/bin
-          tar xzf "packages/mindx-${VERSION_NUM}-linux-amd64.tar.gz" -C runtime/bin/
-          chmod +x runtime/bin/mindx
-          echo "Binary ready:"
-          ls -lh runtime/bin/mindx
-          runtime/bin/mindx version || true
+          tar xzf "packages-amd64/mindx-${VERSION_NUM}-linux-amd64.tar.gz" -C runtime/bin/
+          mv runtime/bin/mindx runtime/bin/mindx-amd64
+          chmod +x runtime/bin/mindx-amd64
+
+          # Extract linux/arm64 binary → runtime/bin/mindx-arm64
+          tar xzf "packages-arm64/mindx-${VERSION_NUM}-linux-arm64.tar.gz" -C runtime/bin/
+          mv runtime/bin/mindx runtime/bin/mindx-arm64
+          chmod +x runtime/bin/mindx-arm64
+
+          echo "Binaries ready:"
+          ls -lh runtime/bin/
+          runtime/bin/mindx-amd64 version || true
+          runtime/bin/mindx-arm64 version || true
 
           # Ensure model file is present (LFS checkout should have pulled it)
           if [ ! -f "runtime/data/models/model_q4.onnx" ]; then
