@@ -27,7 +27,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "❌ 连接失败: %v\n", err)
 		os.Exit(1)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	fmt.Fprintf(os.Stderr, "✅ 已连接 %s\n\n", addr)
 
 	// 1. Sync

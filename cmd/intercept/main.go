@@ -46,7 +46,7 @@ func main() {
 		fmt.Printf("  [CAPTURED #%d] %s %s (%d bytes)\n", len(capturedRequests), r.Method, r.URL.Path, len(body))
 
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"id": "chatcmpl-intercept",
 			"object": "chat.completion",
 			"created": %d,

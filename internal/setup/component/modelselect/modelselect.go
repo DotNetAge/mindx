@@ -51,11 +51,11 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 	}
 
 	if isSelected {
-		fmt.Fprint(w, lipgloss.NewStyle().
+		_, _ = fmt.Fprint(w, lipgloss.NewStyle().
 			Foreground(lipgloss.Color("212")).
 			Render("❯ "+line))
 	} else {
-		fmt.Fprint(w, lipgloss.NewStyle().
+		_, _ = fmt.Fprint(w, lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")).
 			Render("  "+line))
 	}

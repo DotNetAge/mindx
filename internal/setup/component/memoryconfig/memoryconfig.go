@@ -245,7 +245,7 @@ func runModelDownload(cacheDir string, ch chan<- setupmsg.DownloadProgressMsg) {
 		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.open.failed"), err)}
 		return
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	dst, err := os.Create(dstPath)
 	if err != nil {

@@ -39,7 +39,7 @@ func (j *ChangeJournal) Append(changes ...data.FileChange) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	enc := json.NewEncoder(f)
 	for _, c := range changes {

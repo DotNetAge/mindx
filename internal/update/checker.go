@@ -40,7 +40,7 @@ func LatestRelease(httpClient *http.Client) (*ReleaseInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch latest release: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		// Read body for rate limit info
