@@ -72,7 +72,7 @@ func StartDaemon() error {
 		case "snapctl":
 			return startDaemonSnap()
 		case "dbus":
-			return fmt.Errorf("Flatpak daemon is D-Bus-activated; it starts on-demand automatically")
+			return fmt.Errorf("flatpak daemon is D-Bus-activated; it starts on-demand automatically")
 		}
 	}
 
@@ -98,7 +98,7 @@ func StopDaemon() error {
 		case "snapctl":
 			return stopDaemonSnap()
 		case "dbus":
-			return fmt.Errorf("Flatpak daemon is D-Bus-activated; it stops automatically when idle")
+			return fmt.Errorf("flatpak daemon is D-Bus-activated; it stops automatically when idle")
 		}
 	}
 

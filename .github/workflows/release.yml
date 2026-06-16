@@ -253,14 +253,20 @@ jobs:
           Write-Host "mindx.exe ready:"
           Get-Item mindx.exe | Select-Object Name, Length
 
-      - name: Stage runtime files for packaging
+      - name: Verify runtime files for packaging
         shell: pwsh
         run: |
-          # Copy runtime/ directory alongside the wxs file so heat.exe can find it
-          # This packages skills, agents, settings YAMLs into the MSI
-          Copy-Item -Recurse -Force "runtime" ".\runtime"
-          Write-Host "Runtime files staged:"
-          Get-ChildItem -Recurse runtime | Measure-Object | Select-Object Count
+          # runtime/ is already present from checkout — just verify structure
+          # The wxs and heat.exe reference: runtime/settings/*.yml, runtime/skills/*, runtime/agents/*
+          $required = @("settings", "skills", "agents")
+          foreach ($dir in $required) {
+            $path = Join-Path "runtime" $dir
+            if (-not (Test-Path $path)) {
+              Write-Warning "Missing runtime subdirectory: $path"
+            }
+          }
+          Write-Host "Runtime layout:"
+          Get-ChildItem -Path runtime | Format-Table Name, Mode -AutoSize
 
       - name: Install WiX Toolset v3
         run: choco install wixtoolset --no-progress -y
