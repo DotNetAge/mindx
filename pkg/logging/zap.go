@@ -210,7 +210,7 @@ func fixLogFilePermissions(filename string) {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		f, createErr := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if createErr == nil {
-				_ = f.Close()
+			_ = f.Close()
 		}
 		return
 	}

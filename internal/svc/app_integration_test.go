@@ -68,7 +68,7 @@ func loadEnv() error {
 		}
 	}
 
-_ = os.Setenv("MINDX_WS_ADDR", ":2323")
+	_ = os.Setenv("MINDX_WS_ADDR", ":2323")
 
 	return nil
 }

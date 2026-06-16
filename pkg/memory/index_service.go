@@ -413,6 +413,7 @@ func (p *IndexService) removeChunks(ctx context.Context, chunks []chunkInfo) {
 }
 
 // isDirIgnored checks whether a directory should be skipped entirely during walking.
+//
 //nolint:unused
 func (p *IndexService) _isDirIgnored(relPath string, info os.FileInfo) bool {
 	// Skip hidden directories
