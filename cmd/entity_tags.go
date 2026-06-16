@@ -31,7 +31,7 @@ var entityTagsGetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.EntityTagsGet()
 		if err != nil {
 			return err
