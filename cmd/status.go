@@ -42,7 +42,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	exePath, _ := os.Executable()
 	fmt.Printf("\n📦 Binary:   %s\n", exePath)
 
-	installed, installDir, _ := setup.IsInstalled()
+	installed, installDir, _, _ := setup.IsInstalled()
 	if installed {
 		fmt.Printf("   Status:   installed (system)\n")
 	} else {

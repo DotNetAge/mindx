@@ -23,10 +23,11 @@ type UninstallOptions struct {
 
 // UninstallResult reports what was done during uninstallation.
 type UninstallResult struct {
-	DaemonRemoved   bool // whether daemon service was unregistered
-	PathCleaned     bool // whether PATH entry was removed
-	ShortcutRemoved bool // whether desktop shortcut was deleted
-	BinaryRemoved   bool // whether installed binary was deleted
+	DaemonRemoved   bool          // whether daemon service was unregistered
+	PathCleaned     bool          // whether PATH entry was removed
+	ShortcutRemoved bool          // whether desktop shortcut was deleted
+	BinaryRemoved   bool          // whether installed binary was deleted
+	Source          InstallSource // detected install source (for informational output)
 }
 
 // Uninstall performs a full platform-aware uninstallation of MindX,
@@ -40,6 +41,12 @@ type UninstallResult struct {
 //  5. Delete installed binary (unless KeepBinary is set)
 func Uninstall(opts UninstallOptions) (*UninstallResult, error) {
 	result := &UninstallResult{}
+
+	// Detect install source to guide cleanup decisions
+	exePath, exeErr := os.Executable()
+	if exeErr == nil {
+		result.Source = detectInstallSource(exePath)
+	}
 
 	installDir, err := resolveInstallDir("")
 	if err != nil {
@@ -105,8 +112,14 @@ func Uninstall(opts UninstallOptions) (*UninstallResult, error) {
 	}
 
 	// Step 5: Delete installed binary
-	if !opts.KeepBinary {
-		exePath, exeErr := os.Executable()
+	// Skip if the binary is from a package manager (managed) — use `brew uninstall` etc.
+	shouldRemoveBinary := !opts.KeepBinary && result.Source == SourceCustom
+	if result.Source == SourceManaged {
+		shouldRemoveBinary = false
+		fmt.Println("  Binary: skipping removal (package manager owned)")
+		fmt.Println("    Use 'brew uninstall mindx' (or your package manager) to remove the binary.")
+	}
+	if shouldRemoveBinary {
 		if exeErr == nil {
 			destExe := filepath.Join(installDir, filepath.Base(exePath))
 			if _, statErr := os.Stat(destExe); statErr == nil {

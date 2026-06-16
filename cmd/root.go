@@ -87,7 +87,7 @@ func runTUI(cmd *cobra.Command, args []string) error {
 	cmd.Long = i18n.T("cmd.root.description")
 
 	// Suggest install if running from non-standard location
-	if installed, _, _ := setup.IsInstalled(); !installed {
+	if installed, _, _, _ := setup.IsInstalled(); !installed {
 		fmt.Printf("💡 %s\n\n", i18n.T("cmd.root.hint.install"))
 	}
 

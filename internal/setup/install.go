@@ -5,7 +5,42 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
+
+// InstallSource describes where the current binary was installed from.
+type InstallSource int
+
+const (
+	// SourceUnknown means the binary location could not be classified.
+	SourceUnknown InstallSource = iota
+
+	// SourceManaged means the binary is in a package-manager or system PATH
+	// directory (e.g., Homebrew, apt, dnf, pacman). No copy is needed;
+	// daemon should use the binary in-place.
+	SourceManaged
+
+	// SourceCustom means the binary was downloaded manually (e.g., from GitHub
+	// releases) and needs to be copied to a stable install location.
+	SourceCustom
+
+	// SourceAlreadyInstalled means the binary is already in our target install
+	// directory (e.g., ~/.mindx/bin). This is an in-place upgrade scenario.
+	SourceAlreadyInstalled
+)
+
+func (s InstallSource) String() string {
+	switch s {
+	case SourceManaged:
+		return "managed (package manager / system PATH)"
+	case SourceCustom:
+		return "custom (manual download)"
+	case SourceAlreadyInstalled:
+		return "already in target directory"
+	default:
+		return "unknown"
+	}
+}
 
 // InstallOptions controls which steps of the installation to perform.
 type InstallOptions struct {
@@ -21,104 +56,134 @@ type InstallOptions struct {
 
 	// SkipShortcut skips desktop shortcut creation (Windows only).
 	SkipShortcut bool
+
+	// ForceCopy forces copying even when the binary is in a managed location
+	// (useful for testing or non-standard setups).
+	ForceCopy bool
 }
 
 // InstallResult reports what was done during installation.
 type InstallResult struct {
-	BinaryDest      string // where the binary was installed
+	BinaryDest      string // where the binary ended up (or original path if managed)
 	DaemonSetup     bool   // whether daemon was registered
 	PathConfigured  bool   // whether PATH was updated
 	ShortcutCreated bool   // whether desktop shortcut was created
+	Source          InstallSource // detected install source
+	SkippedCopy     bool   // whether binary copy was skipped (managed/in-place)
 }
 
-// Install performs a full platform-aware installation of MindX.
+// Install performs a platform-aware installation of MindX.
 //
-// On all platforms:
-//   - Copies the current binary to the install directory
-//   - Extracts runtime assets alongside the binary
+// Behavior depends on where the current binary came from:
 //
-// Platform-specific extras:
-//   - macOS/Linux: adds install dir to shell rc PATH, registers LaunchAgent/systemd service
-//   - Windows: adds install dir to System PATH, creates desktop .lnk, registers schtasks task
+//   - **Managed** (Homebrew, apt, system PATH): Skips copy + PATH setup.
+//     Only registers/starts the daemon service. The package manager owns the binary.
+//
+//   - **Custom** (GitHub release, manual download): Full install — copies binary
+//     to stable location, adds to PATH, registers daemon.
+//
+//   - **Already installed** (in target dir): In-place upgrade — no copy needed,
+//     re-registers daemon with any config changes.
 func Install(opts InstallOptions) (*InstallResult, error) {
 	result := &InstallResult{}
-
-	// Step 1: Determine install directory
-	installDir, err := resolveInstallDir(opts.InstallDir)
-	if err != nil {
-		return nil, fmt.Errorf("resolve install dir: %w", err)
-	}
-
-	if err := os.MkdirAll(installDir, 0755); err != nil {
-		return nil, fmt.Errorf("create install dir: %w", err)
-	}
 
 	exePath, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("get executable path: %w", err)
 	}
 
-	// Step 2: Stop old daemon before replacing binary or config
+	// Detect where this binary came from
+	source := detectInstallSource(exePath)
+	result.Source = source
+
+	installDir, err := resolveInstallDir(opts.InstallDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve install dir: %w", err)
+	}
+
+	shouldCopy := !opts.ForceCopy && (source == SourceCustom)
+
+	// Step 1: Stop old daemon before replacing binary or config
 	if !opts.SkipDaemon {
 		if err := StopDaemon(); err != nil {
-			fmt.Printf("ℹ️  Stopping old daemon: %v\n", err)
+			fmt.Printf("  Stopping old daemon: %v\n", err)
 		} else {
-			fmt.Println("✅ Stopped old daemon")
+			fmt.Println("  Daemon stopped")
 		}
 	}
 
-	// Step 3: Copy binary
-	destExe := filepath.Join(installDir, filepath.Base(exePath))
-	if err := copyFile(exePath, destExe); err != nil {
-		return nil, fmt.Errorf("copy binary: %w", err)
+	// Step 2: Copy binary (only if needed)
+	var destExe string
+	if shouldCopy {
+		if err := os.MkdirAll(installDir, 0755); err != nil {
+			return nil, fmt.Errorf("create install dir: %w", err)
+		}
+		destExe = filepath.Join(installDir, filepath.Base(exePath))
+		if err := copyFile(exePath, destExe); err != nil {
+			return nil, fmt.Errorf("copy binary: %w", err)
+		}
+		result.BinaryDest = destExe
+		fmt.Printf("  Binary installed -> %s\n", destExe)
+	} else {
+		destExe = exePath
+		result.BinaryDest = exePath
+		result.SkippedCopy = true
+		switch source {
+		case SourceManaged:
+			fmt.Printf("  Binary: using managed location (%s)\n", exePath)
+			fmt.Println("  (package manager owns this binary; skipping copy)")
+		case SourceAlreadyInstalled:
+			fmt.Printf("  Binary: already at target location (%s)\n", exePath)
+			fmt.Println("  (in-place upgrade; skipping copy)")
+		default:
+			fmt.Printf("  Binary: using current location (%s)\n", exePath)
+		}
 	}
-	result.BinaryDest = destExe
-	fmt.Printf("✅ Binary installed → %s\n", destExe)
 
-	// Note: Runtime assets (agents, prompts, models) are extracted at startup
-	// by core.ExtractWorkspace() from the embedded FS. No need to duplicate here.
-
-	// Step 4: Configure system PATH
-	if !opts.SkipPath {
+	// Step 3: Configure system PATH (only if we actually placed a binary somewhere new)
+	if !opts.SkipPath && shouldCopy {
 		pathOk, pathErr := AddToSystemPath(installDir)
 		if pathErr != nil {
-			fmt.Printf("⚠️  PATH configuration: %v\n", pathErr)
+			fmt.Printf("  PATH configuration: %v\n", pathErr)
 		} else {
 			result.PathConfigured = pathOk
 			if pathOk {
-				fmt.Printf("✅ System PATH updated: %s\n", installDir)
+				fmt.Printf("  System PATH updated: %s\n", installDir)
 				if runtime.GOOS == "windows" {
-					fmt.Println("   New terminals will pick up the change automatically.")
+					fmt.Println("    New terminals will pick up the change automatically.")
 				} else {
-					fmt.Println("   Restart your terminal or run: source ~/.zshrc (or ~/.bashrc)")
+					fmt.Println("    Restart your terminal or run: source ~/.zshrc (or ~/.bashrc)")
 				}
 			} else {
-				fmt.Println("ℹ️  Already in system PATH")
+				fmt.Println("  Already in system PATH")
 			}
 		}
+	} else if !opts.SkipPath && !shouldCopy {
+		result.PathConfigured = true // Already on PATH by virtue of being managed
+		fmt.Println("  PATH: already configured (managed source)")
 	}
 
-	// Step 5: Create desktop shortcut (Windows only)
+	// Step 4: Create desktop shortcut (Windows only)
 	if !opts.SkipShortcut && runtime.GOOS == "windows" {
 		scOk, scErr := CreateDesktopShortcut(destExe)
 		if scErr != nil {
-			fmt.Printf("⚠️  Desktop shortcut: %v\n", scErr)
+			fmt.Printf("  Desktop shortcut: %v\n", scErr)
 		} else {
 			result.ShortcutCreated = scOk
 			if scOk {
-				fmt.Println("✅ Desktop shortcut created")
+				fmt.Println("  Desktop shortcut created")
 			}
 		}
 	}
 
-	// Step 6: Register daemon with updated plist/config and start it
+	// Step 5: Register daemon with updated config and start it
 	if !opts.SkipDaemon {
 		workspaceDir := resolveWorkspaceDir(installDir)
 		if err := SetupDaemon(workspaceDir); err != nil {
-			fmt.Printf("⚠️  Daemon registration: %v\n", err)
+			fmt.Printf("  Daemon registration: %v\n", err)
 		} else {
 			result.DaemonSetup = true
-			fmt.Println("✅ Daemon auto-start registered and started")
+			fmt.Println("  Daemon auto-start registered and started")
 		}
 	}
 
@@ -126,20 +191,100 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 }
 
 // IsInstalled checks whether MindX appears to be properly installed.
-func IsInstalled() (bool, string, error) {
+// Returns true if either:
+//   - The binary is in a managed/system location AND daemon is registered, OR
+//   - The binary is in our target install directory.
+func IsInstalled() (bool, InstallSource, string, error) {
 	exePath, err := os.Executable()
 	if err != nil {
-		return false, "", fmt.Errorf("get executable: %w", err)
+		return false, SourceUnknown, "", fmt.Errorf("get executable: %w", err)
 	}
-	expectedDir, _ := resolveInstallDir("")
+
+	source := detectInstallSource(exePath)
 	actualDir := filepath.Dir(exePath)
-	return actualDir == expectedDir, actualDir, nil
+
+	switch source {
+	case SourceManaged:
+		// Managed: check if daemon is registered (the real indicator of "installed")
+		status, _ := CheckDaemon()
+		return status == DaemonRunning || status == DaemonStopped, source, actualDir, nil
+	case SourceAlreadyInstalled:
+		return true, source, actualDir, nil
+	default:
+		expectedDir, _ := resolveInstallDir("")
+		return actualDir == expectedDir, source, actualDir, nil
+	}
+}
+
+// ── Install source detection ────────────────────────────────────────────────
+
+// detectInstallSource classifies where the given executable path came from.
+func detectInstallSource(exePath string) InstallSource {
+	dir := filepath.Dir(filepath.Clean(exePath))
+	home, _ := os.UserHomeDir()
+
+	// Check: already in our target install directory?
+	targetDir, _ := resolveInstallDir("")
+	if dir == filepath.Clean(targetDir) {
+		return SourceAlreadyInstalled
+	}
+
+	// Check: managed locations (package managers / system PATH)?
+	for _, prefix := range managedPrefixes(home) {
+		if strings.HasPrefix(dir, prefix) {
+			return SourceManaged
+		}
+	}
+
+	// Default: custom/manual download
+	return SourceCustom
+}
+
+// managedPrefixes returns directory prefixes that indicate a package-managed
+// or system-PATH binary (no copy needed).
+func managedPrefixes(home string) []string {
+	prefixes := []string{
+		// Homebrew (Apple Silicon + Intel)
+		"/opt/homebrew",
+		"/usr/local/Cellar",
+		"/usr/local/opt",
+		// Homebrew (Linux)
+		"/home/linuxbrew/.linuxbrew",
+		// Standard system bin directories
+		"/usr/local/bin",
+		"/usr/bin",
+		"/usr/sbin",
+		"/bin",
+		"/sbin",
+		// Snap
+		"/snap/",
+		// Flatpak (via symlink)
+		".local/share/flatpak",
+		// Nix
+		"/nix/store",
+		// Conda/Mamba
+		"miniconda3",
+		"anaconda3",
+		"miniforge3",
+		// MacPorts
+		"/opt/local",
+	}
+
+	// Also include home-relative paths that are common for user-level managers
+	if home != "" {
+		prefixes = append(prefixes,
+			filepath.Join(home, ".local", "bin"),
+			filepath.Join(home, ".cargo", "bin"),
+		)
+	}
+
+	return prefixes
 }
 
 // ── Internal helpers ────────────────────────────────────────────────────────
 
 // resolveInstallDir returns the platform-appropriate default install directory,
-// or the user-specified override.
+// or the user-specified override. This is only used for custom-source installs.
 func resolveInstallDir(override string) (string, error) {
 	if override != "" {
 		return override, nil
@@ -160,7 +305,6 @@ func resolveInstallDir(override string) (string, error) {
 
 // resolveWorkspaceDir returns the workspace/data directory for the given install location.
 func resolveWorkspaceDir(installDir string) string {
-	// Workspace stays in user home regardless of install location
 	home, _ := os.UserHomeDir()
 	if home != "" {
 		return filepath.Join(home, ".mindx")
