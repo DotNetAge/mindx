@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MindX Windows Installer (WiX v3 / MSI)
+  Features:
+    - Provider selection -> API Key input -> saved as system env var via setx
+    - API Key required before Next button enables
+    - Daemon registered as Windows Service via NSSM (auto-start on boot)
+    - Runtime files extracted to %LOCALAPPDATA%\Mindx\
+    - Python venv auto-created if Python detected
+    - Desktop/Start Menu shortcut opens browser to http://localhost:1313
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+
+  <?define ProductName = "MindX" ?>
+  <?define Manufacturer = "DotNetAge" ?>
+  <?define ProductVersion = "__VERSION__" ?>
+  <?define UpgradeCode = "A1B2C3D4-E5F6-7890-ABCD-EF1234567890" ?>
+
+  <Product Id="*"
+           Name="$(var.ProductName)"
+           Language="2052"
+           Version="$(var.ProductVersion)"
+           Manufacturer="$(var.Manufacturer)"
+           UpgradeCode="$(var.UpgradeCode)">
+
+    <Package InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Platform="x64"
+             Description="$(var.ProductName) AI-native multi-agent conversation platform"
+             Comments="AI-native multi-agent conversation platform with OPC capabilities"
+             Manufacturer="$(var.Manufacturer)" />
+
+    <Property Id="MSIINSTALLPERUSER" Value="0" Secure="yes" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of $(var.ProductName) is already installed."
+                  Schedule="afterInstallInitialize"
+                  RemoveFeatures="All" />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="MindXIcon" SourceFile="mindx.ico" />
+    <Property Id="ARPPRODUCTICON" Value="MindXIcon" />
+
+    <!-- Properties: user inputs from UI -->
+    <Property Id="SELECTED_PROVIDER" Value="openai|OPENAI_API_KEY" Secure="yes" />
+    <Property Id="APIKEY_INPUT" Value="" Hidden="yes" Secure="yes" />
+    <Property Id="ENV_VAR_NAME" Value="OPENAI_API_KEY" Secure="yes" />
+    <Property Id="DAEMON_AUTOSTART" Value="1" Secure="yes" />
+    <Property Id="CREATE_SHORTCUT" Value="1" Secure="yes" />
+    <Property Id="SETUP_VENV" Value="1" Secure="yes" />
+    <Property Id="MINDX_WORKSPACE">[LocalAppDataFolder]Mindx\</Property>
+    <Property Id="DAEMON_PORT" Value="1314" Secure="yes" />
+    <Property Id="WEBUI_URL" Value="http://localhost:1313" Secure="yes" />
+    <Property Id="LAUNCH_BROWSER" Value="0" Secure="yes" />
+
+    <!-- Detect Python on system -->
+    <Property Id="PYTHON_DETECTED">
+      <DirectorySearch Id="PythonInProgramFiles" Path="[ProgramFilesFolder]Python*" Depth="2">
+        <FileSearch Name="python.exe" />
+      </DirectorySearch>
+      <DirectorySearch Id="PythonInProgramFilesx86" Path="[ProgramFiles6432Folder]Python*" Depth="2">
+        <FileSearch Name="python.exe" />
+      </DirectorySearch>
+      <DirectorySearch Id="PythonInAppData" Path="[LocalAppDataFolder]Programs\Python*" Depth="2">
+        <FileSearch Name="python.exe" />
+      </DirectorySearch>
+    </Property>
+
+    <!-- UI -->
+    <UIRef Id="WixUI_InstallDir" />
+    <UI Id="MindX_WixUI">
+      <Publish Dialog="WelcomeDlg"          control="Next" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+      <Publish Dialog="LicenseAgreementDlg" control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
+      <Publish Dialog="LicenseAgreementDlg" control="Next" Event="NewDialog" Value="MindXConfigDlg">LicenseAccepted = "1"</Publish>
+      <Publish Dialog="MindXConfigDlg"       control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+      <Publish Dialog="MindXConfigDlg"       control="Next" Event="NewDialog" Value="VerifyReadyDlg"><![CDATA[ SELECTED_PROVIDER <> "" AND APIKEY_INPUT <> "" ]]></Publish>
+      <Publish Dialog="MindXConfigDlg"       control="Next" Event="SpawnDialog" Value="ErrorDlg"><![CDATA[ SELECTED_PROVIDER = "" OR APIKEY_INPUT = "" ]]></Publish>
+      <Publish Dialog="VerifyReadyDlg"       control="Back" Event="NewDialog" Value="MindXConfigDlg">1</Publish>
+      <Publish Dialog="ExitDialog"           control="Finish" Event="DoAction" Value="LaunchBrowser">LAUNCH_BROWSER = "1" AND NOT Installed</Publish>
+    </UI>
+
+    <ProgressText Action="SetAPIKeyEnvVar">Setting up API key environment variable...</ProgressText>
+    <ProgressText Action="RegisterDaemonService">Registering MindX Windows Service...</ProgressText>
+    <ProgressText Action="ConfigureDaemonStart">Setting service to auto-start...</ProgressText>
+    <ProgressText Action="ConfigureDaemonDir">Setting service working directory...</ProgressText>
+    <ProgressText Action="ConfigureDaemonDisplayName">Setting service display name...</ProgressText>
+    <ProgressText Action="ConfigureDaemonDescription">Setting service description...</ProgressText>
+    <ProgressText Action="StartDaemonService">Starting MindX daemon service...</ProgressText>
+    <ProgressText Action="CreatePythonVenv">Setting up Python virtual environment...</ProgressText>
+    <ProgressText Action="CreateShortcuts">Creating shortcuts...</ProgressText>
+    <ProgressText Action="RemoveDaemonService">Removing MindX Windows Service...</ProgressText>
+    <ProgressText Action="RemoveAPIKeyEnvVar">Removing API key environment variable...</ProgressText>
+
+    <!-- VBScript Helper -->
+    <Binary Id="VBSHelper" SourceFile="scripts/installer-helper.vbs" />
+    <CustomAction Id="SplitProviderValue" BinaryKey="VBSHelper" VBScriptCall="SplitProviderValue" Execute="immediate" />
+    <Publish Dialog="MindXConfigDlg" control="ProviderCombo" Event="Change" Value="SplitProviderValue">1</Publish>
+
+    <!-- Directory Structure -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="$(var.ProductName)">
+          <Component Id="MainExecutable" Guid="*"><File Id="mindx_exe" Source="mindx.exe" KeyPath="yes" Vital="yes" /></Component>
+          <Component Id="NssmBinary" Guid="*"><File Id="nssm_exe" Source="nssm.exe" KeyPath="yes" Vital="yes" /></Component>
+        </Directory>
+      </Directory>
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="MINDX_APPDATA" Name="$(var.ProductName)">
+          <Component Id="RuntimeSettings" Guid="*">
+            <CreateFolder Directory="MINDX_SETTINGS_DIR" />
+            <File Id="providers_yml" Source="runtime/settings/providers.yml" Vital="no" />
+            <File Id="models_yml" Source="runtime/settings/models.yml" Vital="no" />
+            <File Id="mindx_json" Source="runtime/mindx.json" Vital="no" />
+          </Component>
+          <Component Id="RuntimeSkillsDir" Guid="*"><CreateFolder Directory="MINDX_SKILLS_DIR" /></Component>
+          <Component Id="RuntimeAgentsDir" Guid="*"><CreateFolder Directory="MINDX_AGENTS_DIR" /></Component>
+          <Component Id="WorkspaceDirs" Guid="*">
+            <CreateFolder Directory="MINDX_SESSIONS_DIR" />
+            <CreateFolder Directory="MINDX_LOGS_DIR" />
+            <CreateFolder Directory="MINDX_DATA_DIR" />
+            <CreateFolder Directory="MINDX_MODELS_DIR" />
+            <CreateFolder Directory="MINDX_MEMORY_CACHE_DIR" />
+            <CreateFolder Directory="MINDX_MEMORY_DIR" />
+          </Component>
+          <Directory Id="MINDX_SETTINGS_DIR" Name="settings" />
+          <Directory Id="MINDX_SKILLS_DIR" Name="skills" />
+          <Directory Id="MINDX_AGENTS_DIR" Name="agents" />
+          <Directory Id="MINDX_SESSIONS_DIR" Name="sessions" />
+          <Directory Id="MINDX_LOGS_DIR" Name="logs" />
+          <Directory Id="MINDX_DATA_DIR" Name="data">
+            <Directory Id="MINDX_MODELS_DIR" Name="models" />
+            <Directory Id="MINDX_MEMORY_CACHE_DIR" Name="memory-cache" />
+          </Directory>
+          <Directory Id="MINDX_MEMORY_DIR" Name="memory" />
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder"><Directory Id="AppMenuDir" Name="$(var.ProductName)" /></Directory>
+      <Directory Id="DesktopFolder" Name="Desktop" />
+    </Directory>
+
+    <?include heat-skills.wxs ?>
+    <?include heat-agents.wxs ?>
+
+    <Feature Id="Complete" Title="$(var.ProductName)" Level="1" Description="Full installation including daemon service and WebUI access">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="NssmBinary" />
+      <ComponentRef Id="RuntimeSettings" />
+      <ComponentRef Id="RuntimeSkillsDir" />
+      <ComponentRef Id="RuntimeAgentsDir" />
+      <ComponentRef Id="WorkspaceDirs" />
+      <ComponentGroupRef Id="SkillFiles" />
+      <ComponentGroupRef Id="AgentFiles" />
+    </Feature>
+
+    <!-- Custom Actions: Install (all deferred, elevated) -->
+    <CustomAction Id="SetAPIKeyEnvVar" ExeCommand='cmd /c setx [ENV_VAR_NAME] &quot;[APIKEY_INPUT]&quot;' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="RegisterDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; install MindXDaemon &quot;[INSTALLDIR]mindx.exe&quot; daemon' Execute="deferred" Return="check" Impersonate="no" />
+    <CustomAction Id="ConfigureDaemonStart" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon Start SERVICE_AUTO_START' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="ConfigureDaemonDir" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon AppDirectory &quot;[MINDX_WORKSPACE]&quot;' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="ConfigureDaemonDisplayName" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon DisplayName &quot;MindX Daemon&quot;' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="ConfigureDaemonDescription" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon Description &quot;MindX AI-native background service&quot;' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="StartDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; start MindXDaemon' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="CreatePythonVenv" ExeCommand='cmd /c python -m venv &quot;[MINDX_WORKSPACE].venv&quot;' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="CreateShortcuts" ExeCommand='cmd /c (echo [Internet Shortcut] &gt; &quot;[DesktopFolder]Mindx WebUI.url&quot; &amp;&amp; echo URL=[WEBUI_URL] &gt;&gt; &quot;[DesktopFolder]Mindx WebUI.url&quot;) &amp;&amp; (echo [Internet Shortcut] &gt; &quot;[AppMenuDir]\Mindx WebUI.url&quot; &amp;&amp; echo URL=[WEBUI_URL] &gt;&gt; &quot;[AppMenuDir]\Mindx WebUI.url&quot;)' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="LaunchBrowser" ExeCommand='cmd /c start "" "[WEBUI_URL]"' Execute="immediate" Return="ignore" Directory="SystemFolder" />
+
+    <!-- Custom Actions: Uninstall -->
+    <CustomAction Id="RemoveDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; stop MindXDaemon &amp;&amp; &quot;[INSTALLDIR]nssm.exe&quot; remove MindXDaemon confirm' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="RemoveAPIKeyEnvVar" ExeCommand='cmd /c setx [ENV_VAR_NAME] ""' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="RemoveShortcuts" ExeCommand='cmd /c del /Q &quot;[DesktopFolder]Mindx WebUI.url&quot; 2&gt;nul &amp;&amp; del /Q &quot;[AppMenuDir]\Mindx WebUI.url&quot; 2&gt;nul' Execute="deferred" Return="ignore" Impersonate="no" />
+
+    <InstallExecuteSequence>
+      <Custom Action="RemoveDaemonService" Before="RemoveFiles">Installed AND NOT UPGRADINGPRODUCTCODE AND DAEMON_AUTOSTART = "1"</Custom>
+      <Custom Action="RemoveShortcuts" Before="RemoveFiles">Installed AND NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="RemoveAPIKeyEnvVar" Before="RemoveFiles">Installed AND NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="SetAPIKeyEnvVar" After="InstallFiles">NOT Installed</Custom>
+      <Custom Action="RegisterDaemonService" After="SetAPIKeyEnvVar">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
+      <Custom Action="ConfigureDaemonStart" After="RegisterDaemonService">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
+      <Custom Action="ConfigureDaemonDir" After="ConfigureDaemonStart">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
+      <Custom Action="ConfigureDaemonDisplayName" After="ConfigureDaemonDir">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
+      <Custom Action="ConfigureDaemonDescription" After="ConfigureDaemonDisplayName">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
+      <Custom Action="StartDaemonService" After="ConfigureDaemonDescription">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
+      <Custom Action="CreatePythonVenv" After="StartDaemonService">NOT Installed AND SETUP_VENV = "1" AND PYTHON_DETECTED <> ""</Custom>
+      <Custom Action="CreateShortcuts" After="CreatePythonVenv">NOT Installed AND CREATE_SHORTCUT = "1"</Custom>
+    </InstallExecuteSequence>
+
+    <!-- Custom Dialog: Configuration Page -->
+    <Dialog Id="MindXConfigDlg" Width="480" Height="400" Title="[ProductName] Setup" NoMinimize="yes">
+      <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="480" Height="58" Text="BannerBitmap" FixedSize="yes" />
+      <Control Id="BannerLine" Type="Line" X="0" Y="58" Width="480" Height="0" />
+      <Control Id="Title" Type="Text" X="20" Y="10" Width="440" Height="24" Transparent="yes" NoPrefix="yes"><Text>[ProductName] Configuration</Text></Control>
+      <Control Id="Description" Type="Text" X="20" Y="38" Width="440" Height="18" Transparent="yes" NoPrefix="yes"><Text>Select your AI provider, enter your API key, and configure options</Text></Control>
+      <Control Id="BottomLine" Type="Line" X="0" Y="368" Width="480" Height="0" />
+
+      <Control Id="ProviderLabel" Type="Text" X="20" Y="72" Width="180" Height="12" NoPrefix="yes"><Text>AI Provider:</Text></Control>
+      <Control Id="ProviderCombo" Type="ComboBox" X="20" Y="84" Width="280" Height="18" Property="SELECTED_PROVIDER" ComboList="yes" Sorted="yes">
+        <ComboBox>
+          <ListItem Text="OpenAI" Value="openai|OPENAI_API_KEY" />
+          <ListItem Text="Anthropic (Claude)" Value="anthropic|ANTHROPIC_API_KEY" />
+          <ListItem Text="Google (Gemini)" Value="google|GEMINI_API_KEY" />
+          <ListItem Text="DeepSeek" Value="deepseek|DEEPSEEK_API_KEY" />
+          <ListItem Text="Alibaba Cloud (DashScope)" Value="dashscope|DASHSCOPE_API_KEY" />
+          <ListItem Text="Zhipu (ChatGLM)" Value="zhipu|ZHIPU_API_KEY" />
+          <ListItem Text="Moonshot (Kimi)" Value="moonshot|MOONSHOT_API_KEY" />
+          <ListItem Text="MiniMax" Value="minimax|MINIMAX_API_KEY" />
+          <ListItem Text="Volcengine (Ark)" Value="ark|ARK_API_KEY" />
+        </ComboBox>
+        <Publish Property="SplitProviderValue" Value="1">1</Publish>
+      </Control>
+
+      <Control Id="ApiKeyLabel" Type="Text" X="20" Y="112" Width="420" Height="24" NoPrefix="yes"><Text>API Key (saved as system environment variable [ENV_VAR_NAME]):</Text></Control>
+      <Control Id="ApiKeyEdit" Type="Edit" X="20" Y="138" Width="340" Height="18" Property="APIKEY_INPUT" Password="yes" HasCharacters="yes" />
+      <Control Id="ApiKeyHint" Type="Text" X="370" Y="140" Width="100" Height="14" Disabled="yes" NoPrefix="yes" Red="yes">
+        <Text>Required</Text>
+        <Condition Action="show">APIKEY_INPUT = ""</Condition>
+        <Condition Action="hide">APIKEY_INPUT &lt;&gt; ""</Condition>
+      </Control>
+
+      <Control Id="OptionsGroupBox" Type="GroupBox" X="18" Y="168" Width="444" Height="140" Text="Options" />
+      <Control Id="DaemonAutoStartCheck" Type="CheckBox" X="30" Y="188" Width="410" Height="16" Property="DAEMON_AUTOSTART" CheckBoxValue="1"><Text>Register as Windows Service (starts automatically on boot)</Text></Control>
+      <Control Id="DaemonPortLabel" Type="Text" X="46" Y="208" Width="120" Height="12" NoPrefix="yes"><Text>Daemon port:</Text></Control>
+      <Control Id="DaemonPortEdit" Type="Edit" X="170" Y="206" Width="60" Height="16" Property="DAEMON_PORT"><Text>1314</Text></Control>
+      <Control Id="ShortcutCheck" Type="CheckBox" X="30" Y="232" Width="410" Height="16" Property="CREATE_SHORTCUT" CheckBoxValue="1"><Text>Create desktop &amp; Start Menu shortcuts (opens [WEBUI_URL])</Text></Control>
+      <Control Id="VenvCheck" Type="CheckBox" X="30" Y="254" Width="410" Height="16" Property="SETUP_VENV" CheckBoxValue="1"><Text>Create Python virtual environment (for skill scripts)</Text></Control>
+      <Control Id="PythonStatusNone" Type="Text" X="46" Y="274" Width="300" Height="12" Disabled="yes" NoPrefix="yes">
+        <Text>Python not found — venv setup will be skipped</Text>
+        <Condition Action="show">PYTHON_DETECTED = ""</Condition>
+        <Condition Action="hide">PYTHON_DETECTED &lt;&gt; ""</Condition>
+      </Control>
+      <Control Id="PythonStatusFound" Type="Text" X="46" Y="274" Width="300" Height="12" Disabled="yes" NoPrefix="yes" Hidden="yes">
+        <Text>Python detected — virtual environment will be created during installation</Text>
+        <Condition Action="show">PYTHON_DETECTED &lt;&gt; ""</Condition>
+        <Condition Action="hide">PYTHON_DETECTED = ""</Condition>
+      </Control>
+
+      <Control Id="Back" Type="PushButton" X="180" Y="376" Width="56" Height="17">&lt; Back</Control>
+      <Control Id="Next" Type="PushButton" X="248" Y="376" Width="56" Height="17" Default="yes">Next &gt;</Control>
+      <Condition Action="disable"><![CDATA[ SELECTED_PROVIDER = "" OR APIKEY_INPUT = "" ]]></Condition>
+      <Condition Action="enable"><![CDATA[ SELECTED_PROVIDER <> "" AND APIKEY_INPUT <> "" ]]></Condition>
+      <Control Id="Cancel" Type="PushButton" X="328" Y="376" Width="56" Height="17">Cancel</Control>
+    </Dialog>
+
+    <UI><Dialog Id="ExitDialog">
+      <Control Id="LaunchBrowserCheckBox" Type="CheckBox" X="20" Y="160" Width="340" Height="18" Property="LAUNCH_BROWSER" CheckBoxValue="1">
+        <Text>Open MindX WebUI in browser ([WEBUI_URL])</Text>
+      </Control>
+    </Dialog></UI>
+
+  </Product>
+</Wix>

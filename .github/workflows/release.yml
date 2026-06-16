@@ -92,6 +92,7 @@ jobs:
           CONTENT+="| macOS (Intel) | amd64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-darwin-amd64.tar.gz\` |\n"
           CONTENT+="| macOS (Apple Silicon) | arm64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-darwin-arm64.tar.gz\` |\n"
           CONTENT+="| Windows | amd64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-windows-amd64.zip\` |\n"
+          CONTENT+="| Windows (Installer) | amd64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}.msi\` |\n"
 
           echo "content<<EOF" >> "$GITHUB_OUTPUT"
           echo -e "$CONTENT" >> "$GITHUB_OUTPUT"
@@ -219,12 +220,219 @@ jobs:
           retention-days: 1
 
   # ==========================================================================
+  # MSI — build Windows installer (WiX) for proper install/uninstall
+  #
+  # Produces: mindx-VERSION.msi with:
+  #   - Custom UI: Provider selection, API Key input, options
+  #   - Daemon as Windows Service (NSSM wrapper, auto-start)
+  #   - Runtime files to %LOCALAPPDATA%\Mindx\
+  #   - Python venv auto-setup
+  #   - Browser shortcut -> http://localhost:1313
+  # ==========================================================================
+  msi:
+    name: MSI Installer (Windows)
+    runs-on: windows-latest
+    needs: [prepare, build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-windows-amd64
+          path: packages
+          merge-multiple: true
+
+      - name: Extract mindx.exe from zip
+        shell: pwsh
+        run: |
+          $version = "${{ needs.prepare.outputs.version_num }}"
+          Expand-Archive -Path "packages\mindx-${version}-windows-amd64.zip" -DestinationPath staging -Force
+          Copy-Item "staging\mindx.exe" ".\mindx.exe"
+          Write-Host "mindx.exe ready:"
+          Get-Item mindx.exe | Select-Object Name, Length
+
+      - name: Stage runtime files for packaging
+        shell: pwsh
+        run: |
+          # Copy runtime/ directory alongside the wxs file so heat.exe can find it
+          # This packages skills, agents, settings YAMLs into the MSI
+          Copy-Item -Recurse -Force "runtime" ".\runtime"
+          Write-Host "Runtime files staged:"
+          Get-ChildItem -Recurse runtime | Measure-Object | Select-Object Count
+
+      - name: Install WiX Toolset v3
+        run: choco install wixtoolset --no-progress -y
+
+      - name: Install ImageMagick (for icon conversion)
+        run: choco install imagemagick --no-progress -y
+
+      - name: Download NSSM (Non-Sucking Service Manager)
+        shell: pwsh
+        run: |
+          $nssmUrl = "https://nssm.cc/release/nssm-2.24.zip"
+          Invoke-WebRequest -Uri $nssmUrl -OutFile nssm.zip
+          Expand-Archive -Path nssm.zip -DestinationPath nssm-temp -Force
+          # NSSM x64 binary is in win64/ subfolder
+          Copy-Item "nssm-temp\nssm-2.24\win64\nssm.exe" ".\nssm.exe"
+          Remove-Item -Recurse -Force nssm-temp, nssm.zip
+          Write-Host "NSSM ready:"
+          Get-Item nssm.exe | Select-Object Name, Length
+
+      - name: Convert icon (PNG -> ICO)
+        shell: pwsh
+        run: |
+          if (Test-Path "assets/images/mindx.png") {
+            # Use ImageMagick to convert PNG to multi-resolution ICO
+            magick "assets/images/mindx.png" `
+              -define icon:auto-resize=256,128,64,48,32,16 `
+              "mindx.ico"
+            Write-Host "Icon created from PNG: mindx.ico"
+            Get-Item mindx.ico | Select-Object Name, Length
+          } else {
+            # Fallback: generate a minimal valid 1-pixel ICO file so WiX doesn't fail
+            # ICO format: 6-byte header + 16-byte image directory entry + pixel data
+            $icoBytes = [byte[]]::new(86)
+            # ICONDIR header: reserved=0, type=1 (ICO), count=1
+            $icoBytes[0] = 0x00; $icoBytes[1] = 0x00  # reserved
+            $icoBytes[2] = 0x01; $icoBytes[3] = 0x00  # type = ICO
+            $icoBytes[4] = 0x01; $icoBytes[5] = 0x00  # count = 1
+            # ICONDIRENTRY: size=16, offset=22
+            $icoBytes[6]  = 0x20  # width = 32
+            $icoBytes[7]  = 0x20  # height = 32
+            $icoBytes[8]  = 0x00  # color palette
+            $icoBytes[9]  = 0x00  # reserved
+            $icoBytes[10] = 0x01  # color planes
+            $icoBytes[11] = 0x18  # bits per pixel
+            $icoBytes[12] = 0x40; $icoBytes[13] = 0x00; $icoBytes[14] = 0x00; $icoBytes[15] = 0x00  # size = 64 bytes
+            $icoBytes[16] = 0x16; $icoBytes[17] = 0x00; $icoBytes[18] = 0x00; $icoBytes[19] = 0x00  # offset = 22
+            # BITMAPINFOHEADER (40 bytes starting at offset 22)
+            $offset = 22
+            $icoBytes[$offset+0] = 0x28; $icoBytes[$offset+1] = 0x00; $icoBytes[$offset+2] = 0x00; $icoBytes[$offset+3] = 0x00  # header size = 40
+            $icoBytes[$offset+4] = 0x20; $icoBytes[$offset+5] = 0x00; $icoBytes[$offset+6] = 0x00; $icoBytes[$offset+7] = 0x00  # width = 32
+            $icoBytes[$offset+8] = 0x40; $icoBytes[$offset+9] = 0x00; $icoBytes[$offset+10] = 0x00; $icoBytes[$offset+11] = 0x00  # height = 64 (doubled for XOR+AND masks)
+            $icoBytes[$offset+12] = 0x01; $icoBytes[$offset+13] = 0x00  # planes = 1
+            $icoBytes[$offset+14] = 0x20; $icoBytes[$offset+15] = 0x00  # bpp = 32
+            $icoBytes[$offset+16] = 0x00; $icoBytes[$offset+17] = 0x00; $icoBytes[$offset+18] = 0x00; $icoBytes[$offset+19] = 0x00  # compression = none
+            $icoBytes[$offset+20] = 0x00; $icoBytes[$offset+21] = 0x00; $icoBytes[$offset+22] = 0x00; $icoBytes[$offset+23] = 0x00  # image size
+            $icoBytes[$offset+24] = 0x00; $icoBytes[$offset+25] = 0x00; $icoBytes[$offset+26] = 0x00; $icoBytes[$offset+27] = 0x00  # x/m per meter
+            $icoBytes[$offset+28] = 0x00; $icoBytes[$offset+29] = 0x00; $icoBytes[$offset+30] = 0x00; $icoBytes[$offset+31] = 0x00  # colors used
+            $icoBytes[$offset+32] = 0x00; $icoBytes[$offset+33] = 0x00; $icoBytes[$offset+34] = 0x00; $icoBytes[$offset+35] = 0x00  # colors important
+            # Pixel data: 1 transparent pixel (BGRA) + empty AND mask row
+            # XOR bitmap: 1 pixel = 4 bytes BGRA, padded to 4-byte boundary per row (32 pixels * 4 bpp / 8 = 128 bytes/row)
+            # For simplicity: write minimal pixel data (the icon will appear as a tiny dot)
+            [System.IO.File]::WriteAllBytes("mindx.ico", $icoBytes)
+            Write-Host "Generated minimal placeholder ICO (assets/images/mindx.png not found)"
+            Get-Item mindx.ico | Select-Object Name, Length
+          }
+
+      - name: Prepare wxs with version
+        shell: pwsh
+        run: |
+          $version = "${{ needs.prepare.outputs.version_num }}"
+          # Replace __VERSION__ placeholder in wxs
+          (Get-Content "scripts/installer.wxs" -Encoding UTF8) -replace '__VERSION__', $version | Set-Content "scripts/installer.wxs" -Encoding UTF8 -NoNewline
+          Write-Host "WXS version set to: $version"
+
+      - name: Build MSI (candle + light)
+        shell: pwsh
+        run: |
+          $env:WIX = "${env:ProgramFiles(x86)}\WiX Toolset v3.11"
+          $env:Path += ";$env:WIX\bin"
+
+          $version = "${{ needs.prepare.outputs.version_num }}"
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+
+          # Step 0: Use heat.exe to generate .wxs fragments for large directory trees
+          #   - heat-skills.wxs: all files under runtime/skills/ -> ComponentGroup "SkillFiles"
+          #   - heat-agents.wxs: all files under runtime/agents/ -> ComponentGroup "AgentFiles"
+          #   Both target MINDX_SKILLS_DIR / MINDX_AGENTS_DIR respectively
+          Write-Host "=== Generating heat fragments for runtime/skills ==="
+          heat.exe dir ".\runtime\skills" `
+            -out "heat-skills.wxs" `
+            -cg SkillFiles `
+            -dr MINDX_SKILLS_DIR `
+            -scom -sreg -srd -sfrag `
+            -var "var.SourceDir" `
+            -ag
+
+          if (-not (Test-Path "heat-skills.wxs")) {
+            Write-Error "heat.exe failed to generate heat-skills.wxs for skills directory"
+          }
+          Write-Host "heat-skills.wxs generated ($(Get-Item heat-skills.wxs).Length) bytes"
+
+          Write-Host "=== Generating heat fragments for runtime/agents ==="
+          heat.exe dir ".\runtime\agents" `
+            -out "heat-agents.wxs" `
+            -cg AgentFiles `
+            -dr MINDX_AGENTS_DIR `
+            -scom -sreg -srd -sfrag `
+            -var "var.SourceDir" `
+            -ag
+
+          if (-not (Test-Path "heat-agents.wxs")) {
+            Write-Error "heat.exe failed to generate heat-agents.wxs for agents directory"
+          }
+          Write-Host "heat-agents.wxs generated ($(Get-Item heat-agents.wxs).Length) bytes"
+
+          # Step 1: Compile .wxs -> .wixobj (main wxs + 2 heat-generated fragments)
+          Write-Host "=== Compiling WiX sources with candle ==="
+          candle scripts/installer.wxs heat-skills.wxs heat-agents.wxs `
+            -ext WixUIExtension `
+            -dSourceDir="."
+
+          # Step 2: Link .wixobj -> .msi
+          Write-Host "=== Linking with light ==="
+          light installer.wixobj heat-skills.wixobj heat-agents.wixobj `
+            -ext WixUIExtension `
+            -out "dist/mindx-${version}.msi"
+
+          if (Test-Path "dist/mindx-${version}.msi") {
+            $msi = Get-Item "dist/mindx-${version}.msi"
+            Write-Host "MSI built successfully:"
+            Write-Host "  File: $($msi.Name)"
+            Write-Host "  Size: $([math]::Round($msi.Length / 1MB, 1)) MB"
+          } else {
+            Write-Error "MSI build failed — output not found"
+          }
+
+      - name: Upload MSI to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "${{ needs.prepare.outputs.version }}"
+          $version = "${{ needs.prepare.outputs.version_num }}"
+          $msiFile = "dist/mindx-${version}.msi"
+
+          if (Test-Path $msiFile) {
+            gh release upload "$tag" $msiFile `
+              --repo "${{ env.GITHUB_REPO }}" --clobber
+            Write-Host "Uploaded: $msiFile"
+          } else {
+            Write-Host "MSI file not found, skipping upload"
+          }
+
+      - name: Summary
+        shell: pwsh
+        run: |
+          $version = "${{ needs.prepare.outputs.version_num }}"
+          echo "## MSI Installer Built & Uploaded" >> "$env:GITHUB_STEP_SUMMARY"
+          echo "" >> "$env:GITHUB_STEP_SUMMARY"
+          echo "| Item | Value |" >> "$env:GITHUB_STEP_SUMMARY"
+          echo "|------|-------|" >> "$env:GITHUB_STEP_SUMMARY"
+          echo "| File | \`mindx-${version}.msi\` |" >> "$env:GITHUB_STEP_SUMMARY"
+          echo "| Platform | Windows x86_64 |" >> "$env:GITHUB_STEP_SUMMARY"
+          echo "| Features | Provider setup, API Key env var, NSSM service, AppData runtime, Python venv, browser shortcut |" >> "$env:GITHUB_STEP_SUMMARY"
+
+  # ==========================================================================
   # Release — create GitHub Release with all assets + checksums
   # ==========================================================================
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [prepare, build]
+    needs: [prepare, build, msi]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
