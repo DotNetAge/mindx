@@ -965,7 +965,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				d.sendEvent(clientID, sid, gateway.RespMarkdown, i18n.T("svc.event.outputting"), chunk)
 			}).
 			OnToolUseDelta(func(data events.ToolUseDeltaData) {
-				gw.SendResponse(clientID, gateway.RespToolUseDelta, i18n.T("svc.event.tool.use.delta"), map[string]any{
+_ = gw.SendResponse(clientID, gateway.RespToolUseDelta, i18n.T("svc.event.tool.use.delta"), map[string]any{
 					"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
 				}, gateway.WithSessionID(sid))
 			}).
@@ -973,12 +973,12 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				d.sendEvent(clientID, sid, gateway.RespThinkingDone, i18n.T("svc.event.thinking.done"), i18n.T("svc.event.thinking.done.detail"))
 			}).
 			OnToolStart(func(data events.ToolExecStartData) {
-				gw.SendResponse(clientID, gateway.RespToolExecStart, i18n.T("svc.event.tool.start"), map[string]any{
+_ = gw.SendResponse(clientID, gateway.RespToolExecStart, i18n.T("svc.event.tool.start"), map[string]any{
 					"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
 				}, gateway.WithSessionID(sid))
 			}).
 			OnToolEnd(func(data events.ToolExecEndData) {
-				gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.end"), map[string]any{
+_ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.end"), map[string]any{
 					"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
 					"success": data.Success, "result": data.Result, "error": data.Error,
 					"duration_ms": int(data.Duration.Milliseconds()),

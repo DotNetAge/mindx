@@ -62,7 +62,7 @@ func (j *ChangeJournal) ReadAll() ([]data.FileChange, error) {
 		}
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var changes []data.FileChange
 	scanner := bufio.NewScanner(f)

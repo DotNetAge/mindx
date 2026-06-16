@@ -116,7 +116,7 @@ Example:
 		if err != nil {
 			return fmt.Errorf("cannot connect to daemon: %w", err)
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.AgentGet(name)
 		if err != nil {
@@ -168,7 +168,7 @@ Example:
 		if err != nil {
 			return fmt.Errorf("cannot connect to daemon: %w", err)
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.AgentScore(rpc.AgentScoreParams{
 			AgentName: agentScoreFlags.agentName,
@@ -244,7 +244,7 @@ Examples:
 		if err != nil {
 			return fmt.Errorf("cannot connect to daemon: %w", err)
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.AgentUpdate(params)
 		if err != nil {
