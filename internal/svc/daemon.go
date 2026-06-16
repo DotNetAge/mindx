@@ -991,7 +991,7 @@ _ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.en
 					for _, fp := range modFiles {
 						fileInfos = append(fileInfos, computeFileDiff(s, fp))
 					}
-					gw.SendResponse(clientID, gateway.RespFileModified, i18n.T("svc.event.file.modified"), map[string]any{
+ _ =					gw.SendResponse(clientID, gateway.RespFileModified, i18n.T("svc.event.file.modified"), map[string]any{
 						"files":  fileInfos,
 						"action": "tracked",
 					}, gateway.WithSessionID(sid))
@@ -1008,27 +1008,27 @@ _ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.en
 				d.sendExecutionSummary(clientID, sid, data)
 			}).
 			OnCycleEnd(func(data events.CycleInfo) {
-				gw.SendResponse(clientID, gateway.RespCycleEnd, i18n.T("svc.event.cycle.end"), map[string]any{
+ _ =				gw.SendResponse(clientID, gateway.RespCycleEnd, i18n.T("svc.event.cycle.end"), map[string]any{
 					"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
 				}, gateway.WithSessionID(sid))
 			}).
 			OnAgentTalkStart(func(data events.AgentTalkInfo) {
-				gw.SendResponse(clientID, gateway.RespAgentTalkStart, i18n.T("svc.event.agent.talk.start"), map[string]any{
+ _ =				gw.SendResponse(clientID, gateway.RespAgentTalkStart, i18n.T("svc.event.agent.talk.start"), map[string]any{
 					"to": data.To, "message": data.Message,
 				}, gateway.WithSessionID(sid))
 			}).
 			OnAgentTalkEnd(func(data events.AgentTalkResult) {
-				gw.SendResponse(clientID, gateway.RespAgentTalkEnd, i18n.T("svc.event.agent.talk.end"), map[string]any{
+				_ = gw.SendResponse(clientID, gateway.RespAgentTalkEnd, i18n.T("svc.event.agent.talk.end"), map[string]any{
 					"to": data.To, "reply": data.Reply, "error": data.Error,
 				}, gateway.WithSessionID(sid))
 			}).
 			OnCompaction(func(data events.CompactionData) {
-				gw.SendResponse(clientID, gateway.RespCompaction, i18n.T("svc.event.compaction"), map[string]any{
+				_ = gw.SendResponse(clientID, gateway.RespCompaction, i18n.T("svc.event.compaction"), map[string]any{
 					"session_id": data.SessionID, "messages_slid": data.MessagesSlid, "remaining_after": data.RemainingAfter, "window_size": data.WindowSize,
 				}, gateway.WithSessionID(sid))
 			}).
 			OnMaxTurnsReached(func(data events.MaxTurnsReachedData) {
-				gw.SendResponse(clientID, gateway.RespMaxTurnsReached, i18n.T("svc.event.max.turns.reached"), map[string]any{
+				_ = gw.SendResponse(clientID, gateway.RespMaxTurnsReached, i18n.T("svc.event.max.turns.reached"), map[string]any{
 					"turns_completed": data.TurnsCompleted, "max_turns": data.MaxTurns, "suggestion": data.Suggestion,
 				}, gateway.WithSessionID(sid))
 			}).
@@ -1051,7 +1051,7 @@ _ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.en
 					createdAt: time.Now(),
 				}
 				d.interactMu.Unlock()
-				gw.SendResponse(clientID, gateway.RespForm, i18n.T("svc.event.ask.user"), map[string]any{
+				_ = gw.SendResponse(clientID, gateway.RespForm, i18n.T("svc.event.ask.user"), map[string]any{
 					"correlation_id": correlationID,
 					"questions":      data.Questions,
 				}, gateway.WithSessionID(sid))
@@ -1065,7 +1065,7 @@ _ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.en
 					createdAt: time.Now(),
 				}
 				d.interactMu.Unlock()
-				gw.SendResponse(clientID, gateway.RespPermissionRequest, i18n.T("svc.event.permission.request"), map[string]any{
+				_ = gw.SendResponse(clientID, gateway.RespPermissionRequest, i18n.T("svc.event.permission.request"), map[string]any{
 					"correlation_id": correlationID,
 					"tool_name":      data.ToolName,
 					"reason":         data.Reason,
@@ -1078,7 +1078,7 @@ _ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.en
 			}).
 			OnTaskSummary(func(data events.TaskSummaryData) {
 				md := buildTaskSummaryMarkdown(data)
-				gw.SendResponse(clientID, gateway.RespTaskSummary, i18n.T("svc.event.task.summary"), md,
+				_ = gw.SendResponse(clientID, gateway.RespTaskSummary, i18n.T("svc.event.task.summary"), md,
 					gateway.WithSessionID(sid),
 					gateway.WithResponseMeta(map[string]any{
 						"input_tokens":  data.TokenUsage.InputTokens,
@@ -1090,7 +1090,7 @@ _ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.en
 				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.timeout"), msg)
 			}).
 			OnTokenUsageRecorded(func(record goharnesssession.TokenUsageRecord) {
-				gw.SendResponse(clientID, gateway.RespTokenUsageRecorded, i18n.T("svc.event.token.usage"), map[string]any{
+				_ = gw.SendResponse(clientID, gateway.RespTokenUsageRecorded, i18n.T("svc.event.token.usage"), map[string]any{
 					"id":                record.ID,
 					"session_id":        record.SessionID,
 					"conversation_id":   record.ConversationID,

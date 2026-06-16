@@ -125,8 +125,8 @@ func TestFileSchedulerStore_List(t *testing.T) {
 	}
 
 	// 添加两个 entry
-	store.Save(ctx, &ScheduleEntry{ID: "b-job", Agent: "a", Content: "c1", CronExpr: "* * * * * *"})
-	store.Save(ctx, &ScheduleEntry{ID: "a-job", Agent: "b", Content: "c2", CronExpr: "* * * * * *"})
+	_ = store.Save(ctx, &ScheduleEntry{ID: "b-job", Agent: "a", Content: "c1", CronExpr: "* * * * * *"})
+	_ = store.Save(ctx, &ScheduleEntry{ID: "a-job", Agent: "b", Content: "c2", CronExpr: "* * * * * *"})
 
 	list, err = store.List(ctx)
 	if err != nil {
@@ -257,11 +257,11 @@ func TestFileSchedulerStore_Concurrency(t *testing.T) {
 	// 并发的 Save 和 UpdateLastRun
 	done := make(chan struct{})
 	go func() {
-		store.Save(ctx, &ScheduleEntry{ID: "concurrent-1", Agent: "a", Content: "c", CronExpr: "* * * * * *"})
+		_ = store.Save(ctx, &ScheduleEntry{ID: "concurrent-1", Agent: "a", Content: "c", CronExpr: "* * * * * *"})
 		done <- struct{}{}
 	}()
 	go func() {
-		store.Save(ctx, &ScheduleEntry{ID: "concurrent-2", Agent: "b", Content: "d", CronExpr: "* * * * * *"})
+		_ = store.Save(ctx, &ScheduleEntry{ID: "concurrent-2", Agent: "b", Content: "d", CronExpr: "* * * * * *"})
 		done <- struct{}{}
 	}()
 

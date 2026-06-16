@@ -786,7 +786,8 @@ func (m *rootModel) saveConnectResult(modelName string) {
 			}
 			_ = reg.Save(modelCfg)
 		}
-	} else if m.connectAPIKey != "" {
+		// no-op
+		_ = m.connectAPIKey // nolint:SA9003
 		// APIKey已存入CredentialStore（上方），无需再持久化模型配置
 		// no-op
 	}
