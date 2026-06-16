@@ -95,7 +95,7 @@ func setupDaemonMacOS(workspaceDir string) error {
 
 	// Try to unload any existing service with the same label first
 	// launchctl bootout returns exit status 5 if not loaded, which is fine
-	exec.Command("launchctl", "bootout", "gui/"+fmt.Sprint(os.Getuid()), agentPlist).Run()
+	exec.Command("launchctl", "bootout", "gui/"+fmt.Sprint(os.Getuid()), agentPlist)
 
 	if err := exec.Command("launchctl", "bootstrap", "gui/"+fmt.Sprint(os.Getuid()), agentPlist).Run(); err != nil {
 		return fmt.Errorf("launchctl bootstrap: %w", err)

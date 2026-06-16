@@ -304,7 +304,7 @@ func stopDaemonDirect() error {
 			continue
 		}
 		if proc, perr := os.FindProcess(pid); perr == nil {
-			proc.Signal(syscall.SIGTERM)
+			_ = proc.Signal(syscall.SIGTERM)
 			fmt.Fprintf(os.Stderr, "  Sent SIGTERM to daemon PID %d\n", pid)
 		}
 	}
@@ -326,7 +326,7 @@ func stopDaemonDirect() error {
 			continue
 		}
 		if proc, perr := os.FindProcess(pid); perr == nil {
-			proc.Signal(syscall.SIGKILL)
+			_ = proc.Signal(syscall.SIGKILL)
 			fmt.Fprintf(os.Stderr, "  Sent SIGKILL to daemon PID %d\n", pid)
 		}
 	}
@@ -411,6 +411,7 @@ func parseIntSafe(s string) int {
 }
 
 // isRunningTask checks if the MindXDaemon scheduled task is currently running.
+	//nolint:unused
 func _isRunningTask() (bool, error) {
 	cmd := exec.Command("schtasks", "/query", "/tn", "MindXDaemon", "/fo", "CSV", "/nh")
 	out, err := cmd.CombinedOutput()

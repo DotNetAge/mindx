@@ -220,7 +220,7 @@ func unregisterDaemonLinux() (bool, error) {
 	}
 
 	// Reload systemd to pick up removed unit
-	exec.Command("systemctl", "--user", "daemon-reload").Run()
+	exec.Command("systemctl", "--user", "daemon-reload")
 
 	return cleaned, nil
 }

@@ -66,7 +66,7 @@ func (tm *terminalManager) cleanupClient(clientID string) {
 	for id, ts := range tm.sessions {
 		if ts.clientID == clientID {
 			ts.pty.Close()
-			ts.cmd.Process.Kill()
+			_ = ts.cmd.Process.Kill()
 			delete(tm.sessions, id)
 		}
 	}
@@ -138,7 +138,7 @@ func (d *Daemon) handleTerminalStart(ctx context.Context, params json.RawMessage
 			}
 		}
 		ts.close()
-		d.gw.SendResponse(clientID, gateway.ResponseType("terminal.exit"),
+		_ = d.gw.SendResponse(clientID, gateway.ResponseType("terminal.exit"),
 			"", "",
 			gateway.WithSessionID(sessionID),
 			gateway.WithResponseMeta(map[string]interface{}{
@@ -258,7 +258,7 @@ func (ts *terminalSession) close() {
 		ts.closed.Store(true)
 		termMgr.remove(ts.id)
 		ts.pty.Close()
-		ts.cmd.Process.Kill()
+		_ = ts.cmd.Process.Kill()
 		close(ts.done)
 	})
 }
