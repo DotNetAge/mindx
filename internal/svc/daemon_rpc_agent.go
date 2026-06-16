@@ -314,3 +314,13 @@ func (d *Daemon) handleAgentScore(_ context.Context, params json.RawMessage) (an
 		"completes": completes,
 	}, nil
 }
+
+func (d *Daemon) handleAgentReload(_ context.Context, params json.RawMessage) (any, error) {
+	if err := d.app.ReloadAgents(); err != nil {
+		return nil, fmt.Errorf("agent reload failed: %w", err)
+	}
+	return map[string]string{
+		"status":  "ok",
+		"message": "agents reloaded successfully",
+	}, nil
+}

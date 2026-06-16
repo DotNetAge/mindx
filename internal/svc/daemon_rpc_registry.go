@@ -35,6 +35,7 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("agent.create", r.daemon.handleAgentCreate)
 	gw.RegisterMethod("agent.update", r.daemon.handleAgentUpdate)
 	gw.RegisterMethod("agent.score", r.daemon.handleAgentScore)
+	gw.RegisterMethod("agent.reload", r.daemon.handleAgentReload)
 
 	gw.RegisterMethod("model.list", r.daemon.handleModelList)
 	gw.RegisterMethod("model.get", r.daemon.handleModelGet)
@@ -50,6 +51,7 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 
 	gw.RegisterMethod("skill.list", r.daemon.handleSkillList)
 	gw.RegisterMethod("skill.get", r.daemon.handleSkillGet)
+	gw.RegisterMethod("skill.reload", r.daemon.handleSkillReload)
 
 	gw.RegisterMethod("ask_user.reply", r.daemon.handleAskUserReply)
 	gw.RegisterMethod("permission.reply", r.daemon.handlePermissionReply)

@@ -107,6 +107,7 @@ Define agent personas with roles, descriptions, skills, and models.
 | Exclude tools | `mindx agent update --exclude-tools fs.write,bash` | Block specific tools |
 | Score agent performance | `mindx agent score --agent-name <n> --task "<desc>" --score 8 --notes "..."` | 1-10 scale, stored in KVStore |
 | Get agent score | (via `mindx kv list --prefix score:`) | Query stored scores |
+| Reload agents from disk | `mindx reload agents` | Re-scans `~/.mindx/agents/`, no restart needed |
 
 ### Example
 ```bash
@@ -126,6 +127,7 @@ View available skills loaded from `runtime/skills/`.
 | List installed skills | `mindx skill list` | Name / description / allowed-tools |
 | List as JSON | `mindx skill list --json` | Includes full frontmatter metadata |
 | View skill detail | `mindx skill get <name>` | Shows SKILL.md content |
+| Reload skills from disk | `mindx reload skills` | Re-scans `~/.mindx/skills/`, no restart needed |
 
 ## Permission Rules (Tool Access Control)
 

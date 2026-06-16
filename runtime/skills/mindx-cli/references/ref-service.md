@@ -36,6 +36,8 @@ Most of these work offline (no daemon required).
 | Stop daemon | `mindx stop` | Graceful shutdown |
 | Restart daemon | `mindx restart` | After config change or upgrade |
 | Check status | `mindx status` | Shows binary path, config, daemon state, platform info |
+| Reload agents | `mindx reload agents` | Hot-reload agent configs without full restart |
+| Reload skills | `mindx reload skills` | Hot-reload skill configs without full restart |
 
 ### Direct Daemon Run (Development)
 

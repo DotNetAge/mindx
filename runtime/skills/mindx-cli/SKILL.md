@@ -67,6 +67,10 @@ mindx logs -n 30
 # 5. If daemon is unhealthy
 mindx restart
 
+# 5b. Or if only agent/skill configs changed (no full restart needed)
+mindx reload agents    # after editing ~/.mindx/agents/*.md
+mindx reload skills    # after editing skills/*/SKILL.md
+
 # 6. If still broken, check full logs
 mindx log read --limit 50 --stream error
 ```
@@ -93,4 +97,5 @@ Some commands work without the daemon running; others require it.
 **Daemon-required** (need `mindx start` first):
 All `memory`, `graph`, `session`, `schedule`, `kv`, `fs`, `fw`, `token`, `rule create/update/delete`,
 `log read/clear/count`, `translate`, `entity-tags`, `user config`,
-`agent get/score/update`, `provider create/update/delete`, `model switch`
+`agent get/score/update/reload`, `provider create/update/delete`, `model switch`,
+`reload agents|skills`

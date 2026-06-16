@@ -75,3 +75,13 @@ func (d *Daemon) handleSkillGet(_ context.Context, params json.RawMessage) (any,
 
 	return sk, nil
 }
+
+func (d *Daemon) handleSkillReload(_ context.Context, params json.RawMessage) (any, error) {
+	if err := d.app.ReloadSkills(); err != nil {
+		return nil, fmt.Errorf("skill reload failed: %w", err)
+	}
+	return map[string]string{
+		"status":  "ok",
+		"message": "skills reloaded successfully",
+	}, nil
+}
