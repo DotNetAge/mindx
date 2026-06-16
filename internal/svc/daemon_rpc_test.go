@@ -40,7 +40,9 @@ func newTestDaemon(t *testing.T) (*Daemon, func()) {
 
 	d := NewDaemon(app, ":0", "/ws", nil)
 
-	cleanup := func() {}
+	cleanup := func() {
+		d.stopBackgroundServices()
+	}
 
 	return d, cleanup
 }
