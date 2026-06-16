@@ -90,7 +90,7 @@ func setupDaemonMacOS(workspaceDir string) error {
 		if err := os.WriteFile(agentPlist, data, 0644); err != nil {
 			return fmt.Errorf("copy plist to LaunchAgents: %w", err)
 		}
-		os.Remove(plistPath)
+		_ = os.Remove(plistPath)
 	}
 
 	// Try to unload any existing service with the same label first

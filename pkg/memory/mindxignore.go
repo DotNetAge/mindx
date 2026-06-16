@@ -59,7 +59,7 @@ func LoadMindxIgnore(projectDir string) *IgnoreRules {
 	if err != nil {
 		return r
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {

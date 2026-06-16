@@ -47,7 +47,7 @@ Write-Output 'OK'`,
 	if err := os.WriteFile(tmpScript, []byte(script), 0644); err != nil {
 		return false, fmt.Errorf("write shortcut script: %w", err)
 	}
-	defer os.Remove(tmpScript)
+	defer func() { _ = os.Remove(tmpScript) }()
 
 	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmpScript)
 	out, err := cmd.CombinedOutput()

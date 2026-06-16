@@ -252,7 +252,7 @@ func runModelDownload(cacheDir string, ch chan<- setupmsg.DownloadProgressMsg) {
 		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.create.failed"), err)}
 		return
 	}
-	defer dst.Close()
+	defer func() { _ = dst.Close() }()
 
 	if _, err := io.Copy(dst, src); err != nil {
 		ch <- setupmsg.DownloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.copy.failed"), err)}
@@ -260,7 +260,7 @@ func runModelDownload(cacheDir string, ch chan<- setupmsg.DownloadProgressMsg) {
 	}
 
 	srcDir := filepath.Join(cacheDir, strings.ReplaceAll(modelID, "/", string(filepath.Separator)))
-	os.RemoveAll(srcDir)
+	_ = os.RemoveAll(srcDir)
 
 	ch <- setupmsg.DownloadProgressMsg{
 		Done:   true,

@@ -965,7 +965,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				d.sendEvent(clientID, sid, gateway.RespMarkdown, i18n.T("svc.event.outputting"), chunk)
 			}).
 			OnToolUseDelta(func(data events.ToolUseDeltaData) {
-_ = gw.SendResponse(clientID, gateway.RespToolUseDelta, i18n.T("svc.event.tool.use.delta"), map[string]any{
+				_ = gw.SendResponse(clientID, gateway.RespToolUseDelta, i18n.T("svc.event.tool.use.delta"), map[string]any{
 					"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
 				}, gateway.WithSessionID(sid))
 			}).
@@ -973,12 +973,12 @@ _ = gw.SendResponse(clientID, gateway.RespToolUseDelta, i18n.T("svc.event.tool.u
 				d.sendEvent(clientID, sid, gateway.RespThinkingDone, i18n.T("svc.event.thinking.done"), i18n.T("svc.event.thinking.done.detail"))
 			}).
 			OnToolStart(func(data events.ToolExecStartData) {
-_ = gw.SendResponse(clientID, gateway.RespToolExecStart, i18n.T("svc.event.tool.start"), map[string]any{
+				_ = gw.SendResponse(clientID, gateway.RespToolExecStart, i18n.T("svc.event.tool.start"), map[string]any{
 					"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
 				}, gateway.WithSessionID(sid))
 			}).
 			OnToolEnd(func(data events.ToolExecEndData) {
-_ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.end"), map[string]any{
+				_ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.end"), map[string]any{
 					"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
 					"success": data.Success, "result": data.Result, "error": data.Error,
 					"duration_ms": int(data.Duration.Milliseconds()),
@@ -991,7 +991,7 @@ _ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.en
 					for _, fp := range modFiles {
 						fileInfos = append(fileInfos, computeFileDiff(s, fp))
 					}
- _ =					gw.SendResponse(clientID, gateway.RespFileModified, i18n.T("svc.event.file.modified"), map[string]any{
+					_ = gw.SendResponse(clientID, gateway.RespFileModified, i18n.T("svc.event.file.modified"), map[string]any{
 						"files":  fileInfos,
 						"action": "tracked",
 					}, gateway.WithSessionID(sid))
@@ -1008,12 +1008,12 @@ _ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.en
 				d.sendExecutionSummary(clientID, sid, data)
 			}).
 			OnCycleEnd(func(data events.CycleInfo) {
- _ =				gw.SendResponse(clientID, gateway.RespCycleEnd, i18n.T("svc.event.cycle.end"), map[string]any{
+				_ = gw.SendResponse(clientID, gateway.RespCycleEnd, i18n.T("svc.event.cycle.end"), map[string]any{
 					"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
 				}, gateway.WithSessionID(sid))
 			}).
 			OnAgentTalkStart(func(data events.AgentTalkInfo) {
- _ =				gw.SendResponse(clientID, gateway.RespAgentTalkStart, i18n.T("svc.event.agent.talk.start"), map[string]any{
+				_ = gw.SendResponse(clientID, gateway.RespAgentTalkStart, i18n.T("svc.event.agent.talk.start"), map[string]any{
 					"to": data.To, "message": data.Message,
 				}, gateway.WithSessionID(sid))
 			}).
@@ -1257,8 +1257,8 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 					"error", restoreErr,
 				)
 			}
-			os.Unsetenv("MINDX_PROJECT_DIR")
-			os.Unsetenv("MINDX_SESSION_ID")
+			_ = os.Unsetenv("MINDX_PROJECT_DIR")
+			_ = os.Unsetenv("MINDX_SESSION_ID")
 			d.execMu.Unlock()
 
 			if err != nil {

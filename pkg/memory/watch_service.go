@@ -103,7 +103,7 @@ func (s *FileWatchService) Start(ctx context.Context) error {
 		return fmt.Errorf("filewatch: create watcher: %w", err)
 	}
 	s.watcher = watcher
-	defer s.watcher.Close()
+	_ = s.watcher.Close()
 
 	// Register all directories from the watchlist
 	entries := s.store.List()

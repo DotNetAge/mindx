@@ -122,7 +122,7 @@ var daemonCheckUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.ServerCheckUpdate()
 		if err != nil {
