@@ -46,6 +46,7 @@ func Execute() error {
 	// before cobra displays help text. runTUI will re-init with config language.
 	if err := i18n.Init(""); err != nil {
 		// Non-fatal: T() falls back to returning keys as-is
+		_ = err
 	}
 	return rootCmd.Execute()
 }

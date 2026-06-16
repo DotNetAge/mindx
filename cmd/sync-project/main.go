@@ -38,7 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 	var res map[string]any
-	json.Unmarshal(result, &res)
+	_ = json.Unmarshal(result, &res)
 	fmt.Fprintf(os.Stderr, "✅ memory.sync_project 完成\n")
 	for k, v := range res {
 		fmt.Printf("  %s: %v\n", k, v)

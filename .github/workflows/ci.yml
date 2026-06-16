@@ -236,6 +236,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools musl-dev
+          # musl-tools only provides x86_64-linux-musl-gcc; download aarch64 cross-compiler from musl.cc
+          if [ "${{ matrix.goarch }}" = "arm64" ]; then
+            wget -q https://musl.cc/aarch64-linux-musl-cross.tgz -O /tmp/musl-cross.tgz
+            sudo tar xzf /tmp/musl-cross.tgz -C /usr/local
+            rm /tmp/musl-cross.tgz
+          fi
 
       - name: Setup MinGW (Windows CGO)
         if: matrix.goos == 'windows'

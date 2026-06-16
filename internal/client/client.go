@@ -788,6 +788,7 @@ func (m *rootModel) saveConnectResult(modelName string) {
 		}
 	} else if m.connectAPIKey != "" {
 		// APIKey已存入CredentialStore（上方），无需再持久化模型配置
+		// no-op
 	}
 
 	label := fmt.Sprintf(i18n.T("client.notify.connected"), m.connectProvider)
@@ -831,7 +832,7 @@ func probeDaemon(addr string) clientmsg.DaemonConnStatus {
 	if err != nil {
 		return clientmsg.DaemonDisconnected
 	}
-	conn.Close()
+	_ = conn.Close()
 	return clientmsg.DaemonConnected
 }
 

@@ -141,7 +141,7 @@ func saveFile() {
 		"requests": capturedRequests,
 	}, "", "  ")
 
-	os.WriteFile(outPath, data, 0644)
+	_ = os.WriteFile(outPath, data, 0644)
 	fmt.Printf("\r  [SAVED] %s (%d requests)    \n", outPath, len(capturedRequests))
 }
 

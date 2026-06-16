@@ -64,12 +64,12 @@ type InstallOptions struct {
 
 // InstallResult reports what was done during installation.
 type InstallResult struct {
-	BinaryDest      string // where the binary ended up (or original path if managed)
-	DaemonSetup     bool   // whether daemon was registered
-	PathConfigured  bool   // whether PATH was updated
-	ShortcutCreated bool   // whether desktop shortcut was created
+	BinaryDest      string        // where the binary ended up (or original path if managed)
+	DaemonSetup     bool          // whether daemon was registered
+	PathConfigured  bool          // whether PATH was updated
+	ShortcutCreated bool          // whether desktop shortcut was created
 	Source          InstallSource // detected install source
-	SkippedCopy     bool   // whether binary copy was skipped (managed/in-place)
+	SkippedCopy     bool          // whether binary copy was skipped (managed/in-place)
 }
 
 // Install performs a platform-aware installation of MindX.

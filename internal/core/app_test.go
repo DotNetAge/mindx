@@ -40,11 +40,11 @@ func TestSettings_Directories(t *testing.T) {
 func TestNewApp(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	os.MkdirAll(filepath.Join(tmpDir, "agents"), 0755)
-	os.MkdirAll(filepath.Join(tmpDir, "settings"), 0755)
-	os.WriteFile(filepath.Join(tmpDir, "settings", "models.yml"), []byte{}, 0644)
-	os.WriteFile(filepath.Join(tmpDir, "settings", "rules.yml"), []byte{}, 0644)
-	os.MkdirAll(filepath.Join(tmpDir, "sessions"), 0755)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "agents"), 0755)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "settings"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "settings", "models.yml"), []byte{}, 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "settings", "rules.yml"), []byte{}, 0644)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "sessions"), 0755)
 
 	app, err := DefaultApp(nil)
 	if err != nil {

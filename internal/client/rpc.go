@@ -213,7 +213,7 @@ func (m *rootModel) registerNotificationHandlers() {
 			case strings.Contains(metric, "Duration"):
 				msg.Duration, _ = time.ParseDuration(value)
 			case strings.Contains(metric, "Tool Calls"):
-				fmt.Sscanf(value, "%d", &msg.ToolCalls)
+				_, _ = fmt.Sscanf(value, "%d", &msg.ToolCalls)
 			case strings.Contains(metric, "Tokens Used"):
 				parseTokenUsage(value, &msg.TokensUsed)
 			}
@@ -398,11 +398,11 @@ func toBool(v any) bool {
 
 func parseTokenUsage(value string, tu *session.TokenUsage) {
 	// format: "1234 (in:100 out:200 cached:50 reasoning:50)"
-	fmt.Sscanf(value, "%d", &tu.TotalTokens)
+	_, _ = fmt.Sscanf(value, "%d", &tu.TotalTokens)
 	if idx := strings.Index(value, "("); idx >= 0 {
 		inner := value[idx+1 : len(value)-1]
 		var in, out, cached, reasoning int
-		fmt.Sscanf(inner, "in:%d out:%d cached:%d reasoning:%d", &in, &out, &cached, &reasoning)
+		_, _ = fmt.Sscanf(inner, "in:%d out:%d cached:%d reasoning:%d", &in, &out, &cached, &reasoning)
 		tu.InputTokens = in
 		tu.OutputTokens = out
 		tu.CachedTokens = cached
