@@ -132,7 +132,7 @@ func Uninstall(opts UninstallOptions) (*UninstallResult, error) {
 					// Also remove VBS launcher on Windows
 					if runtime.GOOS == "windows" {
 						vbsPath := filepath.Join(installDir, "MindXDaemon.vbs")
-						os.Remove(vbsPath)
+						_ = os.Remove(vbsPath)
 					}
 
 					// Try to remove empty install directory
@@ -243,7 +243,7 @@ func unregisterDaemonWindows() (bool, error) {
 	// Remove VBS launcher
 	home, _ := os.UserHomeDir()
 	vbsPath := filepath.Join(home, ".mindx", "bin", "MindXDaemon.vbs")
-	os.Remove(vbsPath)
+	_ = os.Remove(vbsPath)
 
 	return true, nil
 }

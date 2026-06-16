@@ -174,9 +174,9 @@ func addUnixPath(dir string) (bool, error) {
 	}
 	defer func() { _ = f.Close() }()
 
-	fmt.Fprintln(f, "")
-	fmt.Fprintln(f, "# MindX")
-	fmt.Fprintln(f, line)
+	_, _ = fmt.Fprintln(f, "")
+	_, _ = fmt.Fprintln(f, "# MindX")
+	_, _ = fmt.Fprintln(f, line)
 	return false, nil
 }
 

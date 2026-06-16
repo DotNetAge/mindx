@@ -89,7 +89,7 @@ var daemonVersionCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.ServerVersion()
 		if err != nil {
@@ -144,7 +144,7 @@ var daemonApplyUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.ServerApplyUpdate()
 		if err != nil {
@@ -166,7 +166,7 @@ var daemonRestartCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.ServerRestartDaemon()
 		if err != nil {
@@ -188,7 +188,7 @@ var daemonConfigCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.UserConfig()
 		if err != nil {

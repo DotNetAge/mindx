@@ -159,7 +159,7 @@ func countLogFile(path string) map[string]int64 {
 	if err != nil {
 		return result
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	buf := make([]byte, 64*1024)
 	var lines int64
