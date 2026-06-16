@@ -90,7 +90,7 @@ Both should succeed before using any other commands.
 Some commands work without the daemon running; others require it.
 
 **Offline-safe** (work anytime):
-`install`, `upgrade`, `version`, `doctor`, `start`, `stop`, `restart`, `status`,
+`install`, `uninstall`, `upgrade`, `version`, `doctor`, `start`, `stop`, `restart`, `status`,
 `logs`, `query`, `web`, `app`, `provider list/add/rm/setkey`, `model list/add/rm/set`,
 `agent list/add/rm`, `skill list/get`
 
