@@ -23,7 +23,7 @@ defer func() { _ = os.RemoveAll(tmpDir) }()
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	sessionID := "test-session-123"
 	agentName := "test-agent"
@@ -149,7 +149,7 @@ defer func() { _ = os.RemoveAll(tmpDir) }()
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
 	sessionID := "yaml-format-test"
@@ -198,7 +198,7 @@ func TestFileStoreConcurrentAppend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
 	sessionID := "concurrent-test"
@@ -260,7 +260,7 @@ func TestFileStoreDeleteSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
 	agentName := "test-agent"
@@ -303,7 +303,7 @@ func TestFileStoreDeleteSessionNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	err = store.DeleteSession(context.Background(), "nonexistent-session")
 	if err != goharnesssession.ErrSessionNotFound {

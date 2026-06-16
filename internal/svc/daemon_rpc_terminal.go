@@ -257,7 +257,7 @@ func (ts *terminalSession) close() {
 	ts.closeOnce.Do(func() {
 		ts.closed.Store(true)
 		termMgr.remove(ts.id)
-		ts.pty.Close()
+		_ = ts.pty.Close()
 		_ = ts.cmd.Process.Kill()
 		close(ts.done)
 	})

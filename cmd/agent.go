@@ -46,7 +46,7 @@ var agentListCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("cannot connect to daemon: %w", err)
 			}
-			defer cl.Close()
+			defer func() { _ = cl.Close() }()
 
 			result, err := cl.AgentList()
 			if err != nil {

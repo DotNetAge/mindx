@@ -117,7 +117,7 @@ func isValidFileContentForScan(baseDir, relPath string) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	n, _ := f.Read(header)
 	if n == 0 {
 		return false

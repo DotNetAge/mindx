@@ -94,7 +94,7 @@ func main() {
 		fmt.Printf("Error creating temp session dir: %v\n", err)
 		os.Exit(1)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 	tmpStore, err := mindxses.NewFileSessionStore(tmpDir)
 	if err != nil {
 		fmt.Printf("Error creating temp session store: %v\n", err)

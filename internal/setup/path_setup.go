@@ -172,7 +172,7 @@ func addUnixPath(dir string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("open shell rc: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	fmt.Fprintln(f, "")
 	fmt.Fprintln(f, "# MindX")
