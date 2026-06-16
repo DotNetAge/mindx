@@ -143,22 +143,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools musl-dev
-          # musl-tools only provides x86_64-linux-musl-gcc; download aarch64 cross-compiler from musl.cc
+          # For arm64: use zig as reliable cross-compiler (musl.cc often unreachable from CI)
           if [ "${{ matrix.goarch }}" = "arm64" ]; then
-            # Retry up to 3 times with 30s interval (musl.cc can be slow)
-            for i in 1 2 3; do
-              if wget --timeout=300 --tries=3 https://musl.cc/aarch64-linux-musl-cross.tgz -O /tmp/musl-cross.tgz; then
-                break
-              fi
-              echo "Download attempt $i failed, retrying..."
-              sleep 10
-            done
-            if [ ! -f /tmp/musl-cross.tgz ] || [ ! -s /tmp/musl-cross.tgz ]; then
-              echo "ERROR: Failed to download aarch64 musl cross-compiler"
-              exit 1
+            if ! command -v aarch64-linux-musl-gcc &>/dev/null; then
+              echo "aarch64-linux-musl-gcc not found, installing zig as fallback..."
+              sudo apt-get install -y zig
             fi
-            sudo tar xzf /tmp/musl-cross.tgz -C /usr/local
-            rm /tmp/musl-cross.tgz
           fi
 
       - name: Setup MinGW + zip (Windows CGO)
@@ -177,7 +167,12 @@ jobs:
             if [ "$GOARCH" = "amd64" ]; then
               export CC=x86_64-linux-musl-gcc
             elif [ "$GOARCH" = "arm64" ]; then
-              export CC=aarch64-linux-musl-gcc
+              # Use native musl-gcc if available, otherwise fall back to zig
+              if command -v aarch64-linux-musl-gcc &>/dev/null; then
+                export CC=aarch64-linux-musl-gcc
+              else
+                export CC="zig cc -target aarch64-linux-musl"
+              fi
             fi
           fi
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
