@@ -86,7 +86,7 @@ func TestDefaultLogger_Info(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Info("test info", "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		_ = dl.Close()
+		_ = _ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -102,7 +102,7 @@ func TestDefaultLogger_Error(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Error("test error", nil, "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		_ = dl.Close()
+		_ = _ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -117,7 +117,7 @@ func TestDefaultLogger_Debug(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Debug("test debug", "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		_ = dl.Close()
+		_ = _ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -133,7 +133,7 @@ func TestDefaultLogger_Warn(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Warn("test warn", "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		_ = dl.Close()
+		_ = _ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -152,7 +152,7 @@ func TestDefaultLogger_LevelFiltering(t *testing.T) {
 	fileLogger.Error("error should appear", nil)
 	fileLogger.Warn("warn should appear")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		_ = dl.Close()
+		_ = _ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -169,7 +169,7 @@ func TestDefaultLogger_ErrorWithNilError(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Error("test error", nil, "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -185,7 +185,7 @@ func TestDefaultLogger_ErrorWithRealError(t *testing.T) {
 	testErr := os.ErrPermission
 	fileLogger.Error("test error", testErr, "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -201,7 +201,7 @@ func TestDefaultLogger_KeyvalsFormat(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Info("test message", "string", "value", "int", 42, "bool", true)
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -217,7 +217,7 @@ func TestDefaultLogger_NoKeyvals(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Info("test message")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -231,7 +231,7 @@ func TestDefaultLogger_OddKeyvals(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Info("test message", "orphan_key")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -260,7 +260,7 @@ func TestDefaultLogger_ErrorWithErrorAndKeyvals(t *testing.T) {
 	testErr := errors.New("disk full")
 	fileLogger.Error("write failed", testErr, "file", "data.bin", "size", 1024)
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)

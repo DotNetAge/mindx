@@ -221,7 +221,7 @@ func setupDaemonWindows(workspaceDir string) error {
 	if err := os.WriteFile(tmpXML, toUTF16LE(xmlContent), 0644); err != nil {
 		return fmt.Errorf("write task xml: %w", err)
 	}
-	defer os.Remove(tmpXML)
+	defer func() { _ = os.Remove(tmpXML) }()
 
 	// Try schtasks /create first
 	if err := createSchtasks(taskName, tmpXML); err == nil {

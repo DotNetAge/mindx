@@ -65,7 +65,7 @@ func (tm *terminalManager) cleanupClient(clientID string) {
 	defer tm.mu.Unlock()
 	for id, ts := range tm.sessions {
 		if ts.clientID == clientID {
-			ts.pty.Close()
+			_ = ts.pty.Close()
 			_ = ts.cmd.Process.Kill()
 			delete(tm.sessions, id)
 		}
