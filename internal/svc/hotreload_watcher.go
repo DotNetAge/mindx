@@ -25,6 +25,7 @@ const reloadDebounce = 500 * time.Millisecond
 // disjoint directory trees:
 //   - FileWatchService  → user project working directories (dynamic, via watchlist)
 //   - HotReloadWatcher   → ~/.mindx/agents/ and ~/.mindx/skills/ (fixed paths)
+//
 // Both use independent fsnotify.Watcher instances.
 type HotReloadWatcher struct {
 	app    *core.App

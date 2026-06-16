@@ -12,6 +12,9 @@ Most of these work offline (no daemon required).
 | Skip PATH setup | `mindx install --no-path` | When PATH is already configured |
 | No desktop shortcut | `mindx install --no-shortcut` | Headless environments |
 | Custom install dir | `mindx install --dir /opt/mindx` | Non-default location |
+| **Full uninstall** | `mindx uninstall` | Stops daemon, removes service, cleans PATH, deletes binary, removes shortcut |
+| Uninstall (keep binary) | `mindx uninstall --keep-binary` | Remove integrations only, keep binary in place |
+| Skip daemon cleanup | `mindx uninstall --no-daemon` | Don't touch daemon service during uninstall |
 | Check version | `mindx version` | Shows build info, Go runtime, platform |
 | Check for updates | `mindx upgrade --check` | Dry run — does not install |
 | Upgrade to latest | `mindx upgrade` | Downloads and installs from GitHub |
@@ -99,6 +102,12 @@ mindx status
 mindx doctor -f
 mindx logs -n 50
 mindx log read --limit 30 --stream error
+```
+
+### Complete Removal
+```bash
+mindx uninstall              # Remove all system integrations
+rm -rf ~/.mindx             # Optionally remove all data (logs, sessions, config)
 ```
 
 ### Development Mode

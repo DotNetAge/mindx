@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/DotNetAge/gort/pkg/gateway"
@@ -24,7 +25,8 @@ const (
 
 // Client is a thin JSON-RPC client for the MindX daemon.
 type Client struct {
-	gw *gateway.Client
+	gw        *gateway.Client
+	closeOnce sync.Once
 }
 
 // Dial connects to the MindX daemon at the given WebSocket address.
@@ -43,8 +45,15 @@ func Dial(addr string) (*Client, error) {
 }
 
 // Close shuts down the client connection.
+// Safe to call multiple times; subsequent calls are no-ops.
+// This works around a race in gort's gateway.Client where readLoop may also
+// call Close() after the main goroutine has already closed the done channel.
 func (c *Client) Close() error {
-	return c.gw.Close()
+	var err error
+	c.closeOnce.Do(func() {
+		err = c.gw.Close()
+	})
+	return err
 }
 
 // Call invokes a JSON-RPC method and returns the raw result.
