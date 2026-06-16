@@ -290,9 +290,9 @@ jobs:
           go build \
             -trimpath \
             -ldflags="-s -w \
-              -X github.com/DotNetAge/mindx/cmd.Version=${VERSION#v} \
-              -X github.com/DotNetAge/mindx/cmd.Commit=${COMMIT} \
-              -X github.com/DotNetAge/mindx/cmd.BuildTime=${BUILD_TIME}" \
+              -X github.com/DotNetAge/mindx/internal/core.Version=${VERSION#v} \
+              -X github.com/DotNetAge/mindx/internal/core.Commit=${COMMIT} \
+              -X github.com/DotNetAge/mindx/internal/core.BuildTime=${BUILD_TIME}" \
             -o dist/${BINARY_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}${SUFFIX} \
             .
 
