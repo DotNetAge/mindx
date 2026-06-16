@@ -86,7 +86,7 @@ func TestDefaultLogger_Info(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Info("test info", "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		_ = _ = dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -102,7 +102,7 @@ func TestDefaultLogger_Error(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Error("test error", nil, "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		_ = _ = dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -117,7 +117,7 @@ func TestDefaultLogger_Debug(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Debug("test debug", "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		_ = _ = dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -133,7 +133,7 @@ func TestDefaultLogger_Warn(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Warn("test warn", "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		_ = _ = dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -152,7 +152,7 @@ func TestDefaultLogger_LevelFiltering(t *testing.T) {
 	fileLogger.Error("error should appear", nil)
 	fileLogger.Warn("warn should appear")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		_ = _ = dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
