@@ -10,22 +10,26 @@ import (
 
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall",
-	Short: "Uninstall MindX from system (binary + PATH + daemon + shortcut)",
-	Long: `Removes MindX from the system, reversing the installation:
+	Short: "Uninstall MindX from system (daemon + PATH + shortcut)",
+	Long: `Removes MindX system integrations, reversing the installation:
 
   - Stops and unregisters the daemon service
   - Removes the install directory from system PATH
   - Removes desktop shortcut (Windows only)
-  - Deletes the installed binary
+  - Deletes installed binary (unless managed by package manager)
 
-This is the inverse of 'mindx install'. By default all components are removed.
-Use flags to skip specific cleanup steps.
+Behavior adapts to how MindX was installed:
+  - **Package manager** (Homebrew, etc.): Skips binary removal — use
+    'brew uninstall mindx' instead. Only cleans up daemon/PATH/shortcut.
+  - **Manual download**: Full cleanup including binary removal.
+
+This is the inverse of 'mindx install'. By default all removable components are
+cleaned up. Use flags to skip specific steps.
 
 Examples:
-  mindx uninstall                  # Full uninstallation with all defaults
-  mindx uninstall --no-daemon      # Skip daemon unregistration
+  mindx uninstall                  # Smart uninstall (auto-detects source)
   mindx uninstall --keep-binary    # Remove integrations but keep binary
-  mindx uninstall --dir /opt/mindx # Custom install directory`,
+  mindx uninstall --no-daemon      # Skip daemon unregistration`,
 	RunE: runUninstall,
 }
 
@@ -64,6 +68,7 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	fmt.Println("────────────────────────────────────────")
 	fmt.Println("Uninstallation complete!")
 	fmt.Println()
+	fmt.Printf("   Source:  %s\n", result.Source)
 
 	if result.DaemonRemoved {
 		fmt.Println("   Daemon:   unregistered")
@@ -76,13 +81,15 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	}
 	if result.BinaryRemoved {
 		fmt.Println("   Binary:   removed")
+	} else if !uninstallKeepBinary && result.Source == setup.SourceManaged {
+		fmt.Println("   Binary:   skipped (package manager owned)")
 	}
 	if uninstallKeepBinary {
 		fmt.Println("   Binary:   kept (--keep-binary)")
 	}
 
 	allClean := !result.DaemonRemoved && !result.PathCleaned && !result.ShortcutRemoved && !result.BinaryRemoved
-	if allClean && !uninstallKeepBinary {
+	if allClean && !uninstallKeepBinary && result.Source != setup.SourceManaged {
 		fmt.Println("   (nothing to clean — already uninstalled)")
 	}
 

@@ -10,20 +10,22 @@ import (
 
 var installCmd = &cobra.Command{
 	Use:   "install",
-	Short: "Install MindX to system (binary + PATH + daemon + shortcut)",
-	Long: `Installs MindX to a platform-appropriate system location and configures
-all necessary integrations:
+	Short: "Install MindX to system (daemon + PATH + shortcut)",
+	Long: `Installs MindX and configures all necessary system integrations.
 
-  - Copies binary to install directory
-  - Adds directory to system PATH
-  - Registers auto-start daemon service
-  - Creates desktop shortcut (Windows only)
+Behavior adapts to how MindX was installed:
+
+  - **Package manager** (Homebrew, apt, etc.): Skips binary copy and PATH setup.
+    Only registers the daemon service. The package manager owns the binary.
+  - **Manual download**: Copies binary to a stable location, adds to PATH,
+    registers daemon, and creates desktop shortcut (Windows).
 
 This command requires administrator / elevated privileges on Windows (for System PATH
 and schtasks registration). On macOS/Linux, user-level installation is sufficient.
 
 Examples:
-  mindx install                  # Full installation with all defaults
+  mindx install                  # Smart install (auto-detects source)
+  mindx install --force-copy     # Force copy even from managed location
   mindx install --no-daemon      # Skip daemon registration
   mindx install --dir /opt/mindx # Custom install directory`,
 	RunE: runInstall,
@@ -34,6 +36,7 @@ var (
 	installNoDaemon   bool
 	installNoPath     bool
 	installNoShortcut bool
+	installForceCopy  bool
 )
 
 func init() {
@@ -42,6 +45,7 @@ func init() {
 	installCmd.Flags().BoolVar(&installNoDaemon, "no-daemon", false, "Skip daemon/service registration")
 	installCmd.Flags().BoolVar(&installNoPath, "no-path", false, "Skip PATH configuration")
 	installCmd.Flags().BoolVar(&installNoShortcut, "no-shortcut", false, "Skip desktop shortcut creation")
+	installCmd.Flags().BoolVar(&installForceCopy, "force-copy", false, "Force copy binary even from managed location")
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {
@@ -53,6 +57,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		SkipDaemon:   installNoDaemon,
 		SkipPath:     installNoPath,
 		SkipShortcut: installNoShortcut,
+		ForceCopy:    installForceCopy,
 	}
 
 	result, err := setup.Install(opts)
@@ -62,9 +67,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 	fmt.Println("────────────────────────────────────────")
-	fmt.Println("✅ Installation complete!")
+	fmt.Println("Installation complete!")
 	fmt.Println()
-	fmt.Printf("   Binary: %s\n", result.BinaryDest)
+	fmt.Printf("   Source:  %s\n", result.Source)
+	fmt.Printf("   Binary:  %s\n", result.BinaryDest)
 
 	if result.PathConfigured {
 		fmt.Println("   PATH:   configured")
