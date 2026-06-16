@@ -43,7 +43,7 @@ var tokenOverviewCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.TokenUsageOverview()
 		if err != nil {
@@ -88,7 +88,7 @@ var tokenMonthlyCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.TokenUsageMonthly(year, month)
 		if err != nil {
@@ -139,7 +139,7 @@ var tokenByModelCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.TokenUsageByModel(model, year, month)
 		if err != nil {
@@ -173,7 +173,7 @@ var tokenTotalCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.TokenUsageTotal()
 		if err != nil {
@@ -212,7 +212,7 @@ var tokenSessionCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.TokenUsageSession(sessionID)
 		if err != nil {

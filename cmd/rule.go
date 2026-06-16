@@ -55,7 +55,7 @@ var ruleListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.RuleList()
 		if err != nil {
@@ -112,7 +112,7 @@ var ruleGetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.RuleGet(id)
 		if err != nil {
@@ -171,7 +171,7 @@ var ruleCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.RuleCreate(rpc.RuleCreateParams{
 			ID:       id,
@@ -233,7 +233,7 @@ var ruleUpdateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.RuleUpdate(params)
 		if err != nil {
@@ -269,7 +269,7 @@ var ruleDeleteCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.RuleDelete(id)
 		if err != nil {

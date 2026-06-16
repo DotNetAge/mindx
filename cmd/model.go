@@ -39,7 +39,7 @@ var modelListCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("cannot connect to daemon: %w", err)
 			}
-			defer cl.Close()
+			defer func() { _ = cl.Close() }()
 
 			result, err := cl.ModelList()
 			if err != nil {
@@ -332,7 +332,7 @@ var modelSwitchCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("cannot connect to daemon: %w", err)
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.ModelSwitch(name, provider)
 		if err != nil {
 			return err

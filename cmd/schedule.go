@@ -52,7 +52,7 @@ var scheduleListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.ScheduleList()
 		if err != nil {
@@ -113,7 +113,7 @@ var scheduleAddCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.ScheduleAdd(rpc.ScheduleAddParams{
 			Agent:      agent,
@@ -155,7 +155,7 @@ var scheduleDeleteCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 
 		result, err := cl.ScheduleDelete(id)
 		if err != nil {
