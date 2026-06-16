@@ -959,7 +959,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		_, err := rt.Ask(resolvedAgentName, content, s).
 			WithContext(ctx).
 			OnThinking(func(chunk string) {
-				gw.SendResponse(clientID, gateway.RespThinkingDelta, i18n.T("svc.event.thinking"), chunk, gateway.WithSessionID(sid))
+				_ = gw.SendResponse(clientID, gateway.RespThinkingDelta, i18n.T("svc.event.thinking"), chunk, gateway.WithSessionID(sid))
 			}).
 			OnContent(func(chunk string) {
 				d.sendEvent(clientID, sid, gateway.RespMarkdown, i18n.T("svc.event.outputting"), chunk)
@@ -1228,8 +1228,8 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 				"error", err,
 			)
 		} else {
-			os.Setenv("MINDX_PROJECT_DIR", targetDir)
-			os.Setenv("MINDX_SESSION_ID", sessionID)
+			_ = os.Setenv("MINDX_PROJECT_DIR", targetDir)
+			_ = os.Setenv("MINDX_SESSION_ID", sessionID)
 			d.logger.Info("scheduled task: set execution context",
 				"session_id", sessionID,
 				"project_dir", targetDir,

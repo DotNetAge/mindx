@@ -102,7 +102,7 @@ func TestDefaultLogger_Error(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Error("test error", nil, "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)
@@ -117,7 +117,7 @@ func TestDefaultLogger_Debug(t *testing.T) {
 	fileLogger, _ := DefaultFileLogger(filePath, WithLevel(DEBUG))
 	fileLogger.Debug("test debug", "key", "value")
 	if dl, ok := fileLogger.(*defaultLogger); ok {
-		dl.Close()
+		_ = dl.Close()
 	}
 
 	content, err := os.ReadFile(filePath)

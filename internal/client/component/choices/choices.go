@@ -57,7 +57,7 @@ func (d choiceDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	}
 
 	if isCursor {
-		fmt.Fprint(w, style.CyanStyle.Render(line))
+		_, _ = fmt.Fprint(w, style.CyanStyle.Render(line))
 	} else {
 		fmt.Fprint(w, style.DimStyle.Render(line))
 	}

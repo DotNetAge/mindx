@@ -44,7 +44,7 @@ func ViewSideBySideDiff(diff string, width int) string {
 	for _, dl := range lines {
 		switch dl.kind {
 		case '@':
-			fmt.Sscanf(dl.text, "@@ -%d,%*d +%d,%*d", &oldNum, &newNum)
+			_, _ = fmt.Sscanf(dl.text, "@@ -%d,%*d +%d,%*d", &oldNum, &newNum)
 			inHunk = true
 
 			if started {

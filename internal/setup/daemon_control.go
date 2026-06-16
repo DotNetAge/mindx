@@ -107,7 +107,7 @@ func startDaemonMacOS(workspaceDir string) error {
 			// Truly not registered — proceed to bootstrap directly.
 		} else {
 			// Ghost/stale state: try forced removal via unload (legacy API) as fallback.
-			exec.Command("launchctl", "unload", agentPlist).Run()
+			_ = exec.Command("launchctl", "unload", agentPlist).Run()
 			time.Sleep(200 * time.Millisecond)
 		}
 	}

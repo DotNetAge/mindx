@@ -23,20 +23,20 @@ func newTestDaemon(t *testing.T) (*Daemon, func()) {
 	sessionsDir := filepath.Join(tmpDir, "sessions")
 	dataDir := filepath.Join(tmpDir, "data")
 	prefsDir := filepath.Join(tmpDir, "prefs")
-	os.MkdirAll(sessionsDir, 0755)
-	os.MkdirAll(dataDir, 0755)
-	os.MkdirAll(prefsDir, 0755)
-	os.MkdirAll(filepath.Join(tmpDir, "agents"), 0755)
-	os.MkdirAll(filepath.Join(tmpDir, "settings"), 0755)
-	os.WriteFile(filepath.Join(tmpDir, "settings", "models.yml"), []byte{}, 0644)
-	os.WriteFile(filepath.Join(tmpDir, "settings", "rules.yml"), []byte{}, 0644)
+	_ = os.MkdirAll(sessionsDir, 0755)
+	_ = os.MkdirAll(dataDir, 0755)
+	_ = os.MkdirAll(prefsDir, 0755)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "agents"), 0755)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "settings"), 0755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "settings", "models.yml"), []byte{}, 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "settings", "rules.yml"), []byte{}, 0644)
 
 	app, err := core.DefaultApp(core.DefaultMindxConfig(tmpDir))
 	if err != nil {
 		t.Fatalf("DefaultApp() error = %v", err)
 	}
 
-	app.SetTestDir(tmpDir)
+	_ = app.SetTestDir(tmpDir)
 
 	d := NewDaemon(app, ":0", "/ws", nil)
 

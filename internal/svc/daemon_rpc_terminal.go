@@ -121,7 +121,7 @@ func (d *Daemon) handleTerminalStart(ctx context.Context, params json.RawMessage
 				return
 			}
 			if n > 0 {
-				d.gw.SendResponse(clientID, gateway.ResponseType("terminal.output"),
+				_ = d.gw.SendResponse(clientID, gateway.ResponseType("terminal.output"),
 					"", string(buf[:n]),
 					gateway.WithSessionID(sessionID))
 			}

@@ -236,7 +236,7 @@ func (a *App) isDaemonRunning() bool {
 	if err != nil {
 		return false
 	}
-	conn.Close()
+	_ = conn.Close()
 	if a.logger != nil {
 		a.logger.Info("daemon detected, opening LongTerm memory in read-only mode")
 	}

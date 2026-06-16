@@ -114,7 +114,7 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	pathFile := filepath.Join(filepath.Dir(dst), ".path")
-	os.WriteFile(pathFile, []byte(src), 0644)
+	_ = os.WriteFile(pathFile, []byte(src), 0644)
 	return nil
 }
 
