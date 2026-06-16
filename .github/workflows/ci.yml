@@ -238,7 +238,18 @@ jobs:
           sudo apt-get install -y musl-tools musl-dev
           # musl-tools only provides x86_64-linux-musl-gcc; download aarch64 cross-compiler from musl.cc
           if [ "${{ matrix.goarch }}" = "arm64" ]; then
-            wget -q https://musl.cc/aarch64-linux-musl-cross.tgz -O /tmp/musl-cross.tgz
+            # Retry up to 3 times with 30s interval (musl.cc can be slow)
+            for i in 1 2 3; do
+              if wget --timeout=300 --tries=3 https://musl.cc/aarch64-linux-musl-cross.tgz -O /tmp/musl-cross.tgz; then
+                break
+              fi
+              echo "Download attempt $i failed, retrying..."
+              sleep 10
+            done
+            if [ ! -f /tmp/musl-cross.tgz ] || [ ! -s /tmp/musl-cross.tgz ]; then
+              echo "ERROR: Failed to download aarch64 musl cross-compiler"
+              exit 1
+            fi
             sudo tar xzf /tmp/musl-cross.tgz -C /usr/local
             rm /tmp/musl-cross.tgz
           fi
