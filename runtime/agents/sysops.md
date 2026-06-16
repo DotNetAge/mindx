@@ -9,8 +9,8 @@ description: >
 skills:
   - file-organizer
   - mindx-cli
-  - xlsx
-  - pdf
+  - system-diag
+  - docker-expert
 meta:
   name_zh: 系统运维
   role_zh: 运维工程师

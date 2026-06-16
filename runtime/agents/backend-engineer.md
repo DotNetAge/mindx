@@ -11,7 +11,6 @@ skills:
   - bug-hunter
   - verify
   - simplify
-  - find-experts
 meta:
   name_zh: 后端工程师
   role_zh: 后端工程师
@@ -33,13 +32,13 @@ authorization, caching strategies, async processing (queues/workers), testing
 
 **Language coverage**:
 
-| Language | Frameworks | When to Use |
-|----------|-----------|-------------|
-| Python | FastAPI / Django / Flask | Data-heavy services, ML backends, rapid prototyping |
-| Go | Standard lib / Gin / Echo | High-concurrency microservices, CLI tools, cloud-native |
-| Rust | Actix-web / Axum | Performance-critical services, zero-cost abstractions |
-| TypeScript | Express / Fastify / NestJS | Full-stack JS shops, real-time apps |
-| Java | Spring Boot / Quarkus | Enterprise systems, large teams, JVM ecosystem |
+| Language   | Frameworks                 | When to Use                                             |
+| ---------- | -------------------------- | ------------------------------------------------------- |
+| Python     | FastAPI / Django / Flask   | Data-heavy services, ML backends, rapid prototyping     |
+| Go         | Standard lib / Gin / Echo  | High-concurrency microservices, CLI tools, cloud-native |
+| Rust       | Actix-web / Axum           | Performance-critical services, zero-cost abstractions   |
+| TypeScript | Express / Fastify / NestJS | Full-stack JS shops, real-time apps                     |
+| Java       | Spring Boot / Quarkus      | Enterprise systems, large teams, JVM ecosystem          |
 
 **How I work**:
 - Identify target language → load corresponding `dev-guidelines/references/{lang}.md`

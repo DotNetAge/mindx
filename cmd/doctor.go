@@ -149,7 +149,7 @@ func runAllChecks() []Check {
 			Name:    "Daemon Service",
 			Status:  "⚠️",
 			Message: "Registered but not running — WebUI/MacUI may not connect",
-			Fix:     nil, // User should explicitly start it
+			Fix:     func() error { return setup.StartDaemon() },
 		})
 	case setup.DaemonNotInstalled:
 		checks = append(checks, Check{
