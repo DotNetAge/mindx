@@ -236,12 +236,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools musl-dev
-          # For arm64: use zig as reliable cross-compiler (musl.cc often unreachable from CI)
+          # For arm64: install zig as cross-compiler fallback (musl.cc often unreachable from CI)
           if [ "${{ matrix.goarch }}" = "arm64" ]; then
-            # Try musl-tools first, fall back to zig
             if ! command -v aarch64-linux-musl-gcc &>/dev/null; then
-              echo "aarch64-linux-musl-gcc not found, installing zig as fallback..."
-              sudo apt-get install -y zig
+              echo "aarch64-linux-musl-gcc not found, installing zig..."
+              ZIG_VER="0.13.0"
+              wget -q "https://ziglang.org/download/${ZIG_VER}/zig-linux-x86_64-${ZIG_VER}.tar.xz" -O /tmp/zig.tar.xz
+              sudo tar xf /tmp/zig.tar.xz -C /usr/local
+              sudo ln -sf /usr/local/zig-linux-x86_64-${ZIG_VER}/zig /usr/local/bin/zig
+              rm /tmp/zig.tar.xz
+              zig version
             fi
           fi
 
