@@ -2,8 +2,8 @@ package memory
 
 import (
 	"os"
-	"runtime"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 

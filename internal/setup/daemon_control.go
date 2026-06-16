@@ -39,6 +39,17 @@ func (s DaemonStatus) String() string {
 // CheckDaemon returns the current daemon status.
 func CheckDaemon() (DaemonStatus, error) {
 	workspaceDir := core.DefaultUserPrefsDir()
+
+	// Sandbox environments use their own service managers.
+	if method := getInstallMethod(workspaceDir); method != "" {
+		switch method {
+		case "snapctl":
+			return checkDaemonSnap()
+		case "dbus":
+			return checkDaemonFlatpak()
+		}
+	}
+
 	switch runtime.GOOS {
 	case "darwin":
 		return checkDaemonMacOS(workspaceDir)
@@ -55,6 +66,16 @@ func CheckDaemon() (DaemonStatus, error) {
 // Returns an error if the daemon is not installed or cannot be started.
 func StartDaemon() error {
 	workspaceDir := core.DefaultUserPrefsDir()
+
+	if method := getInstallMethod(workspaceDir); method != "" {
+		switch method {
+		case "snapctl":
+			return startDaemonSnap()
+		case "dbus":
+			return fmt.Errorf("Flatpak daemon is D-Bus-activated; it starts on-demand automatically")
+		}
+	}
+
 	switch runtime.GOOS {
 	case "darwin":
 		return startDaemonMacOS(workspaceDir)
@@ -71,6 +92,16 @@ func StartDaemon() error {
 // Returns an error if the daemon cannot be stopped or was not installed.
 func StopDaemon() error {
 	workspaceDir := core.DefaultUserPrefsDir()
+
+	if method := getInstallMethod(workspaceDir); method != "" {
+		switch method {
+		case "snapctl":
+			return stopDaemonSnap()
+		case "dbus":
+			return fmt.Errorf("Flatpak daemon is D-Bus-activated; it stops automatically when idle")
+		}
+	}
+
 	switch runtime.GOOS {
 	case "darwin":
 		return stopDaemonMacOS(workspaceDir)
@@ -168,7 +199,7 @@ func startDaemonDirect(workspaceDir string) error {
 	}
 
 	logDir := filepath.Join(workspaceDir, "logs")
-_ = os.MkdirAll(logDir, 0755)
+	_ = os.MkdirAll(logDir, 0755)
 
 	cmd := exec.Command(exePath, "daemon")
 	cmd.Env = append(os.Environ(), "MINDX_WORKSPACE="+workspaceDir)
@@ -184,15 +215,30 @@ _ = os.MkdirAll(logDir, 0755)
 		return fmt.Errorf("start daemon process: %w", err)
 	}
 
-	// Detach: release the process so it outlives the parent.
-	_ = cmd.Process.Release()
-
-	// Brief pause then verify the child is still alive.
-	time.Sleep(300 * time.Millisecond)
-	if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
-		return fmt.Errorf("daemon process exited immediately; check %s for details",
+	// Verify the child is still alive before detaching.
+	// Wait up to 2s for early crashes (port conflict, bad config, missing deps).
+	alive := false
+	for i := 0; i < 4; i++ {
+		time.Sleep(500 * time.Millisecond)
+		if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
+			return fmt.Errorf("daemon process exited unexpectedly after %dms; check logs:\n  %s\n  %s",
+				(i+1)*500,
+				filepath.Join(logDir, "daemon.log"),
+				filepath.Join(logDir, "daemon.err.log"))
+		}
+		// Process still running after first check — likely healthy.
+		if i == 0 {
+			alive = true
+		}
+	}
+	if !alive {
+		return fmt.Errorf("daemon process exited within 500ms of startup; check logs:\n  %s\n  %s",
+			filepath.Join(logDir, "daemon.log"),
 			filepath.Join(logDir, "daemon.err.log"))
 	}
+
+	// Detach: release the process so it outlives the parent.
+	_ = cmd.Process.Release()
 
 	fmt.Fprintln(os.Stderr, "  Daemon started via direct process (not launchd-managed).")
 
@@ -411,7 +457,8 @@ func parseIntSafe(s string) int {
 }
 
 // isRunningTask checks if the MindXDaemon scheduled task is currently running.
-	//nolint:unused
+//
+//nolint:unused
 func _isRunningTask() (bool, error) {
 	cmd := exec.Command("schtasks", "/query", "/tn", "MindXDaemon", "/fo", "CSV", "/nh")
 	out, err := cmd.CombinedOutput()
@@ -419,4 +466,63 @@ func _isRunningTask() (bool, error) {
 		return false, err
 	}
 	return strings.Contains(string(out), "Running"), nil
+}
+
+// ── Install method helpers ───────────────────────────────────────────────
+
+// getInstallMethod returns the daemon install method from config, or empty
+// string if not set / config unreadable (fall through to OS default).
+func getInstallMethod(workspaceDir string) string {
+	cfg, err := core.LoadMindxConfig(workspaceDir)
+	if err != nil {
+		return ""
+	}
+	return cfg.Daemon.InstallMethod
+}
+
+// ── Snap daemon control (snapctl) ────────────────────────────────────────
+
+func checkDaemonSnap() (DaemonStatus, error) {
+	out, err := exec.Command("snapctl", "services", "mindx.daemon").CombinedOutput()
+	if err != nil {
+		return DaemonNotInstalled, nil
+	}
+	s := string(out)
+	if strings.Contains(s, "active") {
+		return DaemonRunning, nil
+	}
+	return DaemonStopped, nil
+}
+
+func startDaemonSnap() error {
+	out, err := exec.Command("snapctl", "start", "mindx.daemon").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("snapctl start: %w\n%s", err, string(out))
+	}
+	return nil
+}
+
+func stopDaemonSnap() error {
+	out, err := exec.Command("snapctl", "stop", "mindx.daemon").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("snapctl stop: %w\n%s", err, string(out))
+	}
+	return nil
+}
+
+// ── Flatpak daemon control (D-Bus) ───────────────────────────────────────
+
+func checkDaemonFlatpak() (DaemonStatus, error) {
+	// Flatpak daemon is D-Bus-activated — it's "running" if the D-Bus name is owned.
+	cmd := exec.Command("busctl", "--user", "get-name-owner", "com.dotnetage.MindX.Daemon")
+	if out, err := cmd.CombinedOutput(); err == nil && len(strings.TrimSpace(string(out))) > 0 {
+		return DaemonRunning, nil
+	}
+	// busctl may not be available inside flatpak; fall back to process check.
+	exePath, _ := os.Executable()
+	pgrep := exec.Command("pgrep", "-f", exePath+" daemon")
+	if pgrepOut, pgrepErr := pgrep.CombinedOutput(); pgrepErr == nil && strings.TrimSpace(string(pgrepOut)) != "" {
+		return DaemonRunning, nil
+	}
+	return DaemonStopped, nil
 }
