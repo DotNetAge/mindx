@@ -44,11 +44,18 @@ RUN python3 -m venv /home/mindx/.mindx/.venv && \
 USER mindx
 WORKDIR /home/mindx
 
-# Deploy runtime environment + pre-built binary
+# Deploy runtime environment + pre-built binaries (multi-platform)
 COPY --chown=mindx:mindx runtime/ /home/mindx/.mindx/
 
-# Ensure binary is executable
-RUN [ -f /home/mindx/.mindx/bin/mindx ] && chmod +x /home/mindx/.mindx/bin/mindx || true
+# Select correct binary for target architecture
+RUN ARCH=$(uname -m); \
+    if [ "$ARCH" = "x86_64" ]; then \
+    cp /home/mindx/.mindx/bin/mindx-amd64 /home/mindx/.mindx/bin/mindx; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+    cp /home/mindx/.mindx/bin/mindx-arm64 /home/mindx/.mindx/bin/mindx; \
+    fi && \
+    chmod +x /home/mindx/.mindx/bin/mindx && \
+    rm -f /home/mindx/.mindx/bin/mindx-amd64 /home/mindx/.mindx/bin/mindx-arm64
 
 # Fix venv path in mindx.json for container
 RUN sed -i 's|/Users/ray/.mindx/.venv|/home/mindx/.mindx/.venv|g' \
