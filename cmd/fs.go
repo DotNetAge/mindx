@@ -55,7 +55,7 @@ var fsListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.FSList(args[0])
 		if err != nil {
 			return err

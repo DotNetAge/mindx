@@ -78,7 +78,7 @@ var entityTagsSaveCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer cl.Close()
+		defer func() { _ = cl.Close() }()
 		result, err := cl.EntityTagsSave(defs)
 		if err != nil {
 			return err

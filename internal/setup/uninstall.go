@@ -137,7 +137,7 @@ func Uninstall(opts UninstallOptions) (*UninstallResult, error) {
 
 					// Try to remove empty install directory
 					if entries, dirErr := os.ReadDir(installDir); dirErr == nil && len(entries) == 0 {
-						os.Remove(installDir)
+						_ = os.Remove(installDir)
 					}
 				}
 			} else {
