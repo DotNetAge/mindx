@@ -12,12 +12,12 @@ import (
 )
 
 type DaemonConfig struct {
-	Enabled        bool   `json:"enabled"`
-	Port           int    `json:"port,omitempty"`
-	Path           string `json:"path,omitempty"`
-	AutoStart      bool   `json:"autostart,omitempty"`
-	Installed      bool   `json:"installed,omitempty"`
-	InstallMethod  string `json:"install_method,omitempty"` // "launchd" | "systemd" | "snapctl" | "schtasks" | "dbus"
+	Enabled       bool   `json:"enabled"`
+	Port          int    `json:"port,omitempty"`
+	Path          string `json:"path,omitempty"`
+	AutoStart     bool   `json:"autostart,omitempty"`
+	Installed     bool   `json:"installed,omitempty"`
+	InstallMethod string `json:"install_method,omitempty"` // "launchd" | "systemd" | "snapctl" | "schtasks" | "dbus"
 }
 
 type PythonConfig struct {
