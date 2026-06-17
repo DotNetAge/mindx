@@ -179,7 +179,7 @@
       <Custom Action="ConfigureDaemonDisplayName" After="ConfigureDaemonDir">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
       <Custom Action="ConfigureDaemonDescription" After="ConfigureDaemonDisplayName">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
       <Custom Action="StartDaemonService" After="ConfigureDaemonDescription">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
-      <Custom Action="CreatePythonVenv" After="StartDaemonService">NOT Installed AND SETUP_VENV = "1" AND PYTHON_DETECTED <> ""</Custom>
+      <Custom Action="CreatePythonVenv" After="StartDaemonService">NOT Installed AND SETUP_VENV = "1" AND PYTHON_DETECTED != ""</Custom>
       <Custom Action="CreateShortcuts" After="CreatePythonVenv">NOT Installed AND CREATE_SHORTCUT = "1"</Custom>
     </InstallExecuteSequence>
 
@@ -212,7 +212,7 @@
       <Control Id="ApiKeyHint" Type="Text" X="370" Y="140" Width="100" Height="14" Disabled="yes" NoPrefix="yes" Red="yes">
         <Text>Required</Text>
         <Condition Action="show">APIKEY_INPUT = ""</Condition>
-        <Condition Action="hide">APIKEY_INPUT &lt;&gt; ""</Condition>
+        <Condition Action="hide">APIKEY_INPUT != ""</Condition>
       </Control>
 
       <Control Id="OptionsGroupBox" Type="GroupBox" X="18" Y="168" Width="444" Height="140" Text="Options" />
@@ -224,11 +224,11 @@
       <Control Id="PythonStatusNone" Type="Text" X="46" Y="274" Width="300" Height="12" Disabled="yes" NoPrefix="yes">
         <Text>Python not found — venv setup will be skipped</Text>
         <Condition Action="show">PYTHON_DETECTED = ""</Condition>
-        <Condition Action="hide">PYTHON_DETECTED &lt;&gt; ""</Condition>
+        <Condition Action="hide">PYTHON_DETECTED != ""</Condition>
       </Control>
       <Control Id="PythonStatusFound" Type="Text" X="46" Y="274" Width="300" Height="12" Disabled="yes" NoPrefix="yes" Hidden="yes">
         <Text>Python detected — virtual environment will be created during installation</Text>
-        <Condition Action="show">PYTHON_DETECTED &lt;&gt; ""</Condition>
+        <Condition Action="show">PYTHON_DETECTED != ""</Condition>
         <Condition Action="hide">PYTHON_DETECTED = ""</Condition>
       </Control>
 
