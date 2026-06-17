@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "description": "Healthcare organization: hospital, regulatory body, NGO, or research institution",
+  "properties": {
+    "name": { "type": "string", "description": "Organization name" },
+    "org_type": {
+      "type": "string",
+      "enum": ["hospital", "regulator", "NGO", "research"],
+      "description": "Category of healthcare organization"
+    },
+    "location": {
+      "type": "string",
+      "description": "Geographic location or headquarters"
+    },
+    "specialties": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Medical specialties or areas of focus"
+    },
+    "size": {
+      "type": "string",
+      "description": "Approximate size or capacity (e.g., number of beds, employees)"
+    }
+  },
+  "required": ["name"]
+}

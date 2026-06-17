@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "description": "Market event — rate decision, earnings report, IPO, merger, economic data release",
+  "properties": {
+    "name": { "type": "string", "description": "Event name or title" },
+    "event_type": {
+      "type": "string",
+      "enum": ["rate_decision", "earnings", "IPO", "merger"],
+      "description": "Category of the event"
+    },
+    "date": {
+      "type": "string",
+      "description": "Date or timestamp of the event"
+    },
+    "impact_level": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Perceived market impact level"
+    },
+    "affected_assets": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Assets or sectors impacted by this event"
+    },
+    "details": {
+      "type": "string",
+      "description": "Additional context or description of the event"
+    }
+  },
+  "required": ["name", "event_type"]
+}

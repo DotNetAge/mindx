@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "description": "Investment or trading strategy — dollar-cost averaging, hedging, value investing, momentum trading",
+  "properties": {
+    "name": { "type": "string", "description": "Strategy name" },
+    "strategy_type": {
+      "type": "string",
+      "enum": ["investment", "trading", "hedging"],
+      "description": "Category of the strategy"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed explanation of the strategy approach"
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Associated risk level"
+    },
+    "time_horizon": {
+      "type": "string",
+      "description": "Typical holding period (e.g., short-term, medium-term, long-term)"
+    },
+    "asset_classes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Asset classes the strategy applies to"
+    }
+  },
+  "required": ["name", "strategy_type"]
+}

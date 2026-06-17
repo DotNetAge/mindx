@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "description": "A person or entity involved in a news story, such as a politician, celebrity, witness, or expert",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The full name of the figure"
+    },
+    "role": {
+      "type": "string",
+      "description": "The figure's primary role in the context of the news",
+      "enum": [
+        "politician",
+        "celebrity",
+        "witness",
+        "expert",
+        "spokesperson",
+        "activist",
+        "official"
+      ]
+    },
+    "affiliation": {
+      "type": "string",
+      "description": "The organization, party, or group the figure is associated with"
+    },
+    "relevance": {
+      "type": "string",
+      "description": "Why this figure is relevant to the current news context"
+    },
+    "statements": {
+      "type": "array",
+      "description": "Key statements or quotes attributed to this figure in reporting",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["name", "role"]
+}

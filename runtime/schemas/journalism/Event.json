@@ -1,0 +1,45 @@
+{
+  "type": "object",
+  "description": "A news event, incident, or development occurring in journalism coverage",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "A concise label or headline for the event"
+    },
+    "event_type": {
+      "type": "string",
+      "description": "The nature of the event",
+      "enum": [
+        "incident",
+        "development",
+        "announcement",
+        "conference",
+        "election",
+        "disaster",
+        "protest",
+        "ceremony"
+      ]
+    },
+    "date": {
+      "type": "string",
+      "description": "The date or date range when the event occurred (ISO 8601 format preferred)"
+    },
+    "location": {
+      "type": "string",
+      "description": "The geographic location where the event took place"
+    },
+    "participants": {
+      "type": "array",
+      "description": "Key persons, organizations, or entities involved in the event",
+      "items": {
+        "type": "string"
+      }
+    },
+    "significance": {
+      "type": "string",
+      "description": "The importance or impact level of the event",
+      "enum": ["breaking", "major", "minor", "background"]
+    }
+  },
+  "required": ["name", "event_type"]
+}

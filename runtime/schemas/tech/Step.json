@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "description": "An individual step, stage, or phase within a larger process or workflow",
+  "properties": {
+    "name": { "type": "string", "description": "Name or title of the step" },
+    "step_number": {
+      "type": "number",
+      "description": "Ordinal position of the step within the sequence"
+    },
+    "description": {
+      "type": "string",
+      "description": "What is accomplished during this step and any notable details"
+    },
+    "duration_estimate": {
+      "type": "string",
+      "description": "Estimated time to complete the step (e.g., '30 minutes', '2-3 days')"
+    },
+    "inputs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Artifacts, data, or resources required to begin this step"
+    },
+    "outputs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Artifacts, data, or results produced by completing this step"
+    },
+    "depends_on": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Names of steps that must be completed before this step can begin"
+    }
+  },
+  "required": ["name", "step_number", "description"]
+}

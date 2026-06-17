@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "description": "A key individual in the media ecosystem, such as a KOL, content creator, influencer, or competitor account",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Real name or username of the individual, e.g. 李佳琦, 罗翔说刑法"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "KOL",
+        "creator",
+        "influencer",
+        "competitor",
+        "celebrity",
+        "expert"
+      ],
+      "description": "Primary role of the person in the media context"
+    },
+    "platform": {
+      "type": "string",
+      "description": "Main platform where this person is active"
+    },
+    "followers_count": {
+      "type": "string",
+      "description": "Number of followers or subscribers, e.g. 5000万, 100万+"
+    },
+    "niche": {
+      "type": "string",
+      "description": "Content niche or specialty, e.g. 美妆, 科技评测, 知识科普"
+    },
+    "account_handle": {
+      "type": "string",
+      "description": "Unique account handle or ID on the platform"
+    }
+  },
+  "required": ["name"]
+}

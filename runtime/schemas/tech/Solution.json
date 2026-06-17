@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "description": "A solution, fix, workaround, or answer that addresses one or more problems",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name or title of the solution"
+    },
+    "description": {
+      "type": "string",
+      "description": "Explanation of how the solution resolves the problem"
+    },
+    "applicable_to": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Problems or scenarios this solution addresses"
+    },
+    "steps": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Ordered list of actions required to implement the solution"
+    },
+    "prerequisites": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Conditions, tools, or knowledge needed before applying the solution"
+    }
+  },
+  "required": ["name", "description"]
+}

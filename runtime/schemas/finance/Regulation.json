@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "description": "Regulatory body, policy, or regulation — SEC, central bank policy, monetary policy rule, Basel accord",
+  "properties": {
+    "name": { "type": "string", "description": "Regulation or policy name" },
+    "regulatory_body": {
+      "type": "string",
+      "description": "Enforcing authority or institution"
+    },
+    "jurisdiction": {
+      "type": "string",
+      "description": "Geographic or legal jurisdiction of the regulation"
+    },
+    "effective_date": {
+      "type": "string",
+      "description": "Date when the regulation takes effect"
+    },
+    "description": {
+      "type": "string",
+      "description": "Summary of the regulation and its purpose"
+    },
+    "affected_sectors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Financial sectors or industries affected by this regulation"
+    }
+  },
+  "required": ["name", "regulatory_body"]
+}

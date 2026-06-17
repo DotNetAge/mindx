@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "description": "An organization, government body, NGO, or company involved in news coverage",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The full name of the organization"
+    },
+    "org_type": {
+      "type": "string",
+      "description": "The type of organization",
+      "enum": [
+        "government",
+        "NGO",
+        "company",
+        "international",
+        "educational",
+        "media",
+        "military"
+      ]
+    },
+    "sector": {
+      "type": "string",
+      "description": "The industry or sector the organization operates in"
+    },
+    "headquarters": {
+      "type": "string",
+      "description": "The location of the organization's headquarters"
+    },
+    "leadership": {
+      "type": "string",
+      "description": "Key leader(s) or representative(s) of the organization"
+    }
+  },
+  "required": ["name", "org_type"]
+}

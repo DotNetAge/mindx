@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "description": "Specific drug, medication, dosage, or formulation",
+  "properties": {
+    "name": { "type": "string", "description": "Brand or common drug name" },
+    "generic_name": {
+      "type": "string",
+      "description": "Generic/INN name of the drug"
+    },
+    "drug_class": {
+      "type": "string",
+      "description": "Pharmacological or therapeutic class"
+    },
+    "dosage_forms": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Available dosage forms (e.g., tablet, injection, topical)"
+    },
+    "administration_route": {
+      "type": "string",
+      "description": "Route of administration (e.g., oral, intravenous, topical)"
+    },
+    "side_effects": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Common or notable side effects"
+    }
+  },
+  "required": ["name"]
+}

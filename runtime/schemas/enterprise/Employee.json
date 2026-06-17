@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "description": "Employee, staff member, colleague, or stakeholder within the organization",
+  "properties": {
+    "name": { "type": "string", "description": "Full name of the employee" },
+    "title": {
+      "type": "string",
+      "description": "Job title or position (e.g., Software Engineer, VP of Sales)"
+    },
+    "department": {
+      "type": "string",
+      "description": "Department or team the employee belongs to"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "Employee email address"
+    },
+    "role": {
+      "type": "string",
+      "description": "Role category or function (e.g., individual contributor, manager, executive)"
+    },
+    "manager": {
+      "type": "string",
+      "description": "Manager or supervisor name the employee reports to"
+    }
+  },
+  "required": ["name", "email"]
+}

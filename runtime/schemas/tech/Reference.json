@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "description": "A reference, citation, link, or source that points to external material for verification or further reading",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title of the referenced material"
+    },
+    "url": {
+      "type": "string",
+      "description": "URL or locator where the reference can be accessed"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["article", "book", "doc", "code"],
+      "description": "Format or category of the reference"
+    },
+    "author": {
+      "type": "string",
+      "description": "Author or creator of the referenced material"
+    },
+    "access_date": {
+      "type": "string",
+      "description": "Date when the reference was last accessed or retrieved (ISO 8601 format)"
+    },
+    "citation": {
+      "type": "string",
+      "description": "Formal citation string following a standard citation format"
+    }
+  },
+  "required": ["title", "url"]
+}

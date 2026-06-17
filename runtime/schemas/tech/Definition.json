@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "description": "Formal definition or specification of a term, concept, or standard within a technical domain",
+  "properties": {
+    "term": {
+      "type": "string",
+      "description": "The term or concept being defined"
+    },
+    "definition": {
+      "type": "string",
+      "description": "Precise and unambiguous definition of the term"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Technical domain or field to which the definition belongs"
+    },
+    "source": {
+      "type": "string",
+      "description": "Origin of the definition (e.g., specification document, standard body, authoritative reference)"
+    },
+    "examples": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Illustrative examples that clarify the definition in practice"
+    }
+  },
+  "required": ["term", "definition"]
+}

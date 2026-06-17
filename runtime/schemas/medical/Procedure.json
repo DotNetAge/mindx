@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "description": "Medical procedure, surgery, or examination",
+  "properties": {
+    "name": { "type": "string", "description": "Procedure or surgery name" },
+    "procedure_type": {
+      "type": "string",
+      "enum": ["surgery", "examination", "diagnostic"],
+      "description": "Category of procedure"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the procedure"
+    },
+    "duration": {
+      "type": "string",
+      "description": "Typical duration of the procedure"
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Associated risks or complications"
+    },
+    "recovery_time": {
+      "type": "string",
+      "description": "Typical recovery time after the procedure"
+    }
+  },
+  "required": ["name"]
+}

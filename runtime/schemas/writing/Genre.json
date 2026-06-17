@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "description": "A literary genre that categorizes works based on shared narrative conventions, style, and thematic content.",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the genre, e.g. 科幻, 言情, 悬疑, 现实主义, 奇幻"
+    },
+    "genre_type": {
+      "type": "string",
+      "description": "The broad category of the genre",
+      "enum": ["fiction", "non-fiction", "poetry", "drama"]
+    },
+    "description": {
+      "type": "string",
+      "description": "A concise description of the genre's defining characteristics"
+    },
+    "examples": {
+      "type": "array",
+      "description": "Representative works of this genre",
+      "items": {
+        "type": "string"
+      }
+    },
+    "conventions": {
+      "type": "array",
+      "description": "Common tropes, structural elements, and stylistic conventions associated with this genre",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["name"]
+}

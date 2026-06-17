@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "description": "A news topic, issue, or beat (e.g., diplomacy, economy, technology)",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the news topic or beat"
+    },
+    "topic_type": {
+      "type": "string",
+      "description": "The category of the topic",
+      "enum": [
+        "diplomacy",
+        "economy",
+        "tech",
+        "science",
+        "society",
+        "politics",
+        "environment",
+        "culture",
+        "sports"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "description": "A brief description of what this topic covers"
+    },
+    "sub_topics": {
+      "type": "array",
+      "description": "Related sub-topics or specific areas within this topic",
+      "items": {
+        "type": "string"
+      }
+    },
+    "trending": {
+      "type": "boolean",
+      "description": "Indicates whether this topic is currently trending in the news cycle"
+    }
+  },
+  "required": ["name", "topic_type"]
+}

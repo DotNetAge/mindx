@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "description": "A chronological marker, sequence of events, or timeline relevant to a news story",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "A label for the timeline or sequence of events"
+    },
+    "entries": {
+      "type": "array",
+      "description": "Ordered list of events in the timeline, each with a date and description",
+      "items": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "The date or timestamp of the entry (ISO 8601 format preferred)"
+          },
+          "description": {
+            "type": "string",
+            "description": "What happened at this point in the timeline"
+          }
+        },
+        "required": ["date", "description"]
+      }
+    },
+    "category": {
+      "type": "string",
+      "description": "The category of events this timeline covers"
+    },
+    "source": {
+      "type": "string",
+      "description": "The source(s) from which the timeline information was compiled"
+    }
+  },
+  "required": ["name", "entries"]
+}

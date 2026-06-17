@@ -54,11 +54,10 @@ type MemoryConfig struct {
 	// 当 LLMConfig 配置且此项为空时，会自动创建。
 	GraphStore goragcore.GraphStore
 
-	// EntityDefs 可选。用户自定义的实体类型定义行列表。
-	// 每行格式为 "**Name** — Description"。
-	// 从 entity_tags.yml 中读取并在初始化时注入 LLMIndexer。
+	// EntityDefs 可选。用户自定义的实体类型定义列表。
+	// 从 entity-defs.json 中读取并在初始化时注入 LLMIndexer。
 	// 如果为空，LLMIndexer 将使用一组通用的默认实体类型。
-	EntityDefs []string
+	EntityDefs []goragindexer.EntityDef
 
 	// LLMConfig 可选。非空时启用 LLMIndexer，在语义索引基础上增加知识图谱
 	// 实体/关系索引与标签系统（tags, summary, entity_ids）。
@@ -183,7 +182,7 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 		var llmOpts []goragindexer.LLMOption
 		llmOpts = append(llmOpts, goragindexer.WithLLMLogger(logger))
 		if len(cfg.EntityDefs) > 0 {
-			// 从 saved entity_tags.yml 加载用户自定义实体类型定义
+			// 从 saved entity-defs.json 加载用户自定义实体类型定义
 			llmOpts = append(llmOpts, goragindexer.WithEntities(cfg.EntityDefs...))
 			logger.Info("memory: loaded saved entity defs", "count", len(cfg.EntityDefs))
 		}

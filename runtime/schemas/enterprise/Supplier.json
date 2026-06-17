@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "description": "Supplier, vendor, distributor, or subcontractor providing goods or services to the organization",
+  "properties": {
+    "name": { "type": "string", "description": "Supplier or company name" },
+    "contact_person": {
+      "type": "string",
+      "description": "Primary contact person name or email at the supplier"
+    },
+    "category": {
+      "type": "string",
+      "description": "Category of supplied goods or services (e.g., raw materials, IT services, logistics)"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "inactive", "suspended", "former"],
+      "description": "Current engagement status with the supplier"
+    },
+    "products_services": {
+      "type": "string",
+      "description": "Description of the key products or services provided by the supplier"
+    }
+  },
+  "required": ["name"]
+}

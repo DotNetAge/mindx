@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "description": "Financial market or exchange — stock exchange, bond market, commodity market, forex market, derivatives market",
+  "properties": {
+    "name": { "type": "string", "description": "Market or exchange name" },
+    "market_type": {
+      "type": "string",
+      "enum": ["stock", "bond", "commodity", "derivative", "forex"],
+      "description": "Type of financial market"
+    },
+    "region": {
+      "type": "string",
+      "description": "Geographic region or country of the market"
+    },
+    "operating_hours": {
+      "type": "string",
+      "description": "Trading hours and timezone (e.g., 9:30-16:00 ET)"
+    },
+    "index_tickers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key benchmark index tickers associated with this market"
+    }
+  },
+  "required": ["name", "market_type"]
+}

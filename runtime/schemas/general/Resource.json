@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "description": "Document, book, article, webpage, reference",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Title or name of the resource"
+    },
+    "author": {
+      "type": "string",
+      "description": "Author or creator of the resource"
+    },
+    "type": {
+      "type": "string",
+      "description": "Resource type: article, book, video, documentation, webpage, report, etc."
+    },
+    "url": {
+      "type": "string",
+      "description": "URL or access link to the resource"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Brief summary or abstract of the content"
+    },
+    "published_date": {
+      "type": "string",
+      "description": "Publication or release date in YYYY-MM-DD format"
+    }
+  },
+  "required": ["name"]
+}

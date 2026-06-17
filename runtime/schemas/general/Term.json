@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "description": "Domain-specific term, jargon, noun",
+  "properties": {
+    "name": { "type": "string", "description": "The term itself" },
+    "definition": { "type": "string", "description": "Definition of the term" },
+    "domain": { "type": "string", "description": "Domain or field of use" },
+    "synonyms": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Alternative terms or synonyms"
+    }
+  },
+  "required": ["name", "definition"]
+}

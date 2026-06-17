@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "description": "Financial institution — bank, investment fund, brokerage firm, regulatory agency",
+  "properties": {
+    "name": { "type": "string", "description": "Institution name" },
+    "institution_type": {
+      "type": "string",
+      "enum": ["bank", "fund", "brokerage", "regulator"],
+      "description": "Type of financial institution"
+    },
+    "region": {
+      "type": "string",
+      "description": "Primary region or country of operation"
+    },
+    "assets_under_management": {
+      "type": "number",
+      "description": "Total assets under management in USD (if applicable)"
+    },
+    "specializations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Areas of specialization or expertise"
+    }
+  },
+  "required": ["name", "institution_type"]
+}

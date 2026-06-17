@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "description": "A literary device or technique used to achieve a specific artistic effect in writing.",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the literary technique, e.g. 隐喻, 伏笔, 对话, 倒叙"
+    },
+    "technique_type": {
+      "type": "string",
+      "description": "The category of literary device",
+      "enum": ["metaphor", "foreshadowing", "dialogue", "flashback"]
+    },
+    "description": {
+      "type": "string",
+      "description": "An explanation of how this technique operates in a text"
+    },
+    "effect": {
+      "type": "string",
+      "description": "The artistic or rhetorical effect produced by this technique"
+    },
+    "example_usage": {
+      "type": "string",
+      "description": "A concrete example illustrating how this technique is applied in practice"
+    }
+  },
+  "required": ["name"]
+}

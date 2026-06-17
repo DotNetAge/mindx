@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "description": "Risk factor in finance — volatility, credit risk, inflation risk, liquidity risk, market risk",
+  "properties": {
+    "name": { "type": "string", "description": "Risk factor name" },
+    "risk_type": {
+      "type": "string",
+      "enum": ["market", "credit", "liquidity", "inflation", "volatility"],
+      "description": "Category of risk"
+    },
+    "description": {
+      "type": "string",
+      "description": "Explanation of the risk factor and its impact"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "description": "Severity level of the risk"
+    },
+    "mitigation_methods": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Common methods to mitigate this risk"
+    }
+  },
+  "required": ["name", "risk_type"]
+}

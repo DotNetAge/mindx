@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "description": "Diagnostic criteria, test, or biomarker",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Diagnosis method or test name"
+    },
+    "diagnosis_type": {
+      "type": "string",
+      "enum": ["criteria", "test", "biomarker", "imaging"],
+      "description": "Category of diagnostic method"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the diagnostic method"
+    },
+    "conditions_diagnosed": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Conditions this method helps diagnose"
+    },
+    "accuracy": {
+      "type": "string",
+      "description": "Typical accuracy, sensitivity, or specificity"
+    }
+  },
+  "required": ["name"]
+}

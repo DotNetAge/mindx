@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "description": "Project, initiative, program, or milestone representing a planned undertaking with defined goals",
+  "properties": {
+    "name": { "type": "string", "description": "Project name or code name" },
+    "description": {
+      "type": "string",
+      "description": "Brief description of the project scope and objectives"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Project owner, sponsor, or responsible person"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["planned", "in_progress", "on_hold", "completed", "cancelled"],
+      "description": "Current phase or status of the project"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Project start date (ISO 8601 format)"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Project end or target completion date (ISO 8601 format)"
+    },
+    "budget": {
+      "type": "number",
+      "description": "Approved budget or allocated funds for the project"
+    }
+  },
+  "required": ["name"]
+}

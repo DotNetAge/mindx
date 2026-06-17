@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "description": "Core idea, theory, principle, paradigm",
+  "properties": {
+    "name": { "type": "string", "description": "The concept name" },
+    "description": {
+      "type": "string",
+      "description": "Definition or explanation of the concept"
+    },
+    "category": {
+      "type": "string",
+      "description": "Broader category this concept belongs to"
+    },
+    "related_concepts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Related or closely associated concepts"
+    }
+  },
+  "required": ["name", "description"]
+}

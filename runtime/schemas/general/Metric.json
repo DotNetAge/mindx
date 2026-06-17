@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "description": "KPI, measurement, score, statistic",
+  "properties": {
+    "name": { "type": "string", "description": "Metric name" },
+    "description": {
+      "type": "string",
+      "description": "What this metric measures and how it is interpreted"
+    },
+    "value": { "type": "number", "description": "Current observed value" },
+    "unit": { "type": "string", "description": "Unit of measurement" },
+    "benchmark": {
+      "type": "number",
+      "description": "Benchmark or target value for comparison"
+    }
+  },
+  "required": ["name"]
+}

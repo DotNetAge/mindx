@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "description": "An independent knowledge point representing a specific method, process, technique, formula, or framework",
+  "properties": {
+    "name": { "type": "string", "description": "Name of the knowledge unit" },
+    "type": {
+      "type": "string",
+      "enum": ["method", "process", "technique", "formula", "framework"],
+      "description": "Category of the knowledge unit"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed explanation of what the knowledge unit entails and how it is used"
+    },
+    "prerequisites": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Prior knowledge or skills required to understand or apply this unit"
+    },
+    "applications": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Common use cases or scenarios where this knowledge unit is applied"
+    }
+  },
+  "required": ["name", "type", "description"]
+}

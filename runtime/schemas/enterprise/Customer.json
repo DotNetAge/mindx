@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "description": "Customer, client, account, or partner entity representing a business relationship",
+  "properties": {
+    "name": { "type": "string", "description": "Customer or account name" },
+    "type": {
+      "type": "string",
+      "enum": ["customer", "client", "partner", "vendor"],
+      "description": "Relationship type classifying the nature of the business relationship"
+    },
+    "industry": {
+      "type": "string",
+      "description": "Industry sector the customer operates in (e.g., technology, healthcare, finance)"
+    },
+    "contact": {
+      "type": "string",
+      "description": "Primary contact person name or email for this customer"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "inactive", "former"],
+      "description": "Current relationship status with the customer"
+    }
+  },
+  "required": ["name", "type"]
+}

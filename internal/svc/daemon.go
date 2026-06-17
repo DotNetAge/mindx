@@ -33,7 +33,6 @@ import (
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 	"github.com/google/uuid"
 	"go.etcd.io/bbolt"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -355,23 +354,32 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	if emb := app.Embedder(); emb != nil {
 		logger.Info("embedder found, initializing shared memory service")
 
-		// 尝试从 entity_tags.yml 加载用户之前保存的实体标签定义
-		var entityDefs []string
-		entityTagsPath := filepath.Join(app.Settings().DataDir(), "entity_tags.yml")
-		if etData, etErr := os.ReadFile(entityTagsPath); etErr == nil {
+		// 尝试从 entity-defs.json 加载用户之前保存的实体标签定义
+		var entityDefs []goragindexer.EntityDef
+		entityDefsPath := filepath.Join(app.Settings().DataDir(), "entity-defs.json")
+		if etData, etErr := os.ReadFile(entityDefsPath); etErr == nil {
 			var etFile struct {
 				Types []struct {
-					Name string `yaml:"name"`
-					Desc string `yaml:"desc"`
-				} `yaml:"types"`
+					Name   string `json:"name"`
+					Desc   string `json:"desc"`
+					Prompt string `json:"prompt,omitempty"`
+					Schema string `json:"schema,omitempty"`
+				} `json:"types"`
 			}
-			if yaml.Unmarshal(etData, &etFile) == nil {
+			if json.Unmarshal(etData, &etFile) == nil {
 				for _, t := range etFile.Types {
 					if t.Name != "" {
-						entityDefs = append(entityDefs, "**"+t.Name+"** — "+t.Desc)
+						prompt := t.Prompt
+						if prompt == "" {
+							prompt = "**" + t.Name + "** — " + t.Desc
+						}
+						entityDefs = append(entityDefs, goragindexer.EntityDef{
+							Prompt: prompt,
+							Schema: t.Schema,
+						})
 					}
 				}
-				logger.Info("memory: loaded saved entity tags from file", "path", entityTagsPath, "count", len(entityDefs))
+				logger.Info("memory: loaded saved entity tags from file", "path", entityDefsPath, "count", len(entityDefs))
 			}
 		}
 

@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "description": "Person — author, expert, contributor, role",
+  "properties": {
+    "name": { "type": "string", "description": "Full name of the person" },
+    "role": {
+      "type": "string",
+      "description": "Role, title, or position held by the person"
+    },
+    "affiliation": {
+      "type": "string",
+      "description": "Organization or team the person is associated with"
+    },
+    "expertise": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Areas of expertise or specialization"
+    }
+  },
+  "required": ["name"]
+}

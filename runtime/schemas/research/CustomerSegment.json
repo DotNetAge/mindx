@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "description": "Customer group, user persona, or demographic segment",
+  "properties": {
+    "name": { "type": "string", "description": "Segment name" },
+    "demographics": { "type": "string", "description": "Demographic profile" },
+    "needs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key customer needs"
+    },
+    "pain_points": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Customer pain points"
+    },
+    "behavior_patterns": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Customer behavior patterns"
+    }
+  },
+  "required": ["name"]
+}

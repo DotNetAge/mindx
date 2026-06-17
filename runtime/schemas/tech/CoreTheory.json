@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "description": "Abstract top-level knowledge entity representing a foundational theory, principle, or model that underpins a domain of understanding",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the theory, principle, or model"
+    },
+    "description": {
+      "type": "string",
+      "description": "Concise explanation of the theory's core idea and significance"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Subject area or field where the theory applies (e.g., distributed systems, cryptography)"
+    },
+    "related_principles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Names of related theories, principles, or models that complement or extend this one"
+    }
+  },
+  "required": ["name", "description"]
+}

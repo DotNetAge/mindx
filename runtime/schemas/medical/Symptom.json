@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "description": "Sign, symptom, or clinical presentation",
+  "properties": {
+    "name": { "type": "string", "description": "Symptom or sign name" },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the symptom"
+    },
+    "associated_diseases": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Diseases commonly associated with this symptom"
+    },
+    "severity_range": {
+      "type": "string",
+      "description": "Typical severity range (e.g., mild to severe)"
+    },
+    "duration": {
+      "type": "string",
+      "description": "Typical duration of the symptom"
+    },
+    "body_system": {
+      "type": "string",
+      "description": "Related body system (e.g., cardiovascular, respiratory)"
+    }
+  },
+  "required": ["name"]
+}

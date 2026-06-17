@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "description": "A tag, label, or category marker used for organizing and filtering knowledge entities",
+  "properties": {
+    "name": { "type": "string", "description": "Display name of the tag" },
+    "color": {
+      "type": "string",
+      "description": "Hex color code for visual identification (e.g., '#FF5733')"
+    },
+    "group": {
+      "type": "string",
+      "description": "Logical group or category the tag belongs to (e.g., 'language', 'domain', 'difficulty')"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief explanation of what the tag represents and when it should be used"
+    },
+    "related_tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Names of other tags semantically related to this one"
+    }
+  },
+  "required": ["name"]
+}

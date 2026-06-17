@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "description": "A performance metric used to measure content or account success on media platforms, such as views, engagement, or conversion rates",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the metric, e.g. 播放量, 点赞数, 转化率, 粉丝数"
+    },
+    "metric_type": {
+      "type": "string",
+      "enum": [
+        "views",
+        "likes",
+        "shares",
+        "comments",
+        "followers",
+        "conversion",
+        "engagement_rate",
+        "impressions",
+        "revenue"
+      ],
+      "description": "Category of the metric"
+    },
+    "value": {
+      "type": "number",
+      "description": "Numeric value of the metric"
+    },
+    "unit": {
+      "type": "string",
+      "description": "Unit of measurement, e.g. 万, 亿, %, count"
+    },
+    "platform": {
+      "type": "string",
+      "description": "Platform this metric is sourced from"
+    },
+    "period": {
+      "type": "string",
+      "description": "Time period this metric covers, e.g. 2024-Q1, 2024年, 过去30天"
+    }
+  },
+  "required": ["name"]
+}

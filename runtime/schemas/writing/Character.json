@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "description": "A fictional character, role, or archetype within a narrative work.",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name or title of the character"
+    },
+    "role": {
+      "type": "string",
+      "description": "The character's narrative function in the story",
+      "enum": ["protagonist", "antagonist", "supporting"]
+    },
+    "archetype": {
+      "type": "string",
+      "description": "The archetypal pattern the character embodies, e.g. hero, mentor, trickster, shadow"
+    },
+    "traits": {
+      "type": "array",
+      "description": "Distinguishing personality attributes, habits, or physical characteristics",
+      "items": {
+        "type": "string"
+      }
+    },
+    "motivation": {
+      "type": "string",
+      "description": "The character's primary drive, goal, or desire that propels their actions"
+    },
+    "arc_description": {
+      "type": "string",
+      "description": "A summary of the character's transformation or development throughout the narrative"
+    }
+  },
+  "required": ["name"]
+}
