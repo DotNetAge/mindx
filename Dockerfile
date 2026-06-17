@@ -31,7 +31,8 @@ RUN apk add --no-cache \
 RUN adduser -D -s /bin/bash mindx && \
     mkdir -p /home/mindx/.mindx/logs \
     /home/mindx/.mindx/sessions \
-    /home/mindx/workspaces
+    /home/mindx/workspaces && \
+    chown -R mindx:mindx /home/mindx/.mindx /home/mindx/workspaces
 
 # Python venv (create as root, then chown to mindx)
 RUN python3 -m venv /home/mindx/.mindx/.venv && \
