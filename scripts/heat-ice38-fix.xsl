@@ -1,26 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Heat output post-processor: makes harvested components ICE38-compliant.
+  Heat output post-processor: makes harvested components ICE38/ICE64-compliant.
 
-  Per Microsoft docs (https://learn.microsoft.com/en-us/windows/win32/msi/ice38):
-  "ICE38 validates that every component being installed under the current user's
-   profile also specifies a registry key under the HKEY_CURRENT_USER root in the
-   KeyPath column of the Component table."
+  ICE38 (per https://learn.microsoft.com/en-us/windows/win32/msi/ice38):
+  "Every component installed under the current user's profile must specify a
+   registry key under HKEY_CURRENT_USER as its KeyPath, not a file."
 
-  By default, heat.exe dir generates one Component per file with the File as the
-  KeyPath. Since runtime/skills/ and runtime/agents/ install to LocalAppDataFolder
-  (user profile), every harvested component triggers ICE38.
+  ICE64 (per https://learn.microsoft.com/en-us/windows/win32/msi/ice64):
+  "New directories in the user profile must be removed correctly in roaming
+   scenarios." Each such directory must have a row in the RemoveFile table.
+
+  heat.exe dir by default:
+    * Creates one Component per file with the File as KeyPath (violates ICE38)
+    * Creates subdirectories under user profile without RemoveFile (violates ICE64)
 
   This XSLT transform:
     1. Strips KeyPath="yes" from any File child.
     2. Strips the KeyPath attribute from the Component itself (if present).
     3. Appends a RegistryValue under HKCU as the new KeyPath.
+    4. Appends a RemoveFile to clean up the Component's directory on uninstall.
 
   Wired into heat.exe via the -t <xsl> flag:
       heat.exe dir ".\runtime\skills" -t scripts/heat-ice38-fix.xsl ...
 
-  Reference:
-    - ICE38:  https://learn.microsoft.com/en-us/windows/win32/msi/ice38
+  References:
+    - ICE38: https://learn.microsoft.com/en-us/windows/win32/msi/ice38
+    - ICE64: https://learn.microsoft.com/en-us/windows/win32/msi/ice64
     - heat -t: https://docs.firegiant.com/wix3/overview/heat/
 -->
 <xsl:stylesheet
@@ -42,11 +47,12 @@
   <!-- Drop KeyPath="yes" from File elements (force File to NOT be the KeyPath). -->
   <xsl:template match="wix:File/@KeyPath"/>
 
-  <!-- Component: copy attributes except KeyPath, copy children, append RegistryValue. -->
+  <!-- Component: copy attributes except KeyPath, copy children, append RemoveFile + RegistryValue. -->
   <xsl:template match="wix:Component">
     <xsl:copy>
       <xsl:apply-templates select="@*[name() != 'KeyPath']"/>
       <xsl:apply-templates select="node()"/>
+      <RemoveFile Id="Rm_{@Id}" Directory="{@Directory}" Name="*" On="uninstall"/>
       <RegistryValue
         Id="Reg_{@Id}"
         Root="HKCU"
