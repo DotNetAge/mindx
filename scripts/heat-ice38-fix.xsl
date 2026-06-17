@@ -52,7 +52,14 @@
     <xsl:copy>
       <xsl:apply-templates select="@*[name() != 'KeyPath']"/>
       <xsl:apply-templates select="node()"/>
-      <RemoveFile Id="Rm_{@Id}" Directory="{@Directory}" Name="*" On="uninstall"/>
+      <!-- Directory attribute is intentionally omitted: in heat -srd output the
+           Component lives inside a <Directory> element and has no @Directory
+           attribute of its own. The RemoveFile default (per
+           https://docs.firegiant.com/wix3/xsd/wix/removefile/) is the parent
+           component's directory, which is exactly the <Directory> wrapping
+           this Component. This creates a RemoveFile row per harvested
+           subdirectory and resolves ICE64. -->
+      <RemoveFile Id="Rm_{@Id}" Name="*" On="uninstall"/>
       <RegistryValue
         Id="Reg_{@Id}"
         Root="HKCU"
