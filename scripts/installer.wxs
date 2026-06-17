@@ -109,6 +109,7 @@
             <File Id="providers_yml" Source="runtime/settings/providers.yml" Vital="no" />
             <File Id="models_yml" Source="runtime/settings/models.yml" Vital="no" />
             <File Id="mindx_json" Source="runtime/mindx.json" Vital="no" />
+            <RemoveFile Id="RmAppData" Directory="MINDX_APPDATA" Name="*" On="uninstall" />
             <RegistryValue Id="RuntimeSettingsReg" Root="HKCU" Key="Software\DotNetAge\mindx\InstallState" Name="RuntimeSettings" Type="integer" Value="1" KeyPath="yes" />
           </Component>
           <Component Id="RuntimeSkillsDir" Guid="177FB78D-B46F-4DAB-BE42-AE07FBEC4916">
