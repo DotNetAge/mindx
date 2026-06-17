@@ -188,10 +188,9 @@
     <!-- Custom Dialog: Configuration Page -->
     <UI Id="MindXConfigDlgHost">
       <Dialog Id="MindXConfigDlg" Width="480" Height="400" Title="[ProductName] Setup" NoMinimize="yes">
-      <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="480" Height="58" Text="WixUIBannerBmp" FixedSize="yes" />
-      <Control Id="BannerLine" Type="Line" X="0" Y="58" Width="480" Height="0" />
-      <Control Id="Title" Type="Text" X="20" Y="10" Width="440" Height="24" Transparent="yes" NoPrefix="yes"><Text>[ProductName] Configuration</Text></Control>
-      <Control Id="Description" Type="Text" X="20" Y="38" Width="440" Height="18" Transparent="yes" NoPrefix="yes"><Text>Select your AI provider, enter your API key, and configure options</Text></Control>
+      <Control Id="BannerLine" Type="Line" X="0" Y="8" Width="480" Height="0" />
+      <Control Id="Title" Type="Text" X="20" Y="18" Width="440" Height="24" Transparent="yes" NoPrefix="yes"><Text>[ProductName] Configuration</Text></Control>
+      <Control Id="Description" Type="Text" X="20" Y="42" Width="440" Height="18" Transparent="yes" NoPrefix="yes"><Text>Select your AI provider, enter your API key, and configure options</Text></Control>
       <Control Id="BottomLine" Type="Line" X="0" Y="368" Width="480" Height="0" />
 
       <Control Id="ProviderLabel" Type="Text" X="20" Y="72" Width="180" Height="12" NoPrefix="yes"><Text>AI Provider:</Text></Control>
