@@ -1,0 +1,40 @@
+{
+  "type": "object",
+  "description": "An information source, news outlet, or media agency (e.g., Reuters, Xinhua News Agency)",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the source, news outlet, or media agency"
+    },
+    "source_type": {
+      "type": "string",
+      "description": "The category of the source",
+      "enum": [
+        "news_outlet",
+        "agency",
+        "media",
+        "blog",
+        "social_media",
+        "official_statement"
+      ]
+    },
+    "region": {
+      "type": "string",
+      "description": "Geographic region or country the source primarily operates in or reports on"
+    },
+    "reliability_rating": {
+      "type": "string",
+      "description": "Reliability assessment of the source",
+      "enum": ["high", "moderate", "low", "unverified"]
+    },
+    "url": {
+      "type": "string",
+      "description": "Primary website or URL of the source"
+    },
+    "political_lean": {
+      "type": "string",
+      "description": "Stated or observed political leaning of the source, if any"
+    }
+  },
+  "required": ["name", "source_type"]
+}

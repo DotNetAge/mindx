@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "description": "A source document, section, or chunk of content that serves as a reference for knowledge extraction",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title of the document or section"
+    },
+    "document_type": {
+      "type": "string",
+      "description": "Type of document (e.g., specification, tutorial, API reference, README, design doc)"
+    },
+    "author": {
+      "type": "string",
+      "description": "Author or maintainer of the document"
+    },
+    "sections": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Top-level sections or major topics covered in the document"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Brief summary of the document's content and purpose"
+    },
+    "version": {
+      "type": "string",
+      "description": "Document version or revision identifier"
+    }
+  },
+  "required": ["title", "document_type"]
+}

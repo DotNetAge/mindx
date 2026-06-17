@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "description": "Product, service, offering, or feature",
+  "properties": {
+    "name": { "type": "string", "description": "Product name" },
+    "category": { "type": "string", "description": "Product category" },
+    "pricing": { "type": "string", "description": "Pricing model" },
+    "description": { "type": "string", "description": "Product description" },
+    "stage": {
+      "type": "string",
+      "enum": ["development", "launch", "mature", "decline"],
+      "description": "Product lifecycle stage"
+    },
+    "competitors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Competing products"
+    }
+  },
+  "required": ["name"]
+}

@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "description": "The storyline, conflict, and narrative arc that drives a literary work forward.",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "A short identifier or label for this plot element or storyline"
+    },
+    "story": {
+      "type": "string",
+      "description": "A summary of the sequence of events that constitute this plot thread"
+    },
+    "conflict_type": {
+      "type": "string",
+      "description": "The fundamental type of conflict driving the narrative",
+      "enum": [
+        "person_vs_person",
+        "person_vs_self",
+        "person_vs_society",
+        "person_vs_nature"
+      ]
+    },
+    "structure_beat": {
+      "type": "string",
+      "description": "Where this plot element falls in the narrative structure, e.g. inciting incident, rising action, climax, resolution"
+    },
+    "resolution": {
+      "type": "string",
+      "description": "How the conflict or storyline is resolved or left open"
+    }
+  },
+  "required": ["name"]
+}

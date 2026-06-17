@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "description": "Department, team, division, or business unit within the organization",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Department or team name (e.g., Engineering, Marketing)"
+    },
+    "division": {
+      "type": "string",
+      "description": "Higher-level division or business unit the department belongs to"
+    },
+    "head": {
+      "type": "string",
+      "description": "Department head, director, or manager responsible for the team"
+    },
+    "headcount": {
+      "type": "integer",
+      "description": "Number of employees or team members in the department"
+    },
+    "function": {
+      "type": "string",
+      "description": "Primary function or responsibility of the department (e.g., product development, sales, HR)"
+    }
+  },
+  "required": ["name"]
+}

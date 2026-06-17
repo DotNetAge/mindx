@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "description": "A statement, allegation, or assertion made by a figure or entity in news coverage",
+  "properties": {
+    "claim_text": {
+      "type": "string",
+      "description": "The full text of the claim or statement"
+    },
+    "claimant": {
+      "type": "string",
+      "description": "The person or entity making the claim"
+    },
+    "date": {
+      "type": "string",
+      "description": "The date the claim was made (ISO 8601 format preferred)"
+    },
+    "context": {
+      "type": "string",
+      "description": "The context in which the claim was made (e.g., press conference, interview, social media post)"
+    },
+    "verification_status": {
+      "type": "string",
+      "description": "Current verification status of the claim",
+      "enum": [
+        "verified",
+        "unverified",
+        "false",
+        "partially_true",
+        "misleading"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Supporting or refuting evidence for the claim",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["claim_text", "claimant"]
+}

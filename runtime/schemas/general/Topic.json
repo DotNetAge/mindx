@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "description": "Subject, domain, category, tag",
+  "properties": {
+    "name": { "type": "string", "description": "Topic or subject name" },
+    "description": {
+      "type": "string",
+      "description": "Description of the topic and its scope"
+    },
+    "parent_topic": {
+      "type": "string",
+      "description": "Broader parent topic or category this belongs to"
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Related keywords or search terms"
+    }
+  },
+  "required": ["name"]
+}

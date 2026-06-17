@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "description": "A geographic location, region, or country relevant to news coverage",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the location (country, region, city, or site)"
+    },
+    "location_type": {
+      "type": "string",
+      "description": "The type of geographic entity",
+      "enum": ["country", "region", "city", "site", "district", "landmark"]
+    },
+    "coordinates": {
+      "type": "object",
+      "description": "Geographic coordinates of the location",
+      "properties": {
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" }
+      }
+    },
+    "significance": {
+      "type": "string",
+      "description": "Why this location is significant in the current news context"
+    },
+    "related_events": {
+      "type": "array",
+      "description": "Names or references of events associated with this location",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["name", "location_type"]
+}

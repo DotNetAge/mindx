@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "description": "The narrative structure that organizes a story's sequence and pacing.",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the structure type, e.g. 三幕式, 起承转合, 非线性"
+    },
+    "structure_type": {
+      "type": "string",
+      "description": "A standardized label for the structural pattern",
+      "enum": ["three_act", "kishotenketsu", "nonlinear"]
+    },
+    "parts": {
+      "type": "array",
+      "description": "Ordered sections or phases that make up this structure",
+      "items": {
+        "type": "string"
+      }
+    },
+    "purpose": {
+      "type": "string",
+      "description": "The narrative or emotional function this structure serves"
+    },
+    "example_works": {
+      "type": "array",
+      "description": "Notable works that exemplify this narrative structure",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["name"]
+}

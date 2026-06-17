@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "description": "A distribution channel or platform for media content, such as social media sites, video platforms, or streaming services",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the platform, e.g. 抖音, 公众号, B站, YouTube"
+    },
+    "platform_type": {
+      "type": "string",
+      "enum": ["social", "video", "live", "audio", "text"],
+      "description": "Category of the platform: social (social network), video (video sharing), live (live streaming), audio (podcast/music), text (blog/article)"
+    },
+    "region": {
+      "type": "string",
+      "description": "Primary geographic region or language market the platform serves, e.g. China, Global"
+    },
+    "user_base_size": {
+      "type": "string",
+      "description": "Estimated size of the platform's user base, e.g. 1B+ MAU, 100M+ DAU"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Official website URL of the platform"
+    }
+  },
+  "required": ["name"]
+}

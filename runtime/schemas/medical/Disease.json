@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "description": "Disease, condition, diagnosis",
+  "properties": {
+    "name": { "type": "string", "description": "Disease or condition name" },
+    "icd_code": { "type": "string", "description": "ICD code if available" },
+    "symptoms": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Associated symptoms"
+    },
+    "risk_factors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Risk factors contributing to the disease"
+    },
+    "common_treatments": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Common treatments or therapies"
+    },
+    "specialty": { "type": "string", "description": "Medical specialty" }
+  },
+  "required": ["name"]
+}

@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "description": "Key individual: analyst, executive, influencer",
+  "properties": {
+    "name": { "type": "string", "description": "Person name" },
+    "role": {
+      "type": "string",
+      "description": "Role: analyst, executive, or influencer"
+    },
+    "organization": {
+      "type": "string",
+      "description": "Affiliated organization"
+    },
+    "expertise": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Areas of expertise"
+    },
+    "notable_contributions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Notable contributions or achievements"
+    }
+  },
+  "required": ["name"]
+}

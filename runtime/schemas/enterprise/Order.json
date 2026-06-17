@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "description": "Order, purchase order, sales order, or transaction representing a request to fulfill goods or services",
+  "properties": {
+    "order_id": {
+      "type": "string",
+      "description": "Unique identifier for the order (e.g., PO-2024-001)"
+    },
+    "customer": {
+      "type": "string",
+      "description": "Customer or account name associated with the order"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Total monetary value of the order"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "confirmed", "shipped", "completed", "cancelled"],
+      "description": "Current fulfillment status of the order"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the order was placed (ISO 8601 format)"
+    },
+    "items": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of items or line items included in the order"
+    }
+  },
+  "required": ["order_id", "customer"]
+}

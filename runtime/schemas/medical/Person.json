@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "description": "Healthcare professional: doctor, researcher, specialist, or nurse",
+  "properties": {
+    "name": { "type": "string", "description": "Person's full name" },
+    "role": {
+      "type": "string",
+      "enum": ["doctor", "researcher", "specialist", "nurse"],
+      "description": "Professional role in healthcare"
+    },
+    "specialty": {
+      "type": "string",
+      "description": "Medical specialty or field of expertise"
+    },
+    "affiliation": {
+      "type": "string",
+      "description": "Institutional affiliation (hospital, university, etc.)"
+    },
+    "credentials": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Professional credentials and qualifications (e.g., MD, PhD, RN)"
+    }
+  },
+  "required": ["name"]
+}

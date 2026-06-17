@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "description": "Research or analysis method: SWOT, Porter's Five Forces, survey, etc.",
+  "properties": {
+    "name": { "type": "string", "description": "Method name" },
+    "method_type": {
+      "type": "string",
+      "description": "Method type: SWOT, survey, framework, or analysis"
+    },
+    "description": { "type": "string", "description": "Method description" },
+    "steps": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Steps to execute the method"
+    },
+    "when_to_use": {
+      "type": "string",
+      "description": "When this method is most applicable"
+    }
+  },
+  "required": ["name"]
+}

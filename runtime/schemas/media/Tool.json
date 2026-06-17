@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "description": "A tool, software, or application used in media content creation, editing, analytics, or design",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the tool, e.g. 剪映, Final Cut Pro, Canva, 飞瓜数据"
+    },
+    "tool_type": {
+      "type": "string",
+      "enum": [
+        "editor",
+        "analytics",
+        "design",
+        "scheduling",
+        "management",
+        "production"
+      ],
+      "description": "Category of the tool: editor (video/image editor), analytics (data analysis), design (graphic design), scheduling (content planning), management (account management), production (production software)"
+    },
+    "platform": {
+      "type": "string",
+      "description": "Supported operating system or platform, e.g. 网页端, iOS, Android, Windows, macOS"
+    },
+    "pricing_model": {
+      "type": "string",
+      "description": "Pricing model, e.g. 免费, Freemium, 订阅制, 买断制"
+    },
+    "features": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of key features or capabilities of the tool"
+    }
+  },
+  "required": ["name"]
+}

@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "description": "A version, release, or revision of a software component, document, or artifact",
+  "properties": {
+    "version_number": {
+      "type": "string",
+      "description": "Semantic version identifier (e.g., '1.2.3', 'v2.0.0-beta')"
+    },
+    "release_date": {
+      "type": "string",
+      "description": "Date when the version was released or published (ISO 8601 format)"
+    },
+    "changes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of notable changes, additions, fixes, or deprecations in this version"
+    },
+    "compatibility": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Other versions or systems with which this version is compatible"
+    },
+    "status": {
+      "type": "string",
+      "description": "Release maturity (e.g., alpha, beta, release-candidate, stable, deprecated)"
+    }
+  },
+  "required": ["version_number", "status"]
+}

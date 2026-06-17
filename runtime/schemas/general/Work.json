@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "description": "Creative output: blog, video, story, artwork, code",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Title or name of the creative work"
+    },
+    "creator": {
+      "type": "string",
+      "description": "Creator, author, or artist who produced the work"
+    },
+    "type": {
+      "type": "string",
+      "description": "Work type: blog, video, artwork, code, story, music, design, etc."
+    },
+    "description": {
+      "type": "string",
+      "description": "Description or summary of the work"
+    },
+    "url": {
+      "type": "string",
+      "description": "URL or link to access the work"
+    },
+    "created_date": {
+      "type": "string",
+      "description": "Creation or publication date in YYYY-MM-DD format"
+    }
+  },
+  "required": ["name"]
+}

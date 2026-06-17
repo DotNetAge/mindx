@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "description": "Milestone, meeting, occurrence, historical event",
+  "properties": {
+    "name": { "type": "string", "description": "Event name or title" },
+    "date": {
+      "type": "string",
+      "description": "Event date in YYYY-MM-DD format"
+    },
+    "location": {
+      "type": "string",
+      "description": "Physical location or virtual venue of the event"
+    },
+    "participants": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key participants, speakers, or attendees"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of what occurred during the event"
+    },
+    "type": {
+      "type": "string",
+      "description": "Event type: milestone, meeting, release, conference, workshop, etc."
+    }
+  },
+  "required": ["name"]
+}

@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "description": "Software, platform, device, utility",
+  "properties": {
+    "name": { "type": "string", "description": "Tool name" },
+    "purpose": {
+      "type": "string",
+      "description": "Primary purpose or function"
+    },
+    "version": { "type": "string", "description": "Version or release" },
+    "vendor": { "type": "string", "description": "Developer or vendor" },
+    "platform": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Supported platforms"
+    },
+    "features": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key features or capabilities"
+    }
+  },
+  "required": ["name", "purpose"]
+}

@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "description": "Market trend, pattern, or directional shift",
+  "properties": {
+    "name": { "type": "string", "description": "Trend name" },
+    "direction": {
+      "type": "string",
+      "description": "Trend direction: rising, stable, or declining"
+    },
+    "category": {
+      "type": "string",
+      "description": "Trend category: tech, social, or economic"
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Supporting evidence for the trend"
+    },
+    "impact_level": {
+      "type": "string",
+      "description": "Impact level (e.g., high, medium, low)"
+    }
+  },
+  "required": ["name"]
+}

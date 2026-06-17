@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "description": "A published piece of content, such as a video, article, or post, created and distributed on a media platform",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title of the content piece"
+    },
+    "creator": {
+      "type": "string",
+      "description": "Name or handle of the creator who published this work"
+    },
+    "platform": {
+      "type": "string",
+      "description": "Platform where the work was published"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Link to the published work"
+    },
+    "publish_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date when the work was published, in YYYY-MM-DD format"
+    },
+    "format": {
+      "type": "string",
+      "description": "Content format of this work, e.g. 短视频, 图文, 播客"
+    },
+    "performance_metrics": {
+      "type": "object",
+      "description": "Key performance indicators for this work",
+      "properties": {
+        "views": { "type": "integer", "description": "Number of views/plays" },
+        "likes": { "type": "integer", "description": "Number of likes" },
+        "shares": {
+          "type": "integer",
+          "description": "Number of shares/retweets"
+        },
+        "comments": { "type": "integer", "description": "Number of comments" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["title"]
+}

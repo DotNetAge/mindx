@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "description": "Business metrics: market share, growth rate, DAU, NPS, etc.",
+  "properties": {
+    "name": { "type": "string", "description": "Metric name" },
+    "metric_type": {
+      "type": "string",
+      "description": "Metric type: market_share, growth, DAU, NPS, or revenue"
+    },
+    "value": { "type": "string", "description": "Metric value" },
+    "benchmark": {
+      "type": "string",
+      "description": "Industry benchmark or comparison"
+    },
+    "source": { "type": "string", "description": "Data source" }
+  },
+  "required": ["name"]
+}

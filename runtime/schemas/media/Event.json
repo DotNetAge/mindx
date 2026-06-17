@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "description": "An activity, release, or hot event in the media space, such as campaign launches, content releases, or trending social incidents",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the event, e.g. 618大促, 春晚直播, 某品牌新品发布会"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "release",
+        "launch",
+        "hot_topic",
+        "campaign",
+        "conference",
+        "festival",
+        "controversy"
+      ],
+      "description": "Category of the event"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date when the event occurs or occurred, in YYYY-MM-DD format"
+    },
+    "platform": {
+      "type": "string",
+      "description": "Platform where the event takes place or is primarily discussed"
+    },
+    "participants": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Notable participants, creators, or brands involved in the event"
+    },
+    "impact": {
+      "type": "string",
+      "description": "Description of the event's impact or significance, including reach or engagement"
+    }
+  },
+  "required": ["name"]
+}

@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "description": "Key figure in finance — analyst, economist, fund manager, trader, industry expert",
+  "properties": {
+    "name": { "type": "string", "description": "Person's full name" },
+    "role": {
+      "type": "string",
+      "enum": ["analyst", "economist", "manager", "trader"],
+      "description": "Professional role"
+    },
+    "organization": {
+      "type": "string",
+      "description": "Affiliated organization or employer"
+    },
+    "specializations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Areas of expertise or specialization"
+    },
+    "reputation": {
+      "type": "string",
+      "description": "Market reputation or influence level (e.g., renowned, respected, controversial)"
+    }
+  },
+  "required": ["name", "role"]
+}

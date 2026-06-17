@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "description": "A creative work in the literary domain, such as a novel, poem, script, or story.",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "The full title of the work"
+    },
+    "author": {
+      "type": "string",
+      "description": "The name of the author who created this work"
+    },
+    "work_type": {
+      "type": "string",
+      "description": "The literary form of the work",
+      "enum": ["novel", "poem", "script", "story"]
+    },
+    "genre": {
+      "type": "string",
+      "description": "The genre classification of the work"
+    },
+    "publication_date": {
+      "type": "string",
+      "description": "The date or year the work was first published"
+    },
+    "synopsis": {
+      "type": "string",
+      "description": "A brief summary of the work's content and themes"
+    },
+    "characters": {
+      "type": "array",
+      "description": "Key characters appearing in this work",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["title"]
+}

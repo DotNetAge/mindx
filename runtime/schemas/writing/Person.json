@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "description": "A real person in the writing and literary domain, such as an author, critic, or editor.",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The full name of the person"
+    },
+    "role": {
+      "type": "string",
+      "description": "The person's primary professional role in the literary field",
+      "enum": ["author", "critic", "editor"]
+    },
+    "notable_works": {
+      "type": "array",
+      "description": "Significant works associated with this person",
+      "items": {
+        "type": "string"
+      }
+    },
+    "genre": {
+      "type": "string",
+      "description": "The primary genre or literary tradition this person is associated with"
+    },
+    "nationality": {
+      "type": "string",
+      "description": "The person's nationality or cultural background"
+    },
+    "period": {
+      "type": "string",
+      "description": "The historical period during which this person was active"
+    }
+  },
+  "required": ["name"]
+}

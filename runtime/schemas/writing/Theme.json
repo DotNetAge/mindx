@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "description": "A central theme, motif, or underlying idea explored in a literary work.",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The name of the theme, e.g. 爱, 自由, 科技与人, 成长"
+    },
+    "description": {
+      "type": "string",
+      "description": "An explanation of what this theme encompasses"
+    },
+    "related_themes": {
+      "type": "array",
+      "description": "Thematically connected or frequently paired concepts",
+      "items": {
+        "type": "string"
+      }
+    },
+    "works": {
+      "type": "array",
+      "description": "Example works that prominently feature this theme",
+      "items": {
+        "type": "string"
+      }
+    },
+    "significance": {
+      "type": "string",
+      "description": "The thematic importance or cultural relevance of this motif"
+    }
+  },
+  "required": ["name"]
+}

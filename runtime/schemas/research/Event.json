@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "description": "Business event: funding, launch, policy change, merger, etc.",
+  "properties": {
+    "name": { "type": "string", "description": "Event name" },
+    "event_type": {
+      "type": "string",
+      "description": "Event type: funding, launch, policy, or merger"
+    },
+    "date": { "type": "string", "description": "Event date" },
+    "participants": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key participants or parties involved"
+    },
+    "financial_details": {
+      "type": "string",
+      "description": "Financial details if applicable"
+    },
+    "impact": {
+      "type": "string",
+      "description": "Business impact of the event"
+    }
+  },
+  "required": ["name"]
+}

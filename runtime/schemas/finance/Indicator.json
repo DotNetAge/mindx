@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "description": "Economic or technical indicator — K-line, PE ratio, GDP, CPI, moving average, RSI",
+  "properties": {
+    "name": { "type": "string", "description": "Indicator name" },
+    "indicator_type": {
+      "type": "string",
+      "enum": ["economic", "technical", "fundamental"],
+      "description": "Category of the indicator"
+    },
+    "value": {
+      "type": "number",
+      "description": "Current numeric value of the indicator"
+    },
+    "unit": {
+      "type": "string",
+      "description": "Unit of measurement (e.g., %, points, USD, ratio)"
+    },
+    "frequency": {
+      "type": "string",
+      "description": "Reporting frequency (e.g., daily, weekly, monthly, quarterly, annual)"
+    },
+    "source": {
+      "type": "string",
+      "description": "Data source or publisher of the indicator"
+    }
+  },
+  "required": ["name", "indicator_type"]
+}

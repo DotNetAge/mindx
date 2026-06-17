@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "description": "Market, industry, sector, or vertical",
+  "properties": {
+    "name": { "type": "string", "description": "Market name" },
+    "market_type": {
+      "type": "string",
+      "description": "Market type: industry, sector, or vertical"
+    },
+    "region": { "type": "string", "description": "Geographic region" },
+    "size_estimate": {
+      "type": "string",
+      "description": "Estimated market size"
+    },
+    "growth_rate": { "type": "string", "description": "Market growth rate" },
+    "key_players": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key companies in this market"
+    }
+  },
+  "required": ["name"]
+}

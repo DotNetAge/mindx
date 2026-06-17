@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "description": "Company, institution, brand, or agency",
+  "properties": {
+    "name": { "type": "string", "description": "Organization name" },
+    "org_type": {
+      "type": "string",
+      "description": "Organization type: company, institution, brand, or agency"
+    },
+    "industry": { "type": "string", "description": "Primary industry" },
+    "headquarters": {
+      "type": "string",
+      "description": "Headquarters location"
+    },
+    "size": { "type": "string", "description": "Organization size" },
+    "key_products": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key products or services"
+    }
+  },
+  "required": ["name"]
+}

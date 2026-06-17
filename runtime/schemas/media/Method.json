@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "description": "An operation strategy or technique for content creation, publishing, or audience engagement on media platforms",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the method or strategy, e.g. 蹭热点法, 黄金3秒开头, 评论区互动技巧"
+    },
+    "strategy_type": {
+      "type": "string",
+      "description": "Category of strategy: 运营策略 (operation), 排版技巧 (layout), 文案套路 (copywriting)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed explanation of the method and how it works"
+    },
+    "steps": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Step-by-step instructions for implementing the method"
+    },
+    "platform": {
+      "type": "string",
+      "description": "Platform this method is primarily applicable to"
+    },
+    "effectiveness": {
+      "type": "string",
+      "description": "Observed or expected effectiveness of the method, e.g. 高, 中, 低 or specific metrics"
+    }
+  },
+  "required": ["name"]
+}

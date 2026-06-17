@@ -6,50 +6,53 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	goragindexer "github.com/DotNetAge/gorag/indexer"
-	"gopkg.in/yaml.v3"
 )
 
 // ---------------------------------------------------------------------------
 // EntityTags JSON-RPC handlers
-// Data stored in ~/.mindx/data/entity_tags.yml
+// Data stored in ~/.mindx/data/entity-defs.json
 // ---------------------------------------------------------------------------
 
-// entityTagDef 是单个实体标签定义。
-type entityTagDef struct {
-	Name     string `yaml:"name" json:"name"`
-	Title    string `yaml:"title" json:"title"`
-	Desc     string `yaml:"desc" json:"desc"`
-	Category string `yaml:"category,omitempty" json:"category,omitempty"`
+// entityDefFileEntry 是 entity-defs.json 中单个实体类型条目。
+// Prompt 和 Schema 由保存时刻自动填充，不需前端传入。
+type entityDefFileEntry struct {
+	Name     string `json:"name"`
+	Title    string `json:"title"`
+	Desc     string `json:"desc"`
+	Category string `json:"category,omitempty"`
+	Prompt   string `json:"prompt,omitempty"`   // 保存时自动生成或读取
+	Schema   string `json:"schema,omitempty"`   // 保存时从 schema 文件嵌入
 }
 
-// entityTagsFile 是 entity_tags.yml 的文件结构。
+// entityTagsFile 是 entity-defs.json 的文件结构。
 type entityTagsFile struct {
-	Domain string         `yaml:"domain" json:"domain"`
-	Title  string         `yaml:"title" json:"title"`
-	Types  []entityTagDef `yaml:"types" json:"types"`
+	Domain string              `json:"domain"`
+	Title  string              `json:"title"`
+	Types  []entityDefFileEntry `json:"types"`
 }
 
-// entityTagsPath 返回 entity_tags.yml 的完整路径。
-func (d *Daemon) entityTagsPath() string {
-	return filepath.Join(d.app.Settings().DataDir(), "entity_tags.yml")
+// entityDefsPath 返回 entity-defs.json 的完整路径。
+func (d *Daemon) entityDefsPath() string {
+	return filepath.Join(d.app.Settings().DataDir(), "entity-defs.json")
 }
 
-// loadEntityTags 从磁盘加载 entity_tags.yml，文件不存在时返回空结构。
-func (d *Daemon) loadEntityTags() (*entityTagsFile, error) {
-	path := d.entityTagsPath()
+// loadEntityDefs 从磁盘加载 entity-defs.json，文件不存在时返回空结构。
+func (d *Daemon) loadEntityDefs() (*entityTagsFile, error) {
+	path := d.entityDefsPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &entityTagsFile{Domain: "user", Title: "自定义实体标签"}, nil
 		}
-		return nil, fmt.Errorf("read entity_tags: %w", err)
+		return nil, fmt.Errorf("read entity-defs: %w", err)
 	}
 
 	var f entityTagsFile
-	if err := yaml.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("parse entity_tags: %w", err)
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("parse entity-defs: %w", err)
 	}
 	if f.Domain == "" {
 		f.Domain = "user"
@@ -61,7 +64,7 @@ func (d *Daemon) loadEntityTags() (*entityTagsFile, error) {
 }
 
 func (d *Daemon) handleEntityTagsGet(_ context.Context, _ json.RawMessage) (any, error) {
-	f, err := d.loadEntityTags()
+	f, err := d.loadEntityDefs()
 	if err != nil {
 		return nil, fmt.Errorf("entity_tags.get: %w", err)
 	}
@@ -69,13 +72,43 @@ func (d *Daemon) handleEntityTagsGet(_ context.Context, _ json.RawMessage) (any,
 }
 
 type entityTagsSaveParams struct {
-	Types []entityTagDef `json:"types"`
+	Types []entityDefFileEntry `json:"types"`
+}
+
+// schemasDir 返回 ~/.mindx/schemas/ 目录。
+func (d *Daemon) schemasDir() string {
+	return filepath.Join(d.app.Settings().DataDir(), "..", "schemas")
+}
+
+// readSchemaFile 读取 schema 文件，返回文件内容（JSON Schema 文本）。
+// 文件不存在时返回空字符串。
+func (d *Daemon) readSchemaFile(category, name string) string {
+	if category == "" {
+		return ""
+	}
+	path := filepath.Join(d.schemasDir(), category, name+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
 }
 
 func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage) (any, error) {
 	var p entityTagsSaveParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
+	}
+
+	// 补全 Prompt 和 Schema
+	for i := range p.Types {
+		t := &p.Types[i]
+		if t.Prompt == "" && t.Name != "" {
+			t.Prompt = "**" + t.Name + "** — " + t.Desc
+		}
+		if t.Schema == "" {
+			t.Schema = d.readSchemaFile(t.Category, t.Name)
+		}
 	}
 
 	// 构建文件结构
@@ -85,14 +118,14 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 		Types:  p.Types,
 	}
 
-	// 序列化为 YAML
-	data, err := yaml.Marshal(&f)
+	// 序列化为 JSON
+	data, err := json.MarshalIndent(&f, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("entity_tags.save: marshal yaml: %w", err)
+		return nil, fmt.Errorf("entity_tags.save: marshal json: %w", err)
 	}
 
 	// 写入文件
-	path := d.entityTagsPath()
+	path := d.entityDefsPath()
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("entity_tags.save: create dir: %w", err)
@@ -107,15 +140,16 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 	if d.sharedMemory != nil && len(p.Types) > 0 {
 		hybrid := d.sharedMemory.Indexer()
 		if hybrid != nil {
-			// 从 Types 构建 entityDefs 字符串列表
-			defs := make([]string, 0, len(p.Types))
+			defs := make([]goragindexer.EntityDef, 0, len(p.Types))
 			for _, t := range p.Types {
 				if t.Name != "" {
-					defs = append(defs, "**"+t.Name+"** — "+t.Desc)
+					defs = append(defs, goragindexer.EntityDef{
+						Prompt: t.Prompt,
+						Schema: t.Schema,
+					})
 				}
 			}
 			if len(defs) > 0 {
-				// 通过 HybridIndexer 获取 LLMIndexer 并更新实体定义
 				if raw, ok := hybrid.GetIndexer("llm"); ok {
 					if llmIdx, ok := raw.(*goragindexer.LLMIndexer); ok {
 						llmIdx.SetEntityDefs(defs)
@@ -132,12 +166,12 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 	}, nil
 }
 
-// parseEntityDefsFromSavedTags 从 entity_tags.yml 读取并解析为 entityDefs 字符串列表。
+// parseEntityDefsFromSavedTags 从 entity-defs.json 读取并解析为 EntityDef 列表。
 // 用于初始化 LLMIndexer 时加载用户此前保存的实体标签。
 //
 //nolint:unused
-func (d *Daemon) _parseEntityDefsFromSavedTags() []string {
-	f, err := d.loadEntityTags()
+func (d *Daemon) _parseEntityDefsFromSavedTags() []goragindexer.EntityDef {
+	f, err := d.loadEntityDefs()
 	if err != nil {
 		d.logger.Warn("entity_tags: failed to load saved tags, using defaults", "error", err)
 		return nil
@@ -145,11 +179,15 @@ func (d *Daemon) _parseEntityDefsFromSavedTags() []string {
 	if len(f.Types) == 0 {
 		return nil
 	}
-	defs := make([]string, 0, len(f.Types))
+	defs := make([]goragindexer.EntityDef, 0, len(f.Types))
 	for _, t := range f.Types {
-		if t.Name != "" {
-			defs = append(defs, "**"+t.Name+"** — "+t.Desc)
+		if t.Name == "" {
+			continue
 		}
+		defs = append(defs, goragindexer.EntityDef{
+			Prompt: t.Prompt,
+			Schema: t.Schema,
+		})
 	}
 	d.logger.Info("entity_tags: loaded saved entity defs", "count", len(defs))
 	return defs

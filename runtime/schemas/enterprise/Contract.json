@@ -1,0 +1,40 @@
+{
+  "type": "object",
+  "description": "Contract, agreement, SLA, terms, or policy defining a binding arrangement between parties",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Contract title or reference name"
+    },
+    "parties": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of involved parties or signatories in the contract"
+    },
+    "type": {
+      "type": "string",
+      "description": "Type of contract (e.g., service agreement, NDA, license, SLA, employment)"
+    },
+    "effective_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the contract becomes effective (ISO 8601 format)"
+    },
+    "expiry_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the contract expires or renews (ISO 8601 format)"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "active", "expired", "terminated", "renewed"],
+      "description": "Current lifecycle status of the contract"
+    },
+    "key_terms": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key contractual terms, clauses, or conditions (e.g., payment terms, termination notice)"
+    }
+  },
+  "required": ["name", "parties"]
+}

@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "description": "Anatomical structure, organ, or body system",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Anatomical structure or organ name"
+    },
+    "anatomy_type": {
+      "type": "string",
+      "enum": ["organ", "tissue", "system", "structure"],
+      "description": "Category of anatomical entity"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the anatomical structure"
+    },
+    "location": { "type": "string", "description": "Location within the body" },
+    "function": {
+      "type": "string",
+      "description": "Primary physiological function"
+    },
+    "related_structures": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Related or connected anatomical structures"
+    }
+  },
+  "required": ["name"]
+}

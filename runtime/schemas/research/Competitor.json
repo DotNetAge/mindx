@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "description": "Competing company, product, or alternative",
+  "properties": {
+    "name": { "type": "string", "description": "Competitor name" },
+    "market_position": {
+      "type": "string",
+      "description": "Competitive market position (e.g., leader, challenger, niche)"
+    },
+    "strengths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Competitive strengths"
+    },
+    "weaknesses": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Competitive weaknesses"
+    },
+    "market_share": {
+      "type": "string",
+      "description": "Market share estimate"
+    },
+    "products": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key products or services"
+    }
+  },
+  "required": ["name"]
+}

@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "description": "Methodology, process, technique, workflow",
+  "properties": {
+    "name": { "type": "string", "description": "Method name" },
+    "description": {
+      "type": "string",
+      "description": "Description of the method"
+    },
+    "steps": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key steps involved"
+    },
+    "inputs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Required inputs or preconditions"
+    },
+    "outputs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Expected outputs or deliverables"
+    },
+    "difficulty": {
+      "type": "string",
+      "description": "Difficulty level: beginner, intermediate, or advanced"
+    }
+  },
+  "required": ["name"]
+}

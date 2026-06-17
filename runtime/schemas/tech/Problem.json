@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "description": "A problem, bug, issue, or error encountered in a technical context",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Short identifying name or title of the problem"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the problem, including symptoms and context"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "major", "minor"],
+      "description": "Impact level of the problem"
+    },
+    "status": {
+      "type": "string",
+      "description": "Current status (e.g., open, investigating, resolved, closed)"
+    },
+    "affected_component": {
+      "type": "string",
+      "description": "The component, module, or system area affected by the problem"
+    },
+    "workaround": {
+      "type": "string",
+      "description": "Temporary mitigation or alternative approach while a permanent fix is pending"
+    }
+  },
+  "required": ["name", "description"]
+}

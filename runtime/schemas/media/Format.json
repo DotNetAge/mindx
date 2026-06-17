@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "description": "A content format describing how media is presented, including video, text, audio, or live formats",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the content format, e.g. 短视频, 图文, 直播, 播客, 长视频"
+    },
+    "format_type": {
+      "type": "string",
+      "enum": [
+        "short_video",
+        "long_video",
+        "live",
+        "audio",
+        "text",
+        "image_text"
+      ],
+      "description": "Technical category of the format: short_video, long_video, live, audio, text, image_text"
+    },
+    "typical_duration": {
+      "type": "string",
+      "description": "Typical duration or length of the format, e.g. 15-60 seconds, 5-15 minutes, N/A for text"
+    },
+    "platform": {
+      "type": "string",
+      "description": "Platform this format is commonly associated with, e.g. 抖音, B站, 小红书"
+    }
+  },
+  "required": ["name"]
+}

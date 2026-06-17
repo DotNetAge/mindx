@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "description": "A subject, trend, or content idea that drives media conversations, including hot topics, content选题 (topic selections), and emerging trends",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name or keyword of the topic, e.g. AI换脸, 春节营销, 元宇宙"
+    },
+    "category": {
+      "type": "string",
+      "description": "Category of the topic, e.g. 科技, 娱乐, 社会, 商业, 生活方式"
+    },
+    "trend_direction": {
+      "type": "string",
+      "enum": ["rising", "stable", "declining"],
+      "description": "Current trend direction of this topic's popularity"
+    },
+    "related_topics": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Related or subtopics associated with this topic"
+    },
+    "platform": {
+      "type": "string",
+      "description": "Platform where this topic is trending or relevant"
+    }
+  },
+  "required": ["name"]
+}

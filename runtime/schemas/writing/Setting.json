@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "description": "The world-building context of a narrative, encompassing time, place, society, and overarching worldview.",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "A label or short identifier for this setting"
+    },
+    "setting_type": {
+      "type": "string",
+      "description": "The primary domain of the setting",
+      "enum": ["time", "place", "society", "world"]
+    },
+    "description": {
+      "type": "string",
+      "description": "A narrative description of the setting's atmosphere and defining features"
+    },
+    "time_period": {
+      "type": "string",
+      "description": "The historical era, season, or time frame in which the story takes place"
+    },
+    "location": {
+      "type": "string",
+      "description": "The geographical or spatial context of the narrative"
+    },
+    "mood": {
+      "type": "string",
+      "description": "The emotional tone or atmosphere evoked by this setting"
+    }
+  },
+  "required": ["name"]
+}

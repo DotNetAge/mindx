@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "description": "Prevention method, vaccine, or lifestyle measure",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Prevention method or measure name"
+    },
+    "prevention_type": {
+      "type": "string",
+      "enum": ["vaccine", "lifestyle", "screening", "education"],
+      "description": "Category of prevention method"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the prevention method"
+    },
+    "target_conditions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Conditions this method aims to prevent"
+    },
+    "effectiveness": {
+      "type": "string",
+      "description": "Effectiveness or efficacy of the prevention method"
+    }
+  },
+  "required": ["name"]
+}

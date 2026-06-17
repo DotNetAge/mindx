@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "description": "The narrative voice, writing style, and perspective employed in a literary work.",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "A label or identifier for this style or voice"
+    },
+    "perspective": {
+      "type": "string",
+      "description": "The point of view from which the story is told",
+      "enum": ["first_person", "third_person", "omniscient"]
+    },
+    "voice_tone": {
+      "type": "string",
+      "description": "The prevailing tone or attitude of the narration, e.g. formal, lyrical, colloquial, ironic"
+    },
+    "stylistic_markers": {
+      "type": "array",
+      "description": "Recurring stylistic features such as sentence rhythm, diction, figurative language patterns",
+      "items": {
+        "type": "string"
+      }
+    },
+    "influences": {
+      "type": "string",
+      "description": "Literary or cultural influences that shaped this writing style"
+    }
+  },
+  "required": ["name"]
+}

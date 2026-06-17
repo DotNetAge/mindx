@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "description": "Financial asset — stock, bond, real estate, commodity, crypto",
+  "properties": {
+    "name": { "type": "string", "description": "Asset name" },
+    "type": {
+      "type": "string",
+      "enum": ["stock", "bond", "real_estate", "commodity", "crypto", "other"],
+      "description": "Asset class"
+    },
+    "ticker": {
+      "type": "string",
+      "description": "Ticker symbol (if applicable)"
+    },
+    "value": { "type": "number", "description": "Current value or price" },
+    "currency": {
+      "type": "string",
+      "description": "Currency denomination (e.g., USD, CNY, EUR)"
+    },
+    "market": {
+      "type": "string",
+      "description": "Market or exchange where the asset is traded (e.g., NYSE, SSE, HKEX)"
+    }
+  },
+  "required": ["name", "type"]
+}
