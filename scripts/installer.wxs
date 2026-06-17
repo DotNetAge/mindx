@@ -45,7 +45,7 @@
 
     <!-- Properties: user inputs from UI -->
     <Property Id="SELECTED_PROVIDER" Value="openai|OPENAI_API_KEY" Secure="yes" />
-    <Property Id="APIKEY_INPUT" Value="" Hidden="yes" Secure="yes" />
+    <Property Id="APIKEY_INPUT" Hidden="yes" Secure="yes" />
     <Property Id="ENV_VAR_NAME" Value="OPENAI_API_KEY" Secure="yes" />
     <Property Id="DAEMON_AUTOSTART" Value="1" Secure="yes" />
     <Property Id="CREATE_SHORTCUT" Value="1" Secure="yes" />
@@ -71,32 +71,33 @@
     <!-- UI -->
     <UIRef Id="WixUI_InstallDir" />
     <UI Id="MindX_WixUI">
-      <Publish Dialog="WelcomeDlg"          control="Next" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
-      <Publish Dialog="LicenseAgreementDlg" control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
-      <Publish Dialog="LicenseAgreementDlg" control="Next" Event="NewDialog" Value="MindXConfigDlg">LicenseAccepted = "1"</Publish>
-      <Publish Dialog="MindXConfigDlg"       control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
-      <Publish Dialog="MindXConfigDlg"       control="Next" Event="NewDialog" Value="VerifyReadyDlg"><![CDATA[ SELECTED_PROVIDER <> "" AND APIKEY_INPUT <> "" ]]></Publish>
-      <Publish Dialog="MindXConfigDlg"       control="Next" Event="SpawnDialog" Value="ErrorDlg"><![CDATA[ SELECTED_PROVIDER = "" OR APIKEY_INPUT = "" ]]></Publish>
-      <Publish Dialog="VerifyReadyDlg"       control="Back" Event="NewDialog" Value="MindXConfigDlg">1</Publish>
-      <Publish Dialog="ExitDialog"           control="Finish" Event="DoAction" Value="LaunchBrowser">LAUNCH_BROWSER = "1" AND NOT Installed</Publish>
+      <Publish Dialog="WelcomeDlg"          Control="Next" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+      <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="MindXConfigDlg">LicenseAccepted = "1"</Publish>
+      <Publish Dialog="MindXConfigDlg"       Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+      <Publish Dialog="MindXConfigDlg"       Control="Next" Event="NewDialog" Value="VerifyReadyDlg"><![CDATA[ SELECTED_PROVIDER != "" AND APIKEY_INPUT != "" ]]></Publish>
+      <Publish Dialog="MindXConfigDlg"       Control="Next" Event="SpawnDialog" Value="ErrorDlg"><![CDATA[ SELECTED_PROVIDER = "" OR APIKEY_INPUT = "" ]]></Publish>
+      <Publish Dialog="VerifyReadyDlg"       Control="Back" Event="NewDialog" Value="MindXConfigDlg">1</Publish>
+      <Publish Dialog="ExitDialog"           Control="Finish" Event="DoAction" Value="LaunchBrowser">LAUNCH_BROWSER = "1" AND NOT Installed</Publish>
+
+      <ProgressText Action="SetAPIKeyEnvVar">Setting up API key environment variable...</ProgressText>
+      <ProgressText Action="RegisterDaemonService">Registering MindX Windows Service...</ProgressText>
+      <ProgressText Action="ConfigureDaemonStart">Setting service to auto-start...</ProgressText>
+      <ProgressText Action="ConfigureDaemonDir">Setting service working directory...</ProgressText>
+      <ProgressText Action="ConfigureDaemonDisplayName">Setting service display name...</ProgressText>
+      <ProgressText Action="ConfigureDaemonDescription">Setting service description...</ProgressText>
+      <ProgressText Action="StartDaemonService">Starting MindX daemon service...</ProgressText>
+      <ProgressText Action="CreatePythonVenv">Setting up Python virtual environment...</ProgressText>
+      <ProgressText Action="CreateShortcuts">Creating shortcuts...</ProgressText>
+      <ProgressText Action="RemoveDaemonService">Removing MindX Windows Service...</ProgressText>
+      <ProgressText Action="RemoveAPIKeyEnvVar">Removing API key environment variable...</ProgressText>
+
+      <Publish Dialog="MindXConfigDlg" Control="ProviderCombo" Event="Change" Value="SplitProviderValue">1</Publish>
     </UI>
 
-    <ProgressText Action="SetAPIKeyEnvVar">Setting up API key environment variable...</ProgressText>
-    <ProgressText Action="RegisterDaemonService">Registering MindX Windows Service...</ProgressText>
-    <ProgressText Action="ConfigureDaemonStart">Setting service to auto-start...</ProgressText>
-    <ProgressText Action="ConfigureDaemonDir">Setting service working directory...</ProgressText>
-    <ProgressText Action="ConfigureDaemonDisplayName">Setting service display name...</ProgressText>
-    <ProgressText Action="ConfigureDaemonDescription">Setting service description...</ProgressText>
-    <ProgressText Action="StartDaemonService">Starting MindX daemon service...</ProgressText>
-    <ProgressText Action="CreatePythonVenv">Setting up Python virtual environment...</ProgressText>
-    <ProgressText Action="CreateShortcuts">Creating shortcuts...</ProgressText>
-    <ProgressText Action="RemoveDaemonService">Removing MindX Windows Service...</ProgressText>
-    <ProgressText Action="RemoveAPIKeyEnvVar">Removing API key environment variable...</ProgressText>
-
-    <!-- VBScript Helper -->
+    <!-- VBScript Helper (CustomAction for splitting provider|env_var) -->
     <Binary Id="VBSHelper" SourceFile="scripts/installer-helper.vbs" />
     <CustomAction Id="SplitProviderValue" BinaryKey="VBSHelper" VBScriptCall="SplitProviderValue" Execute="immediate" />
-    <Publish Dialog="MindXConfigDlg" control="ProviderCombo" Event="Change" Value="SplitProviderValue">1</Publish>
 
     <!-- Directory Structure -->
     <Directory Id="TARGETDIR" Name="SourceDir">
