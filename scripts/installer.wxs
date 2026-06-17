@@ -235,12 +235,16 @@
         <Condition Action="hide">PYTHON_DETECTED = ""</Condition>
       </Control>
 
-      <Control Id="Back" Type="PushButton" X="180" Y="376" Width="56" Height="17">&lt; Back</Control>
+      <Control Id="Back" Type="PushButton" X="180" Y="376" Width="56" Height="17">
+        <Text>&lt; Back</Text>
+      </Control>
       <Control Id="Next" Type="PushButton" X="248" Y="376" Width="56" Height="17" Default="yes">
         <Text>Next &gt;</Text>
         <Condition Action="disable">SELECTED_PROVIDER = "" OR APIKEY_INPUT = ""</Condition>
       </Control>
-      <Control Id="Cancel" Type="PushButton" X="328" Y="376" Width="56" Height="17">Cancel</Control>
+      <Control Id="Cancel" Type="PushButton" X="328" Y="376" Width="56" Height="17">
+        <Text>Cancel</Text>
+      </Control>
     </Dialog>
     </UI>
 
