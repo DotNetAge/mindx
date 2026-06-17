@@ -140,9 +140,6 @@
       <Directory Id="DesktopFolder" Name="Desktop" />
     </Directory>
 
-    <?include heat-skills.wxs ?>
-    <?include heat-agents.wxs ?>
-
     <Feature Id="Complete" Title="$(var.ProductName)" Level="1" Description="Full installation including daemon service and WebUI access">
       <ComponentRef Id="MainExecutable" />
       <ComponentRef Id="NssmBinary" />

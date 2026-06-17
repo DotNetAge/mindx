@@ -338,7 +338,7 @@ jobs:
         run: |
           $version = "${{ needs.prepare.outputs.version_num }}"
           # Replace __VERSION__ placeholder in wxs
-          (Get-Content "scripts/installer.wxs" -Encoding UTF8) -replace '__VERSION__', $version | Set-Content "scripts/installer.wxs" -Encoding UTF8 -NoNewline
+          (Get-Content "scripts/installer.wxs" -Encoding UTF8) -replace '__VERSION__', $version | Set-Content "scripts/installer.wxs" -Encoding UTF8
           Write-Host "WXS version set to: $version"
 
       - name: Build MSI (candle + light)
@@ -356,41 +356,41 @@ jobs:
           #   Both target MINDX_SKILLS_DIR / MINDX_AGENTS_DIR respectively
           Write-Host "=== Generating heat fragments for runtime/skills ==="
           heat.exe dir ".\runtime\skills" `
-            -out "scripts\heat-skills.wxs" `
+            -out "heat-skills.wxs" `
             -cg SkillFiles `
             -dr MINDX_SKILLS_DIR `
             -scom -sreg -srd -sfrag `
             -var "var.SourceDir" `
             -ag
 
-          if (-not (Test-Path "scripts\heat-skills.wxs")) {
+          if (-not (Test-Path "heat-skills.wxs")) {
             Write-Error "heat.exe failed to generate heat-skills.wxs for skills directory"
           }
-          Write-Host "heat-skills.wxs generated ($(Get-Item scripts\heat-skills.wxs).Length) bytes"
+          Write-Host "heat-skills.wxs generated ($(Get-Item heat-skills.wxs).Length) bytes"
 
           Write-Host "=== Generating heat fragments for runtime/agents ==="
           heat.exe dir ".\runtime\agents" `
-            -out "scripts\heat-agents.wxs" `
+            -out "heat-agents.wxs" `
             -cg AgentFiles `
             -dr MINDX_AGENTS_DIR `
             -scom -sreg -srd -sfrag `
             -var "var.SourceDir" `
             -ag
 
-          if (-not (Test-Path "scripts\heat-agents.wxs")) {
+          if (-not (Test-Path "heat-agents.wxs")) {
             Write-Error "heat.exe failed to generate heat-agents.wxs for agents directory"
           }
-          Write-Host "heat-agents.wxs generated ($(Get-Item scripts\heat-agents.wxs).Length) bytes"
+          Write-Host "heat-agents.wxs generated ($(Get-Item heat-agents.wxs).Length) bytes"
 
           # Step 1: Compile .wxs -> .wixobj (main wxs + 2 heat-generated fragments)
           Write-Host "=== Compiling WiX sources with candle ==="
-          candle scripts/installer.wxs scripts/heat-skills.wxs scripts/heat-agents.wxs `
+          candle scripts/installer.wxs heat-skills.wxs heat-agents.wxs `
             -ext WixUIExtension `
             -dSourceDir="."
 
           # Step 2: Link .wixobj -> .msi
           Write-Host "=== Linking with light ==="
-          light installer.wixobj scripts/heat-skills.wixobj scripts/heat-agents.wixobj `
+          light installer.wixobj heat-skills.wixobj heat-agents.wixobj `
             -ext WixUIExtension `
             -out "dist/mindx-${version}.msi"
 
