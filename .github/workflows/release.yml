@@ -371,6 +371,7 @@ jobs:
             -cg SkillFiles `
             -dr MINDX_SKILLS_DIR `
             -scom -sreg -srd -sfrag `
+            -var var.SourceDir `
             -ag
 
           if (-not (Test-Path "heat-skills.wxs")) {
@@ -384,6 +385,7 @@ jobs:
             -cg AgentFiles `
             -dr MINDX_AGENTS_DIR `
             -scom -sreg -srd -sfrag `
+            -var var.SourceDir `
             -ag
 
           if (-not (Test-Path "heat-agents.wxs")) {
