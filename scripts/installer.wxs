@@ -69,17 +69,19 @@
       </DirectorySearch>
     </Property>
 
-    <!-- UI -->
+    <!-- UI: custom dialog flow that inserts MindXConfigDlg between License and InstallDir -->
     <UIRef Id="WixUI_InstallDir" />
     <UI Id="MindX_WixUI">
-      <Publish Dialog="WelcomeDlg"          Control="Next" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
-      <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
-      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="MindXConfigDlg">LicenseAccepted = "1"</Publish>
-      <Publish Dialog="MindXConfigDlg"       Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
-      <Publish Dialog="MindXConfigDlg"       Control="Next" Event="NewDialog" Value="VerifyReadyDlg"><![CDATA[ SELECTED_PROVIDER != "" AND APIKEY_INPUT != "" ]]></Publish>
-      <Publish Dialog="MindXConfigDlg"       Control="Next" Event="SpawnDialog" Value="ErrorDlg"><![CDATA[ SELECTED_PROVIDER = "" OR APIKEY_INPUT = "" ]]></Publish>
-      <Publish Dialog="VerifyReadyDlg"       Control="Back" Event="NewDialog" Value="MindXConfigDlg">1</Publish>
-      <Publish Dialog="ExitDialog"           Control="Finish" Event="DoAction" Value="LaunchBrowser">LAUNCH_BROWSER = "1" AND NOT Installed</Publish>
+      <!-- Override: License Agreement Next goes to MindXConfigDlg instead of InstallDirDlg -->
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="MindXConfigDlg" Order="2">LicenseAccepted = "1"</Publish>
+
+      <!-- New: MindXConfigDlg navigation -->
+      <Publish Dialog="MindXConfigDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+      <Publish Dialog="MindXConfigDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2"><![CDATA[ SELECTED_PROVIDER != "" AND APIKEY_INPUT != "" ]]></Publish>
+      <Publish Dialog="MindXConfigDlg" Control="Next" Event="SpawnDialog" Value="ErrorDlg"><![CDATA[ SELECTED_PROVIDER = "" OR APIKEY_INPUT = "" ]]></Publish>
+
+      <!-- Launch browser after install completes -->
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchBrowser" Order="1">LAUNCH_BROWSER = "1" AND NOT Installed</Publish>
 
       <ProgressText Action="SetAPIKeyEnvVar">Setting up API key environment variable...</ProgressText>
       <ProgressText Action="RegisterDaemonService">Registering MindX Windows Service...</ProgressText>
