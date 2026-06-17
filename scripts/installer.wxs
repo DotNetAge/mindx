@@ -43,19 +43,6 @@
     <Icon Id="MindXIcon" SourceFile="mindx.ico" />
     <Property Id="ARPPRODUCTICON" Value="MindXIcon" />
 
-    <!-- ComboBox content (top-level, referenced by Property name) -->
-    <ComboBox Property="SELECTED_PROVIDER">
-      <ListItem Text="OpenAI" Value="openai|OPENAI_API_KEY" />
-      <ListItem Text="Anthropic (Claude)" Value="anthropic|ANTHROPIC_API_KEY" />
-      <ListItem Text="Google (Gemini)" Value="google|GEMINI_API_KEY" />
-      <ListItem Text="DeepSeek" Value="deepseek|DEEPSEEK_API_KEY" />
-      <ListItem Text="Alibaba Cloud (DashScope)" Value="dashscope|DASHSCOPE_API_KEY" />
-      <ListItem Text="Zhipu (ChatGLM)" Value="zhipu|ZHIPU_API_KEY" />
-      <ListItem Text="Moonshot (Kimi)" Value="moonshot|MOONSHOT_API_KEY" />
-      <ListItem Text="MiniMax" Value="minimax|MINIMAX_API_KEY" />
-      <ListItem Text="Volcengine (Ark)" Value="ark|ARK_API_KEY" />
-    </ComboBox>
-
     <!-- Properties: user inputs from UI -->
     <Property Id="SELECTED_PROVIDER" Value="openai|OPENAI_API_KEY" Secure="yes" />
     <Property Id="APIKEY_INPUT" Hidden="yes" Secure="yes" />
@@ -209,6 +196,17 @@
 
       <Control Id="ProviderLabel" Type="Text" X="20" Y="72" Width="180" Height="12" NoPrefix="yes"><Text>AI Provider:</Text></Control>
       <Control Id="ProviderCombo" Type="ComboBox" X="20" Y="84" Width="280" Height="18" Property="SELECTED_PROVIDER" ComboList="yes" Sorted="yes">
+        <ComboBox Property="SELECTED_PROVIDER">
+          <ListItem Text="OpenAI" Value="openai|OPENAI_API_KEY" />
+          <ListItem Text="Anthropic (Claude)" Value="anthropic|ANTHROPIC_API_KEY" />
+          <ListItem Text="Google (Gemini)" Value="google|GEMINI_API_KEY" />
+          <ListItem Text="DeepSeek" Value="deepseek|DEEPSEEK_API_KEY" />
+          <ListItem Text="Alibaba Cloud (DashScope)" Value="dashscope|DASHSCOPE_API_KEY" />
+          <ListItem Text="Zhipu (ChatGLM)" Value="zhipu|ZHIPU_API_KEY" />
+          <ListItem Text="Moonshot (Kimi)" Value="moonshot|MOONSHOT_API_KEY" />
+          <ListItem Text="MiniMax" Value="minimax|MINIMAX_API_KEY" />
+          <ListItem Text="Volcengine (Ark)" Value="ark|ARK_API_KEY" />
+        </ComboBox>
         <Publish Property="SplitProviderValue" Value="1">1</Publish>
       </Control>
 
