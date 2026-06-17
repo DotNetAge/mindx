@@ -112,15 +112,15 @@
       </Directory>
       <Directory Id="LocalAppDataFolder">
         <Directory Id="MINDX_APPDATA" Name="$(var.ProductName)">
-          <Component Id="RuntimeSettings" Guid="*">
+          <Component Id="RuntimeSettings" Guid="A643DD9A-75B7-4358-B2E1-413A0F6AF2AB" KeyPath="yes">
             <CreateFolder Directory="MINDX_SETTINGS_DIR" />
             <File Id="providers_yml" Source="runtime/settings/providers.yml" Vital="no" />
             <File Id="models_yml" Source="runtime/settings/models.yml" Vital="no" />
             <File Id="mindx_json" Source="runtime/mindx.json" Vital="no" />
           </Component>
-          <Component Id="RuntimeSkillsDir" Guid="*"><CreateFolder Directory="MINDX_SKILLS_DIR" /></Component>
-          <Component Id="RuntimeAgentsDir" Guid="*"><CreateFolder Directory="MINDX_AGENTS_DIR" /></Component>
-          <Component Id="WorkspaceDirs" Guid="*">
+          <Component Id="RuntimeSkillsDir" Guid="177FB78D-B46F-4DAB-BE42-AE07FBEC4916"><CreateFolder Directory="MINDX_SKILLS_DIR" /></Component>
+          <Component Id="RuntimeAgentsDir" Guid="349A4CE2-5485-4DBC-8DAD-63FE9748428A"><CreateFolder Directory="MINDX_AGENTS_DIR" /></Component>
+          <Component Id="WorkspaceDirs" Guid="BAB2D7E7-2437-442A-B8B8-3AE0483BCE99">
             <CreateFolder Directory="MINDX_SESSIONS_DIR" />
             <CreateFolder Directory="MINDX_LOGS_DIR" />
             <CreateFolder Directory="MINDX_DATA_DIR" />
