@@ -372,6 +372,7 @@ jobs:
             -dr MINDX_SKILLS_DIR `
             -scom -sreg -srd -sfrag `
             -var var.SourceDir `
+            -t scripts/heat-ice38-fix.xsl `
             -ag
 
           if (-not (Test-Path "heat-skills.wxs")) {
@@ -386,6 +387,7 @@ jobs:
             -dr MINDX_AGENTS_DIR `
             -scom -sreg -srd -sfrag `
             -var var.SourceDir `
+            -t scripts/heat-ice38-fix.xsl `
             -ag
 
           if (-not (Test-Path "heat-agents.wxs")) {

@@ -104,11 +104,12 @@
       </Directory>
       <Directory Id="LocalAppDataFolder">
         <Directory Id="MINDX_APPDATA" Name="$(var.ProductName)">
-          <Component Id="RuntimeSettings" Guid="A643DD9A-75B7-4358-B2E1-413A0F6AF2AB" KeyPath="yes">
+          <Component Id="RuntimeSettings" Guid="A643DD9A-75B7-4358-B2E1-413A0F6AF2AB">
             <CreateFolder Directory="MINDX_SETTINGS_DIR" />
             <File Id="providers_yml" Source="runtime/settings/providers.yml" Vital="no" />
             <File Id="models_yml" Source="runtime/settings/models.yml" Vital="no" />
             <File Id="mindx_json" Source="runtime/mindx.json" Vital="no" />
+            <RegistryValue Id="RuntimeSettingsReg" Root="HKCU" Key="Software\DotNetAge\mindx\InstallState" Name="RuntimeSettings" Type="integer" Value="1" KeyPath="yes" />
           </Component>
           <Component Id="RuntimeSkillsDir" Guid="177FB78D-B46F-4DAB-BE42-AE07FBEC4916">
             <CreateFolder Directory="MINDX_SKILLS_DIR" />
