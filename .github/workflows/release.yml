@@ -223,7 +223,7 @@ jobs:
       - name: Generate SHA256 checksums
         run: |
           cd packages
-          shasum -a 256 *.tar.gz *.zip > checksums.txt
+          shasum -a 256 *.tar.gz > checksums.txt
           cat checksums.txt
 
       - name: Create GitHub Release
