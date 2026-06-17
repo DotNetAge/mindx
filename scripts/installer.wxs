@@ -153,21 +153,21 @@
     </Feature>
 
     <!-- Custom Actions: Install (all deferred, elevated) -->
-    <CustomAction Id="SetAPIKeyEnvVar" ExeCommand='cmd /c setx [ENV_VAR_NAME] &quot;[APIKEY_INPUT]&quot;' Execute="deferred" Return="ignore" Impersonate="no" />
-    <CustomAction Id="RegisterDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; install MindXDaemon &quot;[INSTALLDIR]mindx.exe&quot; daemon' Execute="deferred" Return="check" Impersonate="no" />
-    <CustomAction Id="ConfigureDaemonStart" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon Start SERVICE_AUTO_START' Execute="deferred" Return="ignore" Impersonate="no" />
-    <CustomAction Id="ConfigureDaemonDir" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon AppDirectory &quot;[MINDX_WORKSPACE]&quot;' Execute="deferred" Return="ignore" Impersonate="no" />
-    <CustomAction Id="ConfigureDaemonDisplayName" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon DisplayName &quot;MindX Daemon&quot;' Execute="deferred" Return="ignore" Impersonate="no" />
-    <CustomAction Id="ConfigureDaemonDescription" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon Description &quot;MindX AI-native background service&quot;' Execute="deferred" Return="ignore" Impersonate="no" />
-    <CustomAction Id="StartDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; start MindXDaemon' Execute="deferred" Return="ignore" Impersonate="no" />
-    <CustomAction Id="CreatePythonVenv" ExeCommand='cmd /c python -m venv &quot;[MINDX_WORKSPACE].venv&quot;' Execute="deferred" Return="ignore" Impersonate="no" />
-    <CustomAction Id="CreateShortcuts" ExeCommand='cmd /c (echo [Internet Shortcut] &gt; &quot;[DesktopFolder]Mindx WebUI.url&quot; &amp;&amp; echo URL=[WEBUI_URL] &gt;&gt; &quot;[DesktopFolder]Mindx WebUI.url&quot;) &amp;&amp; (echo [Internet Shortcut] &gt; &quot;[AppMenuDir]\Mindx WebUI.url&quot; &amp;&amp; echo URL=[WEBUI_URL] &gt;&gt; &quot;[AppMenuDir]\Mindx WebUI.url&quot;)' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="SetAPIKeyEnvVar" ExeCommand='cmd /c setx [ENV_VAR_NAME] &quot;[APIKEY_INPUT]&quot;' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
+    <CustomAction Id="RegisterDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; install MindXDaemon &quot;[INSTALLDIR]mindx.exe&quot; daemon' Execute="deferred" Return="check" Impersonate="no" Directory="INSTALLDIR" />
+    <CustomAction Id="ConfigureDaemonStart" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon Start SERVICE_AUTO_START' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
+    <CustomAction Id="ConfigureDaemonDir" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon AppDirectory &quot;[MINDX_WORKSPACE]&quot;' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
+    <CustomAction Id="ConfigureDaemonDisplayName" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon DisplayName &quot;MindX Daemon&quot;' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
+    <CustomAction Id="ConfigureDaemonDescription" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon Description &quot;MindX AI-native background service&quot;' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
+    <CustomAction Id="StartDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; start MindXDaemon' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
+    <CustomAction Id="CreatePythonVenv" ExeCommand='cmd /c python -m venv &quot;[MINDX_WORKSPACE].venv&quot;' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
+    <CustomAction Id="CreateShortcuts" ExeCommand='cmd /c (echo [Internet Shortcut] &gt; &quot;[DesktopFolder]Mindx WebUI.url&quot; &amp;&amp; echo URL=[WEBUI_URL] &gt;&gt; &quot;[DesktopFolder]Mindx WebUI.url&quot;) &amp;&amp; (echo [Internet Shortcut] &gt; &quot;[AppMenuDir]\Mindx WebUI.url&quot; &amp;&amp; echo URL=[WEBUI_URL] &gt;&gt; &quot;[AppMenuDir]\Mindx WebUI.url&quot;)' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
     <CustomAction Id="LaunchBrowser" ExeCommand='cmd /c start "" "[WEBUI_URL]"' Execute="immediate" Return="ignore" Directory="SystemFolder" />
 
     <!-- Custom Actions: Uninstall -->
-    <CustomAction Id="RemoveDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; stop MindXDaemon &amp;&amp; &quot;[INSTALLDIR]nssm.exe&quot; remove MindXDaemon confirm' Execute="deferred" Return="ignore" Impersonate="no" />
-    <CustomAction Id="RemoveAPIKeyEnvVar" ExeCommand='cmd /c setx [ENV_VAR_NAME] ""' Execute="deferred" Return="ignore" Impersonate="no" />
-    <CustomAction Id="RemoveShortcuts" ExeCommand='cmd /c del /Q &quot;[DesktopFolder]Mindx WebUI.url&quot; 2&gt;nul &amp;&amp; del /Q &quot;[AppMenuDir]\Mindx WebUI.url&quot; 2&gt;nul' Execute="deferred" Return="ignore" Impersonate="no" />
+    <CustomAction Id="RemoveDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; stop MindXDaemon &amp;&amp; &quot;[INSTALLDIR]nssm.exe&quot; remove MindXDaemon confirm' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
+    <CustomAction Id="RemoveAPIKeyEnvVar" ExeCommand='cmd /c setx [ENV_VAR_NAME] ""' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
+    <CustomAction Id="RemoveShortcuts" ExeCommand='cmd /c del /Q &quot;[DesktopFolder]Mindx WebUI.url&quot; 2&gt;nul &amp;&amp; del /Q &quot;[AppMenuDir]\Mindx WebUI.url&quot; 2&gt;nul' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
 
     <InstallExecuteSequence>
       <Custom Action="RemoveDaemonService" Before="RemoveFiles">Installed AND NOT UPGRADINGPRODUCTCODE AND DAEMON_AUTOSTART = "1"</Custom>
@@ -185,7 +185,8 @@
     </InstallExecuteSequence>
 
     <!-- Custom Dialog: Configuration Page -->
-    <Dialog Id="MindXConfigDlg" Width="480" Height="400" Title="[ProductName] Setup" NoMinimize="yes">
+    <UI Id="MindXConfigDlgHost">
+      <Dialog Id="MindXConfigDlg" Width="480" Height="400" Title="[ProductName] Setup" NoMinimize="yes">
       <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="480" Height="58" Text="BannerBitmap" FixedSize="yes" />
       <Control Id="BannerLine" Type="Line" X="0" Y="58" Width="480" Height="0" />
       <Control Id="Title" Type="Text" X="20" Y="10" Width="440" Height="24" Transparent="yes" NoPrefix="yes"><Text>[ProductName] Configuration</Text></Control>
@@ -236,15 +237,10 @@
       <Control Id="Back" Type="PushButton" X="180" Y="376" Width="56" Height="17">&lt; Back</Control>
       <Control Id="Next" Type="PushButton" X="248" Y="376" Width="56" Height="17" Default="yes">Next &gt;</Control>
       <Condition Action="disable"><![CDATA[ SELECTED_PROVIDER = "" OR APIKEY_INPUT = "" ]]></Condition>
-      <Condition Action="enable"><![CDATA[ SELECTED_PROVIDER <> "" AND APIKEY_INPUT <> "" ]]></Condition>
+      <Condition Action="enable"><![CDATA[ SELECTED_PROVIDER != "" AND APIKEY_INPUT != "" ]]></Condition>
       <Control Id="Cancel" Type="PushButton" X="328" Y="376" Width="56" Height="17">Cancel</Control>
     </Dialog>
-
-    <UI><Dialog Id="ExitDialog">
-      <Control Id="LaunchBrowserCheckBox" Type="CheckBox" X="20" Y="160" Width="340" Height="18" Property="LAUNCH_BROWSER" CheckBoxValue="1">
-        <Text>Open MindX WebUI in browser ([WEBUI_URL])</Text>
-      </Control>
-    </Dialog></UI>
+    </UI>
 
   </Product>
 </Wix>
