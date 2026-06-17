@@ -274,23 +274,26 @@ jobs:
       - name: Install ImageMagick (for icon conversion)
         run: choco install imagemagick --no-progress -y
 
-      - name: Download NSSM (Non-Sucking Service Manager)
+      - name: Install NSSM (Non-Sucking Service Manager)
+        run: choco install nssm --no-progress -y
+        shell: cmd
+
+      - name: Copy nssm.exe to build root
         shell: pwsh
         run: |
-          # nssm.cc is often unreliable (503); use GitHub mirror instead
-          $nssmUrl = "https://github.com/kirillkovalenko/nssm/releases/download/nssm-2.24/nssm-2.24.zip"
-          Write-Host "Downloading NSSM from: $nssmUrl"
-          try {
-            Invoke-WebRequest -Uri $nssmUrl -OutFile nssm.zip -MaximumRedirection 5
-          } catch {
-            Write-Host "GitHub mirror failed, trying nssm.cc..."
-            $nssmUrl = "https://nssm.cc/release/nssm-2.24.zip"
-            Invoke-WebRequest -Uri $nssmUrl -OutFile nssm.zip
+          $nssmPath = "${env:ProgramData}\chocolatey\bin\nssm.exe"
+          if (-not (Test-Path $nssmPath)) {
+            # choco 64-bit install path
+            $nssmPath = "${env:ProgramData}\chocolatey\lib\nssm\tools\nssm-2.24\win64\nssm.exe"
           }
-          Expand-Archive -Path nssm.zip -DestinationPath nssm-temp -Force
-          # NSSM x64 binary is in win64/ subfolder
-          Copy-Item "nssm-temp\nssm-2.24\win64\nssm.exe" ".\nssm.exe"
-          Remove-Item -Recurse -Force nssm-temp, nssm.zip
+          if (-not (Test-Path $nssmPath)) {
+            # Find any nssm.exe
+            $nssmPath = Get-ChildItem -Path "${env:ProgramData}\chocolatey" -Recurse -Filter "nssm.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $nssmPath -or -not (Test-Path $nssmPath)) {
+            Write-Error "nssm.exe not found after choco install"
+          }
+          Copy-Item $nssmPath ".\nssm.exe" -Force
           Write-Host "NSSM ready:"
           Get-Item nssm.exe | Select-Object Name, Length
 
