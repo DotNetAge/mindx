@@ -277,8 +277,16 @@ jobs:
       - name: Download NSSM (Non-Sucking Service Manager)
         shell: pwsh
         run: |
-          $nssmUrl = "https://nssm.cc/release/nssm-2.24.zip"
-          Invoke-WebRequest -Uri $nssmUrl -OutFile nssm.zip
+          # nssm.cc is often unreliable (503); use GitHub mirror instead
+          $nssmUrl = "https://github.com/kirillkovalenko/nssm/releases/download/nssm-2.24/nssm-2.24.zip"
+          Write-Host "Downloading NSSM from: $nssmUrl"
+          try {
+            Invoke-WebRequest -Uri $nssmUrl -OutFile nssm.zip -MaximumRedirection 5
+          } catch {
+            Write-Host "GitHub mirror failed, trying nssm.cc..."
+            $nssmUrl = "https://nssm.cc/release/nssm-2.24.zip"
+            Invoke-WebRequest -Uri $nssmUrl -OutFile nssm.zip
+          }
           Expand-Archive -Path nssm.zip -DestinationPath nssm-temp -Force
           # NSSM x64 binary is in win64/ subfolder
           Copy-Item "nssm-temp\nssm-2.24\win64\nssm.exe" ".\nssm.exe"
