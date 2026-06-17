@@ -182,11 +182,13 @@ func unregisterDaemonMacOS() (bool, error) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		outStr := string(out)
+		errStr := err.Error()
 		// exit status 3/5 means not loaded — still safe to delete plist
 		if strings.Contains(outStr, "Could not find service") ||
 			strings.Contains(outStr, "not found") ||
-			strings.Contains(outStr, "exit status 3") ||
-			strings.Contains(outStr, "exit status 5") {
+			strings.Contains(outStr, "No such process") ||
+			strings.Contains(errStr, "exit status 3") ||
+			strings.Contains(errStr, "exit status 5") {
 			// Fall through to delete plist
 		} else {
 			return false, fmt.Errorf("launchctl bootout: %w\n%s", err, outStr)
