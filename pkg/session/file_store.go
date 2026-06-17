@@ -843,3 +843,29 @@ func (s *FileSessionStore) GetModifyFiles(sessionID string) ([]string, error) {
 
 	return files, nil
 }
+
+// Truncate removes messages from the session file on disk, keeping only
+// the first keepCount messages. Remaining messages are written back to
+// the session.yml file in their original order.
+func (s *FileSessionStore) Truncate(_ context.Context, sessionID string, keepCount int) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return nil
+	}
+
+	path := filepath.Join(dirPath, "session.yml")
+	msgs, err := parseMessagesFromFile(path)
+	if err != nil {
+		return err
+	}
+
+	if keepCount >= len(msgs) {
+		return nil
+	}
+
+	msgs = msgs[:keepCount]
+	return writeMessagesToFile(path, msgs)
+}

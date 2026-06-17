@@ -276,3 +276,50 @@ func (d *Daemon) handleSessionRollbackFiles(_ context.Context, params json.RawMe
 		"rolled_back": rolledBack,
 	}, nil
 }
+
+type sessionTruncateParams struct {
+	SessionID string `json:"session_id"`
+}
+
+func (d *Daemon) handleSessionTruncate(ctx context.Context, params json.RawMessage) (any, error) {
+	var p sessionTruncateParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	sess, err := d.getOrLoadSession(p.SessionID)
+	if err != nil {
+		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
+	}
+
+	// Find the last user message — we truncate everything after it
+	msgs := sess.All()
+	lastUserIdx := -1
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "user" {
+			lastUserIdx = i
+			break
+		}
+	}
+	if lastUserIdx < 0 {
+		return nil, fmt.Errorf("no user message found to truncate at")
+	}
+
+	if err := sess.Truncate(ctx, lastUserIdx); err != nil {
+		return nil, fmt.Errorf("truncate session %q failed: %w", p.SessionID, err)
+	}
+
+	d.logger.Info("session truncated for retry",
+		"session_id", p.SessionID,
+		"messages_kept", lastUserIdx,
+	)
+
+	return map[string]any{
+		"session_id":    p.SessionID,
+		"messages_kept": lastUserIdx,
+		"truncated":     true,
+	}, nil
+}
