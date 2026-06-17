@@ -50,7 +50,8 @@
     <Property Id="DAEMON_AUTOSTART" Value="1" Secure="yes" />
     <Property Id="CREATE_SHORTCUT" Value="1" Secure="yes" />
     <Property Id="SETUP_VENV" Value="1" Secure="yes" />
-    <Property Id="MINDX_WORKSPACE">[LocalAppDataFolder]Mindx\</Property>
+    <Property Id="MINDX_WORKSPACE" Value="Mindx\" />
+    <SetProperty Id="MINDX_WORKSPACE" Value="[LocalAppDataFolder]Mindx\" Before="AppSearch" Sequence="execute" />
     <Property Id="DAEMON_PORT" Value="1314" Secure="yes" />
     <Property Id="WEBUI_URL" Value="http://localhost:1313" Secure="yes" />
     <Property Id="LAUNCH_BROWSER" Value="0" Secure="yes" />
@@ -195,17 +196,15 @@
 
       <Control Id="ProviderLabel" Type="Text" X="20" Y="72" Width="180" Height="12" NoPrefix="yes"><Text>AI Provider:</Text></Control>
       <Control Id="ProviderCombo" Type="ComboBox" X="20" Y="84" Width="280" Height="18" Property="SELECTED_PROVIDER" ComboList="yes" Sorted="yes">
-        <ComboBox Property="SELECTED_PROVIDER">
-          <ListItem Text="OpenAI" Value="openai|OPENAI_API_KEY" />
-          <ListItem Text="Anthropic (Claude)" Value="anthropic|ANTHROPIC_API_KEY" />
-          <ListItem Text="Google (Gemini)" Value="google|GEMINI_API_KEY" />
-          <ListItem Text="DeepSeek" Value="deepseek|DEEPSEEK_API_KEY" />
-          <ListItem Text="Alibaba Cloud (DashScope)" Value="dashscope|DASHSCOPE_API_KEY" />
-          <ListItem Text="Zhipu (ChatGLM)" Value="zhipu|ZHIPU_API_KEY" />
-          <ListItem Text="Moonshot (Kimi)" Value="moonshot|MOONSHOT_API_KEY" />
-          <ListItem Text="MiniMax" Value="minimax|MINIMAX_API_KEY" />
-          <ListItem Text="Volcengine (Ark)" Value="ark|ARK_API_KEY" />
-        </ComboBox>
+        <ListItem Text="OpenAI" Value="openai|OPENAI_API_KEY" />
+        <ListItem Text="Anthropic (Claude)" Value="anthropic|ANTHROPIC_API_KEY" />
+        <ListItem Text="Google (Gemini)" Value="google|GEMINI_API_KEY" />
+        <ListItem Text="DeepSeek" Value="deepseek|DEEPSEEK_API_KEY" />
+        <ListItem Text="Alibaba Cloud (DashScope)" Value="dashscope|DASHSCOPE_API_KEY" />
+        <ListItem Text="Zhipu (ChatGLM)" Value="zhipu|ZHIPU_API_KEY" />
+        <ListItem Text="Moonshot (Kimi)" Value="moonshot|MOONSHOT_API_KEY" />
+        <ListItem Text="MiniMax" Value="minimax|MINIMAX_API_KEY" />
+        <ListItem Text="Volcengine (Ark)" Value="ark|ARK_API_KEY" />
         <Publish Property="SplitProviderValue" Value="1">1</Publish>
       </Control>
 
@@ -237,8 +236,7 @@
       <Control Id="Back" Type="PushButton" X="180" Y="376" Width="56" Height="17">&lt; Back</Control>
       <Control Id="Next" Type="PushButton" X="248" Y="376" Width="56" Height="17" Default="yes">
         <Text>Next &gt;</Text>
-        <Condition Action="disable"><![CDATA[ SELECTED_PROVIDER = "" OR APIKEY_INPUT = "" ]]></Condition>
-        <Condition Action="enable"><![CDATA[ SELECTED_PROVIDER != "" AND APIKEY_INPUT != "" ]]></Condition>
+        <Condition Action="disable" Message="Please select a provider and enter your API key">SELECTED_PROVIDER = "" OR APIKEY_INPUT = ""</Condition>
       </Control>
       <Control Id="Cancel" Type="PushButton" X="328" Y="376" Width="56" Height="17">Cancel</Control>
     </Dialog>
