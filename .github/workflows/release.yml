@@ -394,10 +394,29 @@ jobs:
           Write-Host "heat-agents.wxs generated ($(Get-Item heat-agents.wxs).Length) bytes"
 
           # Step 1: Compile .wxs -> .wixobj (main wxs + 2 heat-generated fragments)
+          # heat.exe dir strips the input directory from Source paths, so:
+          #   heat-skills.wxs uses $(var.SourceDir)\algorithmic-art\... (relative to runtime/skills/)
+          #   heat-agents.wxs uses $(var.SourceDir)\architect.md (relative to runtime/agents/)
+          # We pass different -dSourceDir values to candle depending on file.
+          # Since candle can only have one SourceDir value, we use a wrapper approach:
+          #   - Pre-process each heat file to replace $(var.SourceDir) with the proper relative path
+          #   - OR: cd into the directory before running heat (cleaner)
           Write-Host "=== Compiling WiX sources with candle ==="
-          candle scripts/installer.wxs heat-skills.wxs heat-agents.wxs `
+          candle scripts/installer.wxs `
             -ext WixUIExtension `
             -dSourceDir="."
+
+          Write-Host "=== Compiling heat-skills fragment with SourceDir=runtime/skills ==="
+          candle heat-skills.wxs `
+            -ext WixUIExtension `
+            -dSourceDir="runtime/skills" `
+            -out heat-skills.wixobj
+
+          Write-Host "=== Compiling heat-agents fragment with SourceDir=runtime/agents ==="
+          candle heat-agents.wxs `
+            -ext WixUIExtension `
+            -dSourceDir="runtime/agents" `
+            -out heat-agents.wixobj
 
           # Step 2: Link .wixobj -> .msi
           Write-Host "=== Linking with light ==="
