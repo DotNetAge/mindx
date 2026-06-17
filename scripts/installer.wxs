@@ -56,17 +56,9 @@
     <Property Id="WEBUI_URL" Value="http://localhost:1313" Secure="yes" />
     <Property Id="LAUNCH_BROWSER" Value="0" Secure="yes" />
 
-    <!-- Detect Python on system -->
+    <!-- Detect Python on system via registry -->
     <Property Id="PYTHON_DETECTED">
-      <DirectorySearch Id="PythonInProgramFiles" Path="[ProgramFilesFolder]Python*" Depth="2">
-        <FileSearch Name="python.exe" />
-      </DirectorySearch>
-      <DirectorySearch Id="PythonInProgramFilesx86" Path="[ProgramFiles6432Folder]Python*" Depth="2">
-        <FileSearch Name="python.exe" />
-      </DirectorySearch>
-      <DirectorySearch Id="PythonInAppData" Path="[LocalAppDataFolder]Programs\Python*" Depth="2">
-        <FileSearch Name="python.exe" />
-      </DirectorySearch>
+      <RegistrySearch Id="PythonCoreRegSearch" Type="raw" Root="HKLM" Key="SOFTWARE\Python\PythonCore" Name="InstallPath" />
     </Property>
 
     <!-- UI: custom dialog flow that inserts MindXConfigDlg between License and InstallDir -->
@@ -77,8 +69,9 @@
 
       <!-- New: MindXConfigDlg navigation -->
       <Publish Dialog="MindXConfigDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
-      <Publish Dialog="MindXConfigDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2"><![CDATA[ SELECTED_PROVIDER != "" AND APIKEY_INPUT != "" ]]></Publish>
+      <Publish Dialog="MindXConfigDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2">SELECTED_PROVIDER &lt;&gt; "" AND APIKEY_INPUT &lt;&gt; ""</Publish>
       <Publish Dialog="MindXConfigDlg" Control="Next" Event="SpawnDialog" Value="ErrorDlg"><![CDATA[ SELECTED_PROVIDER = "" OR APIKEY_INPUT = "" ]]></Publish>
+      <Publish Dialog="MindXConfigDlg" Control="Cancel" Event="EndDialog" Value="Exit">1</Publish>
 
       <!-- Launch browser after install completes -->
       <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchBrowser" Order="1">LAUNCH_BROWSER = "1" AND NOT Installed</Publish>
@@ -118,8 +111,14 @@
             <File Id="models_yml" Source="runtime/settings/models.yml" Vital="no" />
             <File Id="mindx_json" Source="runtime/mindx.json" Vital="no" />
           </Component>
-          <Component Id="RuntimeSkillsDir" Guid="177FB78D-B46F-4DAB-BE42-AE07FBEC4916"><CreateFolder Directory="MINDX_SKILLS_DIR" /></Component>
-          <Component Id="RuntimeAgentsDir" Guid="349A4CE2-5485-4DBC-8DAD-63FE9748428A"><CreateFolder Directory="MINDX_AGENTS_DIR" /></Component>
+          <Component Id="RuntimeSkillsDir" Guid="177FB78D-B46F-4DAB-BE42-AE07FBEC4916">
+            <CreateFolder Directory="MINDX_SKILLS_DIR" />
+            <RegistryValue Id="RuntimeSkillsDirReg" Root="HKCU" Key="Software\DotNetAge\mindx\InstallState" Name="SkillsDir" Type="integer" Value="1" KeyPath="yes" />
+          </Component>
+          <Component Id="RuntimeAgentsDir" Guid="349A4CE2-5485-4DBC-8DAD-63FE9748428A">
+            <CreateFolder Directory="MINDX_AGENTS_DIR" />
+            <RegistryValue Id="RuntimeAgentsDirReg" Root="HKCU" Key="Software\DotNetAge\mindx\InstallState" Name="AgentsDir" Type="integer" Value="1" KeyPath="yes" />
+          </Component>
           <Component Id="WorkspaceDirs" Guid="BAB2D7E7-2437-442A-B8B8-3AE0483BCE99">
             <CreateFolder Directory="MINDX_SESSIONS_DIR" />
             <CreateFolder Directory="MINDX_LOGS_DIR" />
@@ -127,6 +126,7 @@
             <CreateFolder Directory="MINDX_MODELS_DIR" />
             <CreateFolder Directory="MINDX_MEMORY_CACHE_DIR" />
             <CreateFolder Directory="MINDX_MEMORY_DIR" />
+            <RegistryValue Id="WorkspaceDirsReg" Root="HKCU" Key="Software\DotNetAge\mindx\InstallState" Name="WorkspaceDirs" Type="integer" Value="1" KeyPath="yes" />
           </Component>
           <Directory Id="MINDX_SETTINGS_DIR" Name="settings" />
           <Directory Id="MINDX_SKILLS_DIR" Name="skills" />
@@ -164,7 +164,6 @@
     <CustomAction Id="ConfigureDaemonDescription" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon Description &quot;MindX AI-native background service&quot;' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
     <CustomAction Id="StartDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; start MindXDaemon' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
     <CustomAction Id="CreatePythonVenv" ExeCommand='cmd /c python -m venv &quot;[MINDX_WORKSPACE].venv&quot;' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
-    <CustomAction Id="CreateShortcuts" ExeCommand='cmd /c (echo [Internet Shortcut] &gt; &quot;[DesktopFolder]Mindx WebUI.url&quot; &amp;&amp; echo URL=[WEBUI_URL] &gt;&gt; &quot;[DesktopFolder]Mindx WebUI.url&quot;) &amp;&amp; (echo [Internet Shortcut] &gt; &quot;[AppMenuDir]\Mindx WebUI.url&quot; &amp;&amp; echo URL=[WEBUI_URL] &gt;&gt; &quot;[AppMenuDir]\Mindx WebUI.url&quot;)' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
     <CustomAction Id="LaunchBrowser" ExeCommand='cmd /c start "" "[WEBUI_URL]"' Execute="immediate" Return="ignore" Directory="INSTALLDIR" />
 
     <!-- Custom Actions: Uninstall -->
@@ -183,7 +182,7 @@
       <Custom Action="ConfigureDaemonDisplayName" After="ConfigureDaemonDir">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
       <Custom Action="ConfigureDaemonDescription" After="ConfigureDaemonDisplayName">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
       <Custom Action="StartDaemonService" After="ConfigureDaemonDescription">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
-      <Custom Action="CreatePythonVenv" After="StartDaemonService">NOT Installed AND SETUP_VENV = "1" AND PYTHON_DETECTED != ""</Custom>
+      <Custom Action="CreatePythonVenv" After="StartDaemonService">NOT Installed AND SETUP_VENV = "1" AND PYTHON_DETECTED &lt;&gt; ""</Custom>
       <Custom Action="CreateShortcuts" After="CreatePythonVenv">NOT Installed AND CREATE_SHORTCUT = "1"</Custom>
     </InstallExecuteSequence>
 
@@ -216,7 +215,7 @@
       <Control Id="ApiKeyHint" Type="Text" X="370" Y="140" Width="100" Height="14" Disabled="yes" NoPrefix="yes">
         <Text>Required</Text>
         <Condition Action="show">APIKEY_INPUT = ""</Condition>
-        <Condition Action="hide">APIKEY_INPUT != ""</Condition>
+        <Condition Action="hide">APIKEY_INPUT &lt;&gt; ""</Condition>
       </Control>
 
       <Control Id="OptionsGroupBox" Type="GroupBox" X="18" Y="168" Width="444" Height="140" Text="Options" />
@@ -228,11 +227,11 @@
       <Control Id="PythonStatusNone" Type="Text" X="46" Y="274" Width="300" Height="12" Disabled="yes" NoPrefix="yes">
         <Text>Python not found — venv setup will be skipped</Text>
         <Condition Action="show">PYTHON_DETECTED = ""</Condition>
-        <Condition Action="hide">PYTHON_DETECTED != ""</Condition>
+        <Condition Action="hide">PYTHON_DETECTED &lt;&gt; ""</Condition>
       </Control>
       <Control Id="PythonStatusFound" Type="Text" X="46" Y="274" Width="300" Height="12" Disabled="yes" NoPrefix="yes" Hidden="yes">
         <Text>Python detected — virtual environment will be created during installation</Text>
-        <Condition Action="show">PYTHON_DETECTED != ""</Condition>
+        <Condition Action="show">PYTHON_DETECTED &lt;&gt; ""</Condition>
         <Condition Action="hide">PYTHON_DETECTED = ""</Condition>
       </Control>
 
