@@ -373,7 +373,7 @@ jobs:
             -scom -sreg -srd -sfrag `
             -var var.SourceDir `
             -t scripts/heat-ice38-fix.xsl `
-            -ag
+            -gg
 
           if (-not (Test-Path "heat-skills.wxs")) {
             Write-Error "heat.exe failed to generate heat-skills.wxs for skills directory"
