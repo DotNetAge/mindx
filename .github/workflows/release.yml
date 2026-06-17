@@ -4,10 +4,9 @@
 # Trigger: push of version tags (v*)
 #
 # Pipeline:
-#   prepare → build(5 platforms) → release(GH Release)
+#   prepare → build(4 platforms: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64) → release(GH Release)
 #     ├── docker         → GHCR + Docker Hub (stable only)
 #     ├── homebrew      → DotNetAge/homebrew-mindx tap
-#     ├── winget        → microsoft/winget-pkgs PR
 #     ├── linux-packages→ AppImage + .deb (attached to GH Release)
 #     ├── snap          → Snap Store (stable only)
 #     └── flatpak       → Flathub PR (stable only)
@@ -209,7 +208,7 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [prepare, build, msi]
+    needs: [prepare, build]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
