@@ -84,7 +84,6 @@
       <ProgressText Action="ConfigureDaemonDescription">Setting service description...</ProgressText>
       <ProgressText Action="StartDaemonService">Starting MindX daemon service...</ProgressText>
       <ProgressText Action="CreatePythonVenv">Setting up Python virtual environment...</ProgressText>
-      <ProgressText Action="CreateShortcuts">Creating shortcuts...</ProgressText>
       <ProgressText Action="RemoveDaemonService">Removing MindX Windows Service...</ProgressText>
       <ProgressText Action="RemoveAPIKeyEnvVar">Removing API key environment variable...</ProgressText>
 
@@ -183,7 +182,6 @@
       <Custom Action="ConfigureDaemonDescription" After="ConfigureDaemonDisplayName">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
       <Custom Action="StartDaemonService" After="ConfigureDaemonDescription">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
       <Custom Action="CreatePythonVenv" After="StartDaemonService">NOT Installed AND SETUP_VENV = "1" AND PYTHON_DETECTED &lt;&gt; ""</Custom>
-      <Custom Action="CreateShortcuts" After="CreatePythonVenv">NOT Installed AND CREATE_SHORTCUT = "1"</Custom>
     </InstallExecuteSequence>
 
     <!-- Custom Dialog: Configuration Page -->
