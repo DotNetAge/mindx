@@ -163,7 +163,7 @@
     <CustomAction Id="StartDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; start MindXDaemon' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
     <CustomAction Id="CreatePythonVenv" ExeCommand='cmd /c python -m venv &quot;[MINDX_WORKSPACE].venv&quot;' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
     <CustomAction Id="CreateShortcuts" ExeCommand='cmd /c (echo [Internet Shortcut] &gt; &quot;[DesktopFolder]Mindx WebUI.url&quot; &amp;&amp; echo URL=[WEBUI_URL] &gt;&gt; &quot;[DesktopFolder]Mindx WebUI.url&quot;) &amp;&amp; (echo [Internet Shortcut] &gt; &quot;[AppMenuDir]\Mindx WebUI.url&quot; &amp;&amp; echo URL=[WEBUI_URL] &gt;&gt; &quot;[AppMenuDir]\Mindx WebUI.url&quot;)' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
-    <CustomAction Id="LaunchBrowser" ExeCommand='cmd /c start "" "[WEBUI_URL]"' Execute="immediate" Return="ignore" Directory="SystemFolder" />
+    <CustomAction Id="LaunchBrowser" ExeCommand='cmd /c start "" "[WEBUI_URL]"' Execute="immediate" Return="ignore" Directory="INSTALLDIR" />
 
     <!-- Custom Actions: Uninstall -->
     <CustomAction Id="RemoveDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; stop MindXDaemon &amp;&amp; &quot;[INSTALLDIR]nssm.exe&quot; remove MindXDaemon confirm' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
@@ -188,7 +188,7 @@
     <!-- Custom Dialog: Configuration Page -->
     <UI Id="MindXConfigDlgHost">
       <Dialog Id="MindXConfigDlg" Width="480" Height="400" Title="[ProductName] Setup" NoMinimize="yes">
-      <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="480" Height="58" Text="BannerBitmap" FixedSize="yes" />
+      <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="480" Height="58" Text="WixUIBannerBmp" FixedSize="yes" />
       <Control Id="BannerLine" Type="Line" X="0" Y="58" Width="480" Height="0" />
       <Control Id="Title" Type="Text" X="20" Y="10" Width="440" Height="24" Transparent="yes" NoPrefix="yes"><Text>[ProductName] Configuration</Text></Control>
       <Control Id="Description" Type="Text" X="20" Y="38" Width="440" Height="18" Transparent="yes" NoPrefix="yes"><Text>Select your AI provider, enter your API key, and configure options</Text></Control>
