@@ -169,13 +169,18 @@ func (s *FileWatchService) Start(ctx context.Context) error {
 	if s.indexState != nil {
 		for dir := range added {
 			st := s.indexState.Get(dir)
-			if st == nil || st.State == "completed" {
+			if st != nil && st.State == "completed" {
 				continue
 			}
 			if s.logger != nil {
 				s.logger.Info("filewatch: resuming indexing",
 					"dir", dir,
-					"state", st.State,
+					"state", func() string {
+						if st != nil {
+							return st.State
+						}
+						return "pending (new)"
+					}(),
 				)
 			}
 			go s.SyncDir(s.ctx, dir)
@@ -288,6 +293,12 @@ func (s *FileWatchService) AddWatch(dir, agent string) error {
 
 	if err := s.store.Add(absDir, agent); err != nil {
 		return fmt.Errorf("filewatch: store add: %w", err)
+	}
+
+	// Create index state entry so Start()'s resume loop picks up
+	// the directory for full scanning even if the service isn't running yet.
+	if s.indexState != nil {
+		s.indexState.SetPending(absDir)
 	}
 
 	if s.watcher != nil {
