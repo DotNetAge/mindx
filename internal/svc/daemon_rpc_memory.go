@@ -498,6 +498,38 @@ func (d *Daemon) handleFilewatchStop(_ context.Context, _ json.RawMessage) (any,
 }
 
 // ---------------------------------------------------------------------------
+// filewatch.remove — 从监控列表中移除指定目录
+// ---------------------------------------------------------------------------
+
+type filewatchRemoveParams struct {
+	Dir string `json:"dir"`
+}
+
+func (d *Daemon) handleFilewatchRemove(_ context.Context, params json.RawMessage) (any, error) {
+	if d.memoryWatch == nil {
+		return nil, fmt.Errorf("filewatch service not available")
+	}
+
+	var p filewatchRemoveParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Dir == "" {
+		return nil, fmt.Errorf("dir is required")
+	}
+
+	d.logger.Info("filewatch.remove: removing directory", "dir", p.Dir)
+
+	if err := d.memoryWatch.RemoveWatchByDir(p.Dir); err != nil {
+		return nil, fmt.Errorf("filewatch.remove: %w", err)
+	}
+
+	d.logger.Info("filewatch.remove: directory removed", "dir", p.Dir)
+
+	return map[string]string{"status": "removed", "dir": p.Dir}, nil
+}
+
+// ---------------------------------------------------------------------------
 // filewatch.status — 查询文件监控服务状态
 // ---------------------------------------------------------------------------
 
@@ -510,6 +542,11 @@ func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (an
 	}
 
 	status := d.memoryWatch.Status()
+
+	d.logger.Info("filewatch.status query",
+		"running", status.Running,
+		"watched_dirs", status.Watched,
+	)
 
 	return map[string]any{
 		"available": true,

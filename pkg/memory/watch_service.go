@@ -108,7 +108,6 @@ func (s *FileWatchService) Start(ctx context.Context) error {
 		return fmt.Errorf("filewatch: create watcher: %w", err)
 	}
 	s.watcher = watcher
-	_ = s.watcher.Close()
 
 	// Register all directories from the watchlist
 	entries := s.store.List()
@@ -141,7 +140,14 @@ func (s *FileWatchService) Start(ctx context.Context) error {
 	}
 
 	if s.logger != nil {
-		s.logger.Info("filewatch: started", "directories", len(added))
+		dirList := make([]string, 0, len(added))
+		for d := range added {
+			dirList = append(dirList, d)
+		}
+		s.logger.Info("filewatch: started",
+			"directories", len(added),
+			"watch_list", dirList,
+		)
 	}
 
 	s.wg.Add(1)
@@ -265,6 +271,35 @@ func (s *FileWatchService) RemoveWatch(dir, agent string) error {
 	}
 
 	if err := s.store.Remove(absDir, agent); err != nil {
+		return fmt.Errorf("filewatch: store remove: %w", err)
+	}
+
+	if s.watcher != nil {
+		_ = s.watcher.Remove(absDir)
+	}
+	return nil
+}
+
+// RemoveWatchByDir stops monitoring all entries for a directory and removes
+// them from the store (regardless of agent name). This is the method to use
+// when the frontend removes a watched directory by path alone.
+//
+// Concurrency safety:
+//   - WatchListStore.RemoveByDir() acquires a write lock, so concurrent
+//     List() calls (used by eventLoop.findRootDir()) will see the directory
+//     as removed immediately after this returns.
+//   - fsnotify.Watcher.Remove() stops OS-level events for this directory.
+//   - Any events already queued in the channel will be processed by eventLoop,
+//     but findRootDir() returns "" for removed directories → events dropped.
+//   - The indexing operation is idempotent, so even if a small number of
+//     pre-removal events get processed, no data inconsistency occurs.
+func (s *FileWatchService) RemoveWatchByDir(dir string) error {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("filewatch: resolve path: %w", err)
+	}
+
+	if err := s.store.RemoveByDir(absDir); err != nil {
 		return fmt.Errorf("filewatch: store remove: %w", err)
 	}
 
