@@ -23,14 +23,14 @@ type entityDefFileEntry struct {
 	Title    string `json:"title"`
 	Desc     string `json:"desc"`
 	Category string `json:"category,omitempty"`
-	Prompt   string `json:"prompt,omitempty"`   // 保存时自动生成或读取
-	Schema   string `json:"schema,omitempty"`   // 保存时从 schema 文件嵌入
+	Prompt   string `json:"prompt,omitempty"` // 保存时自动生成或读取
+	Schema   string `json:"schema,omitempty"` // 保存时从 schema 文件嵌入
 }
 
 // entityTagsFile 是 entity-defs.json 的文件结构。
 type entityTagsFile struct {
-	Domain string              `json:"domain"`
-	Title  string              `json:"title"`
+	Domain string               `json:"domain"`
+	Title  string               `json:"title"`
 	Types  []entityDefFileEntry `json:"types"`
 }
 

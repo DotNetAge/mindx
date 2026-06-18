@@ -52,6 +52,11 @@ type FileWatchService struct {
 	// Set by Daemon to integrate with FileVersionStore.
 	VersionRecorder func(absPath string)
 
+	// IndexEventCallback is called for each file before and after indexing.
+	// eventType is "indexing" before and "indexed" after.
+	// Set by Daemon to broadcast to WebUI clients.
+	IndexEventCallback func(absPath, relPath, absDir, eventType string)
+
 	// Debounce state: coalesce rapid events for the same file
 	debounce   map[string]time.Time // absPath → last event time
 	debounceMu sync.Mutex
@@ -432,6 +437,14 @@ func (s *FileWatchService) processChanges(pending map[string][]pendingChange) {
 
 		// Process creates/updates
 		if len(toIndex) > 0 {
+			// Fire index-start events for each file
+			for _, relPath := range toIndex {
+				if s.IndexEventCallback != nil {
+					absPath := filepath.Join(absDir, relPath)
+					s.IndexEventCallback(absPath, relPath, absDir, "indexing")
+				}
+			}
+
 			result := pi.SyncFiles(s.ctx, absDir, toIndex, false)
 			if s.logger != nil && (result.Indexed > 0 || result.Updated > 0 || result.Removed > 0) {
 				s.logger.Info("filewatch: indexed files",
@@ -440,6 +453,14 @@ func (s *FileWatchService) processChanges(pending map[string][]pendingChange) {
 					"updated", result.Updated,
 					"errors", len(result.Errors),
 				)
+			}
+
+			// Fire index-complete events for each file (only those actually indexed/updated)
+			if s.IndexEventCallback != nil && (result.Indexed > 0 || result.Updated > 0) {
+				for _, relPath := range toIndex {
+					absPath := filepath.Join(absDir, relPath)
+					s.IndexEventCallback(absPath, relPath, absDir, "indexed")
+				}
 			}
 			// Record file versions for changed files
 			if s.VersionRecorder != nil {

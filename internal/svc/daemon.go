@@ -563,11 +563,24 @@ func (d *Daemon) autoUpdateLoop(ctx context.Context) {
 					"current", info.CurrentVersion,
 					"latest", info.LatestVersion,
 				)
+				// 通知客户端更新即将开始
+				d.gw.BroadcastNotification("update_started", map[string]interface{}{
+					"type": "update_started",
+					"data": map[string]string{
+						"version": info.LatestVersion,
+					},
+				})
 				// 自动下载并安装新二进制（但不要重启，只记录日志通知用户）
 				if err := d.updater.DownloadAndInstall(ctx); err != nil {
 					d.logger.Warn("auto-update: download and install failed", "error", err)
 				} else {
 					d.logger.Info("auto-update: update installed. User should restart the daemon.")
+					d.gw.BroadcastNotification("update_installed", map[string]interface{}{
+						"type": "update_installed",
+						"data": map[string]string{
+							"version": info.LatestVersion,
+						},
+					})
 				}
 			} else {
 				d.logger.Info("auto-update: already up-to-date", "version", info.CurrentVersion)
@@ -589,6 +602,20 @@ func (d *Daemon) Start(ctx context.Context) error {
 	if d.gw == nil {
 		d.logger.Info("initializing gateway")
 		d.initGateway()
+	}
+
+	// Wire filewatch indexing events to WebUI broadcast
+	if d.memoryWatch != nil {
+		d.memoryWatch.IndexEventCallback = func(absPath, relPath, absDir, eventType string) {
+			d.gw.BroadcastNotification("file_indexing", map[string]interface{}{
+				"type": "file_indexing",
+				"data": map[string]string{
+					"file":      relPath,
+					"directory": absDir,
+					"state":     eventType,
+				},
+			})
+		}
 	}
 
 	if d.scheduler != nil {

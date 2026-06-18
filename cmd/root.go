@@ -76,6 +76,10 @@ func runTUI(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if _, err := core.SyncRuntimeAssets(RuntimeFS, workspaceDir, core.Version, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "⚠️  sync runtime assets: %v\n", err)
+	}
+
 	// Initialize i18n with language from config (defaults to system locale)
 	if err := i18n.Init(cfg.Language); err != nil {
 		fmt.Fprintf(os.Stderr, "⚠️  i18n init failed: %v (using default language)\n", err)

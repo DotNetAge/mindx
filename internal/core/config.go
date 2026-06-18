@@ -49,6 +49,19 @@ type MindxConfig struct {
 	// Used by the auto-updater to track which version is on disk.
 	InstalledVersion string `json:"installed_version,omitempty"`
 
+	// RuntimeSyncedVersion records the version at which runtime assets
+	// (schemas, web, agents, skills) were last synchronized to disk.
+	// When the app version changes, these directories are overwritten
+	// from the embedded filesystem.
+	RuntimeSyncedVersion string `json:"runtime_synced_version,omitempty"`
+
+	// AgentSkillChecksums stores SHA256 checksums of deployed agent and skill
+	// files, keyed by relative path from workspaceDir. Used by SyncRuntimeAssets
+	// to detect user modifications — if a file's on-disk hash differs from the
+	// stored checksum, the file is considered user-modified and will not be
+	// overwritten on update.
+	AgentSkillChecksums map[string]string `json:"agent_skill_checksums,omitempty"`
+
 	filePath string `json:"-"`
 }
 

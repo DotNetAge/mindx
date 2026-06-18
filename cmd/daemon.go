@@ -52,6 +52,11 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", i18n.T("cmd.daemon.error.config.load"), err)
 	}
+
+	if _, err := core.SyncRuntimeAssets(RuntimeFS, workspaceDir, core.Version, cfg); err != nil {
+		return fmt.Errorf("sync runtime assets: %w", err)
+	}
+
 	if !cfg.Initialized {
 		return fmt.Errorf("%s", i18n.T("cmd.daemon.error.notconfigured"))
 	}
