@@ -467,6 +467,17 @@ func (d *Daemon) handleFilewatchStart(_ context.Context, params json.RawMessage)
 		}
 	}()
 
+	// Wait briefly for the eventLoop goroutine to set isRunning=true.
+	for i := 0; i < 50; i++ {
+		if d.memoryWatch.IsRunning() {
+			return map[string]string{"status": "started"}, nil
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// Timed out — the goroutine might still be starting, but report success anyway
+	// since Start() is non-blocking. The frontend should refresh status again.
+	d.logger.Warn("filewatch.start: took longer than expected, returning started optimistically")
 	return map[string]string{"status": "started"}, nil
 }
 
