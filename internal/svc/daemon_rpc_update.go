@@ -12,9 +12,18 @@ func (d *Daemon) handleServerCheckUpdate(_ context.Context, params json.RawMessa
 }
 
 func (d *Daemon) handleServerApplyUpdate(ctx context.Context, params json.RawMessage) (any, error) {
+	// 通知客户端更新即将开始
+	d.gw.BroadcastNotification("update_started", map[string]interface{}{
+		"type": "update_started",
+	})
 	if err := d.updater.DownloadAndInstall(ctx); err != nil {
 		return map[string]string{"error": err.Error()}, nil
 	}
+
+	// Broadcast notification to all connected clients before restart
+	d.gw.BroadcastNotification("update_installed", map[string]interface{}{
+		"type": "update_installed",
+	})
 
 	// Trigger restart in a goroutine so the RPC response can be sent back first
 	go func() {

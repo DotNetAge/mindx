@@ -20,7 +20,7 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("session.delete", r.daemon.handleSessionDelete)
 	gw.RegisterMethod("session.confirm_files", r.daemon.handleSessionConfirmFiles)
 	gw.RegisterMethod("session.rollback_files", r.daemon.handleSessionRollbackFiles)
-		gw.RegisterMethod("session.truncate", r.daemon.handleSessionTruncate)
+	gw.RegisterMethod("session.truncate", r.daemon.handleSessionTruncate)
 
 	gw.RegisterMethod("memory.query", r.daemon.handleMemoryQuery)
 	gw.RegisterMethod("memory.store", r.daemon.handleMemoryStore)
