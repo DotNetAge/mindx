@@ -113,6 +113,7 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 
 	gw.RegisterMethod("filewatch.start", r.daemon.handleFilewatchStart)
 	gw.RegisterMethod("filewatch.stop", r.daemon.handleFilewatchStop)
+	gw.RegisterMethod("filewatch.remove", r.daemon.handleFilewatchRemove)
 	gw.RegisterMethod("filewatch.status", r.daemon.handleFilewatchStatus)
 
 	gw.RegisterMethod("memory.file_states", r.daemon.handleMemoryFileStates)
