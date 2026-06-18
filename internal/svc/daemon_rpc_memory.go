@@ -549,10 +549,11 @@ func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (an
 	)
 
 	return map[string]any{
-		"available": true,
-		"running":   status.Running,
-		"watched":   status.Watched,
-		"cache_dir": status.CacheBase,
+		"available":   true,
+		"running":     status.Running,
+		"watched":     status.Watched,
+		"cache_dir":   status.CacheBase,
+		"index_state": status.IndexStates,
 	}, nil
 }
 

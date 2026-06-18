@@ -8,12 +8,7 @@ description: >
 skills:
   - find-experts
   - introspect
-  - app-promotion
-  - customer-success
-  - content-ops
   - event-coordinator
-  - software-dev
-  - research-pipeline
 meta:
   name_zh: 执行助理
   role_zh: 执行助理

@@ -397,22 +397,21 @@ func emptyMonthlyResult(year, month int) map[string]any {
 
 func calculateRecordCost(mc core.ModelCost, r goharnesssession.TokenUsageRecord) float64 {
 	cost := 0.0
-	if mc.CostPer1MIn > 0 {
-		cost += mc.CostPer1MIn / 1_000_000 * float64(r.PromptTokens)
+
+	// Input tokens: cached portion is excluded (already paid in a prior call)
+	chargeableInput := r.PromptTokens - r.CachedTokens
+	if chargeableInput < 0 {
+		chargeableInput = 0
 	}
+	if mc.CostPer1MIn > 0 {
+		cost += mc.CostPer1MIn / 1_000_000 * float64(chargeableInput)
+	}
+
+	// Output tokens
 	if mc.CostPer1MOut > 0 {
 		cost += mc.CostPer1MOut / 1_000_000 * float64(r.CompletionTokens)
 	}
-	if mc.CostPer1MInCached > 0 && r.CachedTokens > 0 {
-		cost += mc.CostPer1MInCached / 1_000_000 * float64(r.CachedTokens)
-	}
-	if mc.CostPer1MOutCached > 0 {
-		// CostPer1MOutCached is reserved for future use; the current TokenUsageRecord
-		// does not yet break out cached completion tokens separately, so it is not
-		// charged here to avoid double counting.
-		_ = mc
-		// charged here to avoid double counting.
-	}
+
 	return cost
 }
 

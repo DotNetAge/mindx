@@ -402,33 +402,39 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			if wlErr != nil {
 				logger.Warn("filewatch: failed to create watchlist store, watch disabled", "error", wlErr)
 			} else {
-				memoryWatch = memory.NewFileWatchService(
-					sharedMem.Indexer(),
-					watchList,
-					filepath.Join(app.Settings().DataDir(), "memory-cache"),
-					logger,
-				)
-				logger.Info("filewatch service configured",
-					"cache_dir", filepath.Join(app.Settings().DataDir(), "memory-cache"),
-				)
-				memoryWatch.VersionRecorder = func(absPath string) {
-					if app.SessDB() == nil || app.FileVersions() == nil {
-						return
-					}
-					sessions, listErr := app.SessDB().ListSessions(context.Background())
-					if listErr != nil {
-						return
-					}
-					for _, s := range sessions {
-						if s.ProjectDir == "" || !strings.HasPrefix(absPath, s.ProjectDir) {
-							continue
+				indexState, isErr := memory.NewIndexStateStore(app.Settings().DataDir())
+				if isErr != nil {
+					logger.Warn("filewatch: failed to create index state store, watch disabled", "error", isErr)
+				} else {
+					memoryWatch = memory.NewFileWatchService(
+						sharedMem.Indexer(),
+						watchList,
+						indexState,
+						filepath.Join(app.Settings().DataDir(), "memory-cache"),
+						logger,
+					)
+					logger.Info("filewatch service configured",
+						"cache_dir", filepath.Join(app.Settings().DataDir(), "memory-cache"),
+					)
+					memoryWatch.VersionRecorder = func(absPath string) {
+						if app.SessDB() == nil || app.FileVersions() == nil {
+							return
 						}
-						if s.SessionDir != "" {
-							_ = app.FileVersions().Record(s.SessionDir, absPath)
+						sessions, listErr := app.SessDB().ListSessions(context.Background())
+						if listErr != nil {
+							return
+						}
+						for _, s := range sessions {
+							if s.ProjectDir == "" || !strings.HasPrefix(absPath, s.ProjectDir) {
+								continue
+							}
+							if s.SessionDir != "" {
+								_ = app.FileVersions().Record(s.SessionDir, absPath)
+							}
 						}
 					}
-				}
-			}
+				} // end indexState != nil
+			} // end watchList != nil
 		}
 	} else {
 		logger.Info("no embedder configured, filewatch disabled")

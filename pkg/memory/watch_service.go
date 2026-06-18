@@ -48,6 +48,12 @@ type FileWatchService struct {
 	cacheBase string                   // base directory for per-dir indexing caches
 	logger    logging.Logger
 
+	// indexState persists per-directory full-scan state (pending/indexing/completed).
+	indexState *IndexStateStore
+
+	// indexingGuard prevents concurrent SyncDir goroutines for the same directory.
+	indexingGuard sync.Map // map[absDir]struct{}
+
 	// VersionRecorder is called for each changed file to persist version snapshots.
 	// Set by Daemon to integrate with FileVersionStore.
 	VersionRecorder func(absPath string)
@@ -75,22 +81,25 @@ type FileWatchService struct {
 //
 //   - indexer: the shared LongTerm RAG HybridIndexer to write into.
 //   - store: the WatchListStore containing directories to monitor.
+//   - indexState: persistent per-directory index state tracker.
 //   - cacheBaseDir: directory for per-watched-dir indexing caches
 //     (e.g., ~/.mindx/data/memory-cache/).
 //   - logger: optional logger.
 func NewFileWatchService(
 	indexer *gorag.HybridIndexer,
 	store *WatchListStore,
+	indexState *IndexStateStore,
 	cacheBaseDir string,
 	logger logging.Logger,
 ) *FileWatchService {
 	return &FileWatchService{
-		indexer:   indexer,
-		store:     store,
-		indexers:  make(map[string]*IndexService),
-		cacheBase: cacheBaseDir,
-		logger:    logger,
-		debounce:  make(map[string]time.Time),
+		indexer:    indexer,
+		store:      store,
+		indexState: indexState,
+		indexers:   make(map[string]*IndexService),
+		cacheBase:  cacheBaseDir,
+		logger:     logger,
+		debounce:   make(map[string]time.Time),
 	}
 }
 
@@ -153,6 +162,26 @@ func (s *FileWatchService) Start(ctx context.Context) error {
 	s.wg.Add(1)
 	go s.eventLoop()
 
+	// Resume incomplete indexing for registered directories.
+	// SyncDir → Sync() loads the persisted file cache (mtime/size),
+	// so already-indexed files are skipped — work continues from
+	// where it left off, not restarted from zero.
+	if s.indexState != nil {
+		for dir := range added {
+			st := s.indexState.Get(dir)
+			if st == nil || st.State == "completed" {
+				continue
+			}
+			if s.logger != nil {
+				s.logger.Info("filewatch: resuming indexing",
+					"dir", dir,
+					"state", st.State,
+				)
+			}
+			go s.SyncDir(s.ctx, dir)
+		}
+	}
+
 	<-ctx.Done()
 	return nil
 }
@@ -180,9 +209,10 @@ func (s *FileWatchService) IsRunning() bool {
 
 // FileWatchStatus summarizes the current state of the FileWatchService.
 type FileWatchStatus struct {
-	Running   bool     `json:"running"`
-	Watched   []string `json:"watched,omitempty"`
-	CacheBase string   `json:"cache_base,omitempty"`
+	Running     bool                      `json:"running"`
+	Watched     []string                  `json:"watched,omitempty"`
+	CacheBase   string                    `json:"cache_base,omitempty"`
+	IndexStates map[string]*DirIndexState `json:"index_states,omitempty"`
 }
 
 // Status returns the current running state and list of watched directories.
@@ -195,6 +225,9 @@ func (s *FileWatchService) Status() FileWatchStatus {
 		for _, e := range s.store.List() {
 			status.Watched = append(status.Watched, e.Dir)
 		}
+	}
+	if s.indexState != nil {
+		status.IndexStates = s.indexState.All()
 	}
 	return status
 }
@@ -258,7 +291,14 @@ func (s *FileWatchService) AddWatch(dir, agent string) error {
 	}
 
 	if s.watcher != nil {
-		return s.watchDir(absDir)
+		if err := s.watchDir(absDir); err != nil {
+			return err
+		}
+		// Trigger full scan in background if service is running
+		if s.isRunning.Load() {
+			go s.SyncDir(s.ctx, absDir)
+		}
+		return nil
 	}
 	return nil
 }
@@ -277,7 +317,75 @@ func (s *FileWatchService) RemoveWatch(dir, agent string) error {
 	if s.watcher != nil {
 		_ = s.watcher.Remove(absDir)
 	}
+
+	// Clean up index state and indexer
+	if s.indexState != nil {
+		s.indexState.Remove(absDir)
+	}
+	delete(s.indexers, absDir)
 	return nil
+}
+
+// SyncDir performs a full scan and index of the given directory.
+// It updates indexState to reflect progress (pending → indexing → completed).
+// Runs synchronously; call in a goroutine if you need non-blocking behavior.
+func (s *FileWatchService) SyncDir(ctx context.Context, absDir string) {
+	if s.indexState == nil {
+		return
+	}
+
+	s.indexState.SetPending(absDir)
+
+	// Guard: skip if another goroutine is already indexing this directory.
+	if _, loaded := s.indexingGuard.LoadOrStore(absDir, struct{}{}); loaded {
+		if s.logger != nil {
+			s.logger.Info("filewatch.sync: skip (already indexing)", "dir", absDir)
+		}
+		return
+	}
+	defer s.indexingGuard.Delete(absDir)
+
+	// Lightweight file count for progress (no stat calls, no ignore rules).
+	totalFiles, err := countFilesRecursive(absDir)
+	if err != nil {
+		s.indexState.SetFailed(absDir, err.Error())
+		if s.logger != nil {
+			s.logger.Error("filewatch.sync: count failed", err, "dir", absDir)
+		}
+		return
+	}
+
+	s.indexState.SetIndexing(absDir, totalFiles)
+	if s.logger != nil {
+		s.logger.Info("filewatch.sync: starting full scan",
+			"dir", absDir, "total_files", totalFiles)
+	}
+
+	// Perform the full sync (IndexService internally walks with ignore rules).
+	pi := s.getIndexer(absDir)
+	result := pi.Sync(ctx, absDir)
+
+	if result.Err != nil {
+		s.indexState.SetFailed(absDir, result.Err.Error())
+		if s.logger != nil {
+			s.logger.Error("filewatch.sync: failed", result.Err, "dir", absDir)
+		}
+		return
+	}
+
+	// Record actual indexing stats from the Sync result.
+	s.indexState.SetCompletedWithStats(absDir, result.Indexed+result.Updated, result.Skipped)
+	if s.logger != nil {
+		s.logger.Info("filewatch.sync: completed",
+			"dir", absDir,
+			"indexed", result.Indexed,
+			"updated", result.Updated,
+			"skipped", result.Skipped,
+			"removed", result.Removed,
+			"errors", len(result.Errors),
+			"elapsed_ms", result.Elapsed.Milliseconds(),
+		)
+	}
 }
 
 // RemoveWatchByDir stops monitoring all entries for a directory and removes
@@ -306,6 +414,12 @@ func (s *FileWatchService) RemoveWatchByDir(dir string) error {
 	if s.watcher != nil {
 		_ = s.watcher.Remove(absDir)
 	}
+
+	// Clean up index state and indexer
+	if s.indexState != nil {
+		s.indexState.Remove(absDir)
+	}
+	delete(s.indexers, absDir)
 	return nil
 }
 
@@ -595,4 +709,21 @@ func sanitizeDirName(absPath string) string {
 		name = name[len(name)-200:]
 	}
 	return name
+}
+
+// countFilesRecursive counts non-directory entries under root using os.ReadDir.
+// It is much lighter than walkProjectDir (no stat calls, no ignore rules) and
+// only serves to estimate total file count for progress reporting.
+func countFilesRecursive(root string) (int, error) {
+	count := 0
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			count++
+		}
+		return nil
+	})
+	return count, err
 }

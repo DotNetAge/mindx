@@ -90,7 +90,7 @@ func (d *Daemon) handleTranslate(_ context.Context, params json.RawMessage) (any
 			TotalTokens:      result.Tokens.TotalTokens,
 			Timestamp:        time.Now(),
 		}
-		if err := d.app.TokenUsageStore().Append(context.Background(), record); err != nil {
+		if err := d.app.TokenUsageStore().AppendWithSource(context.Background(), record, "translation"); err != nil {
 			d.logger.Warn("failed to record token usage for translate", "error", err)
 		}
 	}
