@@ -228,10 +228,23 @@ func (s *FileWatchService) AddWatch(dir, agent string) error {
 		return fmt.Errorf("filewatch: resolve path: %w", err)
 	}
 
-	// Reject system directories — watching /tmp, /dev, /proc etc. would index
-	// transient / non-text content that pollutes the knowledge base.
+	// Reject system directories
 	if isSystemDir(absDir) {
 		return fmt.Errorf("filewatch: refusing to watch system directory: %s", absDir)
+	}
+
+	// Check if a parent directory is already being watched — reject.
+	if ancestor, ok := s.store.CoveredByAncestor(absDir); ok {
+		return fmt.Errorf("filewatch: %s is already covered by %s", absDir, ancestor)
+	}
+
+	// If adding a broader parent, remove child watches from fsnotify first.
+	if removed := s.store.RemoveDescendants(absDir); len(removed) > 0 {
+		if s.watcher != nil {
+			for _, child := range removed {
+				_ = s.watcher.Remove(child)
+			}
+		}
 	}
 
 	if err := s.store.Add(absDir, agent); err != nil {
