@@ -12,7 +12,6 @@ skills:
   - humanizer
   - content-factory
   - copywriting
-  - humanizer
   - find-experts
 meta:
   name_zh: 内容创作者
