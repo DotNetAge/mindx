@@ -38,9 +38,17 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	workspaceDir := core.DefaultUserPrefsDir()
 
-	// Binary location
+	// Binary location & version
 	exePath, _ := os.Executable()
 	fmt.Printf("\n📦 Binary:   %s\n", exePath)
+	fmt.Printf("   Version:  %s", core.Version)
+	if core.Commit != "unknown" {
+		fmt.Printf(" (%s)", core.Commit)
+	}
+	fmt.Println()
+	if core.Dirty == "dirty" {
+		fmt.Println("   ⚠️  dirty build (uncommitted changes)")
+	}
 
 	installed, installDir, _, _ := setup.IsInstalled()
 	if installed {
