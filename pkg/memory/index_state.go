@@ -11,13 +11,13 @@ import (
 
 // DirIndexState tracks the full-scan state of a watched directory.
 type DirIndexState struct {
-	Dir         string `json:"dir"`
-	State       string `json:"state"`        // pending | indexing | completed | failed
-	TotalFiles  int    `json:"total_files"`   // total files discovered during walk
-	IndexedFiles int   `json:"indexed_files"` // files processed so far
-	Error       string `json:"error,omitempty"`
-	StartedAt   int64  `json:"started_at"`
-	CompletedAt int64  `json:"completed_at,omitempty"`
+	Dir          string `json:"dir"`
+	State        string `json:"state"`         // pending | indexing | completed | failed
+	TotalFiles   int    `json:"total_files"`   // total files discovered during walk
+	IndexedFiles int    `json:"indexed_files"` // files processed so far
+	Error        string `json:"error,omitempty"`
+	StartedAt    int64  `json:"started_at"`
+	CompletedAt  int64  `json:"completed_at,omitempty"`
 }
 
 // IndexStateStore persists per-directory index states to disk.
@@ -67,11 +67,11 @@ func (s *IndexStateStore) SetIndexing(dir string, totalFiles int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.states[dir] = &DirIndexState{
-		Dir:         dir,
-		State:       "indexing",
-		TotalFiles:  totalFiles,
+		Dir:          dir,
+		State:        "indexing",
+		TotalFiles:   totalFiles,
 		IndexedFiles: 0,
-		StartedAt:   time.Now().Unix(),
+		StartedAt:    time.Now().Unix(),
 	}
 	_ = s.save()
 }
