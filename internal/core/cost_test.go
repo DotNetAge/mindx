@@ -67,7 +67,7 @@ func TestCalculateCost(t *testing.T) {
 			input:  1_000_000,
 			output: 0,
 			cached: 500_000,
-			want:   10.0 + 0.5,
+			want:   5.0,
 		},
 		{
 			name:   "zero cost model",

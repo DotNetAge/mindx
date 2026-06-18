@@ -80,14 +80,20 @@ func LoadCostsFromModelsFile(path string) (*CostRegistry, error) {
 
 func CalculateCost(modelCost ModelCost, inputTokens, outputTokens, cachedInputTokens int64) float64 {
 	cost := 0.0
-	if modelCost.CostPer1MIn > 0 {
-		cost += modelCost.CostPer1MIn / 1_000_000 * float64(inputTokens)
+
+	// Input tokens: cached portion is excluded (already paid in a prior call)
+	chargeableInput := inputTokens - cachedInputTokens
+	if chargeableInput < 0 {
+		chargeableInput = 0
 	}
+	if modelCost.CostPer1MIn > 0 {
+		cost += modelCost.CostPer1MIn / 1_000_000 * float64(chargeableInput)
+	}
+
+	// Output tokens
 	if modelCost.CostPer1MOut > 0 {
 		cost += modelCost.CostPer1MOut / 1_000_000 * float64(outputTokens)
 	}
-	if modelCost.CostPer1MInCached > 0 && cachedInputTokens > 0 {
-		cost += modelCost.CostPer1MInCached / 1_000_000 * float64(cachedInputTokens)
-	}
+
 	return cost
 }

@@ -12,6 +12,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// TokenUsageRecordWithSource extends goharness's TokenUsageRecord with a source field
+// that identifies where the token consumption originated (chat, indexing, translation, etc.).
+type TokenUsageRecordWithSource struct {
+	goharnesssession.TokenUsageRecord
+	Source UsageSource `json:"source"`
+}
+
 // yamlTokenUsageRecord is the YAML-serializable form of TokenUsageRecord.
 type yamlTokenUsageRecord struct {
 	ID               string    `yaml:"id"`
@@ -26,9 +33,10 @@ type yamlTokenUsageRecord struct {
 	ReasoningTokens  int       `yaml:"reasoning_tokens"`
 	TotalTokens      int       `yaml:"total_tokens"`
 	Timestamp        time.Time `yaml:"timestamp"`
+	Source           string    `yaml:"source"`
 }
 
-func toYamlRecord(r goharnesssession.TokenUsageRecord) yamlTokenUsageRecord {
+func toYamlRecord(r goharnesssession.TokenUsageRecord, source UsageSource) yamlTokenUsageRecord {
 	return yamlTokenUsageRecord{
 		ID:               r.ID,
 		SessionID:        r.SessionID,
@@ -42,23 +50,31 @@ func toYamlRecord(r goharnesssession.TokenUsageRecord) yamlTokenUsageRecord {
 		ReasoningTokens:  r.ReasoningTokens,
 		TotalTokens:      r.TotalTokens,
 		Timestamp:        r.Timestamp,
+		Source:           string(source),
 	}
 }
 
-func fromYamlRecord(yr yamlTokenUsageRecord) goharnesssession.TokenUsageRecord {
-	return goharnesssession.TokenUsageRecord{
-		ID:               yr.ID,
-		SessionID:        yr.SessionID,
-		ConversationID:   yr.ConversationID,
-		ModelName:        yr.ModelName,
-		ProviderName:     yr.ProviderName,
-		AgentName:        yr.AgentName,
-		PromptTokens:     yr.PromptTokens,
-		CompletionTokens: yr.CompletionTokens,
-		CachedTokens:     yr.CachedTokens,
-		ReasoningTokens:  yr.ReasoningTokens,
-		TotalTokens:      yr.TotalTokens,
-		Timestamp:        yr.Timestamp,
+func fromYamlRecord(yr yamlTokenUsageRecord) TokenUsageRecordWithSource {
+	source := UsageSource(yr.Source)
+	if source == "" {
+		source = UsageSourceChat
+	}
+	return TokenUsageRecordWithSource{
+		TokenUsageRecord: goharnesssession.TokenUsageRecord{
+			ID:               yr.ID,
+			SessionID:        yr.SessionID,
+			ConversationID:   yr.ConversationID,
+			ModelName:        yr.ModelName,
+			ProviderName:     yr.ProviderName,
+			AgentName:        yr.AgentName,
+			PromptTokens:     yr.PromptTokens,
+			CompletionTokens: yr.CompletionTokens,
+			CachedTokens:     yr.CachedTokens,
+			ReasoningTokens:  yr.ReasoningTokens,
+			TotalTokens:      yr.TotalTokens,
+			Timestamp:        yr.Timestamp,
+		},
+		Source: source,
 	}
 }
 
@@ -120,8 +136,19 @@ func (s *FileTokenUsageStore) saveAll(records []yamlTokenUsageRecord) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// Append writes a single TokenUsageRecord to the unified store.
+// Append writes a single TokenUsageRecord with default source "chat".
 func (s *FileTokenUsageStore) Append(_ context.Context, record goharnesssession.TokenUsageRecord) error {
+	return s.appendWithSource(record, UsageSourceChat)
+}
+
+// AppendWithSource writes a single TokenUsageRecord with a specific source identifier
+// (e.g. "indexing"). This lets consumers distinguish indexing consumption
+// from chat consumption.
+func (s *FileTokenUsageStore) AppendWithSource(_ context.Context, record goharnesssession.TokenUsageRecord, source string) error {
+	return s.appendWithSource(record, UsageSource(source))
+}
+
+func (s *FileTokenUsageStore) appendWithSource(record goharnesssession.TokenUsageRecord, source UsageSource) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -129,13 +156,28 @@ func (s *FileTokenUsageStore) Append(_ context.Context, record goharnesssession.
 	if err != nil {
 		return err
 	}
-	records = append(records, toYamlRecord(record))
+	records = append(records, toYamlRecord(record, source))
 	return s.saveAll(records)
 }
 
 // Query retrieves TokenUsageRecords matching the given filter from the unified store.
 // All filtering is done in-memory on the flat record collection.
 func (s *FileTokenUsageStore) Query(_ context.Context, filter goharnesssession.TokenUsageFilter) ([]goharnesssession.TokenUsageRecord, error) {
+	extRecords, err := s.QueryWithSource(context.Background(), filter)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]goharnesssession.TokenUsageRecord, len(extRecords))
+	for i, r := range extRecords {
+		result[i] = r.TokenUsageRecord
+	}
+	return result, nil
+}
+
+// QueryWithSource retrieves TokenUsageRecordWithSource entries matching the given filter.
+// Unlike Query, this returns the source field so callers can distinguish indexing
+// consumption from chat consumption.
+func (s *FileTokenUsageStore) QueryWithSource(_ context.Context, filter goharnesssession.TokenUsageFilter) ([]TokenUsageRecordWithSource, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -147,7 +189,7 @@ func (s *FileTokenUsageStore) Query(_ context.Context, filter goharnesssession.T
 		return nil, nil
 	}
 
-	var result []goharnesssession.TokenUsageRecord
+	var result []TokenUsageRecordWithSource
 	for _, yr := range yamlRecs {
 		r := fromYamlRecord(yr)
 		if filter.SessionID != "" && r.SessionID != filter.SessionID {
@@ -174,7 +216,7 @@ func (s *FileTokenUsageStore) Query(_ context.Context, filter goharnesssession.T
 		result = append(result, r)
 	}
 
-	out := make([]goharnesssession.TokenUsageRecord, len(result))
+	out := make([]TokenUsageRecordWithSource, len(result))
 	copy(out, result)
 	return out, nil
 }

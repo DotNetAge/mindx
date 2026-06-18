@@ -398,8 +398,17 @@ func (p *IndexService) recordTokenUsage(ctx context.Context) {
 		TotalTokens:      tu.TotalTokens,
 		Timestamp:        time.Now(),
 	}
-	if err := p.usageStore.Append(ctx, record); err != nil && p.logger != nil {
-		p.logger.Warn("index-service: failed to record token usage", "error", err)
+	// Attempt to write with source annotation; fall back to plain Append if unavailable.
+	if sws, ok := p.usageStore.(interface {
+		AppendWithSource(context.Context, session.TokenUsageRecord, string) error
+	}); ok {
+		if err := sws.AppendWithSource(ctx, record, "indexing"); err != nil && p.logger != nil {
+			p.logger.Warn("index-service: failed to record token usage", "error", err)
+		}
+	} else {
+		if err := p.usageStore.Append(ctx, record); err != nil && p.logger != nil {
+			p.logger.Warn("index-service: failed to record token usage", "error", err)
+		}
 	}
 }
 
