@@ -139,5 +139,3 @@ require (
 )
 
 replace github.com/coder/hnsw => ./third_party/hnsw
-
-replace github.com/DotNetAge/gorag => ../gorag
