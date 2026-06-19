@@ -1,0 +1,14 @@
+[Unit]
+Description=MindX Daemon - AI-native multi-agent conversation platform
+Documentation=https://github.com/DotNetAge/mindx
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/mindx daemon
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=-/etc/default/mindx-daemon
+
+[Install]
+WantedBy=multi-user.target
