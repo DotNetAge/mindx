@@ -374,7 +374,14 @@ func (s *FileWatchService) SyncDir(ctx context.Context, absDir string) {
 
 	// Perform the full sync (IndexService internally walks with ignore rules).
 	pi := s.getIndexer(absDir)
+	if s.IndexEventCallback != nil {
+		cbAbsDir := absDir // capture for closure
+		pi.SyncStepCallback = func(absPath, relPath, state string) {
+			s.IndexEventCallback(absPath, relPath, cbAbsDir, state)
+		}
+	}
 	result := pi.Sync(ctx, absDir)
+	pi.SyncStepCallback = nil // clean up after sync completes
 
 	if result.Err != nil {
 		s.indexState.SetFailed(absDir, result.Err.Error())
