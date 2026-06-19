@@ -1,0 +1,17 @@
+Date: Fri, 19 Jun 2026 07:43:17 +0000
+MD5Sum:
+ f0bfb84df01797dec98b478bc2338749               38 Release
+ ae84f3a0ce5649d95996a08869d3b76e              436 main/binary-amd64/Packages.gz
+ 79641047473aa5f84d3c692b6cdc86c0              435 main/binary-arm64/Packages.gz
+SHA1:
+ 0ac36c7ade133137c39779f04c4f3ecae8e0e8a6               38 Release
+ ac147a1ba3e1a7864de8420877847f262cfb3e9d              436 main/binary-amd64/Packages.gz
+ 64a567da081dfa66899f230fcf4c7be1ff730550              435 main/binary-arm64/Packages.gz
+SHA256:
+ 5b491628ec82cb1989f2fb31f3f7f0bf37d1764256913cda7a7840fba8c0518f               38 Release
+ beb2a8b1243d05175b76106676b5b8612aa9fb6903e86bd37caeb9ad6bef1cad              436 main/binary-amd64/Packages.gz
+ f0c8526fce7e57ada4452ec361218648e8aa345b095e1bfaae0dda9394d32da5              435 main/binary-arm64/Packages.gz
+SHA512:
+ 762e2b59ccb68a356e6f5e6932599cf71be9c79358e509ecce7c24a3b84ced9a0da70b1902b21f039f348444cb474e297dd0a2ae4b3d004e5eff6c480a811e18               38 Release
+ 99bed80520ff4f24a2aeb246f204b5c758acd2345a5558f1eca8c407dae378a8db5ba179ae0b92acdf83abe9364d21bad9448bba3af83c9cd27e6d27f6d6580c              436 main/binary-amd64/Packages.gz
+ 0e4683f1fb286fff20a61e2909339eb55faf277cb310303a744329bb31872a2bee262d35657599eb523cd93d803e57341c7153780c5b36cc17a1578e4d879713              435 main/binary-arm64/Packages.gz
