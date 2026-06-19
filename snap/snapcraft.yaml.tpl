@@ -25,6 +25,16 @@ apps:
       - home
       - removable-media
 
+  daemon:
+    command: bin/mindx daemon
+    daemon: simple
+    restart-condition: always
+    plugs:
+      - network
+      - network-bind
+      - home
+      - removable-media
+
 parts:
   mindx:
     plugin: go
