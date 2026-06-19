@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/gorag"
 	"github.com/DotNetAge/gorag/logging"
 	"github.com/fsnotify/fsnotify"
@@ -47,6 +48,8 @@ type FileWatchService struct {
 	indexers  map[string]*IndexService // keyed by abs dir
 	cacheBase string                   // base directory for per-dir indexing caches
 	logger    logging.Logger
+	usageStore session.TokenUsageStore
+	modelName  string
 
 	// indexState persists per-directory full-scan state (pending/indexing/completed).
 	indexState *IndexStateStore
@@ -91,6 +94,8 @@ func NewFileWatchService(
 	indexState *IndexStateStore,
 	cacheBaseDir string,
 	logger logging.Logger,
+	usageStore session.TokenUsageStore,
+	modelName string,
 ) *FileWatchService {
 	return &FileWatchService{
 		indexer:    indexer,
@@ -99,6 +104,8 @@ func NewFileWatchService(
 		indexers:   make(map[string]*IndexService),
 		cacheBase:  cacheBaseDir,
 		logger:     logger,
+		usageStore: usageStore,
+		modelName:  modelName,
 		debounce:   make(map[string]time.Time),
 	}
 }
@@ -710,7 +717,11 @@ func (s *FileWatchService) getIndexer(absDir string) *IndexService {
 
 	// Each dir gets its own cache directory named by sanitized path
 	cacheDir := filepath.Join(s.cacheBase, sanitizeDirName(absDir))
-	pi := NewIndexService(s.indexer, cacheDir, s.logger)
+	opts := []IndexServiceOption{}
+	if s.usageStore != nil && s.modelName != "" {
+		opts = append(opts, WithTokenUsageStore(s.usageStore, s.modelName))
+	}
+	pi := NewIndexService(s.indexer, cacheDir, s.logger, opts...)
 	s.indexers[absDir] = pi
 	return pi
 }

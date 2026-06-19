@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DotNetAge/goharness/memory"
+	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/gorag"
 	goragcore "github.com/DotNetAge/gorag/core"
 	"github.com/DotNetAge/gorag/embedder"
@@ -25,11 +26,13 @@ var _ memory.Memory = (*RAGMemory)(nil)
 
 // RAGMemory implements memory.Memory using GoRAG's HybridIndexer as the backend.
 type RAGMemory struct {
-	indexer    *gorag.HybridIndexer
-	embedder   goragcore.Embedder
-	memoryType memory.MemoryType
-	graphStore goragcore.GraphStore
-	logger     logging.Logger
+	indexer     *gorag.HybridIndexer
+	embedder    goragcore.Embedder
+	memoryType  memory.MemoryType
+	graphStore  goragcore.GraphStore
+	logger      logging.Logger
+	usageStore  session.TokenUsageStore
+	modelName   string
 }
 
 type RAGMemoryOption func(*RAGMemory)
@@ -62,6 +65,9 @@ type MemoryConfig struct {
 	// LLMConfig 可选。非空时启用 LLMIndexer，在语义索引基础上增加知识图谱
 	// 实体/关系索引与标签系统（tags, summary, entity_ids）。
 	LLMConfig *goragindexer.ModelConfig
+
+	// TokenUsageStore 可选。配置后索引期间的 LLM token 用量将被持久化记录。
+	TokenUsageStore session.TokenUsageStore
 }
 
 func (c MemoryConfig) dataDir() string {
@@ -176,9 +182,8 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 			graphStore = gs
 		}
 
-		// 删除 semanticIndexer（LLMIndexer 替代语义分块 + 实体提取）
-		indexer.RemoveIndexer("semantic")
-
+		// LLMIndexer 与 semantic 索引器共存，无需移除任何索引器
+		// （HybridIndexer 的 List/Count 方法会自动遍历可用索引器）
 		var llmOpts []goragindexer.LLMOption
 		llmOpts = append(llmOpts, goragindexer.WithLLMLogger(logger))
 		if len(cfg.EntityDefs) > 0 {
@@ -208,7 +213,16 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 		memoryType: cfg.MemoryType,
 		graphStore: graphStore,
 		logger:     logger,
+		usageStore: cfg.TokenUsageStore,
+		modelName:  modelName(cfg.LLMConfig),
 	}, nil
+}
+
+func modelName(cfg *goragindexer.ModelConfig) string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Model
 }
 
 func WithMemoryType(t memory.MemoryType) RAGMemoryOption {
@@ -351,7 +365,11 @@ func (m *RAGMemory) Delete(ctx context.Context, id string) error {
 }
 
 func (m *RAGMemory) SyncProjectDir(ctx context.Context, projectDir, cacheDir string) *ProjectSyncResult {
-	pi := NewIndexService(m.indexer, cacheDir, m.logger)
+	opts := []IndexServiceOption{}
+	if m.usageStore != nil && m.modelName != "" {
+		opts = append(opts, WithTokenUsageStore(m.usageStore, m.modelName))
+	}
+	pi := NewIndexService(m.indexer, cacheDir, m.logger, opts...)
 	return pi.Sync(ctx, projectDir)
 }
 
@@ -485,13 +503,19 @@ func hitToRecord(hit goragcore.Hit) *memory.MemoryRecord {
 		content = strings.Join(lines[bodyStart:], "\n")
 	}
 
+	var meta map[string]any
+	if hit.Metadata != nil {
+		meta = hit.Metadata
+	}
+
 	return &memory.MemoryRecord{
-		ID:      id,
-		Type:    memType,
-		Title:   title,
-		Content: content,
-		Tags:    tags,
-		Score:   float64(hit.Score),
+		ID:       id,
+		Type:     memType,
+		Title:    title,
+		Content:  content,
+		Tags:     tags,
+		Score:    float64(hit.Score),
+		Metadata: meta,
 	}
 }
 

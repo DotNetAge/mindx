@@ -392,6 +392,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			LLMConfig:  llmModelCfg,
 			EntityDefs: entityDefs,
 			Logger:     logger,
+			TokenUsageStore: app.TokenUsageStore(),
 		})
 		if memErr != nil {
 			logger.Warn("filewatch: failed to create shared LongTerm indexer, watch disabled", "error", memErr)
@@ -406,12 +407,19 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 				if isErr != nil {
 					logger.Warn("filewatch: failed to create index state store, watch disabled", "error", isErr)
 				} else {
-					memoryWatch = memory.NewFileWatchService(
+					// Determine model name for token usage recording
+				idxModelName := ""
+				if llmModelCfg != nil {
+					idxModelName = llmModelCfg.Model
+				}
+				memoryWatch = memory.NewFileWatchService(
 						sharedMem.Indexer(),
 						watchList,
 						indexState,
 						filepath.Join(app.Settings().DataDir(), "memory-cache"),
 						logger,
+						app.TokenUsageStore(),
+						idxModelName,
 					)
 					logger.Info("filewatch service configured",
 						"cache_dir", filepath.Join(app.Settings().DataDir(), "memory-cache"),
