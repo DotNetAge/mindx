@@ -30,6 +30,10 @@ type IndexService struct {
 	logger     logging.Logger
 	usageStore session.TokenUsageStore
 	modelName  string
+
+	// SyncStepCallback is called for each file during Sync.
+	// Set by FileWatchService.SyncDir to broadcast per-file progress to WebUI.
+	SyncStepCallback func(absPath, relPath, state string) // "indexing" | "indexed"
 }
 
 // IndexServiceOption configures an IndexService.
@@ -108,6 +112,9 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 		}
 
 		absPath := filepath.Join(absDir, relPath)
+		if p.SyncStepCallback != nil {
+			p.SyncStepCallback(absPath, relPath, "indexing")
+		}
 		chunks, idxErr := p.indexFile(ctx, absPath)
 		if idxErr != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", relPath, idxErr))
@@ -130,6 +137,10 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 			Size:   info.Size(),
 			Chunks: chunks,
 		})
+
+		if p.SyncStepCallback != nil {
+			p.SyncStepCallback(absPath, relPath, "indexed")
+		}
 	}
 
 	// Handle deleted files: remove their chunks
