@@ -729,25 +729,26 @@ jobs:
 
       - name: Build APT repository
         run: |
+          set -x
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
           mkdir -p repo/apt/pool/main/m/mindx
           mkdir -p repo/apt/dists/stable/main/binary-amd64
 
           # Copy .deb packages
-          cp packages/*.deb repo/apt/pool/main/m/mindx/ 2>/dev/null || echo "No .deb files"
+          cp packages/*.deb repo/apt/pool/main/m/mindx/ || echo "No .deb files"
 
           # Generate Packages index
           cd repo/apt
-          dpkg-scanpackages pool /dev/null 2>/dev/null \
+          dpkg-scanpackages pool /dev/null \
             | gzip -9c > dists/stable/main/binary-amd64/Packages.gz
 
           # Generate Release + GPG signature
           cd dists/stable
-          apt-ftparchive release . > Release 2>/dev/null
+          apt-ftparchive release . > Release
 
           if gpg --list-keys >/dev/null 2>&1; then
-            gpg --clearsign -o InRelease Release 2>/dev/null
-            gpg -abs -o Release.gpg Release 2>/dev/null
+            gpg --clearsign -o InRelease Release
+            gpg -abs -o Release.gpg Release
             echo "APT repo signed with GPG"
           else
             echo "APT repo unsigned — add [trusted=yes] to client sources.list"
