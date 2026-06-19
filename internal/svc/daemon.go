@@ -384,14 +384,14 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		}
 
 		sharedMem, memErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-			MemoryType: goharnessmemory.MemoryTypeLongTerm,
-			AgentName:  "_shared",
-			MemoryDir:  filepath.Join(app.Settings().UserPreferences(), "memory"),
-			Embedder:   emb,
-			GraphStore: coreGS,
-			LLMConfig:  llmModelCfg,
-			EntityDefs: entityDefs,
-			Logger:     logger,
+			MemoryType:      goharnessmemory.MemoryTypeLongTerm,
+			AgentName:       "_shared",
+			MemoryDir:       filepath.Join(app.Settings().UserPreferences(), "memory"),
+			Embedder:        emb,
+			GraphStore:      coreGS,
+			LLMConfig:       llmModelCfg,
+			EntityDefs:      entityDefs,
+			Logger:          logger,
 			TokenUsageStore: app.TokenUsageStore(),
 		})
 		if memErr != nil {
@@ -408,11 +408,11 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 					logger.Warn("filewatch: failed to create index state store, watch disabled", "error", isErr)
 				} else {
 					// Determine model name for token usage recording
-				idxModelName := ""
-				if llmModelCfg != nil {
-					idxModelName = llmModelCfg.Model
-				}
-				memoryWatch = memory.NewFileWatchService(
+					idxModelName := ""
+					if llmModelCfg != nil {
+						idxModelName = llmModelCfg.Model
+					}
+					memoryWatch = memory.NewFileWatchService(
 						sharedMem.Indexer(),
 						watchList,
 						indexState,
