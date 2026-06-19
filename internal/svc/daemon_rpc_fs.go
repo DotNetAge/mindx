@@ -85,16 +85,6 @@ func (d *Daemon) handleFSList(_ context.Context, params json.RawMessage) (any, e
 		return strings.ToLower(result[i].Name) < strings.ToLower(result[j].Name)
 	})
 
-	parentPath := filepath.Dir(absPath)
-	if parentPath != absPath {
-		result = append([]FSEntry{{
-			Name:    "..",
-			Path:    parentPath,
-			IsDir:   true,
-			ModTime: time.Time{},
-		}}, result...)
-	}
-
 	return result, nil
 }
 

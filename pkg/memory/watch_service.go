@@ -42,12 +42,12 @@ type pendingChange struct {
 //	         ↓
 //	LongTerm RAG Index (shared knowledge base)
 type FileWatchService struct {
-	indexer   *gorag.HybridIndexer
-	store     *WatchListStore
-	watcher   *fsnotify.Watcher
-	indexers  map[string]*IndexService // keyed by abs dir
-	cacheBase string                   // base directory for per-dir indexing caches
-	logger    logging.Logger
+	indexer    *gorag.HybridIndexer
+	store      *WatchListStore
+	watcher    *fsnotify.Watcher
+	indexers   map[string]*IndexService // keyed by abs dir
+	cacheBase  string                   // base directory for per-dir indexing caches
+	logger     logging.Logger
 	usageStore session.TokenUsageStore
 	modelName  string
 

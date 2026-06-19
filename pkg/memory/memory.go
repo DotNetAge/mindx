@@ -26,13 +26,13 @@ var _ memory.Memory = (*RAGMemory)(nil)
 
 // RAGMemory implements memory.Memory using GoRAG's HybridIndexer as the backend.
 type RAGMemory struct {
-	indexer     *gorag.HybridIndexer
-	embedder    goragcore.Embedder
-	memoryType  memory.MemoryType
-	graphStore  goragcore.GraphStore
-	logger      logging.Logger
-	usageStore  session.TokenUsageStore
-	modelName   string
+	indexer    *gorag.HybridIndexer
+	embedder   goragcore.Embedder
+	memoryType memory.MemoryType
+	graphStore goragcore.GraphStore
+	logger     logging.Logger
+	usageStore session.TokenUsageStore
+	modelName  string
 }
 
 type RAGMemoryOption func(*RAGMemory)
