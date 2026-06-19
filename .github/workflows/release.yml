@@ -763,7 +763,7 @@ jobs:
           apt-ftparchive release . > Release
 
           # Use --list-secret-keys to only sign when a secret key is available
-          if gpg --list-secret-keys >/dev/null 2>&1; then
+          if gpg --list-secret-keys 2>/dev/null | grep -q '^sec'; then
             gpg --clearsign -o InRelease Release
             gpg -abs -o Release.gpg Release
             echo "APT repo signed with GPG"
