@@ -731,6 +731,7 @@ jobs:
         run: |
           set -x
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+          mkdir -p repo/apt
           cd repo/apt
 
           # Create per-architecture pool directories (prevents dpkg-scanpackages
