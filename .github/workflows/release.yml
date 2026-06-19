@@ -731,22 +731,38 @@ jobs:
         run: |
           set -x
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
-          mkdir -p repo/apt/pool/main/m/mindx
-          mkdir -p repo/apt/dists/stable/main/binary-amd64
-
-          # Copy .deb packages
-          cp packages/*.deb repo/apt/pool/main/m/mindx/ || echo "No .deb files"
-
-          # Generate Packages index
           cd repo/apt
-          dpkg-scanpackages pool /dev/null \
-            | gzip -9c > dists/stable/main/binary-amd64/Packages.gz
+
+          # Create per-architecture pool directories (prevents dpkg-scanpackages
+          # from warning about duplicate packages and dropping one arch)
+          for arch in amd64 arm64; do
+            mkdir -p "pool/main/m/mindx-${arch}"
+            mkdir -p "dists/stable/main/binary-${arch}"
+          done
+
+          # Copy .deb packages into arch-specific pool dirs
+          for deb in ../../packages/*.deb; do
+            case "$deb" in
+              *_amd64.deb) cp "$deb" pool/main/m/mindx-amd64/ ;;
+              *_arm64.deb) cp "$deb" pool/main/m/mindx-arm64/ ;;
+              *)           cp "$deb" pool/main/m/mindx-amd64/ ;; # fallback
+            esac
+          done
+
+          # Generate per-architecture Packages indices
+          for arch in amd64 arm64; do
+            if [ "$(ls -A pool/main/m/mindx-${arch}/*.deb 2>/dev/null)" ]; then
+              dpkg-scanpackages "pool/main/m/mindx-${arch}" /dev/null \
+                | gzip -9c > "dists/stable/main/binary-${arch}/Packages.gz"
+            fi
+          done
 
           # Generate Release + GPG signature
           cd dists/stable
           apt-ftparchive release . > Release
 
-          if gpg --list-keys >/dev/null 2>&1; then
+          # Use --list-secret-keys to only sign when a secret key is available
+          if gpg --list-secret-keys >/dev/null 2>&1; then
             gpg --clearsign -o InRelease Release
             gpg -abs -o Release.gpg Release
             echo "APT repo signed with GPG"
