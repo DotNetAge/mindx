@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -262,6 +264,57 @@ func (d *Daemon) handleFSMv(_ context.Context, params json.RawMessage) (any, err
 		return nil, fmt.Errorf("cannot move/rename: %w", err)
 	}
 	return map[string]string{"status": "ok"}, nil
+}
+
+// ── 新增：reveal ──
+
+type fsRevealParams struct {
+	Path string `json:"path"`
+}
+
+type fsRevealResult struct {
+	Status string `json:"status"`
+}
+
+// handleFSReveal opens the file's parent directory in the native file manager,
+// and on macOS also highlights/selects the file.
+func (d *Daemon) handleFSReveal(_ context.Context, params json.RawMessage) (any, error) {
+	var p fsRevealParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	cleanPath := filepath.Clean(p.Path)
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	if _, err := os.Stat(absPath); err != nil {
+		return nil, fmt.Errorf("cannot access path: %w", err)
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		// macOS: open -R reveals the file in Finder
+		cmd := exec.Command("open", "-R", absPath)
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("failed to reveal in Finder: %w", err)
+		}
+	case "windows":
+		// Windows: explorer /select highlights the file
+		cmd := exec.Command("explorer", "/select,", absPath)
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("failed to reveal in Explorer: %w", err)
+		}
+	default:
+		// Linux: open the parent directory with the default file manager
+		parentDir := filepath.Dir(absPath)
+		cmd := exec.Command("xdg-open", parentDir)
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("failed to open file manager: %w", err)
+		}
+	}
+
+	return fsRevealResult{Status: "ok"}, nil
 }
 
 // ── HTTP download ──

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
+	"github.com/DotNetAge/gograph/pkg/graph"
 )
 
 // ---------------------------------------------------------------------------
@@ -79,14 +80,18 @@ func (d *Daemon) handleGraphQuery(_ context.Context, params json.RawMessage) (an
 
 	var results []map[string]interface{}
 	for rows.Next() {
+		cols := rows.Columns()
+		vals := make([]interface{}, len(cols))
+		ptrs := make([]interface{}, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, fmt.Errorf("scan row failed: %w", err)
+		}
 		row := make(map[string]interface{})
-		for _, col := range rows.Columns() {
-			// Use Scan into interface{} to preserve original types
-			var val interface{}
-			if err := rows.Scan(&val); err != nil {
-				return nil, fmt.Errorf("scan column %q failed: %w", col, err)
-			}
-			row[col] = val
+		for i, col := range cols {
+			row[col] = vals[i]
 		}
 		results = append(results, row)
 	}
@@ -274,6 +279,66 @@ func (d *Daemon) handleGraphGetNeighbors(_ context.Context, params json.RawMessa
 
 	d.logger.Info("graph.get_neighbors called", "node_id", p.ID, "depth", p.Depth, "count", len(neighbors))
 	return neighbors, nil
+}
+
+func (d *Daemon) handleGraphListNodes(_ context.Context, _ json.RawMessage) (any, error) {
+	gs := d.graphStore
+	if gs == nil {
+		return nil, fmt.Errorf("graph store not available")
+	}
+
+	nodes, err := gs.ListNodes()
+	if err != nil {
+		return nil, fmt.Errorf("list nodes failed: %w", err)
+	}
+
+	result := make([]map[string]interface{}, 0, len(nodes))
+	for _, n := range nodes {
+		result = append(result, map[string]interface{}{
+			"id":         n.ID,
+			"labels":     n.Labels,
+			"properties": graphPropsToAny(n.Properties),
+		})
+	}
+
+	d.logger.Info("graph.list_nodes called", "count", len(result))
+	return result, nil
+}
+
+func (d *Daemon) handleGraphListEdges(_ context.Context, _ json.RawMessage) (any, error) {
+	gs := d.graphStore
+	if gs == nil {
+		return nil, fmt.Errorf("graph store not available")
+	}
+
+	edges, err := gs.ListEdges()
+	if err != nil {
+		return nil, fmt.Errorf("list edges failed: %w", err)
+	}
+
+	result := make([]map[string]interface{}, 0, len(edges))
+	for _, e := range edges {
+		result = append(result, map[string]interface{}{
+			"id":           e.ID,
+			"from_node_id": e.StartNodeID,
+			"to_node_id":   e.EndNodeID,
+			"type":         e.Type,
+			"properties":   graphPropsToAny(e.Properties),
+		})
+	}
+
+	d.logger.Info("graph.list_edges called", "count", len(result))
+	return result, nil
+}
+
+// graphPropsToAny converts a map[string]graph.PropertyValue (gograph internal type)
+// to map[string]interface{} for clean JSON serialization.
+func graphPropsToAny(props map[string]graph.PropertyValue) map[string]interface{} {
+	result := make(map[string]interface{}, len(props))
+	for k, v := range props {
+		result[k] = v.InterfaceValue()
+	}
+	return result
 }
 
 // initGraphDB opens (or creates) the knowledge-graph database under ~/.mindx/data/.

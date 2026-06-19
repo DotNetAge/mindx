@@ -65,6 +65,7 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("fs.mkdir", r.daemon.handleFSMkdir)
 	gw.RegisterMethod("fs.rm", r.daemon.handleFSRm)
 	gw.RegisterMethod("fs.mv", r.daemon.handleFSMv)
+	gw.RegisterMethod("fs.reveal", r.daemon.handleFSReveal)
 
 	gw.RegisterMethod("user.config", r.daemon.handleUserConfig)
 
@@ -97,6 +98,8 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("graph.upsert_edges", r.daemon.handleGraphUpsertEdges)
 	gw.RegisterMethod("graph.get_node", r.daemon.handleGraphGetNode)
 	gw.RegisterMethod("graph.get_neighbors", r.daemon.handleGraphGetNeighbors)
+	gw.RegisterMethod("graph.list_nodes", r.daemon.handleGraphListNodes)
+	gw.RegisterMethod("graph.list_edges", r.daemon.handleGraphListEdges)
 
 	gw.RegisterMethod("kvstore.get", r.daemon.handleKVGet)
 	gw.RegisterMethod("kvstore.set", r.daemon.handleKVSet)
