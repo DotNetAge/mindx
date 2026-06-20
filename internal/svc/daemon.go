@@ -482,6 +482,25 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	if schedulerDB != nil {
 		d.scheduler = scheduler.NewScheduler(schedulerDB, d.executeScheduleCommand, logger)
 		logger.Info("scheduler instance created")
+
+		// Wire lifecycle callback to broadcast job events to all connected clients.
+		d.scheduler.OnLifecycle(func(info scheduler.JobLifecycleInfo) {
+			if d.gw == nil {
+				return
+			}
+			var method string
+			switch info.Status {
+			case "started":
+				method = "schedule.job_started"
+			case "completed":
+				method = "schedule.job_completed"
+			case "failed":
+				method = "schedule.job_failed"
+			default:
+				method = "schedule.job_" + info.Status
+			}
+			d.gw.BroadcastNotification(method, info)
+		})
 	}
 
 	// Initialize global KV store (bbolt)
@@ -609,6 +628,41 @@ func (d *Daemon) autoUpdateLoop(ctx context.Context) {
 	}
 }
 
+// restoreSessionWatches iterates all existing sessions and adds their
+// project_dir to the file watchlist if not already present. This ensures
+// sessions created outside the daemon RPC path (e.g. TUI auto-created
+// default session) also get their directories monitored for RAG indexing.
+func (d *Daemon) restoreSessionWatches() {
+	sessDB := d.app.SessDB()
+	if sessDB == nil {
+		return
+	}
+	sessions, err := sessDB.ListSessions(context.Background())
+	if err != nil {
+		d.logger.Warn("restoreSessionWatches: failed to list sessions", "error", err)
+		return
+	}
+	for _, s := range sessions {
+		if s.ProjectDir == "" {
+			continue
+		}
+		if err := d.memoryWatch.AddWatch(s.ProjectDir, s.AgentName); err != nil {
+			d.logger.Warn("restoreSessionWatches: failed to add watch",
+				"session_id", s.SessionID,
+				"project_dir", s.ProjectDir,
+				"agent", s.AgentName,
+				"error", err,
+			)
+		} else {
+			d.logger.Info("restoreSessionWatches: watch restored",
+				"session_id", s.SessionID,
+				"project_dir", s.ProjectDir,
+				"agent", s.AgentName,
+			)
+		}
+	}
+}
+
 func (d *Daemon) Start(ctx context.Context) error {
 	d.startTime = time.Now()
 	d.logger.Info("daemon start called", "addr", d.addr, "wsPath", d.wsPath)
@@ -630,6 +684,8 @@ func (d *Daemon) Start(ctx context.Context) error {
 				},
 			})
 		}
+		// Restore watches for all existing sessions with a project_dir.
+		d.restoreSessionWatches()
 	}
 
 	if d.scheduler != nil {
@@ -1266,6 +1322,123 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		}
 	}
 
+	s := goharnesssession.NewSession(sessionID, agent,
+		goharnesssession.WithStore(d.app.SessDB()),
+	)
+
+	// Build AskBuilder with event handlers that broadcast to all connected clients.
+	ask := rt.Ask(agent, content, s).
+		WithContext(ctx).
+		OnThinking(func(chunk string) {
+			d.broadcastScheduleEvent(sessionID, agent, "thinking_delta", chunk)
+		}).
+		OnContent(func(chunk string) {
+			d.broadcastScheduleEvent(sessionID, agent, "markdown", chunk)
+		}).
+		OnToolUseDelta(func(data events.ToolUseDeltaData) {
+			d.broadcastScheduleEvent(sessionID, agent, "tool_use_delta", map[string]any{
+				"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
+			})
+		}).
+		OnThinkingDone(func() {
+			d.broadcastScheduleEvent(sessionID, agent, "thinking_done", nil)
+		}).
+		OnToolStart(func(data events.ToolExecStartData) {
+			d.broadcastScheduleEvent(sessionID, agent, "tool_exec_start", map[string]any{
+				"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
+			})
+		}).
+		OnToolEnd(func(data events.ToolExecEndData) {
+			d.broadcastScheduleEvent(sessionID, agent, "tool_exec_end", map[string]any{
+				"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
+				"success": data.Success, "result": data.Result, "error": data.Error,
+				"duration_ms": int(data.Duration.Milliseconds()),
+			})
+		}).
+		OnAnswer(func(answer string) {
+			d.broadcastScheduleEvent(sessionID, agent, "final_answer", answer)
+		}).
+		OnExecutionSummary(func(data events.ExecutionSummaryData) {
+			d.broadcastScheduleEvent(sessionID, agent, "execution_summary", map[string]any{
+				"total_iterations": data.TotalIterations, "tool_calls": data.ToolCalls,
+				"tools_used": data.ToolsUsed, "total_duration": data.TotalDuration.String(),
+				"tokens_used": map[string]any{
+					"total_tokens":      data.TokensUsed.TotalTokens,
+					"input_tokens":      data.TokensUsed.InputTokens,
+					"output_tokens":     data.TokensUsed.OutputTokens,
+					"cached_tokens":     data.TokensUsed.CachedTokens,
+					"reasoning_tokens":  data.TokensUsed.ReasoningTokens,
+				},
+				"termination_reason": data.TerminationReason,
+			})
+		}).
+		OnCycleEnd(func(data events.CycleInfo) {
+			d.broadcastScheduleEvent(sessionID, agent, "cycle_end", map[string]any{
+				"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
+			})
+		}).
+		OnAgentTalkStart(func(data events.AgentTalkInfo) {
+			d.broadcastScheduleEvent(sessionID, agent, "agent_talk_start", map[string]any{
+				"to": data.To, "message": data.Message,
+			})
+		}).
+		OnAgentTalkEnd(func(data events.AgentTalkResult) {
+			d.broadcastScheduleEvent(sessionID, agent, "agent_talk_end", map[string]any{
+				"to": data.To, "reply": data.Reply, "error": data.Error,
+			})
+		}).
+		OnCompaction(func(data events.CompactionData) {
+			d.broadcastScheduleEvent(sessionID, agent, "compaction", map[string]any{
+				"session_id": data.SessionID, "messages_slid": data.MessagesSlid,
+				"remaining_after": data.RemainingAfter, "window_size": data.WindowSize,
+			})
+		}).
+		OnMaxTurnsReached(func(data events.MaxTurnsReachedData) {
+			d.broadcastScheduleEvent(sessionID, agent, "max_turns_reached", map[string]any{
+				"turns_completed": data.TurnsCompleted, "max_turns": data.MaxTurns, "suggestion": data.Suggestion,
+			})
+		}).
+		OnError(func(errMsg string) {
+			d.broadcastScheduleEvent(sessionID, agent, "error", errMsg)
+		}).
+		OnSubtaskSpawned(func(data events.SubtaskInfo) {
+			d.broadcastScheduleEvent(sessionID, agent, "subtask_spawned", map[string]any{
+				"task_id": data.TaskID, "agent_name": data.AgentName,
+				"description": data.Description, "timeout": data.Timeout,
+			})
+		}).
+		OnSubtaskCompleted(func(data events.SubtaskResult) {
+			d.broadcastScheduleEvent(sessionID, agent, "subtask_completed", map[string]any{
+				"task_id": data.TaskID, "success": data.Success,
+				"answer": data.Answer, "error": data.Error,
+			})
+		}).
+		OnTaskSummary(func(data events.TaskSummaryData) {
+			d.broadcastScheduleEvent(sessionID, agent, "task_summary", map[string]any{
+				"summary": data.Summary,
+				"token_usage": map[string]any{
+					"input_tokens":  data.TokenUsage.InputTokens,
+					"output_tokens": data.TokenUsage.OutputTokens,
+					"total_tokens":  data.TokenUsage.TotalTokens,
+				},
+			})
+		}).
+		OnLLMTimeout(func(data events.LLMTimeoutData) {
+			d.broadcastScheduleEvent(sessionID, agent, "llm_timeout", map[string]any{
+				"elapsed": data.Elapsed, "error": data.Error,
+			})
+		}).
+		OnTokenUsageRecorded(func(record goharnesssession.TokenUsageRecord) {
+			d.broadcastScheduleEvent(sessionID, agent, "token_usage_recorded", map[string]any{
+				"id": record.ID, "session_id": record.SessionID,
+				"model_name": record.ModelName, "provider_name": record.ProviderName,
+				"agent_name": record.AgentName, "total_tokens": record.TotalTokens,
+				"prompt_tokens": record.PromptTokens, "completion_tokens": record.CompletionTokens,
+				"cached_tokens": record.CachedTokens, "reasoning_tokens": record.ReasoningTokens,
+				"timestamp": record.Timestamp,
+			})
+		})
+
 	if targetDir != "" {
 		d.execMu.Lock()
 		originalCWD, _ := os.Getwd()
@@ -1289,11 +1462,7 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 				"session_id", sessionID,
 				"agent", agent,
 			)
-
-			s := goharnesssession.NewSession(sessionID, agent,
-				goharnesssession.WithStore(d.app.SessDB()),
-			)
-			_, err = rt.Ask(agent, content, s).Run()
+			_, err = ask.Run()
 
 			d.logger.Info("scheduled task: Runtime.Ask() returned",
 				"session_id", sessionID,
@@ -1326,11 +1495,7 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		"session_id", sessionID,
 		"agent", agent,
 	)
-
-	s := goharnesssession.NewSession(sessionID, agent,
-		goharnesssession.WithStore(d.app.SessDB()),
-	)
-	_, err = rt.Ask(agent, content, s).Run()
+	_, err = ask.Run()
 	if err != nil {
 		return fmt.Errorf("execute scheduled message for @%s (session: %s): %w", agent, sessionID, err)
 	}

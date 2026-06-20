@@ -389,8 +389,13 @@ func (a *App) ProviderConfigs() []*config.ProviderConfig {
 }
 
 // CreateSession creates a new session with metadata including the captured project directory (os.Getwd() at invocation time).
-func (a *App) CreateSession(agentName string) (*session.SessionInfo, error) {
-	sessionInfo, err := a.sessDB.Create(context.Background(), agentName)
+func (a *App) CreateSession(agentName, projectDir string) (*session.SessionInfo, error) {
+	var opts []session.SessionOption
+	if projectDir != "" {
+		opts = append(opts, session.WithProjectDirOption(projectDir))
+	}
+
+	sessionInfo, err := a.sessDB.Create(context.Background(), agentName, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}
@@ -624,10 +629,11 @@ func (a *App) EnsureSession() (string, error) {
 			"new_cwd", cwd,
 		)
 
-		if matched := a.findSessionByProjectDir(cwd); matched != nil {
+		if matched := a.findSessionByProjectDir(cwd, agentName); matched != nil {
 			a.logger.Info("found matching session for current directory",
 				"session_id", matched.SessionID,
 				"project_dir", matched.ProjectDir,
+				"agent", agentName,
 			)
 			a.currentSessionMeta = matched
 			a.mindxConfig.LastSessionID = matched.SessionID
@@ -639,8 +645,9 @@ func (a *App) EnsureSession() (string, error) {
 
 		a.logger.Info("no matching session found, creating new session for current directory",
 			"cwd", cwd,
+			"agent", agentName,
 		)
-		newSession, createErr := a.CreateSession(agentName)
+		newSession, createErr := a.CreateSession(agentName, cwd)
 		if createErr != nil {
 			a.logger.Error("failed to create new session", createErr)
 			a.currentSessionMeta = nil
@@ -662,10 +669,11 @@ func (a *App) EnsureSession() (string, error) {
 	// No current session meta — try to find existing or create new
 	a.logger.Info("no current session, searching for existing", "cwd", cwd)
 
-	if matched := a.findSessionByProjectDir(cwd); matched != nil {
+	if matched := a.findSessionByProjectDir(cwd, agentName); matched != nil {
 		a.logger.Info("found matching session for current directory",
 			"session_id", matched.SessionID,
 			"project_dir", matched.ProjectDir,
+			"agent", agentName,
 		)
 		a.currentSessionMeta = matched
 		a.mindxConfig.LastSessionID = matched.SessionID
@@ -676,7 +684,7 @@ func (a *App) EnsureSession() (string, error) {
 	}
 
 	a.logger.Info("no existing session found, creating new session", "cwd", cwd)
-	newSession, createErr := a.CreateSession(agentName)
+	newSession, createErr := a.CreateSession(agentName, cwd)
 	if createErr != nil {
 		return "", fmt.Errorf("CreateSession failed for agent=%q cwd=%q: %w", agentName, cwd, createErr)
 	}
@@ -844,7 +852,18 @@ func (a *App) ClearCurrentSession() (*session.SessionInfo, error) {
 		}
 	}
 
-	newSession, err := a.CreateSession(a.CurrentAgentName())
+	// Use the old session's project_dir if available; otherwise fall back to CWD.
+	projectDir := ""
+	if currentMeta != nil && currentMeta.ProjectDir != "" {
+		projectDir = currentMeta.ProjectDir
+	} else {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("getwd failed and no previous project_dir: %w", err)
+		}
+		projectDir = cwd
+	}
+	newSession, err := a.CreateSession(a.CurrentAgentName(), projectDir)
 	if err != nil {
 		return nil, fmt.Errorf("create new session failed: %w", err)
 	}
@@ -866,7 +885,7 @@ func sameDirectory(dir1, dir2 string) bool {
 	return abs1 == abs2
 }
 
-func (a *App) findSessionByProjectDir(projectDir string) *session.SessionInfo {
+func (a *App) findSessionByProjectDir(projectDir, agentName string) *session.SessionInfo {
 	ctx := context.Background()
 	sessions, err := a.SessDB().ListSessions(ctx)
 	if err != nil {
@@ -875,7 +894,7 @@ func (a *App) findSessionByProjectDir(projectDir string) *session.SessionInfo {
 
 	var bestMatch *session.SessionInfo
 	for i := range sessions {
-		if sameDirectory(sessions[i].ProjectDir, projectDir) {
+		if sessions[i].AgentName == agentName && sameDirectory(sessions[i].ProjectDir, projectDir) {
 			if bestMatch == nil || sessions[i].LastActivityAt.After(bestMatch.LastActivityAt) {
 				bestMatch = &sessions[i]
 			}

@@ -13,6 +13,19 @@ func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.Response
 	_ = d.gw.SendResponse(clientID, respType, title, data, gateway.WithSessionID(sessionID))
 }
 
+// broadcastScheduleEvent sends a schedule.job_event notification to all connected clients.
+func (d *Daemon) broadcastScheduleEvent(sessionID, agent, eventType string, data interface{}) {
+	if d.gw == nil {
+		return
+	}
+	d.gw.BroadcastNotification("schedule.job_event", map[string]interface{}{
+		"session_id": sessionID,
+		"agent":      agent,
+		"type":       eventType,
+		"data":       data,
+	})
+}
+
 func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharnessevents.ExecutionSummaryData) {
 	d.logger.Info("[SSE-TRACE L5] sendExecutionSummary: total_tokens=" + fmt.Sprint(summary.TokensUsed.TotalTokens) +
 		" input=" + fmt.Sprint(summary.TokensUsed.InputTokens) +

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	goharnesssession "github.com/DotNetAge/goharness/session"
 )
@@ -159,25 +160,57 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 	if p.Agent == "" {
 		return nil, fmt.Errorf("agent is required")
 	}
+	if p.ProjectDir == "" {
+		return nil, fmt.Errorf("project_dir is required")
+	}
 
 	sessDB := d.app.SessDB()
 	if sessDB == nil {
 		return nil, fmt.Errorf("session store not available")
 	}
 
-	// Pass project_dir as a session option so it gets persisted to session meta
-	var opts []goharnesssession.SessionOption
-	if p.ProjectDir != "" {
-		opts = append(opts, goharnesssession.WithProjectDirOption(p.ProjectDir))
+	// Only one session per (agent, project_dir) pair is allowed.
+	existingSessions, err := sessDB.ListSessions(context.Background())
+	if err == nil {
+		for _, s := range existingSessions {
+			if s.AgentName == p.Agent && sameDirectory(s.ProjectDir, p.ProjectDir) {
+				// Ensure the session's project dir is in the watchlist.
+				if s.ProjectDir != "" && d.memoryWatch != nil {
+					if wErr := d.memoryWatch.AddWatch(s.ProjectDir, p.Agent); wErr != nil {
+						d.logger.Warn("failed to add project dir to watchlist (reuse)",
+							"session_id", s.SessionID,
+							"project_dir", s.ProjectDir,
+							"agent", p.Agent,
+							"error", wErr,
+						)
+					}
+				}
+				d.logger.Info("existing session found for same agent+project_dir, reusing",
+					"session_id", s.SessionID,
+					"agent", p.Agent,
+					"project_dir", p.ProjectDir,
+				)
+				return map[string]any{
+					"session_id":  s.SessionID,
+					"agent_name":  s.AgentName,
+					"created_at":  s.CreatedAt,
+					"project_dir": s.ProjectDir,
+				}, nil
+			}
+		}
 	}
 
+	// Pass project_dir as a session option so it gets persisted to session meta.
+	opts := []goharnesssession.SessionOption{
+		goharnesssession.WithProjectDirOption(p.ProjectDir),
+	}
 	info, err := sessDB.Create(context.Background(), p.Agent, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create session failed: %w", err)
 	}
 
 	// Add project directory to file watchlist for auto-indexing (RAG).
-	if p.ProjectDir != "" && d.memoryWatch != nil {
+	if d.memoryWatch != nil {
 		if err := d.memoryWatch.AddWatch(p.ProjectDir, p.Agent); err != nil {
 			d.logger.Warn("failed to add project dir to watchlist",
 				"dir", p.ProjectDir,
@@ -193,6 +226,16 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		"created_at":  info.CreatedAt,
 		"project_dir": info.ProjectDir,
 	}, nil
+}
+
+// sameDirectory compares two directory paths after normalization.
+func sameDirectory(dir1, dir2 string) bool {
+	abs1, err1 := filepath.Abs(dir1)
+	abs2, err2 := filepath.Abs(dir2)
+	if err1 != nil || err2 != nil {
+		return dir1 == dir2
+	}
+	return abs1 == abs2
 }
 
 type sessionFileActionParams struct {

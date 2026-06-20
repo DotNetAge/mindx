@@ -197,7 +197,7 @@ func TestCreateSession(t *testing.T) {
 		t.Fatalf("SetTestDir failed: %v", err)
 	}
 
-	sessionInfo, err := app.CreateSession("test-agent")
+	sessionInfo, err := app.CreateSession("test-agent", tmpDir)
 	if err != nil {
 		t.Fatalf("CreateSession failed: %v", err)
 	}
