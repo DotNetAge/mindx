@@ -136,7 +136,7 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 
 	d.logger.Info("entity_tags saved", "path", path, "count", len(p.Types))
 
-	// ── 同步更新 LLMIndexer 的实体定义 ──────────────────────────
+	// ── 同步更新 GraphIndexer 的实体定义 ──────────────────────────
 	if d.sharedMemory != nil && len(p.Types) > 0 {
 		hybrid := d.sharedMemory.Indexer()
 		if hybrid != nil {
@@ -150,10 +150,10 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 				}
 			}
 			if len(defs) > 0 {
-				if raw, ok := hybrid.GetIndexer("llm"); ok {
-					if llmIdx, ok := raw.(*goragindexer.LLMIndexer); ok {
-						llmIdx.SetEntityDefs(defs)
-						d.logger.Info("entity_tags: updated LLMIndexer entity defs", "count", len(defs))
+				if raw, ok := hybrid.GetIndexer("graph"); ok {
+					if graphIdx, ok := raw.(*goragindexer.GraphIndexer); ok {
+						graphIdx.SetEntityDefs(defs)
+						d.logger.Info("entity_tags: updated GraphIndexer entity defs", "count", len(defs))
 					}
 				}
 			}
@@ -167,7 +167,7 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 }
 
 // parseEntityDefsFromSavedTags 从 entity-defs.json 读取并解析为 EntityDef 列表。
-// 用于初始化 LLMIndexer 时加载用户此前保存的实体标签。
+// 用于初始化 GraphIndexer 时加载用户此前保存的实体标签。
 //
 //nolint:unused
 func (d *Daemon) _parseEntityDefsFromSavedTags() []goragindexer.EntityDef {

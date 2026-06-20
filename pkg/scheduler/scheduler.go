@@ -20,7 +20,7 @@ type JobLifecycleInfo struct {
 	RunID     string `json:"run_id"`
 	Agent     string `json:"agent"`
 	SessionID string `json:"session_id"`
-	Status    string `json:"status"`             // "started", "completed", "failed"
+	Status    string `json:"status"` // "started", "completed", "failed"
 	Error     string `json:"error,omitempty"`
 }
 
