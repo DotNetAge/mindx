@@ -14,13 +14,27 @@ import (
 
 type CommandExecutor func(ctx context.Context, agent string, sessionID string, content string, projectDir string) error
 
+// JobLifecycleInfo describes a scheduled job lifecycle event broadcast to clients.
+type JobLifecycleInfo struct {
+	EntryID   string `json:"entry_id"`
+	RunID     string `json:"run_id"`
+	Agent     string `json:"agent"`
+	SessionID string `json:"session_id"`
+	Status    string `json:"status"`             // "started", "completed", "failed"
+	Error     string `json:"error,omitempty"`
+}
+
+// LifecycleCallback is called when a scheduled job starts, completes, or fails.
+type LifecycleCallback func(info JobLifecycleInfo)
+
 type Scheduler struct {
-	cron     *cron.Cron
-	store    *FileSchedulerStore
-	executor CommandExecutor
-	entries  map[string]cron.EntryID
-	mu       sync.RWMutex
-	logger   logging.Logger
+	cron        *cron.Cron
+	store       *FileSchedulerStore
+	executor    CommandExecutor
+	entries     map[string]cron.EntryID
+	mu          sync.RWMutex
+	logger      logging.Logger
+	lifecycleCb LifecycleCallback
 }
 
 func NewScheduler(store *FileSchedulerStore, executor CommandExecutor, logger logging.Logger) *Scheduler {
@@ -38,6 +52,11 @@ func NewScheduler(store *FileSchedulerStore, executor CommandExecutor, logger lo
 		entries:  make(map[string]cron.EntryID),
 		logger:   logger,
 	}
+}
+
+// OnLifecycle sets a callback that fires when a scheduled job starts, completes, or fails.
+func (s *Scheduler) OnLifecycle(cb LifecycleCallback) {
+	s.lifecycleCb = cb
 }
 
 func (s *Scheduler) Start(ctx context.Context) error {
@@ -140,6 +159,13 @@ func (s *Scheduler) executeJob(entry *ScheduleEntry) {
 	runID := uuid.New().String()[:8]
 	s.logger.Info("executing schedule job", "id", entry.ID, "agent", entry.Agent, "run_id", runID)
 
+	if s.lifecycleCb != nil {
+		s.lifecycleCb(JobLifecycleInfo{
+			EntryID: entry.ID, RunID: runID, Agent: entry.Agent,
+			SessionID: entry.SessionID, Status: "started",
+		})
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -150,8 +176,20 @@ func (s *Scheduler) executeJob(entry *ScheduleEntry) {
 
 	if execErr != nil {
 		s.logger.Error("schedule job failed", execErr, "id", entry.ID, "run_id", runID)
+		if s.lifecycleCb != nil {
+			s.lifecycleCb(JobLifecycleInfo{
+				EntryID: entry.ID, RunID: runID, Agent: entry.Agent,
+				Status: "failed", Error: execErr.Error(),
+			})
+		}
 	} else {
 		s.logger.Info("schedule job completed", "id", entry.ID, "run_id", runID)
+		if s.lifecycleCb != nil {
+			s.lifecycleCb(JobLifecycleInfo{
+				EntryID: entry.ID, RunID: runID, Agent: entry.Agent,
+				Status: "completed",
+			})
+		}
 	}
 }
 

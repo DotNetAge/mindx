@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"os"
 
 	appcore "github.com/DotNetAge/mindx/internal/core"
 )
@@ -149,7 +150,11 @@ func BuiltinCommands(deps CommandDeps) *SlashCommandRegistry {
 			switch arg {
 			case "new":
 				agentName := deps.App.CurrentAgentName()
-				newSession, err := deps.App.CreateSession(agentName)
+				cwd, err := os.Getwd()
+				if err != nil {
+					return CommandResult{Message: fmt.Sprintf("❌ 无法获取当前工作目录: %v", err), Success: false}
+				}
+				newSession, err := deps.App.CreateSession(agentName, cwd)
 				if err != nil {
 					return CommandResult{Message: fmt.Sprintf("❌ 创建会话失败: %v", err), Success: false}
 				}
