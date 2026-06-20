@@ -52,17 +52,17 @@ type MemoryConfig struct {
 
 	ReadOnly bool
 
-	// GraphStore 可选。提供外部已创建的图数据库实例，用于 LLMIndexer 的实体/关系写入，
+	// GraphStore 可选。提供外部已创建的图数据库实例，用于 GraphIndexer 的实体/关系写入，
 	// 也供外部直接查询（GetNode, GetNeighbors, GetMultiHopPaths 等）。
 	// 当 LLMConfig 配置且此项为空时，会自动创建。
 	GraphStore goragcore.GraphStore
 
 	// EntityDefs 可选。用户自定义的实体类型定义列表。
-	// 从 entity-defs.json 中读取并在初始化时注入 LLMIndexer。
-	// 如果为空，LLMIndexer 将使用一组通用的默认实体类型。
+	// 从 entity-defs.json 中读取并在初始化时注入 GraphIndexer。
+	// 如果为空，GraphIndexer 将使用一组通用的默认实体类型。
 	EntityDefs []goragindexer.EntityDef
 
-	// LLMConfig 可选。非空时启用 LLMIndexer，在语义索引基础上增加知识图谱
+	// LLMConfig 可选。非空时启用 GraphIndexer，在语义索引基础上增加知识图谱
 	// 实体/关系索引与标签系统（tags, summary, entity_ids）。
 	LLMConfig *goragindexer.ModelConfig
 
@@ -157,19 +157,19 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 	)
 
 	indexer, err := gorag.NewHybridIndexer(
-		logger, vs, nil, fts, nil, cfg.Embedder,
+		logger, vs, nil, fts, cfg.Embedder,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("memory: create hybrid indexer: %w", err)
 	}
 
-	// ── LLMIndexer 模式（取代 semanticIndexer + graphIndexer）─────────
+	// ── GraphIndexer 模式（取代 vectorIndexer）────────────────────────
 	var graphStore goragcore.GraphStore
 	if cfg.LLMConfig != nil {
 		// 使用外部已创建的 GraphStore，或自动创建
 		if cfg.GraphStore != nil {
 			graphStore = cfg.GraphStore
-			logger.Info("memory: using external GraphStore for LLMIndexer")
+			logger.Info("memory: using external GraphStore for GraphIndexer")
 		} else {
 			graphDir := filepath.Join(dataDir, "knowledge-graph")
 			if mkErr := os.MkdirAll(graphDir, 0755); mkErr != nil {
@@ -182,25 +182,25 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 			graphStore = gs
 		}
 
-		// LLMIndexer 与 semantic 索引器共存，无需移除任何索引器
+		// GraphIndexer 与 semantic 索引器共存，无需移除任何索引器
 		// （HybridIndexer 的 List/Count 方法会自动遍历可用索引器）
-		var llmOpts []goragindexer.LLMOption
-		llmOpts = append(llmOpts, goragindexer.WithLLMLogger(logger))
+		var graphOpts []goragindexer.GraphOption
+		graphOpts = append(graphOpts, goragindexer.WithLLMLogger(logger))
 		if len(cfg.EntityDefs) > 0 {
 			// 从 saved entity-defs.json 加载用户自定义实体类型定义
-			llmOpts = append(llmOpts, goragindexer.WithEntities(cfg.EntityDefs...))
+			graphOpts = append(graphOpts, goragindexer.WithEntities(cfg.EntityDefs...))
 			logger.Info("memory: loaded saved entity defs", "count", len(cfg.EntityDefs))
 		}
-		llmIdx := goragindexer.New(
+		graphIdx := goragindexer.New(
 			*cfg.LLMConfig,
 			cfg.Embedder,
 			vs,
 			graphStore,
-			llmOpts...,
+			graphOpts...,
 		)
-		indexer.AddIndexer(llmIdx, 0.8)
+		indexer.AddIndexer(graphIdx, 0.8)
 
-		logger.Info("memory: LLMIndexer enabled (replaces semantic+graph)",
+		logger.Info("memory: GraphIndexer enabled (replaces semantic+graph)",
 			"model", cfg.LLMConfig.Model,
 			"lang", cfg.LLMConfig.Language,
 			"max_tokens", cfg.LLMConfig.MaxTokens,
@@ -245,9 +245,9 @@ func (m *RAGMemory) Indexer() *gorag.HybridIndexer {
 	return m.indexer
 }
 
-// GraphStore 返回 LLMIndexer 使用的图数据库实例。
+// GraphStore 返回 GraphIndexer 使用的图数据库实例。
 // 可用于直接执行图查询（GetNode, GetNeighbors, GetMultiHopPaths 等）。
-// 仅当 LLMIndexer 启用时非空。
+// 仅当 GraphIndexer 启用时非空。
 func (m *RAGMemory) GraphStore() goragcore.GraphStore {
 	return m.graphStore
 }

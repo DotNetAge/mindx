@@ -382,21 +382,21 @@ func (p *IndexService) indexFile(ctx context.Context, absPath string) ([]chunkIn
 	return infos, nil
 }
 
-// recordTokenUsage extracts LLM token usage from the LLMIndexer (if available)
+// recordTokenUsage extracts LLM token usage from the GraphIndexer (if available)
 // and writes it to the configured TokenUsageStore.
 func (p *IndexService) recordTokenUsage(ctx context.Context) {
 	if p.usageStore == nil {
 		return
 	}
-	raw, ok := p.indexer.GetIndexer("llm")
+	raw, ok := p.indexer.GetIndexer("graph")
 	if !ok {
 		return
 	}
-	llm, ok := raw.(*goragindexer.LLMIndexer)
+	gi, ok := raw.(*goragindexer.GraphIndexer)
 	if !ok {
 		return
 	}
-	tu := llm.LastTokenUsage()
+	tu := gi.LastTokenUsage()
 	if tu == nil {
 		return
 	}

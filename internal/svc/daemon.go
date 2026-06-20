@@ -325,7 +325,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		)
 	}
 
-	// ── LLMIndexer 模型配置 ──────────────────────────────────────
+	// ── GraphIndexer 模型配置 ────────────────────────────────────
 	if defaultModel := app.ResolveDefaultModel(); defaultModel != nil {
 		lang := "Chinese"
 		if c := app.Config(); c != nil {
@@ -341,7 +341,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			Language:  lang,
 			MaxTokens: int(defaultModel.MaxTokens),
 		}
-		logger.Info("LLMIndexer model config resolved",
+		logger.Info("GraphIndexer model config resolved",
 			"model", defaultModel.Name,
 			"provider", defaultModel.Provider,
 			"lang", lang,
@@ -1363,11 +1363,11 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 				"total_iterations": data.TotalIterations, "tool_calls": data.ToolCalls,
 				"tools_used": data.ToolsUsed, "total_duration": data.TotalDuration.String(),
 				"tokens_used": map[string]any{
-					"total_tokens":      data.TokensUsed.TotalTokens,
-					"input_tokens":      data.TokensUsed.InputTokens,
-					"output_tokens":     data.TokensUsed.OutputTokens,
-					"cached_tokens":     data.TokensUsed.CachedTokens,
-					"reasoning_tokens":  data.TokensUsed.ReasoningTokens,
+					"total_tokens":     data.TokensUsed.TotalTokens,
+					"input_tokens":     data.TokensUsed.InputTokens,
+					"output_tokens":    data.TokensUsed.OutputTokens,
+					"cached_tokens":    data.TokensUsed.CachedTokens,
+					"reasoning_tokens": data.TokensUsed.ReasoningTokens,
 				},
 				"termination_reason": data.TerminationReason,
 			})
