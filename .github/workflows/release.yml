@@ -132,6 +132,18 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      - name: Download embedder model
+        env:
+          MODEL_PATH: runtime/data/models/model_q4.onnx
+        run: |
+          if [ ! -f "$MODEL_PATH" ]; then
+            mkdir -p "$(dirname "$MODEL_PATH")"
+            curl -fL -o "$MODEL_PATH" \
+              "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/model_q4.onnx" || \
+            curl -fL -o "$MODEL_PATH" \
+              "https://github.com/DotNetAge/mindx/releases/download/v2.3.0/model_q4.onnx"
+          fi
+
       - name: Install musl cross-compiler
         if: matrix.goos == 'linux'
         run: |
@@ -261,8 +273,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
+
+      - name: Download embedder model
+        env:
+          MODEL_PATH: runtime/data/models/model_q4.onnx
+        run: |
+          if [ ! -f "$MODEL_PATH" ]; then
+            mkdir -p "$(dirname "$MODEL_PATH")"
+            curl -fL -o "$MODEL_PATH" \
+              "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.version }}/model_q4.onnx" || \
+            curl -fL -o "$MODEL_PATH" \
+              "https://github.com/DotNetAge/mindx/releases/download/v2.3.0/model_q4.onnx"
+          fi
 
       - name: Download linux/amd64 artifact
         uses: actions/download-artifact@v4
@@ -298,10 +320,8 @@ jobs:
           runtime/bin/mindx-amd64 version || true
           runtime/bin/mindx-arm64 version || true
 
-          # Ensure model file is present (LFS checkout should have pulled it)
+          # Model file is already downloaded above
           if [ ! -f "runtime/data/models/model_q4.onnx" ]; then
-            echo "WARNING: model_q4.onnx not found, fetching via LFS..."
-            git lfs pull --include="*.onnx" || true
           fi
           echo "Model file:"
           ls -lh runtime/data/models/model_q4.onnx 2>/dev/null || echo "  NOT FOUND"
