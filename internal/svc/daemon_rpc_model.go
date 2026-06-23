@@ -99,11 +99,22 @@ func (d *Daemon) handleModelSwitch(_ context.Context, params json.RawMessage) (a
 	}
 
 	d.app.Config().DefaultModel = p.Name
+	d.app.Config().LastModel = p.Name
 	if p.Provider != "" {
 		d.app.Config().DefaultProvider = p.Provider
 	}
 	if err := d.app.Config().Save(); err != nil {
 		return nil, fmt.Errorf("failed to save config: %w", err)
+	}
+
+	// If filewatch was not initialized at startup (no model configured),
+	// try to initialize it now that a model is available.
+	if d.kbWatch == nil {
+		if initErr := d.ensureGraphIndexer(); initErr != nil {
+			d.logger.Warn("failed to initialize GraphIndexer/FileWatch after model switch",
+				"error", initErr,
+			)
+		}
 	}
 
 	return map[string]any{

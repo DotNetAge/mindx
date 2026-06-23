@@ -131,8 +131,8 @@ func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) 
 	}
 
 	// Remove project directory from file watchlist so it stops being auto-indexed.
-	if projectDir != "" && d.memoryWatch != nil {
-		if err := d.memoryWatch.RemoveWatch(projectDir, agentName); err != nil {
+	if projectDir != "" && d.kbWatch != nil {
+		if err := d.kbWatch.RemoveWatch(projectDir, agentName); err != nil {
 			d.logger.Warn("failed to remove project dir from watchlist",
 				"dir", projectDir,
 				"agent", agentName,
@@ -164,6 +164,12 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("project_dir is required")
 	}
 
+	d.logger.Info("session.create: called",
+		"agent", p.Agent,
+		"project_dir", p.ProjectDir,
+		"kbWatch_available", d.kbWatch != nil,
+	)
+
 	sessDB := d.app.SessDB()
 	if sessDB == nil {
 		return nil, fmt.Errorf("session store not available")
@@ -174,22 +180,32 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 	if err == nil {
 		for _, s := range existingSessions {
 			if s.AgentName == p.Agent && sameDirectory(s.ProjectDir, p.ProjectDir) {
+				d.logger.Info("session.create: existing session found, reusing",
+					"session_id", s.SessionID,
+					"agent", p.Agent,
+					"project_dir", p.ProjectDir,
+				)
 				// Ensure the session's project dir is in the watchlist.
-				if s.ProjectDir != "" && d.memoryWatch != nil {
-					if wErr := d.memoryWatch.AddWatch(s.ProjectDir, p.Agent); wErr != nil {
-						d.logger.Warn("failed to add project dir to watchlist (reuse)",
+				if s.ProjectDir != "" && d.kbWatch != nil {
+					if wErr := d.kbWatch.AddWatch(s.ProjectDir, p.Agent); wErr != nil {
+						d.logger.Warn("session.create: failed to add project dir to watchlist (reuse)",
 							"session_id", s.SessionID,
 							"project_dir", s.ProjectDir,
 							"agent", p.Agent,
 							"error", wErr,
 						)
+					} else {
+						d.logger.Info("session.create: project dir added to watchlist (reuse)",
+							"project_dir", s.ProjectDir,
+							"agent", p.Agent,
+						)
 					}
+				} else if s.ProjectDir != "" && d.kbWatch == nil {
+					d.logger.Warn("session.create: kbWatch is nil, cannot add project dir to watchlist (reuse)",
+						"project_dir", s.ProjectDir,
+						"reason", "GraphIndexer disabled — check if LLM model is configured",
+					)
 				}
-				d.logger.Info("existing session found for same agent+project_dir, reusing",
-					"session_id", s.SessionID,
-					"agent", p.Agent,
-					"project_dir", p.ProjectDir,
-				)
 				return map[string]any{
 					"session_id":  s.SessionID,
 					"agent_name":  s.AgentName,
@@ -209,15 +225,29 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("create session failed: %w", err)
 	}
 
+	d.logger.Info("session.create: new session created",
+		"session_id", info.SessionID,
+		"project_dir", info.ProjectDir,
+	)
+
 	// Add project directory to file watchlist for auto-indexing (RAG).
-	if d.memoryWatch != nil {
-		if err := d.memoryWatch.AddWatch(p.ProjectDir, p.Agent); err != nil {
-			d.logger.Warn("failed to add project dir to watchlist",
-				"dir", p.ProjectDir,
-				"agent", p.Agent,
-				"error", err,
-			)
-		}
+	if d.kbWatch == nil {
+		d.logger.Warn("session.create: kbWatch is nil, skipping AddWatch for new session",
+			"project_dir", p.ProjectDir,
+			"agent", p.Agent,
+			"reason", "GraphIndexer not initialized — check if LLM model is configured",
+		)
+	} else if err := d.kbWatch.AddWatch(p.ProjectDir, p.Agent); err != nil {
+		d.logger.Warn("session.create: failed to add project dir to watchlist",
+			"dir", p.ProjectDir,
+			"agent", p.Agent,
+			"error", err,
+		)
+	} else {
+		d.logger.Info("session.create: project dir added to watchlist",
+			"dir", p.ProjectDir,
+			"agent", p.Agent,
+		)
 	}
 
 	return map[string]any{

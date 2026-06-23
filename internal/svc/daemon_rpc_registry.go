@@ -28,8 +28,6 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("memory.chunks", r.daemon.handleMemoryChunks)
 	gw.RegisterMethod("memory.get_chunks", r.daemon.handleMemoryGetChunks)
 	gw.RegisterMethod("memory.count", r.daemon.handleMemoryCount)
-	gw.RegisterMethod("memory.stats", r.daemon.handleMemoryStats)
-	gw.RegisterMethod("memory.sync_project", r.daemon.handleMemorySyncProject)
 
 	gw.RegisterMethod("agent.list", r.daemon.handleAgentList)
 	gw.RegisterMethod("agent.get", r.daemon.handleAgentGet)
@@ -118,8 +116,15 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("filewatch.stop", r.daemon.handleFilewatchStop)
 	gw.RegisterMethod("filewatch.remove", r.daemon.handleFilewatchRemove)
 	gw.RegisterMethod("filewatch.status", r.daemon.handleFilewatchStatus)
+	gw.RegisterMethod("filewatch.retry-failed", r.daemon.handleFilewatchRetryFailed)
+	gw.RegisterMethod("filewatch.ignore-failed", r.daemon.handleFilewatchIgnoreFailed)
 
-	gw.RegisterMethod("memory.file_states", r.daemon.handleMemoryFileStates)
+	gw.RegisterMethod("kb.search", r.daemon.handleKBSearch)
+	gw.RegisterMethod("kb.chunks", r.daemon.handleKBChunks)
+	gw.RegisterMethod("kb.stats", r.daemon.handleKBStats)
+	gw.RegisterMethod("kb.schema_properties", r.daemon.handleSchemaProperties)
+	gw.RegisterMethod("kb.sync_project", r.daemon.handleKBSyncProject)
+	gw.RegisterMethod("kb.file_states", r.daemon.handleKBFileStates)
 
 	gw.RegisterMethod("entity_tags.get", r.daemon.handleEntityTagsGet)
 	gw.RegisterMethod("entity_tags.save", r.daemon.handleEntityTagsSave)

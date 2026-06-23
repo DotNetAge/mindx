@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/DotNetAge/mindx/internal/setup"
 	"github.com/spf13/cobra"
@@ -43,25 +42,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start daemon: %w", err)
 	}
 
-	// Post-start verification: confirm the daemon is actually running.
-	// Service managers (launchctl, systemd, etc.) may report success even
-	// when the child process crashes immediately (e.g. port conflict, bad config).
-	time.Sleep(500 * time.Millisecond)
-	verifyStatus, _ := setup.CheckDaemon()
-	if verifyStatus != setup.DaemonRunning {
-		fmt.Println("❌ Daemon failed to start or exited immediately.")
-		fmt.Println()
-		fmt.Println("  Possible causes:")
-		fmt.Println("    • Port 1313 or 1314 is already in use")
-		fmt.Println("    • Configuration error — try 'mindx doctor --fix'")
-		fmt.Println("    • Check logs for details:")
-		fmt.Println("      ~/.mindx/logs/daemon.log")
-		fmt.Println("      ~/.mindx/logs/daemon.err.log")
-		return fmt.Errorf("daemon started but is not running (status=%s)", verifyStatus)
-	}
-
-	fmt.Println("✅ Daemon started.")
-	return nil
+	return verifyDaemonStarted()
 }
 
 func init() {

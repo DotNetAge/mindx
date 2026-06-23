@@ -17,16 +17,17 @@ import (
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
 	"github.com/DotNetAge/goharness/events"
 	"github.com/DotNetAge/goharness/hooks/action"
-	goharnessmemory "github.com/DotNetAge/goharness/memory"
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	goragcore "github.com/DotNetAge/gorag/core"
 	goragindexer "github.com/DotNetAge/gorag/indexer"
 	goraggograph "github.com/DotNetAge/gorag/store/graph/gograph"
+	govector "github.com/DotNetAge/gorag/store/vector/govector"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/appicon"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/internal/update"
+	"github.com/DotNetAge/mindx/pkg/kbwatch"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
@@ -238,12 +239,15 @@ type pendingInteraction struct {
 }
 
 type Daemon struct {
-	app           *core.App
-	gw            *gateway.Server
-	scheduler     *scheduler.Scheduler
-	schedulerDB   *scheduler.FileSchedulerStore
-	memoryWatch   *memory.FileWatchService
-	sharedMemory  *memory.RAGMemory
+	app          *core.App
+	gw           *gateway.Server
+	scheduler    *scheduler.Scheduler
+	schedulerDB  *scheduler.FileSchedulerStore
+	kbWatch      *kbwatch.FileWatchService
+	sharedMemory *memory.RAGMemory
+
+	// knowledge-graph indexer (GraphIndexer)
+	graphIndexer  *goragindexer.GraphIndexer
 	webServer     *WebServer
 	addr          string
 	wsPath        string
@@ -335,11 +339,12 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			}
 		}
 		llmModelCfg = &goragindexer.ModelConfig{
-			APIKey:    defaultModel.APIKey,
-			BaseURL:   defaultModel.BaseURL,
-			Model:     defaultModel.Name,
-			Language:  lang,
-			MaxTokens: int(defaultModel.MaxTokens),
+			APIKey:        defaultModel.APIKey,
+			BaseURL:       defaultModel.BaseURL,
+			Model:         defaultModel.Name,
+			Language:      lang,
+			MaxTokens:     int(defaultModel.MaxTokens),
+			ContextLength: int(defaultModel.ContextLength),
 		}
 		logger.Info("GraphIndexer model config resolved",
 			"model", defaultModel.Name,
@@ -348,11 +353,14 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		)
 	}
 
-	// ── Shared LongTerm Memory ──────────────────────────────────
-	var memoryWatch *memory.FileWatchService
+	// ── GraphIndexer（知识库）─────────────────────────────────────
+	// 文件监控服务为 KB 服务，memory 仅为对话服务
+	var graphIndexer *goragindexer.GraphIndexer
 	var sharedMemory *memory.RAGMemory
+	var kbWatch *kbwatch.FileWatchService
+
 	if emb := app.Embedder(); emb != nil {
-		logger.Info("embedder found, initializing shared memory service")
+		logger.Info("embedder found, initializing knowledge base and memory services")
 
 		// 尝试从 entity-defs.json 加载用户之前保存的实体标签定义
 		var entityDefs []goragindexer.EntityDef
@@ -383,27 +391,58 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			}
 		}
 
-		sharedMem, memErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-			MemoryType:      goharnessmemory.MemoryTypeLongTerm,
-			AgentName:       "_shared",
-			MemoryDir:       filepath.Join(app.Settings().UserPreferences(), "memory"),
-			Embedder:        emb,
-			GraphStore:      coreGS,
-			LLMConfig:       llmModelCfg,
-			EntityDefs:      entityDefs,
-			Logger:          logger,
-			TokenUsageStore: app.TokenUsageStore(),
-		})
-		if memErr != nil {
-			logger.Warn("filewatch: failed to create shared LongTerm indexer, watch disabled", "error", memErr)
+		// ── GraphIndexer 初始化 ──────────────────────────────────
+		// 需要: vectorDB (KB专用), graphDB, embedder, LLM model
+		if coreGS != nil && llmModelCfg != nil {
+			kbVecDir := filepath.Join(app.Settings().DataDir(), "kb-vectors")
+			if mkErr := os.MkdirAll(kbVecDir, 0755); mkErr == nil {
+				kbVS, vsErr := govector.NewStore(
+					govector.WithCollection("kb_sem"),
+					govector.WithDimension(emb.Dim()),
+					govector.WithDBPath(filepath.Join(kbVecDir, "kb.db")),
+					govector.WithHNSW(true),
+				)
+				if vsErr != nil {
+					logger.Warn("failed to create KB vector store, GraphIndexer disabled", "error", vsErr)
+				} else {
+					var graphOpts []goragindexer.GraphOption
+					graphOpts = append(graphOpts, goragindexer.WithLogger(logger))
+					if len(entityDefs) > 0 {
+						graphOpts = append(graphOpts, goragindexer.WithSchemas(entityDefs...))
+					}
+					gi := goragindexer.New(
+						*llmModelCfg,
+						emb,
+						kbVS,
+						coreGS,
+						graphOpts...,
+					)
+					graphIndexer = gi
+					logger.Info("GraphIndexer initialized for knowledge base",
+						"vector_dim", emb.Dim(),
+						"vec_db", filepath.Join(kbVecDir, "kb.db"),
+					)
+				}
+			} else {
+				logger.Warn("failed to create KB vector directory", "error", mkErr)
+			}
 		} else {
-			sharedMemory = sharedMem
-			logger.Info("shared RAG memory initialized")
-			watchList, wlErr := memory.NewWatchListStore(app.Settings().DataDir())
+			if coreGS == nil {
+				logger.Warn("graph store unavailable, GraphIndexer disabled")
+			}
+			if llmModelCfg == nil {
+				logger.Warn("no LLM model configured, GraphIndexer disabled")
+			}
+		}
+
+		// ── FileWatchService（KB 文件监控）────────────────────────
+		// 使用 GraphIndexer 作为索引目标
+		if graphIndexer != nil {
+			watchList, wlErr := kbwatch.NewWatchListStore(app.Settings().DataDir())
 			if wlErr != nil {
 				logger.Warn("filewatch: failed to create watchlist store, watch disabled", "error", wlErr)
 			} else {
-				indexState, isErr := memory.NewIndexStateStore(app.Settings().DataDir())
+				indexState, isErr := kbwatch.NewIndexStateStore(app.Settings().DataDir())
 				if isErr != nil {
 					logger.Warn("filewatch: failed to create index state store, watch disabled", "error", isErr)
 				} else {
@@ -412,19 +451,19 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 					if llmModelCfg != nil {
 						idxModelName = llmModelCfg.Model
 					}
-					memoryWatch = memory.NewFileWatchService(
-						sharedMem.Indexer(),
+					kbWatch = kbwatch.NewFileWatchService(
+						graphIndexer,
 						watchList,
 						indexState,
-						filepath.Join(app.Settings().DataDir(), "memory-cache"),
+						filepath.Join(app.Settings().DataDir(), "kb-cache"),
 						logger,
 						app.TokenUsageStore(),
 						idxModelName,
 					)
-					logger.Info("filewatch service configured",
-						"cache_dir", filepath.Join(app.Settings().DataDir(), "memory-cache"),
+					logger.Info("filewatch service configured (backed by GraphIndexer)",
+						"cache_dir", filepath.Join(app.Settings().DataDir(), "kb-cache"),
 					)
-					memoryWatch.VersionRecorder = func(absPath string) {
+					kbWatch.VersionRecorder = func(absPath string) {
 						if app.SessDB() == nil || app.FileVersions() == nil {
 							return
 						}
@@ -444,8 +483,23 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 				} // end indexState != nil
 			} // end watchList != nil
 		}
+
+		// ── Shared Memory（对话记忆）─────────────────────────────
+		// Memory 仅为对话服务，基于 SemanticIndexer
+		sharedMem, memErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
+			AgentName: "_shared",
+			MemoryDir: filepath.Join(app.Settings().UserPreferences(), "memory"),
+			Embedder:  emb,
+			Logger:    logger,
+		})
+		if memErr != nil {
+			logger.Warn("failed to create shared RAG memory", "error", memErr)
+		} else {
+			sharedMemory = sharedMem
+			logger.Info("shared RAG memory initialized for conversation")
+		}
 	} else {
-		logger.Info("no embedder configured, filewatch disabled")
+		logger.Info("no embedder configured, knowledge base and memory disabled")
 	}
 
 	d := &Daemon{
@@ -453,8 +507,9 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		addr:                addr,
 		wsPath:              wsPath,
 		schedulerDB:         schedulerDB,
-		memoryWatch:         memoryWatch,
+		kbWatch:             kbWatch,
 		sharedMemory:        sharedMemory,
+		graphIndexer:        graphIndexer,
 		runtimeFS:           runtimeFS,
 		webServer:           NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
 		logger:              logger,
@@ -536,7 +591,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 
 	d.logger.Info("=== Daemon initialization complete ===",
 		"has_scheduler", d.scheduler != nil,
-		"has_memory_watch", d.memoryWatch != nil,
+		"has_kb_watch", d.kbWatch != nil,
 		"has_shared_memory", d.sharedMemory != nil,
 		"has_graph_db", d.graphDB != nil,
 		"has_kvstore", d.kvStore != nil,
@@ -646,7 +701,7 @@ func (d *Daemon) restoreSessionWatches() {
 		if s.ProjectDir == "" {
 			continue
 		}
-		if err := d.memoryWatch.AddWatch(s.ProjectDir, s.AgentName); err != nil {
+		if err := d.kbWatch.AddWatch(s.ProjectDir, s.AgentName); err != nil {
 			d.logger.Warn("restoreSessionWatches: failed to add watch",
 				"session_id", s.SessionID,
 				"project_dir", s.ProjectDir,
@@ -663,6 +718,172 @@ func (d *Daemon) restoreSessionWatches() {
 	}
 }
 
+// ensureGraphIndexer initializes GraphIndexer and FileWatchService at runtime
+// if they were not created during startup (e.g., because no LLM model was configured).
+// This allows model.switch to dynamically enable filewatch/auto-indexing.
+func (d *Daemon) ensureGraphIndexer() error {
+	if d.kbWatch != nil {
+		d.logger.Info("ensureGraphIndexer: kbWatch already initialized")
+		return nil
+	}
+
+	if d.graphStore == nil || d.graphDB == nil {
+		return fmt.Errorf("graph store not available")
+	}
+	coreGS := goraggograph.WrapGraphStore(d.graphDB, d.graphStore)
+
+	emb := d.app.Embedder()
+	if emb == nil {
+		return fmt.Errorf("embedder not available")
+	}
+
+	defaultModel := d.app.ResolveDefaultModel()
+	if defaultModel == nil {
+		return fmt.Errorf("no LLM model configured")
+	}
+
+	lang := "Chinese"
+	if c := d.app.Config(); c != nil {
+		switch c.Language {
+		case "en", "en-US", "en-GB":
+			lang = "English"
+		}
+	}
+
+	llmModelCfg := &goragindexer.ModelConfig{
+		APIKey:        defaultModel.APIKey,
+		BaseURL:       defaultModel.BaseURL,
+		Model:         defaultModel.Name,
+		Language:      lang,
+		MaxTokens:     int(defaultModel.MaxTokens),
+		ContextLength: int(defaultModel.ContextLength),
+	}
+
+	// Load entity defs from saved file
+	var entityDefs []goragindexer.EntityDef
+	entityDefsPath := filepath.Join(d.app.Settings().DataDir(), "entity-defs.json")
+	if etData, etErr := os.ReadFile(entityDefsPath); etErr == nil {
+		var etFile struct {
+			Types []struct {
+				Name   string `json:"name"`
+				Desc   string `json:"desc"`
+				Prompt string `json:"prompt,omitempty"`
+				Schema string `json:"schema,omitempty"`
+			} `json:"types"`
+		}
+		if json.Unmarshal(etData, &etFile) == nil {
+			for _, t := range etFile.Types {
+				if t.Name != "" {
+					prompt := t.Prompt
+					if prompt == "" {
+						prompt = "**" + t.Name + "** — " + t.Desc
+					}
+					entityDefs = append(entityDefs, goragindexer.EntityDef{
+						Prompt: prompt,
+						Schema: t.Schema,
+					})
+				}
+			}
+		}
+	}
+
+	// Create KB vector store
+	kbVecDir := filepath.Join(d.app.Settings().DataDir(), "kb-vectors")
+	if mkErr := os.MkdirAll(kbVecDir, 0755); mkErr != nil {
+		return fmt.Errorf("create kb vector dir: %w", mkErr)
+	}
+
+	kbVS, vsErr := govector.NewStore(
+		govector.WithCollection("kb_sem"),
+		govector.WithDimension(emb.Dim()),
+		govector.WithDBPath(filepath.Join(kbVecDir, "kb.db")),
+		govector.WithHNSW(true),
+	)
+	if vsErr != nil {
+		return fmt.Errorf("create KB vector store: %w", vsErr)
+	}
+
+	var graphOpts []goragindexer.GraphOption
+	graphOpts = append(graphOpts, goragindexer.WithLogger(d.logger))
+	if len(entityDefs) > 0 {
+		graphOpts = append(graphOpts, goragindexer.WithSchemas(entityDefs...))
+	}
+
+	gi := goragindexer.New(
+		*llmModelCfg,
+		emb,
+		kbVS,
+		coreGS,
+		graphOpts...,
+	)
+	d.graphIndexer = gi
+	d.logger.Info("GraphIndexer initialized after model switch",
+		"model", defaultModel.Name,
+		"vector_dim", emb.Dim(),
+	)
+
+	// Create FileWatchService
+	watchList, wlErr := kbwatch.NewWatchListStore(d.app.Settings().DataDir())
+	if wlErr != nil {
+		return fmt.Errorf("create watchlist store: %w", wlErr)
+	}
+
+	indexState, isErr := kbwatch.NewIndexStateStore(d.app.Settings().DataDir())
+	if isErr != nil {
+		return fmt.Errorf("create index state store: %w", isErr)
+	}
+
+	kbWatch := kbwatch.NewFileWatchService(
+		d.graphIndexer,
+		watchList,
+		indexState,
+		filepath.Join(d.app.Settings().DataDir(), "kb-cache"),
+		d.logger,
+		d.app.TokenUsageStore(),
+		llmModelCfg.Model,
+	)
+
+	kbWatch.VersionRecorder = func(absPath string) {
+		if d.app.SessDB() == nil || d.app.FileVersions() == nil {
+			return
+		}
+		sessions, listErr := d.app.SessDB().ListSessions(context.Background())
+		if listErr != nil {
+			return
+		}
+		for _, s := range sessions {
+			if s.ProjectDir == "" || !strings.HasPrefix(absPath, s.ProjectDir) {
+				continue
+			}
+			if s.SessionDir != "" {
+				_ = d.app.FileVersions().Record(s.SessionDir, absPath)
+			}
+		}
+	}
+
+	d.kbWatch = kbWatch
+	d.logger.Info("FileWatchService initialized after model switch",
+		"cache_dir", filepath.Join(d.app.Settings().DataDir(), "kb-cache"),
+	)
+
+	// Wire IndexEventCallback and restore existing watches if gateway already running.
+	if d.gw != nil {
+		d.kbWatch.IndexEventCallback = func(absPath, relPath, absDir, eventType string) {
+			d.gw.BroadcastNotification("file_indexing", map[string]interface{}{
+				"type": "file_indexing",
+				"data": map[string]string{
+					"file":      relPath,
+					"directory": absDir,
+					"state":     eventType,
+				},
+			})
+		}
+		d.restoreSessionWatches()
+	}
+
+	return nil
+}
+
 func (d *Daemon) Start(ctx context.Context) error {
 	d.startTime = time.Now()
 	d.logger.Info("daemon start called", "addr", d.addr, "wsPath", d.wsPath)
@@ -673,8 +894,8 @@ func (d *Daemon) Start(ctx context.Context) error {
 	}
 
 	// Wire filewatch indexing events to WebUI broadcast
-	if d.memoryWatch != nil {
-		d.memoryWatch.IndexEventCallback = func(absPath, relPath, absDir, eventType string) {
+	if d.kbWatch != nil {
+		d.kbWatch.IndexEventCallback = func(absPath, relPath, absDir, eventType string) {
 			d.gw.BroadcastNotification("file_indexing", map[string]interface{}{
 				"type": "file_indexing",
 				"data": map[string]string{
@@ -710,7 +931,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 		}
 	}()
 
-	if d.memoryWatch != nil {
+	if d.kbWatch != nil {
 		d.logger.Info("filewatch service configured but not started (user must call filewatch.start to activate)")
 	} else {
 		d.logger.Info("no filewatch configured, skipping")
@@ -799,7 +1020,7 @@ func (d *Daemon) stopBackgroundServices() {
 		d.hotReload.Stop()
 		d.logger.Info("hot-reload watcher stopped")
 	}
-	if d.memoryWatch != nil {
+	if d.kbWatch != nil {
 		d.logger.Info("stopping filewatch service")
 		// Cancel the external watch context first so the Start() goroutine
 		// can unblock, then stop the internal eventLoop.
@@ -807,7 +1028,7 @@ func (d *Daemon) stopBackgroundServices() {
 			d.watchCancel()
 			d.watchCancel = nil
 		}
-		d.memoryWatch.Stop()
+		d.kbWatch.Stop()
 		d.logger.Info("filewatch service stopped")
 	}
 	if d.scheduler != nil {
@@ -870,7 +1091,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	// Memory / RAG
 	if d.sharedMemory != nil {
-		idx := d.sharedMemory.Indexer()
+		idx := d.sharedMemory.Semantic()
 		var totalChunks int
 		if idx != nil {
 			if cnt, err := idx.Count(context.Background()); err == nil {
@@ -887,9 +1108,9 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// FileWatch
-	if d.memoryWatch != nil {
+	if d.kbWatch != nil {
 		fwStatus := "stopped"
-		if d.memoryWatch.IsRunning() {
+		if d.kbWatch.IsRunning() {
 			fwStatus = "running"
 		}
 		services["filewatch"] = map[string]any{"status": fwStatus}

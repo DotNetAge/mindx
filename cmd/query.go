@@ -90,11 +90,10 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	})
 
 	mem, err := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-		MemoryType: goharnessmemory.MemoryTypeLongTerm,
-		AgentName:  "_shared",
-		MemoryDir:  memDir,
-		Embedder:   emb,
-		Logger:     queryLogger,
+		AgentName: "_shared",
+		MemoryDir: memDir,
+		Embedder:  emb,
+		Logger:    queryLogger,
 	})
 	if err != nil {
 		return fmt.Errorf("cannot open memory store: %w", err)
@@ -127,16 +126,15 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	}
 
 	// Render table using lipgloss-styled table (bubble ecosystem)
-	table := render.NewTable([]string{"Score", "Created", "Title", "Content"}, 120)
+	table := render.NewTable([]string{"Summary", "Content", "Tags"}, 120)
 	for _, r := range records {
-		score := fmt.Sprintf("%.2f", r.Score)
-		created := r.CreatedAt.Format(time.DateOnly)
-		title := r.Title
-		if title == "" {
-			title = "(untitled)"
+		summary := r.Summary
+		if summary == "" {
+			summary = "(untitled)"
 		}
 		content := truncateText(r.Content, 80)
-		table.AddRow([]string{score, created, title, content})
+		tags := strings.Join(r.Tags, ", ")
+		table.AddRow([]string{summary, content, tags})
 	}
 	fmt.Println(table.Render())
 	fmt.Printf("\n%d record(s) found in %s.\n", len(records), elapsed.Round(time.Millisecond))

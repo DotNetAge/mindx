@@ -18,34 +18,29 @@ func NewRAGMemoryAdapter(rag *memory.RAGMemory) *RAGMemoryAdapter {
 	return &RAGMemoryAdapter{rag: rag}
 }
 
-func (a *RAGMemoryAdapter) Store(_ context.Context, sessionID, title, content string) error {
-	if a.rag == nil {
+func (a *RAGMemoryAdapter) StoreChunks(ctx context.Context, sessionID string, chunks []goharnessmemory.MemoryChunk) error {
+	if a.rag == nil || len(chunks) == 0 {
 		return nil
 	}
-	_, err := a.rag.Store(context.Background(), goharnessmemory.MemoryRecord{
-		Type:      goharnessmemory.MemoryTypeSession,
-		SessionID: sessionID,
-		Title:     title,
-		Content:   content,
-	})
-	return err
+	// Ensure each chunk gets the session ID
+	for i := range chunks {
+		chunks[i].SessionID = sessionID
+	}
+	return a.rag.StoreMemoryChunks(ctx, chunks)
 }
 
-func (a *RAGMemoryAdapter) Retrieve(ctx context.Context, query, sessionID string, limit int) ([]string, error) {
+func (a *RAGMemoryAdapter) Retrieve(ctx context.Context, query, sessionID string, limit int) ([]goharnessmemory.MemoryChunk, error) {
 	if a.rag == nil {
 		return nil, nil
 	}
-	records, err := a.rag.Retrieve(ctx, query,
-		goharnessmemory.WithMemoryTypes(goharnessmemory.MemoryTypeSession),
+
+	opts := []goharnessmemory.RetrieveOption{
 		goharnessmemory.WithMemorySessionID(sessionID),
 		goharnessmemory.WithMemoryLimit(limit),
-	)
-	if err != nil || len(records) == 0 {
+	}
+	chunks, err := a.rag.Retrieve(ctx, query, opts...)
+	if err != nil {
 		return nil, err
 	}
-	out := make([]string, len(records))
-	for i, r := range records {
-		out[i] = r.Content
-	}
-	return out, nil
+	return chunks, nil
 }

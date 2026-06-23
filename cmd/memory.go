@@ -148,37 +148,6 @@ var memoryDeleteCmd = &cobra.Command{
 
 // ── memory stats ──────────────────────────────────────────────
 
-var memoryStatsCmd = &cobra.Command{
-	Use:     "stats",
-	Short:   "Show memory store statistics",
-	Example: `  mindx memory stats`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cl, err := rpc.Dial(daemonAddr)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = cl.Close() }()
-		result, err := cl.MemoryStats()
-		if err != nil {
-			return err
-		}
-
-		// Parse and display as key-value summary
-		var stats map[string]interface{}
-		if err := json.Unmarshal(result, &stats); err == nil {
-			table := render.NewTable([]string{"Metric", "Value"}, 60)
-			for k, v := range stats {
-				valStr := fmt.Sprintf("%v", v)
-				table.AddRow([]string{k, valStr})
-			}
-			fmt.Println(table.Render())
-			return nil
-		}
-		fmt.Println(string(result))
-		return nil
-	},
-}
-
 // ── memory chunks ─────────────────────────────────────────────
 
 var memoryChunksCmd = &cobra.Command{
@@ -312,77 +281,6 @@ var memoryCountCmd = &cobra.Command{
 	},
 }
 
-// ── memory sync ───────────────────────────────────────────────
-
-var memorySyncCmd = &cobra.Command{
-	Use:     "sync",
-	Short:   "Sync project files into memory",
-	Example: `  mindx memory sync --project-dir "/path/to/project"`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		projectDir, _ := cmd.Flags().GetString("project-dir")
-		if projectDir == "" {
-			return fmt.Errorf("--project-dir is required")
-		}
-		cl, err := rpc.Dial(daemonAddr)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = cl.Close() }()
-		result, err := cl.MemorySyncProject(projectDir)
-		if err != nil {
-			return err
-		}
-		fmt.Println(string(result))
-		return nil
-	},
-}
-
-// ── memory file-states ────────────────────────────────────────
-
-var memoryFileStatesCmd = &cobra.Command{
-	Use:     "file-states",
-	Short:   "Show file sync states for a project",
-	Example: `  mindx memory file-states --project-dir "/path/to/project"`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		projectDir, _ := cmd.Flags().GetString("project-dir")
-		if projectDir == "" {
-			return fmt.Errorf("--project-dir is required")
-		}
-		cl, err := rpc.Dial(daemonAddr)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = cl.Close() }()
-		result, err := cl.MemoryFileStates(projectDir)
-		if err != nil {
-			return err
-		}
-
-		type fileStateRecord struct {
-			File  string `json:"file"`
-			State string `json:"state"`
-		}
-		var records []fileStateRecord
-		if err := json.Unmarshal(result, &records); err != nil {
-			fmt.Println(string(result))
-			return nil
-		}
-
-		if len(records) == 0 {
-			fmt.Println("No file states found.")
-			return nil
-		}
-
-		table := render.NewTable([]string{"File", "State"}, 100)
-		for _, r := range records {
-			table.AddRow([]string{r.File, r.State})
-		}
-		fmt.Println(table.Render())
-		fmt.Printf("\n%d file(s)\n", len(records))
-		return nil
-	},
-}
-
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
@@ -397,16 +295,11 @@ func init() {
 	memoryChunksCmd.Flags().Int("page-size", 20, "Page size")
 	memoryChunksCmd.Flags().String("doc-id", "", "Filter by document ID")
 	memoryGetChunksCmd.Flags().String("doc-id", "", "Document ID (required)")
-	memorySyncCmd.Flags().String("project-dir", "", "Project directory path (required)")
-	memoryFileStatesCmd.Flags().String("project-dir", "", "Project directory path (required)")
 
 	memoryCmd.AddCommand(memoryQueryCmd)
 	memoryCmd.AddCommand(memoryStoreCmd)
 	memoryCmd.AddCommand(memoryDeleteCmd)
-	memoryCmd.AddCommand(memoryStatsCmd)
 	memoryCmd.AddCommand(memoryChunksCmd)
 	memoryCmd.AddCommand(memoryGetChunksCmd)
 	memoryCmd.AddCommand(memoryCountCmd)
-	memoryCmd.AddCommand(memorySyncCmd)
-	memoryCmd.AddCommand(memoryFileStatesCmd)
 }

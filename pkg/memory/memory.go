@@ -2,81 +2,50 @@ package memory
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/DotNetAge/goharness/memory"
-	"github.com/DotNetAge/goharness/session"
-	"github.com/DotNetAge/gorag"
 	goragcore "github.com/DotNetAge/gorag/core"
 	"github.com/DotNetAge/gorag/embedder"
 	goragindexer "github.com/DotNetAge/gorag/indexer"
 	"github.com/DotNetAge/gorag/logging"
 	querypkg "github.com/DotNetAge/gorag/query"
-	"github.com/DotNetAge/gorag/store/doc/bleve"
-	graphgograph "github.com/DotNetAge/gorag/store/graph/gograph"
 	"github.com/DotNetAge/gorag/store/vector/govector"
 )
 
 var _ memory.Memory = (*RAGMemory)(nil)
 
-// RAGMemory implements memory.Memory using GoRAG's HybridIndexer as the backend.
+// RAGMemory implements memory.Memory using SemanticIndexer for unified memory storage.
+// All agents' memories are stored in the same vector store, differentiated by metadata
+// fields (agent_name, session_id) for filter-based retrieval.
 type RAGMemory struct {
-	indexer    *gorag.HybridIndexer
-	embedder   goragcore.Embedder
-	memoryType memory.MemoryType
-	graphStore goragcore.GraphStore
-	logger     logging.Logger
-	usageStore session.TokenUsageStore
-	modelName  string
+	semantic goragcore.Indexer // SemanticIndexer（统一记忆存储）
+	embedder goragcore.Embedder
+	logger   logging.Logger
 }
 
 type RAGMemoryOption func(*RAGMemory)
 
 type MemoryConfig struct {
-	MemoryType memory.MemoryType
-
 	AgentName string
 
 	MemoryDir string
-
-	SessionDir string
 
 	Logger logging.Logger
 
 	Embedder goragcore.Embedder
 
 	ReadOnly bool
-
-	// GraphStore 可选。提供外部已创建的图数据库实例，用于 GraphIndexer 的实体/关系写入，
-	// 也供外部直接查询（GetNode, GetNeighbors, GetMultiHopPaths 等）。
-	// 当 LLMConfig 配置且此项为空时，会自动创建。
-	GraphStore goragcore.GraphStore
-
-	// EntityDefs 可选。用户自定义的实体类型定义列表。
-	// 从 entity-defs.json 中读取并在初始化时注入 GraphIndexer。
-	// 如果为空，GraphIndexer 将使用一组通用的默认实体类型。
-	EntityDefs []goragindexer.EntityDef
-
-	// LLMConfig 可选。非空时启用 GraphIndexer，在语义索引基础上增加知识图谱
-	// 实体/关系索引与标签系统（tags, summary, entity_ids）。
-	LLMConfig *goragindexer.ModelConfig
-
-	// TokenUsageStore 可选。配置后索引期间的 LLM token 用量将被持久化记录。
-	TokenUsageStore session.TokenUsageStore
 }
 
 func (c MemoryConfig) dataDir() string {
-	switch c.MemoryType {
-	case memory.MemoryTypeSession:
-		return filepath.Join(c.SessionDir, "memory")
-	default:
-		return filepath.Join(c.MemoryDir, c.AgentName)
-	}
+	return filepath.Join(c.MemoryDir, "shared")
 }
 
 func NewEmbedderFromConfig(modelPath string) (goragcore.Embedder, error) {
@@ -90,10 +59,11 @@ func NewEmbedderFromConfig(modelPath string) (goragcore.Embedder, error) {
 	return emb, nil
 }
 
-func NewRAGMemory(indexer *gorag.HybridIndexer, opts ...RAGMemoryOption) *RAGMemory {
+// NewRAGMemory 创建一个 RAGMemory 实例。
+// semanticIdx 始终非空；graphIdx 可为 nil（仅使用语义检索）。
+func NewRAGMemory(semanticIdx goragcore.Indexer, opts ...RAGMemoryOption) *RAGMemory {
 	m := &RAGMemory{
-		indexer:    indexer,
-		memoryType: memory.MemoryTypeLongTerm,
+		semantic: semanticIdx,
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -111,11 +81,8 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 	if cfg.Logger == nil {
 		return nil, fmt.Errorf("memory: logger is required (pass cfg.Logger to share the application logger)")
 	}
-	if cfg.MemoryDir == "" && cfg.MemoryType != memory.MemoryTypeSession {
-		return nil, fmt.Errorf("memory: memory dir is required for %s memory type", memoryTypeLabel(cfg.MemoryType))
-	}
-	if cfg.SessionDir == "" && cfg.MemoryType == memory.MemoryTypeSession {
-		return nil, fmt.Errorf("memory: session dir is required for session memory type")
+	if cfg.MemoryDir == "" {
+		return nil, fmt.Errorf("memory: memory dir is required")
 	}
 
 	dataDir := cfg.dataDir()
@@ -123,112 +90,39 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 		return nil, fmt.Errorf("memory: create data directory %s: %w", dataDir, err)
 	}
 
-	vecDir := filepath.Join(dataDir, "vectors")
-	if mkErr := os.MkdirAll(vecDir, 0755); mkErr != nil {
-		return nil, fmt.Errorf("memory: create vector directory %s: %w", vecDir, mkErr)
+	logger := cfg.Logger
+
+	// ── SemanticIndexer（统一记忆存储）───────────────────────
+	semVecDir := filepath.Join(dataDir, "vectors")
+	if mkErr := os.MkdirAll(semVecDir, 0755); mkErr != nil {
+		return nil, fmt.Errorf("memory: create semantic vector directory %s: %w", semVecDir, mkErr)
 	}
-	vs, err := govector.NewStore(
-		govector.WithCollection(cfg.AgentName),
+	semVS, err := govector.NewStore(
+		govector.WithCollection("shared_sem"),
 		govector.WithDimension(cfg.Embedder.Dim()),
-		govector.WithDBPath(filepath.Join(vecDir, cfg.AgentName+".db")),
+		govector.WithDBPath(filepath.Join(semVecDir, "shared.db")),
 		govector.WithHNSW(true),
 		govector.WithReadOnly(cfg.ReadOnly),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("memory: create vector store: %w", err)
+		return nil, fmt.Errorf("memory: create semantic vector store: %w", err)
+	}
+	semIdx := goragindexer.NewSemanticIndexer(semVS, cfg.Embedder,
+		goragindexer.WithSemanticLogger(logger),
+	)
+
+	m := &RAGMemory{
+		semantic: semIdx,
+		embedder: cfg.Embedder,
+		logger:   logger,
 	}
 
-	ftDir := filepath.Join(dataDir, "fulltexts")
-	if mkErr := os.MkdirAll(ftDir, 0755); mkErr != nil {
-		return nil, fmt.Errorf("memory: create fulltext directory %s: %w", ftDir, mkErr)
-	}
-	fts, err := bleve.NewBleveStore(filepath.Join(ftDir, cfg.AgentName+".bleve"))
-	if err != nil {
-		return nil, fmt.Errorf("memory: create fulltext store: %w", err)
-	}
-
-	logger := cfg.Logger
-	logger.Info("memory: initializing RAG indexer",
+	logger.Info("memory: initialized",
 		"agent", cfg.AgentName,
-		"memory_type", memoryTypeLabel(cfg.MemoryType),
 		"vector_dim", cfg.Embedder.Dim(),
-		"vector_dir", vecDir,
-		"fulltext_dir", ftDir,
 	)
 
-	indexer, err := gorag.NewHybridIndexer(
-		logger, vs, nil, fts, cfg.Embedder,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("memory: create hybrid indexer: %w", err)
-	}
-
-	// ── GraphIndexer 模式（取代 vectorIndexer）────────────────────────
-	var graphStore goragcore.GraphStore
-	if cfg.LLMConfig != nil {
-		// 使用外部已创建的 GraphStore，或自动创建
-		if cfg.GraphStore != nil {
-			graphStore = cfg.GraphStore
-			logger.Info("memory: using external GraphStore for GraphIndexer")
-		} else {
-			graphDir := filepath.Join(dataDir, "knowledge-graph")
-			if mkErr := os.MkdirAll(graphDir, 0755); mkErr != nil {
-				return nil, fmt.Errorf("memory: create graph directory: %w", mkErr)
-			}
-			gs, gErr := graphgograph.NewGraphStore(filepath.Join(graphDir, "graph.db"))
-			if gErr != nil {
-				return nil, fmt.Errorf("memory: create graph store: %w", gErr)
-			}
-			graphStore = gs
-		}
-
-		// GraphIndexer 与 semantic 索引器共存，无需移除任何索引器
-		// （HybridIndexer 的 List/Count 方法会自动遍历可用索引器）
-		var graphOpts []goragindexer.GraphOption
-		graphOpts = append(graphOpts, goragindexer.WithLLMLogger(logger))
-		if len(cfg.EntityDefs) > 0 {
-			// 从 saved entity-defs.json 加载用户自定义实体类型定义
-			graphOpts = append(graphOpts, goragindexer.WithEntities(cfg.EntityDefs...))
-			logger.Info("memory: loaded saved entity defs", "count", len(cfg.EntityDefs))
-		}
-		graphIdx := goragindexer.New(
-			*cfg.LLMConfig,
-			cfg.Embedder,
-			vs,
-			graphStore,
-			graphOpts...,
-		)
-		indexer.AddIndexer(graphIdx, 0.8)
-
-		logger.Info("memory: GraphIndexer enabled (replaces semantic+graph)",
-			"model", cfg.LLMConfig.Model,
-			"lang", cfg.LLMConfig.Language,
-			"max_tokens", cfg.LLMConfig.MaxTokens,
-		)
-	}
-
-	return &RAGMemory{
-		indexer:    indexer,
-		embedder:   cfg.Embedder,
-		memoryType: cfg.MemoryType,
-		graphStore: graphStore,
-		logger:     logger,
-		usageStore: cfg.TokenUsageStore,
-		modelName:  modelName(cfg.LLMConfig),
-	}, nil
-}
-
-func modelName(cfg *goragindexer.ModelConfig) string {
-	if cfg == nil {
-		return ""
-	}
-	return cfg.Model
-}
-
-func WithMemoryType(t memory.MemoryType) RAGMemoryOption {
-	return func(m *RAGMemory) {
-		m.memoryType = t
-	}
+	return m, nil
 }
 
 func WithEmbedder(embedder goragcore.Embedder) RAGMemoryOption {
@@ -237,37 +131,83 @@ func WithEmbedder(embedder goragcore.Embedder) RAGMemoryOption {
 	}
 }
 
-func (m *RAGMemory) MemoryType() memory.MemoryType {
-	return m.memoryType
+// Semantic 返回 SemanticIndexer，用于统一记忆存储。
+func (m *RAGMemory) Semantic() goragcore.Indexer {
+	return m.semantic
 }
 
-func (m *RAGMemory) Indexer() *gorag.HybridIndexer {
-	return m.indexer
+// StoreMemoryChunks stores memory chunks directly with full Vector metadata for filter-based retrieval.
+func (m *RAGMemory) StoreMemoryChunks(ctx context.Context, chunks []memory.MemoryChunk) error {
+	if len(chunks) == 0 {
+		return nil
+	}
+	for _, chunk := range chunks {
+		if chunk.ID == "" && chunk.Content != "" {
+			chunk.ID = contentHash(chunk.Content)
+		}
+		if err := m.storeMemoryChunk(ctx, chunk); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// GraphStore 返回 GraphIndexer 使用的图数据库实例。
-// 可用于直接执行图查询（GetNode, GetNeighbors, GetMultiHopPaths 等）。
-// 仅当 GraphIndexer 启用时非空。
-func (m *RAGMemory) GraphStore() goragcore.GraphStore {
-	return m.graphStore
+// storeMemoryChunk stores a single MemoryChunk with full Vector metadata.
+func (m *RAGMemory) storeMemoryChunk(ctx context.Context, chunk memory.MemoryChunk) error {
+	content := chunk.Summary
+	if chunk.Content != "" {
+		content = chunk.Summary + "\n" + chunk.Content
+	}
+
+	tagStrs := make([]string, len(chunk.Tags))
+	copy(tagStrs, chunk.Tags)
+
+	metadata := map[string]any{
+		"agent_name": chunk.AgentName,
+		"session_id": chunk.SessionID,
+		"summary":    chunk.Summary,
+		"tags":       tagStrs,
+		"content":    chunk.Content,
+		"title":      chunk.Summary,
+	}
+	if !chunk.Timestamp.IsZero() {
+		metadata["timestamp"] = chunk.Timestamp.UnixMilli()
+	}
+
+	coreChunk := &goragcore.Chunk{
+		ID:       chunk.ID,
+		Content:  content,
+		Title:    chunk.Summary,
+		DocID:    chunk.AgentName,
+		Metadata: metadata,
+	}
+
+	if m.semantic != nil {
+		if err := m.semantic.StoreChunk(ctx, coreChunk); err != nil {
+			return fmt.Errorf("memory store chunk failed: %w", err)
+		}
+	}
+	return nil
 }
 
-func (m *RAGMemory) Retrieve(ctx context.Context, query string, opts ...memory.RetrieveOption) ([]memory.MemoryRecord, error) {
+// Retrieve implements memory.Memory.
+func (m *RAGMemory) Retrieve(ctx context.Context, query string, opts ...memory.RetrieveOption) ([]memory.MemoryChunk, error) {
 	cfg := memory.DefaultRetrieveConfig()
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 
-	if m.indexer == nil {
-		return nil, fmt.Errorf("indexer not initialized")
+	idx := m.semantic
+	if idx == nil {
+		return nil, fmt.Errorf("semantic indexer not initialized")
 	}
 
-	q := m.buildQuery(query)
+	q := m.buildQueryWithFilter(query, cfg)
 	if q == nil {
 		return nil, nil
 	}
 
-	hits, err := m.indexer.Search(ctx, q)
+	hits, err := idx.Search(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("memory retrieve failed: %w", err)
 	}
@@ -276,87 +216,66 @@ func (m *RAGMemory) Retrieve(ctx context.Context, query string, opts ...memory.R
 		return nil, nil
 	}
 
-	var records []memory.MemoryRecord
+	var chunks []memory.MemoryChunk
 	for _, hit := range hits {
-		record := hitToRecord(hit)
-		if record == nil {
+		chunk := hitToChunk(hit)
+		if chunk == nil {
 			continue
 		}
 
-		if cfg.Types != nil && !containsType(cfg.Types, record.Type) {
-			continue
-		}
 		if cfg.MinScore > 0 && float64(hit.Score) < cfg.MinScore {
 			continue
 		}
 
-		record.Score = float64(hit.Score)
-		records = append(records, *record)
+		chunks = append(chunks, *chunk)
 	}
 
-	if cfg.Limit > 0 && len(records) > cfg.Limit {
-		records = records[:cfg.Limit]
+	if cfg.Limit > 0 && len(chunks) > cfg.Limit {
+		chunks = chunks[:cfg.Limit]
 	}
 
-	return records, nil
+	return chunks, nil
 }
 
-func (m *RAGMemory) Store(ctx context.Context, record memory.MemoryRecord) (string, error) {
-	if m.indexer == nil {
-		return "", fmt.Errorf("indexer not initialized")
+// Store implements memory.Memory.
+func (m *RAGMemory) Store(ctx context.Context, chunk memory.MemoryChunk) (string, error) {
+	if chunk.ID == "" && chunk.Content != "" {
+		chunk.ID = contentHash(chunk.Content)
 	}
-
-	if record.ID == "" {
-		record.ID = generateID()
+	if err := m.storeMemoryChunk(ctx, chunk); err != nil {
+		return "", err
 	}
-
-	content := buildContentForStore(record)
-	chunk, err := m.indexer.Add(ctx, content)
-	if err != nil {
-		return "", fmt.Errorf("memory store failed: %w", err)
-	}
-
-	if chunk == nil {
-		return "", fmt.Errorf("memory store returned nil chunk")
-	}
-
-	return record.ID, nil
+	return chunk.ID, nil
 }
 
-func (m *RAGMemory) Update(ctx context.Context, id string, record memory.MemoryRecord) error {
-	if m.indexer == nil {
-		return fmt.Errorf("indexer not initialized")
+// Update is not part of the memory.Memory interface and is not supported in the chunk-based model.
+// Deprecated: use Delete then Store instead.
+func (m *RAGMemory) Update(ctx context.Context, id string, chunk memory.MemoryChunk) error {
+	idx := m.semantic
+	if idx == nil {
+		return fmt.Errorf("semantic indexer not initialized")
 	}
-
 	if id == "" {
 		return memory.ErrMemoryNotFound
 	}
-
-	err := m.indexer.Remove(ctx, id)
-	if err != nil {
+	if err := idx.Remove(ctx, id); err != nil {
 		return fmt.Errorf("memory update failed to remove old record %s: %w", id, err)
 	}
-
-	record.ID = id
-	content := buildContentForStore(record)
-	_, err = m.indexer.Add(ctx, content)
-	if err != nil {
-		return fmt.Errorf("memory update failed to add new record: %w", err)
-	}
-
-	return nil
+	chunk.ID = id
+	return m.storeMemoryChunk(ctx, chunk)
 }
 
 func (m *RAGMemory) Delete(ctx context.Context, id string) error {
-	if m.indexer == nil {
-		return fmt.Errorf("indexer not initialized")
+	idx := m.semantic
+	if idx == nil {
+		return fmt.Errorf("semantic indexer not initialized")
 	}
 
 	if id == "" {
 		return memory.ErrMemoryNotFound
 	}
 
-	err := m.indexer.Remove(ctx, id)
+	err := idx.Remove(ctx, id)
 	if err != nil {
 		return fmt.Errorf("memory delete failed: %w", err)
 	}
@@ -364,73 +283,14 @@ func (m *RAGMemory) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (m *RAGMemory) SyncProjectDir(ctx context.Context, projectDir, cacheDir string) *ProjectSyncResult {
-	opts := []IndexServiceOption{}
-	if m.usageStore != nil && m.modelName != "" {
-		opts = append(opts, WithTokenUsageStore(m.usageStore, m.modelName))
-	}
-	pi := NewIndexService(m.indexer, cacheDir, m.logger, opts...)
-	return pi.Sync(ctx, projectDir)
-}
-
-// MemoryStats summarizes the RAG indexing progress.
-type MemoryStats struct {
-	TotalFiles   int `json:"total_files"`
-	IndexedFiles int `json:"indexed_files"`
-	TotalChunks  int `json:"total_chunks"`
-}
-
-// Stats returns indexing statistics for the given project directory.
-func (m *RAGMemory) Stats(ctx context.Context, projectDir, cacheDir string) *MemoryStats {
-	stats := &MemoryStats{}
-
-	// Count total discoverable files by walking the project dir
-	// (same ignore logic as IndexService)
-	_ = filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		relPath, _ := filepath.Rel(projectDir, path)
-		if info.IsDir() {
-			name := info.Name()
-			if name != "." && (strings.HasPrefix(name, ".") || DefaultIgnoredDirs[name]) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		// Skip ignored files (check via relative path)
-		if relPath == "" || strings.HasPrefix(relPath, ".") {
-			return nil
-		}
-		stats.TotalFiles++
-		return nil
-	})
-
-	// Count indexed files from the IndexService cache
-	if cacheDir != "" {
-		pi := NewIndexService(m.indexer, cacheDir, m.logger)
-		if err := pi.cache.LoadFromFile(pi.cacheDir); err == nil {
-			stats.IndexedFiles = len(pi.cache.Files)
-		}
-	}
-
-	// Count total chunks via Indexer
-	if m.indexer != nil {
-		count, err := m.indexer.Count(ctx)
-		if err == nil {
-			stats.TotalChunks = count
-		}
-	}
-
-	return stats
-}
-
 func (m *RAGMemory) Close(ctx context.Context) error {
 	var errs []error
 
-	if m.indexer != nil {
-		if err := m.indexer.Close(ctx); err != nil {
-			errs = append(errs, err)
+	if m.semantic != nil {
+		if closer, ok := m.semantic.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 
@@ -446,110 +306,79 @@ func (m *RAGMemory) Close(ctx context.Context) error {
 	return nil
 }
 
-func (m *RAGMemory) buildQuery(query string) goragcore.Query {
-	if m.embedder != nil {
-		return querypkg.NewSemanticQuery(query, m.embedder)
+// buildQueryWithFilter builds a semantic query with optional filters for short/long-term memory.
+func (m *RAGMemory) buildQueryWithFilter(query string, cfg memory.RetrieveConfig) goragcore.Query {
+	if m.embedder == nil {
+		return nil
 	}
-	return m.indexer.NewQuery(query)
+
+	q := querypkg.NewSemanticQuery(query, m.embedder)
+
+	if cfg.AgentName != "" {
+		q.AddFilter(memory.FilterKeyAgentName, cfg.AgentName)
+	}
+
+	if cfg.SessionID != "" {
+		q.AddFilter(memory.FilterKeySessionID, cfg.SessionID)
+	}
+
+	return q
 }
 
-func buildContentForStore(record memory.MemoryRecord) string {
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("[ID:%s]\n", record.ID))
-	sb.WriteString(fmt.Sprintf("[Type:%s]\n", memoryTypeLabel(record.Type)))
-	if record.Title != "" {
-		sb.WriteString(fmt.Sprintf("[Title:%s]\n", record.Title))
+func hitToChunk(hit goragcore.Hit) *memory.MemoryChunk {
+	chunk := &memory.MemoryChunk{
+		ID:      hit.ID,
+		Content: hit.Content,
 	}
-	if len(record.Tags) > 0 {
-		sb.WriteString(fmt.Sprintf("[Tags:%s]\n", strings.Join(record.Tags, ", ")))
-	}
-	sb.WriteString("\n")
-	sb.WriteString(record.Content)
-	return sb.String()
-}
 
-func hitToRecord(hit goragcore.Hit) *memory.MemoryRecord {
-	content := hit.Content
-	id := hit.ID
-	title := ""
-	memType := memory.MemoryTypeLongTerm
-	tags := []string{}
-
-	lines := strings.Split(content, "\n")
-	bodyStart := 0
-	for i, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "[ID:") && strings.HasSuffix(line, "]") {
-			id = strings.TrimPrefix(strings.TrimSuffix(line, "]"), "[ID:")
-		} else if strings.HasPrefix(line, "[Type:") && strings.HasSuffix(line, "]") {
-			typeStr := strings.TrimPrefix(strings.TrimSuffix(line, "]"), "[Type:")
-			memType = parseMemoryType(typeStr)
-		} else if strings.HasPrefix(line, "[Title:") && strings.HasSuffix(line, "]") {
-			title = strings.TrimPrefix(strings.TrimSuffix(line, "]"), "[Title:")
-		} else if strings.HasPrefix(line, "[Tags:") && strings.HasSuffix(line, "]") {
-			tagsStr := strings.TrimPrefix(strings.TrimSuffix(line, "]"), "[Tags:")
-			if tagsStr != "" {
-				tags = strings.Split(tagsStr, ",")
-				for i := range tags {
-					tags[i] = strings.TrimSpace(tags[i])
+	// Extract metadata fields from Vector search results
+	if hit.Metadata != nil {
+		if a, ok := hit.Metadata["agent_name"].(string); ok && a != "" {
+			chunk.AgentName = a
+		}
+		if s, ok := hit.Metadata["session_id"].(string); ok {
+			chunk.SessionID = s
+		}
+		if s, ok := hit.Metadata["summary"].(string); ok && s != "" {
+			chunk.Summary = s
+		} else {
+			chunk.Summary = hit.Title
+		}
+		if t, ok := hit.Metadata["tags"]; ok {
+			switch v := t.(type) {
+			case []string:
+				if len(v) > 0 {
+					chunk.Tags = v
+				}
+			case []any:
+				for _, tag := range v {
+					if s, ok := tag.(string); ok {
+						chunk.Tags = append(chunk.Tags, s)
+					}
 				}
 			}
-		} else if line == "" && bodyStart == 0 && i > 0 {
-			bodyStart = i + 1
+		}
+		if ts, ok := hit.Metadata["timestamp"]; ok {
+			switch v := ts.(type) {
+			case float64:
+				chunk.Timestamp = time.UnixMilli(int64(v))
+			case int64:
+				chunk.Timestamp = time.UnixMilli(v)
+			}
+		}
+		if c, ok := hit.Metadata["content"].(string); ok && c != "" {
+			chunk.Content = c
 		}
 	}
 
-	if bodyStart > 0 && bodyStart < len(lines) {
-		content = strings.Join(lines[bodyStart:], "\n")
+	if chunk.Summary == "" {
+		chunk.Summary = hit.Title
 	}
 
-	var meta map[string]any
-	if hit.Metadata != nil {
-		meta = hit.Metadata
-	}
-
-	return &memory.MemoryRecord{
-		ID:       id,
-		Type:     memType,
-		Title:    title,
-		Content:  content,
-		Tags:     tags,
-		Score:    float64(hit.Score),
-		Metadata: meta,
-	}
+	return chunk
 }
 
-func generateID() string {
-	return fmt.Sprintf("mem_%d", time.Now().UnixMilli())
-}
-
-func containsType(types []memory.MemoryType, t memory.MemoryType) bool {
-	for _, v := range types {
-		if v == t {
-			return true
-		}
-	}
-	return false
-}
-
-func memoryTypeLabel(t memory.MemoryType) string {
-	switch t {
-	case memory.MemoryTypeSession:
-		return "session"
-	case memory.MemoryTypeLongTerm:
-		return "longterm"
-	default:
-		return "unknown"
-	}
-}
-
-func parseMemoryType(s string) memory.MemoryType {
-	switch s {
-	case "session":
-		return memory.MemoryTypeSession
-	case "longterm":
-		return memory.MemoryTypeLongTerm
-	default:
-		return memory.MemoryTypeLongTerm
-	}
+func contentHash(content string) string {
+	h := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(h[:])
 }

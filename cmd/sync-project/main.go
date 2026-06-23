@@ -32,22 +32,22 @@ func main() {
 
 	// 1. Sync
 	params := map[string]string{"project_dir": projectDir}
-	result, err := c.Call(ctx, "memory.sync_project", params)
+	result, err := c.Call(ctx, "kb.sync_project", params)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ memory.sync_project 失败: %v\n", err)
+		fmt.Fprintf(os.Stderr, "❌ kb.sync_project 失败: %v\n", err)
 		os.Exit(1)
 	}
 	var res map[string]any
 	_ = json.Unmarshal(result, &res)
-	fmt.Fprintf(os.Stderr, "✅ memory.sync_project 完成\n")
+	fmt.Fprintf(os.Stderr, "✅ kb.sync_project 完成\n")
 	for k, v := range res {
 		fmt.Printf("  %s: %v\n", k, v)
 	}
 
 	// 2. Stats
-	statsResult, err := c.Call(ctx, "memory.stats", params)
+	statsResult, err := c.Call(ctx, "kb.stats", params)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ memory.stats 失败: %v\n", err)
+		fmt.Fprintf(os.Stderr, "❌ kb.stats 失败: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("\n📊 索引统计:\n%s\n\n", string(statsResult))

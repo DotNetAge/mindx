@@ -143,189 +143,48 @@ build-debug: fmt lint pre-build
 	$(GO) build $(GOFLAGS) -gcflags="all=-N -l" -o $(BUILD_DIR)/$(BINARY_NAME)-debug .
 	@echo "$(GREEN)✅ Debug build complete: $(BUILD_DIR)/$(BINARY_NAME)-debug$(NC)"
 
-## install: 构建并部署到 ~/.mindx（含 runtime 资源 + PATH + 系统服务配置，前置: fmt → lint）
+## install: 构建 binary 并委托 mindx install 做完整部署（runtime 文件、PATH、daemon 注册等均由 mindx install 统一处理，前置: fmt → lint）
 install: fmt lint
-	@echo "$(GREEN)➡ Copying runtime files...$(NC)"
-	@cp -r runtime/* ~/.mindx/ && \
-		echo "$(GREEN)  ✅ runtime/ → ~/.mindx/$(NC)"
 	@echo "$(GREEN)➡ Building $(BINARY_NAME) → ~/.mindx/bin/$(BINARY_NAME)...$(NC)"
-	@mkdir -p ~/.mindx/bin ~/.mindx/settings
+	@mkdir -p ~/.mindx/bin
 	@rm -f ~/.mindx/bin/$(BINARY_NAME)
 	@CGO_ENABLED=1 $(GO) build $(GOFLAGS) -o ~/.mindx/bin/$(BINARY_NAME) . && \
 		echo "$(GREEN)  ✅ $(BINARY_NAME) → ~/.mindx/bin/$(BINARY_NAME)$(NC)"
-	@# ── PATH 配置 ──
-	@SHELL_RC=""; \
-	if [ "$$SHELL" = "/bin/zsh" ] || [ "$$SHELL" = "/usr/bin/zsh" ]; then \
-		SHELL_RC="$$HOME/.zshrc"; \
-	elif [ "$$SHELL" = "/bin/bash" ] || [ "$$SHELL" = "/usr/bin/bash" ]; then \
-		SHELL_RC="$$HOME/.bashrc"; \
-	else \
-		SHELL_RC="$$HOME/.profile"; \
-	fi; \
-	LINE='export PATH="$$HOME/.mindx/bin:$$PATH"'; \
-	if ! grep -qxF "$$LINE" "$$SHELL_RC" 2>/dev/null; then \
-		echo "" >> "$$SHELL_RC"; \
-		echo "# MindX" >> "$$SHELL_RC"; \
-		echo "$$LINE" >> "$$SHELL_RC"; \
-		echo "$(GREEN)  ✅ PATH added to $$SHELL_RC$(NC)"; \
-	else \
-		echo "$(GREEN)  ✅ PATH already in $$SHELL_RC$(NC)"; \
-	fi
-	@# ── 系统服务配置 + 注册 + 重启 ──
-	@MINDX_BIN="$$HOME/.mindx/bin/$(BINARY_NAME)"; \
-	HOME_DIR=$$HOME; \
-	UNAME_S=$$(uname -s); \
-	if [ "$$UNAME_S" = "Darwin" ]; then \
-		PLIST="$$HOME/.mindx/settings/com.mindx.daemon.plist"; \
-		LABEL="com.mindx.daemon"; \
-		LAUNCH_AGENTS="$$HOME/Library/LaunchAgents"; \
-		mkdir -p "$$LAUNCH_AGENTS" "$$HOME/.mindx/logs"; \
-		echo "$(CYAN)  ⟳ Cleaning up old services...$(NC)" && \
-		for old_plist in "$$LAUNCH_AGENTS"/com.mindx.*.plist "$$LAUNCH_AGENTS"/com.dotnetage.mindx.plist; do \
-			if [ -f "$$old_plist" ]; then \
-				old_label=$$(basename "$$old_plist" .plist); \
-				launchctl unload "$$old_plist" 2>/dev/null && echo "     unloaded $$old_label" || true; \
-				rm -f "$$old_plist" && echo "     removed $$old_plist"; \
-			fi; \
-		done; \
-		printf '%s\n' \
-			'<?xml version="1.0" encoding="UTF-8"?>' \
-			'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
-			'<plist version="1.0">' \
-			'<dict>' \
-			'    <key>Label</key>' \
-			"    <string>$$LABEL</string>" \
-			'    <key>ProgramArguments</key>' \
-			'    <array>' \
-			"        <string>$$MINDX_BIN</string>" \
-			'        <string>daemon</string>' \
-			'    </array>' \
-			'    <key>RunAtLoad</key>' \
-			'    <true/>' \
-			'    <key>KeepAlive</key>' \
-			'    <true/>' \
-			'    <key>StandardOutPath</key>' \
-			"    <string>$$HOME_DIR/.mindx/logs/daemon.log</string>" \
-			'    <key>StandardErrorPath</key>' \
-			"    <string>$$HOME_DIR/.mindx/logs/daemon.err</string>" \
-			'    <key>EnvironmentVariables</key>' \
-			'    <dict>' \
-			'        <key>HOME</key>' \
-			"        <string>$$HOME_DIR</string>" \
-			'    </dict>' \
-			'    <key>ProcessType</key>' \
-			'    <string>Interactive</string>' \
-			'</dict>' \
-			'</plist>' \
-			> "$$PLIST"; \
-		echo "$(GREEN)  ✅ launchd plist → $$PLIST$(NC)"; \
-		cp "$$PLIST" "$$LAUNCH_AGENTS/$$LABEL.plist"; \
-		SERVICE="gui/$$(id -u)/$$LABEL"; \
-		echo "$(CYAN)  ⟳ Stopping existing service...$(NC)" && \
-		(launchctl bootout "$$SERVICE" 2>/dev/null && echo "     stopped" || echo "     (not running)"); \
-		echo "$(CYAN)  ⟳ Starting service (bootstrap)...$(NC)" && \
-		launchctl bootstrap gui/$$(id -u) "$$LAUNCH_AGENTS/$$LABEL.plist" && \
-		echo "$(GREEN)  ✅ Daemon registered and started$(NC)" || \
-		echo "$(RED)  ❌ Bootstrap failed, trying legacy load...$(NC)" && \
-		launchctl load "$$LAUNCH_AGENTS/$$LABEL.plist" 2>/dev/null; \
-	fi; \
-	if [ "$$UNAME_S" = "Linux" ]; then \
-		SERVICE_PATH="$$HOME/.mindx/settings/$(BINARY_NAME).service"; \
-		SERVICE_NAME="$(BINARY_NAME)"; \
-		mkdir -p "$$HOME/.mindx/logs"; \
-		printf '%s\n' \
-			'[Unit]' \
-			'Description=MindX AI Agent Daemon' \
-			'After=network.target' \
-			'' \
-			'[Service]' \
-			'Type=simple' \
-			"ExecStart=$$MINDX_BIN start" \
-			'Restart=on-failure' \
-			'RestartSec=5' \
-			'' \
-			'[Install]' \
-			'WantedBy=default.target' \
-			> "$$SERVICE_PATH"; \
-		echo "$(GREEN)  ✅ systemd unit → $$SERVICE_PATH$(NC)"; \
-		mkdir -p "$$HOME/.config/systemd/user"; \
-		cp "$$SERVICE_PATH" "$$HOME/.config/systemd/user/$$SERVICE_NAME.service"; \
-		echo "$(CYAN)  ⟳ Stopping existing service...$(NC)" && \
-		systemctl --user stop "$$SERVICE_NAME" 2>/dev/null && echo "     stopped" || echo "     (not running)"; \
-		echo "$(CYAN)  ⟳ Enabling and starting service...$(NC)" && \
-		systemctl --user enable "$$SERVICE_NAME" && \
-		systemctl --user start "$$SERVICE_NAME" && \
-		echo "$(GREEN)  ✅ Daemon registered and started$(NC)"; \
-	fi
-	@echo ""
+	@# ── 统一委托给 mindx install（runtime 同步 + PATH + daemon 注册 + 服务配置）──
+	@echo "$(GREEN)➡ Running mindx install for full deployment...$(NC)"
+	@"$$HOME/.mindx/bin/$(BINARY_NAME)" install || { \
+		echo "$(RED)❌ 'mindx install' failed — daemon may not be registered.$(NC)"; \
+		echo "$(YELLOW)  Run manually: $$HOME/.mindx/bin/$(BINARY_NAME) install$(NC)"; \
+		exit 1; \
+	}
 	@echo "$(GREEN)🎉 Installation complete!$(NC)"
 	@echo ""
 	@echo "  Run: exec $$SHELL   (or source your rc file)"
 	@echo "  Then: $(BINARY_NAME)"
 
-## uninstall: 卸载 mindx（停止服务 + 清理二进制/配置/PATH）
+## uninstall: 卸载 mindx（委托 mindx uninstall + 清理 PATH）
 uninstall:
 	@echo "$(RED)🗑️ Uninstalling $(BINARY_NAME)...$(NC)"
 	@echo ""
-	@# ── 停止正在运行的 daemon ──
-	@echo "$(CYAN)  ⟳ Stopping daemon...$(NC)"
-	@UNAME_S=$$(uname -s); \
-	if [ "$$UNAME_S" = "Darwin" ]; then \
-		SERVICE="gui/$$(id -u)/com.mindx.daemon"; \
-		(launchctl bootout "$$SERVICE" 2>/dev/null && \
-			echo "     stopped launchd service" || echo "     (no launchd service)"); \
-	elif [ "$$UNAME_S" = "Linux" ]; then \
-		systemctl --user stop $(BINARY_NAME) 2>/dev/null && \
-			echo "     stopped systemd service" || echo "     (no systemd service)"; \
-		systemctl --user disable $(BINARY_NAME) 2>/dev/null || true; \
-	fi; \
-	pkill -f "$(BINARY_NAME) daemon" 2>/dev/null && echo "     killed mindx daemon" || true; \
-	lsof -ti:1313 -ti:1314 2>/dev/null | xargs kill 2>/dev/null && echo "     freed ports 1313/1314" || true
-	@sleep 1
-	@echo ""
-	@# ── 删除服务文件 ──
-	@echo "$(CYAN)  ⟳ Removing service files...$(NC)"
-	@UNAME_S=$$(uname -s); \
-	if [ "$$UNAME_S" = "Darwin" ]; then \
-		rm -f ~/Library/LaunchAgents/com.mindx.daemon.plist && \
-			echo "     removed launchd plist" || true; \
-		rm -f ~/Library/LaunchAgents/com.dotnetage.mindx.plist 2>/dev/null || true; \
-	elif [ "$$UNAME_S" = "Linux" ]; then \
-		rm -f ~/.config/systemd/user/$(BINARY_NAME).service && \
-			systemctl --user daemon-reload 2>/dev/null && \
-			echo "     removed systemd unit" || true; \
+	@# ── 委托给 mindx uninstall（停止服务 + 删除服务文件 + 清理安装文件）──
+	@if [ -f "$$HOME/.mindx/bin/$(BINARY_NAME)" ]; then \
+		echo "$(CYAN)  ⟳ Running 'mindx uninstall'...$(NC)"; \
+		"$$HOME/.mindx/bin/$(BINARY_NAME)" uninstall || true; \
+	else \
+		echo "$(CYAN)  ⟳ mindx binary not found, skipping mindx uninstall$(NC)"; \
 	fi
-	@rm -f ~/.mindx/settings/com.mindx.daemon.plist 2>/dev/null || true
-	@rm -f ~/.mindx/settings/com.dotnetage.mindx.plist 2>/dev/null || true
-	@rm -f ~/.mindx/settings/$(BINARY_NAME).service 2>/dev/null || true
 	@echo ""
-	@# ── 从 shell rc 中移除 PATH ──
+	@# ── 从 shell rc 中移除 PATH（shell rc 特有操作）──
 	@echo "$(CYAN)  ⟳ Removing PATH from shell rc files...$(NC)"
 	@for rc in "$$HOME/.zshrc" "$$HOME/.bashrc" "$$HOME/.bash_profile" "$$HOME/.profile"; do \
 		if [ -f "$$rc" ]; then \
 			grep -v '^# MindX$$' "$$rc" | grep -v '^export PATH=".*\.mindx/bin' > "$$rc.tmp" && \
 				mv "$$rc.tmp" "$$rc" && echo "     cleaned $$(basename $$rc)" || true; \
-		fi; \
-	done
-	@echo ""
-	@# ── 删除安装文件 ──
-	@echo "$(CYAN)  ⟳ Removing installed files...$(NC)"
-	@rm -rf ~/.mindx/bin && echo "     removed ~/.mindx/bin" || true
-	@rm -rf ~/.mindx/settings && echo "     removed ~/.mindx/settings" || true
-	@rm -rf ~/.mindx/logs && echo "     removed ~/.mindx/logs" || true
-	@rm -f /usr/local/bin/$(BINARY_NAME) 2>/dev/null || true
-	@rm -f $$GOPATH/bin/$(BINARY_NAME) 2>/dev/null || true
-	@echo ""
-	@# ── Windows 清理（仅在 Windows 上生效）──
-	@schtasks /delete /tn MindXDaemon /f 2>/dev/null && echo "     removed Windows scheduled task" || true
-	@powershell -NoProfile -NonInteractive -Command \
-		"$$d=[Environment]::GetFolderPath('Desktop'); \
-		 Remove-Item \"$$d/mindx.lnk\" -Force -ErrorAction SilentlyContinue" 2>/dev/null || true
+		done
 	@echo ""
 	@echo "$(GREEN)✅ Uninstall complete!$(NC)"
 	@echo "   ~/.mindx/agents, memory, sessions, and config were kept."
 	@echo "   To remove them too, run: rm -rf ~/.mindx"
-
 # =============================================================================
 # 运行目标
 # =============================================================================
@@ -349,7 +208,7 @@ run-daemon: build
 	@echo ""
 	./$(BUILD_DIR)/$(BINARY_NAME) daemon
 
-## restart: 编译并重启 daemon（通过系统服务管理器，非阻塞）
+## restart: 编译并重启 daemon（委托给 mindx restart，非阻塞）
 restart: build
 	@echo "$(YELLOW)🔄 Restarting mindx daemon...$(NC)"
 	@echo "$(CYAN)➡ Building → ~/.mindx/bin/$(BINARY_NAME)...$(NC)"
@@ -365,45 +224,17 @@ restart: build
 	else \
 		echo "$(YELLOW)  ⚠ ../mindx-chat/dist not found, skipping frontend deploy.$(NC)"; \
 	fi
-	@UNAME_S=$$(uname -s); \
-	if [ "$$UNAME_S" = "Darwin" ]; then \
-		LABEL="com.mindx.daemon"; \
-		SERVICE="gui/$$(id -u)/$$LABEL"; \
-		PLIST="$$HOME/Library/LaunchAgents/$$LABEL.plist"; \
-		if launchctl print "$$SERVICE" >/dev/null 2>&1; then \
-			echo "$(CYAN)  ⟳ Restarting via launchctl kickstart...$(NC)" && \
-			launchctl kickstart -k "$$SERVICE" && \
-			echo "$(GREEN)✅ Daemon restarted via launchd.$(NC)" || \
-			(echo "$(YELLOW)  ⚠ kickstart failed, starting directly...$(NC)" && \
-			launchctl bootout "$$SERVICE" 2>/dev/null; \
-			$(BUILD_DIR)/$(BINARY_NAME) daemon & \
-			echo "$(GREEN)✅ Daemon started in background.$(NC)"); \
-		else \
-			echo "$(CYAN)  ⟳ Service not loaded, bootstrapping...$(NC)" && \
-			launchctl bootstrap gui/$$(id -u) "$$PLIST" && \
-			echo "$(GREEN)✅ Daemon started via launchd.$(NC)" || \
-			echo "$(YELLOW)⚠ Bootstrap failed, starting directly...$(NC)" && \
-			$(BUILD_DIR)/$(BINARY_NAME) daemon & \
-			echo "$(GREEN)✅ Daemon started in background.$(NC)"; \
-		fi; \
-	elif [ "$$UNAME_S" = "Linux" ]; then \
-		systemctl --user restart $(BINARY_NAME) 2>/dev/null && \
-			echo "$(GREEN)✅ Daemon restarted via systemd.$(NC)" || \
-			echo "$(RED)❌ Failed to restart via systemd. Try: make run-daemon$(NC)"; \
-	fi
+	@# ── 委托给 mindx restart（统一入口）──
+	@echo "$(GREEN)➡ Delegating daemon restart to 'mindx restart'...$(NC)"
+	@"$$HOME/.mindx/bin/$(BINARY_NAME)" restart || {
+		echo "$(RED)❌ 'mindx restart' failed.$(NC)";
+		echo "$(YELLOW)  Try manually: $$HOME/.mindx/bin/$(BINARY_NAME) restart$(NC)";
+	}
 
-## stop: 停止本机 mindx daemon
+## stop: 停止 mindx daemon（委托给 mindx stop）
 stop:
 	@echo "$(YELLOW)🛑 Stopping mindx daemon...$(NC)"
-	@UNAME_S=$$(uname -s); \
-	if [ "$$UNAME_S" = "Darwin" ]; then \
-		SERVICE="gui/$$(id -u)/com.mindx.daemon"; \
-		launchctl bootout "$$SERVICE" 2>/dev/null && echo "     stopped launchd service" || true; \
-	fi; \
-	pkill -f "$(BINARY_NAME) daemon" 2>/dev/null || \
-	 (lsof -ti:1313 -ti:1314 2>/dev/null | xargs kill 2>/dev/null) || \
-	 echo "$(GREEN)  ✅ No running daemon found.$(NC)"
-	@sleep 1
+	@"$$HOME/.mindx/bin/$(BINARY_NAME)" stop || echo "$(YELLOW)  ⚠ Daemon may not have been running.$(NC)"
 	@echo "$(GREEN)✅ mindx daemon stopped.$(NC)"
 
 ## dev: 开发模式（go run，不编译，推荐日常开发）

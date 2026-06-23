@@ -137,26 +137,19 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 	d.logger.Info("entity_tags saved", "path", path, "count", len(p.Types))
 
 	// ── 同步更新 GraphIndexer 的实体定义 ──────────────────────────
-	if d.sharedMemory != nil && len(p.Types) > 0 {
-		hybrid := d.sharedMemory.Indexer()
-		if hybrid != nil {
-			defs := make([]goragindexer.EntityDef, 0, len(p.Types))
-			for _, t := range p.Types {
-				if t.Name != "" {
-					defs = append(defs, goragindexer.EntityDef{
-						Prompt: t.Prompt,
-						Schema: t.Schema,
-					})
-				}
+	if d.graphIndexer != nil && len(p.Types) > 0 {
+		defs := make([]goragindexer.EntityDef, 0, len(p.Types))
+		for _, t := range p.Types {
+			if t.Name != "" {
+				defs = append(defs, goragindexer.EntityDef{
+					Prompt: t.Prompt,
+					Schema: t.Schema,
+				})
 			}
-			if len(defs) > 0 {
-				if raw, ok := hybrid.GetIndexer("graph"); ok {
-					if graphIdx, ok := raw.(*goragindexer.GraphIndexer); ok {
-						graphIdx.SetEntityDefs(defs)
-						d.logger.Info("entity_tags: updated GraphIndexer entity defs", "count", len(defs))
-					}
-				}
-			}
+		}
+		if len(defs) > 0 {
+			d.graphIndexer.SetEntityDefs(defs)
+			d.logger.Info("entity_tags: updated GraphIndexer entity defs", "count", len(defs))
 		}
 	}
 
@@ -191,4 +184,66 @@ func (d *Daemon) _parseEntityDefsFromSavedTags() []goragindexer.EntityDef {
 	}
 	d.logger.Info("entity_tags: loaded saved entity defs", "count", len(defs))
 	return defs
+}
+
+// ---------------------------------------------------------------------------
+// Schema Properties RPC — 从 runtime/schemas/*.json 提取每个实体类型的属性列表
+// ---------------------------------------------------------------------------
+
+// schemaPropertyMap 是 kb.schema_properties 的返回结构。
+type schemaPropertyMap struct {
+	// key = 实体类型名（如 "Topic", "CoreTheory", "Customer"）
+	// value = 该实体类型在 Schema 中定义的所有属性 key 列表
+	Schemas map[string][]string `json:"schemas"`
+}
+
+func (d *Daemon) handleSchemaProperties(_ context.Context, _ json.RawMessage) (any, error) {
+	dir := d.schemasDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return schemaPropertyMap{Schemas: map[string][]string{}}, nil
+		}
+		return nil, fmt.Errorf("schema_properties: read schemas dir: %w", err)
+	}
+
+	result := make(map[string][]string)
+
+	for _, catEntry := range entries {
+		if !catEntry.IsDir() {
+			continue
+		}
+		catDir := filepath.Join(dir, catEntry.Name())
+		files, err := os.ReadDir(catDir)
+		if err != nil {
+			continue // 跳过无法读取的目录
+		}
+		for _, f := range files {
+			if f.IsDir() || filepath.Ext(f.Name()) != ".json" {
+				continue
+			}
+			entityType := strings.TrimSuffix(f.Name(), ".json")
+			data, err := os.ReadFile(filepath.Join(catDir, f.Name()))
+			if err != nil {
+				continue
+			}
+
+			// 解析 JSON Schema 的 properties 字段
+			var schema struct {
+				Properties map[string]any `json:"properties"`
+			}
+			if json.Unmarshal(data, &schema) != nil {
+				continue
+			}
+
+			keys := make([]string, 0, len(schema.Properties))
+			for k := range schema.Properties {
+				keys = append(keys, k)
+			}
+			result[entityType] = keys
+		}
+	}
+
+	d.logger.Info("schema_properties: loaded", "types", len(result))
+	return schemaPropertyMap{Schemas: result}, nil
 }

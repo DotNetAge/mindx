@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
+	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/setup"
 	setupstyle "github.com/DotNetAge/mindx/internal/setup/style"
 	"github.com/spf13/cobra"
@@ -52,6 +55,28 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	fmt.Println(setupstyle.GradientTitle(""))
 	fmt.Println()
 
+	// ── 检查是否已初始化，未初始化则弹出安装向导 ──
+	workspaceDir := core.DefaultUserPrefsDir()
+	cfg, cfgErr := core.LoadMindxConfig(workspaceDir)
+	if cfgErr == nil && !cfg.Initialized {
+		fmt.Println("⚙️  Configuration not complete — launching setup wizard...")
+		fmt.Println()
+
+		settingsDir := filepath.Join(workspaceDir, "settings")
+		modelsPath := filepath.Join(settingsDir, "models.yml")
+		providersPath := filepath.Join(settingsDir, "providers.yml")
+		agentsDir := filepath.Join(workspaceDir, "agents")
+
+		if err := setup.RunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg, RuntimeFS); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️  Setup wizard failed: %v\n", err)
+			fmt.Println("   You can run 'mindx' later to complete configuration.")
+		} else {
+			fmt.Println()
+			fmt.Println("✅ Configuration complete!")
+		}
+		fmt.Println()
+	}
+
 	opts := setup.InstallOptions{
 		InstallDir:   installDir,
 		SkipDaemon:   installNoDaemon,
@@ -77,6 +102,14 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 	if result.DaemonSetup {
 		fmt.Println("   Daemon: registered")
+		// Verify daemon is actually running — launchctl bootstrap may succeed
+		// even when the daemon process crashes immediately (port conflict, etc.)
+		daemonStatus, _ := setup.CheckDaemon()
+		if daemonStatus != setup.DaemonRunning {
+			fmt.Println("   ⚠️  Daemon registered but not yet running.")
+			fmt.Println("      Run 'mindx start' to launch it, or check:")
+			fmt.Println("        ~/.mindx/logs/daemon.err.log")
+		}
 	}
 	if result.ShortcutCreated {
 		fmt.Println("   Shortcut: Desktop")
