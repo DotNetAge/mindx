@@ -35,6 +35,7 @@ env:
   CGO_ENABLED: 1
   GOLANGCI_LINT_VERSION: v2.9
   MINDX_WORKSPACE: ${{ github.workspace }}/.test
+  MODEL_PATH: runtime/data/models/model_q4.onnx
 
 jobs:
   # ==========================================================================
@@ -46,8 +47,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -70,8 +69,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -99,8 +96,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -136,14 +131,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+
+      - name: Restore embedder model from cache
+        id: model-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MODEL_PATH }}
+          key: model-q4-onnx-v1
+
+      - name: Download embedder model (cache miss)
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$(dirname "${{ env.MODEL_PATH }}")"
+          curl -fL -o "${{ env.MODEL_PATH }}" \
+            "https://github.com/DotNetAge/mindx/releases/download/v2.3.0/model_q4.onnx"
 
       - name: Prepare test workspace
         run: |
@@ -222,14 +229,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+
+      - name: Restore embedder model from cache
+        id: model-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MODEL_PATH }}
+          key: model-q4-onnx-v1
+
+      - name: Download embedder model (cache miss)
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$(dirname "${{ env.MODEL_PATH }}")"
+          curl -fL -o "${{ env.MODEL_PATH }}" \
+            "https://github.com/DotNetAge/mindx/releases/download/v2.3.0/model_q4.onnx"
 
       - name: Install musl cross-compiler
         if: matrix.goos == 'linux'
