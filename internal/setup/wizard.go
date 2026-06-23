@@ -852,7 +852,7 @@ func (m *firstRunModel) runEmbedderDownload(taskIdx int) {
 		m.markTaskDone(taskIdx, taskFailed, err, "")
 		return
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	dst, err := os.Create(dstPath)
 	if err != nil {
@@ -860,7 +860,7 @@ func (m *firstRunModel) runEmbedderDownload(taskIdx int) {
 		m.markTaskDone(taskIdx, taskFailed, err, "")
 		return
 	}
-	defer dst.Close()
+	defer func() { _ = dst.Close() }()
 
 	if _, err := io.Copy(dst, src); err != nil {
 		m.downloadCh <- downloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.copy.failed"), err)}
@@ -869,7 +869,7 @@ func (m *firstRunModel) runEmbedderDownload(taskIdx int) {
 	}
 
 	srcDir := filepath.Join(cacheDir, strings.ReplaceAll(modelID, "/", string(filepath.Separator)))
-	os.RemoveAll(srcDir)
+	_ = os.RemoveAll(srcDir)
 
 	m.downloadCh <- downloadProgressMsg{
 		Done:   true,
