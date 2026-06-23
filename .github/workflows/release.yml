@@ -317,12 +317,10 @@ jobs:
 
           echo "Binaries ready:"
           ls -lh runtime/bin/
-          runtime/bin/mindx-amd64 version || true
-          runtime/bin/mindx-arm64 version || true
+          runtime/bin/mindx-amd64 version 2>&1 || echo "  (cannot run amd64 binary on this runner)"
+          # arm64 binary won't run on amd64 runner, that's expected
 
-          # Model file is already downloaded above
-          if [ ! -f "runtime/data/models/model_q4.onnx" ]; then
-          fi
+          # Model file was downloaded above
           echo "Model file:"
           ls -lh runtime/data/models/model_q4.onnx 2>/dev/null || echo "  NOT FOUND"
 
