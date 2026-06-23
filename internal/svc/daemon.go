@@ -517,6 +517,11 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		restartCh:           make(chan struct{}, 1),
 	}
 
+	// Pass GraphIndexer to App for use in LocalSearch tool
+	if graphIndexer != nil {
+		app.SetGraphIndexer(graphIndexer)
+	}
+
 	// Wire graphDB to daemon fields (deferred because d is needed)
 	if graphDB != nil {
 		d.graphDB = graphDB
@@ -821,6 +826,7 @@ func (d *Daemon) ensureGraphIndexer() error {
 		"model", defaultModel.Name,
 		"vector_dim", emb.Dim(),
 	)
+	d.app.SetGraphIndexer(gi)
 
 	// Create FileWatchService
 	watchList, wlErr := kbwatch.NewWatchListStore(d.app.Settings().DataDir())
@@ -932,7 +938,21 @@ func (d *Daemon) Start(ctx context.Context) error {
 	}()
 
 	if d.kbWatch != nil {
-		d.logger.Info("filewatch service configured but not started (user must call filewatch.start to activate)")
+		// Restore persisted auto-indexing state: if user had enabled it before
+		// daemon restart, automatically resume file watching.
+		cfg := d.app.Config()
+		if cfg != nil && cfg.AutoIndexing {
+			d.logger.Info("filewatch service configured, restoring previous running state (auto_indexing=true)")
+			ctx, cancel := context.WithCancel(context.Background())
+			d.watchCancel = cancel
+			go func() {
+				if err := d.kbWatch.Start(ctx); err != nil {
+					d.logger.Warn("auto-restore: filewatch exited with error", "error", err)
+				}
+			}()
+		} else {
+			d.logger.Info("filewatch service configured but not started (user must call filewatch.start to activate)")
+		}
 	} else {
 		d.logger.Info("no filewatch configured, skipping")
 	}

@@ -53,6 +53,13 @@ type ProjectSyncResult struct {
 	Err     error    // fatal error (operation aborted)
 	Elapsed time.Duration
 
+	// EntitiesCreated counts total entities extracted and written to graphDB
+	// during this sync operation.
+	EntitiesCreated int
+
+	// RelsCreated counts total relationships written to graphDB during this sync.
+	RelsCreated int
+
 	// FailedFiles records per-file indexing failures with timestamps
 	// and error classification. The frontend can surface this to the user
 	// rather than silently skipping failed files.

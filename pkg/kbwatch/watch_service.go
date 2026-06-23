@@ -436,9 +436,9 @@ func (s *FileWatchService) SyncDir(ctx context.Context, absDir string) {
 				ElapsedMs: fe.Elapsed.Milliseconds(),
 			}
 		}
-		s.indexState.SetCompletedWithFailedFiles(absDir, indexedCount, result.Skipped, completedRecs, failedRecs)
+		s.indexState.SetCompletedWithFailedFiles(absDir, indexedCount, result.Skipped, result.EntitiesCreated, result.RelsCreated, result.Elapsed.Milliseconds(), completedRecs, failedRecs)
 	} else {
-		s.indexState.SetCompletedWithStats(absDir, indexedCount, result.Skipped, completedRecs)
+		s.indexState.SetCompletedWithStats(absDir, indexedCount, result.Skipped, result.EntitiesCreated, result.RelsCreated, result.Elapsed.Milliseconds(), completedRecs)
 	}
 	if s.logger != nil {
 		s.logger.Info("filewatch.sync: completed",
@@ -450,6 +450,8 @@ func (s *FileWatchService) SyncDir(ctx context.Context, absDir string) {
 			"errors", len(result.Errors),
 			"failed_files", len(result.FailedFiles),
 			"completed_files", len(result.CompletedFiles),
+			"entities", result.EntitiesCreated,
+			"rels", result.RelsCreated,
 			"elapsed_ms", result.Elapsed.Milliseconds(),
 		)
 	}
@@ -758,7 +760,7 @@ func (s *FileWatchService) getIndexer(absDir string) *IndexService {
 	}
 
 	// Each dir gets its own cache directory named by sanitized path
-	cacheDir := filepath.Join(s.cacheBase, sanitizeDirName(absDir))
+	cacheDir := filepath.Join(s.cacheBase, SanitizeDirName(absDir))
 	opts := []IndexServiceOption{}
 	if s.usageStore != nil && s.modelName != "" {
 		opts = append(opts, WithTokenUsageStore(s.usageStore, s.modelName))
@@ -781,7 +783,7 @@ func (s *FileWatchService) IndexState() *IndexStateStore {
 }
 
 // sanitizeDirName converts a filesystem path to a safe directory name.
-func sanitizeDirName(absPath string) string {
+func SanitizeDirName(absPath string) string {
 	replacer := strings.NewReplacer(
 		string(filepath.Separator), "_",
 		":", "_",

@@ -77,7 +77,7 @@ func WithMaxConcurrency(n int) IndexServiceOption {
 func NewIndexService(idx goragcore.Indexer, cacheDir string, logger logging.Logger, opts ...IndexServiceOption) *IndexService {
 	p := &IndexService{
 		indexer:        idx,
-		cache:          newProjectFileCache(),
+		cache:          NewProjectFileCache(),
 		cacheDir:       cacheDir,
 		ignore:         nil, // set per Sync call
 		logger:         logger,
@@ -97,6 +97,11 @@ func NewIndexService(idx goragcore.Indexer, cacheDir string, logger logging.Logg
 func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSyncResult {
 	start := time.Now()
 	result := &ProjectSyncResult{}
+
+	// Reset entity/rel counters on GraphIndexer for this sync cycle.
+	if gi, ok := p.indexer.(*goragindexer.GraphIndexer); ok {
+		gi.ResetEntityStats()
+	}
 
 	absDir, err := filepath.Abs(projectDir)
 	if err != nil {
@@ -320,6 +325,12 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 	}
 
 	result.Elapsed = time.Since(start)
+
+	// Collect entity/rel stats from GraphIndexer.
+	if gi, ok := p.indexer.(*goragindexer.GraphIndexer); ok {
+		result.EntitiesCreated, result.RelsCreated = gi.EntityStats()
+	}
+
 	if p.logger != nil {
 		p.logger.Info("index-service.sync.done",
 			"dir", absDir,

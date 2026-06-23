@@ -51,9 +51,11 @@ type MindxConfig struct {
 
 	// RuntimeSyncedVersion records the version at which runtime assets
 	// (schemas, web, agents, skills) were last synchronized to disk.
-	// When the app version changes, these directories are overwritten
-	// from the embedded filesystem.
 	RuntimeSyncedVersion string `json:"runtime_synced_version,omitempty"`
+
+	// AutoIndexing records whether the filewatch auto-indexing was enabled
+	// by the user. Persisted so that daemon restart restores the running state.
+	AutoIndexing bool `json:"auto_indexing,omitempty"`
 
 	// AgentSkillChecksums stores SHA256 checksums of deployed agent and skill
 	// files, keyed by relative path from workspaceDir. Used by SyncRuntimeAssets

@@ -136,4 +136,5 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	gw.RegisterMethod("terminal.list", r.daemon.handleTerminalList)
 
 	gw.RegisterMethod("translate.rpc", r.daemon.handleTranslate)
+	gw.RegisterMethod("optimize.rpc", r.daemon.handleOptimize)
 }
