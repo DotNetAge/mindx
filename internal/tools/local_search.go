@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/DotNetAge/goharness/tools"
-	goragindexer "github.com/DotNetAge/gorag/indexer"
-	"github.com/DotNetAge/gorag/core"
-	"github.com/DotNetAge/gorag/query"
+	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
+	"github.com/DotNetAge/gorag/v2/core"
+	"github.com/DotNetAge/gorag/v2/query"
 )
 
 // LocalSearch searches the local knowledge graph for relevant chunks and their

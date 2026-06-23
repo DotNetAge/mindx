@@ -11,7 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
-	goragutils "github.com/DotNetAge/gorag/utils"
+	goragutils "github.com/DotNetAge/gorag/v2/utils"
 
 	"github.com/DotNetAge/mindx/internal/i18n"
 	setupmsg "github.com/DotNetAge/mindx/internal/setup/msg"

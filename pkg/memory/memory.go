@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/DotNetAge/goharness/memory"
-	goragcore "github.com/DotNetAge/gorag/core"
-	"github.com/DotNetAge/gorag/embedder"
-	goragindexer "github.com/DotNetAge/gorag/indexer"
-	"github.com/DotNetAge/gorag/logging"
-	querypkg "github.com/DotNetAge/gorag/query"
-	"github.com/DotNetAge/gorag/store/vector/govector"
+	goragcore "github.com/DotNetAge/gorag/v2/core"
+	"github.com/DotNetAge/gorag/v2/embedder"
+	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
+	"github.com/DotNetAge/gorag/v2/logging"
+	querypkg "github.com/DotNetAge/gorag/v2/query"
+	"github.com/DotNetAge/gorag/v2/store/vector/govector"
 )
 
 var _ memory.Memory = (*RAGMemory)(nil)

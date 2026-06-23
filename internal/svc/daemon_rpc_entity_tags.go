@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	goragindexer "github.com/DotNetAge/gorag/indexer"
+	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
 )
 
 // ---------------------------------------------------------------------------
