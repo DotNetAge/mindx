@@ -58,13 +58,13 @@ func TestLocalSearchWithRealData(t *testing.T) {
 	// ── 2. Load embedder (Chinese CLIP ONNX) ──────────────────────────
 	modelPath := filepath.Join(dataDir, "models", "model_q4.onnx")
 	if _, err := os.Stat(modelPath); err != nil {
-		db.Close()
+		_ = db.Close()
 		t.Skipf("embedder model not found at %s", modelPath)
 	}
 
 	emb, err := embedder.NewChineseClipEmbedder(embedder.WithModelFile(modelPath))
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		t.Skipf("cannot initialize embedder (ONNX Runtime missing or incompatible): %v", err)
 	}
 
@@ -81,7 +81,7 @@ func TestLocalSearchWithRealData(t *testing.T) {
 		govector.WithHNSW(true),
 	)
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		t.Skipf("vector store open failed: %v", err)
 	}
 
