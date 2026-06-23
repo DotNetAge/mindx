@@ -34,16 +34,6 @@ type MemoryGetChunksParams struct {
 	DocID string `json:"doc_id"`
 }
 
-// MemorySyncProjectParams are the params for memory.sync_project.
-type MemorySyncProjectParams struct {
-	ProjectDir string `json:"project_dir"`
-}
-
-// MemoryFileStatesParams are the params for memory.file_states.
-type MemoryFileStatesParams struct {
-	ProjectDir string `json:"project_dir"`
-}
-
 func (c *Client) MemoryQuery(query string, limit int, minScore float64) (json.RawMessage, error) {
 	return c.CallWithTimeout("memory.query", MemoryQueryParams{
 		Query: query, Limit: limit, MinScore: minScore,
@@ -60,10 +50,6 @@ func (c *Client) MemoryDelete(id string) (json.RawMessage, error) {
 	return c.CallWithTimeout("memory.delete", MemoryDeleteParams{ID: id})
 }
 
-func (c *Client) MemoryStats() (json.RawMessage, error) {
-	return c.CallWithTimeout("memory.stats", nil)
-}
-
 func (c *Client) MemoryChunks(page, pageSize int, docID string) (json.RawMessage, error) {
 	return c.CallWithTimeout("memory.chunks", MemoryChunksParams{
 		Page: page, PageSize: pageSize, DocID: docID,
@@ -76,12 +62,4 @@ func (c *Client) MemoryGetChunks(docID string) (json.RawMessage, error) {
 
 func (c *Client) MemoryCount() (json.RawMessage, error) {
 	return c.CallWithTimeout("memory.count", nil)
-}
-
-func (c *Client) MemorySyncProject(projectDir string) (json.RawMessage, error) {
-	return c.CallWithTimeout("memory.sync_project", MemorySyncProjectParams{ProjectDir: projectDir})
-}
-
-func (c *Client) MemoryFileStates(projectDir string) (json.RawMessage, error) {
-	return c.CallWithTimeout("memory.file_states", MemoryFileStatesParams{ProjectDir: projectDir})
 }

@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	goharnessmemory "github.com/DotNetAge/goharness/memory"
-
-	"github.com/DotNetAge/mindx/pkg/memory"
+	"github.com/DotNetAge/mindx/pkg/kbwatch"
 )
 
 // sanitizeDirName converts a filesystem path to a safe directory name (same logic as memory package).
@@ -65,15 +63,15 @@ func (d *Daemon) handleMemoryQuery(_ context.Context, params json.RawMessage) (a
 		}
 	}
 
-	records, err := mem.Retrieve(context.Background(), p.Query, opts...)
+	chunks, err := mem.Retrieve(context.Background(), p.Query, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("memory query failed: %w", err)
 	}
 
-	if records == nil {
-		return []goharnessmemory.MemoryRecord{}, nil
+	if chunks == nil {
+		return []goharnessmemory.MemoryChunk{}, nil
 	}
-	return records, nil
+	return chunks, nil
 }
 
 type memoryStoreParams struct {
@@ -97,19 +95,14 @@ func (d *Daemon) handleMemoryStore(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("memory service not available (embedder not configured)")
 	}
 
-	record := goharnessmemory.MemoryRecord{
-		Title:     p.Title,
+	chunk := goharnessmemory.MemoryChunk{
+		Summary:   p.Title,
 		Content:   p.Content,
 		Tags:      p.Tags,
-		CreatedAt: time.Now(),
-	}
-	if p.Type == "session" {
-		record.Type = goharnessmemory.MemoryTypeSession
-	} else {
-		record.Type = goharnessmemory.MemoryTypeLongTerm
+		Timestamp: time.Now(),
 	}
 
-	id, err := mem.Store(context.Background(), record)
+	id, err := mem.Store(context.Background(), chunk)
 	if err != nil {
 		return nil, fmt.Errorf("memory store failed: %w", err)
 	}
@@ -195,7 +188,7 @@ func (d *Daemon) handleMemoryChunks(_ context.Context, params json.RawMessage) (
 		return nil, fmt.Errorf("memory service not available (embedder not configured)")
 	}
 
-	indexer := mem.Indexer()
+	indexer := mem.Semantic()
 	if indexer == nil {
 		return nil, fmt.Errorf("indexer not initialized")
 	}
@@ -268,7 +261,7 @@ func (d *Daemon) handleMemoryGetChunks(_ context.Context, params json.RawMessage
 		return nil, fmt.Errorf("memory service not available (embedder not configured)")
 	}
 
-	indexer := mem.Indexer()
+	indexer := mem.Semantic()
 	if indexer == nil {
 		return nil, fmt.Errorf("indexer not initialized")
 	}
@@ -330,7 +323,7 @@ func (d *Daemon) handleMemoryCount(_ context.Context, _ json.RawMessage) (any, e
 		return nil, fmt.Errorf("memory service not available (embedder not configured)")
 	}
 
-	indexer := mem.Indexer()
+	indexer := mem.Semantic()
 	if indexer == nil {
 		return nil, fmt.Errorf("indexer not initialized")
 	}
@@ -346,114 +339,23 @@ func (d *Daemon) handleMemoryCount(_ context.Context, _ json.RawMessage) (any, e
 }
 
 // ---------------------------------------------------------------------------
-// memory.stats — 获取 RAG 索引进度统计
-// ---------------------------------------------------------------------------
-
-type memoryStatsResult struct {
-	TotalFiles   int `json:"total_files"`
-	IndexedFiles int `json:"indexed_files"`
-	TotalChunks  int `json:"total_chunks"`
-}
-
-func (d *Daemon) handleMemoryStats(_ context.Context, params json.RawMessage) (any, error) {
-	var p struct {
-		ProjectDir string `json:"project_dir"`
-	}
-	if err := unmarshalParams(params, &p); err != nil {
-		return nil, err
-	}
-	if p.ProjectDir == "" {
-		return nil, fmt.Errorf("project_dir is required")
-	}
-
-	mem := d.sharedMemory
-	if mem == nil {
-		return nil, fmt.Errorf("memory service not available (embedder not configured)")
-	}
-
-	// Determine cache dir from FileWatchService (same convention)
-	var cacheDir string
-	if d.memoryWatch != nil {
-		cacheBase := filepath.Join(d.app.Settings().DataDir(), "memory-cache")
-		cacheDir = filepath.Join(cacheBase, sanitizeDirName(p.ProjectDir))
-	}
-
-	stats := mem.Stats(context.Background(), p.ProjectDir, cacheDir)
-
-	d.logger.Info("memory.stats called",
-		"project_dir", p.ProjectDir,
-		"total_files", stats.TotalFiles,
-		"indexed_files", stats.IndexedFiles,
-		"total_chunks", stats.TotalChunks,
-	)
-
-	return memoryStatsResult{
-		TotalFiles:   stats.TotalFiles,
-		IndexedFiles: stats.IndexedFiles,
-		TotalChunks:  stats.TotalChunks,
-	}, nil
-}
-
-// ---------------------------------------------------------------------------
-// memory.sync_project — 对指定目录执行全量文件扫描和索引
-// ---------------------------------------------------------------------------
-
-func (d *Daemon) handleMemorySyncProject(_ context.Context, params json.RawMessage) (any, error) {
-	var p struct {
-		ProjectDir string `json:"project_dir"`
-	}
-	if err := unmarshalParams(params, &p); err != nil {
-		return nil, err
-	}
-	if p.ProjectDir == "" {
-		return nil, fmt.Errorf("project_dir is required")
-	}
-
-	mem := d.sharedMemory
-	if mem == nil {
-		return nil, fmt.Errorf("memory service not available (embedder not configured)")
-	}
-
-	// Determine cache dir from FileWatchService (same convention as Stats)
-	var cacheDir string
-	if d.memoryWatch != nil {
-		cacheBase := filepath.Join(d.app.Settings().DataDir(), "memory-cache")
-		cacheDir = filepath.Join(cacheBase, sanitizeDirName(p.ProjectDir))
-		// Remove cache to force full re-index
-		if cacheDir != "" {
-			if err := os.RemoveAll(cacheDir); err != nil {
-				d.logger.Warn("failed to remove cache dir, re-index may be partial", "cache_dir", cacheDir, "error", err)
-			} else {
-				d.logger.Info("cache cleared, forcing full re-index", "cache_dir", cacheDir)
-			}
-		}
-	}
-
-	result := mem.SyncProjectDir(context.Background(), p.ProjectDir, cacheDir)
-
-	d.logger.Info("memory.sync_project completed",
-		"project_dir", p.ProjectDir,
-		"indexed", result.Indexed,
-		"updated", result.Updated,
-		"removed", result.Removed,
-		"errors", result.Errors,
-	)
-
-	return result, nil
-}
-
-// ---------------------------------------------------------------------------
 // filewatch.start — 启动文件监控服务
 // ---------------------------------------------------------------------------
 
 func (d *Daemon) handleFilewatchStart(_ context.Context, params json.RawMessage) (any, error) {
-	if d.memoryWatch == nil {
+	if d.kbWatch == nil {
 		return nil, fmt.Errorf("filewatch service not available")
 	}
 
-	if d.memoryWatch.IsRunning() {
+	if d.kbWatch.IsRunning() {
 		return map[string]string{"status": "already_running"}, nil
 	}
+
+	// Before starting, restore watches for all existing sessions that have a
+	// project_dir. This ensures directories are registered even if sessions were
+	// created before the filewatch service was available (e.g. no LLM model at
+	// session creation time) or if the watchlist was cleared.
+	d.restoreSessionWatches()
 
 	// Create a cancellable context for this watch session.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -462,14 +364,14 @@ func (d *Daemon) handleFilewatchStart(_ context.Context, params json.RawMessage)
 	d.logger.Info("filewatch.start: starting filewatch service")
 
 	go func() {
-		if err := d.memoryWatch.Start(ctx); err != nil {
+		if err := d.kbWatch.Start(ctx); err != nil {
 			d.logger.Warn("filewatch.start: service exited with error", "error", err)
 		}
 	}()
 
 	// Wait briefly for the eventLoop goroutine to set isRunning=true.
 	for i := 0; i < 50; i++ {
-		if d.memoryWatch.IsRunning() {
+		if d.kbWatch.IsRunning() {
 			return map[string]string{"status": "started"}, nil
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -486,11 +388,11 @@ func (d *Daemon) handleFilewatchStart(_ context.Context, params json.RawMessage)
 // ---------------------------------------------------------------------------
 
 func (d *Daemon) handleFilewatchStop(_ context.Context, _ json.RawMessage) (any, error) {
-	if d.memoryWatch == nil {
+	if d.kbWatch == nil {
 		return nil, fmt.Errorf("filewatch service not available")
 	}
 
-	if !d.memoryWatch.IsRunning() {
+	if !d.kbWatch.IsRunning() {
 		return map[string]string{"status": "already_stopped"}, nil
 	}
 
@@ -501,7 +403,7 @@ func (d *Daemon) handleFilewatchStop(_ context.Context, _ json.RawMessage) (any,
 		d.watchCancel()
 		d.watchCancel = nil
 	}
-	d.memoryWatch.Stop()
+	d.kbWatch.Stop()
 
 	d.logger.Info("filewatch.stop: filewatch service stopped")
 
@@ -517,7 +419,7 @@ type filewatchRemoveParams struct {
 }
 
 func (d *Daemon) handleFilewatchRemove(_ context.Context, params json.RawMessage) (any, error) {
-	if d.memoryWatch == nil {
+	if d.kbWatch == nil {
 		return nil, fmt.Errorf("filewatch service not available")
 	}
 
@@ -531,7 +433,7 @@ func (d *Daemon) handleFilewatchRemove(_ context.Context, params json.RawMessage
 
 	d.logger.Info("filewatch.remove: removing directory", "dir", p.Dir)
 
-	if err := d.memoryWatch.RemoveWatchByDir(p.Dir); err != nil {
+	if err := d.kbWatch.RemoveWatchByDir(p.Dir); err != nil {
 		return nil, fmt.Errorf("filewatch.remove: %w", err)
 	}
 
@@ -545,19 +447,46 @@ func (d *Daemon) handleFilewatchRemove(_ context.Context, params json.RawMessage
 // ---------------------------------------------------------------------------
 
 func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (any, error) {
-	if d.memoryWatch == nil {
+	if d.kbWatch == nil {
 		return map[string]any{
 			"available": false,
 			"running":   false,
 		}, nil
 	}
 
-	status := d.memoryWatch.Status()
+	status := d.kbWatch.Status()
 
 	d.logger.Info("filewatch.status query",
 		"running", status.Running,
 		"watched_dirs", status.Watched,
 	)
+	for dir, st := range status.IndexStates {
+		d.logger.Debug("filewatch.status state",
+			"dir", dir,
+			"state", st.State,
+			"indexed", st.IndexedFiles,
+			"total", st.TotalFiles,
+		)
+	}
+
+	// Filter out ignored files from the per-directory failed lists before
+	// returning the status to the frontend.
+	for dir, st := range status.IndexStates {
+		if st == nil || len(st.IgnoredFiles) == 0 || len(st.FailedFiles) == 0 {
+			continue
+		}
+		ignored := make(map[string]bool, len(st.IgnoredFiles))
+		for _, f := range st.IgnoredFiles {
+			ignored[f] = true
+		}
+		filtered := make([]kbwatch.FailedFileRecord, 0, len(st.FailedFiles))
+		for _, rec := range st.FailedFiles {
+			if !ignored[rec.Path] {
+				filtered = append(filtered, rec)
+			}
+		}
+		status.IndexStates[dir].FailedFiles = filtered
+	}
 
 	return map[string]any{
 		"available":   true,
@@ -569,69 +498,109 @@ func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (an
 }
 
 // ---------------------------------------------------------------------------
-// memory.file_states — 扫描项目目录文件状态（只读，不索引）
+// filewatch.retry-failed — 重新索引指定失败文件
 // ---------------------------------------------------------------------------
 
-func (d *Daemon) handleMemoryFileStates(_ context.Context, params json.RawMessage) (any, error) {
-	var p struct {
-		ProjectDir string `json:"project_dir"`
+type filewatchRetryFailedParams struct {
+	Dir   string   `json:"dir"`
+	Files []string `json:"files"` // relative file paths
+}
+
+func (d *Daemon) handleFilewatchRetryFailed(_ context.Context, params json.RawMessage) (any, error) {
+	if d.kbWatch == nil {
+		return nil, fmt.Errorf("filewatch service not available")
 	}
+
+	var p filewatchRetryFailedParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
-	if p.ProjectDir == "" {
-		return nil, fmt.Errorf("project_dir is required")
+	if p.Dir == "" || len(p.Files) == 0 {
+		return nil, fmt.Errorf("dir and files are required")
 	}
 
-	mem := d.sharedMemory
-	if mem == nil {
-		return nil, fmt.Errorf("memory service not available (embedder not configured)")
-	}
-
-	// Determine cache dir from FileWatchService (same convention as Stats)
-	var cacheDir string
-	if d.memoryWatch != nil {
-		cacheBase := filepath.Join(d.app.Settings().DataDir(), "memory-cache")
-		cacheDir = filepath.Join(cacheBase, sanitizeDirName(p.ProjectDir))
-	}
-
-	// Create a temporary IndexService for scanning (no indexing performed)
-	indexer := mem.Indexer()
-	if indexer == nil {
-		return nil, fmt.Errorf("indexer not initialized")
-	}
-
-	pi := memory.NewIndexService(indexer, cacheDir, d.logger)
-	states, err := pi.ScanFileStates(context.Background(), p.ProjectDir)
-	if err != nil {
-		return nil, fmt.Errorf("file states scan failed: %w", err)
-	}
-
-	// Count by state
-	counts := map[string]int{
-		"indexed": 0,
-		"changed": 0,
-		"new":     0,
-		"removed": 0,
-		"skipped": 0,
-		"total":   len(states),
-	}
-	for _, s := range states {
-		counts[string(s.State)]++
-	}
-
-	d.logger.Info("memory.file_states completed",
-		"project_dir", p.ProjectDir,
-		"total", len(states),
-		"indexed", counts["indexed"],
-		"changed", counts["changed"],
-		"new", counts["new"],
-		"removed", counts["removed"],
-		"skipped", counts["skipped"],
+	d.logger.Info("filewatch.retry-failed: retrying files",
+		"dir", p.Dir,
+		"files", p.Files,
+		"count", len(p.Files),
 	)
 
-	return map[string]any{
-		"states": states,
-		"counts": counts,
-	}, nil
+	// Clear cache entries for the failed files so they are re-indexed.
+	pi := d.kbWatch.GetIndexer(p.Dir)
+	if pi != nil {
+		for _, f := range p.Files {
+			pi.ClearCacheEntry(f)
+		}
+	}
+
+	// Remove from the failed list (retry will either succeed or fail again).
+	if d.kbWatch.IndexState() != nil {
+		d.kbWatch.IndexState().RemoveFailedFiles(p.Dir, p.Files)
+	}
+
+	// Re-index the files. SyncFiles handles the actual LLM indexing.
+	if pi != nil {
+		result := pi.SyncFiles(context.Background(), p.Dir, p.Files, false)
+		d.logger.Info("filewatch.retry-failed: sync result",
+			"dir", p.Dir,
+			"indexed", result.Indexed,
+			"updated", result.Updated,
+			"errors", len(result.Errors),
+		)
+		if len(result.Errors) > 0 && d.kbWatch.IndexState() != nil {
+			// Re-record failures with new timestamps from result.Errors.
+			st := d.kbWatch.IndexState().Get(p.Dir)
+			if st != nil {
+				now := time.Now().Unix()
+				for _, errStr := range result.Errors {
+					// errStr format: "filepath: error message"
+					parts := strings.SplitN(errStr, ": ", 2)
+					fpath := parts[0]
+					st.FailedFiles = append(st.FailedFiles, kbwatch.FailedFileRecord{
+						Path:      fpath,
+						Error:     errStr,
+						Timestamp: now,
+					})
+				}
+			}
+			return map[string]any{"status": "partial", "errors": len(result.Errors)}, nil
+		}
+		return map[string]any{"status": "ok", "indexed": result.Indexed}, nil
+	}
+
+	return map[string]any{"status": "ok"}, nil
+}
+
+// ---------------------------------------------------------------------------
+// filewatch.ignore-failed — 将失败文件标记为忽略
+// ---------------------------------------------------------------------------
+
+type filewatchIgnoreFailedParams struct {
+	Dir   string   `json:"dir"`
+	Files []string `json:"files"` // relative file paths to ignore
+}
+
+func (d *Daemon) handleFilewatchIgnoreFailed(_ context.Context, params json.RawMessage) (any, error) {
+	if d.kbWatch == nil {
+		return nil, fmt.Errorf("filewatch service not available")
+	}
+
+	var p filewatchIgnoreFailedParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Dir == "" || len(p.Files) == 0 {
+		return nil, fmt.Errorf("dir and files are required")
+	}
+
+	d.logger.Info("filewatch.ignore-failed: ignoring files",
+		"dir", p.Dir,
+		"files", p.Files,
+	)
+
+	if d.kbWatch.IndexState() != nil {
+		d.kbWatch.IndexState().IgnoreFailedFiles(p.Dir, p.Files)
+	}
+
+	return map[string]any{"status": "ok"}, nil
 }

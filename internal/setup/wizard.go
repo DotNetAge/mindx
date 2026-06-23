@@ -2,17 +2,21 @@ package setup
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	goharnessconfig "github.com/DotNetAge/goharness/config"
+	goragutils "github.com/DotNetAge/gorag/utils"
 	"gopkg.in/yaml.v3"
 
 	"github.com/DotNetAge/mindx/internal/setup/style"
@@ -24,6 +28,8 @@ import (
 const minContentWidth = 60
 
 var borderStyle = lipgloss.NewStyle().Padding(1, 2)
+
+// ── Provider / Model list items ───────────────────────────────────────────
 
 type providerItem struct {
 	Name        string
@@ -47,13 +53,91 @@ func (i modelItem) Title() string       { return i.Name }
 func (i modelItem) Description() string { return i.desc }
 func (i modelItem) FilterValue() string { return i.Name }
 
-type daemonInstallMsg struct {
-	err error
+// ── Auto-setup task ──────────────────────────────────────────────────────
+
+// taskStatus 表示一个自动安装任务的状态。
+type taskStatus int
+
+const (
+	taskPending taskStatus = iota // 待执行
+	taskRunning                   // 执行中
+	taskDone                      // 已完成
+	taskFailed                    // 失败
+	taskSkipped                   // 已跳过
+)
+
+// setupTask 代表向导中自动执行的一个安装步骤。
+type setupTask struct {
+	Name    string        // 显示名称
+	Status  taskStatus    // 当前状态
+	Err     error         // 错误信息（仅 taskFailed）
+	Detail  string        // 补充信息（如版本号、路径等）
+	spinner spinner.Model // 运行中动画
 }
+
+func (t *setupTask) statusIcon() string {
+	switch t.Status {
+	case taskDone:
+		return i18n.T("wizard.autosetup.icon.done")
+	case taskFailed:
+		return i18n.T("wizard.autosetup.icon.failed")
+	case taskSkipped:
+		return i18n.T("wizard.autosetup.icon.skipped")
+	case taskRunning:
+		return t.spinner.View()
+	default:
+		return i18n.T("wizard.autosetup.icon.pending")
+	}
+}
+
+// autoSetupDoneMsg 在所有自动安装任务完成后发送。
+type autoSetupDoneMsg struct{}
+
+// downloadProgressMsg 用于 embedder 模型下载进度。
+type downloadProgressMsg struct {
+	Current int64
+	Total   int64
+	File    string
+	Done    bool
+	Err     error
+	Status  string
+}
+
+// downloadObserver 将 goragutils 的下载事件转换为 Bubble Tea 消息。
+type downloadObserver struct {
+	ch      chan<- downloadProgressMsg
+	taskIdx int
+}
+
+func (o *downloadObserver) OnEvent(event goragutils.DownloadEvent) {
+	msg := downloadProgressMsg{
+		Current: event.Current,
+		Total:   event.Total,
+		File:    event.File,
+	}
+	switch event.Type {
+	case goragutils.EventStart:
+		msg.Status = fmt.Sprintf(i18n.T("setup.memory.downloading"), event.File)
+	case goragutils.EventProgress:
+		downloadedMB := float64(event.Current) / (1024 * 1024)
+		if event.Total > 0 {
+			totalMB := float64(event.Total) / (1024 * 1024)
+			msg.Status = fmt.Sprintf(i18n.T("setup.memory.download.progress"), downloadedMB, totalMB)
+		} else {
+			msg.Status = fmt.Sprintf(i18n.T("setup.memory.download.progress.mb"), downloadedMB)
+		}
+	case goragutils.EventComplete:
+		msg.Status = fmt.Sprintf(i18n.T("setup.memory.download.complete"), event.File)
+	}
+	o.ch <- msg
+}
+
+// ── Wizard model ─────────────────────────────────────────────────────────
 
 type firstRunModel struct {
 	step int
 
+	// Step 0-2: Provider / API Key / Model 选择
 	providerList     list.Model
 	providers        []providerItem
 	selectedProvider providerItem
@@ -64,46 +148,28 @@ type firstRunModel struct {
 	apiKeyInput   textinput.Model
 	selectedModel modelItem
 
-	err      error
-	done     bool
-	quitting bool
-
-	modelsPath  string
-	agentsDir   string
-	mindxConfig *core.MindxConfig
-
-	daemonChoice     bool
-	daemonInstallCh  chan error
-	daemonInstallErr error
-	daemonState      int // 0=choice, 1=installing, 2=done
-
-	pythonChoice    bool
-	pythonSubmitted bool
-	pythonDetected  bool
-	pythonVersion   string
-	pythonInfo      core.PythonConfig
-
-	memoryState   int
-	embedderModel string
-	workspaceDir  string
-
-	pathChoice    bool
-	pathSubmitted bool
-	installDir    string
-	pathInPath    bool
-
-	webUIReady     bool
-	webUISubmitted bool
+	preResolvedKeys map[string]string
 
 	modelConfigured  bool
 	apiKeyConfigured bool
 
-	// preResolvedKeys: 从环境变量预解析的 Provider API Key（provider name -> actual key value）
-	preResolvedKeys map[string]string
+	// Step 3: 自动安装进度
+	autoTasks     []*setupTask
+	autoSetupDone bool
+	downloadCh    chan downloadProgressMsg
 
-	width  int
-	height int
+	// 通用状态
+	err      error
+	done     bool
+	quitting bool
 
+	modelsPath   string
+	agentsDir    string
+	mindxConfig  *core.MindxConfig
+	workspaceDir string
+
+	width    int
+	height   int
 	renderer *glamour.TermRenderer
 }
 
@@ -111,16 +177,23 @@ type firstRunResult struct {
 	SelectedProvider string
 	SelectedModel    string
 	APIKey           string
-	ResolvedKeys     map[string]string // 所有从环境变量预解析的非空 Provider Key
+	ResolvedKeys     map[string]string
 	Err              error
 
-	DaemonSetup   bool
-	PythonSetup   bool
+	// 自动安装结果（由 wizard 内部执行，不再询问用户）
+	DaemonOK      bool
+	DaemonErr     error
+	PythonOK      bool
 	PythonInfo    core.PythonConfig
+	PythonErr     error
+	EmbedderOK    bool
 	EmbedderModel string
-	PathSetup     bool
+	PathOK        bool
+	PathErr       error
 	WebUIReady    bool
 }
+
+// ── Constructor & helpers ─────────────────────────────────────────────────
 
 func (m *firstRunModel) contentWidth() int {
 	if m.width > minContentWidth {
@@ -135,9 +208,6 @@ func (m *firstRunModel) contentWidth() int {
 
 func (m *firstRunModel) paddedView(content string) string {
 	lines := strings.Count(content, "\n") + 1
-	// Reserve 3 lines for gradient title (1) + two newlines (2) added in View().
-	// Without this, the title gets truncated by Bubble Tea's renderer when
-	// the frame taller than the terminal height.
 	availableHeight := m.height - 3
 	if availableHeight > lines+1 {
 		return content + strings.Repeat("\n", availableHeight-lines)
@@ -154,13 +224,6 @@ func (m *firstRunModel) renderMarkdown(src string) string {
 		return src
 	}
 	return out
-}
-
-func (m *firstRunModel) yesNoIndicator(yes bool) string {
-	if yes {
-		return i18n.T("wizard.yesno.yes")
-	}
-	return i18n.T("wizard.yesno.no")
 }
 
 func initGlamour(width int) *glamour.TermRenderer {
@@ -199,11 +262,9 @@ func resolveAllProviderKeys(providersPath, workspaceDir string) (map[string]stri
 			keys[p.Name] = ""
 			continue
 		}
-		// api_key 字段存的是环境变量名，尝试读取实际值
 		if v := os.Getenv(p.APIKey); v != "" {
 			keys[p.Name] = v
 		} else if credStore != nil {
-			// 尝试从 CredentialStore 读取
 			if v, err := credStore.Get(p.Name); err == nil && v != "" {
 				keys[p.Name] = v
 			} else {
@@ -217,7 +278,6 @@ func resolveAllProviderKeys(providersPath, workspaceDir string) (map[string]stri
 }
 
 func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, mindxConfig *core.MindxConfig) firstRunResult {
-	// 提前解析所有 Provider 的 API Key（环境变量 + CredentialStore）
 	providerKeys, _ := resolveAllProviderKeys(providersPath, workspaceDir)
 
 	providerList, modelList, err := parseProviderAndModels(providersPath, modelsPath, providerKeys)
@@ -255,39 +315,31 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 	pl.SetFilteringEnabled(false)
 
 	var modelItems []list.Item
-	for _, m := range modelList {
-		modelItems = append(modelItems, m)
+	for _, ml := range modelList {
+		modelItems = append(modelItems, ml)
 	}
-	ml := list.New(modelItems, md, minContentWidth-4, 8)
-	ml.SetShowStatusBar(false)
-	ml.SetShowPagination(false)
-	ml.SetShowTitle(false)
-	ml.SetFilteringEnabled(false)
-
-	pythonInfo := DetectPython()
+	mlist := list.New(modelItems, md, minContentWidth-4, 8)
+	mlist.SetShowStatusBar(false)
+	mlist.SetShowPagination(false)
+	mlist.SetShowTitle(false)
+	mlist.SetFilteringEnabled(false)
 
 	m := &firstRunModel{
-		step:           0,
-		providerList:   pl,
-		providers:      providerList,
-		modelList:      ml,
-		models:         modelList,
-		apiKeyInput:    ti,
-		modelsPath:     modelsPath,
-		agentsDir:      agentsDir,
-		mindxConfig:    mindxConfig,
-		pythonDetected: pythonInfo.Detected,
-		pythonVersion:  pythonInfo.Version,
-		pythonInfo:     pythonInfo,
-		memoryState:    0,
-		workspaceDir:   workspaceDir,
-		pathChoice:     true,
-		renderer:       initGlamour(minContentWidth),
-		width:          80,
-		height:         24,
+		step:         0,
+		providerList: pl,
+		providers:    providerList,
+		modelList:    mlist,
+		models:       modelList,
+		apiKeyInput:  ti,
+		modelsPath:   modelsPath,
+		agentsDir:    agentsDir,
+		mindxConfig:  mindxConfig,
+		workspaceDir: workspaceDir,
+		renderer:     initGlamour(minContentWidth),
+		width:        80,
+		height:       24,
 	}
 
-	// 预解析所有 Provider 的 API Key（从环境变量和 CredentialStore 读取）
 	if preKeys, err := resolveAllProviderKeys(providersPath, workspaceDir); err == nil {
 		m.preResolvedKeys = preKeys
 	}
@@ -304,29 +356,6 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		}
 	}
 
-	if runtime.GOOS == "windows" {
-		if exe, err := os.Executable(); err == nil {
-			m.installDir = filepath.Dir(exe)
-			m.pathInPath = CheckInPath(m.installDir)
-		}
-		m.pathChoice = m.pathInPath
-	}
-
-	m.daemonChoice = DaemonInstalled(workspaceDir)
-
-	m.pythonChoice = true
-
-	modelPath := filepath.Join(workspaceDir, "data", "models", "model_q4.onnx")
-	if _, err := os.Stat(modelPath); err == nil {
-		m.memoryState = 2
-		m.embedderModel = "model_q4.onnx"
-	}
-
-	webDirPath := filepath.Join(workspaceDir, "web")
-	if _, err := os.Stat(webDirPath); err == nil {
-		m.webUIReady = true
-	}
-
 	p := tea.NewProgram(m, tea.WithoutSignals())
 	finalModel, err := p.Run()
 	if err != nil {
@@ -338,24 +367,48 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		return firstRunResult{Err: fmt.Errorf("%s", i18n.T("wizard.error.user.cancelled"))}
 	}
 
-	return firstRunResult{
+	// 从 autoTasks 中提取结果
+	result := firstRunResult{
 		SelectedProvider: fm.selectedProvider.Name,
 		SelectedModel:    fm.selectedModel.Name,
 		APIKey:           fm.apiKeyInput.Value(),
 		ResolvedKeys:     fm.preResolvedKeys,
-		DaemonSetup:      fm.daemonChoice,
-		PythonSetup:      fm.pythonChoice,
-		PythonInfo:       fm.pythonInfo,
-		EmbedderModel:    fm.embedderModel,
-		PathSetup:        fm.pathChoice,
-		WebUIReady:       fm.webUIReady,
 	}
+	if len(fm.autoTasks) > 0 {
+		result.DaemonOK = fm.autoTasks[0].Status == taskDone
+		result.DaemonErr = fm.autoTasks[0].Err
+		result.PythonOK = fm.autoTasks[1].Status == taskDone || fm.autoTasks[1].Status == taskSkipped
+		result.PythonErr = fm.autoTasks[1].Err
+		result.PythonInfo = fm.pythonInfoFromTask(fm.autoTasks[1])
+		result.EmbedderOK = fm.autoTasks[2].Status == taskDone || fm.autoTasks[2].Status == taskSkipped
+		result.EmbedderModel = fm.autoTasks[2].Detail
+		if runtime.GOOS == "windows" && len(fm.autoTasks) > 3 {
+			result.PathOK = fm.autoTasks[3].Status == taskDone || fm.autoTasks[3].Status == taskSkipped
+			result.PathErr = fm.autoTasks[3].Err
+		} else {
+			result.PathOK = true // 非 Windows 不需要 PATH 设置
+		}
+	}
+
+	webDir := filepath.Join(workspaceDir, "web")
+	if _, err := os.Stat(webDir); err == nil {
+		result.WebUIReady = true
+	}
+
+	return result
+}
+
+func (m *firstRunModel) pythonInfoFromTask(t *setupTask) core.PythonConfig {
+	info := DetectPython()
+	if t.Detail != "" {
+		info.VenvPath = t.Detail
+	}
+	return info
 }
 
 func parseProviderAndModels(providersPath, modelsPath string, providerKeys map[string]string) ([]providerItem, []modelItem, error) {
 	var providerItems []providerItem
 
-	// Load providers from providers.yml (if exists)
 	if data, err := os.ReadFile(providersPath); err == nil {
 		var provConfig struct {
 			Providers []goharnessconfig.ProviderConfig `yaml:"providers"`
@@ -371,7 +424,6 @@ func parseProviderAndModels(providersPath, modelsPath string, providerKeys map[s
 		}
 	}
 
-	// Fallback: if no providers found in providers.yml, try to extract from models.yml
 	if len(providerItems) == 0 {
 		data, err := os.ReadFile(modelsPath)
 		if err != nil {
@@ -395,7 +447,6 @@ func parseProviderAndModels(providersPath, modelsPath string, providerKeys map[s
 		}
 	}
 
-	// Load models from models.yml
 	data, err := os.ReadFile(modelsPath)
 	if err != nil {
 		return nil, nil, err
@@ -409,18 +460,18 @@ func parseProviderAndModels(providersPath, modelsPath string, providerKeys map[s
 	}
 
 	var items []modelItem
-	for _, m := range modelConfig.Models {
-		desc := strings.TrimSpace(m.Description)
+	for _, mi := range modelConfig.Models {
+		desc := strings.TrimSpace(mi.Description)
 		enabled := false
-		if providerKeys != nil && providerKeys[m.Provider] != "" {
+		if providerKeys != nil && providerKeys[mi.Provider] != "" {
 			enabled = true
 		}
 		items = append(items, modelItem{
-			Name:     m.Name,
+			Name:     mi.Name,
 			desc:     desc,
-			BaseURL:  m.BaseURL,
-			CredRef:  m.APIKey,
-			Provider: m.Provider,
+			BaseURL:  mi.BaseURL,
+			CredRef:  mi.APIKey,
+			Provider: mi.Provider,
 			Enabled:  enabled,
 		})
 	}
@@ -459,6 +510,8 @@ func enableModelsForProvider(modelsPath, providerName string) error {
 	return os.WriteFile(modelsPath, out, 0644)
 }
 
+// ── Bubble Tea Init / Update / View ───────────────────────────────────────
+
 func (m *firstRunModel) Init() tea.Cmd {
 	return textinput.Blink
 }
@@ -486,18 +539,14 @@ func (m *firstRunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case 2:
 		return m.updateModelSelect(msg)
 	case 3:
-		return m.updateDaemonCheck(msg)
+		return m.updateAutoSetup(msg)
 	case 4:
-		return m.updatePythonCheck(msg)
-	case 5:
-		return m.updateMemoryConfig(msg)
-	case 6:
-		return m.updatePathSetup(msg)
-	case 7:
-		return m.updateWebUIComplete(msg)
+		return m.updateComplete(msg)
 	}
 	return m, nil
 }
+
+// ── Step 0: Provider selection ────────────────────────────────────────────
 
 func (m *firstRunModel) updateProviderSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -510,7 +559,6 @@ func (m *firstRunModel) updateProviderSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if item := m.providerList.SelectedItem(); item != nil {
 				if pi, ok := item.(providerItem); ok {
 					m.selectedProvider = pi
-					// 检查是否已有预解析的环境变量 Key 或 CredentialStore 中的 Key
 					if preKey, hasPre := m.preResolvedKeys[pi.Name]; hasPre && preKey != "" {
 						m.apiKeyInput.SetValue(preKey)
 						m.step = 2
@@ -528,7 +576,6 @@ func (m *firstRunModel) updateProviderSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "s", "S":
 			if m.apiKeyConfigured {
-				// Skip to model selection if API key already configured
 				if item := m.providerList.SelectedItem(); item != nil {
 					if pi, ok := item.(providerItem); ok {
 						m.selectedProvider = pi
@@ -545,50 +592,7 @@ func (m *firstRunModel) updateProviderSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *firstRunModel) updateModelSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Build filtered model list for the selected provider
-	var filtered []list.Item
-	for _, mi := range m.models {
-		if mi.Provider == m.selectedProvider.Name {
-			filtered = append(filtered, mi)
-		}
-	}
-
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			m.quitting = true
-			return m, tea.Quit
-		case "esc":
-			m.step = 1
-			return m, nil
-		case "enter":
-			if item := m.modelList.SelectedItem(); item != nil {
-				if mi, ok := item.(modelItem); ok {
-					m.selectedModel = mi
-					m.step = 3
-					return m, nil
-				}
-			}
-		case "s", "S":
-			if m.modelConfigured {
-				if item := m.modelList.SelectedItem(); item != nil {
-					if mi, ok := item.(modelItem); ok {
-						m.selectedModel = mi
-						m.step = 3
-						return m, nil
-					}
-				}
-			}
-		}
-	}
-
-	m.modelList.SetItems(filtered)
-	var cmd tea.Cmd
-	m.modelList, cmd = m.modelList.Update(msg)
-	return m, cmd
-}
+// ── Step 1: API Key input ─────────────────────────────────────────────────
 
 func (m *firstRunModel) updateAPIKeyInput(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -603,7 +607,6 @@ func (m *firstRunModel) updateAPIKeyInput(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.apiKeyInput.Value() == "" {
 				return m, nil
 			}
-			// 将新输入的 Key 写入 preResolvedKeys，并启用该提供商下所有模型
 			if m.preResolvedKeys == nil {
 				m.preResolvedKeys = make(map[string]string)
 			}
@@ -626,62 +629,16 @@ func (m *firstRunModel) updateAPIKeyInput(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *firstRunModel) updateDaemonCheck(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "q", "ctrl+c", "esc":
-			m.quitting = true
-			return m, tea.Quit
-		case "left", "right":
-			if m.daemonState == 0 {
-				m.daemonChoice = !m.daemonChoice
-			}
-		case "enter":
-			if m.daemonState == 0 {
-				if DaemonInstalled(m.workspaceDir) {
-					m.step = 4
-					return m, nil
-				}
-				if m.daemonChoice {
-					m.daemonState = 1
-					m.daemonInstallCh = make(chan error, 1)
-					ch := m.daemonInstallCh
-					wd := m.workspaceDir
-					go func() {
-						ch <- SetupDaemon(wd)
-					}()
-					return m, m.listenDaemonInstallCmd()
-				}
-				m.step = 4
-				return m, nil
-			}
-			if m.daemonState == 2 {
-				m.step = 4
-				return m, nil
-			}
-		case "s", "S":
-			if DaemonInstalled(m.workspaceDir) {
-				m.step = 4
-				return m, nil
-			}
+// ── Step 2: Model selection ───────────────────────────────────────────────
+
+func (m *firstRunModel) updateModelSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var filtered []list.Item
+	for _, mi := range m.models {
+		if mi.Provider == m.selectedProvider.Name {
+			filtered = append(filtered, mi)
 		}
-	case daemonInstallMsg:
-		m.daemonInstallErr = msg.err
-		m.daemonState = 2
-		return m, nil
 	}
-	return m, nil
-}
 
-func (m *firstRunModel) listenDaemonInstallCmd() tea.Cmd {
-	return func() tea.Msg {
-		err := <-m.daemonInstallCh
-		return daemonInstallMsg{err: err}
-	}
-}
-
-func (m *firstRunModel) updatePythonCheck(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -689,85 +646,283 @@ func (m *firstRunModel) updatePythonCheck(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		case "esc":
-			if m.pythonDetected {
-				m.quitting = true
-				return m, tea.Quit
-			}
-			m.pythonChoice = false
-			m.pythonSubmitted = true
-			m.step = 5
+			m.step = 1
 			return m, nil
-		case "left", "right":
-			if m.pythonDetected {
-				m.pythonChoice = !m.pythonChoice
-			}
 		case "enter":
-			if !m.pythonDetected {
-				m.pythonChoice = true
-				m.pythonSubmitted = true
-				m.step = 5
-				return m, nil
+			if item := m.modelList.SelectedItem(); item != nil {
+				if mi, ok := item.(modelItem); ok {
+					m.selectedModel = mi
+					m.initAutoSetupTasks()
+					autoCmd := m.startAutoSetup()
+					m.step = 3
+					return m, autoCmd
+				}
 			}
-			m.pythonSubmitted = true
-			m.step = 5
-			return m, nil
 		case "s", "S":
-			if _, err := os.Stat(filepath.Join(m.workspaceDir, ".venv")); err == nil {
-				m.pythonSubmitted = true
-				m.step = 5
-				return m, nil
+			if m.modelConfigured {
+				if item := m.modelList.SelectedItem(); item != nil {
+					if mi, ok := item.(modelItem); ok {
+						m.selectedModel = mi
+						m.initAutoSetupTasks()
+						autoCmd := m.startAutoSetup()
+						m.step = 3
+						return m, autoCmd
+					}
+				}
 			}
 		}
 	}
-	return m, nil
+
+	m.modelList.SetItems(filtered)
+	var cmd tea.Cmd
+	m.modelList, cmd = m.modelList.Update(msg)
+	return m, cmd
 }
 
-func (m *firstRunModel) updateMemoryConfig(msg tea.Msg) (tea.Model, tea.Cmd) {
+// ── Step 3: Auto Setup Progress ───────────────────────────────────────────
+
+// initAutoSetupTasks 初始化自动安装任务列表。
+func (m *firstRunModel) initAutoSetupTasks() {
+	tasks := []*setupTask{
+		{Name: i18n.T("wizard.autosetup.task.daemon"), spinner: spinner.New(spinner.WithSpinner(spinner.Dot))},
+		{Name: i18n.T("wizard.autosetup.task.python"), spinner: spinner.New(spinner.WithSpinner(spinner.Dot))},
+		{Name: i18n.T("wizard.autosetup.task.embedder"), spinner: spinner.New(spinner.WithSpinner(spinner.Dot))},
+	}
+	// Windows 额外需要 PATH 配置任务
+	if runtime.GOOS == "windows" {
+		tasks = append(tasks, &setupTask{
+			Name:    i18n.T("wizard.autosetup.task.path"),
+			spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
+		})
+	}
+	m.autoTasks = tasks
+	m.downloadCh = make(chan downloadProgressMsg, 100)
+	m.autoSetupDone = false
+}
+
+// startAutoSetup 在 goroutine 中并行执行所有安装任务。
+func (m *firstRunModel) startAutoSetup() tea.Cmd {
+	wd := m.workspaceDir
+	taskCount := len(m.autoTasks)
+
+	// Daemon 安装
+	go func(idx int) {
+		err := SetupDaemon(wd)
+		if err == nil && DaemonInstalled(wd) {
+			m.markTaskDone(idx, taskDone, nil, "")
+		} else {
+			m.markTaskDone(idx, taskFailed, err, "")
+		}
+	}(0)
+
+	// Python 环境
+	go func(idx int) {
+		pyInfo, err := SetupPython(wd)
+		detail := ""
+		if err == nil {
+			detail = pyInfo.VenvPath
+			venvExists := false
+			if pyInfo.VenvPath != "" {
+				if _, statErr := os.Stat(pyInfo.VenvPath); statErr == nil {
+					venvExists = true
+				}
+			}
+			if venvExists {
+				m.markTaskDone(idx, taskDone, nil, detail)
+			} else if pyInfo.Detected {
+				m.markTaskDone(idx, taskSkipped, err, detail)
+			} else {
+				m.markTaskDone(idx, taskFailed, err, detail)
+			}
+		} else {
+			if pyInfo.Detected {
+				m.markTaskDone(idx, taskSkipped, err, detail)
+			} else {
+				m.markTaskDone(idx, taskFailed, err, detail)
+			}
+		}
+	}(1)
+
+	// Embedder 模型下载
+	go func(idx int) {
+		m.runEmbedderDownload(idx)
+	}(2)
+
+	// PATH 配置（仅 Windows）
+	if runtime.GOOS == "windows" && taskCount > 3 {
+		go func(idx int) {
+			exe, exeErr := os.Executable()
+			if exeErr != nil {
+				m.markTaskDone(idx, taskFailed, exeErr, "")
+				return
+			}
+			installDir := filepath.Dir(exe)
+			if CheckInPath(installDir) {
+				m.markTaskDone(idx, taskSkipped, nil, installDir)
+				return
+			}
+			if _, pathErr := AddToSystemPath(installDir); pathErr != nil {
+				m.markTaskDone(idx, taskFailed, pathErr, "")
+			} else {
+				m.markTaskDone(idx, taskDone, nil, installDir)
+			}
+		}(3)
+	}
+
+	return tea.Batch(append([]tea.Cmd{m.listenTaskResults(taskCount)}, m.spinnerTickCmds()...)...)
+}
+
+// markTaskDone 安全地标记任务完成状态（从 goroutine 调用）。
+func (m *firstRunModel) markTaskDone(idx int, status taskStatus, err error, detail string) {
+	if idx >= 0 && idx < len(m.autoTasks) {
+		m.autoTasks[idx].Status = status
+		m.autoTasks[idx].Err = err
+		m.autoTasks[idx].Detail = detail
+	}
+}
+
+// spinnerTickCmds 返回所有 autoTasks 中 spinner 的 Tick 命令，用于驱动动画。
+func (m *firstRunModel) spinnerTickCmds() []tea.Cmd {
+	var cmds []tea.Cmd
+	for _, t := range m.autoTasks {
+		cmds = append(cmds, t.spinner.Tick)
+	}
+	return cmds
+}
+
+func (m *firstRunModel) listenTaskResults(expected int) tea.Cmd {
+	return func() tea.Msg {
+		ticker := time.NewTicker(200 * time.Millisecond)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			doneCount := 0
+			for _, t := range m.autoTasks {
+				if t.Status == taskDone || t.Status == taskFailed || t.Status == taskSkipped {
+					doneCount++
+				}
+			}
+			if doneCount >= expected {
+				return autoSetupDoneMsg{}
+			}
+		}
+		return autoSetupDoneMsg{}
+	}
+}
+
+// runEmbedderDownload 在 goroutine 中执行 embedder 模型下载并通过 channel 报告进度。
+func (m *firstRunModel) runEmbedderDownload(taskIdx int) {
+	defer close(m.downloadCh)
+
+	cacheDir := filepath.Join(m.workspaceDir, "data", "models")
+	modelID := "Xenova/chinese-clip-vit-base-patch16"
+	modelFile := "onnx/model_q4.onnx"
+	dstPath := filepath.Join(cacheDir, filepath.Base(modelFile))
+
+	m.markTaskDone(taskIdx, taskRunning, nil, "")
+
+	if _, err := os.Stat(dstPath); err == nil {
+		m.downloadCh <- downloadProgressMsg{Done: true}
+		m.markTaskDone(taskIdx, taskSkipped, nil, "model_q4.onnx")
+		return
+	}
+
+	observer := &downloadObserver{ch: m.downloadCh, taskIdx: taskIdx}
+
+	downloader, err := goragutils.NewModelDownloader(cacheDir)
+	if err != nil {
+		m.downloadCh <- downloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.downloader.create.failed"), err)}
+		m.markTaskDone(taskIdx, taskFailed, err, "")
+		return
+	}
+	downloader.WithObserver(observer)
+
+	files := []string{modelFile}
+	if _, err := downloader.Download(modelID, files); err != nil {
+		m.downloadCh <- downloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.download.failed.err"), err)}
+		m.markTaskDone(taskIdx, taskFailed, err, "")
+		return
+	}
+
+	srcPath := filepath.Join(cacheDir, strings.ReplaceAll(modelID, "/", string(filepath.Separator)), modelFile)
+
+	src, err := os.Open(srcPath)
+	if err != nil {
+		m.downloadCh <- downloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.open.failed"), err)}
+		m.markTaskDone(taskIdx, taskFailed, err, "")
+		return
+	}
+	defer src.Close()
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		m.downloadCh <- downloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.create.failed"), err)}
+		m.markTaskDone(taskIdx, taskFailed, err, "")
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, src); err != nil {
+		m.downloadCh <- downloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.copy.failed"), err)}
+		m.markTaskDone(taskIdx, taskFailed, err, "")
+		return
+	}
+
+	srcDir := filepath.Join(cacheDir, strings.ReplaceAll(modelID, "/", string(filepath.Separator)))
+	os.RemoveAll(srcDir)
+
+	m.downloadCh <- downloadProgressMsg{
+		Done:   true,
+		Status: i18n.T("setup.memory.model.download.complete"),
+	}
+	m.markTaskDone(taskIdx, taskDone, nil, "model_q4.onnx")
+}
+
+func (m *firstRunModel) updateAutoSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "q", "ctrl+c", "esc":
+		case "q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
-		case "enter", " ", "s", "S":
-			if runtime.GOOS == "windows" {
-				m.step = 6
-				return m, nil
-			}
-			m.done = true
-			return m, tea.Quit
 		}
-	}
-	return m, nil
-}
-
-func (m *firstRunModel) updatePathSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "q", "ctrl+c", "esc":
-			m.quitting = true
-			return m, tea.Quit
-		case "left", "right":
-			if !m.pathInPath {
-				m.pathChoice = !m.pathChoice
+	case downloadProgressMsg:
+		// 更新 embedder 任务的状态文本
+		if len(m.autoTasks) > 2 {
+			if msg.Err != nil {
+				m.autoTasks[2].Status = taskFailed
+				m.autoTasks[2].Err = msg.Err
+			} else if msg.Done {
+				m.autoTasks[2].Status = taskDone
+				if m.autoTasks[2].Detail == "" || m.autoTasks[2].Status == taskRunning {
+					m.autoTasks[2].Detail = "model_q4.onnx"
+				}
 			}
-		case "enter":
-			m.pathSubmitted = true
-			m.step = 7
-			return m, nil
-		case "s", "S":
-			if m.pathInPath {
-				m.pathSubmitted = true
-				m.step = 7
-				return m, nil
+			if msg.Status != "" {
+				m.autoTasks[2].Detail = msg.Status
 			}
 		}
+	case autoSetupDoneMsg:
+		m.autoSetupDone = true
+		m.step = 4
+		return m, nil
 	}
-	return m, nil
+
+	// 更新 spinner 动画
+	var cmds []tea.Cmd
+	for _, t := range m.autoTasks {
+		if t.Status == taskRunning || t.Status == taskPending {
+			var cmd tea.Cmd
+			t.spinner, cmd = t.spinner.Update(msg)
+			cmds = append(cmds, cmd)
+		}
+	}
+	return m, tea.Batch(cmds...)
 }
 
-func (m *firstRunModel) updateWebUIComplete(msg tea.Msg) (tea.Model, tea.Cmd) {
+// ── Step 4: Complete ──────────────────────────────────────────────────────
+
+func (m *firstRunModel) updateComplete(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -775,13 +930,14 @@ func (m *firstRunModel) updateWebUIComplete(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		case "enter", " ", "s", "S":
-			m.webUISubmitted = true
 			m.done = true
 			return m, tea.Quit
 		}
 	}
 	return m, nil
 }
+
+// ── Render methods ────────────────────────────────────────────────────────
 
 func (m *firstRunModel) renderProviderSelect() string {
 	var b strings.Builder
@@ -830,91 +986,33 @@ func (m *firstRunModel) renderModelSelect() string {
 	return m.paddedView(borderStyle.Render(b.String()))
 }
 
-func (m *firstRunModel) renderDaemonCheck() string {
+func (m *firstRunModel) renderAutoSetup() string {
 	var b strings.Builder
-	if m.daemonState == 1 {
-		b.WriteString(m.renderMarkdown(i18n.T("wizard.daemon.installing.wait")))
-		return m.paddedView(borderStyle.Render(b.String()))
-	}
-	if m.daemonState == 2 {
-		if m.daemonInstallErr != nil {
-			b.WriteString(m.renderMarkdown(fmt.Sprintf(
-				i18n.T("wizard.daemon.install.error.format"),
-				m.daemonInstallErr.Error(),
-			)))
-		} else {
-			restartHint := ""
-			if runtime.GOOS == "windows" {
-				restartHint = i18n.T("wizard.daemon.restart.hint.installed")
-			}
-			b.WriteString(m.renderMarkdown(fmt.Sprintf(
-				i18n.T("wizard.daemon.installed.success.format"), restartHint,
-			)))
+	b.WriteString(m.renderMarkdown(fmt.Sprintf("**%s**\n\n", i18n.T("wizard.autosetup.title"))))
+	b.WriteString(m.renderMarkdown(i18n.T("wizard.autosetup.desc") + "\n\n"))
+
+	for _, t := range m.autoTasks {
+		line := fmt.Sprintf("  %s %s", t.statusIcon(), t.Name)
+		if t.Detail != "" && t.Status != taskRunning {
+			line += fmt.Sprintf(" — %s", t.Detail)
 		}
-		return m.paddedView(borderStyle.Render(b.String()))
-	}
-	installed := DaemonInstalled(m.workspaceDir)
-	if installed {
-		restartHint := ""
-		if runtime.GOOS == "windows" {
-			restartHint = i18n.T("wizard.daemon.restart.hint.installed")
+		if t.Status == taskFailed && t.Err != nil {
+			line += fmt.Sprintf(" (%s)", t.Err.Error())
 		}
-		b.WriteString(m.renderMarkdown(fmt.Sprintf(
-			i18n.T("wizard.daemon.already.installed.format"), restartHint,
-		)))
-	} else {
-		md := i18n.T("wizard.daemon.notinstalled.desc") + "\n\n" + m.yesNoIndicator(m.daemonChoice) + "\n\n" + i18n.T("wizard.daemon.toggle.nav")
-		b.WriteString(m.renderMarkdown(md))
+		b.WriteString(line + "\n")
 	}
+
+	b.WriteString("\n")
+	if !m.autoSetupDone {
+		b.WriteString(m.renderMarkdown(i18n.T("wizard.autosetup.waiting")))
+	} else {
+		b.WriteString(m.renderMarkdown(i18n.T("wizard.autosetup.done.hint")))
+	}
+
 	return m.paddedView(borderStyle.Render(b.String()))
 }
 
-func (m *firstRunModel) renderPythonCheck() string {
-	var b strings.Builder
-	venvPath := filepath.Join(m.workspaceDir, ".venv")
-	_, venvExists := os.Stat(venvPath)
-
-	if m.pythonDetected && venvExists == nil {
-		b.WriteString(m.renderMarkdown(fmt.Sprintf(
-			i18n.T("wizard.python.ready.format"),
-			m.pythonVersion,
-		)))
-	} else if m.pythonDetected {
-		md := fmt.Sprintf(
-			i18n.T("wizard.python.detected.no.venv.format"),
-			m.pythonVersion, m.yesNoIndicator(m.pythonChoice),
-		)
-		b.WriteString(m.renderMarkdown(md))
-	} else {
-		md := i18n.T("wizard.python.notinstalled.desc")
-		b.WriteString(m.renderMarkdown(md))
-	}
-	return m.paddedView(borderStyle.Render(b.String()))
-}
-
-func (m *firstRunModel) renderMemoryConfig() string {
-	md := i18n.T("wizard.memory.embedder.ready.detail")
-	return m.paddedView(borderStyle.Render(m.renderMarkdown(md)))
-}
-
-func (m *firstRunModel) renderPathSetup() string {
-	var b strings.Builder
-	if m.pathInPath {
-		b.WriteString(m.renderMarkdown(fmt.Sprintf(
-			i18n.T("wizard.path.already.in.format"),
-			m.installDir,
-		)))
-	} else {
-		md := fmt.Sprintf(
-			i18n.T("wizard.path.add.desc.format"),
-			m.installDir, m.yesNoIndicator(m.pathChoice),
-		)
-		b.WriteString(m.renderMarkdown(md))
-	}
-	return m.paddedView(borderStyle.Render(b.String()))
-}
-
-func (m *firstRunModel) renderWebUIComplete() string {
+func (m *firstRunModel) renderComplete() string {
 	var items []string
 
 	// Provider
@@ -927,41 +1025,47 @@ func (m *firstRunModel) renderWebUIComplete() string {
 		items = append(items, fmt.Sprintf(i18n.T("wizard.complete.item.model"), m.selectedModel.Name))
 	}
 
-	// Daemon - re-check
-	if DaemonInstalled(m.workspaceDir) {
-		items = append(items, i18n.T("wizard.complete.item.daemon.installed"))
-	} else if m.daemonState == 2 && m.daemonInstallErr != nil {
-		items = append(items, i18n.T("wizard.complete.item.daemon.failed"))
-	} else {
-		items = append(items, i18n.T("wizard.complete.item.daemon.skipped"))
-	}
-
-	// Python + venv - re-check
-	venvPath := filepath.Join(m.workspaceDir, ".venv")
-	_, venvExists := os.Stat(venvPath)
-	if m.pythonDetected {
-		if venvExists == nil {
-			items = append(items, fmt.Sprintf(i18n.T("wizard.complete.item.python.ready"), m.pythonVersion))
-		} else {
-			items = append(items, fmt.Sprintf(i18n.T("wizard.complete.item.python.no.venv"), m.pythonVersion))
+	// Daemon
+	if len(m.autoTasks) > 0 {
+		switch m.autoTasks[0].Status {
+		case taskDone:
+			items = append(items, i18n.T("wizard.complete.item.daemon.installed"))
+		case taskFailed:
+			items = append(items, i18n.T("wizard.complete.item.daemon.failed"))
+		default:
+			items = append(items, i18n.T("wizard.complete.item.daemon.skipped"))
 		}
-	} else {
-		items = append(items, i18n.T("wizard.complete.item.python.missing"))
 	}
 
-	// Embedder model - re-check
-	modelPath := filepath.Join(m.workspaceDir, "data", "models", "model_q4.onnx")
-	if _, err := os.Stat(modelPath); err == nil {
-		items = append(items, i18n.T("wizard.complete.item.embedder.ready"))
-	} else {
-		items = append(items, i18n.T("wizard.complete.item.embedder.pending"))
+	// Python
+	if len(m.autoTasks) > 1 {
+		pyInfo := DetectPython()
+		venvPath := filepath.Join(m.workspaceDir, ".venv")
+		_, venvExists := os.Stat(venvPath)
+		if pyInfo.Detected && venvExists == nil {
+			items = append(items, fmt.Sprintf(i18n.T("wizard.complete.item.python.ready"), pyInfo.Version))
+		} else if pyInfo.Detected {
+			items = append(items, fmt.Sprintf(i18n.T("wizard.complete.item.python.no.venv"), pyInfo.Version))
+		} else {
+			items = append(items, i18n.T("wizard.complete.item.python.missing"))
+		}
 	}
 
-	// PATH - re-check (Windows only)
-	if runtime.GOOS == "windows" && m.installDir != "" {
-		if CheckInPath(m.installDir) {
+	// Embedder
+	if len(m.autoTasks) > 2 {
+		modelPath := filepath.Join(m.workspaceDir, "data", "models", "model_q4.onnx")
+		if _, err := os.Stat(modelPath); err == nil {
+			items = append(items, i18n.T("wizard.complete.item.embedder.ready"))
+		} else {
+			items = append(items, i18n.T("wizard.complete.item.embedder.pending"))
+		}
+	}
+
+	// PATH (Windows only)
+	if runtime.GOOS == "windows" && len(m.autoTasks) > 3 {
+		if CheckInPath(m.autoTasks[3].Detail) || m.autoTasks[3].Status == taskDone {
 			items = append(items, i18n.T("wizard.complete.item.path.added"))
-		} else if m.pathChoice {
+		} else if m.autoTasks[3].Status == taskFailed {
 			items = append(items, i18n.T("wizard.complete.item.path.failed"))
 		} else {
 			items = append(items, i18n.T("wizard.complete.item.path.skipped"))
@@ -977,22 +1081,22 @@ func (m *firstRunModel) renderWebUIComplete() string {
 	}
 
 	// Build markdown output
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.title")))
-	b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.status.header")))
+	var cb strings.Builder
+	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.title")))
+	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.status.header")))
 	for _, item := range items {
-		b.WriteString(item + "\n\n")
+		cb.WriteString(item + "\n\n")
 	}
-	b.WriteString("---\n\n")
-	b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.header")))
-	b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.tui.detail")))
-	b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.webui.detail")))
+	cb.WriteString("---\n\n")
+	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.header")))
+	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.tui.detail")))
+	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.webui.detail")))
 	if runtime.GOOS == "windows" {
-		b.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.windows.restart")))
+		cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.windows.restart")))
 	}
-	b.WriteString(i18n.T("wizard.complete.finish"))
+	cb.WriteString(i18n.T("wizard.complete.finish"))
 
-	return m.paddedView(borderStyle.Render(m.renderMarkdown(b.String())))
+	return m.paddedView(borderStyle.Render(m.renderMarkdown(cb.String())))
 }
 
 func (m *firstRunModel) View() tea.View {
@@ -1005,15 +1109,9 @@ func (m *firstRunModel) View() tea.View {
 	case 2:
 		content = m.renderModelSelect()
 	case 3:
-		content = m.renderDaemonCheck()
+		content = m.renderAutoSetup()
 	case 4:
-		content = m.renderPythonCheck()
-	case 5:
-		content = m.renderMemoryConfig()
-	case 6:
-		content = m.renderPathSetup()
-	case 7:
-		content = m.renderWebUIComplete()
+		content = m.renderComplete()
 	}
 	return tea.View{
 		Content:   style.GradientTitle("") + "\n\n" + content,

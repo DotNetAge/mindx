@@ -14,7 +14,6 @@ import (
 	"github.com/DotNetAge/goharness/agents"
 	"github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/goharness/constants"
-	goharnessmemory "github.com/DotNetAge/goharness/memory"
 	"github.com/DotNetAge/goharness/rule"
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/goharness/skill"
@@ -247,13 +246,20 @@ func (a *App) Config() *MindxConfig {
 	return a.mindxConfig
 }
 
-// ResolveDefaultModel 返回解析后的默认模型配置，包含从 Provider 继承的连接参数
-// 和从 CredentialStore 解析的 API 密钥。未配置默认模型时返回 nil。
+// ResolveDefaultModel 返回解析后的默认模型配置，包含从 Provider 继承的参数
+// 和从 CredentialStore 解析的 API 密钥。优先使用 DefaultModel，为空时 fallback 到 LastModel。
 func (a *App) ResolveDefaultModel() *config.ModelConfig {
-	if a.mindxConfig == nil || a.mindxConfig.DefaultModel == "" {
+	if a.mindxConfig == nil {
 		return nil
 	}
-	modelCfg := a.Models().Get(a.mindxConfig.DefaultModel)
+	modelName := a.mindxConfig.DefaultModel
+	if modelName == "" {
+		modelName = a.mindxConfig.LastModel
+	}
+	if modelName == "" {
+		return nil
+	}
+	modelCfg := a.Models().Get(modelName)
 	if modelCfg == nil {
 		return nil
 	}
@@ -538,12 +544,12 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 			// The TUI delegates all memory operations to the Daemon via RPC instead.
 			a.logger.Info("daemon detected: skipping local LongTerm memory init (delegated to daemon)")
 		} else {
-			a.logger.Info("createRuntime: creating long-term memory", "agent", agentName)
+			a.logger.Info("createRuntime: creating shared memory", "agent", agentName)
 			ltMem, ltErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-				MemoryType: goharnessmemory.MemoryTypeLongTerm,
-				AgentName:  "_shared",
-				MemoryDir:  filepath.Join(a.settings.UserPreferences(), "memory"),
-				Embedder:   a.embedder,
+				AgentName: "_shared",
+				MemoryDir: filepath.Join(a.settings.UserPreferences(), "memory"),
+				Embedder:  a.embedder,
+				Logger:    a.logger,
 			})
 			if ltErr != nil {
 				a.logger.Warn("Failed to create long-term memory for agent %q: %v", agent.Name, ltErr)
@@ -724,16 +730,11 @@ func (a *App) NewSessionFromMeta() *session.Session {
 	}
 
 	if a.embedder != nil {
-		sessionDir := a.currentSessionMeta.SessionDir
-		if sessionDir == "" {
-			sessionDir, _ = a.sessDB.ResolveSessionDir(a.currentSessionMeta.SessionID)
-		}
 		sessRAG, ragErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-			MemoryType: goharnessmemory.MemoryTypeSession,
-			AgentName:  agentName,
-			SessionDir: sessionDir,
-			Embedder:   a.embedder,
-			Logger:     a.logger,
+			AgentName: agentName,
+			MemoryDir: filepath.Join(a.settings.UserPreferences(), "memory"),
+			Embedder:  a.embedder,
+			Logger:    a.logger,
 		})
 		if ragErr != nil {
 			a.logger.Warn("failed to create session RAG memory, compaction summaries will use in-memory fallback", "error", ragErr)
@@ -744,7 +745,7 @@ func (a *App) NewSessionFromMeta() *session.Session {
 			if agent != nil {
 				model := a.Models().Get(agent.Model)
 				if model != nil && model.Enabled {
-					opts = append(opts, session.WithSummarizer(mindxses.NewLLMSummarizer(*model)))
+					opts = append(opts, session.WithSummarizer(session.NewLLMSummarizer(*model)))
 				}
 			}
 		}

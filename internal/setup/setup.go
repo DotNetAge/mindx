@@ -3,8 +3,6 @@ package setup
 import (
 	"fmt"
 	"io/fs"
-	"os"
-	"path/filepath"
 
 	"github.com/DotNetAge/goharness/config"
 
@@ -13,8 +11,10 @@ import (
 )
 
 // RunWizard runs the interactive setup wizard and applies the results.
-// It handles provider selection, API key input, model selection, daemon setup,
-// Python venv setup, and PATH configuration.
+// The wizard collects Provider/Model/APIKey from the user (steps 0-2),
+// then automatically executes all remaining installation steps (daemon,
+// python venv, embedder model, path) with a progress display (step 3),
+// and finally shows the completion summary (step 4).
 func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *core.MindxConfig, embeddedFS fs.FS) error {
 	// 强制将内置的 providers.yml 同步到用户设置目录（覆盖旧版本）
 	if err := core.SyncEmbeddedFile(embeddedFS, "runtime/settings/providers.yml", providersPath); err != nil {
@@ -26,12 +26,7 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 		return result.Err
 	}
 
-	// 规则3: TUI不应修改providers.yml中Provider的APIKey字段。
-	// 原updateProviderCredRef调用已移除，YAML中的api_key保持为环境变量引用名。
-	// 实际APIKey仅通过CredentialStore安全存储（下方代码）。
-
 	// Store the actual API key in credential store (not in YAML).
-	// Runs after models.yml is confirmed updated to avoid inconsistent state.
 	credStore := core.NewCredentialStore(workspaceDir)
 	if result.APIKey != "" {
 		if err := credStore.Set(result.SelectedProvider, result.APIKey); err != nil {
@@ -43,12 +38,12 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 	for providerName, key := range result.ResolvedKeys {
 		if key != "" && providerName != result.SelectedProvider {
 			if err := credStore.Set(providerName, key); err != nil {
-				// 单个写入失败不阻断流程，仅记录警告
 				fmt.Printf("⚠️  "+i18n.T("setup.store.apikey.provider.failed")+"\n", providerName, err)
 			}
 		}
 	}
 
+	// Update agent models and config
 	if result.SelectedModel != "" {
 		if err := updateAllAgentsModel(agentsDir, result.SelectedModel); err != nil {
 			return fmt.Errorf(i18n.T("setup.update.agent.model.failed"), err)
@@ -62,83 +57,41 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 	}
 	cfg.Initialized = true
 
-	// Setup PATH: copy binary and configure shell RC (must run before daemon)
-	if result.PathSetup {
-		fmt.Print(i18n.T("setup.path.installing") + "\n")
-		exe, err := os.Executable()
-		if err != nil {
-			fmt.Printf("⚠️  "+i18n.T("setup.exe.path.failed")+"\n", err)
-		} else {
-			installDir, err := resolveInstallDir("")
-			if err != nil {
-				fmt.Printf("⚠️  "+i18n.T("setup.install.dir.unknown")+"\n", err)
-			} else {
-				if err := os.MkdirAll(installDir, 0755); err != nil {
-					fmt.Printf("⚠️  "+i18n.T("setup.mkdir.install.failed")+"\n", err)
-				} else {
-					destExe := filepath.Join(installDir, filepath.Base(exe))
-					if destExe != exe {
-						if err := copyFile(exe, destExe); err != nil {
-							fmt.Printf("⚠️  "+i18n.T("setup.copy.binary.failed")+"\n", err)
-						} else {
-							fmt.Printf(i18n.T("setup.binary.installed")+"\n", destExe)
-						}
-					} else {
-						fmt.Printf(i18n.T("setup.binary.exists")+"\n", destExe)
-					}
-
-					// add install directory to shell RC PATH
-					if already, err := AddToSystemPath(installDir); err != nil {
-						fmt.Printf("⚠️  "+i18n.T("setup.path.set.failed")+"\n", err)
-					} else if !already {
-						fmt.Printf(i18n.T("setup.path.added")+"\n", installDir)
-						fmt.Print("\033[31m" + i18n.T("setup.path.restart.hint") + "\033[0m\n\n")
-					} else {
-						fmt.Println(i18n.T("setup.path.already.exists"))
-					}
-				}
-			}
-		}
+	// Daemon 状态（已由 wizard 内部执行，这里只记录到配置）
+	if result.DaemonOK {
+		cfg.Daemon.Installed = true
+		cfg.Daemon.AutoStart = true
+	} else if result.DaemonErr != nil {
+		cfg.Daemon.Installed = false
+		cfg.Daemon.AutoStart = false
+		fmt.Printf("⚠️  "+i18n.T("setup.daemon.register.failed")+"\n", result.DaemonErr)
 	}
 
-	// Setup daemon if user requested
-	if result.DaemonSetup {
-		fmt.Print(i18n.T("setup.daemon.registering") + "\n")
-		if err := SetupDaemon(workspaceDir); err != nil {
-			cfg.Daemon.Installed = false
-			cfg.Daemon.AutoStart = false
-			fmt.Printf("⚠️  "+i18n.T("setup.daemon.register.failed")+"\n", err)
-		} else {
-			cfg.Daemon.Installed = true
-			cfg.Daemon.AutoStart = true
-			fmt.Println(i18n.T("setup.daemon.registered"))
-		}
-	}
-
-	// Setup Python virtual environment if user requested
-	// SetupPython internally detects Python and attempts InstallPython if missing
-	if result.PythonSetup {
-		fmt.Print(i18n.T("setup.python.checking") + "\n")
-		pyInfo, err := SetupPython(workspaceDir)
-		if err != nil {
-			fmt.Printf("⚠️  "+i18n.T("setup.python.config.failed")+"\n", err)
-			cfg.Python = result.PythonInfo
-		} else {
-			cfg.Python = pyInfo
-			fmt.Printf(i18n.T("setup.python.ready")+"\n", pyInfo.VenvPath)
-		}
+	// Python 环境（已由 wizard 内部执行）
+	if result.PythonOK {
+		cfg.Python = result.PythonInfo
+	} else if result.PythonErr != nil {
+		cfg.Python = result.PythonInfo
+		fmt.Printf("⚠️  "+i18n.T("setup.python.config.failed")+"\n", result.PythonErr)
 	} else {
 		cfg.Python = result.PythonInfo
 	}
 
+	// Embedder 模型（已由 wizard 内部执行）
 	if result.EmbedderModel != "" {
 		cfg.EmbedderModel = result.EmbedderModel
+	}
+
+	// PATH 配置（仅 Windows，已由 wizard 内部执行）
+	if !result.PathOK && result.PathErr != nil {
+		fmt.Printf("⚠️  PATH configuration failed: %v\n", result.PathErr)
 	}
 
 	if err := cfg.Save(); err != nil {
 		return fmt.Errorf(i18n.T("config.error.serialize.failed"), err)
 	}
 
+	// WebUI 提示
 	if result.WebUIReady {
 		fmt.Print("\n" + i18n.T("setup.webui.ready") + "\n\n")
 		fmt.Println("   " + i18n.T("setup.webui.access"))

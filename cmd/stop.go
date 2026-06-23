@@ -45,6 +45,5 @@ func runStop(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to stop daemon: %w", err)
 	}
 
-	fmt.Println("✅ Daemon stopped.")
-	return nil
+	return verifyDaemonStopped()
 }
