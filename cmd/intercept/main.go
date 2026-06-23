@@ -14,10 +14,10 @@ import (
 
 	"github.com/DotNetAge/goharness/session"
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
-	"github.com/DotNetAge/gorag/embedder"
-	goragindexer "github.com/DotNetAge/gorag/indexer"
-	goraggograph "github.com/DotNetAge/gorag/store/graph/gograph"
-	govector "github.com/DotNetAge/gorag/store/vector/govector"
+	"github.com/DotNetAge/gorag/v2/embedder"
+	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
+	goraggograph "github.com/DotNetAge/gorag/v2/store/graph/gograph"
+	govector "github.com/DotNetAge/gorag/v2/store/vector/govector"
 	"github.com/DotNetAge/mindx/internal/core"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )

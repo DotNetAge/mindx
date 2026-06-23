@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	goragcore "github.com/DotNetAge/gorag/core"
-	goragquery "github.com/DotNetAge/gorag/query"
+	goragcore "github.com/DotNetAge/gorag/v2/core"
+	goragquery "github.com/DotNetAge/gorag/v2/query"
 	"github.com/DotNetAge/mindx/pkg/kbwatch"
 )
 

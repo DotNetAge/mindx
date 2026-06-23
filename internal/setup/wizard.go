@@ -16,7 +16,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	goharnessconfig "github.com/DotNetAge/goharness/config"
-	goragutils "github.com/DotNetAge/gorag/utils"
+	goragutils "github.com/DotNetAge/gorag/v2/utils"
 	"gopkg.in/yaml.v3"
 
 	"github.com/DotNetAge/mindx/internal/setup/style"

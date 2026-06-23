@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/DotNetAge/goharness/session"
-	goragcore "github.com/DotNetAge/gorag/core"
-	goragindexer "github.com/DotNetAge/gorag/indexer"
-	"github.com/DotNetAge/gorag/logging"
+	goragcore "github.com/DotNetAge/gorag/v2/core"
+	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
+	"github.com/DotNetAge/gorag/v2/logging"
 )
 
 // maxFileIndexTimeout is the maximum wall-clock time spent indexing a single
