@@ -96,7 +96,7 @@ func TestLocalSearchWithRealData(t *testing.T) {
 	gi := goragindexer.New(llmModelCfg, emb, kbVS, coreGS)
 
 	// Cleanup
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	// kbVS is backed by read-only bbolt; no explicit Close needed
 
 	// ── 5. Create LocalSearch and query ───────────────────────────────
