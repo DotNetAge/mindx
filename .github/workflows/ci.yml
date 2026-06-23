@@ -125,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     env:
       CGO_ENABLED: 1  # race detector requires CGO
     steps:
@@ -223,9 +223,6 @@ jobs:
           - goos: darwin
             goarch: arm64
             runner: macos-latest
-          - goos: windows
-            goarch: amd64
-            runner: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -267,10 +264,6 @@ jobs:
               zig version
             fi
           fi
-
-      - name: Setup MinGW (Windows CGO)
-        if: matrix.goos == 'windows'
-        run: choco install mingw -y --no-progress
 
       - name: Get version info
         id: version
