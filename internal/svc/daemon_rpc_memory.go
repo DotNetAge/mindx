@@ -497,7 +497,7 @@ func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (an
 				continue
 			}
 			// Only reconcile entries that look like they were never synced.
-			if st.State != "pending" && !(st.State == "indexing" && st.TotalFiles == 0 && st.IndexedFiles == 0) {
+			if st.State != "pending" && (st.State != "indexing" || st.TotalFiles != 0 || st.IndexedFiles != 0) {
 				continue
 			}
 			cacheDir := filepath.Join(status.CacheBase, kbwatch.SanitizeDirName(dir))

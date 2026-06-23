@@ -189,14 +189,14 @@ func initGraphIndexer() *goragindexer.GraphIndexer {
 	modelPath := filepath.Join(dataDir, "models", "model_q4.onnx")
 	if _, err := os.Stat(modelPath); err != nil {
 		fmt.Printf("  [KB] embedder model not found at %s\n", modelPath)
-		db.Close()
+		_ = db.Close()
 		return nil
 	}
 
 	emb, err := embedder.NewChineseClipEmbedder(embedder.WithModelFile(modelPath))
 	if err != nil {
 		fmt.Printf("  [KB] cannot initialize embedder: %v\n", err)
-		db.Close()
+		_ = db.Close()
 		return nil
 	}
 
@@ -209,7 +209,7 @@ func initGraphIndexer() *goragindexer.GraphIndexer {
 	)
 	if err != nil {
 		fmt.Printf("  [KB] cannot open vector store: %v\n", err)
-		db.Close()
+		_ = db.Close()
 		return nil
 	}
 
