@@ -27,8 +27,8 @@ type fileCache struct {
 	mu    sync.Mutex
 }
 
-// newProjectFileCache creates an empty cache.
-func newProjectFileCache() *fileCache {
+// NewProjectFileCache creates an empty cache.
+func NewProjectFileCache() *fileCache {
 	return &fileCache{
 		Files: make(map[string]*projectFileEntry),
 	}

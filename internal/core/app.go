@@ -19,6 +19,8 @@ import (
 	"github.com/DotNetAge/goharness/skill"
 	"github.com/DotNetAge/goharness/store"
 	goragcore "github.com/DotNetAge/gorag/core"
+	goragindexer "github.com/DotNetAge/gorag/indexer"
+	mindxtools "github.com/DotNetAge/mindx/internal/tools"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/rules"
@@ -52,6 +54,9 @@ type App struct {
 
 	// Optional components
 	embedder goragcore.Embedder
+
+	// Knowledge graph indexer (injected by Daemon after initialization)
+	graphIndexer *goragindexer.GraphIndexer
 
 	// Embedded app icon filesystem (for favicon / .app bundle)
 	iconFS fs.FS
@@ -216,6 +221,11 @@ func (a *App) Settings() *Settings {
 
 func (a *App) Embedder() goragcore.Embedder {
 	return a.embedder
+}
+
+// SetGraphIndexer injects the knowledge graph indexer for LocalSearch tool.
+func (a *App) SetGraphIndexer(gi *goragindexer.GraphIndexer) {
+	a.graphIndexer = gi
 }
 
 // IconFS returns the embedded filesystem containing the app icon, or nil if not set.
@@ -563,6 +573,17 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	a.logger.Info("createRuntime: calling agents.NewRuntime", "agent", agentName)
 	rt := agents.NewRuntime(opts...)
 	a.logger.Info("createRuntime: done", "agent", agentName)
+
+	// Register LocalSearch if GraphIndexer is available
+	if a.graphIndexer != nil {
+		ls := mindxtools.NewLocalSearch(a.graphIndexer)
+		if err := rt.RegisterTool(ls); err != nil {
+			a.logger.Warn("createRuntime: failed to register LocalSearch", "agent", agentName, "error", err)
+		} else {
+			a.logger.Info("createRuntime: LocalSearch registered", "agent", agentName)
+		}
+	}
+
 	return rt, nil
 }
 

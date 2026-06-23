@@ -226,9 +226,9 @@ restart: build
 	fi
 	@# ── 委托给 mindx restart（统一入口）──
 	@echo "$(GREEN)➡ Delegating daemon restart to 'mindx restart'...$(NC)"
-	@"$$HOME/.mindx/bin/$(BINARY_NAME)" restart || {
-		echo "$(RED)❌ 'mindx restart' failed.$(NC)";
-		echo "$(YELLOW)  Try manually: $$HOME/.mindx/bin/$(BINARY_NAME) restart$(NC)";
+	@"$$HOME/.mindx/bin/$(BINARY_NAME)" restart || { \
+		echo "$(RED)❌ 'mindx restart' failed.$(NC)"; \
+		echo "$(YELLOW)  Try manually: $$HOME/.mindx/bin/$(BINARY_NAME) restart$(NC)"; \
 	}
 
 ## stop: 停止 mindx daemon（委托给 mindx stop）

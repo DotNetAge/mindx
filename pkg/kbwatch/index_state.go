@@ -24,6 +24,17 @@ type DirIndexState struct {
 	StartedAt    int64  `json:"started_at"`
 	CompletedAt  int64  `json:"completed_at,omitempty"`
 
+	// EntitiesCreated counts entities extracted and written to graphDB
+	// for this directory (populated after a successful sync).
+	EntitiesCreated int `json:"entities_created,omitempty"`
+
+	// RelsCreated counts relationships written to graphDB for this directory.
+	RelsCreated int `json:"rels_created,omitempty"`
+
+	// TotalElapsedMs is the wall-clock time (ms) spent indexing this directory,
+	// from Sync start to completion. Useful for post-hoc performance analysis.
+	TotalElapsedMs int64 `json:"total_elapsed_ms,omitempty"`
+
 	// FailedFiles lists individual file indexing failures for display
 	// in the frontend's progress panel.
 	FailedFiles []FailedFileRecord `json:"failed_files,omitempty"`
@@ -158,7 +169,7 @@ func (s *IndexStateStore) AppendCompletedFile(dir string, rec CompletedFileRecor
 
 // SetCompletedWithStats marks a directory's indexing as completed and records
 // the actual number of files indexed (from the Sync result).
-func (s *IndexStateStore) SetCompletedWithStats(dir string, indexedFiles, skippedFiles int, completedFiles []CompletedFileRecord) {
+func (s *IndexStateStore) SetCompletedWithStats(dir string, indexedFiles, skippedFiles int, entitiesCreated, relsCreated int, totalElapsedMs int64, completedFiles []CompletedFileRecord) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st, ok := s.states[dir]
@@ -168,6 +179,9 @@ func (s *IndexStateStore) SetCompletedWithStats(dir string, indexedFiles, skippe
 	st.State = "completed"
 	st.IndexedFiles = indexedFiles
 	st.TotalFiles = indexedFiles + skippedFiles
+	st.EntitiesCreated = entitiesCreated
+	st.RelsCreated = relsCreated
+	st.TotalElapsedMs = totalElapsedMs
 	st.CompletedAt = time.Now().Unix()
 	if len(completedFiles) > 0 {
 		st.CompletedFiles = completedFiles
@@ -179,7 +193,7 @@ func (s *IndexStateStore) SetCompletedWithStats(dir string, indexedFiles, skippe
 // SetCompletedWithFailedFiles marks a directory's indexing as completed,
 // recording both the common stats and the list of individual files that
 // failed. The frontend uses failed_files to show per-file error details.
-func (s *IndexStateStore) SetCompletedWithFailedFiles(dir string, indexedFiles, skippedFiles int, completedFiles []CompletedFileRecord, failedFiles []FailedFileRecord) {
+func (s *IndexStateStore) SetCompletedWithFailedFiles(dir string, indexedFiles, skippedFiles int, entitiesCreated, relsCreated int, totalElapsedMs int64, completedFiles []CompletedFileRecord, failedFiles []FailedFileRecord) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	st, ok := s.states[dir]
@@ -189,6 +203,9 @@ func (s *IndexStateStore) SetCompletedWithFailedFiles(dir string, indexedFiles, 
 	st.State = "completed"
 	st.IndexedFiles = indexedFiles
 	st.TotalFiles = indexedFiles + skippedFiles + len(failedFiles)
+	st.EntitiesCreated = entitiesCreated
+	st.RelsCreated = relsCreated
+	st.TotalElapsedMs = totalElapsedMs
 	st.CompletedAt = time.Now().Unix()
 	if len(completedFiles) > 0 {
 		st.CompletedFiles = completedFiles

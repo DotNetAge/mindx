@@ -13,6 +13,11 @@ import (
 	"time"
 
 	"github.com/DotNetAge/goharness/session"
+	graphapi "github.com/DotNetAge/gograph/pkg/api"
+	"github.com/DotNetAge/gorag/embedder"
+	goragindexer "github.com/DotNetAge/gorag/indexer"
+	goraggograph "github.com/DotNetAge/gorag/store/graph/gograph"
+	govector "github.com/DotNetAge/gorag/store/vector/govector"
 	"github.com/DotNetAge/mindx/internal/core"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
@@ -101,6 +106,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize GraphIndexer from real data so LocalSearch is registered
+	if gi := initGraphIndexer(); gi != nil {
+		app.SetGraphIndexer(gi)
+		fmt.Println("LocalSearch tool enabled (GraphIndexer initialized)")
+	} else {
+		fmt.Println("LocalSearch tool disabled (GraphIndexer not available)")
+	}
+
 	rt, err := app.ResolveRuntime(agentCfg.Name)
 	if err != nil {
 		fmt.Printf("Error resolving runtime: %v\n", err)
@@ -150,4 +163,62 @@ type capturedRequest struct {
 	Method  string            `json:"method"`
 	Headers map[string]string `json:"headers"`
 	Body    json.RawMessage   `json:"body"`
+}
+
+// initGraphIndexer initializes a GraphIndexer from the real knowledge base data
+// at ~/.mindx/data. Returns nil if data is unavailable or locked (daemon running).
+func initGraphIndexer() *goragindexer.GraphIndexer {
+	home, _ := os.UserHomeDir()
+	dataDir := filepath.Join(home, ".mindx", "data")
+
+	dbPath := filepath.Join(dataDir, "kb.db")
+	if _, err := os.Stat(dbPath); err != nil {
+		fmt.Printf("  [KB] graph database not found at %s\n", dbPath)
+		return nil
+	}
+
+	db, err := graphapi.Open(dbPath)
+	if err != nil {
+		fmt.Printf("  [KB] cannot open graph database (daemon running?): %v\n", err)
+		return nil
+	}
+
+	gs := graphapi.NewGraphStore(db)
+	coreGS := goraggograph.WrapGraphStore(db, gs)
+
+	modelPath := filepath.Join(dataDir, "models", "model_q4.onnx")
+	if _, err := os.Stat(modelPath); err != nil {
+		fmt.Printf("  [KB] embedder model not found at %s\n", modelPath)
+		db.Close()
+		return nil
+	}
+
+	emb, err := embedder.NewChineseClipEmbedder(embedder.WithModelFile(modelPath))
+	if err != nil {
+		fmt.Printf("  [KB] cannot initialize embedder: %v\n", err)
+		db.Close()
+		return nil
+	}
+
+	kbVecDir := filepath.Join(dataDir, "kb-vectors")
+	kbVS, err := govector.NewStore(
+		govector.WithCollection("kb_sem"),
+		govector.WithDimension(emb.Dim()),
+		govector.WithDBPath(filepath.Join(kbVecDir, "kb.db")),
+		govector.WithHNSW(true),
+	)
+	if err != nil {
+		fmt.Printf("  [KB] cannot open vector store: %v\n", err)
+		db.Close()
+		return nil
+	}
+
+	llmModelCfg := goragindexer.ModelConfig{
+		APIKey: "intercept-skip",
+		Model:  "placeholder",
+	}
+
+	gi := goragindexer.New(llmModelCfg, emb, kbVS, coreGS)
+	fmt.Printf("  [KB] GraphIndexer initialized (dim=%d, db=%s)\n", emb.Dim(), dbPath)
+	return gi
 }

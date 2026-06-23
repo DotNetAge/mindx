@@ -351,6 +351,14 @@ func (d *Daemon) handleFilewatchStart(_ context.Context, params json.RawMessage)
 		return map[string]string{"status": "already_running"}, nil
 	}
 
+	// Persist enabled state to config so it survives daemon restart.
+	if c := d.app.Config(); c != nil && !c.AutoIndexing {
+		c.AutoIndexing = true
+		if err := c.Save(); err != nil {
+			d.logger.Warn("filewatch.start: failed to persist auto_indexing config", "error", err)
+		}
+	}
+
 	// Before starting, restore watches for all existing sessions that have a
 	// project_dir. This ensures directories are registered even if sessions were
 	// created before the filewatch service was available (e.g. no LLM model at
@@ -404,6 +412,14 @@ func (d *Daemon) handleFilewatchStop(_ context.Context, _ json.RawMessage) (any,
 		d.watchCancel = nil
 	}
 	d.kbWatch.Stop()
+
+	// Persist disabled state to config so it survives daemon restart.
+	if c := d.app.Config(); c != nil && c.AutoIndexing {
+		c.AutoIndexing = false
+		if err := c.Save(); err != nil {
+			d.logger.Warn("filewatch.stop: failed to persist auto_indexing config", "error", err)
+		}
+	}
 
 	d.logger.Info("filewatch.stop: filewatch service stopped")
 
@@ -467,6 +483,47 @@ func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (an
 			"indexed", st.IndexedFiles,
 			"total", st.TotalFiles,
 		)
+	}
+
+	// Reconcile stale index_state with actual indexer cache data.
+	// When auto-indexing was never started, or crashed before completing,
+	// index_state stays at "pending / 0/0" even though files may have been
+	// indexed (e.g. during a previous successful run).  Cross-reference each
+	// stale entry against its on-disk index_cache.json so the dialog always
+	// shows real data.
+	if status.CacheBase != "" {
+		for dir, st := range status.IndexStates {
+			if st == nil {
+				continue
+			}
+			// Only reconcile entries that look like they were never synced.
+			if st.State != "pending" && !(st.State == "indexing" && st.TotalFiles == 0 && st.IndexedFiles == 0) {
+				continue
+			}
+			cacheDir := filepath.Join(status.CacheBase, kbwatch.SanitizeDirName(dir))
+			cache := kbwatch.NewProjectFileCache()
+			if err := cache.LoadFromFile(cacheDir); err != nil || len(cache.Files) == 0 {
+				continue
+			}
+			// Cache has real data — promote the state to completed so the
+			// frontend displays meaningful file counts and chunk info.
+			completed := make([]kbwatch.CompletedFileRecord, 0, len(cache.Files))
+			for _, entry := range cache.Files {
+				completed = append(completed, kbwatch.CompletedFileRecord{
+					Path:   entry.Path,
+					Chunks: len(entry.Chunks),
+				})
+			}
+			st.State = "completed"
+			st.IndexedFiles = len(cache.Files)
+			st.TotalFiles = len(cache.Files)
+			st.CompletedFiles = completed
+			st.CompletedAt = time.Now().Unix()
+			d.logger.Info("filewatch.status: reconciled stale index_state from cache",
+				"dir", dir,
+				"cached_files", len(cache.Files),
+			)
+		}
 	}
 
 	// Filter out ignored files from the per-directory failed lists before
