@@ -15,8 +15,8 @@ github.com/DotNetAge/gochat v0.2.7 h1:W06T9dRx46QlWkFDlpRSGtpdgNb8m9meTPxycRX/xZ
 github.com/DotNetAge/gochat v0.2.7/go.mod h1:w7m36rMZoDwmReJNTLUGHhok6DSqnIidg9wFKwYM1dM=
 github.com/DotNetAge/gograph v0.2.6 h1:LhYERtYTPaWXvbBy9bO/6XGmYTW/OZGXQ+zyfycsexo=
 github.com/DotNetAge/gograph v0.2.6/go.mod h1:Ia2wvbkpdJvFJEZ1vw+IklbhNbWjPli2dnU21jbmy7I=
-github.com/DotNetAge/goharness v0.2.0 h1:Gp05DOiXuaBP8xmLUP5lKCY6gZt0tSMkeA7yxESP+E8=
-github.com/DotNetAge/goharness v0.2.0/go.mod h1:+kx9N2I5nkKquSD8xcN1JR9U1mHOpVtMTcGQbV1NGQ4=
+github.com/DotNetAge/goharness v0.2.1 h1:QtYlUjy+0dAyG430RDxYXBOqU97KRBhYpaIq3+rnWQA=
+github.com/DotNetAge/goharness v0.2.1/go.mod h1:+kx9N2I5nkKquSD8xcN1JR9U1mHOpVtMTcGQbV1NGQ4=
 github.com/DotNetAge/gorag/v2 v2.0.2 h1:ujK4l+0WCNizSJEinBlcI433+4Vpr/ESeNebMzBQ4bc=
 github.com/DotNetAge/gorag/v2 v2.0.2/go.mod h1:K8YAydeJR41JMY59xrzgMNDKRHVg3cwB2pYwJSwVjbE=
 github.com/DotNetAge/gort v0.1.4 h1:nUZdy3cN3Kif21GWIYkxlIS/iFr62eN5boBmCzmI3xw=

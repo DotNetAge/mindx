@@ -175,43 +175,18 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("session store not available")
 	}
 
-	// Only one session per (agent, project_dir) pair is allowed.
+	// Design rule: only one session per (agent, project_dir) pair is allowed.
 	existingSessions, err := sessDB.ListSessions(context.Background())
 	if err == nil {
 		for _, s := range existingSessions {
 			if s.AgentName == p.Agent && sameDirectory(s.ProjectDir, p.ProjectDir) {
-				d.logger.Info("session.create: existing session found, reusing",
-					"session_id", s.SessionID,
+				d.logger.Warn("session.create: duplicate session rejected",
 					"agent", p.Agent,
 					"project_dir", p.ProjectDir,
+					"existing_session_id", s.SessionID,
 				)
-				// Ensure the session's project dir is in the watchlist.
-				if s.ProjectDir != "" && d.kbWatch != nil {
-					if wErr := d.kbWatch.AddWatch(s.ProjectDir, p.Agent); wErr != nil {
-						d.logger.Warn("session.create: failed to add project dir to watchlist (reuse)",
-							"session_id", s.SessionID,
-							"project_dir", s.ProjectDir,
-							"agent", p.Agent,
-							"error", wErr,
-						)
-					} else {
-						d.logger.Info("session.create: project dir added to watchlist (reuse)",
-							"project_dir", s.ProjectDir,
-							"agent", p.Agent,
-						)
-					}
-				} else if s.ProjectDir != "" && d.kbWatch == nil {
-					d.logger.Warn("session.create: kbWatch is nil, cannot add project dir to watchlist (reuse)",
-						"project_dir", s.ProjectDir,
-						"reason", "GraphIndexer disabled — check if LLM model is configured",
-					)
-				}
-				return map[string]any{
-					"session_id":  s.SessionID,
-					"agent_name":  s.AgentName,
-					"created_at":  s.CreatedAt,
-					"project_dir": s.ProjectDir,
-				}, nil
+				return nil, fmt.Errorf("duplicate session: agent %q already has a session for directory %q",
+					p.Agent, p.ProjectDir)
 			}
 		}
 	}
