@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DotNetAge/goharness/session"
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
+	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/gorag/v2/embedder"
 	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
 	goraggograph "github.com/DotNetAge/gorag/v2/store/graph/gograph"

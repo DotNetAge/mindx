@@ -426,6 +426,28 @@ func (s *FileWatchService) SyncDir(ctx context.Context, absDir string) {
 		})
 	}
 
+	// When all files were cache hits (skipped), CompletedFiles is empty but the
+	// files ARE indexed. Use ScanFileStates to retrieve them so the UI can
+	// display the full history of indexed files.
+	if len(completedRecs) == 0 && result.Skipped > 0 {
+		if scanResult, scanErr := pi.ScanFileStates(s.ctx, absDir); scanErr == nil {
+			for _, fs := range scanResult {
+				if fs.State == FileStateIndexed || fs.State == FileStateChanged {
+					completedRecs = append(completedRecs, CompletedFileRecord{
+						Path: fs.Path,
+					})
+				}
+			}
+			if s.logger != nil {
+				s.logger.Info("filewatch.sync: populated completed_files from ScanFileStates",
+					"dir", absDir, "count", len(completedRecs))
+			}
+		} else if s.logger != nil {
+			s.logger.Warn("filewatch.sync: ScanFileStates failed, completed_files will be empty",
+				"dir", absDir, "error", scanErr)
+		}
+	}
+
 	if len(result.FailedFiles) > 0 {
 		failedRecs := make([]FailedFileRecord, len(result.FailedFiles))
 		for i, fe := range result.FailedFiles {

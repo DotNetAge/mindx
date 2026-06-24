@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/DotNetAge/goharness/tools"
-	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
 	"github.com/DotNetAge/gorag/v2/core"
+	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
 	"github.com/DotNetAge/gorag/v2/query"
 )
 
