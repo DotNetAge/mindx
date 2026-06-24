@@ -169,6 +169,8 @@ func (s *IndexStateStore) AppendCompletedFile(dir string, rec CompletedFileRecor
 
 // SetCompletedWithStats marks a directory's indexing as completed and records
 // the actual number of files indexed (from the Sync result).
+// skippedFiles are files that were already in cache (previously indexed),
+// so they count as both indexed and total.
 func (s *IndexStateStore) SetCompletedWithStats(dir string, indexedFiles, skippedFiles int, entitiesCreated, relsCreated int, totalElapsedMs int64, completedFiles []CompletedFileRecord) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -177,7 +179,9 @@ func (s *IndexStateStore) SetCompletedWithStats(dir string, indexedFiles, skippe
 		st = &DirIndexState{Dir: dir}
 	}
 	st.State = "completed"
-	st.IndexedFiles = indexedFiles
+	// Skipped files are already in cache — they were indexed in a previous run,
+	// so they count as indexed for progress display purposes.
+	st.IndexedFiles = indexedFiles + skippedFiles
 	st.TotalFiles = indexedFiles + skippedFiles
 	st.EntitiesCreated = entitiesCreated
 	st.RelsCreated = relsCreated
@@ -193,6 +197,7 @@ func (s *IndexStateStore) SetCompletedWithStats(dir string, indexedFiles, skippe
 // SetCompletedWithFailedFiles marks a directory's indexing as completed,
 // recording both the common stats and the list of individual files that
 // failed. The frontend uses failed_files to show per-file error details.
+// skippedFiles are previously indexed (cached) files — they count as indexed.
 func (s *IndexStateStore) SetCompletedWithFailedFiles(dir string, indexedFiles, skippedFiles int, entitiesCreated, relsCreated int, totalElapsedMs int64, completedFiles []CompletedFileRecord, failedFiles []FailedFileRecord) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -201,7 +206,8 @@ func (s *IndexStateStore) SetCompletedWithFailedFiles(dir string, indexedFiles, 
 		st = &DirIndexState{Dir: dir}
 	}
 	st.State = "completed"
-	st.IndexedFiles = indexedFiles
+	// Skipped files are already in cache — they count as indexed.
+	st.IndexedFiles = indexedFiles + skippedFiles
 	st.TotalFiles = indexedFiles + skippedFiles + len(failedFiles)
 	st.EntitiesCreated = entitiesCreated
 	st.RelsCreated = relsCreated

@@ -89,8 +89,8 @@ func TestLocalSearchWithRealData(t *testing.T) {
 	// ModelConfig is required by the constructor but not used for Search
 	// when TextQuery is set to "" (prevents LLM text→Cypher path).
 	llmModelCfg := goragindexer.ModelConfig{
-		APIKey:  "test-skip",
-		Model:   "placeholder",
+		APIKey: "test-skip",
+		Model:  "placeholder",
 	}
 
 	gi := goragindexer.New(llmModelCfg, emb, kbVS, coreGS)
