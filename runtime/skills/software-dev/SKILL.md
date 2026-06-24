@@ -1,373 +1,299 @@
 ---
 name: software-dev
 description: >
-  Plan and manage software product development — from requirements through
-  architecture, sprint execution, quality gates, to release and monitoring.
-  Supports agile workflows with cross-session persistence for ongoing projects.
-allowed-tools: bash sub-agent collect-results task-create task-update task-get task-list team-create team-list team-get-tasks team-delete find-experts
+  Follow this agile development process: requirements analysis → architecture design → sprint planning →
+  sprint execution → quality gates → release → monitoring. Each phase produces specific artifacts.
+allowed-tools: bash sub-agent collect-results task-create task-update task-get task-list team-create team-list team-get-tasks find-experts
 metadata:
   name_zh: 软件开发
   name_zh-tw: 軟體開發
-  description_zh: 规划和管理软件产品开发——从需求分析、架构设计、迭代执行、质量门禁到发布监控，支持敏捷工作流和跨会话持久化
-  description_zh-tw: 規劃和管理軟體產品開發——從需求分析、架構設計、迭代執行、質量門禁到發布監控，支持敏捷工作流和跨會話持久化
+  description_zh: 遵循敏捷开发流程：需求分析 → 架构设计 → Sprint 规划 → Sprint 执行 → 质量门禁 → 发布 → 监控
+  description_zh-tw: 遵循敏捷開發流程：需求分析 → 架構設計 → Sprint 規劃 → Sprint 執行 → 質量門禁 → 發佈 → 監控
 ---
 
-## Trigger Decision
+## When to Use
 
-Use this skill when:
+Activate this skill when:
+- User wants to build a software feature, module, or entire product
+- User mentions: develop, implement, build, sprint, release, refactor, architecture
+- The task spans multiple files or multiple sessions
 
-- User asks to build a software feature, module, or entire product
-- User needs sprint planning, iteration management, or release coordination
-- Task spans multiple sessions/sprints with dependencies between components
-- User mentions "develop", "implement", "build", "sprint", "release", "refactor"
+Do NOT activate for: single-file edits, trivial bug fixes — do those directly.
 
-**Do NOT use** for single-file edits or trivial bug fixes (do those directly).
+---
 
-**Do NOT confuse with** `find-experts` — this skill manages the **development lifecycle itself**, while `find-experts` delegates **individual tasks** to specialists. They compose: `software-dev` uses `find-experts` Mode 2 for complex sprints.
+## Phase 1 — Requirements Analysis
 
-## GraphRAG Integration
+**Mandatory first phase. Do not skip to coding.**
 
-### Language Handling
+### Step 1.1 — Elicit Requirements from the User
 
-> **CRITICAL: This SKILL.md is written in English for token efficiency and global compatibility, but you MUST query GraphRAG in the language matching the stored content.**
+Ask the user these five questions in order. Wait for each answer before proceeding.
 
-**Language detection rule:**
-- User speaks/writes in **Chinese** → Query `mindx memory query` and `mindx graph query` in **Chinese first**, then English as fallback
-- User speaks/writes in **English** → Query in **English first**, then Chinese as fallback
-- When storing via `mindx memory store` → Store in the **same language as the user's current working language**
-- Graph node `properties` values → Match the language of stored data
-- Cypher string literals → Use the language stored in node properties
+1. **Core problem** — "What problem are you trying to solve? What scenario are you implementing?"
+2. **Users & scope** — "Who will use this? At what scale?"
+3. **Specific features** — "What exactly needs to be built? List the core features. Which are MVP vs. future?"
+4. **Constraints** — "Any technical, platform, timeline, or resource constraints?"
+5. **Definition of done** — "How do we verify it's complete? What are the acceptance criteria?"
 
-### Dual-Engine Architecture
+During the conversation, actively guide:
 
-> **This system has two storage layers that work together — you (the LLM) are the bridge between them via Cypher.**
+- User is vague → ask clarifying follow-ups
+- User lists too many features → help prioritize ("Which 3 are the most critical?")
+- User describes a solution instead of a problem → dig deeper ("What underlying problem does this solve?")
 
-**Layer 1: Graph — Entity Relationship Index**
-- **What it stores:** Nodes (entities) and Edges (relationships)
-- **Node structure:** `id`, `type` (entity type from definitions), `name`, `properties` (`description`, `confidence`, + any custom business fields you set)
-- **Edge structure:** `type` (relationship), `source`, `target`, `predicate`, `properties`
-- **How to write:** `mindx graph upsert-nodes --nodes '[...]'` and `mindx graph upsert-edges --edges '[...]'`
-- **How to read:** `mindx graph query --cypher "<your dynamic Cypher>"` or `mindx graph exec --cypher "..."`
+### Step 1.2 — Output Requirements Brief
 
-**Layer 2: NativeRAG — Semantic Overview Index**
-- **What it stores:** Chunks of semantic content with vector embeddings
-- **Structure:** content, title, tags, positions, doc_id
-- **How to write:** `mindx memory store --content "..." --title "..."`
-- **How to read:** `mindx memory query "<search terms>"` (vector similarity search)
+Synthesize answers into this document. Save to `docs/requirements.md`. Show to the user for confirmation before proceeding:
 
-**The link:** Both layers share `doc_id` — a Graph node can trace back to its source chunks in NativeRAG, and vice versa.
+```markdown
+# Requirements Brief
 
-**Your superpower as LLM:** Humans write fixed hybrid queries. You write **dynamic Cypher** that traverses entity relationships in the Graph, then jumps to NativeRAG for full context via doc_id. This is what makes this architecture flexible.
+## Overview
+[One-line summary of what to build]
 
-**When to use which:**
-| Need | Command |
-|------|---------|
-| Find relevant knowledge/documents | `mindx memory query` (semantic search) |
-| Store new insights/learnings | `mindx memory store` (vector index) |
-| Build structured business state (projects, sprints, tasks with dependencies) | `mindx graph upsert-nodes/edges` (entity graph) |
-| Query relationships between entities | `mindx graph query --cypher "..."` (Cypher traversal) |
-| Update business state | `mindx graph exec --cypher "SET ..."` (mutation) |
-| Cross-reference: entity → full context | Graph node → get source docs → `memory query` |
+## Core Problem
+[The pain point or goal]
 
-## Domain Context
+## Target Users
+[Who and at what scale]
 
-This skill follows an **agile-inspired development model** adapted for AI-agent orchestration:
+## MVP Features
+1. [Feature A]
+2. [Feature B]
+3. [Feature C]
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Development Lifecycle                     │
-│                                                             │
-│  Requirements ──→ Architecture ──→ Sprint Plan               │
-│       (Phase 1)        (Phase 2)         (Phase 3)          │
-│                                             │                │
-│                                    ┌──────▼──────┐         │
-│                                    │   Sprint    │◄────────┘
-│                                    │  Execution   │── repeat
-│                                    │  (Phase 4)   │
-│                                    └──────┬──────┘         │
-│                                           │                  │
-│                              ┌────────────┼────────────┐     │
-│                              ▼            ▼            ▼     │
-│                         Quality      Release    Monitor     │
-│                         Gate (5)     (Phase 6)  (Phase 7)  │
-└─────────────────────────────────────────────────────────────┘
+## Future Scope (excluded from this round)
+- [Feature D]
+- [Feature E]
+
+## Constraints
+- Tech stack: [e.g. Go + React + PostgreSQL]
+- Platform: [e.g. Web / iOS / Android]
+- Timeline: [e.g. 2 weeks]
+- Other:
+
+## Acceptance Criteria
+- [ ] [Verifiable criterion 1]
+- [ ] [Verifiable criterion 2]
+- [ ] [Verifiable criterion 3]
+
+## Success Metric
+[How to measure success]
 ```
 
-## Workflow
+> **Phase 1 is complete when `docs/requirements.md` is saved to the project directory and confirmed by the user.**
 
-### Phase 1: Requirements — Understand What to Build
+---
 
-Gather requirements before writing any code. Use structured extraction:
+## Phase 2 — Architecture Design
 
-| Ask | Why | Good Answer Example |
-|-----|-----|---------------------|
-| "What problem does this solve?" | Root understanding | "Users can't track their workout history across devices" |
-| "Who are the users?" | Scope & personas | "Fitness enthusiasts using iOS/Android" |
-| "What's the MVP scope?" | Prevent scope creep | "Sync + basic stats dashboard, social later" |
-| "Any technical constraints?" | Architecture input | "Must work offline, existing Go backend" |
-| "Definition of done?" | Acceptance criteria | "Data syncs within 5s, no data loss scenario" |
+Based on the confirmed requirements brief, produce the architecture blueprint. Save to `docs/architecture.md`.
 
-**Output: Requirements Brief**
+### Output: Architecture Blueprint
 
-```
-Requirements Brief:
-  Problem: <what pain point>
-  Users: <who benefits>
-  MVP Scope: [feature-1, feature-2, ...]
-  Out of scope: [future-feature-a, ...]
-  Constraints: [tech/business]
-  Definition of Done: [testable criteria]
-  Success Metric: <how we know it works>
-```
+```markdown
+# Architecture Blueprint
 
-### Phase 2: Architecture — Design Before Coding
+## 1. System Architecture Diagram
 
-Decompose the MVP into technical components:
+[Use Mermaid to draw: Client → API Gateway → Service Layer → Data Layer, etc.]
+
+## 2. Project Directory Structure
 
 ```
-Architecture Blueprint:
-  Components:
-    - <component-A>: <responsibility> → <tech choice>
-    - <component-B>: <responsibility> → <tech choice>
-    - <component-C>: <responsibility> → <tech choice>
-
-  Data Model:
-    - <entity-1>: {fields, relationships}
-    - <entity-2>: {fields, relationships}
-
-  API Surface:
-    - POST /api/<resource> — <purpose>
-    - GET /api/<resource>/:id — <purpose>
-
-  Dependencies:
-    - component-B depends on component-A (must build A first)
-    - component-C is independent (can parallelize with B)
+project-root/
+├── cmd/              # Entry points
+├── internal/
+│   ├── api/          # HTTP/gRPC handlers
+│   ├── service/      # Business logic
+│   ├── repository/   # Data access
+│   └── model/        # Data models
+├── pkg/              # Shared libraries
+├── migrations/       # Database migrations
+├── configs/          # Configuration
+└── deploy/           # Deployment files
 ```
 
-If the project is complex enough, delegate architecture design:
+## 3. Core Data Models
 
+- [Entity 1]: {fields, relationships}
+- [Entity 2]: {fields, relationships}
+
+## 4. API Surface
+
+- `POST /api/resource` — Create resource
+- `GET /api/resource/:id` — Get resource
+- ...
+
+## 5. Component Dependencies
+
+- Component B depends on A (build A first)
+- Component C is independent (can parallelize with A/B)
 ```
-sub-agent(
-  agent_name="architect",
-  task="Design the architecture for: {requirements brief}. "+
-       "Output: component diagram, data model, API endpoints, "+
-       "dependency graph, tech stack rationale. Format as structured markdown."
-)
-collect-results(task_ids=[...])
-→ Review output, adjust if needed
-```
 
-### Phase 3: Sprint Planning — Break Into Executable Tasks
+> **Phase 2 is complete when `docs/architecture.md` is saved to the project directory.**
 
-Map architecture components to a sprint backlog. Each task must be **executable by a specialist agent in one session**.
+---
 
-**Sprint template:**
+## Phase 3 — Sprint Planning
 
-```
-Sprint N: {sprint goal} ({start} → {end})
+Every sprint is requirement-driven. Select requirement(s) from the Requirements Brief to deliver in this sprint. The sprint goal is to deliver those specific requirements. Do not create tasks from the architecture alone — tasks serve requirements.
 
-Wave 1 (no dependencies):
-  Task: {name}          | Owner: {agent} | Est: {size} | Deps: none
-  Task: {name}          | Owner: {agent} | Est: {size} | Deps: none
+### Step 3.1 — Select Sprint Requirements
+
+Pick a subset of requirements from the Requirements Brief that can be delivered in one sprint cycle. The sprint goal must reference specific requirements by name.
+
+### Step 3.2 — Discover Available Agents
+
+Run `mindx agent list` to see available agents and their capabilities. Use this to determine who can handle each task.
+
+### Step 3.3 — Break Requirements Into Tasks
+
+For each selected requirement, decompose into executable tasks organized by dependency waves. Every task must map back to a requirement from the sprint goal.
+
+### Step 3.4 — Output Sprint Plan
+
+Save sprint plan to `docs/sprint-plan.md`.
+
+```markdown
+# Sprint 1: [derived from requirements — e.g. "user authentication & profile"]
+
+Requirement(s) addressed:
+  - [Requirement A from Requirements Brief]
+  - [Requirement B from Requirements Brief]
+
+Wave 1 (no dependencies, parallel):
+  Task: [Feature A] — Requirement: [Req A] — Owner: [agent] — Est: M
+  Task: [Feature B] — Requirement: [Req A] — Owner: [agent] — Est: M
 
 Wave 2 (depends on Wave 1):
-  Task: {name}          | Owner: {agent} | Est: {size} | Deps: wave1-task-x
+  Task: [Integration A+B] — Requirement: [Req A] — Owner: [agent] — Est: S
+  Task: [Tests A+B] — Requirement: [Req B] — Owner: [agent] — Est: S
 
 Wave 3 (depends on Wave 2):
-  Task: {name}          | Owner: {agent} | Est: {size} | Deps: wave2-task-y
+  Task: [E2E tests] — Requirement: [Req A, Req B] — Owner: [agent] — Est: M
 ```
 
-**Create tasks via TaskCreate, wire dependencies via TaskUpdate(addBlockedBy):**
+Create tasks and wire dependencies:
 
 ```
-# Create all tasks first
-TaskCreate(subject="API: user sync endpoint", description="...")
-TaskCreate(subject="Client: sync service layer", description="...)
-TaskCreate(subject="Tests: sync integration tests", description="...)
-
-# Wire: tests depend on both API and client
-TaskUpdate(task_id=tests_task, addBlockedBy=[api_task, client_task])
+task-create(subject="[Req X] Task name", description="AC from requirements: {criteria}. Files to modify: {paths}.")
+task-update(task_id=B, addBlockedBy=[A])
 ```
 
-For multi-sprint projects, also create a **release milestone** in the graph:
+> **Phase 3 is complete when `docs/sprint-plan.md` is saved and all tasks are created in the system with dependencies wired.**
 
-```bash
-PROJ_ID=$(mindx utils uuid)
-SPRINT_ID=$(mindx utils uuid)
+---
 
-mindx graph upsert-nodes --nodes '[{
-  "id":"'"$PROJ_ID"'",
-  "labels":["SoftwareProject"],
-  "properties":{
-    "name":"{project-name}",
-    "status":"active","sprint":1,"progress":0.0,
-    "requirements":"{req-brief-summary}"
-  }
-}]'
-mindx graph upsert-nodes --nodes '[{
-  "id":"'"$SPRINT_ID"'",
-  "labels":["Sprint"],
-  "properties":{"number":1,"goal":"{sprint-goal}","status":"planning"}
-}]'
-mindx graph upsert-edges --edges '[{
-  "from_node_id":"'"$PROJ_ID"'","to_node_id":"'"$SPRINT_ID"'",
-  "type":"CURRENT_SPRINT"
-}]'
-```
+## Phase 4 — Sprint Execution
 
-### Phase 4: Sprint Execution — Build Wave by Wave
+Execute tasks wave by wave. Run parallel tasks concurrently using sub-agents.
 
-Use **find-experts Mode 2 (Team Orchestration)** for sprints with multiple components.
+### Step 4.1 — Agent Discovery
 
-**Team composition for typical software project:**
+Use `mindx agent list` to find the right agent for each task. Match task requirements against each agent's capabilities.
 
-| Role | When Included | Responsibility |
-|------|--------------|----------------|
-| `architect` | Phase 2 only | Design, code review for structural issues |
-| `backend-dev` | API, services, DB work | Server-side implementation |
-| `frontend-dev` | UI, mobile client | Client-side implementation |
-| `qa-engineer` | After each wave | Test planning, integration testing, regression |
-| `devops` | Phase 6-7 | CI/CD pipeline, deployment, monitoring setup |
+### Step 4.2 — Sub-Agent Task Template
 
-**Execution pattern per wave:**
+Every delegated task must include these five elements, with ACCEPTANCE pulled directly from the Requirements Brief:
 
 ```
-// Wave 1: No-dependency tasks
+subject: clear task name
+description: |
+  GOAL: what to achieve
+  ACCEPTANCE: [copied from requirements — these are the same criteria used to mark this task complete]
+  SCOPE: exact files/paths to modify
+  CONSTRAINTS: tech stack, conventions, patterns to follow
+  DELIVERABLE: expected output format
+```
+
+### Step 4.3 — Execution Pattern
+
+```
+# Wave 1: parallel
 task-update(wave1_tasks, status="in_progress")
-sub-agent(backend-dev, task="Implement user sync API endpoint:...")
-sub-agent(frontend-dev, task="Implement sync service client:...")
-// Both run in parallel (same response)
+sub-agent([agent_name], task="{goal}. Accept when: {acceptance}. Scope: {paths}. Standards: {tech}.")
+sub-agent([agent_name], task="{goal}. Accept when: {acceptance}. Scope: {paths}. Standards: {tech}.")
 collect-results(...)
+→ Verify each result against its acceptance criteria. Run tests. Mark complete only when all pass.
 task-update(wave1_tasks, status="completed")
 
-// Wave 2: Depends on Wave 1
+# Wave 2: sequential
 task-update(wave2_tasks, status="in_progress")
-sub-agent(qa-engineer, task="Write integration tests for sync flow:...")
-// Can start once Wave 1 completes
+sub-agent([agent_name], task="{goal}. Accept when: {acceptance}. Scope: {paths}.")
 collect-results(...)
+→ Verify against acceptance criteria. Run integration tests.
 task-update(wave2_tasks, status="completed")
-
-// Wave 3: Final validation
-task-update(wave3_tasks, status="in_progress")
-[execute final tasks...]
-task-update(wave3_tasks, status="completed")
 ```
 
-**Each sub-agent task prompt must include:**
-- Clear acceptance criteria from Phase 1 DoD
-- Relevant files/paths to work on
-- Coding standards (language, framework conventions)
-- Testing requirement (unit test coverage threshold)
+---
 
-### Phase 5: Quality Gates — Don't Ship Broken Code
+## Phase 5 — Quality Gates
 
-Before declaring anything complete, verify against quality checklist:
+Before marking any task or sprint complete, run these checks in order:
 
-| Gate | Check | How | Pass Criteria |
-|------|-------|-----|----------------|
-| **Code completeness** | All planned features implemented? | TaskList(status_filter="completed") | All wave tasks completed |
-| **Unit tests** | Core logic covered? | Run test command | ≥70% coverage on new code |
-| **Integration smoke** | Happy path works? | Manual or automated smoke test | Primary user flow executes end-to-end |
-| **Code review** | No obvious issues? | Read changed files or sub-agent review | No critical bugs, style consistent |
-| **No regressions** | Existing features still work? | Run existing test suite | All pre-existing tests still pass |
+| Gate                 | Action                                    | Fail →             |
+| -------------------- | ----------------------------------------- | ------------------ |
+| 1. Code complete     | Verify all planned code is written        | Fix or defer       |
+| 2. Unit tests        | Run test suite, coverage ≥70% on new code | Fix failing tests  |
+| 3. Integration smoke | Run primary user flow end-to-end          | Debug and fix      |
+| 4. Code review       | Read key files for structural issues      | Refactor if needed |
+| 5. No regressions    | Run all pre-existing tests                | Fix regressions    |
 
-**If a gate fails:**
+After passing all gates, save a quality report to `docs/quality-report.md` documenting results for each gate.
 
-```
-Quality gate FAILED: {which gate}
-  Issue: {what went wrong}
-  Action:
-    Option A: Fix now (create fix task, assign, execute)
-    Option B: Defer to next sprint (document as known issue, update task status)
-    Option C: Adjust scope (remove failing feature from this sprint's DoD)
-```
+> **Phase 5 is complete when all gates pass and `docs/quality-report.md` is saved.**
 
-**Every 3rd completion triggers nudge from TaskUpdate** — act on it: run tests, review files, check coverage.
+---
 
-### Phase 6: Release — Ship It
+## Phase 6 — Release
 
-When all quality gates pass:
-
-```bash
-# Update sprint status in graph
-mindx graph exec --cypher "
-  MATCH (s:Sprint {id: '$SPRINT_ID'})
-  SET s.status = 'completed', s.completed_at = timestamp()
-  RETURN s.number, s.goal
-"
-
-# If there's a next sprint, link it
-mindx graph upsert-edges --edges '[{
-  "from_node_id":"'"$PROJ_ID"'",
-  "to_node_id":"'$NEXT_SPRINT_ID'",
-  "type":"CURRENT_SPRINT"
-}]'
-```
-
-**Release communication:**
+When all quality gates pass, save release notes to `docs/release-notes.md` and communicate:
 
 ```
-🚀 Sprint {N} Complete — {Project Name}
+Sprint 1 Complete — [Project]
 
 Delivered:
-  ✅ {feature-1}: {one-line summary}
-  ✅ {feature-2}: {one-line summary}
-  ✅ {feature-3}: {one-line summary}
+  ✅ [Feature]: [summary]
+  ✅ [Feature]: [summary]
 
 Quality:
-  Tests: {pass}/{total} passing | Coverage: {coverage}%
-  Known issues: {n} (tracked)
+  Tests: X/Y passing | Coverage: X%
+  Known issues: N (tracked)
 
-Next sprint preview:
-  · {next-item-1}
-  · {next-item-2}
-
-Deploy: {deployment status / instructions}
+Next sprint:
+  · [item 1]
+  · [item 2]
 ```
 
-### Phase 7: Monitor — Watch After Shipping
+> **Phase 6 is complete when `docs/release-notes.md` is saved.**
+
+---
+
+## Phase 7 — Monitor
 
 Post-release checks:
 
-| Check | Frequency | Command / Method |
-|-------|----------|------------------|
-| Error rate spike | Daily after release | Check logs / monitoring dashboards |
-| Performance regression | Within 24h | Benchmark key endpoints vs baseline |
-| User-reported bugs | Ongoing | Triage incoming reports, file if new |
-| Technical debt accumulation | Per sprint | Review TODO/FIXME/HACK counts in new code |
+| Check        | When       | How                          |
+| ------------ | ---------- | ---------------------------- |
+| Error spikes | Daily      | Check logs                   |
+| Performance  | Within 24h | Benchmark vs baseline        |
+| User bugs    | Ongoing    | Triage reports               |
+| Tech debt    | Per sprint | Count TODO/FIXME in new code |
 
-## Sprint Anti-Patterns
+---
 
-- Do not skip Phase 1 (requirements) — "just start coding" always leads to rework
-- Do not make sprints longer than 2 weeks — long sprints hide progress problems
-- Do not add tasks mid-sprint without removing others of equal size — scope must be fixed at sprint start
-- Do not mark tasks complete without running them (or having a sub-agent run them) — trust but verify
-- Do not let tasks sit in `in_progress` for more than 2 days — investigate or cancel
-- Do not skip quality gates for "MVP speed" — technical debt compounds faster than you think
-- Do not push to production without at least a smoke test — even "small changes" can break things
-- Do not ignore the nudge from TaskUpdate (every 3 completions) — it exists for a reason
+## Hard Rules
 
-## Quick Reference: Task Status Lifecycle
-
-```
-pending → in_progress → completed
-                        ↓ (quality gate failed)
-                     blocked → in_progress (after fix)
-                        
-pending → cancelled (deprioritized / out of scope)
-
-Valid transitions only. Invalid transitions will be rejected.
-```
-
-## Quick Reference: Dependency Declaration Syntax
-
-```
-// "B depends on A" (A must finish before B starts):
-TaskUpdate(task_id=B, addBlockedBy=[A])
-
-// Equivalent alternative:
-TaskUpdate(task_id=A, addBlocks=[B])
-
-// Circular dependencies are auto-detected and rejected.
-// Transitive cycles (A→B→C→A) are also caught.
-```
+- **Each phase is complete only when its deliverable document is saved.** No document = incomplete phase.
+- Phase 1 complete → `docs/requirements.md` saved and user confirmed.
+- Phase 2 complete → `docs/architecture.md` saved.
+- Phase 3 complete → `docs/sprint-plan.md` saved and tasks wired.
+- Phase 5 complete → all quality gates passed and `docs/quality-report.md` saved.
+- Phase 6 complete → `docs/release-notes.md` saved.
+- Phase 1 must complete before Phase 2. Phase 2 before Phase 3. Phase 5 before Phase 6. No exceptions.
+- Every task must have a clear acceptance criterion before execution.
+- Do not modify files outside the agreed scope without re-confirming with the user.
+- All output documents must be written in the same language as the user's input.
+- **The acceptance criteria defined in Phase 1 are the sole standard for verifying all outputs. If the criteria are insufficient to verify a result, the deficiency is in Phase 1 — go back and refine requirements before proceeding.**

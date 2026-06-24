@@ -1,251 +1,76 @@
-# B站脚本规范 (Bilibili Script Writing Standard)
+# Bilibili (B站) — Content Reference
 
-> 本文件是 content-ops 技能的**平台参考标准**，不是独立技能。当需要为B站生产中长视频内容时，由 SKILL.md 的工作流按需加载本文件。
+## Platform Context
 
-## 平台本质
+- Long-form video platform (10min+ typical). Community-driven with danmaku (弹幕).
+- Core metrics: completion rate > danmaku density > coins (三连) > share.
+- Users want substance — "有料、有趣、有共鸣".
+- Chapter markers strongly encouraged (Bilibili's chapter feature).
+- Knowledge category: reward depth with strong search + long-tail recommendation.
+- Danmaku rate is a direct signal to the algorithm — design for it.
 
-B站 = **兴趣社区 + 知识乐园**
-
-用户来这里是为了 **学东西** 和 **找同好**。B站最大的差异化优势是：**用户愿意看5-20分钟的深度内容**（这在其他短视频平台是不可能的）。
-
-## 核心机制
-
-### 三连文化（B站独有的互动体系）
-
-```
-投币（×5元） > 收藏 > 点赞
-
-投币 = 最高含金量的互动
-（用户真金白银支持 = 对内容的最高认可）
-```
-
-| 行为 | 含义 | 权重认知 |
-|------|------|---------|
-| **投币** | "这视频太好看了，我愿意付费支持" | 最高（真实付费意愿） |
-| **收藏** | "这个内容有用，我要留着以后看" | 高（实用价值认可） |
-| **点赞** | "这个内容不错" | 基础（轻度认可） |
-| **弹幕** | "我有话要说/我在看/我和UP主/和其他观众在一起" | 社区参与（文化核心） |
-| **转发** | "别人也应该看到这个" | 传播（社交货币） |
-| **关注** | "这个UP主的内容我都要看" | 长期关系（粉丝资产） |
-
-### 弹幕是第二内容层
-
-好的B站视频，弹幕本身就是内容的一部分。**甚至有些用户是"来看弹幕的"。**
+## Content Structure
 
 ```
-普通视频：画面 + 声音 = 内容
-B站视频：  画面 + 声音 + 弹幕流 = 内容
-                      ↑
-              这是B站的护城河
+0-3 seconds: Hook
+  Pain/suspense that sets up the video's core question
+  "How I went from [state A] to [state B] in [timeframe]"
+  "This is the most common mistake in [topic], and almost everyone does it."
+
+0s-5min: Setup & Core Framework
+  State the problem clearly
+  Provide context and framework before diving deep
+  Every 30s: deliver one point of new information
+  Insert danmaku trigger points:
+    - "Have you encountered this too?" → triggers sharing experiences
+    - "Bet you didn't know this" → triggers "下次一定"/"懂了" danmaku
+    - Leave 2-3s silence after a question → users fill the gap with danmaku
+
+5min-10min: Deep Dive
+  Expand each framework component with evidence, cases, data
+  Use chapter markers for navigation
+  Insert a "彩蛋" (easter egg) mid-video to reward attentive viewers
+  Every 2-3 minutes: visual variety (B-roll, animation, on-screen text)
+
+10min-End: Synthesis & CTA
+  Summarize framework
+  Tease next video
+  "If this helped, a coin would mean a lot" (Bilibili-specific ask)
+  "What topic should I cover next? Comment your idea."
 ```
 
-### 长尾效应
+## Title Formula
 
-B站视频的生命周期远超其他平台：
-- 抖音/小红书：热度通常 **3-7天**
-- B站：优质视频可以被推荐 **数月甚至数年**
-- 知识类内容的长尾效应尤其明显（搜索 + 推荐 + 算法持续推荐）
+- `[Topic]: [Core insight] | [N]分钟彻底搞懂[Subject]` — Knowledge
+- `从[起点]到[终点]，我是怎么做到的？` — Story/transformation
+- `[Controversial statement]？聊聊我的看法` — Discussion
+- `全网首个[Topic]教程，[unique angle]` — First-of-its-kind
 
----
+## Writing Style
 
-## 一、脚本结构模板
+- Balance authority with approachability. No textbook tone.
+- Self-deprecating humor is rewarded ("翻车现场", "我也是试了N次才...")
+- Use analogies extensively: abstract concepts → familiar metaphors
+- Occasional "梗" (memes) appropriate for community engagement
+- Avoid: corporate tone, excessive self-promotion, obvious script reading
 
-### 标准中长视频脚本（5-20分钟）
+## Community Interaction Design
 
-```markdown
-## B站视频脚本 — [{预计时长}] — [{视频类型}]
+- **Danmaku triggers**: predefined moments where danmaku naturally surges
+  - Time-stamped "梗" pre-placed at specific timestamps (e.g., 05:20, 13:14)
+  - Controversial statement with 2s pause for reaction danmaku
+  - "Choose A or B? Type your answer" moments
+- **Comment strategy**: pin a discussion-starting comment immediately after posting
+- **Interaction window**: respond to top comments within 30 minutes of posting
 
-═════════════════════════════════════════════
-🎯 视频核心命题：{这一期到底讲什么，一句话}
-🎯 目标受众：{谁应该看这个视频}
-🎯 预期三连率：{X%}  |  🎯 预期弹幕密度：{条/分钟}
-═════════════════════════════════════════════
+## Quality Checklist
 
-【0-30秒】点击率杀手锏
-画面：{最具信息量或戏剧性的画面}
-台词："{本期最吸引人的结论/问题/矛盾}"
-字幕：{视频标题 + 一句话副标题}
-→ 目标：从推荐页的众多视频中脱颖而出
-→ （参考：references/douyin.md 的 Hook 设计，但B站允许更长）
-
-【30s-2min】背景铺垫 + 信任建立
-画面：UP主出镜 / 相关素材混剪
-台词："{为什么做这期 / 这个话题为什么重要 / 我的立场}"
-弹幕预埋点："{这里观众通常会发的弹幕类型}"
-
-【2min-{N-2}min】主体内容（分段式深入）
-┌─────────────────────────────────────────┐
-│ 第一部分：{小标题}                       │
-│ 论点：{核心观点}                          │
-│ 论据：{案例/数据/演示/对比}               │
-│ 弹幕触发："{设计让观众忍不住发弹幕的点}"   │
-│                                         │
-│ 第二部分：{小标题}                       │
-│ ...                                     │
-│                                         │
-│ 第三部分：{小标题}                       │
-│ ...                                     │
-└─────────────────────────────────────────┘
-
-【{N-2}min-{N}min】总结 + 升华
-画面：回到UP主 / 金句卡片 / 情绪BGM起
-台词："{全文总结 / 更高维度的思考 / 个人态度表达}"
-→ 目标：让用户觉得"这X分钟没白看"
-
-【结尾】三连引导 + 下期预告
-画面：关注按钮指引 / 动态展示 / 彩蛋
-台词："{求三连的理由 + 下期话题预告 + 互动提问}"
-
-═════════════════════════════════════════════
-备注：{选题背景/参考资料/免责声明（如需要）}
-```
-
----
-
-## 二、弹幕工程设计
-
-> 弹幕不是自发产生的 —— 优质B站内容会 **主动设计** 弹幕触发点。
-
-### 6类弹幕触发点
-
-| 类型 | 触发方式 | 预期弹幕 | 设计时机 |
-|------|---------|---------|---------|
-| **1. 共鸣触发** | "是不是很多人都..." | "是我""真实""+1""一样" | 开头/痛点描述时 |
-| **2. 争议触发** | "我认为XX其实是..." | "不同意""等一个解释""来了" | 提出反常识观点时 |
-| **3. 笑点触发** | （梗/自嘲/反差） | "哈哈哈哈""草""前方高能" | 幽默/自黑片段 |
-| **4. 互动触发** | "你们觉得呢？" | 各种观点刷屏 | 需要讨论的话题节点 |
-| **5. 剧情触发** | "接下来发生的事..." | "？？？""卧槽""发生了什么" | 悬念/反转前 |
-| **6. 数据触发** | "这个数字意味着..." | "这么多？""离谱""不敢信" | 数据震撼时刻 |
-
-### 弹幕设计原则
-
-```
-原则1: 每1-2分钟至少一个弹幕触发点
-原则2: 全程无触发点 = "安静得像个YouTube视频"（贬义）
-原则3: 不要过度设计（每30秒一个触发 = 刻意感太强）
-原则4: 弹幕预埋 ≠ 自己发弹幕（是设计内容让观众想发）
-原则5: 最好的弹幕是观众自发创造的梗（无法完全设计，但可以引导）
-```
-
-### 弹幕友好的内容特征
-
-- **有"共同语言"**：使用社区内的流行梗/术语（但不过时）
-- **有"可吐槽点"**：适度暴露瑕疵或尴尬瞬间（增加真实感和亲近感）
-- **有"可参与空间"**：留出让观众补充/纠正/发表意见的空间
-- **有"时间标记"**：UP主可以说"此时应该有一波弹幕了"（meta式互动）
-
----
-
-## 三、内容类型策略
-
-| 视频类型 | 最佳时长 | 结构特点 | 弹幕设计要点 | 三连引导策略 |
-|---------|---------|---------|------------|-------------|
-| **知识科普** | 8-15min | 问题引入 → 知识拆解 → 案例佐证 → 总结升华 | "这里记下来""考试要考的""懂的都懂" | "投币等于学费，收藏等于笔记" |
-| **技术教程** | 10-20min | 效果展示 → 环境准备 → 分步教学 → 常见问题 | "到这里了吗？""报错的扣1""学会了" | "觉得有用的投个币支持一下" |
-| **体验/评测** | 5-12min | 开箱初印象 → 深度使用 → 优缺点总结 | "这也太贵了吧""等等党胜利""真香" | "觉得客观的投币，有不同意见评论区见" |
-| **杂谈/观点** | 5-10min | 事件引入 → 多角度分析 → 个人立场 | "说到心坎上了""前排吃瓜""真相了" | "认同的点赞，不认同的评论区辩论" |
-| **系列连载** | 每期8-15min | 每期独立成章但有连续性 | "追番""催更""下一期什么时候" | "追番请一键三连，不错过更新" |
-
----
-
-## 四、深度内容要求
-
-B站用户对内容深度的容忍度和期望值 **远高于其他平台**。
-
-### B站用户不能接受的
-
-- 浅尝辄止的表面介绍（"百度百科式"科普）
-- 没有个人观点的搬运/复读
-- 注水严重的内容（5分钟能说清楚的事拖到15分钟）
-- 缺乏专业性的"伪知识"
-- 没有信息增量的内容（"看了跟没看一样"）
-
-### B站用户期待的
-
-- **有独特视角**：不是人云亦云，有自己的分析和判断
-- **有信息增量**：看完之后确实学到了新东西
-- **有逻辑框架**：清晰的论证过程，不是东拼西凑
-- **有真诚态度**：可以犯错/可以有局限，但不能敷衍
-- **有参考资料**：知识类内容标注信息来源（增加可信度）
-
-### 深度内容的结构要求
-
-```
-浅层（其他平台可能就够了）:
-  现象描述 → 结论给出
-
-中层（B站最低标准）:
-  现象描述 → 原因分析 → 结论给出 → 案例佐证
-
-深层（B站爆款标配）:
-  现象描述 → 多角度分析 → 反方观点回应 → 独立判断 → 
-  案例验证 → 升华总结 → 开放讨论
-```
-
----
-
-## 五、发布规范
-
-### 最佳发布时间
-
-| 时段 | 适合内容 | 原因 |
-|------|---------|------|
-| 11:30-13:00 | 轻松/短中视频 | 午休观看 |
-| **17:00-20:00** | **全类型（放学下班高峰）** | **B站主力的学生/年轻白领集中上线** |
-| **20:00-23:00** | **深度/长视频/知识类** | **黄金时段，完整观看时间长** |
-| 周五晚-周日全天 | 系列内容/长视频 | 周末用户有大块时间 |
-| 寒暑假期间 | 泛娱乐/知识类/游戏 | 学生群体活跃度高 |
-
-### 发布后运营
-
-- **发布后1小时**：回复前排弹幕和评论（B站用户重视UP主互动）
-- **发布后6小时**：置顶高质量评论/弹幕（引导讨论方向）
-- **发布后24小时**：记录核心数据（播放量/互动率/三连率/新增关注）
-- **发布后3天**：如果表现好，可以考虑做" reaction / 补充 / 答评论区热门问题"的跟进视频
-
----
-
-## 六、质量检查卡
-
-> 每条B站视频发布前，必须逐项通过此检查卡。
-
-```
-B站发布前自查清单
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-【开头（0-30秒）】
-□ 有足够的点击吸引力（画面+台词+标题一致性）？
-□ 在前30秒内传达了本期核心价值？
-□ 没有过长的自我介绍/废话开场？
-
-【内容深度】
-□ 内容深度匹配B站用户期望（非浅尝辄止）？
-□ 有独特的个人视角/分析/判断？
-□ 有信息增量（用户看完能学到东西）？
-□ 论证逻辑清晰（非东拼西凑）？
-
-【弹幕工程】
-□ 全程设计了弹幕触发点（每1-2分钟至少一个）？
-□ 使用了多种触发类型（不只用一种）？
-□ 预留了观众参与/吐槽的空间？
-
-【制作质量】
-□ 时长合理（没有注水/拖沓的部分）？
-□ 画质/收音达到基本标准？
-□ 字幕/注释/时间轴（如有必要）做好了？
-
-【结尾】
-□ 有总结/升华（让用户觉得"没白看"）？
-□ 有三连引导（自然的，不强硬的）？
-□ 有下期预告（培养期待感）？
-
-【包装】
-□ 封面/标题/简介三位一体（信息一致且有吸引力）？
-□ 分区选择正确？
-□ 标签/描述中有利于搜索的关键词？
-□ 参考资料标注清楚（知识类必需）？
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-质量评级：⭐⭐⭐⭐☆ (4/5)
-是否通过：✅ YES / ❌ 需修改（原因：__________）
-```
+- [ ] Opening hook within 3 seconds
+- [ ] Every 30s delivers one new information point
+- [ ] Danmaku trigger points designed in script
+- [ ] Chapter markers applied
+- [ ] Each 2-3 minutes has scene/visual change
+- [ ] CTA includes Bilibili-specific element (coin/follow)
+- [ ] Comment strategy prepared (pinned comment drafted)
+- [ ] Duration appropriate: 8-15min (knowledge), 5-8min (entertainment)
+- [ ] Background music licensed or Bilibili library

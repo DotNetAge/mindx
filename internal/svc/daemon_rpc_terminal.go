@@ -86,8 +86,23 @@ func (d *Daemon) handleTerminalStart(ctx context.Context, params json.RawMessage
 		return nil, fmt.Errorf("client_id required")
 	}
 
-	cmd := exec.Command("zsh")
-	cmd.Dir = req.Cwd
+	// Resolve working directory: use provided cwd, or try to find a sensible default
+	cwd := req.Cwd
+	if cwd == "" {
+		cwd = d.resolveTerminalCwd()
+	}
+
+	cmd := exec.Command("zsh", "--login", "-i")
+	cmd.Dir = cwd
+	cmd.Env = append(os.Environ(),
+		"TERM=xterm-256color",
+		"COLORTERM=truecolor",
+		fmt.Sprintf("CWD=%s", cwd),
+		// Suppress fancy prompts that render as garbled Unicode in xterm
+		"DISABLE_AUTO_TITLE=1",
+		"PROMPT=%n@%m:%~%# ",
+		"RPROMPT=",
+	)
 
 	f, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: 24, Cols: 80})
 	if err != nil {
@@ -210,6 +225,23 @@ func (d *Daemon) handleTerminalResize(ctx context.Context, params json.RawMessag
 	}
 
 	return nil, nil
+}
+
+// resolveTerminalCwd tries to find a sensible working directory when none is provided.
+// Priority: first watched KB directory > current working directory.
+func (d *Daemon) resolveTerminalCwd() string {
+	// Try the first watched directory from filewatch service
+	if d.kbWatch != nil {
+		status := d.kbWatch.Status()
+		if len(status.Watched) > 0 && status.Watched[0] != "" {
+			return status.Watched[0]
+		}
+	}
+	// Fallback to current working directory
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
+	}
+	return ""
 }
 
 // handleTerminalKill 强制终止终端会话

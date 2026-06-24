@@ -1,251 +1,77 @@
-# 知乎写作规范 (Zhihu Writing Standard)
+# Zhihu (知乎) — Content Reference
 
-> 本文件是 content-ops 技能的**平台参考标准**，不是独立技能。当需要为知乎生产问答/文章内容时，由 SKILL.md 的工作流按需加载本文件。
+## Platform Context
 
-## 平台本质
+- Q&A platform. Long-form text answers (1000-3000+ words).
+- Users value: information density, unique perspective, practical value.
+- Algorithm factors: upvotes > comments > share. Credibility signals weighted heavily.
+- New creators: answer questions first, write articles later (after establishing followers).
+- High-quality answers get long-tail traffic via search for months or years.
 
-知乎 = **中文互联网的知识殿堂**
-
-用户来这里是为了获得 **专业、可信、有深度** 的回答。知乎的核心货币不是流量，而是 **专业权重（权威性）**。
-
-## 核心机制
-
-### 赞同数 = 专业权重
+## Answer Structure — "金字塔结构" (Pyramid)
 
 ```
-赞同数越高 → 专业权重越高 → 回答排序越靠前 → 更多曝光 → 更多赞同
-（正向飞轮）
+Opening (first 3 lines — must hook):
+  State your unique angle in one sentence.
+  "I've been [doing X] for [N] years and handled [Y] cases. Here's what I learned."
+  Avoid: "I think", "In my opinion". Lead with substance.
+
+Body:
+  Core argument → supporting evidence → specific examples
+  3-5 major points. Each with subheading if >300 words.
+  Structure flow:
+    1. Claim (bold it — this is the headline of that section)
+    2. Evidence (data, source citation, personal case)
+    3. Application (how the reader can use this)
+
+Closing:
+  Synthesis (1-3 sentence summary)
+  Actionable checklist or next steps
+  Invite discussion: "If you're working on [topic], comment your specific scenario."
 ```
 
-- 高质量回答会被持续推荐，**长尾流量巨大**
-- 一个好回答可以持续带来流量长达 **数月甚至数年**
-- 知乎的搜索引擎权重很高（百度搜索经常出现知乎结果）
-
-### "谢邀"时代已过
-
-现在直接切入正题，不需要客套开场。用户的时间宝贵，他们要看的是 **干货**。
-
-### 结构化 > 文采飞扬
-
-知乎用户喜欢 **清晰的逻辑框架**，不喜欢散文式的回答。能用表格就不用段落，能用分点就不用连贯叙述。
-
-### 数据和案例是硬通货
-
-- 空谈观点不如一个具体案例有说服力
-- "我觉得"不如"我在XX项目中实测的数据是..."
-- 没有来源的数据不如标注了出处的数据
-
----
-
-## 一、5层结构法
-
-这是知乎高赞回答的标准结构。每一层都有明确的功能。
-
-### Layer 1: 结论先行（最重要的300字）
-
-```markdown
-{直接给出结论/核心观点}
-→ 一句话说清你的立场
-→ 如果答案是复杂的，用"简而言之：{一句话总结}，具体情况如下："
-```
-
-**为什么先给结论：** 知乎用户刷信息流时只会看前几行。如果前300字没有结论，大部分人不会继续往下看。
-
-**常见错误：** 铺垫太长，讲了半天才说到正题。知乎不是小说，不需要悬念。
-
-### Layer 2: 权威建立（为什么你有资格回答）
-
-```markdown
-→ 相关从业经验（X年在XX领域）
-→ 直接/间接相关案例
-→ 数据/研究支撑
-→ "我曾在{情境}中遇到{问题}，通过{方法}解决了..."
-```
-
-**原则：不要装大佬，但要让人知道你不是在瞎说。**
-
-适度展示资质即可，过度吹嘘反而引起反感。最好的方式是用 **事实** 建立权威，而不是用 **头衔**。
-
-### Layer 3: 结构化论证（主体部分）
-
-```markdown
-## 一、{论点一}
-### 1.1 {子论点}
-- 论据/案例/数据
-- 具体例子（"比如我在XX项目中..."）
-
-### 1.2 {子论点}
-- 论据/案例/数据
-
-## 二、{论点二}
-...
-
-## 三、反驳/补充视角
-（主动提出反面意见并回应，显示客观性和深度）
-→ "有人可能会说...但实际上..."
-→ "另一种思路是...但在这种情况下..."
-
-## 四、实操建议（如果适用）
-→ Step 1: ...
-→ Step 2: ...
-→ Step 3: ...
-```
-
-**结构化技巧：**
-- 使用 H2/H3/H4 分层标题
-- 每个论点一段，不超过5-8行
-- 适当使用表格对比
-- 重要论据加粗
-- 代码/数据用代码块
-
-### Layer 4: 信息增量（让用户觉得"值了"）
-
-```markdown
-💡 附赠信息：
-→ 别人没提到的角度/资源/工具
-→ 常见误区提醒（"很多人在这里犯错..."）
-→ 延伸阅读推荐（"如果你想深入了解，推荐看XX"）
-→ "如果只记住一点，那就是：{最核心的一句话}"
-```
-
-**为什么需要这一层：** 让你的回答与其他回答拉开差距。大多数人会在Layer 3结束，你的Layer 4就是"超额交付"。
-
-### Layer 5: 互动收尾
-
-```markdown
----
-以上是我的回答，基于{时间/情境}的个人经验。
-情况不同做法可能不同，欢迎在评论区补充不同视角。
-如果有具体问题，可以{进一步互动的方式}。
-```
-
-**保持开放态度：** 知乎是一个讨论社区，不是演讲台。承认自己的局限性反而增加可信度。
-
----
-
-## 二、质量阶梯
-
-| 层次 | 特征 | 获赞潜力 | 典型表现 |
-|------|------|---------|---------|
-| **L5 大师级** | 原创研究/一手数据 + 独特框架 + 行业影响力 | 10K+ | 被引用/转载/成为行业标准答案 |
-| **L4 专家级** | 深度经验 + 结构化论证 + 多维度分析 | 1K-10K | 专业人士认可，同行会推荐 |
-| **L3 优质级** | 有逻辑有案例 + 信息量大 + 可操作性强 | 500-1K | 用户觉得"学到了"，会收藏 |
-| **L2 及格级** | 观点正确 + 有一定论据 | 100-500 | 不出错，但也不出彩 |
-| **L1 水货级** | 空谈感受/纯主观/无实质内容 | <100 | "说了等于没说" |
-
-**目标：每篇回答至少达到 L3，争取 L4。**
-
----
-
-## 三、选题策略
-
-### 高价值回答特征
-
-```
-✅ 热门问题（浏览量 > 10万）+ 低质现有回答（机会窗口）
-   → 你的高质量回答可以快速脱颖而出
-
-✅ 细分领域专业问题（竞争少，精准受众）
-   → 小众但高价值的 niche 问题
-
-✅ "如何评价X"类问题（允许深度长文发挥）
-   → 议论型问题最适合展示分析能力
-
-✅ 时效性问题（早期回答享受长尾红利）
-   → 趁热点还在时抢占位置
-
-✅ 自身独特经历的问题（无法被复制的优势）
-   → 第一手经验是无法抄袭的
-```
-
-### 应该避免的问题
-
-```
-❌ 已有大量优质回答的老问题（很难超越前几名）
-❌ 纯主观/引战类问题（容易招黑，品牌风险）
-❌ 违规/灰色地带问题（账号安全风险）
-❌ 太过宽泛的问题（如"怎么赚钱"——范围太大无法深入）
-```
-
----
-
-## 四、回答 vs 文章的选择
-
-| | 回答 | 文章 |
-|--|------|------|
-| **长度** | 1000-5000字 | 2000-10000字 |
-| **流量来源** | 问题推荐 + 搜索 + 关注 | 关注 + 推荐 + 搜索 |
-| **适用场景** | 针对性强 / 回答具体问题 | 系统性强 / 完整论述一个话题 |
-| **长尾效应** | 依附于问题的生命周期 | 独立存在，生命周期更长 |
-| **互动方式** | 评论 + 赞同 + 感谢 | 评论 + 赞同 + 收藏 |
-| **建议** | 从回答开始建立权威 | 有了一定粉丝后再写文章 |
-
-**新手策略：先从高质量的回答开始积累专业权重，再逐步过渡到专栏文章。**
-
----
-
-## 五、发布规范
-
-### 最佳发布时间
-
-| 时段 | 效果 | 原因 |
-|------|------|------|
-| **9:00-11:00** | **高（工作间隙刷知乎）** | **一线城市白领通勤/开工前** |
-| **14:00-16:00** | 中高 | 下午茶时间 |
-| **20:00-23:00** | 高 | 晚间深度阅读时段 |
-| **周三-周五** | **高于周末** | **工作日专业内容消费更高** |
-
-### 发布后运营
-
-- **发布后2小时**：回复前几条评论（早期互动影响推荐）
-- **发布后24小时**：持续回复评论，参与讨论
-- **发布后一周**：观察数据趋势，如果表现好可以更新补充内容（编辑功能）
-
----
-
-## 六、质量检查卡
-
-> 每篇知乎内容发布前，必须逐项通过此检查卡。
-
-```
-知乎发布前自查清单
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-【Layer 1: 结论】
-□ 前300字给出了明确结论？
-□ 结论可以直接回答问题？
-□ 没有过长的铺垫/客套？
-
-【Layer 2: 权威】
-□ 建立了回答者的可信度（经验/数据/案例）？
-□ 不过度吹嘘（用事实而非头衔）？
-
-【Layer 3: 论证】
-□ 论证结构清晰（使用了分层标题 H2/H3）？
-□ 包含具体案例或数据（不是空谈）？
-□ 主动回应了可能的反驳意见？
-□ 有可操作的建议或行动指引？
-
-【Layer 4: 增量】
-□ 有信息增量（别人没提到的角度/资源/工具）？
-□ 有常见误区提醒？
-□ 有"如果只记住一点"的金句？
-
-【Layer 5: 收尾】
-□ 保持开放态度（欢迎补充）？
-□ 有进一步互动的引导？
-
-【整体质量】
-□ 信息量足够大（用户觉得"学到东西了"）？
-□ 没有抄袭/洗稿嫌疑？
-□ 达到 L3 或以上质量层级？
-
-【选题】
-□ 问题有足够的浏览量/关注度？
-□ 现有回答质量不高（有机会超越）？
-□ 在自己的专业能力范围内？
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-质量层级：L{X}/5
-是否通过：✅ YES / ❌ 需修改（原因：__________）
-```
+## Title Formula
+
+(For writing answers — adapt to the question title)
+
+- `How to [achieve result] in [timeframe] — a [credential]'s guide`
+- `What nobody tells you about [topic] before [consequence]`
+- `I tried [method] for [duration], here's the unfiltered truth`
+- `The difference between [good practice] and [bad practice] in [scenario]`
+
+## Writing Style
+
+- **Authority through specifics**: cite verifiable experience, projects, cases
+  - "As a [role] who handled [N] projects over [timeframe], I can confirm..."
+  - "This claim is sourced from [publication] [year] report, page [X]"
+- **Conversational but substantive**: no filler paragraphs
+- **Emotional honesty**: share failures and doubts, not just successes
+- **Avoid**: platitudes, generic advice, Wikipedia summaries, promotional tone
+
+## Trust-Building Elements
+
+- Personal credential woven naturally into opening (not a boast paragraph)
+- Data sourced with reference details (publication, date, page if applicable)
+- Counter-arguments acknowledged before presenting your view
+- Limitations of your advice stated clearly ("This applies to [context], not [context]")
+
+## Critical Anti-Patterns (Never Write)
+
+- Pure theory without practical application
+- "Copy and paste" from other sources without original insight
+- Overwhelming jargon without explanation
+- Claims without evidence
+- Marketing or sales content disguised as answers
+
+## Quality Checklist
+
+- [ ] Opening hooks within 3 lines with a unique angle
+- [ ] Body structured in 3-5 clear points
+- [ ] Each claim has evidence (data, case, or source)
+- [ ] Personal credential mentioned naturally in opening
+- [ ] Practical value: reader can apply something immediately
+- [ ] Closing includes actionable summary
+- [ ] Answer length: 1000-2000+ words (depth expected)
+- [ ] No promotional or sales language
+- [ ] Limitations of advice acknowledged
+- [ ] Sources cited for key data points
