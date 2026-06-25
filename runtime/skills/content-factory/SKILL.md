@@ -1,5 +1,5 @@
 ---
-name: content-ops
+name: content-factory
 description: >
   Write high-quality, platform-native content for Chinese social media
   platforms (Xiaohongshu/WeChat OA/Douyin/Bilibili/Zhihu/Weibo).
