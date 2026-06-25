@@ -206,24 +206,15 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 	)
 
 	// Add project directory to file watchlist for auto-indexing (RAG).
-	if d.kbWatch == nil {
-		d.logger.Warn("session.create: kbWatch is nil, skipping AddWatch for new session",
-			"project_dir", p.ProjectDir,
-			"agent", p.Agent,
-			"reason", "GraphIndexer not initialized — check if LLM model is configured",
-		)
-	} else if err := d.kbWatch.AddWatch(p.ProjectDir, p.Agent); err != nil {
-		d.logger.Warn("session.create: failed to add project dir to watchlist",
-			"dir", p.ProjectDir,
-			"agent", p.Agent,
-			"error", err,
-		)
-	} else {
-		d.logger.Info("session.create: project dir added to watchlist",
-			"dir", p.ProjectDir,
-			"agent", p.Agent,
-		)
-	}
+	// Unconditionally persists the entry to the watch list store.
+	// The FileWatchService, if running, will also register an fsnotify watcher
+	// via addWatchEntry. If the service is not yet available, the entry will
+	// be picked up later by restoreSessionWatches().
+	d.addWatchEntry(p.ProjectDir, p.Agent)
+	d.logger.Info("session.create: project dir processed for watchlist",
+		"dir", p.ProjectDir,
+		"agent", p.Agent,
+	)
 
 	return map[string]any{
 		"session_id":  info.SessionID,
