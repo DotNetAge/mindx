@@ -239,12 +239,19 @@ type pendingInteraction struct {
 }
 
 type Daemon struct {
-	app          *core.App
-	gw           *gateway.Server
-	scheduler    *scheduler.Scheduler
-	schedulerDB  *scheduler.FileSchedulerStore
-	kbWatch      *kbwatch.FileWatchService
-	sharedMemory *memory.RAGMemory
+	app         *core.App
+	gw          *gateway.Server
+	scheduler   *scheduler.Scheduler
+	schedulerDB *scheduler.FileSchedulerStore
+	kbWatch     *kbwatch.FileWatchService
+	// watchListStore and indexStateStore are persisted stores for filewatch
+	// entries. They are created unconditionally (independent of GraphIndexer
+	// or FileWatchService) so that session creation can always persist a
+	// project directory to the watch list. The FileWatchService, when
+	// initialized, reuses the same store instances.
+	watchListStore  *kbwatch.WatchListStore
+	indexStateStore *kbwatch.IndexStateStore
+	sharedMemory    *memory.RAGMemory
 
 	// knowledge-graph indexer (GraphIndexer)
 	graphIndexer  *goragindexer.GraphIndexer
@@ -353,6 +360,18 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		)
 	}
 
+	// ── WatchListStore / IndexStateStore（持久化存储）────────────
+	// 与 FileWatchService 解耦，无条件创建，确保会话创建时始终能持久化
+	// 监控目录条目。当 FileWatchService 初始化后会自动恢复这些条目。
+	watchListStore, wlErr := kbwatch.NewWatchListStore(app.Settings().DataDir())
+	if wlErr != nil {
+		logger.Warn("filewatch: failed to create watchlist store", "error", wlErr)
+	}
+	indexStateStore, isErr := kbwatch.NewIndexStateStore(app.Settings().DataDir())
+	if isErr != nil {
+		logger.Warn("filewatch: failed to create index state store", "error", isErr)
+	}
+
 	// ── GraphIndexer（知识库）─────────────────────────────────────
 	// 文件监控服务为 KB 服务，memory 仅为对话服务
 	var graphIndexer *goragindexer.GraphIndexer
@@ -436,52 +455,48 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		}
 
 		// ── FileWatchService（KB 文件监控）────────────────────────
-		// 使用 GraphIndexer 作为索引目标
-		if graphIndexer != nil {
-			watchList, wlErr := kbwatch.NewWatchListStore(app.Settings().DataDir())
-			if wlErr != nil {
-				logger.Warn("filewatch: failed to create watchlist store, watch disabled", "error", wlErr)
-			} else {
-				indexState, isErr := kbwatch.NewIndexStateStore(app.Settings().DataDir())
-				if isErr != nil {
-					logger.Warn("filewatch: failed to create index state store, watch disabled", "error", isErr)
-				} else {
-					// Determine model name for token usage recording
-					idxModelName := ""
-					if llmModelCfg != nil {
-						idxModelName = llmModelCfg.Model
+		// 使用 GraphIndexer 作为索引目标；store 复用 daemon 级实例。
+		if graphIndexer != nil && watchListStore != nil && indexStateStore != nil {
+			// Determine model name for token usage recording
+			idxModelName := ""
+			if llmModelCfg != nil {
+				idxModelName = llmModelCfg.Model
+			}
+			kbWatch = kbwatch.NewFileWatchService(
+				graphIndexer,
+				watchListStore,
+				indexStateStore,
+				filepath.Join(app.Settings().DataDir(), "kb-cache"),
+				logger,
+				app.TokenUsageStore(),
+				idxModelName,
+			)
+			logger.Info("filewatch service configured (backed by GraphIndexer)",
+				"cache_dir", filepath.Join(app.Settings().DataDir(), "kb-cache"),
+			)
+			kbWatch.VersionRecorder = func(absPath string) {
+				if app.SessDB() == nil || app.FileVersions() == nil {
+					return
+				}
+				sessions, listErr := app.SessDB().ListSessions(context.Background())
+				if listErr != nil {
+					return
+				}
+				for _, s := range sessions {
+					if s.ProjectDir == "" || !strings.HasPrefix(absPath, s.ProjectDir) {
+						continue
 					}
-					kbWatch = kbwatch.NewFileWatchService(
-						graphIndexer,
-						watchList,
-						indexState,
-						filepath.Join(app.Settings().DataDir(), "kb-cache"),
-						logger,
-						app.TokenUsageStore(),
-						idxModelName,
-					)
-					logger.Info("filewatch service configured (backed by GraphIndexer)",
-						"cache_dir", filepath.Join(app.Settings().DataDir(), "kb-cache"),
-					)
-					kbWatch.VersionRecorder = func(absPath string) {
-						if app.SessDB() == nil || app.FileVersions() == nil {
-							return
-						}
-						sessions, listErr := app.SessDB().ListSessions(context.Background())
-						if listErr != nil {
-							return
-						}
-						for _, s := range sessions {
-							if s.ProjectDir == "" || !strings.HasPrefix(absPath, s.ProjectDir) {
-								continue
-							}
-							if s.SessionDir != "" {
-								_ = app.FileVersions().Record(s.SessionDir, absPath)
-							}
-						}
+					if s.SessionDir != "" {
+						_ = app.FileVersions().Record(s.SessionDir, absPath)
 					}
-				} // end indexState != nil
-			} // end watchList != nil
+				}
+			}
+		} else {
+			logger.Warn("filewatch: GraphIndexer or stores not available, FileWatchService disabled",
+				"graphIndexer", graphIndexer != nil,
+				"watchListStore", watchListStore != nil,
+				"indexStateStore", indexStateStore != nil,
+			)
 		}
 
 		// ── Shared Memory（对话记忆）─────────────────────────────
@@ -508,6 +523,8 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		wsPath:              wsPath,
 		schedulerDB:         schedulerDB,
 		kbWatch:             kbWatch,
+		watchListStore:      watchListStore,
+		indexStateStore:     indexStateStore,
 		sharedMemory:        sharedMemory,
 		graphIndexer:        graphIndexer,
 		runtimeFS:           runtimeFS,
@@ -688,6 +705,40 @@ func (d *Daemon) autoUpdateLoop(ctx context.Context) {
 	}
 }
 
+// addWatchEntry persists a directory to the file watch list store
+// unconditionally (independent of FileWatchService status). When the
+// FileWatchService is running, it also registers the fsnotify watcher
+// for real-time monitoring. The store is idempotent — repeated calls
+// with the same (dir, agent) pair are safe (dedup by WatchListStore).
+func (d *Daemon) addWatchEntry(dir, agent string) {
+	if d.watchListStore == nil {
+		return
+	}
+	if err := d.watchListStore.Add(dir, agent); err != nil {
+		d.logger.Warn("addWatchEntry: failed to persist watch entry",
+			"dir", dir,
+			"agent", agent,
+			"error", err,
+		)
+		return
+	}
+	if d.indexStateStore != nil {
+		absDir, _ := filepath.Abs(dir)
+		d.indexStateStore.SetPending(absDir)
+	}
+	// If FileWatchService is running, also register fsnotify watcher.
+	// AddWatch's internal store.Add is a no-op (dedup), so this is safe.
+	if d.kbWatch != nil {
+		if err := d.kbWatch.AddWatch(dir, agent); err != nil {
+			d.logger.Warn("addWatchEntry: failed to register fsnotify watcher",
+				"dir", dir,
+				"agent", agent,
+				"error", err,
+			)
+		}
+	}
+}
+
 // restoreSessionWatches iterates all existing sessions and adds their
 // project_dir to the file watchlist if not already present. This ensures
 // sessions created outside the daemon RPC path (e.g. TUI auto-created
@@ -706,20 +757,12 @@ func (d *Daemon) restoreSessionWatches() {
 		if s.ProjectDir == "" {
 			continue
 		}
-		if err := d.kbWatch.AddWatch(s.ProjectDir, s.AgentName); err != nil {
-			d.logger.Warn("restoreSessionWatches: failed to add watch",
-				"session_id", s.SessionID,
-				"project_dir", s.ProjectDir,
-				"agent", s.AgentName,
-				"error", err,
-			)
-		} else {
-			d.logger.Info("restoreSessionWatches: watch restored",
-				"session_id", s.SessionID,
-				"project_dir", s.ProjectDir,
-				"agent", s.AgentName,
-			)
-		}
+		d.addWatchEntry(s.ProjectDir, s.AgentName)
+		d.logger.Info("restoreSessionWatches: watch entry persisted",
+			"session_id", s.SessionID,
+			"project_dir", s.ProjectDir,
+			"agent", s.AgentName,
+		)
 	}
 }
 
@@ -828,21 +871,26 @@ func (d *Daemon) ensureGraphIndexer() error {
 	)
 	d.app.SetGraphIndexer(gi)
 
-	// Create FileWatchService
-	watchList, wlErr := kbwatch.NewWatchListStore(d.app.Settings().DataDir())
-	if wlErr != nil {
-		return fmt.Errorf("create watchlist store: %w", wlErr)
+	// Create FileWatchService — reuse daemon-level stores or initialize them.
+	if d.watchListStore == nil {
+		ws, wlErr := kbwatch.NewWatchListStore(d.app.Settings().DataDir())
+		if wlErr != nil {
+			return fmt.Errorf("create watchlist store: %w", wlErr)
+		}
+		d.watchListStore = ws
 	}
-
-	indexState, isErr := kbwatch.NewIndexStateStore(d.app.Settings().DataDir())
-	if isErr != nil {
-		return fmt.Errorf("create index state store: %w", isErr)
+	if d.indexStateStore == nil {
+		is, isErr := kbwatch.NewIndexStateStore(d.app.Settings().DataDir())
+		if isErr != nil {
+			return fmt.Errorf("create index state store: %w", isErr)
+		}
+		d.indexStateStore = is
 	}
 
 	kbWatch := kbwatch.NewFileWatchService(
 		d.graphIndexer,
-		watchList,
-		indexState,
+		d.watchListStore,
+		d.indexStateStore,
 		filepath.Join(d.app.Settings().DataDir(), "kb-cache"),
 		d.logger,
 		d.app.TokenUsageStore(),
