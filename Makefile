@@ -19,7 +19,7 @@
 # =============================================================================
 
 .PHONY: build build-all setup-cross clear install run run-daemon restart stop test clean docs help \
-        dev uninstall \
+        dev uninstall sync \
         release release-notes release-publish release-homebrew release-winget publish \
         docker .env docker-build docker-run docker-run-daemon docker-push docker-release docker-clean \
         ci cd deps-update \
@@ -236,6 +236,23 @@ stop:
 	@echo "$(YELLOW)🛑 Stopping mindx daemon...$(NC)"
 	@"$$HOME/.mindx/bin/$(BINARY_NAME)" stop || echo "$(YELLOW)  ⚠ Daemon may not have been running.$(NC)"
 	@echo "$(GREEN)✅ mindx daemon stopped.$(NC)"
+
+## sync: 将 runtime 中的 agents、schemas、skills、web 同步覆盖至 ~/.mindx
+sync:
+	@echo "$(GREEN)➡ Syncing runtime/ → ~/.mindx/ ...$(NC)"
+	@for dir in agents schemas skills web; do \
+		src="runtime/$$dir"; \
+		dst="$$HOME/.mindx/$$dir"; \
+		if [ -d "$$src" ]; then \
+			rm -rf "$$dst" 2>/dev/null; \
+			cp -r "$$src" "$$dst" && \
+			echo "  $(GREEN)✅ $$src → $$dst$(NC)" || \
+			echo "  $(RED)❌ Failed: $$src$(NC)"; \
+		else \
+			echo "  $(YELLOW)⚠ Source not found: $$src$(NC)"; \
+		fi; \
+	done
+	@echo "$(GREEN)✅ Sync complete!$(NC)"
 
 ## dev: 开发模式（go run，不编译，推荐日常开发）
 dev:

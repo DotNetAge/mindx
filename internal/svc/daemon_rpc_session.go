@@ -210,11 +210,9 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 	// The FileWatchService, if running, will also register an fsnotify watcher
 	// via addWatchEntry. If the service is not yet available, the entry will
 	// be picked up later by restoreSessionWatches().
-	d.addWatchEntry(p.ProjectDir, p.Agent)
-	d.logger.Info("session.create: project dir processed for watchlist",
-		"dir", p.ProjectDir,
-		"agent", p.Agent,
-	)
+	if err := d.addWatchEntry(p.ProjectDir, p.Agent); err != nil {
+		return nil, fmt.Errorf("add watch entry: %w", err)
+	}
 
 	return map[string]any{
 		"session_id":  info.SessionID,
