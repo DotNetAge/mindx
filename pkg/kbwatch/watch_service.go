@@ -354,6 +354,16 @@ func (s *FileWatchService) SyncDir(ctx context.Context, absDir string) {
 
 	s.indexState.SetPending(absDir)
 
+	// No indexer configured: keep state as "pending" so the directory will
+	// be picked up when an indexer becomes available (e.g. after model.switch).
+	if s.indexer == nil {
+		if s.logger != nil {
+			s.logger.Info("filewatch.sync: indexer not available, leaving state as pending",
+				"dir", absDir)
+		}
+		return
+	}
+
 	// Guard: skip if another goroutine is already indexing this directory.
 	if _, loaded := s.indexingGuard.LoadOrStore(absDir, struct{}{}); loaded {
 		if s.logger != nil {

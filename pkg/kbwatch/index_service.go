@@ -98,6 +98,13 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 	start := time.Now()
 	result := &ProjectSyncResult{}
 
+	// No indexer configured — skip the entire scan. The file cache is not
+	// updated, so the next Sync (when an indexer becomes available) will
+	// pick up all files as new/changed.
+	if p.indexer == nil {
+		return result
+	}
+
 	// Reset entity/rel counters on GraphIndexer for this sync cycle.
 	if gi, ok := p.indexer.(*goragindexer.GraphIndexer); ok {
 		gi.ResetEntityStats()
@@ -357,6 +364,13 @@ func (p *IndexService) SyncFiles(ctx context.Context, projectDir string, relFile
 	start := time.Now()
 	result := &ProjectSyncResult{}
 
+	// No indexer configured — skip all indexing but don't mark files as
+	// processed (cache remains unchanged, so they'll be re-evaluated later).
+	if p.indexer == nil {
+		result.Skipped = len(relFiles)
+		return result
+	}
+
 	absDir, err := filepath.Abs(projectDir)
 	if err != nil {
 		result.Err = fmt.Errorf("index-service: resolve project dir: %w", err)
@@ -607,6 +621,13 @@ func classifyErrorString(s string) string {
 
 // indexFile reads and indexes a single file, returning all chunk IDs.
 func (p *IndexService) indexFile(ctx context.Context, absPath string) ([]chunkInfo, error) {
+	// If no indexer is configured (e.g. embedder not available), skip indexing
+	// but do NOT mark the file as processed — it will be picked up when an
+	// indexer becomes available (e.g. after model.switch).
+	if p.indexer == nil {
+		return nil, nil
+	}
+
 	// Content quality gate: skip binary / garbage files before they reach the
 	// chunker & embedder pipeline.
 	raw, err := os.ReadFile(absPath)
@@ -680,6 +701,9 @@ func (p *IndexService) recordTokenUsage(ctx context.Context) {
 
 // removeChunks removes all tracked chunks for a previously indexed file.
 func (p *IndexService) removeChunks(ctx context.Context, chunks []chunkInfo) {
+	if p.indexer == nil {
+		return
+	}
 	for _, ci := range chunks {
 		if err := p.indexer.Remove(ctx, ci.ID); err != nil && p.logger != nil {
 			p.logger.Warn("index-service: failed to remove chunk", "id", ci.ID, "error", err)
