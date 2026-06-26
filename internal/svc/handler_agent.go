@@ -10,6 +10,7 @@ import (
 	"go.etcd.io/bbolt"
 
 	goharnessconfig "github.com/DotNetAge/goharness/config"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
 func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any, error) {
@@ -49,12 +50,8 @@ func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any
 	return result, nil
 }
 
-type agentGetParams struct {
-	Name string `json:"name"`
-}
-
 func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any, error) {
-	var p agentGetParams
+	var p rpc.AgentGetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -75,19 +72,8 @@ func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any,
 	return cfg, nil
 }
 
-type agentCreateParams struct {
-	Name         string         `json:"name"`
-	Role         string         `json:"role"`
-	Description  string         `json:"description"`
-	Introduction string         `json:"introduction,omitempty"`
-	Model        string         `json:"model"`
-	Skills       []string       `json:"skills,omitempty"`
-	Body         string         `json:"body"`
-	Meta         map[string]any `json:"meta,omitempty"`
-}
-
 func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (any, error) {
-	var p agentCreateParams
+	var p rpc.AgentCreateParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -145,19 +131,8 @@ func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (a
 	}, nil
 }
 
-type agentUpdateParams struct {
-	Name         string         `json:"name"`
-	Role         string         `json:"role,omitempty"`
-	Description  string         `json:"description,omitempty"`
-	Introduction string         `json:"introduction,omitempty"`
-	Model        string         `json:"model,omitempty"`
-	Skills       []string       `json:"skills,omitempty"`
-	ExcludeTools []string       `json:"exclude_tools,omitempty"`
-	Meta         map[string]any `json:"meta,omitempty"`
-}
-
 func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (any, error) {
-	var p agentUpdateParams
+	var p rpc.AgentUpdateParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -211,15 +186,8 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 	}, nil
 }
 
-type agentScoreParams struct {
-	AgentName string `json:"agent_name"`
-	Task      string `json:"task"`
-	Score     int    `json:"score"`
-	Notes     string `json:"notes,omitempty"`
-}
-
 func (d *Daemon) handleAgentScore(_ context.Context, params json.RawMessage) (any, error) {
-	var p agentScoreParams
+	var p rpc.AgentScoreParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
