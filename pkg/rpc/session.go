@@ -34,6 +34,11 @@ type SessionFileActionParams struct {
 	Files     []string `json:"files,omitempty"`
 }
 
+// SessionTruncateParams are the params for session.truncate.
+type SessionTruncateParams struct {
+	SessionID string `json:"session_id"`
+}
+
 func (c *Client) SessionCreate(agent, projectDir string) (json.RawMessage, error) {
 	return c.CallWithTimeout("session.create", SessionCreateParams{
 		Agent: agent, ProjectDir: projectDir,
@@ -66,4 +71,8 @@ func (c *Client) SessionRollbackFiles(sessionID string, files []string) (json.Ra
 	return c.CallWithTimeout("session.rollback_files", SessionFileActionParams{
 		SessionID: sessionID, Files: files,
 	})
+}
+
+func (c *Client) SessionTruncate(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("session.truncate", SessionTruncateParams{SessionID: sessionID})
 }
