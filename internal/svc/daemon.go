@@ -27,7 +27,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/internal/update"
-	"github.com/DotNetAge/mindx/pkg/kbwatch"
+	"github.com/DotNetAge/mindx/pkg/indexing"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
@@ -243,14 +243,14 @@ type Daemon struct {
 	gw          *gateway.Server
 	scheduler   *scheduler.Scheduler
 	schedulerDB *scheduler.FileSchedulerStore
-	kbWatch     *kbwatch.FileWatchService
+	kbWatch     *indexing.FileWatchService
 	// watchListStore and indexStateStore are persisted stores for filewatch
 	// entries. They are created unconditionally (independent of GraphIndexer
 	// or FileWatchService) so that session creation can always persist a
 	// project directory to the watch list. The FileWatchService, when
 	// initialized, reuses the same store instances.
-	watchListStore  *kbwatch.WatchListStore
-	indexStateStore *kbwatch.IndexStateStore
+	watchListStore  *indexing.WatchListStore
+	indexStateStore *indexing.IndexStateStore
 	sharedMemory    *memory.RAGMemory
 
 	// knowledge-graph indexer (GraphIndexer)
@@ -363,11 +363,11 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	// ── WatchListStore / IndexStateStore（持久化存储）────────────
 	// 与 FileWatchService 解耦，无条件创建，确保会话创建时始终能持久化
 	// 监控目录条目。当 FileWatchService 初始化后会自动恢复这些条目。
-	watchListStore, wlErr := kbwatch.NewWatchListStore(app.Settings().DataDir())
+	watchListStore, wlErr := indexing.NewWatchListStore(app.Settings().DataDir())
 	if wlErr != nil {
 		logger.Warn("filewatch: failed to create watchlist store", "error", wlErr)
 	}
-	indexStateStore, isErr := kbwatch.NewIndexStateStore(app.Settings().DataDir())
+	indexStateStore, isErr := indexing.NewIndexStateStore(app.Settings().DataDir())
 	if isErr != nil {
 		logger.Warn("filewatch: failed to create index state store", "error", isErr)
 	}
@@ -376,7 +376,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	// 文件监控服务为 KB 服务，memory 仅为对话服务
 	var graphIndexer *goragindexer.GraphIndexer
 	var sharedMemory *memory.RAGMemory
-	var kbWatch *kbwatch.FileWatchService
+	var kbWatch *indexing.FileWatchService
 
 	if emb := app.Embedder(); emb != nil {
 		logger.Info("embedder found, initializing knowledge base and memory services")
@@ -464,7 +464,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			if llmModelCfg != nil {
 				idxModelName = llmModelCfg.Model
 			}
-			kbWatch = kbwatch.NewFileWatchService(
+			kbWatch = indexing.NewFileWatchService(
 				graphIndexer,
 				watchListStore,
 				indexStateStore,
@@ -878,21 +878,21 @@ func (d *Daemon) ensureGraphIndexer() error {
 
 	// Create FileWatchService — reuse daemon-level stores or initialize them.
 	if d.watchListStore == nil {
-		ws, wlErr := kbwatch.NewWatchListStore(d.app.Settings().DataDir())
+		ws, wlErr := indexing.NewWatchListStore(d.app.Settings().DataDir())
 		if wlErr != nil {
 			return fmt.Errorf("create watchlist store: %w", wlErr)
 		}
 		d.watchListStore = ws
 	}
 	if d.indexStateStore == nil {
-		is, isErr := kbwatch.NewIndexStateStore(d.app.Settings().DataDir())
+		is, isErr := indexing.NewIndexStateStore(d.app.Settings().DataDir())
 		if isErr != nil {
 			return fmt.Errorf("create index state store: %w", isErr)
 		}
 		d.indexStateStore = is
 	}
 
-	kbWatch := kbwatch.NewFileWatchService(
+	kbWatch := indexing.NewFileWatchService(
 		d.graphIndexer,
 		d.watchListStore,
 		d.indexStateStore,
