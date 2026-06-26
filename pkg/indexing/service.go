@@ -557,7 +557,3 @@ func (p *IndexService) removeCachedFile(ctx context.Context, relPath string, res
 func (p *IndexService) ClearCacheEntry(relPath string) {
 	p.cache.Delete(relPath)
 }
-
-
-
-

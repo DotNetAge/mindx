@@ -98,10 +98,6 @@ func (d *Daemon) handleFSHome(_ context.Context, _ json.RawMessage) (any, error)
 	return map[string]string{"path": defaultFSHome()}, nil
 }
 
-type fsReadResult struct {
-	Content string `json:"content"`
-}
-
 func (d *Daemon) handleFSRead(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.FSReadParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -126,7 +122,7 @@ func (d *Daemon) handleFSRead(_ context.Context, params json.RawMessage) (any, e
 	if err != nil {
 		return nil, fmt.Errorf("cannot read file: %w", err)
 	}
-	return fsReadResult{Content: string(data)}, nil
+	return rpc.FSReadResult{Content: string(data)}, nil
 }
 
 func (d *Daemon) handleFSWrite(_ context.Context, params json.RawMessage) (any, error) {
@@ -187,16 +183,28 @@ func (d *Daemon) handleFSRm(_ context.Context, params json.RawMessage) (any, err
 		return nil, fmt.Errorf("cannot access path: %w", err)
 	}
 	if info.IsDir() {
-		// Only remove empty directories to avoid accidental data loss
-		entries, err := os.ReadDir(absPath)
-		if err != nil {
-			return nil, fmt.Errorf("cannot read directory: %w", err)
-		}
-		if len(entries) > 0 {
-			return nil, fmt.Errorf("directory not empty: %s", p.Path)
-		}
-		if err := os.Remove(absPath); err != nil {
-			return nil, fmt.Errorf("cannot remove directory: %w", err)
+		if p.Recurse {
+			if err := os.RemoveAll(absPath); err != nil {
+				return nil, fmt.Errorf("cannot remove directory tree: %w", err)
+			}
+		} else {
+			entries, err := os.ReadDir(absPath)
+			if err != nil {
+				return nil, fmt.Errorf("cannot read directory: %w", err)
+			}
+			if len(entries) > 0 {
+				if p.Force {
+					if err := os.RemoveAll(absPath); err != nil {
+						return nil, fmt.Errorf("cannot force remove directory: %w", err)
+					}
+				} else {
+					return nil, fmt.Errorf("directory not empty: %s", p.Path)
+				}
+			} else {
+				if err := os.Remove(absPath); err != nil {
+					return nil, fmt.Errorf("cannot remove directory: %w", err)
+				}
+			}
 		}
 	} else {
 		if err := os.Remove(absPath); err != nil {
@@ -233,10 +241,6 @@ func (d *Daemon) handleFSMv(_ context.Context, params json.RawMessage) (any, err
 }
 
 // ── 新增：reveal ──
-
-type fsRevealResult struct {
-	Status string `json:"status"`
-}
 
 // handleFSReveal opens the file's parent directory in the native file manager,
 // and on macOS also highlights/selects the file.
@@ -276,7 +280,7 @@ func (d *Daemon) handleFSReveal(_ context.Context, params json.RawMessage) (any,
 		}
 	}
 
-	return fsRevealResult{Status: "ok"}, nil
+	return rpc.FSRevealResult{Status: "ok"}, nil
 }
 
 // ── HTTP download ──

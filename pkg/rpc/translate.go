@@ -14,6 +14,16 @@ type TranslateResult struct {
 	Cached bool   `json:"cached"`
 }
 
+// OptimizeParams are the params for optimize.rpc.
+type OptimizeParams struct {
+	Text string `json:"text"`
+}
+
+// OptimizeResult is the result of optimize.rpc.
+type OptimizeResult struct {
+	Text string `json:"text"`
+}
+
 func (c *Client) Translate(text, lang string) (json.RawMessage, error) {
 	return c.CallWithTimeout("translate.rpc", TranslateParams{Text: text, Lang: lang})
 }

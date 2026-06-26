@@ -237,9 +237,9 @@ func (d *Daemon) handleMemoryGetChunks(_ context.Context, params json.RawMessage
 	d.logger.Info("memory.get_chunks called", "doc_id", p.DocID, "returned", len(items))
 
 	return struct {
-		DocID  string         `json:"doc_id"`
+		DocID  string          `json:"doc_id"`
 		Chunks []rpc.ChunkItem `json:"chunks"`
-		Count  int            `json:"count"`
+		Count  int             `json:"count"`
 	}{
 		DocID:  p.DocID,
 		Chunks: items,
@@ -250,10 +250,6 @@ func (d *Daemon) handleMemoryGetChunks(_ context.Context, params json.RawMessage
 // ---------------------------------------------------------------------------
 // memory.count — 获取 RAG 索引中的分块总数
 // ---------------------------------------------------------------------------
-
-type memoryCountResult struct {
-	Count int `json:"count"`
-}
 
 func (d *Daemon) handleMemoryCount(_ context.Context, _ json.RawMessage) (any, error) {
 	mem := d.sharedMemory
@@ -273,7 +269,7 @@ func (d *Daemon) handleMemoryCount(_ context.Context, _ json.RawMessage) (any, e
 
 	d.logger.Info("memory.count called", "count", count)
 
-	return memoryCountResult{Count: count}, nil
+	return rpc.MemoryCountResult{Count: count}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -310,6 +306,11 @@ func (d *Daemon) handleFilewatchStart(_ context.Context, params json.RawMessage)
 	d.logger.Info("filewatch.start: starting filewatch service")
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("filewatch.start: goroutine panic", fmt.Errorf("%v", r))
+			}
+		}()
 		if err := d.kbWatch.Start(ctx); err != nil {
 			d.logger.Warn("filewatch.start: service exited with error", "error", err)
 		}

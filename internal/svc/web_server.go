@@ -121,6 +121,11 @@ func (ws *WebServer) Start(ctx context.Context) error {
 	}
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ws.logger.Error("WebUI server: goroutine panic", fmt.Errorf("%v", r))
+			}
+		}()
 		// 使用 listener 的 Serve（同步阻塞），监听错误由 ctx 管理
 		if serveErr := ws.server.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {
 			ws.logger.Error("WebUI server error", fmt.Errorf("%w", serveErr))
@@ -128,6 +133,11 @@ func (ws *WebServer) Start(ctx context.Context) error {
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ws.logger.Error("WebUI shutdown: goroutine panic", fmt.Errorf("%v", r))
+			}
+		}()
 		<-ctx.Done()
 		ws.logger.Info("shutting down WebUI server...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

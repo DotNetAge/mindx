@@ -10,6 +10,9 @@ import (
 )
 
 func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.ResponseType, title string, data string, opts ...gateway.ResponseOption) {
+	if d.gw == nil {
+		return
+	}
 	allOpts := append([]gateway.ResponseOption{gateway.WithSessionID(sessionID)}, opts...)
 	_ = d.gw.SendResponse(clientID, respType, title, data, allOpts...)
 }
@@ -28,6 +31,9 @@ func (d *Daemon) broadcastScheduleEvent(sessionID, agent, eventType string, data
 }
 
 func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharnessevents.ExecutionSummaryData, agentName string) {
+	if d.gw == nil {
+		return
+	}
 	d.logger.Info("[SSE-TRACE L5] sendExecutionSummary: total_tokens=" + fmt.Sprint(summary.TokensUsed.TotalTokens) +
 		" input=" + fmt.Sprint(summary.TokensUsed.InputTokens) +
 		" output=" + fmt.Sprint(summary.TokensUsed.OutputTokens))

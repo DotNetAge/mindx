@@ -23,9 +23,16 @@ const (
 	DefaultTimeout = 30 * time.Second
 )
 
+// gwCaller is the minimal interface satisfied by *gateway.Client.
+// Extracted for testability — typed RPC methods can be tested with a mock.
+type gwCaller interface {
+	Call(ctx context.Context, method string, params any) (json.RawMessage, error)
+	Close() error
+}
+
 // Client is a thin JSON-RPC client for the MindX daemon.
 type Client struct {
-	gw        *gateway.Client
+	gw        gwCaller
 	closeOnce sync.Once
 }
 

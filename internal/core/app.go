@@ -94,7 +94,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	var err error
 	err = godotenv.Load()
 	if err != nil {
-		logger.Warn("WARNING: failed to load .env file: %v", err)
+		logger.Warn("WARNING: failed to load .env file", "error", err)
 	}
 
 	constants.SYSTEM_INFO_NAME = "MindX"
@@ -167,7 +167,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		var embErr error
 		emb, embErr = memory.NewEmbedderFromConfig(modelPath)
 		if embErr != nil {
-			logger.Warn("Failed to create embedder, memory disabled: %v", embErr)
+			logger.Warn("Failed to create embedder, memory disabled", "error", embErr)
 		}
 	}
 
@@ -204,7 +204,7 @@ func resolveCurrentAgentName(cfg *MindxConfig, agents *config.AgentRegistry, log
 		if agents.Get(cfg.LastAgent) != nil {
 			return cfg.LastAgent
 		}
-		logger.Warn("last_agent %q not found in registry, will use fallback", cfg.LastAgent)
+		logger.Warn("last_agent not found in registry, will use fallback", "agent", cfg.LastAgent)
 	}
 
 	if list := agents.List(); len(list) > 0 {
@@ -562,7 +562,7 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 				Logger:    a.logger,
 			})
 			if ltErr != nil {
-				a.logger.Warn("Failed to create long-term memory for agent %q: %v", agent.Name, ltErr)
+				a.logger.Warn("Failed to create long-term memory", "agent", agent.Name, "error", ltErr)
 			} else {
 				opts = append(opts, agents.WithMemory(ltMem))
 				a.logger.Info("createRuntime: long-term memory OK", "agent", agentName)
