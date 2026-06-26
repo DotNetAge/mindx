@@ -9,7 +9,7 @@ import (
 	"time"
 
 	goharnessmemory "github.com/DotNetAge/goharness/memory"
-	"github.com/DotNetAge/mindx/pkg/kbwatch"
+	"github.com/DotNetAge/mindx/pkg/indexing"
 )
 
 // sanitizeDirName converts a filesystem path to a safe directory name (same logic as memory package).
@@ -500,16 +500,16 @@ func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (an
 			if st.State != "pending" && (st.State != "indexing" || st.TotalFiles != 0 || st.IndexedFiles != 0) {
 				continue
 			}
-			cacheDir := filepath.Join(status.CacheBase, kbwatch.SanitizeDirName(dir))
-			cache := kbwatch.NewProjectFileCache()
+			cacheDir := filepath.Join(status.CacheBase, indexing.SanitizeDirName(dir))
+			cache := indexing.NewProjectFileCache()
 			if err := cache.LoadFromFile(cacheDir); err != nil || len(cache.Files) == 0 {
 				continue
 			}
 			// Cache has real data — promote the state to completed so the
 			// frontend displays meaningful file counts and chunk info.
-			completed := make([]kbwatch.CompletedFileRecord, 0, len(cache.Files))
+			completed := make([]indexing.CompletedFileRecord, 0, len(cache.Files))
 			for _, entry := range cache.Files {
-				completed = append(completed, kbwatch.CompletedFileRecord{
+				completed = append(completed, indexing.CompletedFileRecord{
 					Path:   entry.Path,
 					Chunks: len(entry.Chunks),
 				})
@@ -536,7 +536,7 @@ func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (an
 		for _, f := range st.IgnoredFiles {
 			ignored[f] = true
 		}
-		filtered := make([]kbwatch.FailedFileRecord, 0, len(st.FailedFiles))
+		filtered := make([]indexing.FailedFileRecord, 0, len(st.FailedFiles))
 		for _, rec := range st.FailedFiles {
 			if !ignored[rec.Path] {
 				filtered = append(filtered, rec)
@@ -613,7 +613,7 @@ func (d *Daemon) handleFilewatchRetryFailed(_ context.Context, params json.RawMe
 					// errStr format: "filepath: error message"
 					parts := strings.SplitN(errStr, ": ", 2)
 					fpath := parts[0]
-					st.FailedFiles = append(st.FailedFiles, kbwatch.FailedFileRecord{
+					st.FailedFiles = append(st.FailedFiles, indexing.FailedFileRecord{
 						Path:      fpath,
 						Error:     errStr,
 						Timestamp: now,

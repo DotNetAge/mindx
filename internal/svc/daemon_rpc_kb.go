@@ -9,7 +9,7 @@ import (
 
 	goragcore "github.com/DotNetAge/gorag/v2/core"
 	goragquery "github.com/DotNetAge/gorag/v2/query"
-	"github.com/DotNetAge/mindx/pkg/kbwatch"
+	"github.com/DotNetAge/mindx/pkg/indexing"
 )
 
 // ---------------------------------------------------------------------------
@@ -309,7 +309,7 @@ func (d *Daemon) handleKBFileStates(_ context.Context, params json.RawMessage) (
 		return nil, fmt.Errorf("knowledge base not available (no indexer initialized)")
 	}
 
-	pi := kbwatch.NewIndexService(indexer, cacheDir, d.logger)
+	pi := indexing.NewIndexService(indexer, cacheDir, d.logger)
 	states, err := pi.ScanFileStates(context.Background(), p.ProjectDir)
 	if err != nil {
 		return nil, fmt.Errorf("file states scan failed: %w", err)
