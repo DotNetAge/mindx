@@ -129,37 +129,12 @@ func (s *IndexStateStore) IncrementIndexedFiles(dir string) {
 	defer s.mu.Unlock()
 	st, ok := s.states[dir]
 	if !ok || st.State != "indexing" {
-		fmt.Printf("[INDEX-STATE-DEBUG] IncrementIndexedFiles SKIPPED: ok=%v state=%v dir=%s\n", ok, func() string {
-			if ok {
-				return st.State
-			}
-			return ""
-		}(), dir)
 		return // not in an active indexing state
 	}
 	st.IndexedFiles++
-	fmt.Printf("[INDEX-STATE-DEBUG] IncrementIndexedFiles dir=%s IndexedFiles=%d\n", dir, st.IndexedFiles)
 
 	// Debounce disk writes: only save if saveInterval has elapsed since the
 	// last disk write.
-	if time.Since(s.lastSave) < saveInterval {
-		return
-	}
-	s.lastSave = time.Now()
-	_ = s.save()
-}
-
-// AppendCompletedFile appends a successfully indexed file record for a
-// directory that is currently being indexed.
-func (s *IndexStateStore) AppendCompletedFile(dir string, rec CompletedFileRecord) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	st, ok := s.states[dir]
-	if !ok || st.State != "indexing" {
-		return
-	}
-	st.CompletedFiles = append(st.CompletedFiles, rec)
-	// Debounce disk writes (same as IncrementIndexedFiles)
 	if time.Since(s.lastSave) < saveInterval {
 		return
 	}
@@ -172,26 +147,7 @@ func (s *IndexStateStore) AppendCompletedFile(dir string, rec CompletedFileRecor
 // skippedFiles are files that were already in cache (previously indexed),
 // so they count as both indexed and total.
 func (s *IndexStateStore) SetCompletedWithStats(dir string, indexedFiles, skippedFiles int, entitiesCreated, relsCreated int, totalElapsedMs int64, completedFiles []CompletedFileRecord) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	st, ok := s.states[dir]
-	if !ok {
-		st = &DirIndexState{Dir: dir}
-	}
-	st.State = "completed"
-	// Skipped files are already in cache — they were indexed in a previous run,
-	// so they count as indexed for progress display purposes.
-	st.IndexedFiles = indexedFiles + skippedFiles
-	st.TotalFiles = indexedFiles + skippedFiles
-	st.EntitiesCreated = entitiesCreated
-	st.RelsCreated = relsCreated
-	st.TotalElapsedMs = totalElapsedMs
-	st.CompletedAt = time.Now().Unix()
-	if len(completedFiles) > 0 {
-		st.CompletedFiles = completedFiles
-	}
-	s.states[dir] = st
-	_ = s.save()
+	s.SetCompletedWithFailedFiles(dir, indexedFiles, skippedFiles, entitiesCreated, relsCreated, totalElapsedMs, completedFiles, nil)
 }
 
 // SetCompletedWithFailedFiles marks a directory's indexing as completed,
@@ -219,20 +175,6 @@ func (s *IndexStateStore) SetCompletedWithFailedFiles(dir string, indexedFiles, 
 	if len(failedFiles) > 0 {
 		st.FailedFiles = failedFiles
 	}
-	s.states[dir] = st
-	_ = s.save()
-}
-
-// SetCompleted marks a directory's indexing as completed.
-func (s *IndexStateStore) SetCompleted(dir string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	st, ok := s.states[dir]
-	if !ok {
-		st = &DirIndexState{Dir: dir}
-	}
-	st.State = "completed"
-	st.CompletedAt = time.Now().Unix()
 	s.states[dir] = st
 	_ = s.save()
 }
