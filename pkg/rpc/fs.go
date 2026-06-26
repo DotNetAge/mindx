@@ -61,6 +61,15 @@ func (c *Client) FSWrite(path, content string) (json.RawMessage, error) {
 	return c.CallWithTimeout("fs.write", FSWriteParams{Path: path, Content: content})
 }
 
+// FSRevealParams are the params for fs.reveal.
+type FSRevealParams struct {
+	Path string `json:"path"`
+}
+
+func (c *Client) FSReveal(path string) (json.RawMessage, error) {
+	return c.CallWithTimeout("fs.reveal", FSRevealParams{Path: path})
+}
+
 func (c *Client) FSHome() (json.RawMessage, error) {
 	return c.CallWithTimeout("fs.home", nil)
 }

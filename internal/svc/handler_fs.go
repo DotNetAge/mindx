@@ -12,11 +12,9 @@ import (
 	"sort"
 	"strings"
 	"time"
-)
 
-type fsListParams struct {
-	Path string `json:"path"`
-}
+	"github.com/DotNetAge/mindx/pkg/rpc"
+)
 
 type FSEntry struct {
 	Name    string    `json:"name"`
@@ -28,7 +26,7 @@ type FSEntry struct {
 }
 
 func (d *Daemon) handleFSList(_ context.Context, params json.RawMessage) (any, error) {
-	var p fsListParams
+	var p rpc.FSListParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -100,16 +98,12 @@ func (d *Daemon) handleFSHome(_ context.Context, _ json.RawMessage) (any, error)
 	return map[string]string{"path": defaultFSHome()}, nil
 }
 
-type fsReadParams struct {
-	Path string `json:"path"`
-}
-
 type fsReadResult struct {
 	Content string `json:"content"`
 }
 
 func (d *Daemon) handleFSRead(_ context.Context, params json.RawMessage) (any, error) {
-	var p fsReadParams
+	var p rpc.FSReadParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -135,13 +129,8 @@ func (d *Daemon) handleFSRead(_ context.Context, params json.RawMessage) (any, e
 	return fsReadResult{Content: string(data)}, nil
 }
 
-type fsWriteParams struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
-}
-
 func (d *Daemon) handleFSWrite(_ context.Context, params json.RawMessage) (any, error) {
-	var p fsWriteParams
+	var p rpc.FSWriteParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -162,12 +151,8 @@ func (d *Daemon) handleFSWrite(_ context.Context, params json.RawMessage) (any, 
 
 // ── 新增：mkdir ──
 
-type fsMkdirParams struct {
-	Path string `json:"path"`
-}
-
 func (d *Daemon) handleFSMkdir(_ context.Context, params json.RawMessage) (any, error) {
-	var p fsMkdirParams
+	var p rpc.FSMkdirParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -184,12 +169,8 @@ func (d *Daemon) handleFSMkdir(_ context.Context, params json.RawMessage) (any, 
 
 // ── 新增：rm ──
 
-type fsRmParams struct {
-	Path string `json:"path"`
-}
-
 func (d *Daemon) handleFSRm(_ context.Context, params json.RawMessage) (any, error) {
-	var p fsRmParams
+	var p rpc.FSRmParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -227,18 +208,13 @@ func (d *Daemon) handleFSRm(_ context.Context, params json.RawMessage) (any, err
 
 // ── 新增：mv ──
 
-type fsMvParams struct {
-	Source string `json:"source"`
-	Target string `json:"target"`
-}
-
 func (d *Daemon) handleFSMv(_ context.Context, params json.RawMessage) (any, error) {
-	var p fsMvParams
+	var p rpc.FSMvParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
-	srcPath := filepath.Clean(p.Source)
-	dstPath := filepath.Clean(p.Target)
+	srcPath := filepath.Clean(p.Src)
+	dstPath := filepath.Clean(p.Dst)
 	absSrc, err := filepath.Abs(srcPath)
 	if err != nil {
 		return nil, fmt.Errorf("invalid source path: %w", err)
@@ -258,10 +234,6 @@ func (d *Daemon) handleFSMv(_ context.Context, params json.RawMessage) (any, err
 
 // ── 新增：reveal ──
 
-type fsRevealParams struct {
-	Path string `json:"path"`
-}
-
 type fsRevealResult struct {
 	Status string `json:"status"`
 }
@@ -269,7 +241,7 @@ type fsRevealResult struct {
 // handleFSReveal opens the file's parent directory in the native file manager,
 // and on macOS also highlights/selects the file.
 func (d *Daemon) handleFSReveal(_ context.Context, params json.RawMessage) (any, error) {
-	var p fsRevealParams
+	var p rpc.FSRevealParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

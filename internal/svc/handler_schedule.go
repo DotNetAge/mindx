@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 	"github.com/google/uuid"
 )
@@ -28,21 +29,12 @@ func (d *Daemon) handleScheduleList(_ context.Context, _ json.RawMessage) (any, 
 	return entries, nil
 }
 
-type scheduleAddParams struct {
-	Agent      string `json:"agent"`
-	SessionID  string `json:"session_id"`
-	ProjectDir string `json:"project_dir"`
-	Content    string `json:"content"`
-	CronExpr   string `json:"cron_expr"`
-	Enabled    bool   `json:"enabled"`
-}
-
 func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (any, error) {
 	if d.schedulerDB == nil {
 		return nil, fmt.Errorf("scheduler not available")
 	}
 
-	var p scheduleAddParams
+	var p rpc.ScheduleAddParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -80,16 +72,12 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 	return entry, nil
 }
 
-type scheduleDeleteParams struct {
-	ID string `json:"id"`
-}
-
 func (d *Daemon) handleScheduleDelete(_ context.Context, params json.RawMessage) (any, error) {
 	if d.schedulerDB == nil {
 		return nil, fmt.Errorf("scheduler not available")
 	}
 
-	var p scheduleDeleteParams
+	var p rpc.ScheduleDeleteParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

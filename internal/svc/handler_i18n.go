@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/DotNetAge/mindx/internal/i18n"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"golang.org/x/text/language"
 )
 
@@ -23,12 +24,8 @@ func (d *Daemon) handleI18nGet(_ context.Context, _ json.RawMessage) (any, error
 }
 
 // handleI18nSwitch switches the runtime language and persists to config.
-type i18nSwitchParams struct {
-	Lang string `json:"lang"` // BCP 47 tag: "zh", "en", "zh-TW"
-}
-
 func (d *Daemon) handleI18nSwitch(_ context.Context, params json.RawMessage) (any, error) {
-	var p i18nSwitchParams
+	var p rpc.I18nSwitchParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

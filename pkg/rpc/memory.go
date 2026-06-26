@@ -60,6 +60,35 @@ func (c *Client) MemoryGetChunks(docID string) (json.RawMessage, error) {
 	return c.CallWithTimeout("memory.get_chunks", MemoryGetChunksParams{DocID: docID})
 }
 
+// MemoryChunksResult is the result for memory.chunks.
+type MemoryChunksResult struct {
+	Chunks   []ChunkItem `json:"chunks"`
+	Page     int         `json:"page"`
+	PageSize int         `json:"page_size"`
+	Total    int         `json:"total"`
+	HasMore  bool        `json:"has_more"`
+}
+
+// ChunkItem is a single chunk in the result set.
+type ChunkItem struct {
+	ID        string         `json:"id"`
+	ParentID  string         `json:"parent_id,omitempty"`
+	DocID     string         `json:"doc_id,omitempty"`
+	MIMEType  string         `json:"mime_type,omitempty"`
+	Content   string         `json:"content"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	ChunkMeta ChunkMetaItem  `json:"chunk_meta,omitempty"`
+}
+
+// ChunkMetaItem holds chunk-level metadata.
+type ChunkMetaItem struct {
+	Index        int      `json:"index"`
+	StartPos     int      `json:"start_pos"`
+	EndPos       int      `json:"end_pos"`
+	HeadingLevel int      `json:"heading_level"`
+	HeadingPath  []string `json:"heading_path,omitempty"`
+}
+
 func (c *Client) MemoryCount() (json.RawMessage, error) {
 	return c.CallWithTimeout("memory.count", nil)
 }

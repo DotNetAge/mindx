@@ -9,6 +9,7 @@ import (
 
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
 	"github.com/DotNetAge/gograph/pkg/graph"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
 // ---------------------------------------------------------------------------
@@ -16,50 +17,8 @@ import (
 // 知识图谱专用图数据库，数据存储在 ~/.mindx/data/knowledge-graph.db
 // ---------------------------------------------------------------------------
 
-// graphQueryParams is the params for graph.query (read) and graph.exec (write).
-type graphQueryParams struct {
-	Query  string                 `json:"query"`
-	Params map[string]interface{} `json:"params,omitempty"`
-}
-
-// graphUpsertNodesParams is the params for graph.upsert_nodes.
-type graphUpsertNodesParams struct {
-	Nodes []graphNodeParam `json:"nodes"`
-}
-
-type graphNodeParam struct {
-	ID         string                 `json:"id"`
-	Labels     []string               `json:"labels,omitempty"`
-	Properties map[string]interface{} `json:"properties,omitempty"`
-}
-
-// graphUpsertEdgesParams is the params for graph.upsert_edges.
-type graphUpsertEdgesParams struct {
-	Edges []graphEdgeParam `json:"edges"`
-}
-
-type graphEdgeParam struct {
-	FromNodeID string                 `json:"from_node_id"`
-	ToNodeID   string                 `json:"to_node_id"`
-	Type       string                 `json:"type"`
-	Properties map[string]interface{} `json:"properties,omitempty"`
-}
-
-// graphGetNodeParams is the params for graph.get_node.
-type graphGetNodeParams struct {
-	ID string `json:"id"`
-}
-
-// graphGetNeighborsParams is the params for graph.get_neighbors.
-type graphGetNeighborsParams struct {
-	ID    string   `json:"id"`
-	Depth int      `json:"depth,omitempty"`
-	Limit int      `json:"limit,omitempty"`
-	Types []string `json:"types,omitempty"`
-}
-
 func (d *Daemon) handleGraphQuery(_ context.Context, params json.RawMessage) (any, error) {
-	var p graphQueryParams
+	var p rpc.GraphQueryParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -104,7 +63,7 @@ func (d *Daemon) handleGraphQuery(_ context.Context, params json.RawMessage) (an
 }
 
 func (d *Daemon) handleGraphExec(_ context.Context, params json.RawMessage) (any, error) {
-	var p graphQueryParams
+	var p rpc.GraphQueryParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -136,7 +95,7 @@ func (d *Daemon) handleGraphExec(_ context.Context, params json.RawMessage) (any
 }
 
 func (d *Daemon) handleGraphUpsertNodes(_ context.Context, params json.RawMessage) (any, error) {
-	var p graphUpsertNodesParams
+	var p rpc.GraphUpsertNodesParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -170,7 +129,7 @@ func (d *Daemon) handleGraphUpsertNodes(_ context.Context, params json.RawMessag
 }
 
 func (d *Daemon) handleGraphUpsertEdges(_ context.Context, params json.RawMessage) (any, error) {
-	var p graphUpsertEdgesParams
+	var p rpc.GraphUpsertEdgesParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -205,7 +164,7 @@ func (d *Daemon) handleGraphUpsertEdges(_ context.Context, params json.RawMessag
 }
 
 func (d *Daemon) handleGraphGetNode(_ context.Context, params json.RawMessage) (any, error) {
-	var p graphGetNodeParams
+	var p rpc.GraphGetNodeParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -231,7 +190,7 @@ func (d *Daemon) handleGraphGetNode(_ context.Context, params json.RawMessage) (
 }
 
 func (d *Daemon) handleGraphGetNeighbors(_ context.Context, params json.RawMessage) (any, error) {
-	var p graphGetNeighborsParams
+	var p rpc.GraphGetNeighborsParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

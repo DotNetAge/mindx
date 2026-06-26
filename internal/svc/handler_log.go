@@ -9,18 +9,8 @@ import (
 	"strings"
 
 	"github.com/DotNetAge/mindx/pkg/logging"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 )
-
-// logReadParams — 逆向分页读取日志
-//
-//	offset: 从文件末尾向前的偏移行数（0 = 从最后开始）
-//	limit:  每次返回的行数（默认 10）
-//	stream: "main" (默认) 或 "error" — 选择读取哪个日志流
-type logReadParams struct {
-	Offset int    `json:"offset,omitempty"` // 从末尾向前的偏移（行数）
-	Limit  int    `json:"limit,omitempty"`  // 每页行数，默认 10
-	Stream string `json:"stream,omitempty"` // "main" | "error"，默认 "main"
-}
 
 // 允许的日志流名
 var logStreamFilenames = map[string]string{
@@ -29,7 +19,7 @@ var logStreamFilenames = map[string]string{
 }
 
 func (d *Daemon) handleLogRead(_ context.Context, params json.RawMessage) (any, error) {
-	var p logReadParams
+	var p rpc.LogReadParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -90,12 +80,8 @@ func (d *Daemon) handleLogRead(_ context.Context, params json.RawMessage) (any, 
 	}, nil
 }
 
-type logClearParams struct {
-	Confirmed bool `json:"confirmed"` // must be true to confirm destructive action
-}
-
 func (d *Daemon) handleLogClear(_ context.Context, params json.RawMessage) (any, error) {
-	var p logClearParams
+	var p rpc.LogClearParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

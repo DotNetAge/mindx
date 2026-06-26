@@ -8,6 +8,7 @@ import (
 
 	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -74,13 +75,8 @@ func (d *Daemon) handleModelGet(_ context.Context, params json.RawMessage) (any,
 	return cfg, nil
 }
 
-type modelSwitchParams struct {
-	Name     string `json:"name"`
-	Provider string `json:"provider,omitempty"`
-}
-
 func (d *Daemon) handleModelSwitch(_ context.Context, params json.RawMessage) (any, error) {
-	var p modelSwitchParams
+	var p rpc.ModelSwitchParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -126,17 +122,8 @@ func (d *Daemon) handleModelSwitch(_ context.Context, params json.RawMessage) (a
 
 // --- Provider CRUD ---
 
-type providerCreateParams struct {
-	Name      string `json:"name"`
-	Title     string `json:"title"`
-	BaseURL   string `json:"base_url"`
-	APIKey    string `json:"api_key"`
-	AuthToken string `json:"auth_token,omitempty"`
-	IsLocal   bool   `json:"is_local,omitempty"`
-}
-
 func (d *Daemon) handleProviderCreate(_ context.Context, params json.RawMessage) (any, error) {
-	var p providerCreateParams
+	var p rpc.ProviderCreateParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -175,17 +162,8 @@ func (d *Daemon) handleProviderCreate(_ context.Context, params json.RawMessage)
 	}, nil
 }
 
-type providerUpdateParams struct {
-	Name      string `json:"name"`
-	Title     string `json:"title,omitempty"`
-	BaseURL   string `json:"base_url,omitempty"`
-	APIKey    string `json:"api_key,omitempty"`
-	AuthToken string `json:"auth_token,omitempty"`
-	IsLocal   *bool  `json:"is_local,omitempty"`
-}
-
 func (d *Daemon) handleProviderUpdate(_ context.Context, params json.RawMessage) (any, error) {
-	var p providerUpdateParams
+	var p rpc.ProviderUpdateParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -242,12 +220,8 @@ func (d *Daemon) handleProviderUpdate(_ context.Context, params json.RawMessage)
 	}, nil
 }
 
-type providerDeleteParams struct {
-	Name string `json:"name"`
-}
-
 func (d *Daemon) handleProviderDelete(_ context.Context, params json.RawMessage) (any, error) {
-	var p providerDeleteParams
+	var p rpc.ProviderDeleteParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -279,35 +253,8 @@ func (d *Daemon) handleProviderDelete(_ context.Context, params json.RawMessage)
 
 // --- Model CRUD ---
 
-type modelCreateParams struct {
-	Name              string  `json:"name"`
-	Title             string  `json:"title"`
-	Description       string  `json:"description,omitempty"`
-	Provider          string  `json:"provider"`
-	BaseURL           string  `json:"base_url,omitempty"`
-	APIKey            string  `json:"api_key,omitempty"`
-	AuthToken         string  `json:"auth_token,omitempty"`
-	MaxTokens         int64   `json:"max_tokens,omitempty"`
-	ContextLength     int64   `json:"context_length,omitempty"`
-	IsLocal           bool    `json:"is_local,omitempty"`
-	FuncCalling       bool    `json:"func_calling,omitempty"`
-	Structuring       bool    `json:"structuring,omitempty"`
-	WebSearching      bool    `json:"web_searching,omitempty"`
-	PrefixCon         bool    `json:"prefix_con,omitempty"`
-	ContextCache      bool    `json:"context_cache,omitempty"`
-	TopP              float64 `json:"top_p,omitempty"`
-	TopK              float64 `json:"top_k,omitempty"`
-	Temperature       float64 `json:"temperature,omitempty"`
-	RepetitionPenalty float64 `json:"repetition_penalty,omitempty"`
-	FrequencyPenalty  float64 `json:"frequency_penalty,omitempty"`
-	Enabled           bool    `json:"enabled,omitempty"`
-	MaxTurns          int     `json:"max_turns,omitempty"`
-	CostPer1MIn       float64 `json:"cost_per_1m_in,omitempty"`
-	CostPer1MOut      float64 `json:"cost_per_1m_out,omitempty"`
-}
-
 func (d *Daemon) handleModelCreate(_ context.Context, params json.RawMessage) (any, error) {
-	var p modelCreateParams
+	var p rpc.ModelCreateParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -360,35 +307,8 @@ func (d *Daemon) handleModelCreate(_ context.Context, params json.RawMessage) (a
 	}, nil
 }
 
-type modelUpdateParams struct {
-	Name              string   `json:"name"`
-	Title             string   `json:"title,omitempty"`
-	Description       string   `json:"description,omitempty"`
-	Provider          string   `json:"provider,omitempty"`
-	BaseURL           string   `json:"base_url,omitempty"`
-	APIKey            string   `json:"api_key,omitempty"`
-	AuthToken         string   `json:"auth_token,omitempty"`
-	MaxTokens         *int64   `json:"max_tokens,omitempty"`
-	ContextLength     *int64   `json:"context_length,omitempty"`
-	IsLocal           *bool    `json:"is_local,omitempty"`
-	FuncCalling       *bool    `json:"func_calling,omitempty"`
-	Structuring       *bool    `json:"structuring,omitempty"`
-	WebSearching      *bool    `json:"web_searching,omitempty"`
-	PrefixCon         *bool    `json:"prefix_con,omitempty"`
-	ContextCache      *bool    `json:"context_cache,omitempty"`
-	TopP              *float64 `json:"top_p,omitempty"`
-	TopK              *float64 `json:"top_k,omitempty"`
-	Temperature       *float64 `json:"temperature,omitempty"`
-	RepetitionPenalty *float64 `json:"repetition_penalty,omitempty"`
-	FrequencyPenalty  *float64 `json:"frequency_penalty,omitempty"`
-	Enabled           *bool    `json:"enabled,omitempty"`
-	MaxTurns          *int     `json:"max_turns,omitempty"`
-	CostPer1MIn       *float64 `json:"cost_per_1m_in,omitempty"`
-	CostPer1MOut      *float64 `json:"cost_per_1m_out,omitempty"`
-}
-
 func (d *Daemon) handleModelUpdate(_ context.Context, params json.RawMessage) (any, error) {
-	var p modelUpdateParams
+	var p rpc.ModelUpdateParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -498,7 +418,7 @@ func (d *Daemon) handleModelUpdate(_ context.Context, params json.RawMessage) (a
 }
 
 func (d *Daemon) handleModelDelete(_ context.Context, params json.RawMessage) (any, error) {
-	var p modelGetParams
+	var p rpc.ModelGetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
