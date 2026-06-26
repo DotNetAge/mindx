@@ -16,6 +16,9 @@ ARG BUILD_TIME=unknown
 
 WORKDIR /src
 COPY go.mod go.sum ./
+# third_party/ must be copied before go mod download because go.mod has
+# a replace directive pointing to ./third_party/hnsw
+COPY third_party/ ./third_party/
 RUN go mod download
 
 COPY . .
