@@ -710,17 +710,13 @@ func (d *Daemon) autoUpdateLoop(ctx context.Context) {
 // FileWatchService is running, it also registers the fsnotify watcher
 // for real-time monitoring. The store is idempotent — repeated calls
 // with the same (dir, agent) pair are safe (dedup by WatchListStore).
-func (d *Daemon) addWatchEntry(dir, agent string) {
+func (d *Daemon) addWatchEntry(dir, agent string) error {
 	if d.watchListStore == nil {
-		return
+		return fmt.Errorf("addWatchEntry: watchListStore not initialized")
 	}
+
 	if err := d.watchListStore.Add(dir, agent); err != nil {
-		d.logger.Warn("addWatchEntry: failed to persist watch entry",
-			"dir", dir,
-			"agent", agent,
-			"error", err,
-		)
-		return
+		return fmt.Errorf("addWatchEntry: failed to persist watch entry: %w", err)
 	}
 	if d.indexStateStore != nil {
 		absDir, _ := filepath.Abs(dir)
@@ -737,6 +733,7 @@ func (d *Daemon) addWatchEntry(dir, agent string) {
 			)
 		}
 	}
+	return nil
 }
 
 // restoreSessionWatches iterates all existing sessions and adds their
@@ -757,12 +754,14 @@ func (d *Daemon) restoreSessionWatches() {
 		if s.ProjectDir == "" {
 			continue
 		}
-		d.addWatchEntry(s.ProjectDir, s.AgentName)
-		d.logger.Info("restoreSessionWatches: watch entry persisted",
-			"session_id", s.SessionID,
-			"project_dir", s.ProjectDir,
-			"agent", s.AgentName,
-		)
+		if err := d.addWatchEntry(s.ProjectDir, s.AgentName); err != nil {
+			d.logger.Warn("restoreSessionWatches: failed to add watch entry",
+				"session_id", s.SessionID,
+				"project_dir", s.ProjectDir,
+				"agent", s.AgentName,
+				"error", err,
+			)
+		}
 	}
 }
 
