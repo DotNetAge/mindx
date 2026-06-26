@@ -104,23 +104,6 @@ func testRPCNoParams(t *testing.T, c *Client, m *mockGateway, wantMethod string,
 	return result
 }
 
-// testRPCNoParamsNoResult tests a method that takes no parameters and returns no meaningful result.
-func testRPCNoParamsNoResult(t *testing.T, c *Client, m *mockGateway, wantMethod string, fn func() (json.RawMessage, error)) {
-	t.Helper()
-	result, err := fn()
-	if err != nil {
-		t.Fatalf("%s error = %v", wantMethod, err)
-	}
-	method, _, ok := m.lastCall()
-	if !ok {
-		t.Fatalf("%s: no RPC call made", wantMethod)
-	}
-	if method != wantMethod {
-		t.Errorf("method = %q, want %q", method, wantMethod)
-	}
-	_ = result
-}
-
 // ============================================================================
 // Client core tests
 // ============================================================================

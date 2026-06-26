@@ -35,6 +35,9 @@ apps:
       - home
       - removable-media
 
+environment:
+  LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}:${SNAP}/usr/local/lib
+
 parts:
   mindx:
     plugin: go
@@ -56,3 +59,24 @@ parts:
     source: runtime/
     organize:
       '*': usr/share/mindx/runtime/
+
+  onnxruntime:
+    plugin: nil
+    build-packages:
+      - curl
+      - ca-certificates
+    override-build: |
+      ONNX_VERSION="1.24.4"
+      case "${CRAFT_ARCH_BUILD_ON}" in
+        amd64|x86_64) ARCH="x64" ;;
+        arm64|aarch64) ARCH="aarch64" ;;
+        *) echo "Unsupported arch: ${CRAFT_ARCH_BUILD_ON}"; exit 1 ;;
+      esac
+      curl -fL -o /tmp/onnxruntime.tgz \
+        "https://github.com/microsoft/onnxruntime/releases/download/v${ONNX_VERSION}/onnxruntime-linux-${ARCH}-${ONNX_VERSION}.tgz"
+      tar xzf /tmp/onnxruntime.tgz -C /tmp
+      mkdir -p "${CRAFT_PART_INSTALL}/usr/local/lib"
+      cp -P "/tmp/onnxruntime-linux-${ARCH}-${ONNX_VERSION}/lib/libonnxruntime.so"* "${CRAFT_PART_INSTALL}/usr/local/lib/"
+      rm -rf /tmp/onnxruntime*
+    prime:
+      - usr/local/lib/libonnxruntime.so*

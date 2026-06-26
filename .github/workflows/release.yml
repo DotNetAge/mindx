@@ -199,12 +199,35 @@ jobs:
 
           ls -lh dist/
 
+      - name: Download ONNX Runtime library (Linux)
+        if: matrix.goos == 'linux'
+        run: |
+          ONNX_VERSION="1.24.4"
+          if [ "${{ matrix.goarch }}" = "arm64" ]; then
+            ARCH="aarch64"
+          else
+            ARCH="x64"
+          fi
+          curl -fL -o /tmp/onnxruntime.tgz \
+            "https://github.com/microsoft/onnxruntime/releases/download/v${ONNX_VERSION}/onnxruntime-linux-${ARCH}-${ONNX_VERSION}.tgz"
+          tar xzf /tmp/onnxruntime.tgz -C /tmp
+          cp -P "/tmp/onnxruntime-linux-${ARCH}-${ONNX_VERSION}/lib/libonnxruntime.so"* dist/
+          rm -rf /tmp/onnxruntime*
+
+      - name: Bundle ONNX Runtime library (macOS)
+        if: matrix.goos == 'darwin'
+        run: |
+          brew install onnxruntime
+          cp -P "$(brew --prefix onnxruntime)/lib/libonnxruntime."* dist/
+
       - name: Package (tar.gz)
         shell: bash
         run: |
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
           cd dist
-          tar czf "../${{ env.BINARY_NAME }}-${VERSION_NUM}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "${{ env.BINARY_NAME }}"
+          tar czf "../${{ env.BINARY_NAME }}-${VERSION_NUM}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
+            "${{ env.BINARY_NAME }}" \
+            libonnxruntime.*
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
@@ -286,40 +309,8 @@ jobs:
               "https://github.com/DotNetAge/mindx/releases/download/v2.3.0/model_q4.onnx"
           fi
 
-      - name: Download linux/amd64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          pattern: package-linux-amd64
-          path: packages-amd64
-          merge-multiple: true
-
-      - name: Download linux/arm64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          pattern: package-linux-arm64
-          path: packages-arm64
-          merge-multiple: true
-
-      - name: Prepare runtime environment (multi-platform)
+      - name: Prepare runtime environment (model file)
         run: |
-          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
-
-          # Extract linux/amd64 binary → runtime/bin/mindx-amd64
-          mkdir -p runtime/bin
-          tar xzf "packages-amd64/mindx-${VERSION_NUM}-linux-amd64.tar.gz" -C runtime/bin/
-          mv runtime/bin/mindx runtime/bin/mindx-amd64
-          chmod +x runtime/bin/mindx-amd64
-
-          # Extract linux/arm64 binary → runtime/bin/mindx-arm64
-          tar xzf "packages-arm64/mindx-${VERSION_NUM}-linux-arm64.tar.gz" -C runtime/bin/
-          mv runtime/bin/mindx runtime/bin/mindx-arm64
-          chmod +x runtime/bin/mindx-arm64
-
-          echo "Binaries ready:"
-          ls -lh runtime/bin/
-          runtime/bin/mindx-amd64 version 2>&1 || echo "  (cannot run amd64 binary on this runner)"
-          # arm64 binary won't run on amd64 runner, that's expected
-
           # Model file was downloaded above
           echo "Model file:"
           ls -lh runtime/data/models/model_q4.onnx 2>/dev/null || echo "  NOT FOUND"
@@ -598,6 +589,24 @@ jobs:
 
           ls -lh dist/*.AppImage 2>/dev/null || echo "No AppImage generated"
 
+      - name: Download ONNX Runtime library
+        run: |
+          ONNX_VERSION="1.24.4"
+          mkdir -p dist/onnx-lib
+          for ARCH_GO in amd64 arm64; do
+            if [ "$ARCH_GO" = "arm64" ]; then
+              ONNX_ARCH="aarch64"
+            else
+              ONNX_ARCH="x64"
+            fi
+            curl -fL -o /tmp/onnxruntime-${ARCH_GO}.tgz \
+              "https://github.com/microsoft/onnxruntime/releases/download/v${ONNX_VERSION}/onnxruntime-linux-${ONNX_ARCH}-${ONNX_VERSION}.tgz"
+            tar xzf /tmp/onnxruntime-${ARCH_GO}.tgz -C /tmp
+            cp -P "/tmp/onnxruntime-linux-${ONNX_ARCH}-${ONNX_VERSION}/lib/libonnxruntime.so"* "dist/onnx-lib/"
+            rm -rf "/tmp/onnxruntime-linux-${ONNX_ARCH}-${ONNX_VERSION}"
+          done
+          ls -la dist/onnx-lib/
+
       - name: Build .deb packages
         run: |
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
@@ -633,6 +642,10 @@ jobs:
               echo "    dst: /lib/systemd/system/mindx-daemon.service"
               echo "    file_info:"
               echo "      mode: 0644"
+              echo "  - src: dist/onnx-lib/libonnxruntime.so*"
+              echo "    dst: /usr/local/lib/"
+              echo "    file_info:"
+              echo "      mode: 0755"
               echo ""
               echo "scripts:"
               echo "  postinstall: scripts/postinstall.sh"
