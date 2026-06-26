@@ -3,11 +3,18 @@ package svc
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"time"
+
+	"github.com/DotNetAge/mindx/internal/setup"
 )
 
 func (d *Daemon) handleServerCheckUpdate(_ context.Context, params json.RawMessage) (any, error) {
 	info := d.updater.Check(true)
+	// Attach install source so the frontend knows how to update
+	if exePath, err := os.Executable(); err == nil {
+		info.InstallSource = setup.InstallSourceSlug(exePath)
+	}
 	return info, nil
 }
 

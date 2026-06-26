@@ -9,8 +9,9 @@ import (
 	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
-func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.ResponseType, title string, data string) {
-	_ = d.gw.SendResponse(clientID, respType, title, data, gateway.WithSessionID(sessionID))
+func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.ResponseType, title string, data string, opts ...gateway.ResponseOption) {
+	allOpts := append([]gateway.ResponseOption{gateway.WithSessionID(sessionID)}, opts...)
+	_ = d.gw.SendResponse(clientID, respType, title, data, allOpts...)
 }
 
 // broadcastScheduleEvent sends a schedule.job_event notification to all connected clients.
@@ -26,7 +27,7 @@ func (d *Daemon) broadcastScheduleEvent(sessionID, agent, eventType string, data
 	})
 }
 
-func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharnessevents.ExecutionSummaryData) {
+func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharnessevents.ExecutionSummaryData, agentName string) {
 	d.logger.Info("[SSE-TRACE L5] sendExecutionSummary: total_tokens=" + fmt.Sprint(summary.TokensUsed.TotalTokens) +
 		" input=" + fmt.Sprint(summary.TokensUsed.InputTokens) +
 		" output=" + fmt.Sprint(summary.TokensUsed.OutputTokens))
@@ -54,6 +55,7 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharn
 			"iterations": summary.TotalIterations,
 			"tool_calls": summary.ToolCalls,
 			"duration":   summary.TotalDuration.String(),
+			"agent_name": agentName,
 		}))
 }
 

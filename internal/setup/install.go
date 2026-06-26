@@ -93,7 +93,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 	}
 
 	// Detect where this binary came from
-	source := detectInstallSource(exePath)
+	source := DetectInstallSource(exePath)
 	result.Source = source
 
 	installDir, err := resolveInstallDir(opts.InstallDir)
@@ -200,7 +200,7 @@ func IsInstalled() (bool, InstallSource, string, error) {
 		return false, SourceUnknown, "", fmt.Errorf("get executable: %w", err)
 	}
 
-	source := detectInstallSource(exePath)
+	source := DetectInstallSource(exePath)
 	actualDir := filepath.Dir(exePath)
 
 	switch source {
@@ -218,8 +218,8 @@ func IsInstalled() (bool, InstallSource, string, error) {
 
 // ── Install source detection ────────────────────────────────────────────────
 
-// detectInstallSource classifies where the given executable path came from.
-func detectInstallSource(exePath string) InstallSource {
+// DetectInstallSource classifies where the given executable path came from.
+func DetectInstallSource(exePath string) InstallSource {
 	dir := filepath.Dir(filepath.Clean(exePath))
 	home, _ := os.UserHomeDir()
 
@@ -279,6 +279,35 @@ func managedPrefixes(home string) []string {
 	}
 
 	return prefixes
+}
+
+// InstallSourceSlug returns a short machine-readable identifier describing
+// how the given executable was installed.
+// Possible values: "homebrew", "snap", "system", "manual".
+func InstallSourceSlug(exePath string) string {
+	source := DetectInstallSource(exePath)
+	if source != SourceManaged {
+		return "manual"
+	}
+
+	dir := filepath.Dir(filepath.Clean(exePath))
+
+	// Detect specific package manager from the binary path
+	switch {
+	case strings.HasPrefix(dir, "/opt/homebrew"),
+		strings.HasPrefix(dir, "/usr/local/Cellar"),
+		strings.HasPrefix(dir, "/home/linuxbrew"):
+		return "homebrew"
+	case strings.Contains(dir, "/snap/"):
+		return "snap"
+	case strings.Contains(dir, "/nix/"):
+		return "nix"
+	case strings.HasPrefix(dir, "/opt/local"):
+		return "macports"
+	default:
+		// /usr/local/bin, /usr/bin, /bin, ~/.local/bin, etc.
+		return "system"
+	}
 }
 
 // ── Internal helpers ────────────────────────────────────────────────────────
