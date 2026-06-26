@@ -456,7 +456,9 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 
 		// ── FileWatchService（KB 文件监控）────────────────────────
 		// 使用 GraphIndexer 作为索引目标；store 复用 daemon 级实例。
-		if graphIndexer != nil && watchListStore != nil && indexStateStore != nil {
+		// FileWatchService 不依赖 GraphIndexer 是否可用 — 即使为 nil，
+		// 也会正常创建（仅不执行向量索引），确保监控目录条目始终能持久化。
+		if watchListStore != nil && indexStateStore != nil {
 			// Determine model name for token usage recording
 			idxModelName := ""
 			if llmModelCfg != nil {
@@ -492,8 +494,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 				}
 			}
 		} else {
-			logger.Warn("filewatch: GraphIndexer or stores not available, FileWatchService disabled",
-				"graphIndexer", graphIndexer != nil,
+			logger.Warn("filewatch: stores not available, FileWatchService disabled",
 				"watchListStore", watchListStore != nil,
 				"indexStateStore", indexStateStore != nil,
 			)
