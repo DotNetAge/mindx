@@ -71,10 +71,6 @@ func (d *Daemon) handleEntityTagsGet(_ context.Context, _ json.RawMessage) (any,
 	return f, nil
 }
 
-type entityTagsSaveParams struct {
-	Types []entityDefFileEntry `json:"types"`
-}
-
 // schemasDir 返回 ~/.mindx/schemas/ 目录。
 func (d *Daemon) schemasDir() string {
 	return filepath.Join(d.app.Settings().DataDir(), "..", "schemas")
@@ -95,7 +91,9 @@ func (d *Daemon) readSchemaFile(category, name string) string {
 }
 
 func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage) (any, error) {
-	var p entityTagsSaveParams
+	var p struct {
+		Types []entityDefFileEntry `json:"types"`
+	}
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

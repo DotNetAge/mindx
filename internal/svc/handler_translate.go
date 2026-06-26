@@ -10,21 +10,10 @@ import (
 
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/google/uuid"
 	"go.etcd.io/bbolt"
 )
-
-// translateParams 是 translate.rpc 方法的请求参数。
-type translateParams struct {
-	Text string `json:"text"` // 待翻译的文本
-	Lang string `json:"lang"` // 目标语言，如 "中文"、"English"
-}
-
-// translateResult 是 translate.rpc 方法的响应结果。
-type translateResult struct {
-	Text   string `json:"text"`   // 翻译后的文本
-	Cached bool   `json:"cached"` // 是否来自缓存
-}
 
 // handleTranslate 处理翻译请求。
 //
@@ -34,7 +23,7 @@ type translateResult struct {
 //  3. 命中缓存 → 直接返回
 //  4. 未命中 → 调用 LLM 翻译 → 存入 KV → 记录 Token 用量 → 返回
 func (d *Daemon) handleTranslate(_ context.Context, params json.RawMessage) (any, error) {
-	var p translateParams
+	var p rpc.TranslateParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -54,7 +43,7 @@ func (d *Daemon) handleTranslate(_ context.Context, params json.RawMessage) (any
 	if d.kvStore != nil {
 		cached, err := d.getCachedTranslation(kvKey)
 		if err == nil && cached != "" {
-			return translateResult{Text: cached, Cached: true}, nil
+			return rpc.TranslateResult{Text: cached, Cached: true}, nil
 		}
 	}
 
@@ -95,7 +84,7 @@ func (d *Daemon) handleTranslate(_ context.Context, params json.RawMessage) (any
 		}
 	}
 
-	return translateResult{Text: result.Result}, nil
+	return rpc.TranslateResult{Text: result.Result}, nil
 }
 
 // getCachedTranslation 从 bbolt 中读取指定 key 的缓存翻译值。

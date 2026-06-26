@@ -10,27 +10,15 @@ import (
 	goragcore "github.com/DotNetAge/gorag/v2/core"
 	goragquery "github.com/DotNetAge/gorag/v2/query"
 	"github.com/DotNetAge/mindx/pkg/indexing"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
 // ---------------------------------------------------------------------------
 // kb.chunks — 分页获取知识库（GraphIndexer）Chunk 列表
 // ---------------------------------------------------------------------------
 
-type kbChunksParams struct {
-	Page     int `json:"page,omitempty"`
-	PageSize int `json:"page_size,omitempty"`
-}
-
-type kbChunksResult struct {
-	Chunks   []chunkItem `json:"chunks"`
-	Page     int         `json:"page"`
-	PageSize int         `json:"page_size"`
-	Total    int         `json:"total"`
-	HasMore  bool        `json:"has_more"`
-}
-
 func (d *Daemon) handleKBChunks(_ context.Context, params json.RawMessage) (any, error) {
-	var p kbChunksParams
+	var p rpc.KBChunksParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -51,18 +39,18 @@ func (d *Daemon) handleKBChunks(_ context.Context, params json.RawMessage) (any,
 		return nil, fmt.Errorf("kb list chunks failed: %w", err)
 	}
 
-	chunks := make([]chunkItem, 0, len(hits))
+	chunks := make([]rpc.ChunkItem, 0, len(hits))
 	for _, h := range hits {
 		parentID, _ := h.Metadata["parent_id"].(string)
 		mimeType, _ := h.Metadata["mime_type"].(string)
-		chunks = append(chunks, chunkItem{
+		chunks = append(chunks, rpc.ChunkItem{
 			ID:       h.ID,
 			ParentID: parentID,
 			DocID:    h.DocID,
 			MIMEType: mimeType,
 			Content:  h.Content,
 			Metadata: h.Metadata,
-			ChunkMeta: chunkMetaItem{
+			ChunkMeta: rpc.ChunkMetaItem{
 				Index:        h.ChunkMeta.Index,
 				StartPos:     h.ChunkMeta.StartPos,
 				EndPos:       h.ChunkMeta.EndPos,
@@ -81,7 +69,7 @@ func (d *Daemon) handleKBChunks(_ context.Context, params json.RawMessage) (any,
 
 	d.logger.Info("kb.chunks called", "page", p.Page, "page_size", p.PageSize, "returned", len(chunks), "total", total, "has_more", hasMore)
 
-	return kbChunksResult{
+	return rpc.MemoryChunksResult{
 		Chunks:   chunks,
 		Page:     p.Page,
 		PageSize: p.PageSize,
@@ -193,12 +181,6 @@ func (d *Daemon) handleKBStats(_ context.Context, params json.RawMessage) (any, 
 // kb.search — 对知识库执行语义搜索（向量检索 + 图融合）
 // ---------------------------------------------------------------------------
 
-type kbSearchParams struct {
-	Query    string  `json:"query"`
-	Limit    int     `json:"limit,omitempty"`
-	MinScore float64 `json:"min_score,omitempty"`
-}
-
 type kbSearchHit struct {
 	ID       string         `json:"id"`
 	Content  string         `json:"content"`
@@ -208,7 +190,7 @@ type kbSearchHit struct {
 }
 
 func (d *Daemon) handleKBSearch(_ context.Context, params json.RawMessage) (any, error) {
-	var p kbSearchParams
+	var p rpc.KBSearchParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

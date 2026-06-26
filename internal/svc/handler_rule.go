@@ -6,40 +6,13 @@ import (
 	"fmt"
 
 	"github.com/DotNetAge/goharness/rule"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
 // ---------------------------------------------------------------------------
 // Rule JSON-RPC handlers
 // Data stored in ~/.mindx/data/rules.yml via FileRuleRegistry
 // ---------------------------------------------------------------------------
-
-// ruleGetParams is the params for rule.get.
-type ruleGetParams struct {
-	ID string `json:"id"` // required: rule ID
-}
-
-// ruleCreateParams is the params for rule.create.
-type ruleCreateParams struct {
-	ID       string         `json:"id"`                 // required: unique identifier
-	Intro    string         `json:"intro"`              // required: behavioral description shown in system prompt
-	Scope    rule.RuleScope `json:"scope,omitempty"`    // default: "global"
-	Priority int            `json:"priority,omitempty"` // default: 0
-	Enabled  bool           `json:"enabled,omitempty"`  // default: true
-}
-
-// ruleUpdateParams is the params for rule.update.
-type ruleUpdateParams struct {
-	ID       string          `json:"id"`                 // required: rule ID to update
-	Intro    *string         `json:"intro,omitempty"`    // optional: new intro
-	Scope    *rule.RuleScope `json:"scope,omitempty"`    // optional: new scope
-	Priority *int            `json:"priority,omitempty"` // optional: new priority
-	Enabled  *bool           `json:"enabled,omitempty"`  // optional: new enabled state
-}
-
-// ruleDeleteParams is the params for rule.delete.
-type ruleDeleteParams struct {
-	ID string `json:"id"` // required: rule ID to delete
-}
 
 func (d *Daemon) handleRuleList(_ context.Context, _ json.RawMessage) (any, error) {
 	reg := d.app.RuleRegistry()
@@ -54,7 +27,7 @@ func (d *Daemon) handleRuleList(_ context.Context, _ json.RawMessage) (any, erro
 }
 
 func (d *Daemon) handleRuleGet(_ context.Context, params json.RawMessage) (any, error) {
-	var p ruleGetParams
+	var p rpc.RuleGetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -75,7 +48,7 @@ func (d *Daemon) handleRuleGet(_ context.Context, params json.RawMessage) (any, 
 }
 
 func (d *Daemon) handleRuleCreate(_ context.Context, params json.RawMessage) (any, error) {
-	var p ruleCreateParams
+	var p rpc.RuleCreateParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -94,7 +67,7 @@ func (d *Daemon) handleRuleCreate(_ context.Context, params json.RawMessage) (an
 	newRule := rule.Rule{
 		ID:       p.ID,
 		Intro:    p.Intro,
-		Scope:    p.Scope,
+		Scope:    rule.RuleScope(p.Scope),
 		Priority: p.Priority,
 		Enabled:  p.Enabled,
 	}
@@ -111,7 +84,7 @@ func (d *Daemon) handleRuleCreate(_ context.Context, params json.RawMessage) (an
 }
 
 func (d *Daemon) handleRuleUpdate(_ context.Context, params json.RawMessage) (any, error) {
-	var p ruleUpdateParams
+	var p rpc.RuleUpdateParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -134,7 +107,7 @@ func (d *Daemon) handleRuleUpdate(_ context.Context, params json.RawMessage) (an
 		updated.Intro = *p.Intro
 	}
 	if p.Scope != nil {
-		updated.Scope = *p.Scope
+		updated.Scope = rule.RuleScope(*p.Scope)
 	}
 	if p.Priority != nil {
 		updated.Priority = *p.Priority
@@ -152,7 +125,7 @@ func (d *Daemon) handleRuleUpdate(_ context.Context, params json.RawMessage) (an
 }
 
 func (d *Daemon) handleRuleDelete(_ context.Context, params json.RawMessage) (any, error) {
-	var p ruleDeleteParams
+	var p rpc.RuleDeleteParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

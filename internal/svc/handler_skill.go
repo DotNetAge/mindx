@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
-type skillListParams struct {
-	AgentName string `json:"agent_name,omitempty"`
-}
-
 func (d *Daemon) handleSkillList(_ context.Context, params json.RawMessage) (any, error) {
-	var p skillListParams
+	var p rpc.SkillListParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -49,13 +47,8 @@ func (d *Daemon) handleSkillList(_ context.Context, params json.RawMessage) (any
 	return result, nil
 }
 
-type skillGetParams struct {
-	Name      string `json:"name"`
-	AgentName string `json:"agent_name,omitempty"`
-}
-
 func (d *Daemon) handleSkillGet(_ context.Context, params json.RawMessage) (any, error) {
-	var p skillGetParams
+	var p rpc.SkillGetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

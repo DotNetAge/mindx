@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"go.etcd.io/bbolt"
 )
 
@@ -19,41 +20,6 @@ import (
 
 const kvStoreBucket = "default"
 
-// kvGetParams is the params for kvstore.get.
-type kvGetParams struct {
-	Key string `json:"key"` // required: full key path, e.g. "kg:checkpoint:page"
-}
-
-// kvSetParams is the params for kvstore.set.
-type kvSetParams struct {
-	Key   string      `json:"key"`           // required
-	Value interface{} `json:"value"`         // any JSON-serializable value
-	TTL   int         `json:"ttl,omitempty"` // optional: seconds until auto-expiry (0 = no expiry)
-}
-
-// kvDeleteParams is the params for kvstore.delete.
-type kvDeleteParams struct {
-	Key string `json:"key"`
-}
-
-// kvListParams is the params for kvstore.list (prefix scan).
-type kvListParams struct {
-	Prefix     string `json:"prefix,omitempty"`      // filter keys with this prefix
-	Limit      int    `json:"limit,omitempty"`       // max results (0 = no limit)
-	WithValues bool   `json:"with_values,omitempty"` // include values in response (default false)
-}
-
-// kvBatchSetParams is the params for kvstore.batch_set.
-type kvBatchSetParams struct {
-	Entries []kvSetEntry `json:"entries"`
-}
-
-type kvSetEntry struct {
-	Key   string      `json:"key"`
-	Value interface{} `json:"value"`
-	TTL   int         `json:"ttl,omitempty"`
-}
-
 // kvItem represents one key-value entry returned by list/get operations.
 type kvItem struct {
 	Key       string      `json:"key"`
@@ -63,7 +29,7 @@ type kvItem struct {
 }
 
 func (d *Daemon) handleKVGet(_ context.Context, params json.RawMessage) (any, error) {
-	var p kvGetParams
+	var p rpc.KVGetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -107,7 +73,7 @@ func (d *Daemon) handleKVGet(_ context.Context, params json.RawMessage) (any, er
 }
 
 func (d *Daemon) handleKVSet(_ context.Context, params json.RawMessage) (any, error) {
-	var p kvSetParams
+	var p rpc.KVSetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -149,7 +115,7 @@ func (d *Daemon) handleKVSet(_ context.Context, params json.RawMessage) (any, er
 }
 
 func (d *Daemon) handleKVDelete(_ context.Context, params json.RawMessage) (any, error) {
-	var p kvDeleteParams
+	var p rpc.KVDeleteParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -183,7 +149,7 @@ func (d *Daemon) kvDeleteInternal(key string) error {
 }
 
 func (d *Daemon) handleKVList(_ context.Context, params json.RawMessage) (any, error) {
-	var p kvListParams
+	var p rpc.KVListParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -242,7 +208,7 @@ func (d *Daemon) handleKVList(_ context.Context, params json.RawMessage) (any, e
 }
 
 func (d *Daemon) handleKVBatchSet(_ context.Context, params json.RawMessage) (any, error) {
-	var p kvBatchSetParams
+	var p rpc.KVBatchSetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -296,7 +262,7 @@ func (d *Daemon) handleKVBatchSet(_ context.Context, params json.RawMessage) (an
 
 // handleKVClear clears all keys matching a prefix.
 func (d *Daemon) handleKVClear(_ context.Context, params json.RawMessage) (any, error) {
-	var p kvListParams
+	var p rpc.KVListParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

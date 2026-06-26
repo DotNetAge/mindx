@@ -8,18 +8,8 @@ import (
 
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 )
-
-type tokenUsageMonthlyParams struct {
-	Year  int `json:"year"`
-	Month int `json:"month"`
-}
-
-type tokenUsageByModelParams struct {
-	Model string `json:"model"`
-	Year  int    `json:"year,omitempty"`
-	Month int    `json:"month,omitempty"`
-}
 
 func (d *Daemon) handleTokenUsageOverview(_ context.Context, params json.RawMessage) (any, error) {
 	now := time.Now()
@@ -52,7 +42,7 @@ func (d *Daemon) handleTokenUsageOverview(_ context.Context, params json.RawMess
 }
 
 func (d *Daemon) handleTokenUsageMonthly(_ context.Context, params json.RawMessage) (any, error) {
-	var p tokenUsageMonthlyParams
+	var p rpc.TokenUsageMonthlyParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -65,10 +55,6 @@ func (d *Daemon) handleTokenUsageMonthly(_ context.Context, params json.RawMessa
 		return nil, fmt.Errorf("build monthly stats: %w", err)
 	}
 	return stats, nil
-}
-
-type tokenUsageSessionParams struct {
-	SessionID string `json:"session_id"`
 }
 
 func (d *Daemon) handleTokenUsageTotal(_ context.Context, _ json.RawMessage) (any, error) {
@@ -111,7 +97,7 @@ func (d *Daemon) handleTokenUsageTotal(_ context.Context, _ json.RawMessage) (an
 }
 
 func (d *Daemon) handleTokenUsageSession(_ context.Context, params json.RawMessage) (any, error) {
-	var p tokenUsageSessionParams
+	var p rpc.TokenUsageSessionParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -152,7 +138,7 @@ func (d *Daemon) handleTokenUsageSession(_ context.Context, params json.RawMessa
 }
 
 func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessage) (any, error) {
-	var p tokenUsageByModelParams
+	var p rpc.TokenUsageByModelParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

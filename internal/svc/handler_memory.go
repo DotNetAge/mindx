@@ -10,6 +10,7 @@ import (
 
 	goharnessmemory "github.com/DotNetAge/goharness/memory"
 	"github.com/DotNetAge/mindx/pkg/indexing"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
 // sanitizeDirName converts a filesystem path to a safe directory name (same logic as memory package).
@@ -26,15 +27,8 @@ func sanitizeDirName(absPath string) string {
 	return name
 }
 
-type memoryQueryParams struct {
-	Query    string  `json:"query"`
-	Limit    int     `json:"limit,omitempty"`
-	Type     string  `json:"type,omitempty"`
-	MinScore float64 `json:"min_score,omitempty"`
-}
-
 func (d *Daemon) handleMemoryQuery(_ context.Context, params json.RawMessage) (any, error) {
-	var p memoryQueryParams
+	var p rpc.MemoryQueryParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -54,14 +48,6 @@ func (d *Daemon) handleMemoryQuery(_ context.Context, params json.RawMessage) (a
 	if p.MinScore > 0 {
 		opts = append(opts, goharnessmemory.WithMinScore(p.MinScore))
 	}
-	if p.Type != "" {
-		switch p.Type {
-		case "longterm":
-			opts = append(opts, goharnessmemory.WithMemoryTypes(goharnessmemory.MemoryTypeLongTerm))
-		case "session":
-			opts = append(opts, goharnessmemory.WithMemoryTypes(goharnessmemory.MemoryTypeSession))
-		}
-	}
 
 	chunks, err := mem.Retrieve(context.Background(), p.Query, opts...)
 	if err != nil {
@@ -74,15 +60,8 @@ func (d *Daemon) handleMemoryQuery(_ context.Context, params json.RawMessage) (a
 	return chunks, nil
 }
 
-type memoryStoreParams struct {
-	Title   string   `json:"title,omitempty"`
-	Content string   `json:"content"`
-	Tags    []string `json:"tags,omitempty"`
-	Type    string   `json:"type,omitempty"`
-}
-
 func (d *Daemon) handleMemoryStore(_ context.Context, params json.RawMessage) (any, error) {
-	var p memoryStoreParams
+	var p rpc.MemoryStoreParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -98,7 +77,6 @@ func (d *Daemon) handleMemoryStore(_ context.Context, params json.RawMessage) (a
 	chunk := goharnessmemory.MemoryChunk{
 		Summary:   p.Title,
 		Content:   p.Content,
-		Tags:      p.Tags,
 		Timestamp: time.Now(),
 	}
 
@@ -110,12 +88,8 @@ func (d *Daemon) handleMemoryStore(_ context.Context, params json.RawMessage) (a
 	return map[string]string{"id": id}, nil
 }
 
-type memoryDeleteParams struct {
-	ID string `json:"id"`
-}
-
 func (d *Daemon) handleMemoryDelete(_ context.Context, params json.RawMessage) (any, error) {
-	var p memoryDeleteParams
+	var p rpc.MemoryDeleteParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -139,40 +113,8 @@ func (d *Daemon) handleMemoryDelete(_ context.Context, params json.RawMessage) (
 // memory.chunks — 分页获取 RAG Chunk 列表（翻书式遍历接口）
 // ---------------------------------------------------------------------------
 
-type memoryChunksParams struct {
-	Page     int    `json:"page,omitempty"`      // 页码，从 1 开始
-	PageSize int    `json:"page_size,omitempty"` // 每页条数，默认 50
-	DocID    string `json:"doc_id,omitempty"`    // 按文档过滤，"all" 表示全部
-}
-
-type memoryChunksResult struct {
-	Chunks   []chunkItem `json:"chunks"`
-	Page     int         `json:"page"`
-	PageSize int         `json:"page_size"`
-	Total    int         `json:"total"`
-	HasMore  bool        `json:"has_more"`
-}
-
-type chunkItem struct {
-	ID        string         `json:"id"`
-	ParentID  string         `json:"parent_id,omitempty"`
-	DocID     string         `json:"doc_id,omitempty"`
-	MIMEType  string         `json:"mime_type,omitempty"`
-	Content   string         `json:"content"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
-	ChunkMeta chunkMetaItem  `json:"chunk_meta,omitempty"`
-}
-
-type chunkMetaItem struct {
-	Index        int      `json:"index"`
-	StartPos     int      `json:"start_pos"`
-	EndPos       int      `json:"end_pos"`
-	HeadingLevel int      `json:"heading_level"`
-	HeadingPath  []string `json:"heading_path,omitempty"`
-}
-
 func (d *Daemon) handleMemoryChunks(_ context.Context, params json.RawMessage) (any, error) {
-	var p memoryChunksParams
+	var p rpc.MemoryChunksParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -199,18 +141,18 @@ func (d *Daemon) handleMemoryChunks(_ context.Context, params json.RawMessage) (
 		return nil, fmt.Errorf("list chunks failed: %w", err)
 	}
 
-	chunks := make([]chunkItem, 0, len(hits))
+	chunks := make([]rpc.ChunkItem, 0, len(hits))
 	for _, h := range hits {
 		parentID, _ := h.Metadata["parent_id"].(string)
 		mimeType, _ := h.Metadata["mime_type"].(string)
-		chunks = append(chunks, chunkItem{
+		chunks = append(chunks, rpc.ChunkItem{
 			ID:       h.ID,
 			ParentID: parentID,
 			DocID:    h.DocID,
 			MIMEType: mimeType,
 			Content:  h.Content,
 			Metadata: h.Metadata,
-			ChunkMeta: chunkMetaItem{
+			ChunkMeta: rpc.ChunkMetaItem{
 				Index:        h.ChunkMeta.Index,
 				StartPos:     h.ChunkMeta.StartPos,
 				EndPos:       h.ChunkMeta.EndPos,
@@ -230,7 +172,7 @@ func (d *Daemon) handleMemoryChunks(_ context.Context, params json.RawMessage) (
 
 	d.logger.Info("memory.chunks called", "page", p.Page, "page_size", p.PageSize, "returned", len(chunks), "total", total, "has_more", hasMore)
 
-	return memoryChunksResult{
+	return rpc.MemoryChunksResult{
 		Chunks:   chunks,
 		Page:     p.Page,
 		PageSize: p.PageSize,
@@ -243,12 +185,8 @@ func (d *Daemon) handleMemoryChunks(_ context.Context, params json.RawMessage) (
 // memory.get_chunks — 按文档ID获取全部分块（一次性拉取单文档所有Chunk）
 // ---------------------------------------------------------------------------
 
-type memoryGetChunksParams struct {
-	DocID string `json:"doc_id"` // 必填：文档ID
-}
-
 func (d *Daemon) handleMemoryGetChunks(_ context.Context, params json.RawMessage) (any, error) {
-	var p memoryGetChunksParams
+	var p rpc.MemoryGetChunksParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -271,7 +209,7 @@ func (d *Daemon) handleMemoryGetChunks(_ context.Context, params json.RawMessage
 		return nil, fmt.Errorf("get chunks by doc_id failed: %w", err)
 	}
 
-	items := make([]chunkItem, 0, len(chunks))
+	items := make([]rpc.ChunkItem, 0, len(chunks))
 	for _, c := range chunks {
 		meta := map[string]any{}
 		if c.Metadata != nil {
@@ -279,14 +217,14 @@ func (d *Daemon) handleMemoryGetChunks(_ context.Context, params json.RawMessage
 				meta[k] = v
 			}
 		}
-		items = append(items, chunkItem{
+		items = append(items, rpc.ChunkItem{
 			ID:       c.ID,
 			ParentID: c.ParentID,
 			DocID:    c.DocID,
 			MIMEType: c.MIMEType,
 			Content:  c.Content,
 			Metadata: meta,
-			ChunkMeta: chunkMetaItem{
+			ChunkMeta: rpc.ChunkMetaItem{
 				Index:        c.ChunkMeta.Index,
 				StartPos:     c.ChunkMeta.StartPos,
 				EndPos:       c.ChunkMeta.EndPos,
@@ -299,9 +237,9 @@ func (d *Daemon) handleMemoryGetChunks(_ context.Context, params json.RawMessage
 	d.logger.Info("memory.get_chunks called", "doc_id", p.DocID, "returned", len(items))
 
 	return struct {
-		DocID  string      `json:"doc_id"`
-		Chunks []chunkItem `json:"chunks"`
-		Count  int         `json:"count"`
+		DocID  string         `json:"doc_id"`
+		Chunks []rpc.ChunkItem `json:"chunks"`
+		Count  int            `json:"count"`
 	}{
 		DocID:  p.DocID,
 		Chunks: items,
@@ -430,16 +368,12 @@ func (d *Daemon) handleFilewatchStop(_ context.Context, _ json.RawMessage) (any,
 // filewatch.remove — 从监控列表中移除指定目录
 // ---------------------------------------------------------------------------
 
-type filewatchRemoveParams struct {
-	Dir string `json:"dir"`
-}
-
 func (d *Daemon) handleFilewatchRemove(_ context.Context, params json.RawMessage) (any, error) {
 	if d.kbWatch == nil {
 		return nil, fmt.Errorf("filewatch service not available")
 	}
 
-	var p filewatchRemoveParams
+	var p rpc.FilewatchRemoveParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -558,17 +492,12 @@ func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (an
 // filewatch.retry-failed — 重新索引指定失败文件
 // ---------------------------------------------------------------------------
 
-type filewatchRetryFailedParams struct {
-	Dir   string   `json:"dir"`
-	Files []string `json:"files"` // relative file paths
-}
-
 func (d *Daemon) handleFilewatchRetryFailed(_ context.Context, params json.RawMessage) (any, error) {
 	if d.kbWatch == nil {
 		return nil, fmt.Errorf("filewatch service not available")
 	}
 
-	var p filewatchRetryFailedParams
+	var p rpc.FilewatchRetryFailedParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -632,17 +561,12 @@ func (d *Daemon) handleFilewatchRetryFailed(_ context.Context, params json.RawMe
 // filewatch.ignore-failed — 将失败文件标记为忽略
 // ---------------------------------------------------------------------------
 
-type filewatchIgnoreFailedParams struct {
-	Dir   string   `json:"dir"`
-	Files []string `json:"files"` // relative file paths to ignore
-}
-
 func (d *Daemon) handleFilewatchIgnoreFailed(_ context.Context, params json.RawMessage) (any, error) {
 	if d.kbWatch == nil {
 		return nil, fmt.Errorf("filewatch service not available")
 	}
 
-	var p filewatchIgnoreFailedParams
+	var p rpc.FilewatchIgnoreFailedParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
