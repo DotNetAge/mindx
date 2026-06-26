@@ -7,14 +7,11 @@ import (
 	"path/filepath"
 
 	goharnesssession "github.com/DotNetAge/goharness/session"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
-type sessionListParams struct {
-	Agent string `json:"agent,omitempty"`
-}
-
 func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (any, error) {
-	var p sessionListParams
+	var p rpc.SessionListParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -42,12 +39,8 @@ func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (a
 	return sessions, nil
 }
 
-type sessionGetParams struct {
-	SessionID string `json:"session_id"`
-}
-
 func (d *Daemon) handleSessionGet(_ context.Context, params json.RawMessage) (any, error) {
-	var p sessionGetParams
+	var p rpc.SessionGetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -78,7 +71,7 @@ func (d *Daemon) handleSessionGet(_ context.Context, params json.RawMessage) (an
 }
 
 func (d *Daemon) handleSessionMeta(_ context.Context, params json.RawMessage) (any, error) {
-	var p sessionGetParams
+	var p rpc.SessionGetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -99,12 +92,8 @@ func (d *Daemon) handleSessionMeta(_ context.Context, params json.RawMessage) (a
 	return meta, nil
 }
 
-type sessionDeleteParams struct {
-	SessionID string `json:"session_id"`
-}
-
 func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) (any, error) {
-	var p sessionDeleteParams
+	var p rpc.SessionDeleteParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -147,13 +136,8 @@ func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) 
 	}, nil
 }
 
-type sessionCreateParams struct {
-	Agent      string `json:"agent"`
-	ProjectDir string `json:"project_dir"`
-}
-
 func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) (any, error) {
-	var p sessionCreateParams
+	var p rpc.SessionCreateParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -232,11 +216,6 @@ func sameDirectory(dir1, dir2 string) bool {
 	return abs1 == abs2
 }
 
-type sessionFileActionParams struct {
-	SessionID string   `json:"session_id"`
-	Files     []string `json:"files,omitempty"`
-}
-
 // getOrLoadSession 尝试从 activeSessions 获取 session，
 // 如果会话已结束（goroutine 已退出），则从持久化存储重建。
 // 如果存储不可用或 session 在磁盘上也不存在，则创建一个空 session
@@ -265,7 +244,7 @@ func (d *Daemon) getOrLoadSession(sessionID string) (*goharnesssession.Session, 
 }
 
 func (d *Daemon) handleSessionConfirmFiles(_ context.Context, params json.RawMessage) (any, error) {
-	var p sessionFileActionParams
+	var p rpc.SessionFileActionParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -290,7 +269,7 @@ func (d *Daemon) handleSessionConfirmFiles(_ context.Context, params json.RawMes
 }
 
 func (d *Daemon) handleSessionRollbackFiles(_ context.Context, params json.RawMessage) (any, error) {
-	var p sessionFileActionParams
+	var p rpc.SessionFileActionParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -314,12 +293,8 @@ func (d *Daemon) handleSessionRollbackFiles(_ context.Context, params json.RawMe
 	}, nil
 }
 
-type sessionTruncateParams struct {
-	SessionID string `json:"session_id"`
-}
-
 func (d *Daemon) handleSessionTruncate(ctx context.Context, params json.RawMessage) (any, error) {
-	var p sessionTruncateParams
+	var p rpc.SessionTruncateParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
