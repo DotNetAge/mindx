@@ -45,7 +45,7 @@ func Uninstall(opts UninstallOptions) (*UninstallResult, error) {
 	// Detect install source to guide cleanup decisions
 	exePath, exeErr := os.Executable()
 	if exeErr == nil {
-		result.Source = detectInstallSource(exePath)
+		result.Source = DetectInstallSource(exePath)
 	}
 
 	installDir, err := resolveInstallDir("")

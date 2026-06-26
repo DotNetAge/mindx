@@ -53,6 +53,7 @@ type VersionInfo struct {
 	LatestVersion   string `json:"latest_version,omitempty"`
 	LatestURL       string `json:"latest_url,omitempty"`
 	UpdateAvailable bool   `json:"update_available"`
+	InstallSource   string `json:"install_source,omitempty"`
 	Error           string `json:"error,omitempty"`
 }
 

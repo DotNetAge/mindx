@@ -718,6 +718,11 @@ func (d *Daemon) addWatchEntry(dir, agent string) error {
 	if err := d.watchListStore.Add(dir, agent); err != nil {
 		return fmt.Errorf("addWatchEntry: failed to persist watch entry: %w", err)
 	}
+	d.logger.Info("addWatchEntry: watch entry persisted",
+		"dir", dir,
+		"agent", agent,
+		"filewatch_active", d.kbWatch != nil,
+	)
 	if d.indexStateStore != nil {
 		absDir, _ := filepath.Abs(dir)
 		d.indexStateStore.SetPending(absDir)
@@ -1329,6 +1334,13 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	clientID := msg.ClientID
 	sid := sessionID
 	gw := d.gw
+	currentAgentName := resolvedAgentName
+
+	// withAgent returns a ResponseOption that includes the current agent_name in meta.
+	// Updated by OnEvent handler when sub-agent events are forwarded to the parent.
+	withAgent := func() gateway.ResponseOption {
+		return gateway.WithResponseMeta(map[string]any{"agent_name": currentAgentName})
+	}
 
 	d.logger.Debug("request: starting async execution via AskBuilder",
 		"session_id", sessionID,
@@ -1351,31 +1363,35 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 
 		_, err := rt.Ask(resolvedAgentName, content, s).
 			WithContext(ctx).
+			// Track current agent_name across forwarded sub-agent events.
+			OnEvent(func(ev events.ReactEvent) {
+				currentAgentName = ev.AgentID
+			}).
 			OnThinking(func(chunk string) {
-				_ = gw.SendResponse(clientID, gateway.RespThinkingDelta, i18n.T("svc.event.thinking"), chunk, gateway.WithSessionID(sid))
+				_ = gw.SendResponse(clientID, gateway.RespThinkingDelta, i18n.T("svc.event.thinking"), chunk, gateway.WithSessionID(sid), withAgent())
 			}).
 			OnContent(func(chunk string) {
-				d.sendEvent(clientID, sid, gateway.RespMarkdown, i18n.T("svc.event.outputting"), chunk)
+				d.sendEvent(clientID, sid, gateway.RespMarkdown, i18n.T("svc.event.outputting"), chunk, withAgent())
 			}).
 			OnToolUseDelta(func(data events.ToolUseDeltaData) {
 				_ = gw.SendResponse(clientID, gateway.RespToolUseDelta, i18n.T("svc.event.tool.use.delta"), map[string]any{
 					"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
-				}, gateway.WithSessionID(sid))
+				}, gateway.WithSessionID(sid), withAgent())
 			}).
 			OnThinkingDone(func() {
-				d.sendEvent(clientID, sid, gateway.RespThinkingDone, i18n.T("svc.event.thinking.done"), i18n.T("svc.event.thinking.done.detail"))
+				d.sendEvent(clientID, sid, gateway.RespThinkingDone, i18n.T("svc.event.thinking.done"), i18n.T("svc.event.thinking.done.detail"), withAgent())
 			}).
 			OnToolStart(func(data events.ToolExecStartData) {
 				_ = gw.SendResponse(clientID, gateway.RespToolExecStart, i18n.T("svc.event.tool.start"), map[string]any{
 					"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
-				}, gateway.WithSessionID(sid))
+				}, gateway.WithSessionID(sid), withAgent())
 			}).
 			OnToolEnd(func(data events.ToolExecEndData) {
 				_ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.end"), map[string]any{
 					"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
 					"success": data.Success, "result": data.Result, "error": data.Error,
 					"duration_ms": int(data.Duration.Milliseconds()),
-				}, gateway.WithSessionID(sid))
+				}, gateway.WithSessionID(sid), withAgent())
 				// Broadcast file modification state after tool execution.
 				// Compute diff stats (additions/deletions/diff text) for each modified file.
 				modFiles := s.GetModifyFiles()
@@ -1387,54 +1403,54 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 					_ = gw.SendResponse(clientID, gateway.RespFileModified, i18n.T("svc.event.file.modified"), map[string]any{
 						"files":  fileInfos,
 						"action": "tracked",
-					}, gateway.WithSessionID(sid))
+					}, gateway.WithSessionID(sid), withAgent())
 				}
 			}).
 			OnAnswer(func(answer string) {
-				d.sendEvent(clientID, sid, gateway.RespFinalAnswer, i18n.T("svc.event.final.answer"), answer)
+				d.sendEvent(clientID, sid, gateway.RespFinalAnswer, i18n.T("svc.event.final.answer"), answer, withAgent())
 			}).
 			OnExecutionSummary(func(data events.ExecutionSummaryData) {
 				d.logger.Info("[DAEMON] OnExecutionSummary FIRED: total_tokens=" + fmt.Sprint(data.TokensUsed.TotalTokens) +
 					" input=" + fmt.Sprint(data.TokensUsed.InputTokens) +
 					" output=" + fmt.Sprint(data.TokensUsed.OutputTokens) +
 					" iterations=" + fmt.Sprint(data.TotalIterations))
-				d.sendExecutionSummary(clientID, sid, data)
+				d.sendExecutionSummary(clientID, sid, data, currentAgentName)
 			}).
 			OnCycleEnd(func(data events.CycleInfo) {
 				_ = gw.SendResponse(clientID, gateway.RespCycleEnd, i18n.T("svc.event.cycle.end"), map[string]any{
 					"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
-				}, gateway.WithSessionID(sid))
+				}, gateway.WithSessionID(sid), withAgent())
 			}).
 			OnAgentTalkStart(func(data events.AgentTalkInfo) {
 				_ = gw.SendResponse(clientID, gateway.RespAgentTalkStart, i18n.T("svc.event.agent.talk.start"), map[string]any{
 					"to": data.To, "message": data.Message,
-				}, gateway.WithSessionID(sid))
+				}, gateway.WithSessionID(sid), withAgent())
 			}).
 			OnAgentTalkEnd(func(data events.AgentTalkResult) {
 				_ = gw.SendResponse(clientID, gateway.RespAgentTalkEnd, i18n.T("svc.event.agent.talk.end"), map[string]any{
 					"to": data.To, "reply": data.Reply, "error": data.Error,
-				}, gateway.WithSessionID(sid))
+				}, gateway.WithSessionID(sid), withAgent())
 			}).
 			OnCompaction(func(data events.CompactionData) {
 				_ = gw.SendResponse(clientID, gateway.RespCompaction, i18n.T("svc.event.compaction"), map[string]any{
 					"session_id": data.SessionID, "messages_slid": data.MessagesSlid, "remaining_after": data.RemainingAfter, "window_size": data.WindowSize,
-				}, gateway.WithSessionID(sid))
+				}, gateway.WithSessionID(sid), withAgent())
 			}).
 			OnMaxTurnsReached(func(data events.MaxTurnsReachedData) {
 				_ = gw.SendResponse(clientID, gateway.RespMaxTurnsReached, i18n.T("svc.event.max.turns.reached"), map[string]any{
 					"turns_completed": data.TurnsCompleted, "max_turns": data.MaxTurns, "suggestion": data.Suggestion,
-				}, gateway.WithSessionID(sid))
+				}, gateway.WithSessionID(sid), withAgent())
 			}).
 			OnError(func(errMsg string) {
-				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.error"), errMsg)
+				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.error"), errMsg, withAgent())
 			}).
 			OnSubtaskSpawned(func(data events.SubtaskInfo) {
 				md := buildSubtaskSpawnedMarkdown(data)
-				d.sendEvent(clientID, sid, gateway.RespSubtaskSpawned, i18n.T("svc.event.subtask.spawned"), md)
+				d.sendEvent(clientID, sid, gateway.RespSubtaskSpawned, i18n.T("svc.event.subtask.spawned"), md, withAgent())
 			}).
 			OnSubtaskCompleted(func(data events.SubtaskResult) {
 				md := buildSubtaskCompletedMarkdown(data)
-				d.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, i18n.T("svc.event.subtask.completed"), md)
+				d.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, i18n.T("svc.event.subtask.completed"), md, withAgent())
 			}).
 			OnAskUser(func(data events.AskUserRequestData) {
 				correlationID := uuid.New().String()
@@ -1447,7 +1463,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				_ = gw.SendResponse(clientID, gateway.RespForm, i18n.T("svc.event.ask.user"), map[string]any{
 					"correlation_id": correlationID,
 					"questions":      data.Questions,
-				}, gateway.WithSessionID(sid))
+				}, gateway.WithSessionID(sid), withAgent())
 			}).
 			OnPermissionRequest(func(data events.PermissionRequestData) {
 				correlationID := uuid.New().String()
@@ -1464,10 +1480,10 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 					"reason":         data.Reason,
 					"security_level": data.SecurityLevel,
 					"params":         data.Params,
-				}, gateway.WithSessionID(sid))
+				}, gateway.WithSessionID(sid), withAgent())
 			}).
 			OnPermissionDenied(func(reason string) {
-				d.sendEvent(clientID, sid, gateway.RespPermissionDenied, i18n.T("svc.event.permission.denied"), reason)
+				d.sendEvent(clientID, sid, gateway.RespPermissionDenied, i18n.T("svc.event.permission.denied"), reason, withAgent())
 			}).
 			OnTaskSummary(func(data events.TaskSummaryData) {
 				md := buildTaskSummaryMarkdown(data)
@@ -1476,11 +1492,12 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 					gateway.WithResponseMeta(map[string]any{
 						"input_tokens":  data.TokenUsage.InputTokens,
 						"output_tokens": data.TokenUsage.OutputTokens,
+						"agent_name":    currentAgentName,
 					}))
 			}).
 			OnLLMTimeout(func(data events.LLMTimeoutData) {
 				msg := fmt.Sprintf(i18n.T("svc.event.llm.timeout"), data.Elapsed, data.Error)
-				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.timeout"), msg)
+				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.timeout"), msg, withAgent())
 			}).
 			OnTokenUsageRecorded(func(record goharnesssession.TokenUsageRecord) {
 				_ = gw.SendResponse(clientID, gateway.RespTokenUsageRecorded, i18n.T("svc.event.token.usage"), map[string]any{
@@ -1496,7 +1513,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 					"reasoning_tokens":  record.ReasoningTokens,
 					"total_tokens":      record.TotalTokens,
 					"timestamp":         record.Timestamp,
-				}, gateway.WithSessionID(sid))
+				}, gateway.WithSessionID(sid), withAgent())
 			}).
 			Run()
 
