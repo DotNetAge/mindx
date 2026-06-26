@@ -1,17 +1,61 @@
 # =============================================================================
-# MindX Docker Image — Alpine (musl) base, matches musl-cross compiled binary
+# MindX Docker Image — Multi-stage build with ONNX Runtime support
 # =============================================================================
 # Build:
-#   Local:  make docker  →  pre-compile + docker compose build
-#   CI:     build job   →  cross-compile artifacts → docker build-push
-#
-# Binary source: runtime/bin/mindx (pre-compiled, NOT built inside Docker)
+#   Local:  make docker                (auto-build .env + docker compose)
+#   Local:  docker build -t mindx .    (standalone)
+#   CI:     docker/build-push-action   (multi-platform via buildx)
 # =============================================================================
 
-# ---- Runtime image ----
-FROM alpine:3.19
+# ---- Builder stage ----
+FROM golang:1.26-bookworm AS builder
 
-LABEL maintainer="DotNetAge <ray@raya.cn>"
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_TIME=unknown
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN CGO_ENABLED=1 go build \
+    -trimpath \
+    -ldflags="-s -w \
+      -X github.com/DotNetAge/mindx/internal/core.Version=${VERSION#v} \
+      -X github.com/DotNetAge/mindx/internal/core.Commit=${COMMIT} \
+      -X github.com/DotNetAge/mindx/internal/core.BuildTime=${BUILD_TIME}" \
+    -o /usr/local/bin/mindx \
+    .
+
+# ---- ONNX Runtime download stage ----
+FROM debian:bookworm-slim AS onnxruntime-dl
+
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -ex; \
+    ONNX_VERSION="1.24.4"; \
+    if [ "$TARGETARCH" = "arm64" ]; then \
+      ARCH="aarch64"; \
+    else \
+      ARCH="x64"; \
+    fi; \
+    curl -fL -o /tmp/onnxruntime.tgz \
+      "https://github.com/microsoft/onnxruntime/releases/download/v${ONNX_VERSION}/onnxruntime-linux-${ARCH}-${ONNX_VERSION}.tgz"; \
+    tar xzf /tmp/onnxruntime.tgz -C /tmp; \
+    cp -P "/tmp/onnxruntime-linux-${ARCH}-${ONNX_VERSION}/lib/libonnxruntime.so"* /usr/local/lib/; \
+    rm -rf /tmp/onnxruntime*
+
+# ---- Runtime stage ----
+FROM debian:bookworm-slim
+
+LABEL maintainer="DotNetAge <ray@rayainfo.cn>"
 LABEL org.opencontainers.image.source="https://github.com/DotNetAge/mindx"
 LABEL org.opencontainers.image.description="MindX AI-native multi-agent conversation platform"
 
@@ -19,44 +63,34 @@ ARG VERSION=dev
 ENV MINDX_VERSION=${VERSION}
 
 # Install runtime dependencies (minimal set)
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     python3 \
-    py3-pip \
-    tini \
+    python3-pip \
     bash \
-    wget
+    wget \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
 
-# Non-root user + runtime directories (single layer)
-RUN adduser -D -s /bin/bash mindx && \
+# Copy ONNX Runtime shared library
+COPY --from=onnxruntime-dl /usr/local/lib/libonnxruntime.so* /usr/local/lib/
+RUN ldconfig
+
+# Copy binary
+COPY --from=builder /usr/local/bin/mindx /usr/local/bin/mindx
+
+# Non-root user + runtime directories
+RUN adduser --disabled-password --gecos '' mindx && \
     mkdir -p /home/mindx/.mindx/logs \
     /home/mindx/.mindx/sessions \
     /home/mindx/workspaces && \
     chown -R mindx:mindx /home/mindx/.mindx /home/mindx/workspaces
 
-# Python venv (create as root, then chown to mindx)
-RUN python3 -m venv /home/mindx/.mindx/.venv && \
-    if [ -s /home/mindx/.mindx/requirements.txt 2>/dev/null ]; then \
-    /home/mindx/.mindx/.venv/bin/pip install --no-cache-dir -r /home/mindx/.mindx/requirements.txt && \
-    /home/mindx/.mindx/.venv/bin/pip cache purge; \
-    fi && \
-    chown -R mindx:mindx /home/mindx/.mindx/.venv
-
 USER mindx
 WORKDIR /home/mindx
 
-# Deploy runtime environment + pre-built binaries (multi-platform)
+# Deploy runtime environment (agents, schemas, settings, skills, mindx.json)
 COPY --chown=mindx:mindx runtime/ /home/mindx/.mindx/
-
-# Select correct binary for target architecture
-RUN ARCH=$(uname -m); \
-    if [ "$ARCH" = "x86_64" ]; then \
-    cp /home/mindx/.mindx/bin/mindx-amd64 /home/mindx/.mindx/bin/mindx; \
-    elif [ "$ARCH" = "aarch64" ]; then \
-    cp /home/mindx/.mindx/bin/mindx-arm64 /home/mindx/.mindx/bin/mindx; \
-    fi && \
-    chmod +x /home/mindx/.mindx/bin/mindx && \
-    rm -f /home/mindx/.mindx/bin/mindx-amd64 /home/mindx/.mindx/bin/mindx-arm64
 
 # Fix venv path in mindx.json for container
 RUN sed -i 's|/Users/ray/.mindx/.venv|/home/mindx/.mindx/.venv|g' \
@@ -71,5 +105,5 @@ EXPOSE 1313 1314
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:1313/ || exit 1
 
-ENTRYPOINT ["/sbin/tini", "--", "/home/mindx/.mindx/bin/mindx"]
+ENTRYPOINT ["/usr/bin/tini", "--", "mindx"]
 CMD ["daemon"]

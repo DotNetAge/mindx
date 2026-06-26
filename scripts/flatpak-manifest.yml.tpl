@@ -17,6 +17,19 @@ finish-args:
   --own-name=com.dotnetage.MindX.Daemon
 
 modules:
+  # ONNX Runtime shared library — required by embedder for AI agent capabilities
+  - name: onnxruntime
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 lib/libonnxruntime.so* /app/lib/
+    sources:
+      - type: archive
+        url: https://github.com/microsoft/onnxruntime/releases/download/v1.24.4/onnxruntime-linux-x64-1.24.4.tgz
+        sha256: 3a211fbea252c1e66290658f1b735b772056149f28321e71c308942cdb54b747
+        dest: onnxruntime
+        only-arches:
+          - x86_64
+
   - name: mindx
     buildsystem: simple
     build-commands:

@@ -399,9 +399,19 @@ func (d *Daemon) handleFilewatchRemove(_ context.Context, params json.RawMessage
 
 func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (any, error) {
 	if d.kbWatch == nil {
+		// 即使 kbWatch 不可用（例如 embedder 未初始化），watchListStore 中
+		// 仍然可能保存了持久化的监控目录条目（来自会话创建时写入），将其
+		// 返回给前端以便显示，但标记 available=false 表示无法实际索引。
+		watched := make([]string, 0)
+		if d.watchListStore != nil {
+			for _, entry := range d.watchListStore.List() {
+				watched = append(watched, entry.Dir)
+			}
+		}
 		return map[string]any{
 			"available": false,
 			"running":   false,
+			"watched":   watched,
 		}, nil
 	}
 

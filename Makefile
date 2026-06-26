@@ -611,10 +611,11 @@ publish:
 # Docker 目标
 # =============================================================================
 
-## docker: 从 git 动态读取版本 → 生成 .env → 编译 Linux 二进制 → Docker Compose 构建并启动
+## docker: 从 git 动态读取版本 → 生成 .env → Docker Compose 构建并启动
 ## 镜像 tag = git tag (如 v2.2.0)，无 tag 时为 dev
+## 采用 Docker 多阶段构建（编译在 Docker builder 中完成，无需本地 pre-compile）
 docker:
-	@echo "$(GREEN)🐳 Building MindX Docker image...$(NC)"
+	@echo "$(GREEN)🐳 Building MindX Docker image (multi-stage build)...$(NC)"
 	@# ── 从 git 动态提取版本信息 ──
 	@_TAG=$$(git describe --tags --abbrev=0 2>/dev/null || echo "dev"); \
 	_COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
@@ -630,18 +631,8 @@ docker:
 	echo "MINDX_BUILD_TIME=$$_BUILD_TIME" >> .env; \
 	echo "$(GREEN)📝 .env generated from git → MINDX_VERSION=$$_TAG$(NC)"; \
 	echo ""; \
-	@# ── 清理旧二进制，防止 //go:embed 递归嵌套打包 ── \
+	@# ── 删除旧二进制，防止 COPY runtime/ 时带上── \
 	rm -f runtime/bin/mindx; \
-	mkdir -p $(BUILD_DIR)/linux-amd64 runtime/bin; \
-	if [ -n "$$CC" ] && command -v $$CC >/dev/null 2>&1; then \
-		echo "$(GREEN)➡ Compiling linux/amd64 (CGO, $$CC)...$(NC)"; \
-		CGO_ENABLED=1 GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) .; \
-	else \
-		echo "$(GREEN)➡ Compiling linux/amd64 (pure Go, no CGO)...$(NC)"; \
-		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) .; \
-	fi && \
-	echo "$(GREEN)📦 Copying binary → runtime/bin/mindx...$(NC)" && \
-	cp $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) runtime/bin/mindx && \
 	echo "$(GREEN)🐳 Building Docker image (mindx:$$_TAG)...$(NC)" && \
 	docker compose build && \
 	echo "$(GREEN)✅ Build complete. Starting daemon...$(NC)" && \
@@ -744,40 +735,9 @@ docker-release: fmt lint
 	echo "$(CYAN)  Commit:    $$_COMMIT$(NC)"; \
 	echo "$(CYAN)  BuildTime: $$_BUILD_TIME$(NC)"
 	@echo ""
-	@# ── 编译 linux/amd64 二进制 → runtime/bin/mindx ──
-	@echo "$(GREEN)➡ Building linux/amd64 → runtime/bin/mindx ...$(NC)"
-	@# ── 清理旧二进制，防止 //go:embed 递归嵌套打包 ──
+	@# ── 清理旧二进制，防止 COPY runtime/ 时带上──
 	@rm -f runtime/bin/mindx
-	@mkdir -p $(BUILD_DIR)/linux-amd64 runtime/bin; \
-	if command -v x86_64-linux-musl-gcc >/dev/null 2>&1; then \
-		echo "$(CYAN)   Using musl cross-compiler (CGO)$(NC)"; \
-		CGO_ENABLED=1 CC=x86_64-linux-musl-gcc GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) .; \
-	else \
-		echo "$(CYAN)   Using pure Go (CGO_ENABLED=0)$(NC)"; \
-		echo "$(YELLOW)   Tip: brew install FiloSottile/musl-cross/musl-cross for better compatibility$(NC)"; \
-		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) .; \
-	fi && \
-	cp $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) runtime/bin/mindx && \
-	chmod +x runtime/bin/mindx && \
-	echo "$(GREEN)✅ Binary built → runtime/bin/mindx$(NC)"
-	@echo ""
-	@# ── 校验二进制版本与 git tag 一致 ──
-	@echo "$(GREEN)🔍 Verifying binary version against git tag ...$(NC)"; \
-	_BUILT_VER=$$(runtime/bin/mindx version 2>&1 | grep "Version:" | awk '{print $$2}'); \
-	_EXPECTED_VER="$(VERSION_NUM)"; \
-	echo "$(CYAN)   Built version : $$_BUILT_VER$(NC)"; \
-	echo "$(CYAN)   Expected (tag): $$_EXPECTED_VER$(NC)"; \
-	if [ "$$_BUILT_VER" = "$$_EXPECTED_VER" ] || [ "$$_BUILT_VER" = "$$_TAG" ]; then \
-		echo "$(GREEN)✅ Version match confirmed!$(NC)"; \
-	else \
-		echo "$(RED)❌ Version mismatch! Binary reports '$$_BUILT_VER' but git tag is '$$_TAG' ($$_EXPECTED_VER)$(NC)"; \
-		exit 1; \
-	fi
-	@echo ""
-	@# ── 检查 runtime/data ──
-	@if [ ! -d runtime/data ] || [ -z "$$(ls -A runtime/data 2>/dev/null)" ]; then \
-		echo "$(YELLOW)⚠  runtime/data/ 为空或不存在（模型文件缺失），镜像将不包含本地模型$(NC)"; \
-	fi
+	@echo "$(GREEN)🐳 Using Docker multi-stage build (compile inside Docker builder)...$(NC)"
 	@echo ""
 	@# ── 生成 .env ──
 	@_TAG=$$(git describe --tags --abbrev=0 2>/dev/null); \

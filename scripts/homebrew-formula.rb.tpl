@@ -16,6 +16,8 @@ class Mindx < Formula
   license "MIT"
   version "__VERSION__"
 
+  depends_on "onnxruntime"
+
   on_macos do
     if Hardware::CPU.intel?
       url "https://github.com/__GITHUB_REPO__/releases/download/__TAG__/mindx-__VERSION__-darwin-amd64.tar.gz"
