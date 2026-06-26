@@ -693,3 +693,386 @@ func TestHandleSkillGet_MissingName(t *testing.T) {
 		t.Fatal("expected error for missing name")
 	}
 }
+
+// ==========================================================================
+// User Config
+// ==========================================================================
+
+func TestHandleUserConfig_OK(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	result, err := d.handleUserConfig(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("handleUserConfig error = %v", err)
+	}
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map[string]interface{}, got %T", result)
+	}
+	if _, exists := m["initialized"]; !exists {
+		t.Error("expected 'initialized' in result")
+	}
+}
+
+// ==========================================================================
+// I18n RPC Handlers
+// ==========================================================================
+
+func TestHandleI18nGet_OK(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	result, err := d.handleI18nGet(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("handleI18nGet error = %v", err)
+	}
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any, got %T", result)
+	}
+	if _, exists := m["tag"]; !exists {
+		t.Error("expected 'tag' in result")
+	}
+	if _, exists := m["name"]; !exists {
+		t.Error("expected 'name' in result")
+	}
+}
+
+func TestHandleI18nList_OK(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	result, err := d.handleI18nList(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("handleI18nList error = %v", err)
+	}
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any, got %T", result)
+	}
+	if _, exists := m["languages"]; !exists {
+		t.Error("expected 'languages' in result")
+	}
+	if _, exists := m["current"]; !exists {
+		t.Error("expected 'current' in result")
+	}
+}
+
+func TestHandleI18nSwitch_EmptyLang(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	params, _ := json.Marshal(map[string]string{"lang": ""})
+	_, err := d.handleI18nSwitch(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for empty lang")
+	}
+}
+
+func TestHandleI18nSwitch_InvalidJSON(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	_, err := d.handleI18nSwitch(context.Background(), json.RawMessage("bad"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// ==========================================================================
+// Server RPC Handlers
+// ==========================================================================
+
+func TestHandleServerVersion_NotSet(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	// In test builds, core.Version is empty, so this should return an error.
+	_, err := d.handleServerVersion(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected error when core.Version is empty")
+	}
+}
+
+// ==========================================================================
+// Schedule RPC Handlers
+// ==========================================================================
+
+func TestHandleScheduleList_Empty(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	result, err := d.handleScheduleList(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("handleScheduleList error = %v", err)
+	}
+	entries, ok := result.([]any)
+	if !ok {
+		t.Fatalf("expected []any, got %T", result)
+	}
+	if len(entries) != 0 {
+		t.Errorf("expected 0 entries, got %d", len(entries))
+	}
+}
+
+func TestHandleScheduleAdd_MissingAgent(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	params, _ := json.Marshal(map[string]string{"content": "test", "cron_expr": "* * * * *"})
+	_, err := d.handleScheduleAdd(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for missing agent")
+	}
+}
+
+func TestHandleScheduleAdd_MissingContent(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	params, _ := json.Marshal(map[string]string{"agent": "a", "cron_expr": "* * * * *"})
+	_, err := d.handleScheduleAdd(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for missing content")
+	}
+}
+
+func TestHandleScheduleAdd_MissingCronExpr(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	params, _ := json.Marshal(map[string]string{"agent": "a", "content": "test"})
+	_, err := d.handleScheduleAdd(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for missing cron_expr")
+	}
+}
+
+func TestHandleScheduleAdd_InvalidJSON(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	_, err := d.handleScheduleAdd(context.Background(), json.RawMessage("bad"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestHandleScheduleDelete_MissingID(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	params, _ := json.Marshal(map[string]string{})
+	_, err := d.handleScheduleDelete(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for missing id")
+	}
+}
+
+func TestHandleScheduleDelete_InvalidJSON(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	_, err := d.handleScheduleDelete(context.Background(), json.RawMessage("bad"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// ==========================================================================
+// Log RPC Handlers
+// ==========================================================================
+
+func TestHandleLog_InvalidJSON(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	_, err := d.handleLogRead(context.Background(), json.RawMessage("bad"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestHandleLogClear_NotConfirmed(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	params, _ := json.Marshal(map[string]bool{"confirmed": false})
+	_, err := d.handleLogClear(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error when confirmed is false")
+	}
+}
+
+func TestHandleLogClear_InvalidJSON(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	_, err := d.handleLogClear(context.Background(), json.RawMessage("bad"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestHandleLogCount_OK(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	result, err := d.handleLogCount(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("handleLogCount error = %v", err)
+	}
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any, got %T", result)
+	}
+	if _, exists := m["counts"]; !exists {
+		t.Error("expected 'counts' in result")
+	}
+}
+
+// ==========================================================================
+// Entity Tags RPC Handlers
+// ==========================================================================
+
+func TestHandleEntityTagsGet_OK(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	// When no entity-defs.json exists, returns empty structure
+	result, err := d.handleEntityTagsGet(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("handleEntityTagsGet error = %v", err)
+	}
+	f, ok := result.(*entityTagsFile)
+	if !ok {
+		t.Fatalf("expected *entityTagsFile, got %T", result)
+	}
+	if f.Domain != "user" {
+		t.Errorf("domain = %s, want user", f.Domain)
+	}
+}
+
+func TestHandleEntityTagsSave_OK(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	params, _ := json.Marshal(map[string]any{
+		"types": []map[string]any{
+			{"name": "bug", "title": "Bug", "desc": "A software bug"},
+		},
+	})
+	result, err := d.handleEntityTagsSave(context.Background(), params)
+	if err != nil {
+		t.Fatalf("handleEntityTagsSave error = %v", err)
+	}
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any, got %T", result)
+	}
+	if m["status"] != "ok" {
+		t.Errorf("status = %v, want ok", m["status"])
+	}
+}
+
+func TestHandleEntityTagsSave_InvalidJSON(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	_, err := d.handleEntityTagsSave(context.Background(), json.RawMessage("bad"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// ==========================================================================
+// Provider RPC Handlers (defined in handler_model.go)
+// ==========================================================================
+
+func TestHandleProviderList_OK(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	result, err := d.handleProviderList(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("handleProviderList error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestHandleProviderCreate_MissingName(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	params, _ := json.Marshal(map[string]string{})
+	_, err := d.handleProviderCreate(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for missing name")
+	}
+}
+
+func TestHandleProviderCreate_InvalidJSON(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	_, err := d.handleProviderCreate(context.Background(), json.RawMessage("bad"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestHandleProviderUpdate_MissingName(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	params, _ := json.Marshal(map[string]string{})
+	_, err := d.handleProviderUpdate(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for missing name")
+	}
+}
+
+func TestHandleProviderUpdate_InvalidJSON(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	_, err := d.handleProviderUpdate(context.Background(), json.RawMessage("bad"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestHandleProviderDelete_MissingName(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	params, _ := json.Marshal(map[string]string{})
+	_, err := d.handleProviderDelete(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for missing name")
+	}
+}
+
+func TestHandleProviderDelete_NotFound(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	params, _ := json.Marshal(map[string]string{"name": "nonexistent"})
+	_, err := d.handleProviderDelete(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for nonexistent provider")
+	}
+}
+
+func TestHandleProviderDelete_InvalidJSON(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	_, err := d.handleProviderDelete(context.Background(), json.RawMessage("bad"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}

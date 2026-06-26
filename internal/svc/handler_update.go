@@ -3,6 +3,7 @@ package svc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"time"
 
@@ -28,12 +29,19 @@ func (d *Daemon) handleServerApplyUpdate(ctx context.Context, params json.RawMes
 	}
 
 	// Broadcast notification to all connected clients before restart
-	d.gw.BroadcastNotification("update_installed", map[string]interface{}{
-		"type": "update_installed",
-	})
+	if d.gw != nil {
+		d.gw.BroadcastNotification("update_installed", map[string]interface{}{
+			"type": "update_installed",
+		})
+	}
 
 	// Trigger restart in a goroutine so the RPC response can be sent back first
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("update restart: goroutine panic", fmt.Errorf("%v", r))
+			}
+		}()
 		// Brief delay to let the RPC response reach the client
 		time.Sleep(500 * time.Millisecond)
 		d.Restart()
@@ -44,6 +52,11 @@ func (d *Daemon) handleServerApplyUpdate(ctx context.Context, params json.RawMes
 
 func (d *Daemon) handleServerRestartDaemon(ctx context.Context, params json.RawMessage) (any, error) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("manual restart: goroutine panic", fmt.Errorf("%v", r))
+			}
+		}()
 		time.Sleep(500 * time.Millisecond)
 		d.Restart()
 	}()

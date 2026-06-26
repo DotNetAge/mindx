@@ -50,6 +50,13 @@ func (c *Client) KBSyncProject(projectDir string) (json.RawMessage, error) {
 	return c.CallWithTimeout("kb.sync_project", KBSyncProjectParams{ProjectDir: projectDir})
 }
 
+// KBStatsResult is the result for kb.stats.
+type KBStatsResult struct {
+	TotalFiles   int `json:"total_files"`
+	IndexedFiles int `json:"indexed_files"`
+	TotalChunks  int `json:"total_chunks"`
+}
+
 func (c *Client) KBFileStates(projectDir string) (json.RawMessage, error) {
 	return c.CallWithTimeout("kb.file_states", KBFileStatesParams{ProjectDir: projectDir})
 }

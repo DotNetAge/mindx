@@ -8,18 +8,9 @@ import (
 
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/google/uuid"
 )
-
-// optimizeParams 是 optimize.rpc 方法的请求参数。
-type optimizeParams struct {
-	Text string `json:"text"` // 待优化的用户输入
-}
-
-// optimizeResult 是 optimize.rpc 方法的响应结果。
-type optimizeResult struct {
-	Text string `json:"text"` // 优化后的用户输入
-}
 
 // handleOptimize 处理用户输入优化请求。
 //
@@ -29,7 +20,7 @@ type optimizeResult struct {
 //  3. 记录 Token 用量
 //  4. 返回优化结果
 func (d *Daemon) handleOptimize(_ context.Context, params json.RawMessage) (any, error) {
-	var p optimizeParams
+	var p rpc.OptimizeParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
@@ -68,5 +59,5 @@ func (d *Daemon) handleOptimize(_ context.Context, params json.RawMessage) (any,
 		}
 	}
 
-	return optimizeResult{Text: result.Result}, nil
+	return rpc.OptimizeResult{Text: result.Result}, nil
 }

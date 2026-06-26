@@ -675,23 +675,27 @@ func (d *Daemon) autoUpdateLoop(ctx context.Context) {
 					"latest", info.LatestVersion,
 				)
 				// 通知客户端更新即将开始
-				d.gw.BroadcastNotification("update_started", map[string]interface{}{
-					"type": "update_started",
-					"data": map[string]string{
-						"version": info.LatestVersion,
-					},
-				})
+				if d.gw != nil {
+					d.gw.BroadcastNotification("update_started", map[string]interface{}{
+						"type": "update_started",
+						"data": map[string]string{
+							"version": info.LatestVersion,
+						},
+					})
+				}
 				// 自动下载并安装新二进制（但不要重启，只记录日志通知用户）
 				if err := d.updater.DownloadAndInstall(ctx); err != nil {
 					d.logger.Warn("auto-update: download and install failed", "error", err)
 				} else {
 					d.logger.Info("auto-update: update installed. User should restart the daemon.")
-					d.gw.BroadcastNotification("update_installed", map[string]interface{}{
-						"type": "update_installed",
-						"data": map[string]string{
-							"version": info.LatestVersion,
-						},
-					})
+					if d.gw != nil {
+						d.gw.BroadcastNotification("update_installed", map[string]interface{}{
+							"type": "update_installed",
+							"data": map[string]string{
+								"version": info.LatestVersion,
+							},
+						})
+					}
 				}
 			} else {
 				d.logger.Info("auto-update: already up-to-date", "version", info.CurrentVersion)
@@ -985,6 +989,11 @@ func (d *Daemon) Start(ctx context.Context) error {
 	// ── Hot-reload: watch agents/skills directories for file changes ──
 	d.hotReload = NewHotReloadWatcher(d.app, d.logger)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil && d.logger != nil {
+				d.logger.Error("hot-reload watcher: goroutine panic", fmt.Errorf("%v", r))
+			}
+		}()
 		if err := d.hotReload.Start(ctx); err != nil && d.logger != nil {
 			d.logger.Warn("hot-reload watcher exited with error", "error", err)
 		}
@@ -999,6 +1008,11 @@ func (d *Daemon) Start(ctx context.Context) error {
 			ctx, cancel := context.WithCancel(context.Background())
 			d.watchCancel = cancel
 			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						d.logger.Error("auto-restore filewatch: goroutine panic", fmt.Errorf("%v", r))
+					}
+				}()
 				if err := d.kbWatch.Start(ctx); err != nil {
 					d.logger.Warn("auto-restore: filewatch exited with error", "error", err)
 				}

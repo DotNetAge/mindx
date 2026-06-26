@@ -125,6 +125,11 @@ func (d *Daemon) handleTerminalStart(ctx context.Context, params json.RawMessage
 	// PTY 输出 → WebSocket 推送
 	go func() {
 		defer ts.close()
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("terminal read: goroutine panic", fmt.Errorf("%v", r))
+			}
+		}()
 		buf := make([]byte, 4096)
 		for {
 			n, err := f.Read(buf)
@@ -145,6 +150,11 @@ func (d *Daemon) handleTerminalStart(ctx context.Context, params json.RawMessage
 
 	// 进程退出通知
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("terminal exit: goroutine panic", fmt.Errorf("%v", r))
+			}
+		}()
 		err := cmd.Wait()
 		exitCode := 0
 		if err != nil {

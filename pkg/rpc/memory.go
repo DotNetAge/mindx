@@ -89,6 +89,11 @@ type ChunkMetaItem struct {
 	HeadingPath  []string `json:"heading_path,omitempty"`
 }
 
+// MemoryCountResult is the result for memory.count.
+type MemoryCountResult struct {
+	Count int `json:"count"`
+}
+
 func (c *Client) MemoryCount() (json.RawMessage, error) {
 	return c.CallWithTimeout("memory.count", nil)
 }

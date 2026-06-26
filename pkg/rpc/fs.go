@@ -70,6 +70,16 @@ func (c *Client) FSReveal(path string) (json.RawMessage, error) {
 	return c.CallWithTimeout("fs.reveal", FSRevealParams{Path: path})
 }
 
+// FSReadResult is the result for fs.read.
+type FSReadResult struct {
+	Content string `json:"content"`
+}
+
+// FSRevealResult is the result for fs.reveal.
+type FSRevealResult struct {
+	Status string `json:"status"`
+}
+
 func (c *Client) FSHome() (json.RawMessage, error) {
 	return c.CallWithTimeout("fs.home", nil)
 }

@@ -125,12 +125,6 @@ func (d *Daemon) handleKBSyncProject(_ context.Context, params json.RawMessage) 
 // kb.stats — 获取知识库文件索引进度统计
 // ---------------------------------------------------------------------------
 
-type kbStatsResult struct {
-	TotalFiles   int `json:"total_files"`
-	IndexedFiles int `json:"indexed_files"`
-	TotalChunks  int `json:"total_chunks"`
-}
-
 func (d *Daemon) handleKBStats(_ context.Context, params json.RawMessage) (any, error) {
 	var p struct {
 		ProjectDir string `json:"project_dir"`
@@ -170,7 +164,7 @@ func (d *Daemon) handleKBStats(_ context.Context, params json.RawMessage) (any, 
 		"total_chunks", totalChunks,
 	)
 
-	return kbStatsResult{
+	return rpc.KBStatsResult{
 		TotalFiles:   totalFiles,
 		IndexedFiles: indexedFiles,
 		TotalChunks:  totalChunks,

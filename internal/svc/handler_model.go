@@ -49,12 +49,8 @@ func (d *Daemon) handleProviderList(_ context.Context, _ json.RawMessage) (any, 
 	return result, nil
 }
 
-type modelGetParams struct {
-	Name string `json:"name"`
-}
-
 func (d *Daemon) handleModelGet(_ context.Context, params json.RawMessage) (any, error) {
-	var p modelGetParams
+	var p rpc.ModelGetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}

@@ -139,6 +139,9 @@ func (d *Daemon) handleKVDelete(_ context.Context, params json.RawMessage) (any,
 
 // kvDeleteInternal deletes a key from the default bucket.
 func (d *Daemon) kvDeleteInternal(key string) error {
+	if d.kvStore == nil {
+		return fmt.Errorf("kvstore not available")
+	}
 	return d.kvStore.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(kvStoreBucket))
 		if b == nil {

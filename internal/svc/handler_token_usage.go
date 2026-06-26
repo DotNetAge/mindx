@@ -222,21 +222,8 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 		return emptyMonthlyResult(year, month), nil
 	}
 
-	// 诊断：打印实际文件路径和文件是否存在
-	dataDir := ""
-	if fts, ok := interface{}(store).(interface{ DataDir() string }); ok {
-		dataDir = fts.DataDir()
-	}
-	d.logger.Info("[TOKEN-DEBUG] store info",
-		"dataDir", dataDir,
-	)
-
 	since := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.Local)
 	until := since.AddDate(0, 1, 0)
-	d.logger.Info("[TOKEN-DEBUG] date range",
-		"since", since, "until", until,
-		"local_tz", time.Local.String(),
-	)
 
 	filter := goharnesssession.TokenUsageFilter{
 		Since: since,
