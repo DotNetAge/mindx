@@ -167,7 +167,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		var embErr error
 		emb, embErr = memory.NewEmbedderFromConfig(modelPath)
 		if embErr != nil {
-			logger.Warn("Failed to create embedder, memory disabled", "error", embErr)
+			logger.Warn("Failed to create embedder, memory disabled", "error", embErr, "model", modelPath)
 		}
 	}
 

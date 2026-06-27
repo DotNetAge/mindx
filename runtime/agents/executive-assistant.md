@@ -8,7 +8,8 @@ description: >
 skills:
   - find-experts
   - introspect
-  - event-coordinator
+  - humanizer
+  - internal-comms
   - multi-agent-meeting
 meta:
   name_zh: 执行助理
