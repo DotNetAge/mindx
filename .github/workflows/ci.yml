@@ -1,7 +1,7 @@
 # =============================================================================
 # MindX CI Pipeline — Production-grade GitHub Actions
 # =============================================================================
-# Stages: lint → vet → security → test (race + coverage) → build (matrix)
+# Stages: hf-dl-validation (temporary) → lint → vet → security → test → build
 #
 # Triggers:
 #   - push to main/develop, all PRs
@@ -38,6 +38,52 @@ env:
   MODEL_PATH: runtime/data/models/model_q4.onnx
 
 jobs:
+  # ==========================================================================
+  # Stage 0: HuggingFace Download Validation (temporary)
+  #   Validates that the embedder model can be retrieved from HuggingFace.
+  #   This proves HF is a viable primary source for the ONNX model,
+  #   bypassing the GitHub LFS pointer problem in CI.
+  #   Once the build pipeline is updated to use HF as primary source,
+  #   this job should be removed.
+  # ==========================================================================
+  hf-dl-validation:
+    name: HF Download Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download model from HuggingFace
+        run: |
+          HF_URL="https://huggingface.co/Xenova/chinese-clip-vit-base-patch16/resolve/main/onnx/model_q4.onnx"
+          echo "Downloading embedder model from HuggingFace..."
+          echo "URL: $HF_URL"
+          curl -fL -o /tmp/model_q4.onnx "$HF_URL"
+          FILE_SIZE=$(wc -c < /tmp/model_q4.onnx)
+          echo "Downloaded size: $FILE_SIZE bytes"
+          echo "model_size=$FILE_SIZE" >> $GITHUB_ENV
+
+      - name: Validate download
+        run: |
+          if [ "${{ env.model_size }}" -lt 10000000 ]; then
+            echo ""
+            echo "╔═══════════════════════════════════════════════════════╗"
+            echo "║  ❌ FAILED: Model too small (${{ env.model_size }} bytes)              ║"
+            echo "║  HuggingFace download returned an error/redirect    ║"
+            echo "╚═══════════════════════════════════════════════════════╝"
+            echo ""
+            echo "First 200 bytes of downloaded file:"
+            head -c 200 /tmp/model_q4.onnx
+            exit 1
+          fi
+          echo ""
+          echo "╔═══════════════════════════════════════════════════════╗"
+          echo "║  ✅ HuggingFace model download validated!            ║"
+          echo "║  Size: ${{ env.model_size }} bytes                        ║"
+          echo "║  HF as primary source: CONFIRMED VIABLE             ║"
+          echo "╚═══════════════════════════════════════════════════════╝"
+          echo ""
+
   # ==========================================================================
   # Stage 1: Lint — golangci-lint with project config
   # ==========================================================================
