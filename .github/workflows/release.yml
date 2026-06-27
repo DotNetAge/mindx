@@ -133,16 +133,15 @@ jobs:
           cache: true
 
       - name: Download embedder model
-        env:
-          MODEL_PATH: runtime/data/models/model_q4.onnx
         run: |
-          if [ ! -f "$MODEL_PATH" ]; then
-            mkdir -p "$(dirname "$MODEL_PATH")"
-            curl -fL -o "$MODEL_PATH" \
-              "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/model_q4.onnx" || \
-            curl -fL -o "$MODEL_PATH" \
-              "https://github.com/DotNetAge/mindx/releases/download/v2.3.0/model_q4.onnx"
-          fi
+          MODEL_PATH="runtime/data/models/model_q4.onnx"
+          mkdir -p "$(dirname "$MODEL_PATH")"
+          rm -f "$MODEL_PATH"
+          echo "Downloading embedder model from HuggingFace..."
+          curl -fL -o "$MODEL_PATH" \
+            "https://huggingface.co/Xenova/chinese-clip-vit-base-patch16/resolve/main/onnx/model_q4.onnx" || \
+          { echo "ERROR: Failed to download embedder model"; exit 1; }
+          echo "Model file size: $(wc -c < "$MODEL_PATH") bytes"
 
       - name: Install musl cross-compiler
         if: matrix.goos == 'linux'
@@ -224,10 +223,13 @@ jobs:
         shell: bash
         run: |
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+          # Copy embedder model into dist/ for packaging
+          cp runtime/data/models/model_q4.onnx dist/
           cd dist
           tar czf "../${{ env.BINARY_NAME }}-${VERSION_NUM}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
             "${{ env.BINARY_NAME }}" \
-            libonnxruntime.*
+            libonnxruntime.* \
+            model_q4.onnx
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
@@ -298,16 +300,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download embedder model
-        env:
-          MODEL_PATH: runtime/data/models/model_q4.onnx
         run: |
-          if [ ! -f "$MODEL_PATH" ]; then
-            mkdir -p "$(dirname "$MODEL_PATH")"
-            curl -fL -o "$MODEL_PATH" \
-              "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.version }}/model_q4.onnx" || \
-            curl -fL -o "$MODEL_PATH" \
-              "https://github.com/DotNetAge/mindx/releases/download/v2.3.0/model_q4.onnx"
-          fi
+          MODEL_PATH="runtime/data/models/model_q4.onnx"
+          mkdir -p "$(dirname "$MODEL_PATH")"
+          rm -f "$MODEL_PATH"
+          echo "Downloading embedder model from HuggingFace..."
+          curl -fL -o "$MODEL_PATH" \
+            "https://huggingface.co/Xenova/chinese-clip-vit-base-patch16/resolve/main/onnx/model_q4.onnx" || \
+          { echo "ERROR: Failed to download embedder model"; exit 1; }
+          echo "Model file size: $(wc -c < "$MODEL_PATH") bytes"
 
       - name: Prepare runtime environment (model file)
         run: |
