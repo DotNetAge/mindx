@@ -2,6 +2,7 @@ package indexing
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -115,6 +116,15 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 		return result
 	}
 
+	// Same regionID computation as Sync().
+	regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(absDir)))
+
+	// Compute a stable regionID for this directory.
+	// All files in this directory share the same regionID, which is stored
+	// as metadata on each chunk. This decouples the region identifier from
+	// individual file paths — if a file moves within the same directory,
+	// only source_file changes, not region_id.
+
 	if p.logger != nil {
 		p.logger.Info("index-service.sync.start",
 			"dir", absDir,
@@ -206,6 +216,7 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 			// entire directory sync. The context timeout bounds the total time
 			// including LLM retries inside indexFile → AddFile.
 			fileCtx, fileCancel := context.WithTimeout(ctx, maxFileIndexTimeout)
+			fileCtx = goragindexer.WithRegionID(fileCtx, regionID)
 			chunks, idxErr := p.indexFile(fileCtx, j.absPath)
 			fileCancel()
 
@@ -376,6 +387,9 @@ func (p *IndexService) SyncFiles(ctx context.Context, projectDir string, relFile
 		return result
 	}
 
+	// Stable regionID for this directory (same computation as Sync).
+	regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(absDir)))
+
 	// Load rules and cache
 	p.ignore = LoadMindxIgnore(absDir)
 	if err := p.cache.LoadFromFile(p.cacheDir); err != nil && p.logger != nil {
@@ -426,6 +440,7 @@ func (p *IndexService) SyncFiles(ctx context.Context, projectDir string, relFile
 		// entire incremental sync. The context timeout bounds the total time
 		// including LLM retries inside indexFile → AddFile.
 		fileCtx, fileCancel := context.WithTimeout(ctx, maxFileIndexTimeout)
+		fileCtx = goragindexer.WithRegionID(fileCtx, regionID)
 		chunks, idxErr := p.indexFile(fileCtx, absPath)
 		fileCancel()
 		if idxErr != nil {

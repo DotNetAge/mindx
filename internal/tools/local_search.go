@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"sort"
 	"strings"
@@ -34,22 +35,42 @@ func NewLocalSearch(indexer *goragindexer.GraphIndexer) tools.FuncTool {
 func (t *LocalSearch) Info() *tools.ToolInfo {
 	return &tools.ToolInfo{
 		Name:        "LocalSearch",
-		Description: "Search the local knowledge graph for relevant chunks and their connected entity nodes. Returns concise clues (summary, file path, line range, tags, entity properties). For full chunk/node details, use LocalFetch.",
+		Description: "Search the local knowledge graph for relevant chunks and their connected entity nodes. Returns concise clues (summary, file path, line range, chunk type, tags, parent reference, entity properties). Optionally limit to a specific watched directory via the 'region' parameter. For full chunk/node details, use LocalFetch.",
 		Prompt: `Search the local knowledge graph. Returns up to 3 key clues.
 
 ## Modes
 - semantic (default): vector search + entity enrichment
 - graph: multi-hop entity relationship traversal (depth=N)
 
+## Region filtering
+Pass the "region" parameter with a watched directory path (e.g. "/Users/me/projects/myapp")
+to limit the search to a specific project or directory. Use this when the user asks about
+a particular project, or when you already know which directory the information should be in.
+
 ## Output
-Each result: [summary] - [file:path][POS:Lstart,end][ID:chunk_id][TAGS:tag1,tag2]
+Each result: [summary] - [file:path][POS:Lstart,end][ID:chunk_id][TYPE:document][TAGS:tag1,tag2][PARENT:parent_id]
 Then connected entity table (schema keys as columns).
 Then entity relationship list.
+
+### Chunk Types
+- Unmarked (no TYPE): regular content segment (paragraph, section, function, class, etc.)
+- [TYPE:document]: document-level summary — a 1-2 sentence overview of the entire file.
+  Use this to understand what a file is about before diving into its segments.
+
+### Parent References
+When [PARENT:chunk_id] is present, this chunk is a child of another chunk.
+- For text documents: a subsection's parent is its containing section; a section's
+  parent is the document summary (TYPE:document).
+- For code files: a method's parent is its containing class/struct; a class/struct's
+  parent is the file-level package/namespace scope.
+Use LocalFetch with the parent chunk ID to retrieve broader context.
 
 ## Usage
 1. Start with semantic mode
 2. For deeper relationship exploration, use graph mode
-3. If more detail is needed on a specific result, use LocalFetch with the chunk_id`,
+3. To navigate hierarchy: if a result has [PARENT:...], use LocalFetch with that ID
+   to get the broader context; if a result has [TYPE:document] and the user needs
+   detail, search again with more specific terms to find segments within that document`,
 		IsReadOnly: true,
 		Parameters: []tools.Parameter{
 			{
@@ -90,6 +111,12 @@ Then entity relationship list.
 				Name:        "tags",
 				Type:        "array",
 				Description: "Filter results by tags. Only hits matching any of the specified tags will be returned.",
+				Required:    false,
+			},
+			{
+				Name:        "region",
+				Type:        "string",
+				Description: "Limit search to a specific watched directory (e.g. \"/Users/me/projects/myapp\"). When set, only chunks from that directory are searched. Use when the user specifies which project or directory to look in.",
 				Required:    false,
 			},
 		},
@@ -155,6 +182,12 @@ func (t *LocalSearch) Execute(ctx context.Context, params map[string]any) (any, 
 		}
 	} else {
 		gq.SetDepth(1)
+	}
+
+	// Apply region filter if specified (limit search to a watched directory)
+	if raw, ok := params["region"].(string); ok && raw != "" {
+		regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(raw)))
+		gq.AddFilter("region_id", regionID)
 	}
 
 	hits, err := t.indexer.Search(ctx, gq)
@@ -250,6 +283,30 @@ func hitTags(hit *core.Hit) []string {
 	return nil
 }
 
+// hitChunkType extracts the chunk type from a hit's metadata.
+// Returns "root" for document-level summary chunks, "segment" for regular
+// content chunks, or "" if unknown.
+func hitChunkType(hit *core.Hit) string {
+	if v, ok := hit.Metadata["chunk_type"]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// hitParentID extracts the parent chunk ID from a hit's metadata.
+// Returns "" when the chunk has no parent (root chunk) or when the
+// parent relationship was not established.
+func hitParentID(hit *core.Hit) string {
+	if v, ok := hit.Metadata["parent_id"]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
 // filterHitsByTags filters hits to only include those that have at least one
 // matching tag from the specified list.
 func filterHitsByTags(hits []core.Hit, tags []string) []core.Hit {
@@ -290,11 +347,13 @@ func formatLocalSearchResults(query string, hits []core.Hit) string {
 	}
 
 	for _, hit := range display {
-		// [summary] - [file:path][POS:Lstart,end][ID:chunk_id][TAGS:tag1,tag2]
+		// [summary] - [file:path][POS:Lstart,end][ID:chunk_id][TYPE:type][TAGS:tag1,tag2][PARENT:parent_id]
 		summary := hitSummary(&hit)
 		file := hitSourceFile(&hit)
 		startLine, endLine := hitLineRange(&hit)
 		tags := hitTags(&hit)
+		chunkType := hitChunkType(&hit)
+		parentID := hitParentID(&hit)
 
 		sb.WriteString("[")
 		sb.WriteString(summary)
@@ -312,9 +371,24 @@ func formatLocalSearchResults(query string, hits []core.Hit) string {
 		sb.WriteString(hit.ID)
 		sb.WriteString("]")
 
+		// Show chunk type only when it's a document-level summary (root).
+		// Regular segments are the default and not marked.
+		if chunkType == "root" {
+			sb.WriteString("[TYPE:document]")
+		}
+
 		if len(tags) > 0 {
 			sb.WriteString("[TAGS:")
 			sb.WriteString(strings.Join(tags, ", "))
+			sb.WriteString("]")
+		}
+
+		// Show parent_id when available, enabling LLM to navigate hierarchy.
+		// The LLM can use LocalFetch with the parent chunk ID to retrieve
+		// the broader context this chunk belongs to.
+		if parentID != "" {
+			sb.WriteString("[PARENT:")
+			sb.WriteString(parentID)
 			sb.WriteString("]")
 		}
 

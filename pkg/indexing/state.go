@@ -46,6 +46,19 @@ type DirIndexState struct {
 	// permanently skip. These are excluded from the failed files display
 	// and will not be re-indexed.
 	IgnoredFiles []string `json:"ignored_files,omitempty"`
+
+	// RegionTitle is the directory-level summary title generated after
+	// all files in this directory have been indexed. Populated by
+	// RegionIndexer.IndexRegion after Sync completes.
+	RegionTitle string `json:"region_title,omitempty"`
+
+	// RegionSummary is the LLM-aggregated summary of this directory's
+	// content, generated after all files are indexed.
+	RegionSummary string `json:"region_summary,omitempty"`
+
+	// RegionTags are merged, deduplicated tags from all chunks in this
+	// directory, collected during region indexing.
+	RegionTags []string `json:"region_tags,omitempty"`
 }
 
 // FailedFileRecord records a single failed file during indexing.
@@ -252,6 +265,22 @@ func (s *IndexStateStore) SetFailed(dir string, errMsg string) {
 	st.Error = errMsg
 	st.CompletedAt = time.Now().Unix()
 	s.states[dir] = st
+	_ = s.save()
+}
+
+// SetRegion records the Region summary for a directory after region indexing.
+// This is called by FileWatchService.SyncDir after all files have been indexed
+// and the RegionIndexer has generated the aggregate summary.
+func (s *IndexStateStore) SetRegion(dir, title, summary string, tags []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, ok := s.states[dir]
+	if !ok {
+		return
+	}
+	st.RegionTitle = title
+	st.RegionSummary = summary
+	st.RegionTags = tags
 	_ = s.save()
 }
 

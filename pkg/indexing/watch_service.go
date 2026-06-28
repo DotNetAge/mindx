@@ -10,6 +10,7 @@ import (
 
 	"github.com/DotNetAge/goharness/session"
 	goragcore "github.com/DotNetAge/gorag/v2/core"
+	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
 	"github.com/DotNetAge/gorag/v2/logging"
 	"github.com/fsnotify/fsnotify"
 )
@@ -24,20 +25,19 @@ import (
 //	         ↓
 //	FileWatchService (reads watchlist, registers fsnotify watchers)
 //	         ↓
-//
-// IndexService.SyncFiles() (incremental index)
-//
+//	IndexService.SyncFiles() (incremental index)
 //	         ↓
 //	LongTerm RAG Index (shared knowledge base)
 type FileWatchService struct {
-	indexer    goragcore.Indexer
-	store      *WatchListStore
-	watcher    *fsnotify.Watcher
-	indexers   map[string]*IndexService // keyed by abs dir
-	cacheBase  string                   // base directory for per-dir indexing caches
-	logger     logging.Logger
-	usageStore session.TokenUsageStore
-	modelName  string
+	indexer       goragcore.Indexer
+	regionIndexer *goragindexer.RegionIndexer // post-sync region indexing
+	store         *WatchListStore
+	watcher       *fsnotify.Watcher
+	indexers      map[string]*IndexService // keyed by abs dir
+	cacheBase     string                   // base directory for per-dir indexing caches
+	logger        logging.Logger
+	usageStore    session.TokenUsageStore
+	modelName     string
 
 	// indexState persists per-directory full-scan state (pending/indexing/completed).
 	indexState *IndexStateStore
@@ -78,6 +78,7 @@ type FileWatchService struct {
 //   - logger: optional logger.
 func NewFileWatchService(
 	indexer goragcore.Indexer,
+	regionIndexer *goragindexer.RegionIndexer,
 	store *WatchListStore,
 	indexState *IndexStateStore,
 	cacheBaseDir string,
@@ -86,10 +87,11 @@ func NewFileWatchService(
 	modelName string,
 ) *FileWatchService {
 	return &FileWatchService{
-		indexer:    indexer,
-		store:      store,
-		indexState: indexState,
-		indexers:   make(map[string]*IndexService),
+		indexer:       indexer,
+		regionIndexer: regionIndexer,
+		store:         store,
+		indexState:    indexState,
+		indexers:      make(map[string]*IndexService),
 		cacheBase:  cacheBaseDir,
 		logger:     logger,
 		usageStore: usageStore,
@@ -179,6 +181,31 @@ func (s *FileWatchService) Start(ctx context.Context) error {
 				)
 			}
 			go s.SyncDir(s.ctx, dir)
+		}
+
+		// Also rebuild Region summaries for fully indexed directories on startup.
+		// This ensures Region vectors are up-to-date even when no files changed,
+		// e.g. after GoRAG version upgrade or LLM model changes.
+		if s.regionIndexer != nil {
+			for dir := range added {
+				st := s.indexState.Get(dir)
+				if st == nil || st.State != "completed" {
+					continue
+				}
+				go func(d string) {
+					if s.logger != nil {
+						s.logger.Info("filewatch: rebuilding region on startup",
+							"dir", d)
+					}
+					region, err := s.regionIndexer.IndexRegion(s.ctx, d)
+					if err != nil && s.logger != nil {
+						s.logger.Warn("filewatch: region rebuild failed on startup",
+							"dir", d, "error", err)
+					} else if region != nil {
+						s.indexState.SetRegion(d, region.Title, region.Summary, region.Tags)
+					}
+				}(dir)
+			}
 		}
 	}
 
@@ -416,6 +443,20 @@ func (s *FileWatchService) SyncDir(ctx context.Context, absDir string) {
 		} else if s.logger != nil {
 			s.logger.Warn("filewatch.sync: ScanFileStates failed, completed_files will be empty",
 				"dir", absDir, "error", scanErr)
+		}
+	}
+
+	// ── Phase 5: Build Region index (post-sync aggregate summary) ──
+	// RegionIndexer.IndexRegion 本身就是全量索引：每次都从 VectorStore 查询该
+	// 目录下的所有 Chunk，重新用 LLM 聚合摘要并覆盖写入。因此每次 SyncDir 结束
+	// 时都重建 Region，不受文件变更数量影响。
+	if s.regionIndexer != nil {
+		region, regionErr := s.regionIndexer.IndexRegion(s.ctx, absDir)
+		if regionErr != nil && s.logger != nil {
+			s.logger.Warn("filewatch.sync: region indexing failed",
+				"dir", absDir, "error", regionErr)
+		} else if region != nil {
+			s.indexState.SetRegion(absDir, region.Title, region.Summary, region.Tags)
 		}
 	}
 
