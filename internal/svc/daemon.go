@@ -905,6 +905,7 @@ func (d *Daemon) ensureGraphIndexer() error {
 			emb,
 			kbVS,
 			goragindexer.RegionWithLogger(d.logger),
+			goragindexer.RegionWithGraphStore(coreGS),
 		)
 		d.logger.Info("RegionIndexer initialized after model switch")
 	}
