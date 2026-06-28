@@ -469,11 +469,11 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			// Requires GraphIndexer (for vectorDB + embedder) and LLM config.
 			// When nil, FileWatchService skips region indexing without error.
 			var regionIndexer *goragindexer.RegionIndexer
-			if graphIndexer != nil && emb != nil && kbVS != nil && llmModelCfg != nil {
+			if graphIndexer != nil && emb != nil && llmModelCfg != nil {
 				regionIndexer = goragindexer.NewRegionIndexer(
 					*llmModelCfg,
 					emb,
-					kbVS,
+					graphIndexer.VectorDB(),
 					goragindexer.RegionWithLogger(logger),
 					goragindexer.RegionWithGraphStore(graphIndexer.GraphDB()),
 				)
