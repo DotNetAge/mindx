@@ -92,11 +92,11 @@ func NewFileWatchService(
 		store:         store,
 		indexState:    indexState,
 		indexers:      make(map[string]*IndexService),
-		cacheBase:  cacheBaseDir,
-		logger:     logger,
-		usageStore: usageStore,
-		modelName:  modelName,
-		debounce:   make(map[string]time.Time),
+		cacheBase:     cacheBaseDir,
+		logger:        logger,
+		usageStore:    usageStore,
+		modelName:     modelName,
+		debounce:      make(map[string]time.Time),
 	}
 }
 
@@ -199,8 +199,8 @@ func (s *FileWatchService) Start(ctx context.Context) error {
 					}
 					region, err := s.regionIndexer.IndexRegion(s.ctx, d)
 					if err != nil && s.logger != nil {
-						s.logger.Warn("filewatch: region rebuild failed on startup",
-							"dir", d, "error", err)
+						s.logger.Error("filewatch: region rebuild failed on startup", err,
+							"dir", d)
 					} else if region != nil {
 						s.indexState.SetRegion(d, region.Title, region.Summary, region.Tags)
 					}
@@ -453,8 +453,8 @@ func (s *FileWatchService) SyncDir(ctx context.Context, absDir string) {
 	if s.regionIndexer != nil {
 		region, regionErr := s.regionIndexer.IndexRegion(s.ctx, absDir)
 		if regionErr != nil && s.logger != nil {
-			s.logger.Warn("filewatch.sync: region indexing failed",
-				"dir", absDir, "error", regionErr)
+			s.logger.Error("filewatch.sync: region indexing failed", regionErr,
+				"dir", absDir)
 		} else if region != nil {
 			s.indexState.SetRegion(absDir, region.Title, region.Summary, region.Tags)
 		}

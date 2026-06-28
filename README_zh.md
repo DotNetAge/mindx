@@ -1,4 +1,4 @@
-# MindX — Agent Harness
+# MindX — 生产级智能体操作系统
 
 [![Release](https://img.shields.io/github/v/release/DotNetAge/mindx)](https://github.com/DotNetAge/mindx/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -10,284 +10,383 @@
   <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
 </p>
 
-> MindX 是一个开源的 AI Agent 平台（Agent Harness），通过混合编排模式、智能记忆系统和自研技术栈，帮助你高效地构建、管理和运行 AI Agent 工作流。无论是日常编码辅助，还是复杂的多步骤任务自动化，MindX 都能提供专业级的AI处理能力。
+**生产级智能体操作系统｜原生双内核：智能体调度基座 + 四维增强认知引擎**
 
-<p align="center">
-  <img src="assets/images/arch-zh.png" alt="MindX 架构图" width="800" />
-  <br />
-  <em>MindX 架构图</em>
-  <br />
-</p>
+MindX 是面向**长期驻留、状态持久、多智能体集群协同**场景的现代 AgentOS。项目提供完整全栈基础设施，覆盖智能体编排调度、分级持久记忆、多维知识认知、多端交互与原生存储底座，可直接落地企业自动化、知识中台与私有化智能体集群。
 
 ---
 
+## 项目概述
 
-## 功能特性
+当前主流智能体框架普遍基于无状态单次调用设计，依赖人工分步指令，缺少持久化记忆、标准化团队协同与结构化知识理解能力。由此产生一系列行业共性问题：对话与任务记忆衰减、上下文超限错乱、执行流程固化、知识与任务执行脱节，无法支撑长期、复杂、可迭代的企业级智能作业。
 
-### 多 Agent 编排
-
-作为一个完善的 Agent Harness，MindX 提供的是一种混合编排模式，以帮助你完成不同复杂程度的问题与业务场景：
-
-| 模式              | 类型     | 说明                                                                        |
-| ----------------- | -------- | --------------------------------------------------------------------------- |
-| 单 Agent 模式     | 基础模式 | 应对简单问题                                                                |
-| 反思模式（ReAct） | 思维链   | 规划 → 执行 → 观察 → 迭代的完整循环（T-A-O ReAct 引擎），寻找最优解         |
-| 并发模式          | 任务驱动 | 对于长时复杂任务，Agent 会自动"分身"同时处理多个任务                        |
-| 规划模式          | 计划驱动 | 规划、分配不同角色的 Agent 执行长时效、周期性复杂任务                       |
-| 委派模式          | 职责驱动 | 专业的人做专业的事，遇事不决找专家                                          |
-| Agentic RAG 模式  | 知识检索 | 基于工作与对话自形成的知识库，拥有人类一般的记忆力                          |
-| **评估体系**      | 质量保障 | 每个 Agent 都具有质量评估和评分的能力，根据任务完成情况和质量进行"绩效计算" |
-
-### 上下文工程
-
-管理 LLM 会话的生命周期——上下文窗口的容量控制、会话持久化和相关上下文注入。
-
-- **真·上下文** — 巧妙地将压缩技术与记忆体有机融合，使上下文不丢失、不失忆、不腐烂
-- **会话持久化和跨重启恢复** — 会话以文件形式存储在磁盘，重启后自动恢复
-- **多会话分支** — 同一项目可同时开启多个独立会话，Agent 间可共享会话，随时切换
-- **渐进式能力披露** — 按需加载能力描述，不浪费上下文
-
-### 记忆与检索
-
-合理并有效利用上下文窗口之外的信息持久化和检索，形成短期记忆、长期记忆和全局知识库。
-
-- **RAG / 语义记忆搜索** — 混合向量 + 全文检索，自动的无感记忆索引
-- **文件地图 / 代码地图** — 全局理解项目结构，Agent 可感知文件、代码组织
-- **跨会话记忆共享** — 持久化记忆记录（Immediately + LongTerm + Experience 三种记忆类型）
-- **网页搜索和页面抓取** — 内置多种搜索引擎并提供深度的网络爬取，国内国外皆可搜
-
-你无需学习甚至感知 RAG 的存在，只需要知道有一批 Advanced RAG 服务在忠实地为你提供语义服务。
-
-### 执行能力
-
-MindX 的设计哲学中"技能远优于工具"，因此工具只是作为 MindX 的底层能力而不是开放的接口。你无须关注或学习任何工具，因为 MindX 自己就会为你"造轮子"。MindX 并不会塞一大堆的 MCP 工具，又或者几千个根本不知道什么时候才用得上的技能给你。
-
-- 根据你的需求为你安排处理问题的专业 Agent
-- Agent 会根据自己的职责自行组装技能，无需你手动配置
-- Agent 会自行总结分析自己是否"称职"，并根据需要调整技能
-- Agent 会反思与总结"工作经验"，将经验总结为你服务的"专属技能"
-
-> MindX 能为你摆脱工具与技能不足的焦虑，让你更专注于解决问题。
-
-### 模型抽象层
-
-统一的 LLM 提供商接口——处理提供商差异、结构化输出、用量统计和降级策略。
-
-- **多服务商、模型支持** — 支持当前主流的 LLM 服务商统一接入
-- **用量和费用追踪** — 跨所有提供商的实时监控和记录，对你的词元消耗和费用提供多个维度与视角的查询
-- **精确追踪每一次对话的词元用量**
-
-### 安全与治理
-
-Agent 行为的控制——权限、沙箱、审计和输出护栏。
-
-- **分层权限模式** — 命令在受限环境中执行（项目/会话目录隔离）
-- **人工审批门禁** — 敏感操作需人工确认
-- **凭据管理** — macOS Keychain 集成 + AES-GCM 加密文件兜底存储 API 密钥和个人密钥
-- **安全漏洞检测** — 依赖扫描、密钥检测
-- **全部工具调用的审计记录** — 所有工具调用留存日志，并提供即时查看工具
-- **命令黑名单和白名单** — 细粒度命令控制策略（Bash 安全机制、内容模式规则）
-
-### 状态与持久化
-
-执行状态的追踪和恢复——检查点、差异对比、可观测性和定时任务。
-
-- **可观测性 / Tracing** — Agent 全链路执行追踪（事件总线、日志观测点）；daemon 事件流，30+ JSON-RPC 方法
-- **文件变更追踪** — 每次工具调用前后生成文件变更对比
-- **检查点机制** — 增量回滚到任意历史状态
-- **定时 / 周期性 Agent 任务** — 内置调度器（秒级精度，文件持久化，热加载，5 分钟超时）
-- **日志系统** — 结构化日志，基于 zap + lumberjack 轮转（ANSI 控制台 + 文件，最大 100MB/30 天保留）
-
-### 平台与交付
-
-Harness 的打包、分发、安装和开发环境集成方式。
-
-- **单二进制分发，零运行时依赖** — 整个平台编译为一个 Go 二进制
-- **多平台发布** — Homebrew、Winget、Snap、Docker 全平台覆盖
-- **终端 TUI** — 全屏终端界面，带对话侧边栏、文件变更追踪、Token 计数器和斜杠命令
-- **系统服务安装** — 支持注册为系统 daemon 服务，带健康检查（launchd/systemd/schtasks）
-- **设置向导** — 8 步交互式 TUI 向导（API 密钥输入、模型选择、路径设置、daemon 检查、Python 检查）
-- **CI/CD 集成** — GitHub Actions、Makefile、Snap 和 Docker 发布流水线
-- **环境管理** — Dockerfile（多阶段构建）、docker-compose.yml（含健康检查和卷挂载）
-- **主题 / 个性化** — 界面主题自定义
+MindX 采用双内核架构，通过 **Agent Harness**实现有状态、可反思、可协同的智能体调度体系，通过 **自研 AgenticRAG** 实现高精度、低损耗、可增量进化的长效认知体系，将工具式单次AI，升级为可长期在岗、可自主成长的数字化工作集群。
 
 ---
 
-## 系统要求
+## 为何选择MindX？
 
-| 平台    | 最低版本                  | 备注               |
-| ------- | ------------------------- | ------------------ |
-| macOS   | Monterey (12.0)           | 推荐 Homebrew 安装 |
-| Linux   | Ubuntu 20.04+ / CentOS 8+ | 推荐 Snap 安装     |
-| Windows | Windows 10+               | 推荐 WSL 或 Docker |
-| Docker  | Docker 20.10+             | 支持 amd64/arm64   |
+> **市场上的 Agent 框架要么是无状态的工具链，要么是固定流程的编排器——没有一个是真正的智能体操作系统。MindX 是唯一一个从调度、记忆、认知、存储到交互全栈自研的 AgentOS。**
 
-- **内存**: 建议 2GB 以上可用内存
-- **磁盘**: 建议 500MB 以上可用空间（不含工作空间）
+| 对比维度       | MindX                                              | LangChain     | AutoGen (Microsoft) | CrewAI        | Dify           |
+| -------------- | -------------------------------------------------- | ------------- | ------------------- | ------------- | -------------- |
+| 运行时语言     | **Go 原生，单二进制**                              | Python        | Python              | Python        | Python         |
+| 有状态持久记忆 | **三级记忆（即时/短期/长期）**                     | ❌ 无          | ❌ 无                | ❌ 无          | 会话级         |
+| RAG 引擎       | **四维融合**（向量+BM25+图谱+Schema）              | 基础向量      | ❌ 无                | ❌ 无          | 基础向量       |
+| 知识图谱       | **自研嵌入式 GoGraph + Cypher**                    | 需外接 Neo4j  | ❌ 无                | ❌ 无          | 需外接         |
+| 多 Agent 协作  | **OPC 组织范式 + 4 种协作模式**                    | ❌ 无          | 固定线性流程        | 顺序/层级     | 工作流 DAG     |
+| 预置 Agent     | **12 个**（项目经理/架构师/工程师...）             | ❌ 无          | ❌ 无                | ❌ 无          | ❌ 无           |
+| 预置 Skill     | **45+**（设计/写作/分析/编程/浏览器...）           | ❌ 无          | ❌ 无                | ❌ 无          | ❌ 无           |
+| 原生内置工具   | **24+ 项**                                         | ✅ 有          | ✅ 有                | 有限          | 有限           |
+| 离线私有部署   | **单二进制，零外部依赖**                           | ❌ Python 环境 | ❌ Python 环境       | ❌ Python 环境 | Docker 必须    |
+| 交互端点       | **WebUI + TUI + CLI + JSON-RPC**                   | CLI 仅        | CLI 仅              | CLI 仅        | Web 仅         |
+| 自研中间件数   | **6 个全栈自研**                                   | 0（全组装）   | 0                   | 0             | 0              |
+| 安装体验       | **`docker pull` → 运行 / `npx skills` → 装 Skill** | pip install   | pip install         | pip install   | docker compose |
 
 ---
 
-## 快速开始
+## 核心架构
 
-<p align="center">
-  <img src="assets/images/webui.png" alt="MindX WebUI 界面截图" width="700" />
-  <br />
-  <em>MindX WebUI</em>
-</p>
+系统采用调度与认知解耦的双层内核设计，兼顾工程稳定性与智能迭代能力，形成「执行可控、认知可持续」的完整Agent运行闭环。
 
-<p align="center">
-  <img src="assets/images/tui.png" alt="MindX TUI 界面截图" width="700" />
-  <br />
-  <em>MindX TUI</em>
-</p>
-### macOS（推荐）
+- **Agent Harness 调度内核**：企业级多智能体运行时，负责任务拆解、自省推理、角色分工、流程编排与持久化任务管理
 
-采用 Homebrew 安装，安装完成后可以直接运行 `mindx` 命令。
+- **AgenticRAG 认知内核**：四维融合增强认知引擎，负责语义理解、结构化解析、多路检索融合与全域知识迭代
+
+![Dual-core architecture diagram](assets/images/arch.jpg)
+
+---
+
+## Agent Harness｜有状态多智能体编排运行时
+
+区别于传统框架无状态、单线程、一次性执行的调度模式，MindX Harness 原生支持**状态存续、多轮反思、组织化协同、时间驱动值守**，适配复杂业务与长期项目迭代。
+
+### 自省推理机制
+
+基于 ReAct 范式拓展多轮自我复盘推理循环，智能体在执行中可自主校验结果、修正决策偏差、迭代执行步骤，大幅提升复杂任务的严谨性与容错能力。
+
+### 多模式组织化协同
+
+原生内置多种团队协作范式，覆盖绝大多数多人/多智能体工作场景：
+
+- **主持人模式**：多智能体圆桌合议、交叉论证、联合决策，用于高复杂度综合性任务
+
+- **专家分派模式**：按需动态组建专项专家小组，形成临时任务团队，垂直攻坚细分场景
+
+- **智能体自主对话模式（Agent Talk）**：智能体之间可直接对话、交接任务、同步进度、协商分歧，无需用户中转干预
+
+- **智能日历值守模式**：基于时间驱动的周期任务、定时任务、预约任务体系，实现无人值守常态化作业
+
+### 分级持久化无限上下文
+
+构建「即时会话记忆、短期任务记忆、长期全域记忆」三级持久化体系，从工程层面解决上下文爆炸、信息衰减、历史遗忘等行业顽疾，实现真正可用的超长时序、多轮迭代记忆能力。
+
+### 工具生态与多模型管理
+
+兼容通用 Skill 标准，内置**24+项原生工具**和**45+个预置 Skill**，覆盖文件管理、系统运维、任务编排、浏览器自动化、前端设计、文档协作、数据分析、项目管理等绝大多数常规工作场景，支持按需渐进加载。**预装12个专业 Agent**（项目经理、技术架构师、前端工程师、后端工程师、DevOps、市场分析师、产品经理、代码审查员、内容创作者、财务顾问、执行助理、系统运维），开箱即组建数字团队。
+
+全面适配多厂商大模型，提供精细化用量统计、成本分析与多模型负载均衡调度。
+
+> **装 Skill 就和装 npm 包一样**：搜索 `npx skills find <keyword>` → 安装 `npx skills add <package>` → 在 MindX 中 `mindx skill reload` 热加载生效。
+
+<!-- TODO: 插入截图 - 安装Skill的CLI演示 -->
+
+---
+
+## 自研 AgenticRAG｜四维融合增强认知引擎
+
+传统 RAG、GraphRAG 依赖向量相似度匹配单路召回，存在语义漂移、误召回、Token冗余开销大、结构化数据识别弱、长期迭代成本高等问题。
+
+MindX 自研 AgenticRAG **四维融合引擎：语义向量首发召回，图谱拓扑精准增强，BM25 词条校准，Schema 结构约束**。四路异构检索经 RRF 无偏融合，从架构层面同时解决「不准、冗余、易幻觉、难迭代」四大痛点。
+
+### 四维统一认知体系
+
+- **语义向量层**：捕捉模糊意图、自然语言语义，适配非结构化场景理解
+
+- **BM25 精准词条层**：锁定专业术语、关键词条，抑制语义泛化误召
+
+- **图谱拓扑层**：挖掘实体关联、业务链路、隐性逻辑，实现超越文本匹配的业务理解
+
+- **结构化 Schema 层**：原生解析文档结构、数据表、字段范式、业务约束，支持结构化数据精准筛选与规则检索
+
+### 核心增强能力
+
+- **图谱增强精准寻址，大幅降低Token开销**
+区别于传统全量文本灌入模式，系统在语义向量召回后，通过图谱拓扑关系与Schema约束二次筛选，仅推送精简高价值信息至大模型。在长期多轮任务、持续迭代场景下，可**降低一至两个量级的Token消耗**，显著降低推理成本与响应延迟。
+
+- **全链路降噪，系统性提升回答精度**
+通过向量语义初筛、词条精准校准、图拓扑过滤、结构约束多层筛选，逐级过滤冗余文本与噪声信息，从根源减少语义漂移与模型幻觉，答案事实一致性、逻辑完整性显著优于传统单路检索方案。
+
+- **HyDE 假设性逆向检索**
+针对短问句、口语化提问、隐性需求、专业冷门问题，系统先基于意图生成假设性标准答案，再以标准语义锚点反向匹配真实知识库，解决语义稀疏场景检索失效问题，大幅提升隐性问题识别能力。
+
+- **RRF 多路排名融合算法**
+对向量、词条、图谱、结构化四路异构检索结果进行无偏融合排序，无需人工权重调试、无需分数归一化，依靠排名位次自动择优多路共识结果，极大提升混合检索的稳定性与场景泛化能力。
+
+- **树状分片渐进式检索**：海量知识库场景按需加载、渐进解析，避免全量检索卡顿与超时，兼顾精度与性能。
+
+<!-- TODO: 插入图片 - 搜索结果树状面板截图（Region→Doc→Chapter 层级展开，Level 徽标、置信度标记、实体 chip） -->
+
+- **自适应上下文压缩**：超长对话与文本通过 LLM 智能摘要压缩，保留核心决策与关键信息，突破模型窗口物理限制。
+
+- **增量知识自主内化**：新增文档经文件监控自动触发增量索引，更新图谱与向量库；对话与任务记忆通过记忆 API 沉淀至知识库，实现知识库越用越准、越迭代越完善。
+
+- **纯Go原生高性能底座**：脱离Python生态冗余开销，低延迟、低内存、高并发，适配7×24小时企业生产级稳定运行。
+
+---
+
+## 核心设计理念：OPC 职责驱动架构
+
+绝大多数智能体系统为**任务驱动型**：依赖用户逐条下发指令、步步干预执行，AI仅作为被动执行工具，缺乏目标意识、分工体系与过程管理，只能做"干活的工具"，无法做"成事的主体"。
+
+MindX 独创 **OPC（目标与职责中心制）架构**，完全复刻现代企业组织运行逻辑，将系统构建为一座可自主运转的数字化团队。各智能体对应不同职能岗位，权责清晰、分工协作、自主闭环。用户从"操作工人"升级为**全局管理者**，只定目标、审结果，无需管理过程细节。
+
+> OPC 并非一段预设的自动化流水线，而是 MindX **LLM 自省推理循环 + 平台基础设施（SubAgent 委派、AgentTalk、团队编排、日历调度）+ Skill 体系（多专家会议、专家分派）** 三者组合而成的智能体组织范式。LLM 在运行时根据目标自主编排协作流程，系统提供全套支撑能力使其可落地执行。
+
+**OPC 典型业务实例**：
+
+你仅需下达全局目标：**"将产品销量推进至指定目标值"**。
+
+系统自动完成全流程自主闭环：
+
+1. **秘书统筹Agent**接收目标，自主识别任务维度，发起多专家专题会议，召集市场、运营、策略等岗位Agent协同研讨，输出完整落地方案；
+
+2. 方案成型后仅向你同步结论与规划，等待目标确认，无需你参与细节打磨；
+
+3. 确认目标后，统筹Agent自动划分权责，移交**项目经理Agent**全权负责落地推进；
+
+4. 项目经理自主拆解子任务、匹配对应专家Agent、划分工作边界，通过**智能体日历**排布全周期执行计划，建立定时推进与汇报机制；
+
+5. 执行阶段，各岗位Agent通过**Agent Talk自主对话**实时交接工作、同步进度、解决协同分歧，全程无人工干预；
+
+6. 项目周期内，项目经理定期汇总进度、风险与成果，由秘书Agent整理极简简报，向你同步全局状态。
+
+全程用户只负责定目标、控结果，所有拆解、调度、协同、跟进、复盘均由智能体团队自主完成。这即是 MindX 的核心差异：**让AI负责事务执行，让用户专注价值决策**。
+
+---
+
+## 全自研技术栈
+
+> **六层核心技术栈全部自研，从零构建。不依赖 Pinecone、不依赖 Neo4j、不依赖 LangChain——这是 MindX 最深层的护城河。**
+
+<!-- TODO: 插入图片 - 全自研技术栈架构分层图（GoHarness→GoChat→GoRAG→GoVector→GoGraph→GoRT 六层堆叠） -->
+
+| 中间件        | 定位             | 说明                                                            |
+| ------------- | ---------------- | --------------------------------------------------------------- |
+| **GoHarness** | Agent 调度框架   | 多智能体运行时、状态管理、Skill 加载、ReAct 推理循环            |
+| **GoChat**    | LLM 统一调用层   | 多厂商模型适配（OpenAI/Claude/Gemini/本地）、用量统计、负载均衡 |
+| **GoRAG**     | 高性能 RAG 引擎  | 四维融合检索（向量+BM25+图谱+Schema）、HyDE、RRF、渐进检索      |
+| **GoVector**  | 嵌入式向量数据库 | HNSW 索引、高效相似度搜索，数据文件直写磁盘                     |
+| **GoGraph**   | 嵌入式图数据库   | Cypher 查询、属性图模型、实体/关系持久化                        |
+| **GoRT**      | 实时通信网关     | WebSocket JSON-RPC 协议、双向通知、会话管理                     |
+
+> **编译结果 = 单一可执行文件。无需 Python 运行时、无需 Node.js、无需外挂数据库。`scp mindx` 到任意 Linux 服务器即可直接运行。**
+
+___
+
+## 全栈交互体系
+
+提供四端一体完整交互能力，覆盖日常使用、开发运维、自动化脚本、第三方集成全场景：
+
+- **WebUI**：集成对话工作台、在线终端、文件管理、知识图谱可视化、智能体日历管理一体化界面
+
+- **TUI**：轻量化高性能终端交互，适配极简操作与服务器环境
+
+- **CLI**：全覆盖系统能力的命令行工具，支持批量运维与自动化脚本串联
+
+- **JSON-RPC**：标准化开放接口，支持第三方系统对接与深度二次开发
+
+<!-- TODO: 插入图片 - WebUI 界面截图（对话工作台 + 力导图可视化） -->
+<!-- TODO: 插入图片 - TUI 终端界面截图（对话列表 + 输入框 + 状态栏） -->
+
+---
+
+## 原生存储基座
+
+内置全套底层存储原语，不依赖第三方中间件，为持久记忆与知识迭代提供原生数据支撑：
+
+- 键值存储：高速状态缓存与临时数据读写
+
+- 图谱存储：实体、关系、业务拓扑结构化持久化
+
+- 记忆池：分级记忆统一管理与长效存续
+
+- 知识库：企业级全域知识沉淀与迭代载体
+
+- 文件系统：原生文件解析、管理与资源调度能力
+
+---
+
+## 应用场景
+
+- **企业数字员工**：长期自动化值守、业务复盘、经验沉淀与迭代优化
+
+- **企业知识中台**：全域文档结构化梳理、多维度智能问答与关联分析
+
+- **私有化离线智能平台**：适配内网、涉密、无外网隔离环境稳定部署
+
+- **多智能体集群系统**：支撑研发、运维、办公、业务全链路智能化协同
+
+---
+
+## 快速部署
+
+MindX 提供多种分发渠道，覆盖所有主流操作系统。选择最适合你的方式：
+
+### 🐳 Docker（推荐方式）
+
+Docker 是启动 MindX 最快的方式，适用于所有平台，开箱即用：
 
 ```bash
-brew install DotNetAge/homebrew-mindx/mindx
+# 拉取镜像
+docker pull dotnetage/mindx:latest
+
+# 启动服务
+docker run -d --name mindx \
+  -p 1313:1313 `# WebUI 与 API 端口` \
+  -p 1314:1314 `# WebSocket 实时通信端口` \
+  -v ./workspaces:/home/mindx/workspaces `# 持久化工作区` \
+  dotnetage/mindx:latest
+
+# 查看运行状态
+docker logs -f mindx
+
+# 在容器内使用 CLI
+docker exec -it mindx mindx skill list
+docker exec -it mindx mindx agent list
 ```
 
-### Linux
+启动后访问 **http://127.0.0.1:1313** 打开 WebUI 界面。
 
-采用 Snap 安装，安装完成后可以直接运行 `mindx` 命令。
+> Docker 镜像基于 debian:bookworm-slim，内置 ONNX Runtime，多架构支持（linux/amd64, linux/arm64）。
+
+---
+
+### 🍎 macOS
+
+macOS 用户推荐通过 Homebrew 安装，自动处理路径、服务注册与更新：
+
+```bash
+# 安装
+brew install DotNetAge/homebrew-mindx/mindx
+
+# 或直接进入 TUI 交互模式
+mindx
+```
+
+Homebrew 安装后会自动注册 daemon 服务，支持 `mindx start/stop/restart` 系统服务管理。
+
+> 也支持 Docker 方式运行，参考上方 Docker 章节。
+
+---
+
+### 🐧 Linux
+
+**Snap（Ubuntu/Debian 推荐）**
 
 ```bash
 sudo snap install mindx
+sudo snap start mindx             # 启动服务
+mindx                             # 进入 TUI
 ```
 
-### Docker
+Snap 自动处理沙箱隔离、自动更新与服务注册。
 
-采用 Docker 镜像安装，官方镜像地址：[dotnetage/mindx](https://hub.docker.com/r/dotnetage/mindx)
-
-拉取镜像：
+**Flatpak（桌面环境推荐）**
 
 ```bash
-docker pull dotnetage/mindx
+flatpak install flathub com.dotnetage.mindx
+flatpak run com.dotnetage.mindx
 ```
 
-运行容器：
+**Debian/Ubuntu 与 Fedora/RHEL**
+
+从 GitHub Releases 下载 `.deb` 或 `.rpm` 包：
 
 ```bash
-docker run -d \
-  --name mindx \
-  -p 1313:1313 \
-  -p 1314:1314 \
-  -v ./workspaces:/home/mindx/workspaces \
-  dotnetage/mindx
+# Debian/Ubuntu
+sudo dpkg -i mindx_*.deb
+
+# Fedora/RHEL
+sudo rpm -ivh mindx_*.rpm
+
+# 启动服务
+sudo systemctl start mindx-daemon
 ```
 
-`./workspaces` 目录可以是你本机任意的目录路径，用于存放 MindX 的工作空间文件。
+**AppImage（便携式）**
 
-### Windows
+从 GitHub Releases 下载 `.AppImage` 文件，赋予执行权限即可运行：
 
 ```bash
-winget install DotNetAge.Mindx
+chmod +x Mindx-*.AppImage
+./Mindx-*.AppImage
 ```
-
-> Windows 用户还是建议使用内置的 Ubuntu 环境或者直接用 Docker 更省事，Windows 确实不是一个适合 Agent 运行的良好环境。
-
-### 从源码构建
-
-从 [Releases](https://github.com/DotNetAge/mindx/releases) 下载预编译版本，或从源码构建：
-
-```bash
-git clone https://github.com/DotNetAge/mindx.git
-cd mindx
-make run
-```
-
-首次运行将启动交互式设置向导，引导你完成 API 密钥配置、模型选择等初始化步骤，之后进入 TUI 聊天界面。
 
 ---
 
-## 使用指南
+### 📦 预编译二进制（所有平台）
 
-### 初始化配置
+从 [GitHub Releases](https://github.com/DotNetAge/mindx/releases) 下载对应平台与架构的压缩包：
 
-首次运行 `mindx` 时，系统会启动交互式设置向导，包含以下步骤：
-
-1. **API 密钥配置** — 输入你使用的 LLM 服务商 API Key
-2. **默认模型选择** — 选择主要使用的对话模型
-3. **工作空间路径设置** — 配置项目文件的存储位置
-4. **Daemon 服务检查** — 检测并配置后台服务
-5. **Python 环境检查** — 检测 Python 运行时（部分技能依赖）
-
-### 基本工作流
+| 平台                  | 架构          | 文件                                  |
+| --------------------- | ------------- | ------------------------------------- |
+| Linux                 | amd64 / arm64 | `mindx-{version}-linux-{arch}.tar.gz` |
+| macOS (Intel)         | amd64         | `mindx-{version}-darwin-amd64.tar.gz` |
+| macOS (Apple Silicon) | arm64         | `mindx-{version}-darwin-arm64.tar.gz` |
 
 ```bash
-# 启动 MindX TUI 界面
-mindx
-
-# 启动 Daemon 后台服务（支持长时间运行的任务）
-mindx start
-
-# 查看 MindX 运行状态
-mindx status
-
-# 打开 Web UI（浏览器访问）
-mindx web
+# 以 macOS Apple Silicon 为例
+tar xzf mindx-*-darwin-arm64.tar.gz
+sudo mv mindx /usr/local/bin/
+mindx daemon &
 ```
 
+---
 
+### 🔧 源码编译
 
-### 高级功能
-
-| 功能         | 命令/方式                                | 说明                          |
-| ------------ | ---------------------------------------- | ----------------------------- |
-| 长期记忆搜索 | `mindx query <关键词>`                   | 搜索历史对话中的知识          |
-| 资源管理     | `mindx provider/model/agent list/rm/add` | 管理 LLM 提供商、模型和 Agent |
-| 日志查看     | `mindx logs`                             | 查看结构化运行日志            |
-| 系统诊断     | `mindx doctor`                           | 自动诊断和修复常见问题        |
+> 源码编译安装请参考 Wiki：[Building from Source](https://github.com/DotNetAge/mindx/wiki/Building-from-Source)
 
 ---
 
-## CLI 参考
+## 安装 Skill 与 Agent
 
-| 命令                                       | 用途                |
-| ------------------------------------------ | ------------------- |
-| `mindx`                                    | 启动向导 + TUI 聊天 |
-| `mindx start\|stop`                        | 启动/停止 Daemon    |
-| `mindx status`                             | 查看系统状态        |
-| `mindx doctor`                             | 诊断和修复          |
-| `mindx install`                            | 安装到系统          |
-| `mindx logs`                               | 查看日志            |
-| `mindx web`                                | 打开 WebUI          |
-| `mindx query`                              | 搜索长期记忆        |
-| `mindx provider\|model\|agent list/rm/add` | 管理资源            |
+MindX 不是一个需要二次开发的库——它是一个完整的智能体操作系统。安装功能就像安装 App：
 
----
+```bash
+# 1. 搜索 Skill（基于 skills.sh 生态）
+npx skills find "前端设计"
+npx skills find "project management"
 
-## 架构概览
+# 2. 安装 Skill
+npx skills add frontend-design
+npx skills add project-manager
 
-MindX 采用分层架构设计，从上至下分为：
+# 3. 在 MindX 中热加载
+mindx skill reload
 
-1. **编排层** — 多模式 Agent 编排引擎（ReAct / 并发 / 规划 / 委派）
-2. **能力层** — 上下文管理、记忆检索、技能组装
-3. **抽象层** — 统一 LLM 接口、模型路由、用量统计
-4. **基础设施层** — 安全治理、状态持久化、可观测性
+# 4. 查看已安装的 Skill 和 Agent
+mindx skill list
+mindx agent list
+```
 
----
+> Skill 即 Agent 的能力包，Agent 即配置了特定 Skill 组合的数字角色。两者都以 Markdown 文件形式存放在 `~/.mindx/skills/` 和 `~/.mindx/agents/` 中，可直接编辑、共享、版本控制。
 
-## 全自研生态依赖
-
-MindX 的核心能力建立在以下全自研技术框架之上：
-
-| 框架          | 定位                   | 仓库                                                                     |
-| ------------- | ---------------------- | ------------------------------------------------------------------------ |
-| **goharness** | Agent Harness 框架     | [github.com/DotNetAge/goharness](https://github.com/DotNetAge/goharness) |
-| **GoChat**    | LLM 统一调用框架       | [github.com/DotNetAge/gochat](https://github.com/DotNetAge/gochat)       |
-| **GoRAG**     | 高性能 RAG 框架        | [github.com/DotNetAge/gorag](https://github.com/DotNetAge/gorag)         |
-| **GoRT**      | 实时通信网关框架       | [github.com/DotNetAge/gort](https://github.com/DotNetAge/gort)           |
-| **GoVector**  | 高性能嵌入式向量数据库 | [github.com/DotNetAge/govector](https://github.com/DotNetAge/govector)   |
-| **GoGraph**   | 高性能嵌入式图数据库   | [github.com/DotNetAge/gograph](https://github.com/DotNetAge/gograph)     |
+<!-- TODO: 插入截图 - mindx skill list 和 mindx agent list 的终端输出 -->
 
 ---
 
-## 贡献
+## 架构总览
 
-欢迎积极提供 PR，共同推动 MindX 的发展。参见 [CONTRIBUTING.md](CONTRIBUTING.md) 了解贡献指南。
+纯Go原生内核｜Agent Harness组织化调度层｜四维AgenticRAG认知层（HyDE+RRF增强）｜多端交互层｜全场景私有化部署
 
-## 许可证
+---
 
-MIT License. 详情请参阅 [LICENSE](LICENSE) 文件。
+## 开源协议
+
+MindX 基于 MIT 协议开源，支持免费商用、二次开发与企业私有化部署，欢迎社区共建与企业定制合作。
+
+---
+
+**MindX AgentOS｜以协同调度赋能智能体，以长效认知定义新智能**

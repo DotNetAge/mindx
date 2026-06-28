@@ -179,10 +179,15 @@ func (s *FileWatchService) processChanges(pending map[string][]pendingChange) {
 			}
 
 			// Fire index-complete events for each file (only those actually indexed/updated)
-			if s.IndexEventCallback != nil && (result.Indexed > 0 || result.Updated > 0) {
+			if (s.IndexEventCallback != nil || s.indexState != nil) && (result.Indexed > 0 || result.Updated > 0) {
 				for _, relPath := range toIndex {
 					absPath := filepath.Join(absDir, relPath)
-					s.IndexEventCallback(absPath, relPath, absDir, "indexed")
+					if s.IndexEventCallback != nil {
+						s.IndexEventCallback(absPath, relPath, absDir, "indexed")
+					}
+					if s.indexState != nil {
+						s.indexState.IncrementIndexedFiles(absDir)
+					}
 				}
 			}
 			// Record file versions for changed files

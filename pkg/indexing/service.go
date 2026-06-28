@@ -199,11 +199,11 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 
 	for _, job := range jobs {
 		jobsWg.Add(1)
-		sem <- struct{}{} // acquire — blocks when at capacity
 
 		go func(j fileJob) {
+			sem <- struct{}{}        // acquire — blocks this goroutine when at capacity
+			defer func() { <-sem }() // release (runs first on exit, LIFO)
 			defer jobsWg.Done()
-			defer func() { <-sem }() // release
 
 			fileStart := time.Now()
 

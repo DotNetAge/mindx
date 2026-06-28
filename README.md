@@ -1,4 +1,4 @@
-# MindX — Agent Harness
+# MindX — Production-Grade Agent Operating System
 
 [![Release](https://img.shields.io/github/v/release/DotNetAge/mindx)](https://github.com/DotNetAge/mindx/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -10,282 +10,381 @@
   <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
 </p>
 
-> MindX is an open-source AI Agent orchestration platform (Agent Harness) that leverages hybrid orchestration modes, intelligent memory systems, and a proprietary tech stack to help you efficiently build, manage, and run AI Agent workflows. Whether for day-to-day coding assistance or complex multi-step task automation, MindX delivers professional-grade agent orchestration capabilities.
+**Production-Grade Agent Operating System | Native Dual-Core: Agent Harness + Enhanced AgenticRAG**
 
-<p align="center">
-  <img src="assets/images/arch.png" alt="MindX Architecture" width="800" />
-  <br />
-  <em>MindX Architecture</em>
-  <br />
-</p>
+MindX is a modern AgentOS designed for long-running, stateful, and multi-agent collaborative scenarios. It provides full-stack infrastructure including agent orchestration, hierarchical persistent memory, multi-dimensional knowledge cognition, multi-terminal interaction, and native storage primitives, supporting enterprise automation, knowledge platforms, and private agent clusters.
 
 ---
 
-## Features
+## Overview
 
-### Multi-Agent Orchestration
+Most mainstream agent frameworks adopt stateless single-turn execution, requiring frequent manual instructions. They lack persistent memory, standardized team collaboration, and structured knowledge understanding, resulting in common industry pain points: memory decay, context overflow, rigid execution, and disconnection between knowledge and action.
 
-As a complete Agent Harness, MindX provides a hybrid orchestration mode to help you tackle problems and business scenarios of varying complexity:
-
-| Mode                  | Type                  | Description                                                                                                     |
-| --------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Single Agent Mode     | Basic                 | Handles simple tasks                                                                                            |
-| ReAct Mode            | Chain-of-Thought      | Plan → Execute → Observe → Iterate full cycle (T-A-O ReAct engine), finding optimal solutions                   |
-| Concurrent Mode       | Task-Driven           | For long-running complex tasks, agents automatically "clone" themselves to handle multiple tasks simultaneously |
-| Planning Mode         | Plan-Driven           | Plans and dispatches role-specific agents for long-duration, periodic complex tasks                             |
-| Delegation Mode       | Responsibility-Driven | Right person for the right job — consult experts when uncertain                                                 |
-| Agentic RAG Mode      | Knowledge Retrieval   | Self-forming knowledge base from work and conversations, with human-like memory                                 |
-| **Evaluation System** | Quality Assurance     | Every agent can assess and score quality, computing "performance" based on task completion                      |
-
-### Context Engineering
-
-Manages the lifecycle of LLM conversations — context window capacity control, session persistence, and relevant context injection.
-
-- **True Context** — Seamlessly blends compression technology with memory stores so context is never lost, forgotten, or corrupted
-- **Session Persistence & Cross-Restart Recovery** — Sessions stored as files on disk, automatically resumed after restart
-- **Multi-Session Branching** — Multiple independent sessions within the same project; agents share and switch between sessions freely
-- **Progressive Capability Disclosure** — Load capability descriptions on demand to conserve context
-
-### Memory & Retrieval
-
-Efficiently persists and retrieves information beyond the context window — forming short-term memory, long-term memory, and a global knowledge base.
-
-- **RAG / Semantic Memory Search** — Hybrid vector + full-text retrieval, automatic transparent memory indexing
-- **File Map / Code Map** — Global understanding of project structure; agents perceive file and code organization
-- **Cross-Session Memory Sharing** — Persistent memory records (Immediately + LongTerm + Experience types)
-- **Web Search & Page Fetching** — Built-in search engines with deep web scraping, supporting both domestic and international sources
-
-You don't need to learn or even be aware of RAG's existence — just know that a fleet of Advanced RAG services faithfully provides semantic services for you.
-
-### Execution Capabilities
-
-MindX's design philosophy is "**skills over tools**" — tools serve as underlying capabilities rather than exposed interfaces. You need not concern yourself with any tools because MindX builds them for you. MindX won't dump a pile of MCP tools or thousands of skills you'll never know when to use.
-
-- Assigns specialized agents to handle problems according to your needs
-- Agents assemble skills based on their responsibilities — no manual configuration required
-- Agents self-assess whether they are "competent" and adjust skills accordingly
-- Agents reflect on and summarize "work experience," distilling it into exclusive skills serving you
-
-> MindX frees you from anxiety about insufficient tools and skills, letting you focus on solving problems.
-
-### Model Abstraction Layer
-
-A unified interface across LLM providers — handling provider differences, structured output, usage statistics, and fallback strategies.
-
-- **Multi-Provider & Model Support** — Unified access to all mainstream LLM providers
-- **Usage & Cost Tracking** — Real-time monitoring and recording across all providers, with multi-dimensional queries of token consumption and costs
-- **Precise Per-Conversation Token Usage Tracking**
-
-### Safety & Governance
-
-Controls over agent behavior — permissions, sandbox, audit, and output guardrails.
-
-- **Layered Permission Model** — Commands execute in restricted environments (project/session directory isolation)
-- **Human Approval Gate** — Sensitive operations require manual confirmation
-- **Credential Management** — macOS Keychain integration + AES-GCM encrypted file fallback for API keys and personal keys
-- **Security Vulnerability Detection** — Dependency scanning, secret detection
-- **Full Audit Log** — All tool calls logged with instant viewing capability
-- **Command Blacklist & Whitelist** — Fine-grained command control policies (Bash security mechanism, content pattern rules)
-
-### State & Persistence
-
-Tracking and recovering execution state — checkpoints, diffs, observability, and scheduled tasks.
-
-- **Observability / Tracing** — End-to-end agent execution tracing (event bus, log observation points); daemon event stream with 30+ JSON-RPC methods
-- **File Change Tracking** — Unified diff generated before and after every tool call
-- **Checkpoint Mechanism** — Incremental rollback to any historical state
-- **Scheduled / Periodic Agent Tasks** — Built-in scheduler (second precision, file persistence, hot-reload, 5-minute timeout)
-- **Logging System** — Structured logging via zap + lumberjack rotation (ANSI console + file, max 100MB / 30-day retention)
-
-### Platform & Delivery
-
-How the harness is packaged, distributed, installed, and integrated into development environments.
-
-- **Single Binary Distribution, Zero Runtime Dependencies** — Entire platform compiled into one Go binary
-- **Multi-Platform Release** — Homebrew, Winget, Snap, Docker coverage across platforms
-- **Terminal TUI** — Full-screen terminal UI with conversation sidebar, file change tracker, token counter, and slash commands
-- **System Service Installation** — Register as system daemon with health checks (launchd/systemd/schtasks)
-- **Setup Wizard** — 8-step interactive TUI wizard (API key input, model selection, path setup, daemon check, Python check)
-- **CI/CD Integration** — GitHub Actions, Makefile, Snap, and Docker publishing pipelines
-- **Environment Management** — Dockerfile (multi-stage build), docker-compose.yml with health checks and volume mounts
-- **Themes / Personalization** — Customizable UI themes
+MindX introduces a dual-core architecture. The **Agent Harness** enables stateful, reflective, and collaborative agent scheduling. The **self-developed AgenticRAG** delivers high-precision, low-cost, incrementally evolvable cognitive capabilities, upgrading traditional disposable tool agents into long-term, self-growing digital workforce clusters.
 
 ---
 
-## System Requirements
+## Why MindX?
 
-| Platform | Minimum Version           | Notes                     |
-| -------- | ------------------------- | ------------------------- |
-| macOS    | Monterey (12.0)           | Homebrew recommended      |
-| Linux    | Ubuntu 20.04+ / CentOS 8+ | Snap recommended          |
-| Windows  | Windows 10+               | WSL or Docker recommended |
-| Docker   | Docker 20.10+             | Supports amd64/arm64      |
+> **Most agent frameworks are either stateless toolchains or rigid workflow orchestrators — none are true Agent Operating Systems. MindX is the only AgentOS with a fully self-developed stack spanning scheduling, memory, cognition, storage, and interaction.**
 
-- **Memory**: 2GB+ available RAM recommended
-- **Disk**: 500MB+ free space recommended (excluding workspace)
+| Dimension          | MindX                                               | LangChain         | AutoGen (Microsoft) | CrewAI                  | Dify            |
+| ------------------ | --------------------------------------------------- | ----------------- | ------------------- | ----------------------- | --------------- |
+| Runtime            | **Go native, single binary**                        | Python            | Python              | Python                  | Python          |
+| Persistent Memory  | **3-tier (session/task/global)**                    | ❌ None            | ❌ None              | ❌ None                  | Session only    |
+| RAG Engine         | **4-dim fusion** (vector+BM25+graph+schema)         | Basic vector      | ❌ None              | ❌ None                  | Basic vector    |
+| Knowledge Graph    | **Embedded GoGraph + Cypher**                       | Needs Neo4j       | ❌ None              | ❌ None                  | Needs external  |
+| Multi-Agent        | **OPC paradigm + 4 modes**                          | ❌ None            | Fixed linear        | Sequential/hierarchical | Workflow DAG    |
+| Pre-built Agents   | **12** (PM/architect/engineer...)                   | ❌ None            | ❌ None              | ❌ None                  | ❌ None          |
+| Pre-built Skills   | **45+** (design/writing/coding/browser...)          | ❌ None            | ❌ None              | ❌ None                  | ❌ None          |
+| Native Tools       | **24+**                                             | ✅ Yes             | ✅ Yes               | Limited                 | Limited         |
+| Offline Deployment | **Single binary, zero deps**                        | ❌ Python env      | ❌ Python env        | ❌ Python env            | Docker required |
+| Interaction        | **WebUI + TUI + CLI + JSON-RPC**                    | CLI only          | CLI only            | CLI only                | Web only        |
+| Self-developed MW  | **6 full-stack**                                    | 0 (all assembled) | 0                   | 0                       | 0               |
+| Install Experience | **`docker pull` → run / `npx skills` → add skills** | pip install       | pip install         | pip install             | docker compose  |
+
+---
+
+## Core Architecture
+
+MindX decouples task scheduling from knowledge cognition, ensuring engineering stability and continuous intelligent iteration.
+
+- **Agent Harness Scheduling Core**: Enterprise-grade multi-agent runtime for task decomposition, reflective reasoning, role collaboration, workflow orchestration, and persistent task management
+
+- **AgenticRAG Cognitive Core**: 4-dimensional enhanced cognitive engine for semantic understanding, structured parsing, multi-path retrieval fusion, and incremental knowledge iteration
+
+![Dual-core architecture diagram](assets/images/arch-en.jpg)
+
+---
+
+## Agent Harness｜Stateful Multi-Agent Orchestration Runtime
+
+Unlike traditional stateless single-run schedulers, MindX Harness natively supports state persistence, multi-turn reflection, organizational collaboration, and time-driven unattended execution, suitable for complex and long-term business iteration.
+
+### Reflective Reasoning Mechanism
+
+Extended from the ReAct paradigm, the system supports multi-turn self-review loops. Agents can autonomously verify outputs, correct decision deviations, and iterate steps, improving robustness in complex scenarios.
+
+### Multi-Mode Organizational Collaboration
+
+- **Moderator Mode**: Multi-agent roundtable discussion, cross-verification, and joint decision-making for complex tasks
+
+- **Expert Dispatch Mode**: Dynamically assemble specialized agent teams for vertical scenario tackling
+
+- **Agent Talk Mode**: Direct autonomous dialogue, task handover, and progress synchronization between agents without human intervention
+
+- **Agent Calendar Mode**: Time-driven scheduled and periodic tasks for unattended continuous operation
+
+### Hierarchical Persistent Infinite Context
+
+A three-level memory system (immediate session, short-term task, long-term global) eliminates context explosion, information decay, and historical forgetting, enabling stable long-sequence multi-round iteration.
+
+### Tool Ecosystem & Multi-Model Management
+
+Compatible with standard Skill specifications, with **24+ built-in native tools** and **45+ pre-built Skills**, covering file management, system operations, task orchestration, browser automation, frontend design, document collaboration, data analysis, project management, and more. **12 professional Agents pre-installed** (Project Manager, Architect, Frontend Engineer, Backend Engineer, DevOps, Market Analyst, Product Manager, Code Reviewer, Content Creator, Financial Advisor, Executive Assistant, SysOps) — your digital team out of the box.
+
+Supports multi-vendor LLM scheduling with fine-grained cost and consumption statistics.
+
+> **Installing a Skill is like installing an npm package**: search with `npx skills find <keyword>` → install with `npx skills add <package>` → hot-reload in MindX with `mindx skill reload`.
+
+<!-- TODO: 插入截图 - CLI demo of installing a Skill -->
+
+---
+
+## Self-Developed AgenticRAG｜4-Dimensional Enhanced Cognitive Engine
+
+Traditional RAG and GraphRAG rely on single-path vector similarity matching, causing semantic drift, false recall, excessive token consumption, weak structured parsing, and high long-term iteration costs.
+
+MindX AgenticRAG adopts a **4-dimensional fusion engine: semantic vector recall first, graph topology enhancement, BM25 lexical calibration, and schema structure constraint**. Four heterogeneous retrieval paths are fused via unbiased RRF, solving inaccuracy, redundancy, hallucination, and poor iteration at the architectural level.
+
+### 4-Dimensional Unified Cognitive System
+
+- **Semantic Vector Layer**: Captures fuzzy user intent for unstructured language understanding
+
+- **BM25 Lexical Layer**: Precise term matching to suppress semantic generalization and false positives
+
+- **Graph Topology Layer**: Mines entity relations and implicit business logic beyond plain text
+
+- **Structured Schema Layer**: Native parsing of document structures, data fields, and business constraints for rule-based accurate filtering
+
+### Key Enhanced Capabilities
+
+- **Graph-Enhanced Precision Addressing & Drastic Token Reduction**: Instead of full text injection, the system performs semantic vector recall first, then applies graph topology and schema constraints for secondary filtering, reducing token consumption by **1–2 orders of magnitude** in long-term multi-round scenarios, lowering costs and latency.
+
+- **Full-Link Noise Reduction & Higher Accuracy**: Multi-layer filtering through vector semantic screening, lexical calibration, graph topology filtering, and structure constraints eliminates redundant noise, fundamentally reducing semantic drift and hallucinations for superior factual consistency.
+
+- **HyDE Hypothetical Reverse Retrieval**: Generates hypothetical standard answers based on user intent, then matches real knowledge against the semantic anchor, solving sparse-query failure in short, ambiguous, or professional questions.
+
+- **RRF Reciprocal Rank Fusion**: Unbiased fusion of vector, lexical, graph, and structured retrieval results. Requires no manual weight tuning or score normalization, improving stability and generalization across scenarios.
+
+- **Tree-Sharded Progressive Retrieval**: On-demand loading for massive knowledge bases, avoiding timeout and congestion while balancing accuracy and performance.
+
+<!-- TODO: 插入图片 - Search tree panel screenshot (Region→Doc→Chapter hierarchy, Level badges, confidence markers, entity chips) -->
+
+- **Adaptive Context Compression**: Long conversations and texts are intelligently summarized via LLM, preserving core decisions and key information, breaking model window limits.
+
+- **Incremental Knowledge Internalization**: New documents trigger automatic incremental indexing via file monitoring, updating graphs and vector stores; conversation and task memories are accumulated into the knowledge base through the memory API for continuous self-improvement.
+
+- **Pure Go High-Performance Runtime**: Eliminates Python overhead with low latency, low memory, and high concurrency for 7×24 production stability.
+
+---
+
+## Core Design: OPC Responsibility-Driven Architecture
+
+Most agent systems are task-driven: requiring step-by-step human instructions. AI acts only as a passive tool without goal awareness, division of labor, or process governance.
+
+MindX introduces **OPC (Objective & Responsibility Centered) Architecture**, simulating modern enterprise organizational operation. Each agent represents a distinct role with clear responsibilities. Users act as **global managers** who set goals and verify results, without managing execution details.
+
+> OPC is not a hard-coded automation pipeline, but an emergent agent organizational paradigm built from MindX's **LLM reflective reasoning loop + platform infrastructure (SubAgent delegation, AgentTalk, team orchestration, calendar scheduling) + Skill system (multi-agent meeting, expert dispatch)**. The LLM autonomously orchestrates the collaboration flow at runtime based on goals, while the system provides the full suite of enabling capabilities.
+
+### OPC Workflow Example
+
+User sets a high-level goal: **"Drive product sales to the target value."**
+
+The system completes full autonomous closed-loop operation:
+
+1. A **coordinator agent** receives the goal, initiates cross-expert meetings, and organizes market, operation, and strategy agents to generate executable plans;
+
+2. Only finalized plans and key decisions are submitted for user confirmation;
+
+3. After confirmation, the coordinator delegates full execution authority to a **project manager agent**;
+
+4. The project manager decomposes subtasks, assigns expert agents, and schedules the full-cycle roadmap via **agent calendar**;
+
+5. During execution, role-based agents cooperate autonomously via **Agent Talk** for real-time handover and progress synchronization;
+
+6. The project manager periodically summarizes progress, risks, and results; the coordinator delivers concise regular reports to the user.
+
+Users focus purely on goals and outcomes. All decomposition, scheduling, collaboration, and review is completed autonomously by the agent team. **AI manages processes, users manage value.**
+
+---
+
+## Self-Developed Full Tech Stack
+
+> **Six core middleware layers, all self-developed from scratch. No Pinecone, no Neo4j, no LangChain — this is MindX's deepest moat.**
+
+<!-- TODO: 插入图片 - Full tech stack architecture diagram (GoHarness→GoChat→GoRAG→GoVector→GoGraph→GoRT stacked layers) -->
+
+| Middleware    | Role                        | Description                                                                     |
+| ------------- | --------------------------- | ------------------------------------------------------------------------------- |
+| **GoHarness** | Agent Scheduling Framework  | Multi-agent runtime, state management, Skill loading, ReAct reasoning loop      |
+| **GoChat**    | LLM Unified Gateway         | Multi-vendor adapters (OpenAI/Claude/Gemini/local), usage stats, load balancing |
+| **GoRAG**     | High-Performance RAG Engine | 4-dim fusion (vector+BM25+graph+schema), HyDE, RRF, progressive retrieval       |
+| **GoVector**  | Embedded Vector Database    | HNSW index, efficient similarity search, direct-to-disk persistence             |
+| **GoGraph**   | Embedded Graph Database     | Cypher queries, property graph model, entity/relation persistence               |
+| **GoRT**      | Real-Time Gateway           | WebSocket JSON-RPC protocol, bidirectional notifications, session management    |
+
+> **Compilation produces a single executable binary. No Python runtime, no Node.js, no external databases. `scp mindx` to any Linux server and run.**
+
+___
+
+## Full-Stack Interaction
+
+- **WebUI**: Integrated workspace with dialogue terminal, file browser, knowledge graph visualization, and agent calendar
+
+- **TUI**: Lightweight high-performance terminal interface
+
+- **CLI**: Full-capability command-line tool for automation and batch operations
+
+- **JSON-RPC**: Standard interface for third-party integration and secondary development
+
+<!-- TODO: 插入图片 - WebUI screenshot (conversation workspace + force-directed graph visualization) -->
+<!-- TODO: 插入图片 - TUI screenshot (conversation list + input area + status bar) -->
+
+---
+
+## Native Storage Infrastructure
+
+Complete built-in storage primitives without third-party dependencies, supporting persistent memory and knowledge iteration:
+
+- KV Store: High-speed cache and state storage
+
+- Graph Store: Structured entity and relation topology storage
+
+- Memory Pool: Hierarchical persistent memory management
+
+- Knowledge Base: Enterprise global knowledge carrier
+
+- File System: Native file parsing and resource management
+
+---
+
+## Application Scenarios
+
+- **Enterprise Digital Employees**: Long-term automation, business review, and experience iteration
+
+- **Enterprise Knowledge Platform**: Global document structuring, multi-dimensional Q&A, and relational analysis
+
+- **Private Offline AI Platform**: Stable deployment for intranet and isolated confidential environments
+
+- **Multi-Agent Cluster System**: Intelligent collaboration for R&D, operation, and office workflows
 
 ---
 
 ## Quick Start
 
-<p align="center">
-  <img src="assets/images/webui.png" alt="MindX WebUI Screenshot" width="700" />
-  <br />
-  <em>MindX WebUI</em>
-</p>
+MindX is available through multiple distribution channels covering all major operating systems. Choose the one that fits your environment:
 
-<p align="center">
-  <img src="assets/images/tui.png" alt="MindX TUI Screenshot" width="700" />
-  <br />
-  <em>MindX TUI</em>
-</p>
+### 🐳 Docker (Recommended)
 
-### macOS (Recommended)
-
-Install via Homebrew, then run `mindx` directly:
+Docker is the fastest way to start MindX on any platform:
 
 ```bash
-brew install DotNetAge/homebrew-mindx/mindx
+# Pull the image
+docker pull dotnetage/mindx:latest
+
+# Start the service
+docker run -d --name mindx \
+  -p 1313:1313 `# WebUI & API port` \
+  -p 1314:1314 `# WebSocket real-time port` \
+  -v ./workspaces:/home/mindx/workspaces `# Persist workspace data` \
+  dotnetage/mindx:latest
+
+# View logs
+docker logs -f mindx
+
+# Use CLI inside the container
+docker exec -it mindx mindx skill list
+docker exec -it mindx mindx agent list
 ```
 
-### Linux
+Open **http://127.0.0.1:1313** in your browser to access the WebUI.
 
-Install via Snap, then run `mindx` directly:
+> The Docker image is based on debian:bookworm-slim with ONNX Runtime included. Supports multi-architecture (linux/amd64, linux/arm64).
+
+---
+
+### 🍎 macOS
+
+macOS users are recommended to install via Homebrew, which handles binary path, service registration, and updates automatically:
+
+```bash
+# Install
+brew install DotNetAge/homebrew-mindx/mindx
+
+# Start the background service
+mindx start
+
+# Open WebUI in browser
+mindx web
+
+# Or launch the TUI directly
+mindx
+```
+
+Homebrew registers a launchd service, supporting `mindx start/stop/restart` for system-level service management.
+
+> You can also run MindX via Docker on macOS — see the Docker section above.
+
+---
+
+### 🐧 Linux
+
+**Snap (Recommended for Ubuntu/Debian)**
 
 ```bash
 sudo snap install mindx
+sudo snap start mindx        # Start the service
+mindx                        # Enter TUI
 ```
 
-### Docker
+Snap handles sandbox isolation, automatic updates, and service registration.
 
-Install using the official image from [dotnetage/mindx](https://hub.docker.com/r/dotnetage/mindx):
-
-Pull the image:
+**Flatpak (Recommended for Desktop Environments)**
 
 ```bash
-docker pull dotnetage/mindx
+flatpak install flathub com.dotnetage.mindx
+flatpak run com.dotnetage.mindx
 ```
 
-Run the container:
+**Debian/Ubuntu & Fedora/RHEL**
+
+Download `.deb` or `.rpm` packages from GitHub Releases:
 
 ```bash
-docker run -d \
-  --name mindx \
-  -p 1313:1313 \
-  -p 1314:1314 \
-  -v ./workspaces:/home/mindx/workspaces \
-  dotnetage/mindx
+# Debian/Ubuntu
+sudo dpkg -i mindx_*.deb
+
+# Fedora/RHEL
+sudo rpm -ivh mindx_*.rpm
+
+# Start the daemon service
+sudo systemctl start mindx-daemon
 ```
 
-The `./workspaces` directory can be any local path for storing MindX workspace files.
+**AppImage (Portable)**
 
-### Windows
+Download the `.AppImage` file from GitHub Releases, make it executable and run:
 
 ```bash
-winget install DotNetAge.Mindx
+chmod +x Mindx-*.AppImage
+./Mindx-*.AppImage
 ```
-
-> Windows users are advised to use the built-in Ubuntu environment or Docker directly — Windows is not an ideal environment for running agents.
-
-### Build from Source
-
-Download pre-built binaries from [Releases](https://github.com/DotNetAge/mindx/releases), or build from source:
-
-```bash
-git clone https://github.com/DotNetAge/mindx.git
-cd mindx
-make run
-```
-
-First run launches an interactive setup wizard guiding you through API key configuration, model selection, and other initialization steps, then enters the TUI chat interface.
 
 ---
 
-## Usage Guide
+### 📦 Pre-built Binaries (All Platforms)
 
-### Initial Configuration
+Download the archive for your platform and architecture from [GitHub Releases](https://github.com/DotNetAge/mindx/releases):
 
-When running `mindx` for the first time, the interactive setup wizard launches with these steps:
-
-1. **API Key Configuration** — Enter your LLM provider's API key
-2. **Default Model Selection** — Choose your primary conversation model
-3. **Workspace Path Setup** — Configure storage location for project files
-4. **Daemon Service Check** — Detect and configure the background service
-5. **Python Environment Check** — Detect Python runtime (required by some skills)
-
-### Basic Workflow
+| Platform              | Architecture  | File                                  |
+| --------------------- | ------------- | ------------------------------------- |
+| Linux                 | amd64 / arm64 | `mindx-{version}-linux-{arch}.tar.gz` |
+| macOS (Intel)         | amd64         | `mindx-{version}-darwin-amd64.tar.gz` |
+| macOS (Apple Silicon) | arm64         | `mindx-{version}-darwin-arm64.tar.gz` |
 
 ```bash
-# Launch MindX TUI
-mindx
-
-# Start Daemon background service (for long-running tasks)
-mindx start
-
-# Check MindX status
-mindx status
-
-# Open Web UI (browser)
-mindx web
+# Example: macOS Apple Silicon
+tar xzf mindx-*-darwin-arm64.tar.gz
+sudo mv mindx /usr/local/bin/
+mindx daemon &
 ```
-
-### Advanced Features
-
-| Feature                 | Command / Method                         | Description                                |
-| ----------------------- | ---------------------------------------- | ------------------------------------------ |
-| Long-Term Memory Search | `mindx query <keyword>`                  | Search knowledge from conversation history |
-| Resource Management     | `mindx provider/model/agent list/rm/add` | Manage LLM providers, models, and agents   |
-| Log Viewing             | `mindx logs`                             | View structured runtime logs               |
-| System Diagnostics      | `mindx doctor`                           | Auto-diagnose and fix common issues        |
 
 ---
 
-## CLI Reference
+### 🔧 Build from Source
 
-| Command                                   | Usage                   |
-| ----------------------------------------- | ----------------------- |
-| `mindx`                                   | Start wizard + TUI chat |
-| `mindx start\|stop`                       | Start/stop Daemon       |
-| `mindx status`                            | Check system status     |
-| `mindx doctor`                            | Diagnostics and repair  |
-| `mindx install`                           | Install to system       |
-| `mindx logs`                              | View logs               |
-| `mindx web`                               | Open WebUI              |
-| `mindx query`                             | Search long-term memory |
-| `mindx provider\|model\agent list/rm/add` | Manage resources        |
+> Building from source? See the Wiki: [Building from Source](https://github.com/DotNetAge/mindx/wiki/Building-from-Source)
+
+---
+
+## Installing Skills & Agents
+
+MindX is not a library that needs secondary development — it's a complete Agent Operating System. Installing capabilities is as simple as installing apps:
+
+```bash
+# 1. Search for Skills (via skills.sh ecosystem)
+npx skills find "frontend design"
+npx skills find "project management"
+
+# 2. Install a Skill
+npx skills add frontend-design
+npx skills add project-manager
+
+# 3. Hot-reload in MindX
+mindx skill reload
+
+# 4. List installed Skills and Agents
+mindx skill list
+mindx agent list
+```
+
+> A Skill is a capability package for Agents. An Agent is a digital role configured with a specific combination of Skills. Both are plain Markdown files in `~/.mindx/skills/` and `~/.mindx/agents/` — directly editable, shareable, and version-controllable.
+
+<!-- TODO: 插入截图 - Terminal output of `mindx skill list` and `mindx agent list` -->
 
 ---
 
 ## Architecture Overview
 
-MindX adopts a layered architecture design, top to bottom:
-
-1. **Orchestration Layer** — Multi-mode agent orchestration engine (ReAct / Concurrent / Planning / Delegation)
-2. **Capability Layer** — Context management, memory retrieval, skill assembly
-3. **Abstraction Layer** — Unified LLM interface, model routing, usage statistics
-4. **Infrastructure Layer** — Security governance, state persistence, observability
+Pure Go Native Kernel | Agent Harness Organizational Scheduling | 4D AgenticRAG Cognition (HyDE+RRF Enhanced) | Multi-Terminal Interaction | Full-Scenario Private Deployment
 
 ---
-
-## Ecosystem Dependencies
-
-MindX's core capabilities are built upon the following proprietary technical frameworks:
-
-| Framework     | Purpose                             | Repository                                                               |
-| ------------- | ----------------------------------- | ------------------------------------------------------------------------ |
-| **goharness** | Agent Harness Framework             | [github.com/DotNetAge/goharness](https://github.com/DotNetAge/goharness) |
-| **GoChat**    | LLM Unified Calling Framework       | [github.com/DotNetAge/gochat](https://github.com/DotNetAge/gochat)       |
-| **GoRAG**     | High-Performance RAG Framework      | [github.com/DotNetAge/gorag](https://github.com/DotNetAge/gorag)         |
-| **GoRT**      | Real-Time Communication Gateway     | [github.com/DotNetAge/gort](https://github.com/DotNetAge/gort)           |
-| **GoVector**  | High-Performance Embedded Vector DB | [github.com/DotNetAge/govector](https://github.com/DotNetAge/govector)   |
-| **GoGraph**   | High-Performance Embedded Graph DB  | [github.com/DotNetAge/gograph](https://github.com/DotNetAge/gograph)     |
-
----
-
-## Contributing
-
-PRs are welcome! Let's drive MindX forward together. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## License
 
-MIT License. See the [LICENSE](LICENSE) file for details.
+MindX is open-sourced under the MIT License, allowing free commercial use, secondary development, and enterprise private deployment. Community contributions and enterprise cooperation are welcome.
+
+---
+
+**MindX AgentOS｜Empower Agents with Collaborative Scheduling, Define Next-Gen Intelligence with Persistent Cognition**
