@@ -464,8 +464,25 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			if llmModelCfg != nil {
 				idxModelName = llmModelCfg.Model
 			}
+
+			// RegionIndexer: post-sync directory-level summary generation.
+			// Requires GraphIndexer (for vectorDB + embedder) and LLM config.
+			// When nil, FileWatchService skips region indexing without error.
+			var regionIndexer *goragindexer.RegionIndexer
+			if graphIndexer != nil && emb != nil && kbVS != nil && llmModelCfg != nil {
+				regionIndexer = goragindexer.NewRegionIndexer(
+					*llmModelCfg,
+					emb,
+					kbVS,
+					goragindexer.RegionWithLogger(logger),
+					goragindexer.RegionWithGraphStore(graphIndexer.GraphDB()),
+				)
+				logger.Info("region indexer initialized for knowledge base")
+			}
+
 			kbWatch = indexing.NewFileWatchService(
 				graphIndexer,
+				regionIndexer,
 				watchListStore,
 				indexStateStore,
 				filepath.Join(app.Settings().DataDir(), "kb-cache"),
@@ -880,6 +897,18 @@ func (d *Daemon) ensureGraphIndexer() error {
 	)
 	d.app.SetGraphIndexer(gi)
 
+	// Create RegionIndexer for post-sync directory-level summaries.
+	var regionIndexer *goragindexer.RegionIndexer
+	if emb != nil && kbVS != nil {
+		regionIndexer = goragindexer.NewRegionIndexer(
+			*llmModelCfg,
+			emb,
+			kbVS,
+			goragindexer.RegionWithLogger(d.logger),
+		)
+		d.logger.Info("RegionIndexer initialized after model switch")
+	}
+
 	// Create FileWatchService — reuse daemon-level stores or initialize them.
 	if d.watchListStore == nil {
 		ws, wlErr := indexing.NewWatchListStore(d.app.Settings().DataDir())
@@ -898,6 +927,7 @@ func (d *Daemon) ensureGraphIndexer() error {
 
 	kbWatch := indexing.NewFileWatchService(
 		d.graphIndexer,
+		regionIndexer,
 		d.watchListStore,
 		d.indexStateStore,
 		filepath.Join(d.app.Settings().DataDir(), "kb-cache"),
