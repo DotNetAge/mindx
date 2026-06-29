@@ -104,6 +104,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"filewatch.ignore-failed": r.daemon.handleFilewatchIgnoreFailed,
 		"kb.search":               r.daemon.handleKBSearch,
 		"kb.chunks":               r.daemon.handleKBChunks,
+		"kb.index":                r.daemon.handleKBIndex,
 		"kb.stats":                r.daemon.handleKBStats,
 		"kb.schema_properties":    r.daemon.handleSchemaProperties,
 		"kb.sync_project":         r.daemon.handleKBSyncProject,

@@ -253,10 +253,25 @@ func (d *Daemon) handleGraphListNodes(_ context.Context, _ json.RawMessage) (any
 
 	result := make([]map[string]interface{}, 0, len(nodes))
 	for _, n := range nodes {
+		props := graphPropsToAny(n.Properties)
+		// Include source_chunk_ids/source_doc_ids/name — these are stored
+		// as properties in the gograph Node (embedded by gorag at write time)
+		// but may have been stripped from Properties by queryResultToNode
+		// when reading via gorag's core.Node path. Here we read directly from
+		// the gograph Node to ensure they are always present.
+		if v, ok := n.GetProperty("source_chunk_ids"); ok {
+			props["source_chunk_ids"] = v.InterfaceValue()
+		}
+		if v, ok := n.GetProperty("source_doc_ids"); ok {
+			props["source_doc_ids"] = v.InterfaceValue()
+		}
+		if v, ok := n.GetProperty("name"); ok {
+			props["name"] = v.InterfaceValue()
+		}
 		result = append(result, map[string]interface{}{
 			"id":         n.ID,
 			"labels":     n.Labels,
-			"properties": graphPropsToAny(n.Properties),
+			"properties": props,
 		})
 	}
 

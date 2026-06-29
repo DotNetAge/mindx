@@ -9,10 +9,18 @@ type KBSearchParams struct {
 	MinScore float64 `json:"min_score,omitempty"`
 }
 
+// FilterCondition mirrors gorag/core.FilterCondition for JSON parsing.
+type FilterCondition struct {
+	Key   string `json:"key"`
+	Type  string `json:"type"`
+	Value any    `json:"value"`
+}
+
 // KBChunksParams are the params for kb.chunks.
 type KBChunksParams struct {
-	Page     int `json:"page,omitempty"`
-	PageSize int `json:"page_size,omitempty"`
+	Page     int               `json:"page,omitempty"`
+	PageSize int               `json:"page_size,omitempty"`
+	Filters  []FilterCondition `json:"filters,omitempty"`
 }
 
 // KBStatsParams are the params for kb.stats.
@@ -59,4 +67,14 @@ type KBStatsResult struct {
 
 func (c *Client) KBFileStates(projectDir string) (json.RawMessage, error) {
 	return c.CallWithTimeout("kb.file_states", KBFileStatesParams{ProjectDir: projectDir})
+}
+
+// KBIndexParams are the params for kb.index.
+type KBIndexParams struct {
+	Path  string `json:"path"`
+	Force bool   `json:"force"`
+}
+
+func (c *Client) KBIndex(path string, force bool) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.index", KBIndexParams{Path: path, Force: force})
 }

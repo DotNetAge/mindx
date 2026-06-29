@@ -21,7 +21,6 @@ import (
 	goragcore "github.com/DotNetAge/gorag/v2/core"
 	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
 	goraggograph "github.com/DotNetAge/gorag/v2/store/graph/gograph"
-	govector "github.com/DotNetAge/gorag/v2/store/vector/govector"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/appicon"
 	"github.com/DotNetAge/mindx/internal/core"
@@ -40,196 +39,6 @@ var (
 	atAgentRegex = regexp.MustCompile(`^@([\w-]+)(?:\s+(.+))?$`)
 	ulidRegex    = regexp.MustCompile(`^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$`)
 )
-
-// fileDiffInfo holds per-file diff data emitted via RespFileModified.
-type fileDiffInfo struct {
-	Path      string `json:"path"`
-	Diff      string `json:"diff"`
-	Additions int    `json:"additions"`
-	Deletions int    `json:"deletions"`
-	IsNew     bool   `json:"isNew"`
-}
-
-// computeFileDiff reads the current file and its backup (if exists) to compute diff stats.
-func computeFileDiff(sess *goharnesssession.Session, filePath string) fileDiffInfo {
-	info := fileDiffInfo{Path: filePath}
-
-	current, err := os.ReadFile(filePath)
-	if err != nil {
-		return info
-	}
-	newContent := string(current)
-
-	sessionDir := sess.SessionDir()
-	if sessionDir == "" {
-		// No session dir — can't find backups, treat as new
-		lines := strings.Split(newContent, "\n")
-		if len(lines) > 0 && lines[len(lines)-1] == "" {
-			lines = lines[:len(lines)-1]
-		}
-		info.IsNew = true
-		info.Additions = len(lines)
-		info.Diff = buildNewFileDiff(filePath, lines)
-		return info
-	}
-
-	backupPath := filepath.Join(sessionDir, "backup", filepath.Base(filePath)+".bak")
-	oldData, oldErr := os.ReadFile(backupPath)
-	if oldErr != nil {
-		// No backup — new file
-		lines := strings.Split(newContent, "\n")
-		if len(lines) > 0 && lines[len(lines)-1] == "" {
-			lines = lines[:len(lines)-1]
-		}
-		info.IsNew = true
-		info.Additions = len(lines)
-		info.Diff = buildNewFileDiff(filePath, lines)
-		return info
-	}
-
-	oldContent := string(oldData)
-	info.Diff = buildUnifiedDiff(filePath, oldContent, newContent)
-	info.Additions, info.Deletions = countDiffLines(oldContent, newContent)
-	return info
-}
-
-// buildNewFileDiff generates a unified-diff-style string for a newly created file.
-func buildNewFileDiff(filePath string, lines []string) string {
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("--- /dev/null\n+++ b/%s\n", filepath.Base(filePath)))
-	b.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
-	for _, line := range lines {
-		b.WriteString("+")
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-	return b.String()
-}
-
-// buildUnifiedDiff generates a basic unified diff string for a modified file.
-func buildUnifiedDiff(filePath, oldContent, newContent string) string {
-	oldLines := splitLines(oldContent)
-	newLines := splitLines(newContent)
-
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("--- a/%s\n+++ b/%s\n", filepath.Base(filePath), filepath.Base(filePath)))
-
-	// Simple line-by-line diff: scan for changes and emit hunks.
-	type diffLine struct {
-		kind byte // ' ', '+', '-'
-		text string
-	}
-
-	var diff []diffLine
-
-	// Build a simple LCS-based diff
-	// First pass: mark unchanged, added, removed
-	oldUsed := make([]bool, len(oldLines))
-	newUsed := make([]bool, len(newLines))
-
-	// Match identical lines in order
-	ni := 0
-	for oi := 0; oi < len(oldLines); oi++ {
-		if ni >= len(newLines) {
-			break
-		}
-		if oldLines[oi] == newLines[ni] {
-			oldUsed[oi] = true
-			newUsed[ni] = true
-			ni++
-		} else {
-			// Try to find this old line later in new lines
-			found := false
-			for nj := ni + 1; nj < len(newLines); nj++ {
-				if oldLines[oi] == newLines[nj] {
-					// Mark skipped new lines as additions
-					for nk := ni; nk < nj; nk++ {
-						if !newUsed[nk] {
-							newUsed[nk] = true
-							diff = append(diff, diffLine{kind: '+', text: newLines[nk]})
-						}
-					}
-					oldUsed[oi] = true
-					newUsed[nj] = true
-					diff = append(diff, diffLine{kind: ' ', text: oldLines[oi]})
-					ni = nj + 1
-					found = true
-					break
-				}
-			}
-			if !found {
-				diff = append(diff, diffLine{kind: '-', text: oldLines[oi]})
-			}
-		}
-	}
-
-	// Remaining new lines are additions
-	for ; ni < len(newLines); ni++ {
-		if !newUsed[ni] {
-			diff = append(diff, diffLine{kind: '+', text: newLines[ni]})
-		}
-	}
-	// Remaining old lines are deletions
-	for oi := 0; oi < len(oldLines); oi++ {
-		if !oldUsed[oi] {
-			// Check if already added as deletion
-			alreadyAdded := false
-			for _, d := range diff {
-				if d.kind == '-' && d.text == oldLines[oi] {
-					alreadyAdded = true
-					break
-				}
-			}
-			if !alreadyAdded {
-				diff = append(diff, diffLine{kind: '-', text: oldLines[oi]})
-			}
-		}
-	}
-
-	if len(diff) == 0 {
-		return ""
-	}
-
-	// Emit hunks with context
-	b.WriteString(fmt.Sprintf("@@ -1,%d +1,%d @@\n", len(oldLines), len(newLines)))
-	for _, d := range diff {
-		b.WriteByte(d.kind)
-		b.WriteString(d.text)
-		b.WriteString("\n")
-	}
-
-	return b.String()
-}
-
-// countDiffLines counts added and removed lines.
-func countDiffLines(oldContent, newContent string) (additions, deletions int) {
-	oldSet := make(map[string]int)
-	for _, l := range strings.Split(oldContent, "\n") {
-		oldSet[l]++
-	}
-	for _, l := range strings.Split(newContent, "\n") {
-		if _, exists := oldSet[l]; exists {
-			oldSet[l]--
-		} else {
-			additions++
-		}
-	}
-	for _, count := range oldSet {
-		if count > 0 {
-			deletions += count
-		}
-	}
-	return additions, deletions
-}
-
-// splitLines splits content into lines, dropping the trailing empty line.
-func splitLines(content string) []string {
-	lines := strings.Split(content, "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	return lines
-}
 
 type pendingInteraction struct {
 	replyFn   func(answers map[string]string)
@@ -254,13 +63,14 @@ type Daemon struct {
 	sharedMemory    *memory.RAGMemory
 
 	// knowledge-graph indexer (GraphIndexer)
-	graphIndexer  *goragindexer.GraphIndexer
-	webServer     *WebServer
-	addr          string
-	wsPath        string
-	logger        logging.Logger
-	execMu        sync.Mutex
-	clientCancels sync.Map
+	graphIndexer    *goragindexer.GraphIndexer
+	graphIndexerErr error // init failure reason, exposed in KB handler errors
+	webServer       *WebServer
+	addr            string
+	wsPath          string
+	logger          logging.Logger
+	execMu          sync.Mutex
+	clientCancels   sync.Map
 
 	// activeSessions tracks live sessions by sessionID for FileModifyHook
 	// to look up the session's TrackModify function.
@@ -290,6 +100,9 @@ type Daemon struct {
 
 	// restartCh 接收重启信号；Start() 主循环通过 select 监听。
 	restartCh chan struct{}
+
+	// cleanupCancel cancels the stale interaction cleanup loop on shutdown.
+	cleanupCancel context.CancelFunc
 
 	// hotReload watches agents/ and skills/ directories for file changes
 	// and automatically reloads registries.
@@ -338,13 +151,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 
 	// ── GraphIndexer 模型配置 ────────────────────────────────────
 	if defaultModel := app.ResolveDefaultModel(); defaultModel != nil {
-		lang := "Chinese"
-		if c := app.Config(); c != nil {
-			switch c.Language {
-			case "en", "en-US", "en-GB":
-				lang = "English"
-			}
-		}
+		lang := resolveIndexerLang(app.Config())
 		llmModelCfg = &goragindexer.ModelConfig{
 			APIKey:        defaultModel.APIKey,
 			BaseURL:       defaultModel.BaseURL,
@@ -375,146 +182,41 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	// ── GraphIndexer（知识库）─────────────────────────────────────
 	// 文件监控服务为 KB 服务，memory 仅为对话服务
 	var graphIndexer *goragindexer.GraphIndexer
+	var graphIndexerErr error
 	var sharedMemory *memory.RAGMemory
 	var kbWatch *indexing.FileWatchService
 
 	if emb := app.Embedder(); emb != nil {
 		logger.Info("embedder found, initializing knowledge base and memory services")
 
-		// 尝试从 entity-defs.json 加载用户之前保存的实体标签定义
-		var entityDefs []goragindexer.EntityDef
-		entityDefsPath := filepath.Join(app.Settings().DataDir(), "entity-defs.json")
-		if etData, etErr := os.ReadFile(entityDefsPath); etErr == nil {
-			var etFile struct {
-				Types []struct {
-					Name   string `json:"name"`
-					Desc   string `json:"desc"`
-					Prompt string `json:"prompt,omitempty"`
-					Schema string `json:"schema,omitempty"`
-				} `json:"types"`
-			}
-			if json.Unmarshal(etData, &etFile) == nil {
-				for _, t := range etFile.Types {
-					if t.Name != "" {
-						prompt := t.Prompt
-						if prompt == "" {
-							prompt = "**" + t.Name + "** — " + t.Desc
-						}
-						entityDefs = append(entityDefs, goragindexer.EntityDef{
-							Prompt: prompt,
-							Schema: t.Schema,
-						})
-					}
-				}
-				logger.Info("memory: loaded saved entity tags from file", "path", entityDefsPath, "count", len(entityDefs))
-			}
-		}
-
-		// ── GraphIndexer 初始化 ──────────────────────────────────
-		// 需要: vectorDB (KB专用), graphDB, embedder, LLM model
+		// ── KB Stack: GraphIndexer + RegionIndexer + FileWatchService ─
+		// 需要 coreGS（graph store）、LLM 模型配置、以及持久化存储。
+		// 任一条件缺失时跳过 KB 服务，记录具体原因到 graphIndexerErr。
 		if coreGS != nil && llmModelCfg != nil {
-			kbVecDir := filepath.Join(app.Settings().DataDir(), "kb-vectors")
-			if mkErr := os.MkdirAll(kbVecDir, 0755); mkErr == nil {
-				kbVS, vsErr := govector.NewStore(
-					govector.WithCollection("kb_sem"),
-					govector.WithDimension(emb.Dim()),
-					govector.WithDBPath(filepath.Join(kbVecDir, "kb.db")),
-					govector.WithHNSW(true),
-				)
-				if vsErr != nil {
-					logger.Warn("failed to create KB vector store, GraphIndexer disabled", "error", vsErr)
-				} else {
-					var graphOpts []goragindexer.GraphOption
-					graphOpts = append(graphOpts, goragindexer.WithLogger(logger))
-					if len(entityDefs) > 0 {
-						graphOpts = append(graphOpts, goragindexer.WithSchemas(entityDefs...))
-					}
-					gi := goragindexer.New(
-						*llmModelCfg,
-						emb,
-						kbVS,
-						coreGS,
-						graphOpts...,
-					)
-					graphIndexer = gi
-					logger.Info("GraphIndexer initialized for knowledge base",
-						"vector_dim", emb.Dim(),
-						"vec_db", filepath.Join(kbVecDir, "kb.db"),
-					)
-				}
+			gi, kw, kbErr := newKBStack(
+				emb, coreGS, llmModelCfg,
+				app.Settings().DataDir(),
+				logger,
+				app.TokenUsageStore(),
+				watchListStore, indexStateStore,
+				app,
+			)
+			if kbErr != nil {
+				logger.Warn("knowledge base init failed, KB service disabled", "error", kbErr)
+				graphIndexerErr = kbErr
 			} else {
-				logger.Warn("failed to create KB vector directory", "error", mkErr)
+				graphIndexer = gi
+				kbWatch = kw
 			}
 		} else {
 			if coreGS == nil {
 				logger.Warn("graph store unavailable, GraphIndexer disabled")
+				graphIndexerErr = fmt.Errorf("graph store unavailable (no vector/graph DB configured)")
 			}
 			if llmModelCfg == nil {
 				logger.Warn("no LLM model configured, GraphIndexer disabled")
+				graphIndexerErr = fmt.Errorf("no LLM model configured for knowledge base")
 			}
-		}
-
-		// ── FileWatchService（KB 文件监控）────────────────────────
-		// 使用 GraphIndexer 作为索引目标；store 复用 daemon 级实例。
-		// FileWatchService 不依赖 GraphIndexer 是否可用 — 即使为 nil，
-		// 也会正常创建（仅不执行向量索引），确保监控目录条目始终能持久化。
-		if watchListStore != nil && indexStateStore != nil {
-			// Determine model name for token usage recording
-			idxModelName := ""
-			if llmModelCfg != nil {
-				idxModelName = llmModelCfg.Model
-			}
-
-			// RegionIndexer: post-sync directory-level summary generation.
-			// Requires GraphIndexer (for vectorDB + embedder) and LLM config.
-			// When nil, FileWatchService skips region indexing without error.
-			var regionIndexer *goragindexer.RegionIndexer
-			if graphIndexer != nil && emb != nil && llmModelCfg != nil {
-				regionIndexer = goragindexer.NewRegionIndexer(
-					*llmModelCfg,
-					emb,
-					graphIndexer.VectorDB(),
-					goragindexer.RegionWithLogger(logger),
-					goragindexer.RegionWithGraphStore(graphIndexer.GraphDB()),
-				)
-				logger.Info("region indexer initialized for knowledge base")
-			}
-
-			kbWatch = indexing.NewFileWatchService(
-				graphIndexer,
-				regionIndexer,
-				watchListStore,
-				indexStateStore,
-				filepath.Join(app.Settings().DataDir(), "kb-cache"),
-				logger,
-				app.TokenUsageStore(),
-				idxModelName,
-			)
-			logger.Info("filewatch service configured (backed by GraphIndexer)",
-				"cache_dir", filepath.Join(app.Settings().DataDir(), "kb-cache"),
-			)
-			kbWatch.VersionRecorder = func(absPath string) {
-				if app.SessDB() == nil || app.FileVersions() == nil {
-					return
-				}
-				sessions, listErr := app.SessDB().ListSessions(context.Background())
-				if listErr != nil {
-					return
-				}
-				for _, s := range sessions {
-					if s.ProjectDir == "" || !strings.HasPrefix(absPath, s.ProjectDir) {
-						continue
-					}
-					if s.SessionDir != "" {
-						_ = app.FileVersions().Record(s.SessionDir, absPath)
-					}
-				}
-			}
-		} else {
-			logger.Warn("filewatch: stores not available, FileWatchService disabled",
-				"watchListStore", watchListStore != nil,
-				"indexStateStore", indexStateStore != nil,
-			)
 		}
 
 		// ── Shared Memory（对话记忆）─────────────────────────────
@@ -545,6 +247,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		indexStateStore:     indexStateStore,
 		sharedMemory:        sharedMemory,
 		graphIndexer:        graphIndexer,
+		graphIndexerErr:     graphIndexerErr,
 		runtimeFS:           runtimeFS,
 		webServer:           NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
 		logger:              logger,
@@ -638,18 +341,27 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	)
 
 	// 定期清理超时的 pending interactions，防止客户端断线后内存泄漏
-	go d.cleanupStaleInteractionsLoop(30*time.Minute, 5*time.Minute)
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		d.cleanupCancel = cancel
+		go d.cleanupStaleInteractionsLoop(ctx, 30*time.Minute, 5*time.Minute)
+	}
 
 	return d
 }
 
 // cleanupStaleInteractionsLoop 定期清理超时的 pending interactions，
 // 防止客户端断线或超时未回复导致内存泄漏。
-func (d *Daemon) cleanupStaleInteractionsLoop(timeout, interval time.Duration) {
+func (d *Daemon) cleanupStaleInteractionsLoop(ctx context.Context, timeout, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	for range ticker.C {
-		d.cleanupStaleInteractions(timeout)
+	for {
+		select {
+		case <-ticker.C:
+			d.cleanupStaleInteractions(timeout)
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
@@ -693,7 +405,7 @@ func (d *Daemon) autoUpdateLoop(ctx context.Context) {
 				)
 				// 通知客户端更新即将开始
 				if d.gw != nil {
-					d.gw.BroadcastNotification("update_started", map[string]interface{}{
+					d.gw.BroadcastNotification("update_started", map[string]any{
 						"type": "update_started",
 						"data": map[string]string{
 							"version": info.LatestVersion,
@@ -706,7 +418,7 @@ func (d *Daemon) autoUpdateLoop(ctx context.Context) {
 				} else {
 					d.logger.Info("auto-update: update installed. User should restart the daemon.")
 					if d.gw != nil {
-						d.gw.BroadcastNotification("update_installed", map[string]interface{}{
+						d.gw.BroadcastNotification("update_installed", map[string]any{
 							"type": "update_installed",
 							"data": map[string]string{
 								"version": info.LatestVersion,
@@ -763,6 +475,38 @@ func (d *Daemon) addWatchEntry(dir, agent string) error {
 	return nil
 }
 
+// resolveIndexerLang returns the language string used by GraphIndexer's
+// ModelConfig based on the application language setting.
+func resolveIndexerLang(cfg *core.MindxConfig) string {
+	if cfg == nil {
+		return "Chinese"
+	}
+	switch cfg.Language {
+	case "en", "en-US", "en-GB":
+		return "English"
+	}
+	return "Chinese"
+}
+
+// wireFileIndexCallback sets the file indexing broadcast callback on a
+// FileWatchService. The callback is idempotent — safe to call multiple times
+// (e.g., from both Start and ensureGraphIndexer).
+func (d *Daemon) wireFileIndexCallback(kw *indexing.FileWatchService) {
+	if kw == nil || d.gw == nil {
+		return
+	}
+	kw.IndexEventCallback = func(absPath, relPath, absDir, eventType string) {
+		d.gw.BroadcastNotification("file_indexing", map[string]any{
+			"type": "file_indexing",
+			"data": map[string]string{
+				"file":      relPath,
+				"directory": absDir,
+				"state":     eventType,
+			},
+		})
+	}
+}
+
 // restoreSessionWatches iterates all existing sessions and adds their
 // project_dir to the file watchlist if not already present. This ensures
 // sessions created outside the daemon RPC path (e.g. TUI auto-created
@@ -816,101 +560,16 @@ func (d *Daemon) ensureGraphIndexer() error {
 		return fmt.Errorf("no LLM model configured")
 	}
 
-	lang := "Chinese"
-	if c := d.app.Config(); c != nil {
-		switch c.Language {
-		case "en", "en-US", "en-GB":
-			lang = "English"
-		}
-	}
-
 	llmModelCfg := &goragindexer.ModelConfig{
 		APIKey:        defaultModel.APIKey,
 		BaseURL:       defaultModel.BaseURL,
 		Model:         defaultModel.Name,
-		Language:      lang,
+		Language:      resolveIndexerLang(d.app.Config()),
 		MaxTokens:     int(defaultModel.MaxTokens),
 		ContextLength: int(defaultModel.ContextLength),
 	}
 
-	// Load entity defs from saved file
-	var entityDefs []goragindexer.EntityDef
-	entityDefsPath := filepath.Join(d.app.Settings().DataDir(), "entity-defs.json")
-	if etData, etErr := os.ReadFile(entityDefsPath); etErr == nil {
-		var etFile struct {
-			Types []struct {
-				Name   string `json:"name"`
-				Desc   string `json:"desc"`
-				Prompt string `json:"prompt,omitempty"`
-				Schema string `json:"schema,omitempty"`
-			} `json:"types"`
-		}
-		if json.Unmarshal(etData, &etFile) == nil {
-			for _, t := range etFile.Types {
-				if t.Name != "" {
-					prompt := t.Prompt
-					if prompt == "" {
-						prompt = "**" + t.Name + "** — " + t.Desc
-					}
-					entityDefs = append(entityDefs, goragindexer.EntityDef{
-						Prompt: prompt,
-						Schema: t.Schema,
-					})
-				}
-			}
-		}
-	}
-
-	// Create KB vector store
-	kbVecDir := filepath.Join(d.app.Settings().DataDir(), "kb-vectors")
-	if mkErr := os.MkdirAll(kbVecDir, 0755); mkErr != nil {
-		return fmt.Errorf("create kb vector dir: %w", mkErr)
-	}
-
-	kbVS, vsErr := govector.NewStore(
-		govector.WithCollection("kb_sem"),
-		govector.WithDimension(emb.Dim()),
-		govector.WithDBPath(filepath.Join(kbVecDir, "kb.db")),
-		govector.WithHNSW(true),
-	)
-	if vsErr != nil {
-		return fmt.Errorf("create KB vector store: %w", vsErr)
-	}
-
-	var graphOpts []goragindexer.GraphOption
-	graphOpts = append(graphOpts, goragindexer.WithLogger(d.logger))
-	if len(entityDefs) > 0 {
-		graphOpts = append(graphOpts, goragindexer.WithSchemas(entityDefs...))
-	}
-
-	gi := goragindexer.New(
-		*llmModelCfg,
-		emb,
-		kbVS,
-		coreGS,
-		graphOpts...,
-	)
-	d.graphIndexer = gi
-	d.logger.Info("GraphIndexer initialized after model switch",
-		"model", defaultModel.Name,
-		"vector_dim", emb.Dim(),
-	)
-	d.app.SetGraphIndexer(gi)
-
-	// Create RegionIndexer for post-sync directory-level summaries.
-	var regionIndexer *goragindexer.RegionIndexer
-	if emb != nil && kbVS != nil {
-		regionIndexer = goragindexer.NewRegionIndexer(
-			*llmModelCfg,
-			emb,
-			kbVS,
-			goragindexer.RegionWithLogger(d.logger),
-			goragindexer.RegionWithGraphStore(coreGS),
-		)
-		d.logger.Info("RegionIndexer initialized after model switch")
-	}
-
-	// Create FileWatchService — reuse daemon-level stores or initialize them.
+	// Ensure stores exist before building KB stack
 	if d.watchListStore == nil {
 		ws, wlErr := indexing.NewWatchListStore(d.app.Settings().DataDir())
 		if wlErr != nil {
@@ -926,52 +585,26 @@ func (d *Daemon) ensureGraphIndexer() error {
 		d.indexStateStore = is
 	}
 
-	kbWatch := indexing.NewFileWatchService(
-		d.graphIndexer,
-		regionIndexer,
-		d.watchListStore,
-		d.indexStateStore,
-		filepath.Join(d.app.Settings().DataDir(), "kb-cache"),
+	gi, kw, kbErr := newKBStack(
+		emb, coreGS, llmModelCfg,
+		d.app.Settings().DataDir(),
 		d.logger,
 		d.app.TokenUsageStore(),
-		llmModelCfg.Model,
+		d.watchListStore, d.indexStateStore,
+		d.app,
 	)
-
-	kbWatch.VersionRecorder = func(absPath string) {
-		if d.app.SessDB() == nil || d.app.FileVersions() == nil {
-			return
-		}
-		sessions, listErr := d.app.SessDB().ListSessions(context.Background())
-		if listErr != nil {
-			return
-		}
-		for _, s := range sessions {
-			if s.ProjectDir == "" || !strings.HasPrefix(absPath, s.ProjectDir) {
-				continue
-			}
-			if s.SessionDir != "" {
-				_ = d.app.FileVersions().Record(s.SessionDir, absPath)
-			}
-		}
+	if kbErr != nil {
+		d.graphIndexerErr = kbErr
+		return kbErr
 	}
 
-	d.kbWatch = kbWatch
-	d.logger.Info("FileWatchService initialized after model switch",
-		"cache_dir", filepath.Join(d.app.Settings().DataDir(), "kb-cache"),
-	)
+	d.graphIndexer = gi
+	d.app.SetGraphIndexer(gi)
+	d.kbWatch = kw
 
 	// Wire IndexEventCallback and restore existing watches if gateway already running.
 	if d.gw != nil {
-		d.kbWatch.IndexEventCallback = func(absPath, relPath, absDir, eventType string) {
-			d.gw.BroadcastNotification("file_indexing", map[string]interface{}{
-				"type": "file_indexing",
-				"data": map[string]string{
-					"file":      relPath,
-					"directory": absDir,
-					"state":     eventType,
-				},
-			})
-		}
+		d.wireFileIndexCallback(d.kbWatch)
 		d.restoreSessionWatches()
 	}
 
@@ -989,16 +622,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 
 	// Wire filewatch indexing events to WebUI broadcast
 	if d.kbWatch != nil {
-		d.kbWatch.IndexEventCallback = func(absPath, relPath, absDir, eventType string) {
-			d.gw.BroadcastNotification("file_indexing", map[string]interface{}{
-				"type": "file_indexing",
-				"data": map[string]string{
-					"file":      relPath,
-					"directory": absDir,
-					"state":     eventType,
-				},
-			})
-		}
+		d.wireFileIndexCallback(d.kbWatch)
 		// Restore watches for all existing sessions with a project_dir.
 		d.restoreSessionWatches()
 	}
@@ -1131,13 +755,44 @@ func (d *Daemon) Restart() {
 	}
 }
 
+// stopService stops a service whose Stop method returns no error.
+func (d *Daemon) stopService(name string, stopper func()) {
+	if stopper == nil {
+		return
+	}
+	d.logger.Info("stopping " + name)
+	stopper()
+	d.logger.Info(name + " stopped")
+}
+
+// stopCloseable stops a service whose Close method returns an error.
+func (d *Daemon) stopCloseable(name string, closer func() error) {
+	if closer == nil {
+		return
+	}
+	d.logger.Info("closing " + name)
+	if err := closer(); err != nil {
+		d.logger.Warn("failed to close "+name, "error", err)
+	} else {
+		d.logger.Info(name + " closed")
+	}
+}
+
 func (d *Daemon) stopBackgroundServices() {
 	d.logger.Info("stopping background services...")
-	if d.hotReload != nil {
-		d.logger.Info("stopping hot-reload watcher")
-		d.hotReload.Stop()
-		d.logger.Info("hot-reload watcher stopped")
+
+	// Cancel stale interaction cleanup loop first (no I/O, no blocking).
+	if d.cleanupCancel != nil {
+		d.cleanupCancel()
+		d.cleanupCancel = nil
 	}
+
+	d.stopService("hot-reload watcher", func() {
+		if d.hotReload != nil {
+			d.hotReload.Stop()
+		}
+	})
+
 	if d.kbWatch != nil {
 		d.logger.Info("stopping filewatch service")
 		// Cancel the external watch context first so the Start() goroutine
@@ -1149,27 +804,27 @@ func (d *Daemon) stopBackgroundServices() {
 		d.kbWatch.Stop()
 		d.logger.Info("filewatch service stopped")
 	}
-	if d.scheduler != nil {
-		d.logger.Info("stopping scheduler service")
-		d.scheduler.Stop()
-		d.logger.Info("scheduler service stopped")
-	}
-	if d.graphDB != nil {
-		d.logger.Info("closing knowledge-graph database")
-		if err := d.graphDB.Close(); err != nil {
-			d.logger.Warn("failed to close knowledge-graph database", "error", err)
-		} else {
-			d.logger.Info("knowledge-graph database closed")
+
+	d.stopService("scheduler service", func() {
+		if d.scheduler != nil {
+			d.scheduler.Stop()
 		}
-	}
-	if d.kvStore != nil {
-		d.logger.Info("closing kvstore")
-		if err := d.kvStore.Close(); err != nil {
-			d.logger.Warn("failed to close kvstore", "error", err)
-		} else {
-			d.logger.Info("kvstore closed")
+	})
+
+	d.stopCloseable("knowledge-graph database", func() error {
+		if d.graphDB != nil {
+			return d.graphDB.Close()
 		}
-	}
+		return nil
+	})
+
+	d.stopCloseable("kvstore", func() error {
+		if d.kvStore != nil {
+			return d.kvStore.Close()
+		}
+		return nil
+	})
+
 	d.logger.Info("all background services stopped")
 }
 
@@ -1195,6 +850,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	services := map[string]any{}
+	degraded := false
 
 	// WebSocket gateway
 	if d.gw != nil {
@@ -1205,6 +861,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		services["websocket"] = map[string]any{"status": "not initialized"}
+		degraded = true
 	}
 
 	// Memory / RAG
@@ -1251,11 +908,8 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	overall := "ok"
-	for _, svc := range services {
-		m, ok := svc.(map[string]any)
-		if ok && m["status"] == "not initialized" {
-			overall = "degraded"
-		}
+	if degraded {
+		overall = "degraded"
 	}
 
 	resp := healthResponse{
@@ -1407,97 +1061,17 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			d.clientCancels.Delete(clientID)
 		}()
 
-		_, err := rt.Ask(resolvedAgentName, content, s).
+		// ── Build common event handlers via factory ──
+		emitter := newClientAskHandlers(d, gw, clientID, sid, withAgent, s, func() string { return currentAgentName })
+
+		builder := rt.Ask(resolvedAgentName, content, s).
 			WithContext(ctx).
-			// Track current agent_name across forwarded sub-agent events.
 			OnEvent(func(ev events.ReactEvent) {
 				currentAgentName = ev.AgentID
-			}).
-			OnThinking(func(chunk string) {
-				_ = gw.SendResponse(clientID, gateway.RespThinkingDelta, i18n.T("svc.event.thinking"), chunk, gateway.WithSessionID(sid), withAgent())
-			}).
-			OnContent(func(chunk string) {
-				d.sendEvent(clientID, sid, gateway.RespMarkdown, i18n.T("svc.event.outputting"), chunk, withAgent())
-			}).
-			OnToolUseDelta(func(data events.ToolUseDeltaData) {
-				_ = gw.SendResponse(clientID, gateway.RespToolUseDelta, i18n.T("svc.event.tool.use.delta"), map[string]any{
-					"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
-				}, gateway.WithSessionID(sid), withAgent())
-			}).
-			OnThinkingDone(func() {
-				d.sendEvent(clientID, sid, gateway.RespThinkingDone, i18n.T("svc.event.thinking.done"), i18n.T("svc.event.thinking.done.detail"), withAgent())
-			}).
-			OnToolStart(func(data events.ToolExecStartData) {
-				_ = gw.SendResponse(clientID, gateway.RespToolExecStart, i18n.T("svc.event.tool.start"), map[string]any{
-					"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
-				}, gateway.WithSessionID(sid), withAgent())
-			}).
-			OnToolEnd(func(data events.ToolExecEndData) {
-				_ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.end"), map[string]any{
-					"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
-					"success": data.Success, "result": data.Result, "error": data.Error,
-					"duration_ms": int(data.Duration.Milliseconds()),
-				}, gateway.WithSessionID(sid), withAgent())
-				// Broadcast file modification state after tool execution.
-				// Compute diff stats (additions/deletions/diff text) for each modified file.
-				modFiles := s.GetModifyFiles()
-				if len(modFiles) > 0 {
-					fileInfos := make([]fileDiffInfo, 0, len(modFiles))
-					for _, fp := range modFiles {
-						fileInfos = append(fileInfos, computeFileDiff(s, fp))
-					}
-					_ = gw.SendResponse(clientID, gateway.RespFileModified, i18n.T("svc.event.file.modified"), map[string]any{
-						"files":  fileInfos,
-						"action": "tracked",
-					}, gateway.WithSessionID(sid), withAgent())
-				}
-			}).
-			OnAnswer(func(answer string) {
-				d.sendEvent(clientID, sid, gateway.RespFinalAnswer, i18n.T("svc.event.final.answer"), answer, withAgent())
-			}).
-			OnExecutionSummary(func(data events.ExecutionSummaryData) {
-				d.logger.Info("[DAEMON] OnExecutionSummary FIRED: total_tokens=" + fmt.Sprint(data.TokensUsed.TotalTokens) +
-					" input=" + fmt.Sprint(data.TokensUsed.InputTokens) +
-					" output=" + fmt.Sprint(data.TokensUsed.OutputTokens) +
-					" iterations=" + fmt.Sprint(data.TotalIterations))
-				d.sendExecutionSummary(clientID, sid, data, currentAgentName)
-			}).
-			OnCycleEnd(func(data events.CycleInfo) {
-				_ = gw.SendResponse(clientID, gateway.RespCycleEnd, i18n.T("svc.event.cycle.end"), map[string]any{
-					"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
-				}, gateway.WithSessionID(sid), withAgent())
-			}).
-			OnAgentTalkStart(func(data events.AgentTalkInfo) {
-				_ = gw.SendResponse(clientID, gateway.RespAgentTalkStart, i18n.T("svc.event.agent.talk.start"), map[string]any{
-					"to": data.To, "message": data.Message,
-				}, gateway.WithSessionID(sid), withAgent())
-			}).
-			OnAgentTalkEnd(func(data events.AgentTalkResult) {
-				_ = gw.SendResponse(clientID, gateway.RespAgentTalkEnd, i18n.T("svc.event.agent.talk.end"), map[string]any{
-					"to": data.To, "reply": data.Reply, "error": data.Error,
-				}, gateway.WithSessionID(sid), withAgent())
-			}).
-			OnCompaction(func(data events.CompactionData) {
-				_ = gw.SendResponse(clientID, gateway.RespCompaction, i18n.T("svc.event.compaction"), map[string]any{
-					"session_id": data.SessionID, "messages_slid": data.MessagesSlid, "remaining_after": data.RemainingAfter, "window_size": data.WindowSize,
-				}, gateway.WithSessionID(sid), withAgent())
-			}).
-			OnMaxTurnsReached(func(data events.MaxTurnsReachedData) {
-				_ = gw.SendResponse(clientID, gateway.RespMaxTurnsReached, i18n.T("svc.event.max.turns.reached"), map[string]any{
-					"turns_completed": data.TurnsCompleted, "max_turns": data.MaxTurns, "suggestion": data.Suggestion,
-				}, gateway.WithSessionID(sid), withAgent())
-			}).
-			OnError(func(errMsg string) {
-				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.error"), errMsg, withAgent())
-			}).
-			OnSubtaskSpawned(func(data events.SubtaskInfo) {
-				md := buildSubtaskSpawnedMarkdown(data)
-				d.sendEvent(clientID, sid, gateway.RespSubtaskSpawned, i18n.T("svc.event.subtask.spawned"), md, withAgent())
-			}).
-			OnSubtaskCompleted(func(data events.SubtaskResult) {
-				md := buildSubtaskCompletedMarkdown(data)
-				d.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, i18n.T("svc.event.subtask.completed"), md, withAgent())
-			}).
+			})
+		builder = wireAskEvents(builder, emitter)
+
+		_, err := builder.
 			OnAskUser(func(data events.AskUserRequestData) {
 				correlationID := uuid.New().String()
 				d.interactMu.Lock()
@@ -1530,36 +1104,6 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			}).
 			OnPermissionDenied(func(reason string) {
 				d.sendEvent(clientID, sid, gateway.RespPermissionDenied, i18n.T("svc.event.permission.denied"), reason, withAgent())
-			}).
-			OnTaskSummary(func(data events.TaskSummaryData) {
-				md := buildTaskSummaryMarkdown(data)
-				_ = gw.SendResponse(clientID, gateway.RespTaskSummary, i18n.T("svc.event.task.summary"), md,
-					gateway.WithSessionID(sid),
-					gateway.WithResponseMeta(map[string]any{
-						"input_tokens":  data.TokenUsage.InputTokens,
-						"output_tokens": data.TokenUsage.OutputTokens,
-						"agent_name":    currentAgentName,
-					}))
-			}).
-			OnLLMTimeout(func(data events.LLMTimeoutData) {
-				msg := fmt.Sprintf(i18n.T("svc.event.llm.timeout"), data.Elapsed, data.Error)
-				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.timeout"), msg, withAgent())
-			}).
-			OnTokenUsageRecorded(func(record goharnesssession.TokenUsageRecord) {
-				_ = gw.SendResponse(clientID, gateway.RespTokenUsageRecorded, i18n.T("svc.event.token.usage"), map[string]any{
-					"id":                record.ID,
-					"session_id":        record.SessionID,
-					"conversation_id":   record.ConversationID,
-					"model_name":        record.ModelName,
-					"provider_name":     record.ProviderName,
-					"agent_name":        record.AgentName,
-					"prompt_tokens":     record.PromptTokens,
-					"completion_tokens": record.CompletionTokens,
-					"cached_tokens":     record.CachedTokens,
-					"reasoning_tokens":  record.ReasoningTokens,
-					"total_tokens":      record.TotalTokens,
-					"timestamp":         record.Timestamp,
-				}, gateway.WithSessionID(sid), withAgent())
 			}).
 			Run()
 
@@ -1677,119 +1221,11 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		goharnesssession.WithStore(d.app.SessDB()),
 	)
 
-	// Build AskBuilder with event handlers that broadcast to all connected clients.
-	ask := rt.Ask(agent, content, s).
-		WithContext(ctx).
-		OnThinking(func(chunk string) {
-			d.broadcastScheduleEvent(sessionID, agent, "thinking_delta", chunk)
-		}).
-		OnContent(func(chunk string) {
-			d.broadcastScheduleEvent(sessionID, agent, "markdown", chunk)
-		}).
-		OnToolUseDelta(func(data events.ToolUseDeltaData) {
-			d.broadcastScheduleEvent(sessionID, agent, "tool_use_delta", map[string]any{
-				"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
-			})
-		}).
-		OnThinkingDone(func() {
-			d.broadcastScheduleEvent(sessionID, agent, "thinking_done", nil)
-		}).
-		OnToolStart(func(data events.ToolExecStartData) {
-			d.broadcastScheduleEvent(sessionID, agent, "tool_exec_start", map[string]any{
-				"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
-			})
-		}).
-		OnToolEnd(func(data events.ToolExecEndData) {
-			d.broadcastScheduleEvent(sessionID, agent, "tool_exec_end", map[string]any{
-				"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
-				"success": data.Success, "result": data.Result, "error": data.Error,
-				"duration_ms": int(data.Duration.Milliseconds()),
-			})
-		}).
-		OnAnswer(func(answer string) {
-			d.broadcastScheduleEvent(sessionID, agent, "final_answer", answer)
-		}).
-		OnExecutionSummary(func(data events.ExecutionSummaryData) {
-			d.broadcastScheduleEvent(sessionID, agent, "execution_summary", map[string]any{
-				"total_iterations": data.TotalIterations, "tool_calls": data.ToolCalls,
-				"tools_used": data.ToolsUsed, "total_duration": data.TotalDuration.String(),
-				"tokens_used": map[string]any{
-					"total_tokens":     data.TokensUsed.TotalTokens,
-					"input_tokens":     data.TokensUsed.InputTokens,
-					"output_tokens":    data.TokensUsed.OutputTokens,
-					"cached_tokens":    data.TokensUsed.CachedTokens,
-					"reasoning_tokens": data.TokensUsed.ReasoningTokens,
-				},
-				"termination_reason": data.TerminationReason,
-			})
-		}).
-		OnCycleEnd(func(data events.CycleInfo) {
-			d.broadcastScheduleEvent(sessionID, agent, "cycle_end", map[string]any{
-				"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
-			})
-		}).
-		OnAgentTalkStart(func(data events.AgentTalkInfo) {
-			d.broadcastScheduleEvent(sessionID, agent, "agent_talk_start", map[string]any{
-				"to": data.To, "message": data.Message,
-			})
-		}).
-		OnAgentTalkEnd(func(data events.AgentTalkResult) {
-			d.broadcastScheduleEvent(sessionID, agent, "agent_talk_end", map[string]any{
-				"to": data.To, "reply": data.Reply, "error": data.Error,
-			})
-		}).
-		OnCompaction(func(data events.CompactionData) {
-			d.broadcastScheduleEvent(sessionID, agent, "compaction", map[string]any{
-				"session_id": data.SessionID, "messages_slid": data.MessagesSlid,
-				"remaining_after": data.RemainingAfter, "window_size": data.WindowSize,
-			})
-		}).
-		OnMaxTurnsReached(func(data events.MaxTurnsReachedData) {
-			d.broadcastScheduleEvent(sessionID, agent, "max_turns_reached", map[string]any{
-				"turns_completed": data.TurnsCompleted, "max_turns": data.MaxTurns, "suggestion": data.Suggestion,
-			})
-		}).
-		OnError(func(errMsg string) {
-			d.broadcastScheduleEvent(sessionID, agent, "error", errMsg)
-		}).
-		OnSubtaskSpawned(func(data events.SubtaskInfo) {
-			d.broadcastScheduleEvent(sessionID, agent, "subtask_spawned", map[string]any{
-				"task_id": data.TaskID, "agent_name": data.AgentName,
-				"description": data.Description, "timeout": data.Timeout,
-			})
-		}).
-		OnSubtaskCompleted(func(data events.SubtaskResult) {
-			d.broadcastScheduleEvent(sessionID, agent, "subtask_completed", map[string]any{
-				"task_id": data.TaskID, "success": data.Success,
-				"answer": data.Answer, "error": data.Error,
-			})
-		}).
-		OnTaskSummary(func(data events.TaskSummaryData) {
-			d.broadcastScheduleEvent(sessionID, agent, "task_summary", map[string]any{
-				"summary": data.Summary,
-				"token_usage": map[string]any{
-					"input_tokens":  data.TokenUsage.InputTokens,
-					"output_tokens": data.TokenUsage.OutputTokens,
-					"total_tokens":  data.TokenUsage.TotalTokens,
-				},
-			})
-		}).
-		OnLLMTimeout(func(data events.LLMTimeoutData) {
-			d.broadcastScheduleEvent(sessionID, agent, "llm_timeout", map[string]any{
-				"elapsed": data.Elapsed, "error": data.Error,
-			})
-		}).
-		OnTokenUsageRecorded(func(record goharnesssession.TokenUsageRecord) {
-			d.broadcastScheduleEvent(sessionID, agent, "token_usage_recorded", map[string]any{
-				"id": record.ID, "session_id": record.SessionID,
-				"model_name": record.ModelName, "provider_name": record.ProviderName,
-				"agent_name": record.AgentName, "total_tokens": record.TotalTokens,
-				"prompt_tokens": record.PromptTokens, "completion_tokens": record.CompletionTokens,
-				"cached_tokens": record.CachedTokens, "reasoning_tokens": record.ReasoningTokens,
-				"timestamp": record.Timestamp,
-			})
-		})
+	// Build AskBuilder with common event handlers (via factory).
+	emitter := newBroadcastAskHandlers(d, sessionID, agent)
+	ask := wireAskEvents(rt.Ask(agent, content, s).WithContext(ctx), emitter)
 
+	// ── Optional chdir for project directory ──
 	if targetDir != "" {
 		d.execMu.Lock()
 		originalCWD, _ := os.Getwd()
@@ -1797,64 +1233,33 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		if err := os.Chdir(targetDir); err != nil {
 			d.execMu.Unlock()
 			d.logger.Warn("scheduled task: failed to chdir to project dir, using current dir",
-				"project_dir", targetDir,
-				"error", err,
-			)
+				"project_dir", targetDir, "error", err)
 		} else {
 			_ = os.Setenv("MINDX_PROJECT_DIR", targetDir)
 			_ = os.Setenv("MINDX_SESSION_ID", sessionID)
-			d.logger.Info("scheduled task: set execution context",
-				"session_id", sessionID,
-				"project_dir", targetDir,
-				"original_cwd", originalCWD,
-			)
-
-			d.logger.Info("scheduled task: calling Runtime.Ask()",
-				"session_id", sessionID,
-				"agent", agent,
-			)
-			_, err = ask.Run()
-
-			d.logger.Info("scheduled task: Runtime.Ask() returned",
-				"session_id", sessionID,
-				"error", err,
-			)
-
-			if restoreErr := os.Chdir(originalCWD); restoreErr != nil {
-				d.logger.Warn("scheduled task: failed to restore cwd after scheduled task",
-					"original", originalCWD,
-					"error", restoreErr,
-				)
-			}
-			_ = os.Unsetenv("MINDX_PROJECT_DIR")
-			_ = os.Unsetenv("MINDX_SESSION_ID")
-			d.execMu.Unlock()
-
-			if err != nil {
-				return fmt.Errorf("execute scheduled message for @%s (session: %s): %w", agent, sessionID, err)
-			}
-
-			d.logger.Info("scheduled task: execution completed successfully",
-				"session_id", sessionID,
-				"agent", agent,
-			)
-			return nil
+			defer func() {
+				if restoreErr := os.Chdir(originalCWD); restoreErr != nil {
+					d.logger.Warn("scheduled task: failed to restore cwd", "original", originalCWD, "error", restoreErr)
+				}
+				_ = os.Unsetenv("MINDX_PROJECT_DIR")
+				_ = os.Unsetenv("MINDX_SESSION_ID")
+				d.execMu.Unlock()
+			}()
 		}
 	}
 
-	d.logger.Info("scheduled task: executing without directory change",
-		"session_id", sessionID,
-		"agent", agent,
-	)
+	d.logger.Info("scheduled task: calling Runtime.Ask()",
+		"session_id", sessionID, "agent", agent)
 	_, err = ask.Run()
+	d.logger.Info("scheduled task: Runtime.Ask() returned",
+		"session_id", sessionID, "error", err)
+
 	if err != nil {
 		return fmt.Errorf("execute scheduled message for @%s (session: %s): %w", agent, sessionID, err)
 	}
 
-	d.logger.Info("scheduled task: execution completed successfully (no dir change)",
-		"session_id", sessionID,
-		"agent", agent,
-	)
+	d.logger.Info("scheduled task: execution completed successfully",
+		"session_id", sessionID, "agent", agent)
 	return nil
 }
 

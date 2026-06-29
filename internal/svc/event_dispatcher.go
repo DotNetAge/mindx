@@ -18,11 +18,11 @@ func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.Response
 }
 
 // broadcastScheduleEvent sends a schedule.job_event notification to all connected clients.
-func (d *Daemon) broadcastScheduleEvent(sessionID, agent, eventType string, data interface{}) {
+func (d *Daemon) broadcastScheduleEvent(sessionID, agent, eventType string, data any) {
 	if d.gw == nil {
 		return
 	}
-	d.gw.BroadcastNotification("schedule.job_event", map[string]interface{}{
+	d.gw.BroadcastNotification("schedule.job_event", map[string]any{
 		"session_id": sessionID,
 		"agent":      agent,
 		"type":       eventType,
@@ -34,9 +34,14 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharn
 	if d.gw == nil {
 		return
 	}
-	d.logger.Info("[SSE-TRACE L5] sendExecutionSummary: total_tokens=" + fmt.Sprint(summary.TokensUsed.TotalTokens) +
-		" input=" + fmt.Sprint(summary.TokensUsed.InputTokens) +
-		" output=" + fmt.Sprint(summary.TokensUsed.OutputTokens))
+	d.logger.Debug("sendExecutionSummary",
+		"total_tokens", summary.TokensUsed.TotalTokens,
+		"input", summary.TokensUsed.InputTokens,
+		"output", summary.TokensUsed.OutputTokens)
+	tokensUsed := summary.TokensUsed
+	tokenValue := fmt.Sprintf("%d (in:%d out:%d cached:%d reasoning:%d)",
+		tokensUsed.TotalTokens, tokensUsed.InputTokens, tokensUsed.OutputTokens,
+		tokensUsed.CachedTokens, tokensUsed.ReasoningTokens)
 	tableData := map[string]any{
 		"headers": []string{"Metric", "Value"},
 		"rows": []map[string]string{
@@ -44,7 +49,7 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharn
 			{"metric": "Tool Calls", "value": fmt.Sprintf("%d", summary.ToolCalls)},
 			{"metric": "Tools Used", "value": strings.Join(summary.ToolsUsed, ", ")},
 			{"metric": "Duration", "value": formatDuration(summary.TotalDuration)},
-			{"metric": "Tokens Used", "value": fmt.Sprintf("%d (in:%d out:%d cached:%d reasoning:%d)", summary.TokensUsed.TotalTokens, summary.TokensUsed.InputTokens, summary.TokensUsed.OutputTokens, summary.TokensUsed.CachedTokens, summary.TokensUsed.ReasoningTokens)},
+			{"metric": "Tokens Used", "value": tokenValue},
 			{"metric": "Termination", "value": summary.TerminationReason},
 		},
 	}

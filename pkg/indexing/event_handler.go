@@ -160,41 +160,57 @@ func (s *FileWatchService) processChanges(pending map[string][]pendingChange) {
 
 		// Process creates/updates
 		if len(toIndex) > 0 {
-			// Fire index-start events for each file
+			// Filter out files matched by ignore rules (e.g. .mindxignore,
+			// *.tmp, vendor/) before firing events or passing to SyncFiles.
+			// SyncFiles also checks IsIgnored internally, but filtering here
+			// prevents misleading pre-event notifications ("indexing") from
+			// being sent for files that will never be indexed.
+			ignore := LoadMindxIgnore(absDir)
+			filtered := toIndex[:0]
 			for _, relPath := range toIndex {
-				if s.IndexEventCallback != nil {
-					absPath := filepath.Join(absDir, relPath)
-					s.IndexEventCallback(absPath, relPath, absDir, "indexing")
+				if !ignore.IsIgnored(relPath) {
+					filtered = append(filtered, relPath)
 				}
 			}
+			toIndex = filtered
 
-			result := pi.SyncFiles(s.ctx, absDir, toIndex, false)
-			if s.logger != nil && (result.Indexed > 0 || result.Updated > 0 || result.Removed > 0) {
-				s.logger.Info("filewatch: indexed files",
-					"dir", absDir,
-					"indexed", result.Indexed,
-					"updated", result.Updated,
-					"errors", len(result.Errors),
-				)
-			}
-
-			// Fire index-complete events for each file (only those actually indexed/updated)
-			if (s.IndexEventCallback != nil || s.indexState != nil) && (result.Indexed > 0 || result.Updated > 0) {
+			if len(toIndex) > 0 {
+				// Fire index-start events for each file
 				for _, relPath := range toIndex {
-					absPath := filepath.Join(absDir, relPath)
 					if s.IndexEventCallback != nil {
-						s.IndexEventCallback(absPath, relPath, absDir, "indexed")
-					}
-					if s.indexState != nil {
-						s.indexState.IncrementIndexedFiles(absDir)
+						absPath := filepath.Join(absDir, relPath)
+						s.IndexEventCallback(absPath, relPath, absDir, "indexing")
 					}
 				}
-			}
-			// Record file versions for changed files
-			if s.VersionRecorder != nil {
-				for _, relPath := range toIndex {
-					absPath := filepath.Join(absDir, relPath)
-					s.VersionRecorder(absPath)
+
+				result := pi.SyncFiles(s.ctx, absDir, toIndex, false)
+				if s.logger != nil && (result.Indexed > 0 || result.Updated > 0 || result.Removed > 0) {
+					s.logger.Info("filewatch: indexed files",
+						"dir", absDir,
+						"indexed", result.Indexed,
+						"updated", result.Updated,
+						"errors", len(result.Errors),
+					)
+				}
+
+				// Fire index-complete events for each file (only those actually indexed/updated)
+				if (s.IndexEventCallback != nil || s.indexState != nil) && (result.Indexed > 0 || result.Updated > 0) {
+					for _, relPath := range toIndex {
+						absPath := filepath.Join(absDir, relPath)
+						if s.IndexEventCallback != nil {
+							s.IndexEventCallback(absPath, relPath, absDir, "indexed")
+						}
+						if s.indexState != nil {
+							s.indexState.IncrementIndexedFiles(absDir)
+						}
+					}
+				}
+				// Record file versions for changed files
+				if s.VersionRecorder != nil {
+					for _, relPath := range toIndex {
+						absPath := filepath.Join(absDir, relPath)
+						s.VersionRecorder(absPath)
+					}
 				}
 			}
 		}

@@ -119,7 +119,9 @@ MindX AgenticRAG adopts a **4-dimensional fusion engine: semantic vector recall 
 
 - **Tree-Sharded Progressive Retrieval**: On-demand loading for massive knowledge bases, avoiding timeout and congestion while balancing accuracy and performance.
 
-<!-- TODO: 插入图片 - Search tree panel screenshot (Region→Doc→Chapter hierarchy, Level badges, confidence markers, entity chips) -->
+![GraphRAG Search Tree](./assets/images/graph-rag-screen-shot.png)
+
+![Schema Panel](./assets/images/schema-screen-shot.png)
 
 - **Adaptive Context Compression**: Long conversations and texts are intelligently summarized via LLM, preserving core decisions and key information, breaking model window limits.
 
@@ -188,8 +190,9 @@ ___
 
 - **JSON-RPC**: Standard interface for third-party integration and secondary development
 
-<!-- TODO: 插入图片 - WebUI screenshot (conversation workspace + force-directed graph visualization) -->
-<!-- TODO: 插入图片 - TUI screenshot (conversation list + input area + status bar) -->
+![WebUI](./assets/images/webui.png)
+
+![TUI](./assets/images/tui.png)
 
 ---
 

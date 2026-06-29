@@ -208,13 +208,26 @@ run-daemon: build
 	@echo ""
 	./$(BUILD_DIR)/$(BINARY_NAME) daemon
 
-## restart: 编译并重启 daemon（委托给 mindx restart，非阻塞）
-restart: build
-	@echo "$(YELLOW)🔄 Restarting mindx daemon...$(NC)"
-	@echo "$(CYAN)➡ Building → ~/.mindx/bin/$(BINARY_NAME)...$(NC)"
+## restart: 编译并重启 daemon（生成与运行的始终是同一份 binary）
+restart: fmt lint pre-build
+	@# ── Step 1: 停掉当前运行的任意 mindx daemon ──
+	@echo "$(YELLOW)🛑 Stopping running mindx daemon...$(NC)"
+	@if pids=$$(pgrep -f "$(BINARY_NAME) daemon" 2>/dev/null); then \
+		echo "  Found PIDs: $$pids"; \
+		kill $$pids 2>/dev/null; sleep 1; \
+		if pids=$$(pgrep -f "$(BINARY_NAME) daemon" 2>/dev/null); then \
+			kill -9 $$pids 2>/dev/null || true; \
+		fi; \
+		echo "$(GREEN)  ✅ Daemon stopped.$(NC)"; \
+	else \
+		echo "$(YELLOW)  ⚠ No running daemon found.$(NC)"; \
+	fi
+	@# ── Step 2: 编译生成到 ~/.mindx/bin（和运行时是同一份文件）──
+	@echo "$(GREEN)➡ Building $(BINARY_NAME) for $(shell go env GOOS)/$(shell go env GOARCH)...$(NC)"
 	@mkdir -p ~/.mindx/bin
-	@cp -f $(BUILD_DIR)/$(BINARY_NAME) ~/.mindx/bin/$(BINARY_NAME) && \
-		echo "$(GREEN)  ✅ Binary updated.$(NC)"
+	@CGO_ENABLED=1 $(GO) build $(GOFLAGS) -o "$$HOME/.mindx/bin/$(BINARY_NAME)" .
+	@echo "$(GREEN)✅ Build complete! (~/.mindx/bin/$(BINARY_NAME))$(NC)"
+	@ls -lh "$$HOME/.mindx/bin/$(BINARY_NAME)"
 	@echo "$(CYAN)➡ Deploying frontend → ~/.mindx/web/...$(NC)"
 	@if [ -d "../mindx-chat/dist" ]; then \
 		rm -rf $$HOME/.mindx/web 2>/dev/null; \
@@ -224,12 +237,13 @@ restart: build
 	else \
 		echo "$(YELLOW)  ⚠ ../mindx-chat/dist not found, skipping frontend deploy.$(NC)"; \
 	fi
-	@# ── 委托给 mindx restart（统一入口）──
-	@echo "$(GREEN)➡ Delegating daemon restart to 'mindx restart'...$(NC)"
-	@"$$HOME/.mindx/bin/$(BINARY_NAME)" restart || { \
-		echo "$(RED)❌ 'mindx restart' failed.$(NC)"; \
-		echo "$(YELLOW)  Try manually: $$HOME/.mindx/bin/$(BINARY_NAME) restart$(NC)"; \
+	@# ── Step 3: 启动 daemon ──
+	@echo "$(GREEN)➡ Starting daemon...$(NC)"
+	@"$$HOME/.mindx/bin/$(BINARY_NAME)" start || { \
+		echo "$(RED)❌ 'mindx start' failed.$(NC)"; \
+		echo "$(YELLOW)  Try manually: $$HOME/.mindx/bin/$(BINARY_NAME) start$(NC)"; \
 	}
+	@echo "$(GREEN)✅ Daemon restarted.$(NC)"
 
 ## stop: 停止 mindx daemon（委托给 mindx stop）
 stop:

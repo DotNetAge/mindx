@@ -106,7 +106,7 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 	}
 
 	// Reset entity/rel counters on GraphIndexer for this sync cycle.
-	if gi, ok := p.indexer.(*goragindexer.GraphIndexer); ok {
+	if gi, ok := p.indexer.(*goragindexer.GraphIndexer); ok && gi != nil {
 		gi.ResetEntityStats()
 	}
 

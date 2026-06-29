@@ -447,10 +447,9 @@ func (s *FileWatchService) SyncDir(ctx context.Context, absDir string) {
 	}
 
 	// ── Phase 5: Build Region index (post-sync aggregate summary) ──
-	// RegionIndexer.IndexRegion 本身就是全量索引：每次都从 VectorStore 查询该
-	// 目录下的所有 Chunk，重新用 LLM 聚合摘要并覆盖写入。因此每次 SyncDir 结束
-	// 时都重建 Region，不受文件变更数量影响。
-	if s.regionIndexer != nil {
+	// 只在文件有实际变化时重建 Region 摘要，避免无效 LLM 调用。
+	shouldRefreshRegion := result.Indexed > 0 || result.Updated > 0 || result.Removed > 0
+	if s.regionIndexer != nil && shouldRefreshRegion {
 		region, regionErr := s.regionIndexer.IndexRegion(s.ctx, absDir)
 		if regionErr != nil && s.logger != nil {
 			s.logger.Error("filewatch.sync: region indexing failed", regionErr,
