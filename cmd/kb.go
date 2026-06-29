@@ -205,6 +205,48 @@ var kbFileStatesCmd = &cobra.Command{
 	},
 }
 
+// ── kb index ──────────────────────────────────────────────────
+
+var kbIndexCmd = &cobra.Command{
+	Use:   "index <path>",
+	Short: "Index a single file or directory into the knowledge base",
+	Long: `Index a file or directory without re-indexing the entire project.
+
+Without --force, skips files that are already indexed (cache hit).
+With --force, clears the cache entry and re-indexes from scratch.
+
+Examples:
+  mindx kb index path/to/file.md
+  mindx kb index path/to/dir
+  mindx kb index --force path/to/file.md`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		force, _ := cmd.Flags().GetBool("force")
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+		result, err := cl.KBIndex(args[0], force)
+		if err != nil {
+			return err
+		}
+
+		var resp struct {
+			Status string `json:"status"`
+			Path   string `json:"path"`
+			Type   string `json:"type"`
+		}
+		if err := json.Unmarshal(result, &resp); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		fmt.Printf("[%s] %s (%s)\n", resp.Status, resp.Path, resp.Type)
+		return nil
+	},
+}
+
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
@@ -213,9 +255,11 @@ func init() {
 	kbStatsCmd.Flags().String("project-dir", "", "Project directory path (required)")
 	kbSyncCmd.Flags().String("project-dir", "", "Project directory path (required)")
 	kbFileStatesCmd.Flags().String("project-dir", "", "Project directory path (required)")
+	kbIndexCmd.Flags().Bool("force", false, "Force re-index even if already cached")
 
 	kbCmd.AddCommand(kbSearchCmd)
 	kbCmd.AddCommand(kbStatsCmd)
 	kbCmd.AddCommand(kbSyncCmd)
 	kbCmd.AddCommand(kbFileStatesCmd)
+	kbCmd.AddCommand(kbIndexCmd)
 }

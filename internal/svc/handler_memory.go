@@ -408,11 +408,18 @@ func (d *Daemon) handleFilewatchStatus(_ context.Context, _ json.RawMessage) (an
 				watched = append(watched, entry.Dir)
 			}
 		}
-		return map[string]any{
+		result := map[string]any{
 			"available": false,
 			"running":   false,
 			"watched":   watched,
-		}, nil
+		}
+		// 即使 FileWatchService 不可用，IndexStateStore 中可能仍有
+		// 之前通过 kb.index 写入的进度数据（例如前端刷新后重连时）。
+		// 必须返回 index_state，否则前端进度条始终显示 0/0。
+		if d.indexStateStore != nil {
+			result["index_state"] = d.indexStateStore.All()
+		}
+		return result, nil
 	}
 
 	status := d.kbWatch.Status()

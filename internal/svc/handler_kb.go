@@ -30,11 +30,36 @@ func (d *Daemon) handleKBChunks(_ context.Context, params json.RawMessage) (any,
 	}
 
 	if d.graphIndexer == nil {
-		return nil, fmt.Errorf("knowledge base not available (GraphIndexer not initialized)")
+		reason := "GraphIndexer not initialized"
+		if d.graphIndexerErr != nil {
+			reason = d.graphIndexerErr.Error()
+		}
+		d.logger.Warn("kb.chunks rejected: " + reason)
+		return nil, fmt.Errorf("knowledge base not available: %s", reason)
 	}
 
 	offset := (p.Page - 1) * p.PageSize
-	hits, err := d.graphIndexer.List(context.Background(), offset, p.PageSize)
+	var (
+		hits  []goragcore.Hit
+		total int
+		err   error
+	)
+	if len(p.Filters) > 0 {
+		filters := make([]goragcore.FilterCondition, len(p.Filters))
+		for i, f := range p.Filters {
+			filters[i] = goragcore.FilterCondition{
+				Key:   f.Key,
+				Type:  f.Type,
+				Value: f.Value,
+			}
+		}
+		hits, total, err = d.graphIndexer.ListFiltered(context.Background(), offset, p.PageSize, filters)
+	} else {
+		hits, err = d.graphIndexer.List(context.Background(), offset, p.PageSize)
+		if err == nil {
+			total, err = d.graphIndexer.Count(context.Background())
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("kb list chunks failed: %w", err)
 	}
@@ -61,11 +86,6 @@ func (d *Daemon) handleKBChunks(_ context.Context, params json.RawMessage) (any,
 	}
 
 	hasMore := len(chunks) == p.PageSize
-
-	total, err := d.graphIndexer.Count(context.Background())
-	if err != nil {
-		total = offset + len(chunks)
-	}
 
 	d.logger.Info("kb.chunks called", "page", p.Page, "page_size", p.PageSize, "returned", len(chunks), "total", total, "has_more", hasMore)
 
@@ -196,7 +216,12 @@ func (d *Daemon) handleKBSearch(_ context.Context, params json.RawMessage) (any,
 	}
 
 	if d.graphIndexer == nil {
-		return nil, fmt.Errorf("knowledge base not available (GraphIndexer not initialized)")
+		reason := "GraphIndexer not initialized"
+		if d.graphIndexerErr != nil {
+			reason = d.graphIndexerErr.Error()
+		}
+		d.logger.Warn("kb.search rejected: " + reason)
+		return nil, fmt.Errorf("knowledge base not available: %s", reason)
 	}
 
 	// 构造 GraphQuery，然后清除 TextQuery（跳过 LLM→Cypher），走向量检索+图融合路径
@@ -282,7 +307,12 @@ func (d *Daemon) handleKBFileStates(_ context.Context, params json.RawMessage) (
 	} else if d.sharedMemory != nil {
 		indexer = d.sharedMemory.Semantic()
 	} else {
-		return nil, fmt.Errorf("knowledge base not available (no indexer initialized)")
+		reason := "no indexer initialized"
+		if d.graphIndexerErr != nil {
+			reason = "GraphIndexer not initialized: " + d.graphIndexerErr.Error()
+		}
+		d.logger.Warn("kb.file_states rejected: " + reason)
+		return nil, fmt.Errorf("knowledge base not available: %s", reason)
 	}
 
 	pi := indexing.NewIndexService(indexer, cacheDir, d.logger)
@@ -317,5 +347,156 @@ func (d *Daemon) handleKBFileStates(_ context.Context, params json.RawMessage) (
 	return map[string]any{
 		"states": states,
 		"counts": counts,
+	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// kb.index — 对单个文件或目录执行索引（--force 强制重索引）
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleKBIndex(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		Path  string `json:"path"`
+		Force bool   `json:"force"`
+	}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Path == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+
+	if d.kbWatch == nil {
+		return nil, fmt.Errorf("filewatch service not available")
+	}
+	if d.graphIndexer == nil {
+		reason := "GraphIndexer not initialized"
+		if d.graphIndexerErr != nil {
+			reason = d.graphIndexerErr.Error()
+		}
+		return nil, fmt.Errorf("knowledge base not available: %s", reason)
+	}
+
+	absPath, err := filepath.Abs(p.Path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve path: %w", err)
+	}
+
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("stat path: %w", err)
+	}
+
+	cacheBase := filepath.Join(d.app.Settings().DataDir(), "kb-cache")
+
+	if info.IsDir() {
+		// ── Directory indexing ──
+		cacheDir := filepath.Join(cacheBase, indexing.SanitizeDirName(absPath))
+		if p.Force {
+			if err := os.RemoveAll(cacheDir); err != nil {
+				d.logger.Warn("failed to clear cache for dir", "dir", absPath, "error", err)
+			} else {
+				d.logger.Info("cache cleared for directory (force)", "dir", absPath)
+			}
+		}
+		d.kbWatch.SyncDir(context.Background(), absPath)
+		return map[string]any{"status": "completed", "path": absPath, "type": "directory"}, nil
+	}
+
+	// ── Single file indexing ──
+	parentDir := filepath.Dir(absPath)
+	relPath := filepath.Base(absPath)
+
+	// Broadcast "indexing" event to frontend
+	if d.gw != nil {
+		d.gw.BroadcastNotification("file_indexing", map[string]any{
+			"type": "file_indexing",
+			"data": map[string]string{
+				"file":      relPath,
+				"directory": parentDir,
+				"state":     "indexing",
+			},
+		})
+	}
+
+	// Set IndexStateStore to "indexing" BEFORE the actual indexing, so the
+	// frontend progress bar shows 0/1 (instead of 0/0) during processing.
+	if d.indexStateStore != nil {
+		d.indexStateStore.SetIndexing(parentDir, 1)
+	}
+
+	pi := indexing.NewIndexService(d.graphIndexer,
+		filepath.Join(cacheBase, indexing.SanitizeDirName(parentDir)),
+		d.logger,
+	)
+
+	if p.Force {
+		pi.ClearCacheEntry(relPath)
+		d.logger.Info("cache entry cleared (force)", "file", relPath)
+	}
+
+	result := pi.SyncFiles(context.Background(), parentDir, []string{relPath}, false)
+
+	if len(result.Errors) > 0 {
+		if d.gw != nil {
+			d.gw.BroadcastNotification("file_indexing", map[string]any{
+				"type": "file_indexing",
+				"data": map[string]string{
+					"file":      relPath,
+					"directory": parentDir,
+					"state":     "error",
+				},
+			})
+		}
+		if d.indexStateStore != nil {
+			d.indexStateStore.SetFailed(parentDir, result.Errors[0])
+		}
+		return nil, fmt.Errorf("index failed: %s", result.Errors[0])
+	}
+
+	status := "skipped"
+	if result.Indexed > 0 {
+		status = "indexed"
+	} else if result.Updated > 0 {
+		status = "updated"
+	}
+
+	// Update IndexStateStore so the frontend progress bar reflects real data.
+	// The entry was already created (SetIndexing above), so we just promote it.
+	if d.indexStateStore != nil && (result.Indexed > 0 || result.Updated > 0) {
+		d.indexStateStore.IncrementIndexedFiles(parentDir)
+		// IncrementIndexedFiles only works when state=="indexing", which we
+		// set above. After incrementing, mark as completed with real stats.
+		d.indexStateStore.SetCompletedWithStats(parentDir, result.Indexed, result.Skipped, 0, 0, 0,
+			[]indexing.CompletedFileRecord{{
+				Path:   relPath,
+				Chunks: result.Indexed,
+			}},
+		)
+	}
+
+	// Broadcast "indexed" event to frontend (AFTER IndexStateStore update,
+	// so the 2s polling timer can pick up the completed state).
+	if d.gw != nil && (result.Indexed > 0 || result.Updated > 0) {
+		d.gw.BroadcastNotification("file_indexing", map[string]any{
+			"type": "file_indexing",
+			"data": map[string]string{
+				"file":      relPath,
+				"directory": parentDir,
+				"state":     "indexed",
+			},
+		})
+	}
+
+	d.logger.Info("kb.index completed",
+		"path", relPath,
+		"status", status,
+		"force", p.Force,
+	)
+
+	return map[string]any{
+		"status": status,
+		"path":   absPath,
+		"type":   "file",
 	}, nil
 }
