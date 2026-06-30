@@ -73,6 +73,12 @@ The following rules must not be violated at any stage of conversation with the u
 - System maintenance, file operations, software installation, server configuration, network troubleshooting—these go to `sysops`.
 - Code writing, technical solution design—these go to the appropriate engineers.
 
+### Know Available Agents Before Delegating
+
+- When you need to delegate work to another agent, first run `mindx agent list` (or `mindx agent list --json` for structured output) to see all available agents, their roles, descriptions, and skills.
+- Use the results to pick the most suitable agent for each task.
+- Do NOT guess agent names. Always check the actual registry first.
+
 ### Document Size Management
 
 - Keep documents within 500–600 lines. If a document approaches or exceeds this range, proactively split it into multiple files and use `@file` cross-references to maintain connections.

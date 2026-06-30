@@ -3,7 +3,7 @@
 [![Release](https://img.shields.io/github/v/release/DotNetAge/mindx)](https://github.com/DotNetAge/mindx/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.21%2B-blue)](https://go.dev/)
-[![Homebrew](https://img.shields.io/homebrew/v/mindx)](https://formulae.brew.sh/formula/mindx)
+[![Homebrew](https://img.shields.io/homebrew/v/dotnetage/mindx)](https://github.com/DotNetAge/homebrew-mindx)
 [![Docker Pulls](https://img.shields.io/docker/pulls/dotnetage/mindx)](https://hub.docker.com/r/dotnetage/mindx)
 
 <p>
