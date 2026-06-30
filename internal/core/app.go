@@ -510,6 +510,8 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		opts = append(opts, agents.WithSkillRegistry(a.skillReg))
 	}
 
+	agentDiscoveryIntro := "Agent discovery: when you need to find or list available agents, run 'mindx agent list' (or 'mindx agent list --json' for structured output). The list shows agent names, roles, descriptions, and their skills. Use this to find the right agent for delegation via SubAgent."
+
 	if a.permissionRuleStore != nil {
 		rules, loadErr := a.permissionRuleStore.Load()
 		if loadErr == nil && rules != nil {
@@ -541,8 +543,23 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 					Enabled:  true,
 				})
 			}
+			_ = permReg.Register(rule.Rule{
+				ID:       "agent-discovery",
+				Intro:    agentDiscoveryIntro,
+				Scope:    rule.ScopeGlobal,
+				Priority: 40,
+				Enabled:  true,
+			})
 			opts = append(opts, agents.WithRuleRegistry(permReg))
 		}
+	} else {
+		_ = a.rules.Register(rule.Rule{
+			ID:       "agent-discovery",
+			Intro:    agentDiscoveryIntro,
+			Scope:    rule.ScopeGlobal,
+			Priority: 40,
+			Enabled:  true,
+		})
 	}
 	// Dual memory: LongTerm (project knowledge) + SessionRAG (conversation recall)
 	if a.embedder != nil {

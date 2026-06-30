@@ -75,21 +75,21 @@ var agentListCmd = &cobra.Command{
 			return nil
 		}
 
-		table := render.NewTable([]string{"Name", "Role", "Model", "Skills"}, 100)
+		table := render.NewTable([]string{"Name", "Role", "Description", "Skills"}, 100)
 		for _, a := range agents {
 			role := a.Role
 			if role == "" {
 				role = "—"
 			}
-			model := a.Model
-			if model == "" {
-				model = "—"
+			desc := a.Description
+			if desc == "" {
+				desc = "—"
 			}
 			skills := ""
 			if len(a.Skills) > 0 {
-				skills = fmt.Sprintf("%d", len(a.Skills))
+				skills = strings.Join(a.Skills, ", ")
 			}
-			table.AddRow([]string{a.Name, role, model, skills})
+			table.AddRow([]string{a.Name, role, desc, skills})
 		}
 		fmt.Println(table.Render())
 		fmt.Printf("\n%d agent(s) configured.\n", len(agents))
