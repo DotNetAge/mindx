@@ -265,8 +265,6 @@
   "rpc.i18n.error.lang.required": "語言參數不能為空",
   "rpc.i18n.error.unsupported": "不支援的語言",
   "rpc.i18n.warning.config.save.failed": "語言已切換但設定儲存失敗",
-  "svc.event.agent.talk.end": "Agent 通訊完成",
-  "svc.event.agent.talk.start": "Agent 通訊",
   "svc.event.ask.user": "向你提問",
   "svc.event.compaction": "會話壓縮",
   "svc.event.cycle.end": "循環結束",

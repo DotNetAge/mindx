@@ -23,8 +23,6 @@ type askEventHandlers struct {
 	Answer             func(answer string)
 	ExecutionSummary   func(data goharnessevents.ExecutionSummaryData)
 	CycleEnd           func(data goharnessevents.CycleInfo)
-	AgentTalkStart     func(data goharnessevents.AgentTalkInfo)
-	AgentTalkEnd       func(data goharnessevents.AgentTalkResult)
 	Compaction         func(data goharnessevents.CompactionData)
 	MaxTurnsReached    func(data goharnessevents.MaxTurnsReachedData)
 	Error              func(errMsg string)
@@ -33,6 +31,8 @@ type askEventHandlers struct {
 	TaskSummary        func(data goharnessevents.TaskSummaryData)
 	LLMTimeout         func(data goharnessevents.LLMTimeoutData)
 	TokenUsageRecorded func(record goharnesssession.TokenUsageRecord)
+	AskUserPending     func(data goharnessevents.AskUserPendingData)
+	PermissionPending  func(data goharnessevents.PermissionPendingData)
 }
 
 // wireAskEvents attaches the common set of event handlers onto an AskBuilder.
@@ -67,12 +67,6 @@ func wireAskEvents(b *agents.AskBuilder, h askEventHandlers) *agents.AskBuilder 
 	if h.CycleEnd != nil {
 		b = b.OnCycleEnd(h.CycleEnd)
 	}
-	if h.AgentTalkStart != nil {
-		b = b.OnAgentTalkStart(h.AgentTalkStart)
-	}
-	if h.AgentTalkEnd != nil {
-		b = b.OnAgentTalkEnd(h.AgentTalkEnd)
-	}
 	if h.Compaction != nil {
 		b = b.OnCompaction(h.Compaction)
 	}
@@ -96,6 +90,12 @@ func wireAskEvents(b *agents.AskBuilder, h askEventHandlers) *agents.AskBuilder 
 	}
 	if h.TokenUsageRecorded != nil {
 		b = b.OnTokenUsageRecorded(h.TokenUsageRecorded)
+	}
+	if h.AskUserPending != nil {
+		b = b.OnAskUserPending(h.AskUserPending)
+	}
+	if h.PermissionPending != nil {
+		b = b.OnPermissionPending(h.PermissionPending)
 	}
 	return b
 }
@@ -164,16 +164,6 @@ func newClientAskHandlers(
 				"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
 			}, gateway.WithSessionID(sid), withAgent())
 		},
-		AgentTalkStart: func(data goharnessevents.AgentTalkInfo) {
-			_ = gw.SendResponse(clientID, gateway.RespAgentTalkStart, i18n.T("svc.event.agent.talk.start"), map[string]any{
-				"to": data.To, "message": data.Message,
-			}, gateway.WithSessionID(sid), withAgent())
-		},
-		AgentTalkEnd: func(data goharnessevents.AgentTalkResult) {
-			_ = gw.SendResponse(clientID, gateway.RespAgentTalkEnd, i18n.T("svc.event.agent.talk.end"), map[string]any{
-				"to": data.To, "reply": data.Reply, "error": data.Error,
-			}, gateway.WithSessionID(sid), withAgent())
-		},
 		Compaction: func(data goharnessevents.CompactionData) {
 			_ = gw.SendResponse(clientID, gateway.RespCompaction, i18n.T("svc.event.compaction"), map[string]any{
 				"session_id": data.SessionID, "messages_slid": data.MessagesSlid, "remaining_after": data.RemainingAfter, "window_size": data.WindowSize,
@@ -188,12 +178,22 @@ func newClientAskHandlers(
 			d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.error"), errMsg, withAgent())
 		},
 		SubtaskSpawned: func(data goharnessevents.SubtaskInfo) {
-			md := buildSubtaskSpawnedMarkdown(data)
-			d.sendEvent(clientID, sid, gateway.RespSubtaskSpawned, i18n.T("svc.event.subtask.spawned"), md, withAgent())
+			_ = gw.SendResponse(clientID, gateway.RespSubtaskSpawned, i18n.T("svc.event.subtask.spawned"), map[string]any{
+				"task_id":     data.TaskID,
+				"agent_name":  data.AgentName,
+				"description": data.Description,
+				"timeout":     data.Timeout,
+			}, gateway.WithSessionID(sid), withAgent())
 		},
 		SubtaskCompleted: func(data goharnessevents.SubtaskResult) {
-			md := buildSubtaskCompletedMarkdown(data)
-			d.sendEvent(clientID, sid, gateway.RespSubtaskCompleted, i18n.T("svc.event.subtask.completed"), md, withAgent())
+			_ = gw.SendResponse(clientID, gateway.RespSubtaskCompleted, i18n.T("svc.event.subtask.completed"), map[string]any{
+				"task_id":     data.TaskID,
+				"agent_name":  data.AgentName,
+				"success":     data.Success,
+				"answer":      data.Answer,
+				"error":       data.Error,
+				"description": data.Description,
+			}, gateway.WithSessionID(sid), withAgent())
 		},
 		TaskSummary: func(data goharnessevents.TaskSummaryData) {
 			md := buildTaskSummaryMarkdown(data)
@@ -219,6 +219,19 @@ func newClientAskHandlers(
 				"cached_tokens": record.CachedTokens, "reasoning_tokens": record.ReasoningTokens,
 				"total_tokens": record.TotalTokens,
 				"timestamp":    record.Timestamp,
+			}, gateway.WithSessionID(sid), withAgent())
+		},
+		AskUserPending: func(data goharnessevents.AskUserPendingData) {
+			_ = gw.SendResponse(clientID, gateway.RespForm, i18n.T("svc.event.ask.user"), map[string]any{
+				"questions": data.Questions,
+			}, gateway.WithSessionID(sid), withAgent())
+		},
+		PermissionPending: func(data goharnessevents.PermissionPendingData) {
+			_ = gw.SendResponse(clientID, gateway.RespPermissionRequest, i18n.T("svc.event.permission.request"), map[string]any{
+				"tool_name":      data.ToolName,
+				"reason":         data.Reason,
+				"security_level": data.SecurityLevel,
+				"params":         data.Params,
 			}, gateway.WithSessionID(sid), withAgent())
 		},
 	}
@@ -281,16 +294,6 @@ func newBroadcastAskHandlers(
 				"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
 			})
 		},
-		AgentTalkStart: func(data goharnessevents.AgentTalkInfo) {
-			d.broadcastScheduleEvent(sessionID, agent, "agent_talk_start", map[string]any{
-				"to": data.To, "message": data.Message,
-			})
-		},
-		AgentTalkEnd: func(data goharnessevents.AgentTalkResult) {
-			d.broadcastScheduleEvent(sessionID, agent, "agent_talk_end", map[string]any{
-				"to": data.To, "reply": data.Reply, "error": data.Error,
-			})
-		},
 		Compaction: func(data goharnessevents.CompactionData) {
 			d.broadcastScheduleEvent(sessionID, agent, "compaction", map[string]any{
 				"session_id": data.SessionID, "messages_slid": data.MessagesSlid,
@@ -313,8 +316,9 @@ func newBroadcastAskHandlers(
 		},
 		SubtaskCompleted: func(data goharnessevents.SubtaskResult) {
 			d.broadcastScheduleEvent(sessionID, agent, "subtask_completed", map[string]any{
-				"task_id": data.TaskID, "success": data.Success,
-				"answer": data.Answer, "error": data.Error,
+				"task_id": data.TaskID, "agent_name": data.AgentName,
+				"success": data.Success, "answer": data.Answer, "error": data.Error,
+				"description": data.Description,
 			})
 		},
 		TaskSummary: func(data goharnessevents.TaskSummaryData) {
@@ -340,6 +344,19 @@ func newBroadcastAskHandlers(
 				"prompt_tokens": record.PromptTokens, "completion_tokens": record.CompletionTokens,
 				"cached_tokens": record.CachedTokens, "reasoning_tokens": record.ReasoningTokens,
 				"timestamp": record.Timestamp,
+			})
+		},
+		AskUserPending: func(data goharnessevents.AskUserPendingData) {
+			d.broadcastScheduleEvent(sessionID, agent, "form", map[string]any{
+				"questions": data.Questions,
+			})
+		},
+		PermissionPending: func(data goharnessevents.PermissionPendingData) {
+			d.broadcastScheduleEvent(sessionID, agent, "permission_request", map[string]any{
+				"tool_name":      data.ToolName,
+				"reason":         data.Reason,
+				"security_level": data.SecurityLevel,
+				"params":         data.Params,
 			})
 		},
 	}

@@ -763,9 +763,7 @@ func (a *App) NewSessionFromMeta() *session.Session {
 	}
 
 	agentName := a.CurrentAgentName()
-	opts := []session.SessionConfig{
-		session.WithStore(a.sessDB),
-	}
+	var opts []session.SessionConfig
 
 	if a.embedder != nil {
 		sessRAG, ragErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
@@ -789,7 +787,11 @@ func (a *App) NewSessionFromMeta() *session.Session {
 		}
 	}
 
-	s := session.NewSession(a.currentSessionMeta.SessionID, agentName, opts...)
+	s, err := session.Load(a.currentSessionMeta.SessionID, agentName, a.sessDB, opts...)
+	if err != nil {
+		a.logger.Error("failed to load session from store", err, "session_id", a.currentSessionMeta.SessionID)
+		return nil
+	}
 	return s
 }
 

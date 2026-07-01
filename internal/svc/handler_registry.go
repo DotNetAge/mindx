@@ -49,6 +49,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"skill.reload":            r.daemon.handleSkillReload,
 		"ask_user.reply":          r.daemon.handleAskUserReply,
 		"permission.reply":        r.daemon.handlePermissionReply,
+		"execution.resume":        r.daemon.handleExecutionResume,
 		"message.cancel":          r.daemon.handleMessageCancel,
 		"fs.list":                 r.daemon.handleFSList,
 		"fs.read":                 r.daemon.handleFSRead,

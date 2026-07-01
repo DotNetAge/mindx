@@ -242,7 +242,6 @@ func (m *rootModel) registerNotificationHandlers() {
 		if !ok {
 			return
 		}
-		m.pendingCorrelationID, _ = data["correlation_id"].(string)
 
 		m.rpcAskUserQuestions = nil
 		if rawQuestions, ok := data["questions"].([]any); ok {
@@ -274,13 +273,9 @@ func (m *rootModel) registerNotificationHandlers() {
 		if !ok {
 			return
 		}
-		m.pendingCorrelationID, _ = data["correlation_id"].(string)
 		toolName, _ := data["tool_name"].(string)
 		reason, _ := data["reason"].(string)
 		secLevel, _ := data["security_level"].(float64)
-		if params, ok := data["params"].(map[string]any); ok {
-			m.pendingPermParams = params
-		}
 		m.program.Send(clientmsg.PermissionRequestMsg{
 			ToolName:      toolName,
 			Reason:        reason,
@@ -350,33 +345,11 @@ func (m *rootModel) rpcSendMessage(text string) {
 	m.statusBar.SessionDuration = 0
 }
 
-func (m *rootModel) rpcReplyAskUser(answers map[string]string) {
-	if !m.rpcIsConnected() || m.pendingCorrelationID == "" {
-		return
-	}
-	go func() {
-		_, _ = m.rpc.client.Call(context.Background(), "ask_user.reply", map[string]any{
-			"correlation_id": m.pendingCorrelationID,
-			"answers":        answers,
-		})
-	}()
-	m.pendingCorrelationID = ""
-}
+// rpcReplyAskUser is removed — the non-blocking AskUser flow sends answers
+// as user messages via rpcSendMessage instead of ask_user.reply RPC.
 
-func (m *rootModel) rpcReplyPermission(action string, params map[string]any, reason string) {
-	if !m.rpcIsConnected() || m.pendingCorrelationID == "" {
-		return
-	}
-	go func() {
-		_, _ = m.rpc.client.Call(context.Background(), "permission.reply", map[string]any{
-			"correlation_id": m.pendingCorrelationID,
-			"action":         action,
-			"params":         params,
-			"reason":         reason,
-		})
-	}()
-	m.pendingCorrelationID = ""
-}
+// rpcReplyPermission is removed — the non-blocking permission flow stores
+// grants via execution.resume RPC instead of permission.reply.
 
 func (m *rootModel) rpcCancelExecution() {
 	if !m.rpcIsConnected() {
