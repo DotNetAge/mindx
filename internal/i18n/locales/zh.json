@@ -277,8 +277,6 @@
   "rpc.i18n.error.lang.required": "语言参数不能为空",
   "rpc.i18n.error.unsupported": "不支持的语言",
   "rpc.i18n.warning.config.save.failed": "语言已切换但配置保存失败",
-  "svc.event.agent.talk.end": "Agent 通讯完成",
-  "svc.event.agent.talk.start": "Agent 通讯",
   "svc.event.ask.user": "向你提问",
   "svc.event.compaction": "会话压缩",
   "svc.event.cycle.end": "循环结束",

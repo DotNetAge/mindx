@@ -81,8 +81,8 @@ type rootModel struct {
 	// currentCancel cancels the running agent execution (for interrupt/stop).
 	currentCancel context.CancelFunc
 
-	// pendingAskUser tracks an active LLM question (AskUser tool) waiting for user response.
-	pendingAskUser *events.AskUserRequestData
+	// pendingAskUserData tracks an active AskUserPending event (non-blocking) for the dialog overlay.
+	pendingAskUserData *events.AskUserPendingData
 
 	// rpcAskUserQuestions stores AskUser questions received via RPC (used when daemon is connected).
 	rpcAskUserQuestions []struct {
@@ -91,18 +91,13 @@ type rootModel struct {
 		MultiSelect bool
 	}
 
-	// pendingPermission tracks a tool security permission request waiting for user response.
-	pendingPermission *events.PermissionRequestData
-
 	// RPC client for daemon communication.
 	rpc          *daemonRPCClient
 	rpcConnected bool
 
-	// pendingCorrelationID links UI interactions (ask_user, permission) back to daemon RPC.
-	pendingCorrelationID string
-
-	// pendingPermParams stores permission request params for grant forwarding.
-	pendingPermParams map[string]any
+	// localGrantCache stores granted permissions for the current session (non-RPC only).
+	// Used by WithGrantCache to allow non-blocking permission resumption in local mode.
+	localGrantCache map[string]map[string]bool
 
 	// currentSessionID tracks the active session ID used in RPC messages.
 	currentSessionID string
@@ -614,14 +609,14 @@ func (m *rootModel) handleOverlayPaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 	return m.updateActiveDialog(msg)
 }
 
-// activateAskUserOverlay sets up the appropriate dialog from pendingAskUser state.
+// activateAskUserOverlay sets up the appropriate dialog from pendingAskUserData state.
 func (m *rootModel) activateAskUserOverlay() {
 	var question string
 	var options []string
 	var multiSelect bool
 
-	if m.pendingAskUser != nil && len(m.pendingAskUser.Questions) > 0 {
-		q := m.pendingAskUser.Questions[0]
+	if m.pendingAskUserData != nil && len(m.pendingAskUserData.Questions) > 0 {
+		q := m.pendingAskUserData.Questions[0]
 		question = q.Question
 		options = q.Options
 		multiSelect = q.MultiSelect
@@ -650,26 +645,24 @@ func (m *rootModel) activateAskUserOverlay() {
 	}
 }
 
-// mapAskUserReply builds the answer map from the dialog result and calls Reply() (or RPC).
+// mapAskUserReply builds the answer from the dialog result and sends it as a user message.
+// In the non-blocking AskUser flow, the LLM loop has already exited; the user's answer
+// re-enters the loop as a new user message.
 func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, customText string, cancelled bool) {
-	var question string
 	var options []string
 	useRPC := m.rpcConnected && len(m.rpcAskUserQuestions) > 0
 
-	if m.pendingAskUser != nil && len(m.pendingAskUser.Questions) > 0 {
-		q := m.pendingAskUser.Questions[0]
-		question = q.Question
+	if m.pendingAskUserData != nil && len(m.pendingAskUserData.Questions) > 0 {
+		q := m.pendingAskUserData.Questions[0]
 		options = q.Options
 	} else if useRPC {
 		q := m.rpcAskUserQuestions[0]
-		question = q.Question
 		options = q.Options
 	} else {
 		return
 	}
 
-	pp := m.pendingAskUser
-	m.pendingAskUser = nil
+	m.pendingAskUserData = nil
 	m.rpcAskUserQuestions = nil
 
 	if cancelled {
@@ -705,10 +698,15 @@ func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, cust
 		return
 	}
 
+	// Non-blocking: send answer as user message to re-enter the LLM loop.
 	if useRPC {
-		m.rpcReplyAskUser(map[string]string{question: answer})
+		if m.currentSessionID != "" {
+			m.rpcSendMessage(answer)
+		}
 	} else {
-		pp.Reply(map[string]string{question: answer})
+		// Local path: use the question text as a new user message.
+		// The answer is appended to the session as user input.
+		m.program.Send(clientmsg.UserSendMsg{Text: answer})
 	}
 }
 
@@ -1026,27 +1024,45 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.ChoiceSelectedMsg:
 		m.statusBar.CurrentState = i18n.T("client.status.idle")
-		if m.rpcConnected {
-			params := m.pendingPermParams
-			m.pendingPermParams = nil
-			if msg.Index < 0 {
-				m.rpcReplyPermission("deny", nil, "user cancelled")
-			} else if msg.Index == 0 {
-				m.rpcReplyPermission("grant", params, "")
+		toolName := m.permBar.ToolName
+		m.permBar = permission.PermissionBar{}
+
+		if msg.Index < 0 {
+			// User cancelled → nothing to do (LLM loop already paused)
+			return m, nil
+		}
+
+		if msg.Index == permission.PermissionAllow {
+			if m.rpcConnected {
+				// RPC path: call execution.resume to store grant in daemon cache,
+				// then resend last user message to re-enter the LLM loop.
+				if m.currentSessionID != "" && toolName != "" {
+					go func() {
+						_, _ = m.rpc.client.Call(context.Background(), "execution.resume", map[string]any{
+							"session_id": m.currentSessionID,
+							"tool_name":  toolName,
+						})
+					}()
+					// Resend last user message silently.
+					if lastMsg := m.getLastUserMessage(); lastMsg != "" {
+						m.rpcSendMessage(lastMsg)
+					}
+				}
 			} else {
-				m.rpcReplyPermission("deny", nil, "user denied")
-			}
-		} else if m.pendingPermission != nil {
-			pp := m.pendingPermission
-			m.pendingPermission = nil
-			if msg.Index < 0 {
-				go pp.Deny("user cancelled")
-			} else if msg.Index == 0 {
-				go pp.Grant(nil)
-			} else {
-				go pp.Deny("user denied")
+				// Local path: store in local grant cache, then resend.
+				if m.localGrantCache == nil {
+					m.localGrantCache = make(map[string]map[string]bool)
+				}
+				if m.localGrantCache[m.currentSessionID] == nil {
+					m.localGrantCache[m.currentSessionID] = make(map[string]bool)
+				}
+				m.localGrantCache[m.currentSessionID][toolName] = true
+				if lastMsg := m.getLastUserMessage(); lastMsg != "" {
+					m.program.Send(clientmsg.UserSendMsg{Text: lastMsg})
+				}
 			}
 		}
+		// msg.Index == PermissionDeny: nothing to do (LLM loop already paused)
 		return m, nil
 
 	// --- Notifications ---
@@ -1116,6 +1132,18 @@ func (m *rootModel) resizeViewport(termWidth, termHeight int) {
 	m.viewport.SetHeight(vpHeight)
 
 	m.sidebar.Update(clientmsg.WindowResizeMsg{Width: m.rightWidth - 2, Height: vpHeight})
+}
+
+// getLastUserMessage returns the content of the last user message in the
+// current conversation list, or empty string if none found.
+func (m *rootModel) getLastUserMessage() string {
+	for i := len(m.conversationList.Conversations) - 1; i >= 0; i-- {
+		q := m.conversationList.Conversations[i].Question
+		if q.Text != "" {
+			return q.Text
+		}
+	}
+	return ""
 }
 
 func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
@@ -1262,12 +1290,20 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 				TokensUsed: tokenUsage,
 			})
 		})
-		ask.OnAskUser(func(d events.AskUserRequestData) {
-			m.pendingAskUser = &d
+		// Set up local grant cache for non-blocking permission resumption.
+		rt.WithGrantCache(func(sessionID, toolName string) bool {
+			if m.localGrantCache == nil {
+				return false
+			}
+			tools, ok := m.localGrantCache[sessionID]
+			return ok && tools[toolName]
+		})
+
+		ask.OnAskUserPending(func(d events.AskUserPendingData) {
+			m.pendingAskUserData = &d
 			m.program.Send(clientmsg.AskUserEventMsg{})
 		})
-		ask.OnPermissionRequest(func(d events.PermissionRequestData) {
-			m.pendingPermission = &d
+		ask.OnPermissionPending(func(d events.PermissionPendingData) {
 			m.program.Send(clientmsg.PermissionRequestMsg{
 				ToolName: d.ToolName, Reason: d.Reason, SecurityLevel: int(d.SecurityLevel),
 			})

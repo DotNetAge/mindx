@@ -31,7 +31,6 @@ import (
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
-	"github.com/google/uuid"
 	"go.etcd.io/bbolt"
 )
 
@@ -78,6 +77,11 @@ type Daemon struct {
 
 	pendingInteractions map[string]*pendingInteraction
 	interactMu          sync.Mutex
+
+	// permissionGrantCache stores granted permissions per session for
+	// non-blocking permission resumption. Key: sessionID, Value: toolName → true.
+	// Cleared after the grant is consumed.
+	permissionGrantCache map[string]map[string]bool
 
 	// knowledge-graph database (gograph)
 	graphDB    *graphapi.DB
@@ -238,21 +242,22 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	}
 
 	d := &Daemon{
-		app:                 app,
-		addr:                addr,
-		wsPath:              wsPath,
-		schedulerDB:         schedulerDB,
-		kbWatch:             kbWatch,
-		watchListStore:      watchListStore,
-		indexStateStore:     indexStateStore,
-		sharedMemory:        sharedMemory,
-		graphIndexer:        graphIndexer,
-		graphIndexerErr:     graphIndexerErr,
-		runtimeFS:           runtimeFS,
-		webServer:           NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
-		logger:              logger,
-		pendingInteractions: make(map[string]*pendingInteraction),
-		restartCh:           make(chan struct{}, 1),
+		app:                  app,
+		addr:                 addr,
+		wsPath:               wsPath,
+		schedulerDB:          schedulerDB,
+		kbWatch:              kbWatch,
+		watchListStore:       watchListStore,
+		indexStateStore:      indexStateStore,
+		sharedMemory:         sharedMemory,
+		graphIndexer:         graphIndexer,
+		graphIndexerErr:      graphIndexerErr,
+		runtimeFS:            runtimeFS,
+		webServer:            NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
+		logger:               logger,
+		pendingInteractions:  make(map[string]*pendingInteraction),
+		permissionGrantCache: make(map[string]map[string]bool),
+		restartCh:            make(chan struct{}, 1),
 	}
 
 	// Pass GraphIndexer to App for use in LocalSearch tool
@@ -1005,6 +1010,23 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		return sess.TrackModify, true
 	})
 
+	// Wire GrantCache for non-blocking permission resumption.
+	// When the user clicks Agree on a permission request, the daemon
+	// stores the grant in the permissionGrantCache, and this function
+	// checks it before the permission chain.
+	rt.WithGrantCache(func(sessionID, toolName string) bool {
+		d.interactMu.Lock()
+		defer d.interactMu.Unlock()
+		if d.permissionGrantCache == nil {
+			return false
+		}
+		cached, ok := d.permissionGrantCache[sessionID]
+		if !ok {
+			return false
+		}
+		return cached[toolName]
+	})
+
 	sessionID := d.resolveSessionID(msg.SessionID, providedSessionID)
 	resolvedAgentName := agentName
 	if resolvedAgentName == "" {
@@ -1025,10 +1047,13 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	ctx, cancel := context.WithCancel(context.Background())
 	d.clientCancels.Store(msg.ClientID, cancel)
 
-	// Create session backed by the file store (lazy-loading: auto-loads on first access)
-	s := goharnesssession.NewSession(sessionID, resolvedAgentName,
-		goharnesssession.WithStore(d.app.SessDB()),
-	)
+	// Load existing session from persistent store (verifies it exists).
+	s, err := goharnesssession.Load(sessionID, resolvedAgentName, d.app.SessDB())
+	if err != nil {
+		d.logger.Error("failed to load session", err, "session_id", sessionID)
+		d.sendEvent(msg.ClientID, sessionID, gateway.RespError, "Session Error", err.Error())
+		return
+	}
 	d.activeSessions.Store(sessionID, s)
 
 	clientID := msg.ClientID
@@ -1067,41 +1092,11 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		builder := rt.Ask(resolvedAgentName, content, s).
 			WithContext(ctx).
 			OnEvent(func(ev events.ReactEvent) {
-				currentAgentName = ev.AgentID
+				currentAgentName = ev.AgentName
 			})
 		builder = wireAskEvents(builder, emitter)
 
 		_, err := builder.
-			OnAskUser(func(data events.AskUserRequestData) {
-				correlationID := uuid.New().String()
-				d.interactMu.Lock()
-				d.pendingInteractions[correlationID] = &pendingInteraction{
-					replyFn:   data.Reply,
-					createdAt: time.Now(),
-				}
-				d.interactMu.Unlock()
-				_ = gw.SendResponse(clientID, gateway.RespForm, i18n.T("svc.event.ask.user"), map[string]any{
-					"correlation_id": correlationID,
-					"questions":      data.Questions,
-				}, gateway.WithSessionID(sid), withAgent())
-			}).
-			OnPermissionRequest(func(data events.PermissionRequestData) {
-				correlationID := uuid.New().String()
-				d.interactMu.Lock()
-				d.pendingInteractions[correlationID] = &pendingInteraction{
-					grantFn:   data.Grant,
-					denyFn:    data.Deny,
-					createdAt: time.Now(),
-				}
-				d.interactMu.Unlock()
-				_ = gw.SendResponse(clientID, gateway.RespPermissionRequest, i18n.T("svc.event.permission.request"), map[string]any{
-					"correlation_id": correlationID,
-					"tool_name":      data.ToolName,
-					"reason":         data.Reason,
-					"security_level": data.SecurityLevel,
-					"params":         data.Params,
-				}, gateway.WithSessionID(sid), withAgent())
-			}).
 			OnPermissionDenied(func(reason string) {
 				d.sendEvent(clientID, sid, gateway.RespPermissionDenied, i18n.T("svc.event.permission.denied"), reason, withAgent())
 			}).
@@ -1199,12 +1194,6 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		)
 		return fmt.Errorf("resolve runtime for %q: %w", agent, err)
 	}
-	if sessionID == "" || sessionID == "new" {
-		sessionID = generateSessionID()
-		d.logger.Info("scheduled task: created new session",
-			"session_id", sessionID,
-		)
-	}
 
 	targetDir := projectDir
 	if targetDir == "" {
@@ -1217,9 +1206,10 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		}
 	}
 
-	s := goharnesssession.NewSession(sessionID, agent,
-		goharnesssession.WithStore(d.app.SessDB()),
-	)
+	s, err := goharnesssession.Load(sessionID, agent, d.app.SessDB())
+	if err != nil {
+		return fmt.Errorf("scheduled task: load session %q: %w", sessionID, err)
+	}
 
 	// Build AskBuilder with common event handlers (via factory).
 	emitter := newBroadcastAskHandlers(d, sessionID, agent)

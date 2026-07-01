@@ -226,18 +226,22 @@ func (d *Daemon) getOrLoadSession(sessionID string) (*goharnesssession.Session, 
 		return val.(*goharnesssession.Session), nil
 	}
 
-	sess := goharnesssession.NewSession(sessionID, "")
+	var sess *goharnesssession.Session
 	sessDB := d.app.SessDB()
 	if sessDB != nil {
-		// 从持久化存储重建 session，触发 lazy-load 以恢复 modifyFiles
-		sess = goharnesssession.NewSession(sessionID, "",
-			goharnesssession.WithStore(sessDB),
-		)
-		// 触发懒加载：加载历史消息和 modify_files
-		//
-		// 即使加载失败（如 session 目录已不存在），ensureLoaded 内部也会
-		// 标记 loaded=true 并静默返回空 session，不会阻塞流程。
+		// Try to load existing session from persistent store.
+		var loadErr error
+		sess, loadErr = goharnesssession.Load(sessionID, "", sessDB)
+		if loadErr != nil {
+			// Session not found in store — create empty session as fallback
+			// so ConfirmModify/Rollback return empty lists instead of errors.
+			sess = goharnesssession.NewSession(sessionID, "")
+			return sess, nil
+		}
+		// Trigger lazy-load to restore messages and modify_files.
 		sess.All()
+	} else {
+		sess = goharnesssession.NewSession(sessionID, "")
 	}
 
 	return sess, nil

@@ -4,7 +4,48 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/DotNetAge/gort/pkg/gateway"
 )
+
+type executionResumeParams struct {
+	SessionID string `json:"session_id"`
+	ToolName  string `json:"tool_name"`
+	ClientID  string `json:"client_id,omitempty"`
+}
+
+func (d *Daemon) handleExecutionResume(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p executionResumeParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, fmt.Errorf("invalid execution.resume params: %w", err)
+	}
+	if p.SessionID == "" || p.ToolName == "" {
+		return nil, fmt.Errorf("session_id and tool_name are required")
+	}
+
+	clientID := gateway.ClientIDFromContext(ctx)
+	if clientID == "" {
+		clientID = p.ClientID
+	}
+
+	d.interactMu.Lock()
+	if d.permissionGrantCache[p.SessionID] == nil {
+		d.permissionGrantCache[p.SessionID] = make(map[string]bool)
+	}
+	d.permissionGrantCache[p.SessionID][p.ToolName] = true
+	d.interactMu.Unlock()
+
+	d.logger.Info("execution.resume: permission cached",
+		"client_id", clientID,
+		"session_id", p.SessionID,
+		"tool", p.ToolName,
+	)
+
+	return map[string]any{
+		"status":     "ok",
+		"session_id": p.SessionID,
+	}, nil
+}
 
 type askUserReplyParams struct {
 	CorrelationID string            `json:"correlation_id"`

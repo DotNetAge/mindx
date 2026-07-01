@@ -277,8 +277,6 @@
   "rpc.i18n.error.lang.required": "language parameter is required",
   "rpc.i18n.error.unsupported": "unsupported language",
   "rpc.i18n.warning.config.save.failed": "language switched but config save failed",
-  "svc.event.agent.talk.end": "Agent Communication Complete",
-  "svc.event.agent.talk.start": "Agent Communication",
   "svc.event.ask.user": "Question for You",
   "svc.event.compaction": "Session Compaction",
   "svc.event.cycle.end": "Cycle End",
