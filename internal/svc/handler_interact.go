@@ -14,13 +14,22 @@ type executionResumeParams struct {
 	ClientID  string `json:"client_id,omitempty"`
 }
 
+// handleExecutionResume is a deprecated no-op kept for backward compatibility
+// with older clients that still call execution.resume to "cache" a grant.
+//
+// In the current permission architecture, permission resumption is driven
+// entirely by the PermissionAllow / PermissionDeny magic words — when the UI
+// resends the last user message (which now contains the magic word), the
+// runtime detects it via resolvePermissionMagicWord, drains
+// session.PendingPermission, and either runs the tool (Allow) or appends a
+// "Permission Denied" result (Deny). No server-side grant cache is needed.
+//
+// See goharness/agents/runtime.go (resolvePermissionMagicWord) and
+// goharness/session/session.go (PendingPermission).
 func (d *Daemon) handleExecutionResume(ctx context.Context, raw json.RawMessage) (any, error) {
 	var p executionResumeParams
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, fmt.Errorf("invalid execution.resume params: %w", err)
-	}
-	if p.SessionID == "" || p.ToolName == "" {
-		return nil, fmt.Errorf("session_id and tool_name are required")
 	}
 
 	clientID := gateway.ClientIDFromContext(ctx)
@@ -28,14 +37,7 @@ func (d *Daemon) handleExecutionResume(ctx context.Context, raw json.RawMessage)
 		clientID = p.ClientID
 	}
 
-	d.interactMu.Lock()
-	if d.permissionGrantCache[p.SessionID] == nil {
-		d.permissionGrantCache[p.SessionID] = make(map[string]bool)
-	}
-	d.permissionGrantCache[p.SessionID][p.ToolName] = true
-	d.interactMu.Unlock()
-
-	d.logger.Info("execution.resume: permission cached",
+	d.logger.Info("execution.resume: deprecated no-op (use PermissionAllow magic word)",
 		"client_id", clientID,
 		"session_id", p.SessionID,
 		"tool", p.ToolName,
@@ -43,6 +45,7 @@ func (d *Daemon) handleExecutionResume(ctx context.Context, raw json.RawMessage)
 
 	return map[string]any{
 		"status":     "ok",
+		"deprecated": true,
 		"session_id": p.SessionID,
 	}, nil
 }

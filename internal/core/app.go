@@ -837,11 +837,12 @@ func (a *App) IsModelAvailable(name ...string) bool {
 }
 
 func BuildDelegationGuidance() string {
-	return `## Delegation
-When a task is outside your expertise, choose one path:
+	return `## Execution
+Pick one path:
 
-- **Know who handles it** → call **SubAgent** tool directly (agent_name + task), then **CollectResults**
-- **Don't know who** → load **find-experts** skill first (discovers experts, then delegates via same workflow)`
+- **Within your remit, multiple steps** → decompose with task tools
+- **Outside your remit, single expert** → delegate to the right expert
+- **Cross-domain collaboration** → form a team and delegate to an expert panel`
 }
 
 func (a *App) SwitchSession(sessionID string) (*session.SessionInfo, error) {

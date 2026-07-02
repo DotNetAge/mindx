@@ -259,8 +259,8 @@ func TestBuildDelegationGuidance(t *testing.T) {
 	if guidance == "" {
 		t.Error("BuildDelegationGuidance should not return empty")
 	}
-	if !contains(guidance, "SubAgent") {
-		t.Error("BuildDelegationGuidance should mention SubAgent")
+	if !contains(guidance, "Execution") {
+		t.Error("BuildDelegationGuidance should mention Execution")
 	}
 }
 
