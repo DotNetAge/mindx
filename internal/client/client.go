@@ -95,10 +95,6 @@ type rootModel struct {
 	rpc          *daemonRPCClient
 	rpcConnected bool
 
-	// localGrantCache stores granted permissions for the current session (non-RPC only).
-	// Used by WithGrantCache to allow non-blocking permission resumption in local mode.
-	localGrantCache map[string]map[string]bool
-
 	// currentSessionID tracks the active session ID used in RPC messages.
 	currentSessionID string
 }
@@ -1024,7 +1020,6 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.ChoiceSelectedMsg:
 		m.statusBar.CurrentState = i18n.T("client.status.idle")
-		toolName := m.permBar.ToolName
 		m.permBar = permission.PermissionBar{}
 
 		if msg.Index < 0 {
@@ -1033,30 +1028,27 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.Index == permission.PermissionAllow {
+			// Permission resumption is now driven entirely by the
+			// PermissionAllow / PermissionDeny magic words. The runtime
+			// intercepts the magic word, drains session.PendingPermission,
+			// and runs (Allow) or denies (Deny) the tool.
+			//
+			// The legacy non-blocking "store-then-resend" flow (which relied
+			// on a server-side GrantCache) has been removed. We keep the
+			// resend step so the LLM gets a fresh turn to call the tool
+			// again with the magic word now in flight as a user message —
+			// the runtime will resolve it before re-running the tool.
 			if m.rpcConnected {
-				// RPC path: call execution.resume to store grant in daemon cache,
-				// then resend last user message to re-enter the LLM loop.
-				if m.currentSessionID != "" && toolName != "" {
-					go func() {
-						_, _ = m.rpc.client.Call(context.Background(), "execution.resume", map[string]any{
-							"session_id": m.currentSessionID,
-							"tool_name":  toolName,
-						})
-					}()
-					// Resend last user message silently.
-					if lastMsg := m.getLastUserMessage(); lastMsg != "" {
-						m.rpcSendMessage(lastMsg)
-					}
+				// RPC path: resend the last user message. The user message
+				// should already carry the PermissionAllow magic word
+				// (set by the chat store when the user clicked Approve).
+				if lastMsg := m.getLastUserMessage(); lastMsg != "" {
+					m.rpcSendMessage(lastMsg)
 				}
 			} else {
-				// Local path: store in local grant cache, then resend.
-				if m.localGrantCache == nil {
-					m.localGrantCache = make(map[string]map[string]bool)
-				}
-				if m.localGrantCache[m.currentSessionID] == nil {
-					m.localGrantCache[m.currentSessionID] = make(map[string]bool)
-				}
-				m.localGrantCache[m.currentSessionID][toolName] = true
+				// Local path: resend last user message through the
+				// program. The user message carries the PermissionAllow
+				// magic word that the runtime intercepts.
 				if lastMsg := m.getLastUserMessage(); lastMsg != "" {
 					m.program.Send(clientmsg.UserSendMsg{Text: lastMsg})
 				}
@@ -1290,14 +1282,13 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 				TokensUsed: tokenUsage,
 			})
 		})
-		// Set up local grant cache for non-blocking permission resumption.
-		rt.WithGrantCache(func(sessionID, toolName string) bool {
-			if m.localGrantCache == nil {
-				return false
-			}
-			tools, ok := m.localGrantCache[sessionID]
-			return ok && tools[toolName]
-		})
+		// NOTE: Old WithGrantCache / localGrantCache non-blocking permission
+		// flow has been removed. Permission resumption now flows through
+		// the PermissionAllow / PermissionDeny magic words (see
+		// agents.resolvePermissionMagicWord). The runtime intercepts the
+		// magic word before it reaches the LLM, drains
+		// session.PendingPermission, and runs the tool (Allow) or appends
+		// a "Permission Denied" result (Deny).
 
 		ask.OnAskUserPending(func(d events.AskUserPendingData) {
 			m.pendingAskUserData = &d

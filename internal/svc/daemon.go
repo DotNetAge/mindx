@@ -78,11 +78,6 @@ type Daemon struct {
 	pendingInteractions map[string]*pendingInteraction
 	interactMu          sync.Mutex
 
-	// permissionGrantCache stores granted permissions per session for
-	// non-blocking permission resumption. Key: sessionID, Value: toolName → true.
-	// Cleared after the grant is consumed.
-	permissionGrantCache map[string]map[string]bool
-
 	// knowledge-graph database (gograph)
 	graphDB    *graphapi.DB
 	graphStore *graphapi.GraphStore
@@ -242,22 +237,21 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	}
 
 	d := &Daemon{
-		app:                  app,
-		addr:                 addr,
-		wsPath:               wsPath,
-		schedulerDB:          schedulerDB,
-		kbWatch:              kbWatch,
-		watchListStore:       watchListStore,
-		indexStateStore:      indexStateStore,
-		sharedMemory:         sharedMemory,
-		graphIndexer:         graphIndexer,
-		graphIndexerErr:      graphIndexerErr,
-		runtimeFS:            runtimeFS,
-		webServer:            NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
-		logger:               logger,
-		pendingInteractions:  make(map[string]*pendingInteraction),
-		permissionGrantCache: make(map[string]map[string]bool),
-		restartCh:            make(chan struct{}, 1),
+		app:                 app,
+		addr:                addr,
+		wsPath:              wsPath,
+		schedulerDB:         schedulerDB,
+		kbWatch:             kbWatch,
+		watchListStore:      watchListStore,
+		indexStateStore:     indexStateStore,
+		sharedMemory:        sharedMemory,
+		graphIndexer:        graphIndexer,
+		graphIndexerErr:     graphIndexerErr,
+		runtimeFS:           runtimeFS,
+		webServer:           NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
+		logger:              logger,
+		pendingInteractions: make(map[string]*pendingInteraction),
+		restartCh:           make(chan struct{}, 1),
 	}
 
 	// Pass GraphIndexer to App for use in LocalSearch tool
@@ -1010,22 +1004,12 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		return sess.TrackModify, true
 	})
 
-	// Wire GrantCache for non-blocking permission resumption.
-	// When the user clicks Agree on a permission request, the daemon
-	// stores the grant in the permissionGrantCache, and this function
-	// checks it before the permission chain.
-	rt.WithGrantCache(func(sessionID, toolName string) bool {
-		d.interactMu.Lock()
-		defer d.interactMu.Unlock()
-		if d.permissionGrantCache == nil {
-			return false
-		}
-		cached, ok := d.permissionGrantCache[sessionID]
-		if !ok {
-			return false
-		}
-		return cached[toolName]
-	})
+	// NOTE: Old GrantCache / execution.resume non-blocking permission flow has
+	// been removed. Permission resumption now flows through the
+	// PermissionAllow / PermissionDeny magic words (see runtime.resolvePermissionMagicWord),
+	// which the UI sends as a regular user message. The runtime intercepts
+	// the magic word, drains session.PendingPermission, and either runs the
+	// tool (Allow) or appends a "Permission Denied" result (Deny).
 
 	sessionID := d.resolveSessionID(msg.SessionID, providedSessionID)
 	resolvedAgentName := agentName
