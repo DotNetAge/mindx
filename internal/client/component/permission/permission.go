@@ -16,6 +16,7 @@ type PermissionBar struct {
 	SecurityLevel int
 	SelectedIndex int
 	Visible       bool
+	Remember      bool
 }
 
 func NewPermissionBar(toolName, reason string, securityLevel int) PermissionBar {
@@ -25,12 +26,14 @@ func NewPermissionBar(toolName, reason string, securityLevel int) PermissionBar 
 		SecurityLevel: securityLevel,
 		SelectedIndex: 0,
 		Visible:       true,
+		Remember:      false,
 	}
 }
 
 const (
-	PermissionAllow = 0
-	PermissionDeny  = 1
+	PermissionAllow        = 0
+	PermissionDeny         = 1
+	PermissionAllowSession = 2
 )
 
 func permissionLabel(idx int) string {
@@ -57,12 +60,22 @@ func UpdatePermissionBar(m PermissionBar, e tea.Msg) (PermissionBar, tea.Cmd) {
 		case tea.KeyEnter, ' ':
 			m.Visible = false
 			return m, func() tea.Msg {
-				return msg.ChoiceSelectedMsg{Index: m.SelectedIndex}
+				idx := m.SelectedIndex
+				if idx == PermissionAllow && m.Remember {
+					idx = PermissionAllowSession
+				}
+				return msg.ChoiceSelectedMsg{Index: idx}
 			}
 		case tea.KeyEsc:
 			m.Visible = false
 			return m, func() tea.Msg {
 				return msg.ChoiceSelectedMsg{Index: -1}
+			}
+		default:
+			// Toggle remember mode with 'r' key when Allow is focused.
+			if key.String() == "r" {
+				m.Remember = !m.Remember
+				return m, nil
 			}
 		}
 	case msg.PermissionRequestMsg:
@@ -86,8 +99,16 @@ func ViewPermissionBar(m PermissionBar, width int) string {
 	allowBtn := renderButton(permissionLabel(0), m.SelectedIndex == PermissionAllow)
 	denyBtn := renderButton(permissionLabel(1), m.SelectedIndex == PermissionDeny)
 
+	// Remember indicator
+	var rememberTag string
+	if m.Remember {
+		rememberTag = " " + style.GreenStyle.Render("📌 [会话白名单]")
+	} else {
+		rememberTag = " " + style.GrayStyle.Render("[r: 记住授权]")
+	}
+
 	gap := "  "
-	buttonsRow := " " + allowBtn + gap + denyBtn
+	buttonsRow := " " + allowBtn + gap + denyBtn + rememberTag
 
 	div := style.Divider(strings.Repeat("─", maxI(width, 4)))
 

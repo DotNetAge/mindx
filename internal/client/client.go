@@ -1027,31 +1027,19 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if msg.Index == permission.PermissionAllow {
-			// Permission resumption is now driven entirely by the
-			// PermissionAllow / PermissionDeny magic words. The runtime
-			// intercepts the magic word, drains session.PendingPermission,
-			// and runs (Allow) or denies (Deny) the tool.
-			//
-			// The legacy non-blocking "store-then-resend" flow (which relied
-			// on a server-side GrantCache) has been removed. We keep the
-			// resend step so the LLM gets a fresh turn to call the tool
-			// again with the magic word now in flight as a user message —
-			// the runtime will resolve it before re-running the tool.
+		if msg.Index == permission.PermissionAllow || msg.Index == permission.PermissionAllowSession {
+			magicWord := "PermissionAllow"
+			if msg.Index == permission.PermissionAllowSession {
+				magicWord = "PermissionAllowSession"
+			}
+
 			if m.rpcConnected {
-				// RPC path: resend the last user message. The user message
-				// should already carry the PermissionAllow magic word
-				// (set by the chat store when the user clicked Approve).
-				if lastMsg := m.getLastUserMessage(); lastMsg != "" {
-					m.rpcSendMessage(lastMsg)
-				}
+				// RPC path: send the permission magic word directly.
+				m.rpcSendMessage(magicWord)
 			} else {
-				// Local path: resend last user message through the
-				// program. The user message carries the PermissionAllow
-				// magic word that the runtime intercepts.
-				if lastMsg := m.getLastUserMessage(); lastMsg != "" {
-					m.program.Send(clientmsg.UserSendMsg{Text: lastMsg})
-				}
+				// Local path: send the magic word so the runtime
+				// resolves the pending permission.
+				m.program.Send(clientmsg.UserSendMsg{Text: magicWord})
 			}
 		}
 		// msg.Index == PermissionDeny: nothing to do (LLM loop already paused)
