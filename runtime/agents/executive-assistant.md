@@ -9,8 +9,12 @@ skills:
   - find-experts
   - introspect
   - humanizer
+  - scheduler
   - internal-comms
   - multi-agent-meeting
+exclude_tools:
+  - Sleep
+  - PowerShell
 meta:
   name_zh: 执行助理
   role_zh: 执行助理

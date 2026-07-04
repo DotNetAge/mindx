@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,9 +38,12 @@ Examples:
 	RunE: runQuery,
 }
 
+var queryJSON bool
+
 func init() {
 	queryCmd.Flags().IntVarP(&queryFlags.limit, "limit", "n", 10, "Maximum number of results to return")
 	queryCmd.Flags().Float64Var(&queryFlags.minScore, "min-score", 0, "Minimum similarity score (0.0 to 1.0)")
+	queryCmd.Flags().BoolVar(&queryJSON, "json", false, "Output raw JSON")
 	rootCmd.AddCommand(queryCmd)
 }
 
@@ -125,6 +129,15 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	if queryJSON {
+		out, err := json.Marshal(records)
+		if err != nil {
+			return fmt.Errorf("failed to marshal records: %w", err)
+		}
+		fmt.Println(string(out))
+		return nil
+	}
+
 	// Render table using lipgloss-styled table (bubble ecosystem)
 	table := render.NewTable([]string{"Summary", "Content", "Tags"}, 120)
 	for _, r := range records {
@@ -132,20 +145,11 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		if summary == "" {
 			summary = "(untitled)"
 		}
-		content := truncateText(r.Content, 80)
 		tags := strings.Join(r.Tags, ", ")
-		table.AddRow([]string{summary, content, tags})
+		table.AddRow([]string{summary, r.Content, tags})
 	}
 	fmt.Println(table.Render())
 	fmt.Printf("\n%d record(s) found in %s.\n", len(records), elapsed.Round(time.Millisecond))
 
 	return nil
-}
-
-func truncateText(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
-	}
-	return string(runes[:maxLen]) + "..."
 }

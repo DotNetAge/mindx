@@ -52,6 +52,7 @@ var memoryQueryCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		limit, _ := cmd.Flags().GetInt("limit")
 		minScore, _ := cmd.Flags().GetFloat64("min-score")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -60,6 +61,11 @@ var memoryQueryCmd = &cobra.Command{
 		result, err := cl.MemoryQuery(args[0], limit, minScore)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var records []memoryRecord
@@ -76,7 +82,7 @@ var memoryQueryCmd = &cobra.Command{
 		table := render.NewTable([]string{"Score", "ID", "Title", "Content"}, 120)
 		for _, r := range records {
 			score := fmt.Sprintf("%.2f", r.Score)
-			table.AddRow([]string{score, truncateStr(r.ID, 12), truncateStr(r.Title, 30), truncateStr(r.Content, 60)})
+			table.AddRow([]string{score, r.ID, r.Title, r.Content})
 		}
 		fmt.Println(table.Render())
 		fmt.Printf("\n%d record(s)\n", len(records))
@@ -160,6 +166,7 @@ var memoryChunksCmd = &cobra.Command{
 		page, _ := cmd.Flags().GetInt("page")
 		pageSize, _ := cmd.Flags().GetInt("page-size")
 		docID, _ := cmd.Flags().GetString("doc-id")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -168,6 +175,11 @@ var memoryChunksCmd = &cobra.Command{
 		result, err := cl.MemoryChunks(page, pageSize, docID)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var records []memoryRecord
@@ -185,11 +197,11 @@ var memoryChunksCmd = &cobra.Command{
 		for _, r := range records {
 			score := fmt.Sprintf("%.2f", r.Score)
 			table.AddRow([]string{
-				truncateStr(r.ID, 12),
-				truncateStr(r.SessionID, 12),
-				truncateStr(r.Type, 10),
-				truncateStr(r.Title, 24),
-				truncateStr(r.Content, 40),
+				r.ID,
+				r.SessionID,
+				r.Type,
+				r.Title,
+				r.Content,
 				score,
 				r.CreatedAt,
 			})
@@ -208,6 +220,7 @@ var memoryGetChunksCmd = &cobra.Command{
 	Example: `  mindx memory get-chunks --doc-id "doc_abc123"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		docID, _ := cmd.Flags().GetString("doc-id")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		if docID == "" {
 			return fmt.Errorf("--doc-id is required")
 		}
@@ -219,6 +232,11 @@ var memoryGetChunksCmd = &cobra.Command{
 		result, err := cl.MemoryGetChunks(docID)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var records []memoryRecord
@@ -236,11 +254,11 @@ var memoryGetChunksCmd = &cobra.Command{
 		for _, r := range records {
 			score := fmt.Sprintf("%.2f", r.Score)
 			table.AddRow([]string{
-				truncateStr(r.ID, 12),
-				truncateStr(r.SessionID, 12),
-				truncateStr(r.Type, 10),
-				truncateStr(r.Title, 24),
-				truncateStr(r.Content, 40),
+				r.ID,
+				r.SessionID,
+				r.Type,
+				r.Title,
+				r.Content,
 				score,
 				r.CreatedAt,
 			})
@@ -286,6 +304,7 @@ var memoryCountCmd = &cobra.Command{
 func init() {
 	memoryQueryCmd.Flags().Int("limit", 10, "Maximum number of results")
 	memoryQueryCmd.Flags().Float64("min-score", 0, "Minimum similarity score (0.0 to 1.0)")
+	memoryQueryCmd.Flags().Bool("json", false, "Output raw JSON")
 	memoryStoreCmd.Flags().String("content", "", "Content to store (required)")
 	memoryStoreCmd.Flags().String("title", "", "Title/summary")
 	memoryStoreCmd.Flags().String("description", "", "Description")
@@ -294,7 +313,9 @@ func init() {
 	memoryChunksCmd.Flags().Int("page", 1, "Page number")
 	memoryChunksCmd.Flags().Int("page-size", 20, "Page size")
 	memoryChunksCmd.Flags().String("doc-id", "", "Filter by document ID")
+	memoryChunksCmd.Flags().Bool("json", false, "Output raw JSON")
 	memoryGetChunksCmd.Flags().String("doc-id", "", "Document ID (required)")
+	memoryGetChunksCmd.Flags().Bool("json", false, "Output raw JSON")
 
 	memoryCmd.AddCommand(memoryQueryCmd)
 	memoryCmd.AddCommand(memoryStoreCmd)

@@ -12,7 +12,7 @@ metadata:
   description_zh-tw: 發現並與專業智慧體協作——當任務超出你的專業範圍、工具或技能不足，或需要多領域並行工作時使用
 ---
 
-## Trigger Decision
+## When to use
 
 Use this skill when **any** of these is true:
 

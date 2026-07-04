@@ -94,6 +94,7 @@ var sessionListCmd = &cobra.Command{
   mindx session list --agent "notes"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agent, _ := cmd.Flags().GetString("agent")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -102,6 +103,11 @@ var sessionListCmd = &cobra.Command{
 		result, err := cl.SessionList(agent)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var sessions []sessionInfo
@@ -119,9 +125,9 @@ var sessionListCmd = &cobra.Command{
 		table := render.NewTable([]string{"Session ID", "Agent", "Title", "Created"}, 100)
 		for _, s := range sessions {
 			table.AddRow([]string{
-				truncateStr(s.SessionID, 12),
+				s.SessionID,
 				s.AgentName,
-				truncateStr(s.Title, 40),
+				s.Title,
 				s.CreatedAt.Format("2006-01-02 15:04"),
 			})
 		}
@@ -139,6 +145,7 @@ var sessionGetCmd = &cobra.Command{
 	Example: `  mindx session get --session-id "01ABCDEFGHJK..."`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id, _ := cmd.Flags().GetString("session-id")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		if id == "" {
 			return fmt.Errorf("--session-id is required")
 		}
@@ -150,6 +157,11 @@ var sessionGetCmd = &cobra.Command{
 		result, err := cl.SessionGet(id)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		// Show session summary as table, then messages in raw JSON
@@ -183,7 +195,7 @@ var sessionGetCmd = &cobra.Command{
 					msgTable.AddRow([]string{
 						fmt.Sprintf("%d", i+1),
 						role,
-						truncateStr(content, 60),
+						content,
 					})
 				}
 				fmt.Println(msgTable.Render())
@@ -308,22 +320,15 @@ var sessionRollbackCmd = &cobra.Command{
 	},
 }
 
-// ── helpers ───────────────────────────────────────────────────
-
-func truncateStr(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
-}
-
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
 	sessionCreateCmd.Flags().String("agent", "", "Agent name (required)")
 	sessionCreateCmd.Flags().String("project-dir", "", "Project directory for file indexing")
 	sessionListCmd.Flags().String("agent", "", "Filter by agent name")
+	sessionListCmd.Flags().Bool("json", false, "Output raw JSON")
 	sessionGetCmd.Flags().String("session-id", "", "Session ID (required)")
+	sessionGetCmd.Flags().Bool("json", false, "Output raw JSON")
 	sessionDeleteCmd.Flags().String("session-id", "", "Session ID (required)")
 	sessionMetaCmd.Flags().String("session-id", "", "Session ID (required)")
 	sessionConfirmCmd.Flags().String("session-id", "", "Session ID (required)")

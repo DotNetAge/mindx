@@ -48,6 +48,7 @@ var scheduleListCmd = &cobra.Command{
 	Short:   "List all scheduled tasks",
 	Example: `  mindx schedule list`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -57,6 +58,11 @@ var scheduleListCmd = &cobra.Command{
 		result, err := cl.ScheduleList()
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var entries []scheduleEntry
@@ -76,7 +82,7 @@ var scheduleListCmd = &cobra.Command{
 			if !e.Enabled {
 				enabled = "no"
 			}
-			table.AddRow([]string{truncateStr(e.ID, 12), e.Agent, e.CronExpr, enabled, e.CreatedAt})
+			table.AddRow([]string{e.ID, e.Agent, e.CronExpr, enabled, e.CreatedAt})
 		}
 		fmt.Println(table.Render())
 		fmt.Printf("\n%d scheduled task(s)\n", len(entries))
@@ -176,6 +182,7 @@ func init() {
 	scheduleAddCmd.Flags().String("project-dir", "", "Project working directory")
 	scheduleAddCmd.Flags().Bool("enabled", true, "Enable the schedule immediately")
 	scheduleDeleteCmd.Flags().String("id", "", "Schedule entry ID to delete")
+	scheduleListCmd.Flags().Bool("json", false, "Output raw JSON")
 
 	scheduleCmd.AddCommand(scheduleListCmd)
 	scheduleCmd.AddCommand(scheduleAddCmd)

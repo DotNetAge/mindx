@@ -53,14 +53,15 @@ Define which specific models are available, tied to a provider.
 | Task | Command | Notes |
 |------|---------|-------|
 | List models | `mindx model list` | Table: name / provider / ctx len / max tokens / func-calling / enabled |
-| List as JSON | `mindx model list --json` | Machine-readable |
+| List as JSON | `mindx model list --json` | Machine-readable; requires daemon |
 | Add model | `mindx model add --name <name> --provider <prov>` | Minimum required fields |
+| Set display title | `mindx model add ... --title "Qwen Max"` | Human-friendly name |
 | Set context length | `mindx model add ... --context-length 32000` | Default varies by model |
 | Set max output tokens | `mindx model add ... --max-tokens 4096` | Response token limit |
 | Enable function calling | `mindx model add ... --func-calling` | Required for tool-use models |
 | Enable web search | `mindx model add ... --web-searching` | Model has search capability |
-| Set generation params | `mindx model add ... --temperature 0.7 --top-p 0.9` | Sampling parameters |
-| Disable model | `mindx model add ... --enabled false` | Keep config but don't use |
+| Set generation params | `mindx model add ... --temperature 0.7 --top-p 0.9 --repetition-penalty 1.0` | Sampling parameters |
+| Enable/disable model | `mindx model add ... --enabled=false` | Defaults to enabled; use `--enabled=false` to disable |
 | Set as default | `mindx model set <model-name>` | Used for new sessions |
 | Switch active model | `mindx model switch --name <model>` | **Daemon required** — changes current session |
 | Switch with provider | `mindx model switch --name <model> --provider <prov>` | Disambiguate same name across providers |
@@ -89,9 +90,10 @@ Define agent personas with roles, descriptions, skills, and models.
 | List as JSON | `mindx agent list --json` | Full details via daemon |
 | Create new agent | `mindx agent add <name> --role "<role>"` | Creates `.md` file + YAML frontmatter |
 | Set description | `mindx agent add ... --description "..."` | What this agent does |
-| Assign model | `mindx agent add ... --model qwen-max` | Default model for this agent |
 | Assign skills | `mindx agent add ... --skills find-experts,introspect` | Comma-separated skill names |
 | Delete agent | `mindx agent rm <name>` | Removes agent file |
+
+> Note: The default model for an agent is set via `mindx agent update --model <model>`, not during `agent add`.
 
 ### Daemon Commands
 
@@ -114,19 +116,24 @@ Define agent personas with roles, descriptions, skills, and models.
 mindx agent add csm-lead \
   --role "Customer Success Lead" \
   --description "Manages enterprise accounts, runs QBRs" \
-  --model gpt-4o \
   --skills find-experts,customer-success,content-ops
+
+# Then set the model separately
+mindx agent update --agent-name csm-lead --model gpt-4o
 ```
 
 ## Skills (Installed Skill Inspectors)
 
-View available skills loaded from `runtime/skills/`.
+View, install, and validate skills loaded from `~/.mindx/skills/`.
 
 | Task | Command | Notes |
 |------|---------|-------|
 | List installed skills | `mindx skill list` | Name / description / allowed-tools |
-| List as JSON | `mindx skill list --json` | Includes full frontmatter metadata |
+| List as JSON | `mindx skill list --json` | Includes full frontmatter metadata; requires daemon |
 | View skill detail | `mindx skill get <name>` | Shows SKILL.md content |
+| Install/update from local dir | `mindx skill add <path>` | Copies skill into `~/.mindx/skills/` |
+| Validate skill structure | `mindx skill validate <name>` | Checks frontmatter and structure |
+| Validate eval test suite | `mindx skill eval <name>` | Checks `evals/evals.json` schema |
 | Reload skills from disk | `mindx reload skills` | Re-scans `~/.mindx/skills/`, no restart needed |
 
 ## Permission Rules (Tool Access Control)
@@ -138,8 +145,8 @@ Define which tools agents can use. Rules are injected into the system prompt.
 | List all rules | `mindx rule list` | Current allow/deny/ask rules |
 | Get rule details | `mindx rule get --id <tool-name>` | Full rule definition |
 | Create new rule | `mindx rule create --id <id> --intro "<instruction>"` | New tool permission |
-| Set scope | `mindx rule create ... --scope global\|session\|agent` | When rule applies |
-| Set priority | `mindx rule create ... --priority high\|medium\|low` | Conflict resolution |
+| Set scope | `mindx rule create ... --scope global|local|conversation` | When rule applies |
+| Set priority | `mindx rule create ... --priority <int>` | Integer priority, higher = more important |
 | Disable rule | `mindx rule create ... --enabled false` | Create but don't activate |
 | Update rule | `mindx rule update --id <id> --intro "..."` | Modify existing |
 | Toggle enabled | `mindx rule update --id <id> --enabled true/false` | |

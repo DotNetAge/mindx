@@ -6,9 +6,23 @@ description: >
   Implements components, manages state, optimizes performance, ensures compatibility.
 skills:
   - dev-guidelines
+  - agent-browser
   - web-dev
   - frontend-design
+  - canvas-design
+  - theme-factory
+  - web-design-guidelines
+  - web-artifacts-builder
+  - webapp-testing
   - browser-automation
+exclude_tools:
+  - SubAgent
+  - CollectResults
+  - TeamCreate
+  - TeamDelete
+  - TeamList
+  - TeamGetTasks
+  - PowerShell
 meta:
   name_zh: 前端工程师
   role_zh: 前端工程师

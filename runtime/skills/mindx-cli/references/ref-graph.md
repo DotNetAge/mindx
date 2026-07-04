@@ -34,9 +34,9 @@ humans cannot easily compose.
 ```json
 {
   "id": "unique-id",
-  "type": "EntityTypeName",        // From entity type definitions or custom
-  "name": "Display Name",
+  "labels": ["EntityTypeName"],     // e.g., ["Customer", "Account"]
   "properties": {
+    "name": "Display Name",
     "description": "...",           // Always present
     "confidence": 0.9,              // Always present (0-1)
     // Custom business fields:
@@ -51,8 +51,8 @@ humans cannot easily compose.
 ### Edge JSON Format
 ```json
 {
-  "source": "source-node-id",
-  "target": "target-node-id",
+  "from_node_id": "source-node-id",
+  "to_node_id": "target-node-id",
   "type": "RELATIONSHIP_TYPE",      // e.g., MANAGES, HAS_GOAL, DEPENDS_ON
   "predicate": "human-readable description of this relationship",
   "properties": {

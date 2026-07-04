@@ -18,7 +18,9 @@ create → (interact) → get/list → confirm/rollback → delete
 | Set project directory | `mindx session create ... --project-dir /path` | Bind to working directory |
 | List all sessions | `mindx session list` | All sessions across agents |
 | Filter by agent | `mindx session list --agent csm-lead` | Only that agent's sessions |
+| List as JSON | `mindx session list --json` | Machine-readable output |
 | Get session details | `mindx session get --session-id <id>` | Full message history + metadata |
+| Get session details as JSON | `mindx session get --session-id <id> --json` | Machine-readable output |
 | Get metadata only | `mindx session meta --session-id <id>` | Lightweight — no messages |
 | Delete session | `mindx session delete --session-id <id>` | **Destructive** — removes history |
 
@@ -55,9 +57,8 @@ mindx session delete --session-id $SESSION_ID
 Sessions and scheduled tasks work together:
 
 ```bash
-# Create a session for recurring work
-TASK_SESSION=$(mindx utils uuid)
-mindx session create --agent weekly-reporter --session-id $TASK_SESSION
+# Create a session for recurring work and capture its ID
+TASK_SESSION=$(mindx session create --agent weekly-reporter | awk '{print $3}')
 
 # Schedule agent to use this session ID
 mindx schedule add \

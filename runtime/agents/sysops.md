@@ -9,6 +9,15 @@ skills:
   - mindx-cli
   - system-diag
   - docker-expert
+  - stuck
+exclude_tools:
+  - SubAgent
+  - CollectResults
+  - TeamCreate
+  - TeamDelete
+  - TeamList
+  - TeamGetTasks
+  - PowerShell
 meta:
   name_zh: 系统运维
   role_zh: 运维工程师

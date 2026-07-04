@@ -90,6 +90,7 @@ var daemonVersionCmd = &cobra.Command{
 	Short:   "Show daemon version information",
 	Example: `  mindx daemon version`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -99,6 +100,11 @@ var daemonVersionCmd = &cobra.Command{
 		result, err := cl.ServerVersion()
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var info map[string]string
@@ -189,6 +195,7 @@ var daemonConfigCmd = &cobra.Command{
 	Short:   "Show daemon user configuration",
 	Example: `  mindx daemon config`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -198,6 +205,11 @@ var daemonConfigCmd = &cobra.Command{
 		result, err := cl.UserConfig()
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var cfg map[string]interface{}
@@ -219,6 +231,9 @@ var daemonConfigCmd = &cobra.Command{
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
+	daemonVersionCmd.Flags().Bool("json", false, "Output raw JSON")
+	daemonConfigCmd.Flags().Bool("json", false, "Output raw JSON")
+
 	daemonCmd.AddCommand(daemonVersionCmd)
 	daemonCmd.AddCommand(daemonCheckUpdateCmd)
 	daemonCmd.AddCommand(daemonApplyUpdateCmd)

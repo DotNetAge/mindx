@@ -6,7 +6,15 @@ description: >
   monitoring, and production stability.
 skills:
   - docker-expert
-  - find-experts
+  - mindx-cli
+exclude_tools:
+  - SubAgent
+  - CollectResults
+  - TeamCreate
+  - TeamDelete
+  - TeamList
+  - TeamGetTasks
+  - PowerShell
 meta:
   name_zh: DevOps工程师
   role_zh: DevOps工程师

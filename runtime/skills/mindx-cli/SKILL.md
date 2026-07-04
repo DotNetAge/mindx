@@ -3,13 +3,11 @@ name: mindx-cli
 description: >
   Complete command reference for the mindx CLI — the control plane for MindX AI Agent.
   Covers service lifecycle, AI capability configuration (providers/models/agents/skills/rules),
-  data layer operations (memory, graph, kv store, sessions), automation (scheduling, token stats),
-  and file system operations. Use when the user needs to manage, diagnose, configure, or query
+  data layer operations (memory, knowledge base, graph, kv store, sessions),
+  automation (scheduling, token stats), and file system / utility operations.
+  Use when the user needs to manage, diagnose, configure, or query
   any aspect of the MindX system via CLI. This is the sysops agent's primary reference.
-allowed-tools:
-  - Bash(mindx *)
-  - Bash(~/mindx *)
-  - Bash(/tmp/mindx *)
+allowed-tools: Bash(mindx *) Bash(~/mindx *) Bash(/tmp/mindx *)
 metadata:
   name_zh: MindX 指令集
   name_zh-tw: MindX 指令集
@@ -37,15 +35,15 @@ Use this skill when:
 
 Detailed references are in `references/`. Use this table to find which file covers your need.
 
-| Group | What It Manages | Reference File | Daemon Required? |
-|-------|----------------|---------------|------------------|
-| **Service** | Install, upgrade, start/stop/restart, logs, doctor, web UI, app bundle | [ref-service.md](references/ref-service.md) | Partial |
-| **Config: AI** | Providers, models, agents, skills, permission rules | [ref-config-ai.md](references/ref-config-ai.md) | Partial |
-| **Memory** | Long-term memory (RAG), key-value store | [ref-memory.md](references/ref-memory.md) | Yes (memory) / No (kv local) |
-| **Graph** | Knowledge graph (Cypher CRUD, nodes, edges) | [ref-graph.md](references/ref-graph.md) | Yes |
-| **Session** | Agent session lifecycle (create/list/get/delete/confirm/rollback) | [ref-session.md](references/ref-session.md) | Yes |
-| **Automation** | Scheduled tasks, token usage statistics, translation | [ref-automation.md](references/ref-automation.md) | Yes |
-| **Ops** | File system ops, file watcher, daemon logs, user config, entity tags | [ref-ops.md](references/ref-ops.md) | Yes |
+| Group          | What It Manages                                                                 | Reference File                                    | Daemon Required?                |
+| -------------- | ------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------- |
+| **Service**    | Install, upgrade, start/stop/restart, logs, doctor, web UI, app bundle, shell completion | [ref-service.md](references/ref-service.md)       | Partial                         |
+| **Config: AI** | Providers, models, agents, skills, permission rules                             | [ref-config-ai.md](references/ref-config-ai.md)   | Partial                         |
+| **Memory**     | Long-term memory (RAG), knowledge base, key-value store, offline query          | [ref-memory.md](references/ref-memory.md)         | Yes (memory/kb/kv) / No (query) |
+| **Graph**      | Knowledge graph (Cypher CRUD, nodes, edges)                                     | [ref-graph.md](references/ref-graph.md)           | Yes                             |
+| **Session**    | Agent session lifecycle (create/list/get/delete/meta/confirm/rollback)          | [ref-session.md](references/ref-session.md)       | Yes                             |
+| **Automation** | Scheduled tasks, token usage statistics, translation                            | [ref-automation.md](references/ref-automation.md) | Yes                             |
+| **Ops**        | File system ops, file watcher, daemon logs, user config, entity tags, utilities | [ref-ops.md](references/ref-ops.md)               | Partial                         |
 
 ## Quick Diagnostic Workflow
 
@@ -91,11 +89,13 @@ Some commands work without the daemon running; others require it.
 
 **Offline-safe** (work anytime):
 `install`, `uninstall`, `upgrade`, `version`, `doctor`, `start`, `stop`, `restart`, `status`,
-`logs`, `query`, `web`, `app`, `provider list/add/rm/setkey`, `model list/add/rm/set`,
-`agent list/add/rm`, `skill list/get`
+`logs`, `query`, `app`, `utils`, `completion`, `provider list/add/rm/setkey`, `model list/add/rm/set`,
+`agent list/add/rm`, `skill list/get/add/validate/eval`
+
+> Note: `provider list`, `model list`, `agent list`, and `skill list` use the daemon only when passed `--json`.
 
 **Daemon-required** (need `mindx start` first):
-All `memory`, `graph`, `session`, `schedule`, `kv`, `fs`, `fw`, `token`, `rule create/update/delete`,
+All `memory`, `kb`, `graph`, `session`, `schedule`, `kv`, `fs`, `fw`, `token`, `rule`,
 `log read/clear/count`, `translate`, `entity-tags`, `user config`,
-`agent get/score/update/reload`, `provider create/update/delete`, `model switch`,
-`reload agents|skills`
+`agent get/score/update`, `provider create/update/delete`, `model switch`,
+`reload agents|skills`, `web`

@@ -41,6 +41,7 @@ var kbSearchCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		limit, _ := cmd.Flags().GetInt("limit")
 		minScore, _ := cmd.Flags().GetFloat64("min-score")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -49,6 +50,11 @@ var kbSearchCmd = &cobra.Command{
 		result, err := cl.KBSearch(args[0], limit, minScore)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		type kbHit struct {
@@ -71,10 +77,10 @@ var kbSearchCmd = &cobra.Command{
 		table := render.NewTable([]string{"ID", "DocID", "Score", "Content"}, 120)
 		for _, h := range hits {
 			table.AddRow([]string{
-				truncateStr(h.ID, 16),
-				truncateStr(h.DocID, 20),
+				h.ID,
+				h.DocID,
 				fmt.Sprintf("%.3f", h.Score),
-				truncateStr(h.Content, 60),
+				h.Content,
 			})
 		}
 		fmt.Println(table.Render())
@@ -91,6 +97,7 @@ var kbStatsCmd = &cobra.Command{
 	Example: `  mindx kb stats --project-dir "/path/to/project"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectDir, _ := cmd.Flags().GetString("project-dir")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		if projectDir == "" {
 			return fmt.Errorf("--project-dir is required")
 		}
@@ -102,6 +109,11 @@ var kbStatsCmd = &cobra.Command{
 		result, err := cl.KBStats(projectDir)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var stats map[string]interface{}
@@ -151,6 +163,7 @@ var kbFileStatesCmd = &cobra.Command{
 	Example: `  mindx kb file-states --project-dir "/path/to/project"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectDir, _ := cmd.Flags().GetString("project-dir")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		if projectDir == "" {
 			return fmt.Errorf("--project-dir is required")
 		}
@@ -162,6 +175,11 @@ var kbFileStatesCmd = &cobra.Command{
 		result, err := cl.KBFileStates(projectDir)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		// Response: { states: [...], counts: {...} }
@@ -252,9 +270,12 @@ Examples:
 func init() {
 	kbSearchCmd.Flags().Int("limit", 10, "Maximum number of results")
 	kbSearchCmd.Flags().Float64("min-score", 0, "Minimum similarity score (0.0 to 1.0)")
+	kbSearchCmd.Flags().Bool("json", false, "Output raw JSON")
 	kbStatsCmd.Flags().String("project-dir", "", "Project directory path (required)")
+	kbStatsCmd.Flags().Bool("json", false, "Output raw JSON")
 	kbSyncCmd.Flags().String("project-dir", "", "Project directory path (required)")
 	kbFileStatesCmd.Flags().String("project-dir", "", "Project directory path (required)")
+	kbFileStatesCmd.Flags().Bool("json", false, "Output raw JSON")
 	kbIndexCmd.Flags().Bool("force", false, "Force re-index even if already cached")
 
 	kbCmd.AddCommand(kbSearchCmd)

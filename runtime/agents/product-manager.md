@@ -6,7 +6,15 @@ description: >
   Defines "what to build" and "why" based on user needs and business goals.
 skills:
   - research-pipeline
-  - find-experts
+exclude_tools:
+  - SubAgent
+  - CollectResults
+  - TeamCreate
+  - TeamDelete
+  - TeamList
+  - TeamGetTasks
+  - Sleep
+  - PowerShell
 meta:
   name_zh: 产品经理
   role_zh: 产品经理

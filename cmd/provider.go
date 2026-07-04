@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"runtime"
@@ -29,6 +30,29 @@ var providerListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all configured providers",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
+
+		if jsonOut {
+			cl, err := rpc.Dial(daemonAddr)
+			if err != nil {
+				return fmt.Errorf("cannot connect to daemon: %w", err)
+			}
+			defer func() { _ = cl.Close() }()
+
+			result, err := cl.ProviderList()
+			if err != nil {
+				return err
+			}
+			var pretty interface{}
+			if err := json.Unmarshal(result, &pretty); err == nil {
+				formatted, _ := json.MarshalIndent(pretty, "", "  ")
+				fmt.Println(string(formatted))
+				return nil
+			}
+			fmt.Println(string(result))
+			return nil
+		}
+
 		path := filepath.Join(core.DefaultUserPrefsDir(), "settings", "providers.yml")
 		providers, err := core.LoadProvidersFile(path)
 		if err != nil {

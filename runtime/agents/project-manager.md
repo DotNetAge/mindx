@@ -6,6 +6,11 @@ description: >
   and delivery assurance.
 skills:
   - find-experts
+  - scheduler
+  - project-tracker
+exclude_tools:
+  - Sleep
+  - PowerShell
 meta:
   name_zh: 项目经理
   role_zh: 项目经理

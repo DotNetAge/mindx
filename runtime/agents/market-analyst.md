@@ -5,8 +5,17 @@ description: >
   Responsible for market intelligence, competitive tracking, brand promotion, and product marketing.
 skills:
   - research-pipeline
+  - data-analyst
   - content-factory
-  - find-experts
+exclude_tools:
+  - SubAgent
+  - CollectResults
+  - TeamCreate
+  - TeamDelete
+  - TeamList
+  - TeamGetTasks
+  - Sleep
+  - PowerShell
 meta:
   name_zh: 市场分析师
   role_zh: 市场分析师

@@ -27,6 +27,7 @@ var userConfigCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Show user configuration",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -35,6 +36,11 @@ var userConfigCmd = &cobra.Command{
 		result, err := cl.UserConfig()
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var data map[string]interface{}
@@ -55,5 +61,6 @@ var userConfigCmd = &cobra.Command{
 // ── init subcommands ───────────────────────────────────────────
 
 func init() {
+	userConfigCmd.Flags().Bool("json", false, "Output raw JSON")
 	userCmd.AddCommand(userConfigCmd)
 }
