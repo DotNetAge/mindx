@@ -27,6 +27,10 @@ Create and improve MindX skills.
 
 When collecting requirements, do NOT ask open-ended questions. Instead:
 
+0. **If the user gives no specifics** (e.g., "帮我生成一个技能" without further detail),
+   default to extracting the content and experience from the current conversation session
+   as the skill's subject matter. The skill should capture the patterns, knowledge, or
+   workflow demonstrated in this session. Skip to Prerequisite to collect remaining details.
 1. **Interpret the user's intent** and generate 2-4 specific hypothetical options
 2. **Present them for confirmation** — let the user pick or refine
 3. Only ask open-ended if none of the options fit
