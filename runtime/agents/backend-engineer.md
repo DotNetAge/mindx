@@ -9,6 +9,14 @@ skills:
   - bug-hunter
   - verify
   - simplify
+exclude_tools:
+  - SubAgent
+  - CollectResults
+  - TeamCreate
+  - TeamDelete
+  - TeamList
+  - TeamGetTasks
+  - PowerShell
 meta:
   name_zh: 后端工程师
   role_zh: 后端工程师

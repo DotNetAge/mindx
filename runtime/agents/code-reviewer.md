@@ -9,7 +9,15 @@ skills:
   - dev-guidelines
   - bug-hunter
   - verify
-  - find-experts
+exclude_tools:
+  - SubAgent
+  - CollectResults
+  - TeamCreate
+  - TeamDelete
+  - TeamList
+  - TeamGetTasks
+  - Sleep
+  - PowerShell
 meta:
   name_zh: 代码审查专家
   role_zh: 代码审查专家

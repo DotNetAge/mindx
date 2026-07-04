@@ -53,6 +53,7 @@ var kvGetCmd = &cobra.Command{
   mindx kv get --key "kg:checkpoint:page"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		key, _ := cmd.Flags().GetString("key")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		if key == "" {
 			return fmt.Errorf("--key is required")
 		}
@@ -65,6 +66,11 @@ var kvGetCmd = &cobra.Command{
 		result, err := cl.KVGet(key)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var resp kvGetResponse
@@ -83,7 +89,7 @@ var kvGetCmd = &cobra.Command{
 			expires = fmt.Sprintf("%d", resp.Item.ExpiresAt)
 		}
 		valJSON, _ := json.Marshal(resp.Item.Value)
-		table.AddRow([]string{resp.Item.Key, truncateStr(string(valJSON), 50), fmt.Sprintf("%d", resp.Item.CreatedAt), expires})
+		table.AddRow([]string{resp.Item.Key, string(valJSON), fmt.Sprintf("%d", resp.Item.CreatedAt), expires})
 		fmt.Println(table.Render())
 		return nil
 	},
@@ -163,6 +169,7 @@ var kvListCmd = &cobra.Command{
 		prefix, _ := cmd.Flags().GetString("prefix")
 		limit, _ := cmd.Flags().GetInt("limit")
 		withValues, _ := cmd.Flags().GetBool("with-values")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -172,6 +179,11 @@ var kvListCmd = &cobra.Command{
 		result, err := cl.KVList(prefix, limit, withValues)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		// RPC returns: {"prefix":"...", "count":N, "items":[...]} or {"prefix":"...", "count":N, "keys":[...]}
@@ -206,7 +218,7 @@ var kvListCmd = &cobra.Command{
 					expires = fmt.Sprintf("%d", item.ExpiresAt)
 				}
 				valJSON, _ := json.Marshal(item.Value)
-				table.AddRow([]string{item.Key, truncateStr(string(valJSON), 50), fmt.Sprintf("%d", item.CreatedAt), expires})
+				table.AddRow([]string{item.Key, string(valJSON), fmt.Sprintf("%d", item.CreatedAt), expires})
 			}
 			fmt.Println(table.Render())
 		}
@@ -278,6 +290,7 @@ var kvClearCmd = &cobra.Command{
 
 func init() {
 	kvGetCmd.Flags().String("key", "", "Key to retrieve")
+	kvGetCmd.Flags().Bool("json", false, "Output raw JSON")
 	kvSetCmd.Flags().String("key", "", "Key to set")
 	kvSetCmd.Flags().String("value", "", "Value (JSON-encoded, e.g. \"string\" or 42 or {\"a\":1})")
 	kvSetCmd.Flags().Int("ttl", 0, "Time-to-live in seconds (0 = no expiry)")
@@ -285,6 +298,7 @@ func init() {
 	kvListCmd.Flags().String("prefix", "", "Key prefix filter")
 	kvListCmd.Flags().Int("limit", 100, "Maximum number of keys to return")
 	kvListCmd.Flags().Bool("with-values", false, "Include values in response")
+	kvListCmd.Flags().Bool("json", false, "Output raw JSON")
 	kvBatchSetCmd.Flags().String("entries", "", "JSON array of {key,value,ttl?} objects")
 	kvClearCmd.Flags().String("prefix", "", "Prefix to clear (all keys starting with this)")
 

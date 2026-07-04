@@ -9,7 +9,15 @@ skills:
   - humanizer
   - content-factory
   - copywriting
-  - find-experts
+exclude_tools:
+  - SubAgent
+  - CollectResults
+  - TeamCreate
+  - TeamDelete
+  - TeamList
+  - TeamGetTasks
+  - Sleep
+  - PowerShell
 meta:
   name_zh: 内容创作者
   role_zh: 媒体内容创作者

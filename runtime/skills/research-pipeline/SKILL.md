@@ -14,7 +14,7 @@ metadata:
 
 # Research Pipeline — Deep Research & Knowledge Production Skill
 
-## Trigger Decision
+## When to use
 
 **Use this skill when:** the user needs in-depth, structured research including but not limited to:
 
@@ -69,7 +69,7 @@ Examples of anchoring answers:
 - "I'm exploring if we should enter the APAC market" → Deep Dive, directional confidence
 - "I want to understand how vector databases work" → Quick Scan, low stakes
 
-#### Q2 — Known/Unknown Separation (已知与未知分离)
+#### Q2 — Known/Unknown Separation 
 
 Ask the user:
 
@@ -89,7 +89,7 @@ Unknowns (research targets):
 - [gap 2]
 ```
 
-#### Q3 — First Principles Decomposition (一阶原理拆解)
+#### Q3 — First Principles Decomposition
 
 Ask the user:
 
@@ -103,7 +103,7 @@ Guide the user to decompose the problem into its irreducible elements. For examp
 
 This step prevents the user's own framing from biasing the research direction.
 
-#### Q4 — Depth Calibration (深度校准)
+#### Q4 — Depth Calibration 
 
 Ask the user:
 

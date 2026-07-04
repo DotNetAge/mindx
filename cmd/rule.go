@@ -51,6 +51,7 @@ var ruleListCmd = &cobra.Command{
 	Short:   "List all behavior rules",
 	Example: `  mindx rule list`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -60,6 +61,11 @@ var ruleListCmd = &cobra.Command{
 		result, err := cl.RuleList()
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var resp struct {
@@ -83,8 +89,8 @@ var ruleListCmd = &cobra.Command{
 				enabled = "no"
 			}
 			table.AddRow([]string{
-				truncateStr(r.ID, 20),
-				truncateStr(r.Intro, 50),
+				r.ID,
+				r.Intro,
 				r.Scope,
 				fmt.Sprintf("%d", r.Priority),
 				enabled,
@@ -284,6 +290,7 @@ var ruleDeleteCmd = &cobra.Command{
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
+	ruleListCmd.Flags().Bool("json", false, "Output raw JSON")
 	ruleGetCmd.Flags().String("id", "", "Rule ID (required)")
 	ruleCreateCmd.Flags().String("id", "", "Unique rule identifier (required)")
 	ruleCreateCmd.Flags().String("intro", "", "Behavioral description (required)")

@@ -67,6 +67,7 @@ var fwStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show file watcher status",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -75,6 +76,11 @@ var fwStatusCmd = &cobra.Command{
 		result, err := cl.FilewatchStatus()
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var data map[string]interface{}
@@ -95,6 +101,8 @@ var fwStatusCmd = &cobra.Command{
 // ── init subcommands ───────────────────────────────────────────
 
 func init() {
+	fwStatusCmd.Flags().Bool("json", false, "Output raw JSON")
+
 	fwCmd.AddCommand(fwStartCmd)
 	fwCmd.AddCommand(fwStopCmd)
 	fwCmd.AddCommand(fwStatusCmd)

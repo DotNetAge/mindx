@@ -72,6 +72,14 @@ type App struct {
 
 	// TokenUsageStore for persistent LLM token usage records
 	tokenUsageStore *mindxses.FileTokenUsageStore
+
+	// skillsPromptOverride, if set, overrides the default skills catalog prompt
+	// section in the agent system prompt. Set via SetSkillsPromptOverride().
+	skillsPromptOverride func(skills []*skill.Skill) string
+
+	// envsOverride, if set, overrides the default Environment section in system
+	// prompts. Set via SetEnvsOverride().
+	envsOverride func(params agents.EnvsParams) string
 }
 
 func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
@@ -320,6 +328,20 @@ func (a *App) SetAgentsRegistry(registry *config.AgentRegistry) {
 	a.agents = registry
 }
 
+// SetSkillsPromptOverride sets an optional function to override the default
+// skills catalog prompt section in the agent system prompt.
+// When set, it is applied via agents.WithSkillsPrompt in createRuntime.
+func (a *App) SetSkillsPromptOverride(fn func(skills []*skill.Skill) string) {
+	a.skillsPromptOverride = fn
+}
+
+// SetEnvsOverride sets an optional function to override the default
+// Environment section in the agent system prompt.
+// When set, it is applied via agents.WithEnvs in createRuntime.
+func (a *App) SetEnvsOverride(fn func(params agents.EnvsParams) string) {
+	a.envsOverride = fn
+}
+
 // ReloadAgents re-scans the agents directory and atomically swaps the in-memory registry.
 // All cached runtimes for affected agents are invalidated so they pick up the new config
 // on next ResolveRuntime() call.
@@ -508,6 +530,14 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 
 	if a.skillReg != nil {
 		opts = append(opts, agents.WithSkillRegistry(a.skillReg))
+	}
+
+	if a.skillsPromptOverride != nil {
+		opts = append(opts, agents.WithSkillsPrompt(a.skillsPromptOverride))
+	}
+
+	if a.envsOverride != nil {
+		opts = append(opts, agents.WithEnvs(a.envsOverride))
 	}
 
 	agentDiscoveryIntro := "Agent discovery: when you need to find or list available agents, run 'mindx agent list' (or 'mindx agent list --json' for structured output). The list shows agent names, roles, descriptions, and their skills. Use this to find the right agent for delegation via SubAgent."

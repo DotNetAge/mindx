@@ -109,6 +109,13 @@ type Daemon struct {
 }
 
 func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
+	// Inject custom skills prompt: list only names, with a tip to use
+	// "mindx skill list -f" for detailed descriptions.
+	app.SetSkillsPromptOverride(NewSkillsPrompt())
+
+	// Inject custom environment prompt: enrich with SessionID and local time.
+	app.SetEnvsOverride(NewEnvironmentPrompt())
+
 	logDir := logging.ResolveLogDir()
 	logger := logging.DefaultZapLogger(&logging.ZapConfig{
 		Filename:   filepath.Join(logDir, "mindx.log"),

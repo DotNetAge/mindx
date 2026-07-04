@@ -51,6 +51,7 @@ var fsListCmd = &cobra.Command{
 	Example: `  mindx fs list /path/to/dir
   mindx fs ls /path/to/dir`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -59,6 +60,11 @@ var fsListCmd = &cobra.Command{
 		result, err := cl.FSList(args[0])
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var entries []fsEntry
@@ -236,6 +242,7 @@ var fsHomeCmd = &cobra.Command{
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
+	fsListCmd.Flags().Bool("json", false, "Output raw JSON")
 	fsWriteCmd.Flags().String("content", "", "File content (required)")
 	fsMkdirCmd.Flags().BoolP("parents", "p", false, "Create parent directories as needed")
 	fsRmCmd.Flags().BoolP("recurse", "r", false, "Recursively remove directories")

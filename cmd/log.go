@@ -42,6 +42,7 @@ var logReadCmd = &cobra.Command{
 		offset, _ := cmd.Flags().GetInt("offset")
 		limit, _ := cmd.Flags().GetInt("limit")
 		stream, _ := cmd.Flags().GetString("stream")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 
 		if limit <= 0 {
 			limit = 10
@@ -61,6 +62,11 @@ var logReadCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
+		}
+
 		var resp map[string]interface{}
 		if err := json.Unmarshal(result, &resp); err != nil {
 			fmt.Println(string(result))
@@ -78,7 +84,7 @@ var logReadCmd = &cobra.Command{
 			lineStr, _ := l.(string)
 			table.AddRow([]string{
 				fmt.Sprintf("%d", i+1),
-				truncateStr(lineStr, 100),
+				lineStr,
 			})
 		}
 		fmt.Println(table.Render())
@@ -130,6 +136,7 @@ var logCountCmd = &cobra.Command{
 	Short:   "Show log entry counts per stream",
 	Example: `  mindx log count`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -139,6 +146,11 @@ var logCountCmd = &cobra.Command{
 		result, err := cl.LogCount()
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var data map[string]interface{}
@@ -163,6 +175,8 @@ func init() {
 	logReadCmd.Flags().Int("offset", 0, "Line offset from end (0 = most recent)")
 	logReadCmd.Flags().Int("limit", 10, "Number of lines to read")
 	logReadCmd.Flags().String("stream", "main", "Log stream: main or error")
+	logReadCmd.Flags().Bool("json", false, "Output raw JSON")
+	logCountCmd.Flags().Bool("json", false, "Output raw JSON")
 	logClearCmd.Flags().Bool("confirm", false, "Confirm log clear (required)")
 
 	logCmd.AddCommand(logReadCmd)

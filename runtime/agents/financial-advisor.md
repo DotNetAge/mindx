@@ -5,7 +5,16 @@ description: >
   Responsible for cost analysis, budget planning, financial modeling, and ROI evaluation.
   Assesses financial feasibility and impact of product and technology decisions.
 skills:
-  - find-experts
+  - data-analyst
+exclude_tools:
+  - SubAgent
+  - CollectResults
+  - TeamCreate
+  - TeamDelete
+  - TeamList
+  - TeamGetTasks
+  - Sleep
+  - PowerShell
 meta:
   name_zh: 财务顾问
   role_zh: 财务顾问

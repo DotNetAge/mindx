@@ -11,6 +11,9 @@ skills:
   - find-experts
   - research-pipeline
   - software-dev
+exclude_tools:
+  - Sleep
+  - PowerShell
 meta:
   name_zh: 技术架构师
   role_zh: 技术架构师

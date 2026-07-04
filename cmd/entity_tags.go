@@ -27,6 +27,7 @@ var entityTagsGetCmd = &cobra.Command{
 	Use:   "get",
 	Short: "Get entity tag definitions",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -35,6 +36,11 @@ var entityTagsGetCmd = &cobra.Command{
 		result, err := cl.EntityTagsGet()
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var defs []rpc.EntityTagDef
@@ -48,7 +54,7 @@ var entityTagsGetCmd = &cobra.Command{
 			table.AddRow([]string{
 				d.Name,
 				d.Title,
-				truncateStr(d.Desc, 50),
+				d.Desc,
 				d.Category,
 			})
 		}
@@ -92,6 +98,7 @@ var entityTagsSaveCmd = &cobra.Command{
 
 func init() {
 	entityTagsSaveCmd.Flags().String("types", "", "JSON array of entity tag definitions (required)")
+	entityTagsGetCmd.Flags().Bool("json", false, "Output raw JSON")
 	entityTagsCmd.AddCommand(entityTagsGetCmd)
 	entityTagsCmd.AddCommand(entityTagsSaveCmd)
 }

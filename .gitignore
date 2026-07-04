@@ -59,3 +59,4 @@ test-output.txt
 docs/docker-hub-readme.md
 credentials.txt
 
+__pycache__/

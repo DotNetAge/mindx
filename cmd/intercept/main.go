@@ -19,6 +19,7 @@ import (
 	goraggograph "github.com/DotNetAge/gorag/v2/store/graph/gograph"
 	govector "github.com/DotNetAge/gorag/v2/store/vector/govector"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/svc"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
 
@@ -75,6 +76,8 @@ func main() {
 		fmt.Printf("Error creating app: %v\n", err)
 		os.Exit(1)
 	}
+	app.SetSkillsPromptOverride(svc.NewSkillsPrompt())
+	app.SetEnvsOverride(svc.NewEnvironmentPrompt())
 
 	for _, m := range app.Models().ListRaw() {
 		m.BaseURL = server.URL
@@ -106,6 +109,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Determine project directory from CWD
+	projectDir, err := os.Getwd()
+	if err != nil {
+		fmt.Printf("Error getting CWD: %v\n", err)
+		projectDir = "."
+	}
+
 	// Initialize GraphIndexer from real data so LocalSearch is registered
 	if gi := initGraphIndexer(); gi != nil {
 		app.SetGraphIndexer(gi)
@@ -125,7 +135,12 @@ func main() {
 
 	s := session.NewSession("test-session", agentCfg.Name,
 		session.WithStore(tmpStore),
+		session.WithProjectDir(projectDir),
 	)
+
+	// Persist the session to the store so SessionDir() and ProjectDir()
+	// resolve correctly in buildSystemPrompts (which runs before Current()).
+	_ = s.Current()
 
 	done := make(chan struct{})
 	go func() {

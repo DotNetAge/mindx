@@ -58,7 +58,7 @@ Before proceeding, verify whether ALL of the following information has been coll
 - What specific tasks will this expert handle?
 - What are the boundaries (IN scope / OUT of scope)?
 - What quality standards should they follow?
-- This information feeds into the `introduction` (the system prompt content)
+- This information feeds into the Markdown body (the system prompt content)
 
 ### (d) Required Skills
 
@@ -68,6 +68,122 @@ Before proceeding, verify whether ALL of the following information has been coll
 - Keep the list minimal — each skill adds context overhead
 
 > If the user's description is vague, do not guess blindly — propose specific role categories and let them choose.
+
+## Agent Definition Writing Guide
+
+The agent definition is a Markdown file with YAML frontmatter. It must match the exact format used by existing agents in `runtime/agents/`.
+
+### File Structure
+
+```markdown
+---
+name: <kebab-case-id>
+role: <English Role Title>
+description: >
+  <One sentence for LLM routing: responsibility, output, boundary>
+skills:
+  - <skill-1>
+  - <skill-2>
+meta:
+  name_zh: <中文名>
+  role_zh: <中文角色>
+  description_zh: |
+    <一句话职责>，从<xxx>角度分析问题。
+---
+
+I am a **<Role>**. I focus on "..." and "..."
+
+## Professional Areas
+
+...
+
+## Core Deliverables
+
+...
+
+## Behavior Rules
+
+...
+```
+
+### Frontmatter Fields
+
+| Field                 | Format           | Purpose                                                       |
+| --------------------- | ---------------- | ------------------------------------------------------------- |
+| `name`                | lowercase-hyphen | Unique machine ID                                             |
+| `role`                | ~2-5 words       | Human-readable role title                                     |
+| `description`         | <1024 chars      | For LLM routing; include responsibility, output, and boundary |
+| `skills`              | list             | Only domain-relevant skills; each adds context overhead       |
+| `meta.name_zh`        | 2-6 chars        | Chinese display name                                          |
+| `meta.role_zh`        | 2-6 chars        | Chinese role title                                            |
+| `meta.description_zh` | 1-2 sentences    | Chinese description, ending with “从...角度分析问题”          |
+
+### Body: Four-Section Format
+
+Every agent body follows this exact structure:
+
+1. **Identity Statement** — One or two sentences. State who you are and what you do NOT do. Use bold for the role name and `**not**` for boundaries.
+2. **Professional Areas** — Bullet list of domain capabilities. Format: `**Title** — explanation`.
+3. **Core Deliverables** — Bullet list of named outputs. Format: `**Deliverable Name** — what it contains`.
+4. **Behavior Rules** — Imperative rules. Each rule has a bold title and a specific, enforceable standard. Include explicit boundary rules (`Don't...`).
+
+### Style Rules
+
+- Use direct, short, imperative language.
+- Prefer absolute terms: `Every`, `All`, `Always`, `Never`, `No`, `must not`.
+- Every proposal or deliverable must state what it includes and what it excludes.
+- The definition is a **constraint list**, not a capability brag.
+- Chinese `description_zh` should end with the perspective phrase: “从...角度分析问题”.
+
+### Full Template
+
+```markdown
+---
+name: <kebab-case-id>
+role: <Role Title>
+description: >
+  <Responsibility>. <Concrete outputs>. <Scope boundary>.
+skills:
+  - <skill-1>
+  - <skill-2>
+meta:
+  name_zh: <中文名>
+  role_zh: <中文角色>
+  description_zh: |
+    <一句话职责>，从<xxx>角度分析问题。
+---
+
+I am a **<Role>**. I focus on "<...>" and "<...>."
+
+## Professional Areas
+
+- **<Area 1>** — <brief description>
+- **<Area 2>** — <brief description>
+- **<Area 3>** — <brief description>
+
+## Core Deliverables
+
+- **<Deliverable 1>** — <what it contains>
+- **<Deliverable 2>** — <what it contains>
+
+## Behavior Rules
+
+### <Imperative Rule 1>
+
+<Specific, enforceable standard.>
+
+### <Imperative Rule 2>
+
+<Specific, enforceable standard.>
+
+### Don't <Overstep>
+
+<Clear boundary of what this agent does NOT do.>
+```
+
+### Examples
+
+See existing agents such as `runtime/agents/backend-engineer.md` and `runtime/agents/product-manager.md`.
 
 ## Workflow
 
@@ -88,7 +204,7 @@ mindx agent get <proposed-name>
 
 ### Step 2: Review Writing Guidelines
 
-Read `references/agent-best-practices.md` — this document contains critical rules and the exact format for writing each field.
+Read the **Agent Definition Writing Guide** above and `references/agent-best-practices.md` before writing anything. They contain the exact format, field rules, and style constraints.
 
 ### Step 3: Query Available Skills and Models
 
@@ -100,9 +216,9 @@ mindx model list --json
 - Select only domain-relevant skills that **implement the behaviors this agent needs**
 - Match model complexity to task — don't waste expensive models on trivial work
 
-### Step 4: Write the Introduction (System Prompt)
+### Step 4: Write the Agent Definition
 
-The `introduction` is the agent's full system prompt / working instructions. It must follow the exact format used by existing agents. See `references/agent-best-practices.md` for the precise template and examples.
+Use the template and style rules in the **Agent Definition Writing Guide** to write the YAML frontmatter and the Markdown body. The body becomes the agent's system prompt / working instructions.
 
 ### Step 5: Create the Agent
 

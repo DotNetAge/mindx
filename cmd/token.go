@@ -39,6 +39,7 @@ var tokenOverviewCmd = &cobra.Command{
 	Short:   "Show token usage overview (current vs previous month)",
 	Example: `  mindx token overview`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -48,6 +49,11 @@ var tokenOverviewCmd = &cobra.Command{
 		result, err := cl.TokenUsageOverview()
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var data map[string]interface{}
@@ -75,6 +81,7 @@ var tokenMonthlyCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		year, _ := cmd.Flags().GetInt("year")
 		month, _ := cmd.Flags().GetInt("month")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 
 		now := time.Now()
 		if year == 0 {
@@ -93,6 +100,11 @@ var tokenMonthlyCmd = &cobra.Command{
 		result, err := cl.TokenUsageMonthly(year, month)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var data map[string]interface{}
@@ -126,6 +138,7 @@ var tokenByModelCmd = &cobra.Command{
 
 		year, _ := cmd.Flags().GetInt("year")
 		month, _ := cmd.Flags().GetInt("month")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 
 		now := time.Now()
 		if year == 0 {
@@ -144,6 +157,11 @@ var tokenByModelCmd = &cobra.Command{
 		result, err := cl.TokenUsageByModel(model, year, month)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var data map[string]interface{}
@@ -169,6 +187,7 @@ var tokenTotalCmd = &cobra.Command{
 	Short:   "Show aggregated total token usage",
 	Example: `  mindx token total`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
@@ -178,6 +197,11 @@ var tokenTotalCmd = &cobra.Command{
 		result, err := cl.TokenUsageTotal()
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var data map[string]interface{}
@@ -204,6 +228,7 @@ var tokenSessionCmd = &cobra.Command{
 	Example: `  mindx token session --session-id "abc123"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		sessionID, _ := cmd.Flags().GetString("session-id")
+		jsonOut, _ := cmd.Flags().GetBool("json")
 		if sessionID == "" {
 			return fmt.Errorf("--session-id is required")
 		}
@@ -217,6 +242,11 @@ var tokenSessionCmd = &cobra.Command{
 		result, err := cl.TokenUsageSession(sessionID)
 		if err != nil {
 			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
 		}
 
 		var data map[string]interface{}
@@ -238,12 +268,17 @@ var tokenSessionCmd = &cobra.Command{
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
+	tokenOverviewCmd.Flags().Bool("json", false, "Output raw JSON")
 	tokenMonthlyCmd.Flags().Int("year", 0, "Year (default: current)")
 	tokenMonthlyCmd.Flags().Int("month", 0, "Month 1-12 (default: current)")
+	tokenMonthlyCmd.Flags().Bool("json", false, "Output raw JSON")
 	tokenByModelCmd.Flags().String("model", "", "Model name (required)")
 	tokenByModelCmd.Flags().Int("year", 0, "Year (default: current)")
 	tokenByModelCmd.Flags().Int("month", 0, "Month 1-12 (default: current)")
+	tokenByModelCmd.Flags().Bool("json", false, "Output raw JSON")
+	tokenTotalCmd.Flags().Bool("json", false, "Output raw JSON")
 	tokenSessionCmd.Flags().String("session-id", "", "Session ID (required)")
+	tokenSessionCmd.Flags().Bool("json", false, "Output raw JSON")
 
 	tokenCmd.AddCommand(tokenOverviewCmd)
 	tokenCmd.AddCommand(tokenMonthlyCmd)
