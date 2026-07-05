@@ -15,14 +15,14 @@ func (d *Daemon) handleSkillList(_ context.Context, params json.RawMessage) (any
 	}
 
 	type skillEntry struct {
-		Name         string            `json:"name"`
-		Description  string            `json:"description"`
-		RootDir      string            `json:"root_dir,omitempty"`
-		Source       string            `json:"source,omitempty"`
-		Instructions string            `json:"instructions,omitempty"`
-		Paths        []string          `json:"paths,omitempty"`
-		Metadata     map[string]string `json:"metadata,omitempty"`
-		License      string            `json:"license,omitempty"`
+		Name         string         `json:"name"`
+		Description  string         `json:"description"`
+		RootDir      string         `json:"root_dir,omitempty"`
+		Source       string         `json:"source,omitempty"`
+		Instructions string         `json:"instructions,omitempty"`
+		Paths        []string       `json:"paths,omitempty"`
+		Metadata     map[string]any `json:"metadata,omitempty"`
+		License      string         `json:"license,omitempty"`
 	}
 
 	skillReg := d.app.SkillRegistry()
