@@ -3,11 +3,20 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
 )
+
+// treeNode is used by "kb chunks tree" to build a directory tree.
+type treeNode struct {
+	name     string
+	id       string
+	summary  string
+	children map[string]*treeNode
+}
 
 // ── kb parent ──────────────────────────────────────────────────
 
@@ -265,6 +274,264 @@ Examples:
 	},
 }
 
+// ── kb chunks ──────────────────────────────────────────────────
+
+var kbChunksCmd = &cobra.Command{
+	Use:   "chunks",
+	Short: "List or inspect knowledge base chunks (requires daemon)",
+	Long: `List, inspect or view the knowledge base chunk directory tree.
+
+Examples:
+  mindx kb chunks                      # paginated list (default page 1, size 50)
+  mindx kb chunks -p 2 -s 10          # page 2, 10 per page
+  mindx kb chunks -r "my-region"      # filter by region
+  mindx kb chunks -g                   # global knowledge base only
+  mindx kb chunks -i <chunk_id>        # show single chunk as JSON
+  mindx kb chunks tree                 # directory tree view
+  mindx kb chunks tree -r "my-region"  # tree filtered by region`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		chunkID, _ := cmd.Flags().GetString("id")
+		page, _ := cmd.Flags().GetInt("page")
+		pageSize, _ := cmd.Flags().GetInt("size")
+		region, _ := cmd.Flags().GetString("region")
+		global, _ := cmd.Flags().GetBool("global")
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+
+		// ── Single chunk by ID ──
+		if chunkID != "" {
+			result, err := cl.KBChunksGet(chunkID)
+			if err != nil {
+				return err
+			}
+			var pretty json.RawMessage
+			if err := json.Unmarshal(result, &pretty); err != nil {
+				fmt.Println(string(result))
+				return nil
+			}
+			formatted, _ := json.MarshalIndent(pretty, "", "  ")
+			fmt.Println(string(formatted))
+			return nil
+		}
+
+		// ── Paginated list ──
+		var filters []rpc.FilterCondition
+		if region != "" {
+			filters = append(filters, rpc.FilterCondition{Key: "region", Type: "eq", Value: region})
+		}
+		if global {
+			filters = append(filters, rpc.FilterCondition{Key: "global", Type: "eq", Value: true})
+		}
+
+		result, err := cl.KBChunks(page, pageSize, filters...)
+		if err != nil {
+			return err
+		}
+
+		var listResult rpc.MemoryChunksResult
+		if err := json.Unmarshal(result, &listResult); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		if len(listResult.Chunks) == 0 {
+			fmt.Println("No chunks found.")
+			return nil
+		}
+
+		table := render.NewTable([]string{"ID", "DocID", "Content Preview"}, 120)
+		for _, ch := range listResult.Chunks {
+			preview := ch.Content
+			if len(preview) > 80 {
+				preview = preview[:80] + "..."
+			}
+			table.AddRow([]string{ch.ID, ch.DocID, preview})
+		}
+		fmt.Println(table.Render())
+		fmt.Printf("\nPage %d / %d per page  |  Total: %d\n", listResult.Page, listResult.PageSize, listResult.Total)
+		return nil
+	},
+}
+
+// ── kb chunks tree ─────────────────────────────────────────────
+
+var kbChunksTreeCmd = &cobra.Command{
+	Use:   "tree",
+	Short: "Display knowledge base chunks as a directory tree",
+	Long: `Display the knowledge base as a directory tree.
+
+Each node shows: filename | chunk-id | summary
+
+Examples:
+  mindx kb chunks tree
+  mindx kb chunks tree -r "my-region"
+  mindx kb chunks tree -g`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		region, _ := cmd.Flags().GetString("region")
+		global, _ := cmd.Flags().GetBool("global")
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+
+		var filters []rpc.FilterCondition
+		if region != "" {
+			filters = append(filters, rpc.FilterCondition{Key: "region", Type: "eq", Value: region})
+		}
+		if global {
+			filters = append(filters, rpc.FilterCondition{Key: "global", Type: "eq", Value: true})
+		}
+
+		// Fetch all chunks (use large page size)
+		var allChunks []rpc.ChunkItem
+		page := 1
+		pageSize := 200
+		for {
+			result, err := cl.KBChunks(page, pageSize, filters...)
+			if err != nil {
+				return err
+			}
+			var listResult rpc.MemoryChunksResult
+			if err := json.Unmarshal(result, &listResult); err != nil {
+				return err
+			}
+			allChunks = append(allChunks, listResult.Chunks...)
+			if !listResult.HasMore || len(listResult.Chunks) == 0 {
+				break
+			}
+			page++
+		}
+
+		if len(allChunks) == 0 {
+			fmt.Println("No chunks found.")
+			return nil
+		}
+
+		// Build directory tree from source_file metadata
+		root := &treeNode{children: make(map[string]*treeNode)}
+
+		for _, ch := range allChunks {
+			srcFile, _ := ch.Metadata["source_file"].(string)
+			if srcFile == "" {
+				srcFile = ch.DocID
+			}
+			summary, _ := ch.Metadata["summary"].(string)
+
+			parts := splitPath(srcFile)
+			node := root
+			for _, part := range parts {
+				if node.children[part] == nil {
+					node.children[part] = &treeNode{name: part, children: make(map[string]*treeNode)}
+				}
+				node = node.children[part]
+			}
+			// Leaf: store chunk info
+			node.id = ch.ID
+			node.summary = summary
+		}
+
+		// Render tree
+		printTree(root, "", true)
+		fmt.Printf("\n%d chunk(s)\n", len(allChunks))
+		return nil
+	},
+}
+
+// splitPath splits a file path into directory components + filename.
+func splitPath(p string) []string {
+	var parts []string
+	start := 0
+	for i := 0; i < len(p); i++ {
+		if p[i] == '/' || p[i] == '\\' {
+			if i > start {
+				parts = append(parts, p[start:i])
+			}
+			start = i + 1
+		}
+	}
+	if start < len(p) {
+		parts = append(parts, p[start:])
+	}
+	return parts
+}
+
+// printTree recursively prints a directory tree.
+func printTree(n *treeNode, prefix string, isRoot bool) {
+	if isRoot {
+		// Print children of root directly
+		keys := sortedKeys(n.children)
+		for i, k := range keys {
+			last := i == len(keys)-1
+			child := n.children[k]
+			printNode(child, prefix, last)
+		}
+		return
+	}
+
+	// Print this node's children
+	keys := sortedKeys(n.children)
+	for i, k := range keys {
+		last := i == len(keys)-1
+		child := n.children[k]
+		printNode(child, prefix, last)
+	}
+}
+
+func printNode(n *treeNode, prefix string, last bool) {
+	var connector, childPrefix string
+	if last {
+		connector = "└── "
+		childPrefix = prefix + "    "
+	} else {
+		connector = "├── "
+		childPrefix = prefix + "│   "
+	}
+
+	if len(n.children) > 0 || n.id == "" {
+		// Directory node
+		fmt.Println(prefix + connector + n.name + "/")
+	} else {
+		// File node with chunk info
+		info := n.name
+		if n.id != "" {
+			info += " | " + n.id
+		}
+		if n.summary != "" {
+			summary := n.summary
+			if len(summary) > 60 {
+				summary = summary[:60] + "..."
+			}
+			info += " | " + summary
+		}
+		fmt.Println(prefix + connector + info)
+	}
+
+	if len(n.children) > 0 {
+		keys := sortedKeys(n.children)
+		for i, k := range keys {
+			lastChild := i == len(keys)-1
+			child := n.children[k]
+			printNode(child, childPrefix, lastChild)
+		}
+	}
+}
+
+// sortedKeys returns sorted map keys for deterministic tree output.
+func sortedKeys(m map[string]*treeNode) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
@@ -278,9 +545,20 @@ func init() {
 	kbFileStatesCmd.Flags().Bool("json", false, "Output raw JSON")
 	kbIndexCmd.Flags().Bool("force", false, "Force re-index even if already cached")
 
+	kbChunksCmd.Flags().StringP("id", "i", "", "Chunk ID to show as JSON")
+	kbChunksCmd.Flags().IntP("page", "p", 1, "Page number")
+	kbChunksCmd.Flags().IntP("size", "s", 50, "Page size")
+	kbChunksCmd.Flags().StringP("region", "r", "", "Filter by region")
+	kbChunksCmd.Flags().BoolP("global", "g", false, "Global knowledge base only")
+
+	kbChunksTreeCmd.Flags().StringP("region", "r", "", "Filter by region")
+	kbChunksTreeCmd.Flags().BoolP("global", "g", false, "Global knowledge base only")
+
 	kbCmd.AddCommand(kbSearchCmd)
 	kbCmd.AddCommand(kbStatsCmd)
 	kbCmd.AddCommand(kbSyncCmd)
 	kbCmd.AddCommand(kbFileStatesCmd)
 	kbCmd.AddCommand(kbIndexCmd)
+	kbCmd.AddCommand(kbChunksCmd)
+	kbChunksCmd.AddCommand(kbChunksTreeCmd)
 }
