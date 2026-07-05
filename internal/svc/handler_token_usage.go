@@ -137,6 +137,53 @@ func (d *Daemon) handleTokenUsageSession(_ context.Context, params json.RawMessa
 	}, nil
 }
 
+func (d *Daemon) handleTokenUsageSessionDetail(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.TokenUsageSessionDetailParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	store := d.app.TokenUsageStore()
+	if store == nil {
+		return []any{}, nil
+	}
+
+	filter := goharnesssession.TokenUsageFilter{
+		SessionID: p.SessionID,
+	}
+	records, err := store.Query(context.Background(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("query session token usage: %w", err)
+	}
+
+	details := make([]any, 0, len(records))
+	for _, r := range records {
+		mc, hasMC := d.app.Costs().Get(r.ModelName)
+		cost := 0.0
+		if hasMC {
+			cost = calculateRecordCost(mc, r)
+		}
+		details = append(details, map[string]any{
+			"timestamp":     r.Timestamp,
+			"input_tokens":  r.PromptTokens,
+			"output_tokens": r.CompletionTokens,
+			"cached_tokens": r.CachedTokens,
+			"total_tokens":  r.TotalTokens,
+			"cost":          roundCost(cost),
+			"model_name":    r.ModelName,
+			"provider_name": r.ProviderName,
+		})
+	}
+
+	return map[string]any{
+		"session_id": p.SessionID,
+		"records":    details,
+	}, nil
+}
+
 func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.TokenUsageByModelParams
 	if err := unmarshalParams(params, &p); err != nil {

@@ -6,7 +6,6 @@ description: >
   Produces Architecture Decision Records (ADRs) and migration plans. Focuses on design and
   deliverables, not personnel assignments.
 skills:
-  - architect
   - batch
   - find-experts
   - research-pipeline
