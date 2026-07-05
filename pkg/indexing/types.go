@@ -35,12 +35,19 @@ type FileIndexError struct {
 // ErrorType returns the top-level classification of this error.
 func (e FileIndexError) ErrorType() string { return classifyErrorString(e.Error) }
 
-// CompletedFileInfo records a successfully indexed file with timing info.
+// CompletedFileInfo records a successfully indexed file with timing info
+// and LLM token consumption.
 type CompletedFileInfo struct {
 	Path      string        `json:"path"`
 	Chunks    int           `json:"chunks"`
 	Elapsed   time.Duration `json:"elapsed"`
 	Timestamp time.Time     `json:"timestamp"`
+
+	// Token usage and cost for this file.
+	InputTokens  int     `json:"input_tokens"`
+	OutputTokens int     `json:"output_tokens"`
+	CacheTokens  int     `json:"cache_tokens"`
+	Cost         float64 `json:"cost"`
 }
 
 // ProjectSyncResult summarizes a Sync operation.

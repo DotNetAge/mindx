@@ -91,3 +91,52 @@ type KBIndexParams struct {
 func (c *Client) KBIndex(path string, force bool) (json.RawMessage, error) {
 	return c.CallWithTimeout("kb.index", KBIndexParams{Path: path, Force: force})
 }
+
+// ── kb.manifest.* ──
+
+// KBManifestGetParams are the params for kb.manifest.get.
+type KBManifestGetParams struct {
+	SessionID string `json:"session_id"`
+}
+
+// KBManifestAddParams are the params for kb.manifest.add.
+type KBManifestAddParams struct {
+	SessionID string   `json:"session_id"`
+	Files     []string `json:"files"`
+}
+
+// KBManifestRemoveParams are the params for kb.manifest.remove.
+type KBManifestRemoveParams struct {
+	SessionID string   `json:"session_id"`
+	Files     []string `json:"files"`
+}
+
+// KBManifestStartParams are the params for kb.manifest.start.
+type KBManifestStartParams struct {
+	SessionID string `json:"session_id"`
+}
+
+// KBManifestStopParams are the params for kb.manifest.stop.
+type KBManifestStopParams struct {
+	SessionID string `json:"session_id"`
+}
+
+func (c *Client) KBManifestGet(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.manifest.get", KBManifestGetParams{SessionID: sessionID})
+}
+
+func (c *Client) KBManifestAdd(sessionID string, files []string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.manifest.add", KBManifestAddParams{SessionID: sessionID, Files: files})
+}
+
+func (c *Client) KBManifestRemove(sessionID string, files []string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.manifest.remove", KBManifestRemoveParams{SessionID: sessionID, Files: files})
+}
+
+func (c *Client) KBManifestStart(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.manifest.start", KBManifestStartParams{SessionID: sessionID})
+}
+
+func (c *Client) KBManifestStop(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.manifest.stop", KBManifestStopParams{SessionID: sessionID})
+}
