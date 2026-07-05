@@ -6,6 +6,9 @@ description: >
   needs. Supports multi-agent scaling for large studies.
 allowed-tools: bash sub-agent collect-results task-create task-update task-get task-list team-create team-list team-get-tasks find-experts firecrawl
 metadata:
+  requires:
+    bins:
+      - python3
   name_zh: 研究管线
   name_zh-tw: 研究管線
   description_zh: 结构化研究技能——先定义真正的问题，再收集证据、综合发现，输出经过验证的 Markdown 报告
@@ -383,6 +386,13 @@ End with an honest assessment:
 > **Recommended follow-up:** [what to do if higher confidence is needed — e.g., "commission a primary survey", "interview 3 industry executives", "purchase Gartner report X"]
 
 ---
+
+## Gotchas
+
+- **Source recency ≠ authority.** A blog post from last week may be less reliable than a 2022 peer-reviewed paper. Apply source quality scoring by methodology, not publication date.
+- **The research question shifts as you find evidence.** If early findings contradict the premise, do not force the answer. Surface the contradiction and let the user redirect.
+- **Fact vs assumption is not always clear.** Speculation in a source can look like fact. Tag aggressively: if it's not independently verifiable, it's assumption.
+- **"No evidence" is not "evidence of absence."** If a search returns nothing relevant, state the scope of the search explicitly — which sources were checked, with which queries.
 
 ## Anti-Patterns
 

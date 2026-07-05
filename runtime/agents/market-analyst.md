@@ -5,6 +5,7 @@ description: >
   Responsible for market intelligence, competitive tracking, brand promotion, and product marketing.
 skills:
   - research-pipeline
+  - lead-research-assistant
   - data-analyst
   - content-factory
 exclude_tools:

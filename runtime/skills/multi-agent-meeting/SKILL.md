@@ -4,6 +4,9 @@ description: >
   When encountering cross-domain collaboration problems, organize a topic-specific meeting, invite relevant experts to participate, collect professional opinions, and generate a structured meeting record.
 allowed-tools: subagent bash agent-talk sleep
 metadata:
+  requires:
+    bins:
+      - python3
   name_zh: 组织专题会议
   name_zh-tw: 组织专题會議
   description_zh: 当遇到需要跨领域合作的问题时，组织专题会议，邀请相关专家参与，收集专业意见，生成结构化的会议记录。
@@ -173,6 +176,13 @@ Output a structured meeting record containing all of the above.
 - **Goal**: Identify and evaluate project risks
 - **Participants**: Project manager, relevant engineers, Financial advisor
 - **Output**: Risk checklist, impact assessment, mitigation measures, timeline impact
+
+## Gotchas
+
+- **Experts are LLMs, not humans.** A meeting of 5 agents produces 5 parallel analyses, not 5 different perspectives in the human sense. The diversity comes from assigned skills and contexts, not genuine disagreement.
+- **Debate script output needs human review.** The closure judgment framework is a heuristic. Do not auto-accept debate conclusions — present them for user confirmation.
+- **Expert availability is not guaranteed.** If an expert agent is already busy in another task, the team creation may fail. Include fallback: suggest a similar expert or proceed with fewer participants.
+- **Meeting records are not decisions.** A structured meeting record captures discussion, but explicit action items and owners need to be stated separately. Always generate action items at the end.
 
 ## Notes
 

@@ -6,6 +6,9 @@ description: >
   management across Chinese platforms (WeChat, Douyin, Xiaohongshu, etc.).
 allowed-tools: bash sub-agent collect-results task-create task-update task-list find-experts
 metadata:
+  requires:
+    bins:
+      - python3
   name_zh: 产品推广
   name_zh-tw: 產品推廣
   description_zh: 规划和执行互联网产品推广活动——内容流水线、社媒运营、数据驱动优化、跨平台活动管理
@@ -67,22 +70,22 @@ mindx memory query "<equivalent in other language>"
 **Your superpower as LLM:** Humans write fixed hybrid queries. You write **dynamic Cypher** that traverses entity relationships in the Graph, then jumps to NativeRAG for full context via doc_id. This is what makes this architecture flexible.
 
 **When to use which:**
-| Need | Command |
-|------|---------|
-| Find relevant knowledge/documents | `mindx memory query` (semantic search) |
-| Store new insights/learnings | `mindx memory store` (vector index) |
-| Build structured business state | `mindx graph upsert-nodes/edges` (entity graph) |
-| Query relationships between entities | `mindx graph query --cypher "..."` (Cypher traversal) |
-| Update business state | `mindx graph exec --cypher "SET ..."` (mutation) |
-| Cross-reference: entity → full context | Graph node → get source docs → `memory query` |
+| Need                                   | Command                                               |
+| -------------------------------------- | ----------------------------------------------------- |
+| Find relevant knowledge/documents      | `mindx memory query` (semantic search)                |
+| Store new insights/learnings           | `mindx memory store` (vector index)                   |
+| Build structured business state        | `mindx graph upsert-nodes/edges` (entity graph)       |
+| Query relationships between entities   | `mindx graph query --cypher "..."` (Cypher traversal) |
+| Update business state                  | `mindx graph exec --cypher "SET ..."` (mutation)      |
+| Cross-reference: entity → full context | Graph node → get source docs → `memory query`         |
 
-| Platform | Content Type | Optimal Posting Window | Key Metrics |
-|----------|-------------|----------------------|-------------|
-| WeChat OA | Long-form article | 8:00-9:00, 20:00-22:00 | Read rate, share rate, new followers |
-| Douyin | Short video (15-60s) | 12:00-13:00, 18:00-21:00 | Views, completion rate, comments, shares |
-| Xiaohongshu | Image + text / short video | 10:00-12:00, 19:00-22:00 | Likes, saves, comments, CTR |
-| Weibo | Short text + image | 9:00-11:00, 17:00-19:00 | Reposts, comments, reach |
-| Bilibili | Mid/long video (3-15min) | 17:00-22:00 (weekend all day) | Play count, bullet comments (danmaku), favorites |
+| Platform    | Content Type               | Optimal Posting Window        | Key Metrics                                      |
+| ----------- | -------------------------- | ----------------------------- | ------------------------------------------------ |
+| WeChat OA   | Long-form article          | 8:00-9:00, 20:00-22:00        | Read rate, share rate, new followers             |
+| Douyin      | Short video (15-60s)       | 12:00-13:00, 18:00-21:00      | Views, completion rate, comments, shares         |
+| Xiaohongshu | Image + text / short video | 10:00-12:00, 19:00-22:00      | Likes, saves, comments, CTR                      |
+| Weibo       | Short text + image         | 9:00-11:00, 17:00-19:00       | Reposts, comments, reach                         |
+| Bilibili    | Mid/long video (3-15min)   | 17:00-22:00 (weekend all day) | Play count, bullet comments (danmaku), favorites |
 
 ## Workflow
 
@@ -90,14 +93,14 @@ mindx memory query "<equivalent in other language>"
 
 Talk to the user before planning anything. Extract concrete parameters:
 
-| Ask | Why | Example Answer |
-|-----|-----|-----------------|
-| "What product/app are we promoting?" | Scope | "Our fitness app FitTrack" |
-| "What's the primary goal?" | Success definition | "Get 10k downloads in 30 days" |
-| "Which platforms?" | Channel selection | "Douyin + Xiaohongshu mainly" |
-| "What's the budget (time/money)?" | Constraints | "No ad budget, organic only" |
-| "Who is the target audience?" | Content direction | "25-35 urban professionals" |
-| "What content formats can we produce?" | Capability check | "Short videos and articles" |
+| Ask                                    | Why                | Example Answer                 |
+| -------------------------------------- | ------------------ | ------------------------------ |
+| "What product/app are we promoting?"   | Scope              | "Our fitness app FitTrack"     |
+| "What's the primary goal?"             | Success definition | "Get 10k downloads in 30 days" |
+| "Which platforms?"                     | Channel selection  | "Douyin + Xiaohongshu mainly"  |
+| "What's the budget (time/money)?"      | Constraints        | "No ad budget, organic only"   |
+| "Who is the target audience?"          | Content direction  | "25-35 urban professionals"    |
+| "What content formats can we produce?" | Capability check   | "Short videos and articles"    |
 
 From answers, define:
 
@@ -145,13 +148,13 @@ Use `find-experts` skill to discover and delegate to specialists.
 
 **Typical team for app promotion:**
 
-| Role | Responsibility | When Needed |
-|------|---------------|-------------|
-| `content-writer` | Article writing, script drafting | Every creation cycle |
-| `video-editor` | Short video editing, captioning | If Douyin/Bilibili is a channel |
-| `data-analyst` | Weekly metrics analysis, A/B insight | After each publish cycle |
-| `copywriter` | Headlines, CTAs, ad copy | For high-conversion touchpoints |
-| `designer` | Cover images, infographics, templates | Visual-heavy platforms |
+| Role             | Responsibility                        | When Needed                     |
+| ---------------- | ------------------------------------- | ------------------------------- |
+| `content-writer` | Article writing, script drafting      | Every creation cycle            |
+| `video-editor`   | Short video editing, captioning       | If Douyin/Bilibili is a channel |
+| `data-analyst`   | Weekly metrics analysis, A/B insight  | After each publish cycle        |
+| `copywriter`     | Headlines, CTAs, ad copy              | For high-conversion touchpoints |
+| `designer`       | Cover images, infographics, templates | Visual-heavy platforms          |
 
 **Team setup pattern** (using find-experts Mode 2):
 
@@ -188,11 +191,11 @@ TaskCreate(
 
 **Execution modes by complexity:**
 
-| Scenario | Mode | Tools Used |
-|----------|------|------------|
-| Single post, do it yourself | Direct execution | Write/edit/publish directly |
-| Need specialist content (e.g., script) | Single SubAgent | `sub-agent(content-writer, task=...)` → `collect-results` |
-| Full weekly cycle with team | Team orchestration | `find-experts` Mode 2 + `task-create/update` |
+| Scenario                               | Mode               | Tools Used                                                |
+| -------------------------------------- | ------------------ | --------------------------------------------------------- |
+| Single post, do it yourself            | Direct execution   | Write/edit/publish directly                               |
+| Need specialist content (e.g., script) | Single SubAgent    | `sub-agent(content-writer, task=...)` → `collect-results` |
+| Full weekly cycle with team            | Team orchestration | `find-experts` Mode 2 + `task-create/update`              |
 
 ### Phase 5: Analyze & Optimize (The Loop)
 
@@ -214,12 +217,12 @@ mindx graph query --cypher "
 
 **Analysis framework — ask these questions every cycle:**
 
-| Question | Good Signal | Bad Signal | Action |
-|----------|-------------|-----------|--------|
-| Which content performed best? | Top 20% by engagement | Bottom 20% | Double down on winning topics/formats |
-| Which platform has best ROI? | Highest conversion per effort | Lowest | Reallocate effort |
-| Is the audience growing? | Follower trend up | Flat or declining | Check content-audience fit |
-| Are we hitting the goal? | On track to target | Behind | Intensify or pivot |
+| Question                      | Good Signal                   | Bad Signal        | Action                                |
+| ----------------------------- | ----------------------------- | ----------------- | ------------------------------------- |
+| Which content performed best? | Top 20% by engagement         | Bottom 20%        | Double down on winning topics/formats |
+| Which platform has best ROI?  | Highest conversion per effort | Lowest            | Reallocate effort                     |
+| Is the audience growing?      | Follower trend up             | Flat or declining | Check content-audience fit            |
+| Are we hitting the goal?      | On track to target            | Behind            | Intensify or pivot                    |
 
 **Output format for weekly report:**
 
@@ -270,6 +273,13 @@ mindx schedule add \
 
 > Each scheduled task's prompt must include: "When you finish, use AgentTalk to report to project coordinator in session '{session_id}'."
 
+## Gotchas
+
+- **Platform algorithm changes are silent and instant.** A content format that performed well yesterday may get zero reach today. Never guarantee a specific outcome — describe what worked recently and note that platforms change.
+- **Content compliance is platform-specific.** WeChat, Douyin, and Xiaohongshu each have different rules on external links, calls-to-action, and commercial content. Always check platform content policies before publishing.
+- **Brand voice is harder to maintain at scale.** When generating content across multiple platforms and 10+ pieces per week, review for tone consistency. Flag any content that deviates from the brand guidelines.
+- **Data-driven optimization is only as good as the data source.** Platform analytics APIs can have 24-48 hour latency. Decisions based on "this week's data" may actually be "last week's data."
+
 ## Anti-Patterns
 
 - Do not post identical content across all platforms — each platform has different format norms and audience expectations
@@ -282,9 +292,9 @@ mindx schedule add \
 
 ## Quick Reference: Content Types by Platform
 
-| Platform | Best Performing Content | Avoid |
-|----------|------------------------|-------|
-| WeChat OA | Deep guides (2000-3000 words), industry insights, how-to series | Pure ads, clickbait without substance |
-| Douyin | Problem-solution hooks (first 3 sec critical), behind-the-scenes, tips compilation | Long intros, no hook, low-energy delivery |
+| Platform    | Best Performing Content                                                            | Avoid                                                  |
+| ----------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| WeChat OA   | Deep guides (2000-3000 words), industry insights, how-to series                    | Pure ads, clickbait without substance                  |
+| Douyin      | Problem-solution hooks (first 3 sec critical), behind-the-scenes, tips compilation | Long intros, no hook, low-energy delivery              |
 | Xiaohongshu | Personal experience reviews, aesthetic flat-lays, "before/after", actionable lists | Overt selling, generic stock photos, no personal voice |
-| Weibo | Timely hot takes, event live-blogging, conversation starters | Evergreen content (dies in feed instantly) |
+| Weibo       | Timely hot takes, event live-blogging, conversation starters                       | Evergreen content (dies in feed instantly)             |

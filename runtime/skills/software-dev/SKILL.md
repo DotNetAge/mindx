@@ -5,6 +5,10 @@ description: >
   sprint execution → quality gates → release → monitoring. Each phase produces specific artifacts.
 allowed-tools: bash sub-agent collect-results task-create task-update task-get task-list team-create team-list team-get-tasks find-experts
 metadata:
+  requires:
+    bins:
+      - git
+      - python3
   name_zh: 软件开发
   name_zh-tw: 軟體開發
   description_zh: 遵循敏捷开发流程：需求分析 → 架构设计 → Sprint 规划 → Sprint 执行 → 质量门禁 → 发布 → 监控
@@ -297,3 +301,12 @@ Post-release checks:
 - Do not modify files outside the agreed scope without re-confirming with the user.
 - All output documents must be written in the same language as the user's input.
 - **The acceptance criteria defined in Phase 1 are the sole standard for verifying all outputs. If the criteria are insufficient to verify a result, the deficiency is in Phase 1 — go back and refine requirements before proceeding.**
+
+---
+
+## Gotchas
+
+- **Acceptance criteria drift during implementation.** What the user wants may shift as they see the output. When this happens, do NOT silently adjust — update the requirements document and re-confirm before proceeding.
+- **Sprint velocity is not a delivery guarantee.** A 2-week sprint with 10 story points can slip if the team discovers unknown unknowns mid-sprint. Never promise a hard delivery date based on velocity alone.
+- **Phase dependencies are strict.** Testing without completed development, or deployment without passing quality gates, produces unreliable output. Do NOT skip phases to save time — the Hard Rules exist for a reason.
+- **Third-party dependency changes break builds.** A library update, API deprecation, or package removal can break the build at any time. When encountering build failures, always check if a dependency changed before debugging the code.

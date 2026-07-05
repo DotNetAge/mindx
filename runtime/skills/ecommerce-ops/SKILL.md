@@ -7,6 +7,9 @@ description: >
   Temu, Shein, and other platforms.
 allowed-tools: bash sub-agent collect-results task-create task-update task-get task-list team-create team-list team-get-tasks find-experts
 metadata:
+  requires:
+    bins:
+      - python3
   name_zh: 跨境电商运营
   name_zh-tw: 跨境電商運營
   description_zh: 端到端跨境电商运营——选品、Listing优化、多平台发布、广告管理、订单处理、客服、库存管控、财务对账
@@ -432,6 +435,14 @@ team-create(
 )
 ```
 
+## Gotchas
+
+- **Platform policies change without notice.** Temu, Shein, and TikTok Shop update fee structures, return policies, and listing requirements frequently. Never assume a policy from 30 days ago is still current — verify before giving recommendations.
+- **Cross-border pricing is not simple math.** Exchange rate + tax + duty + platform fee + shipping can easily double the apparent cost. Always include landed cost calculation, not just unit price.
+- **Returns and refunds differ by country and platform.** EU law has 14-day unconditional return. US is platform-dependent. China has 7-day no-reason return. Never give a blanket returns policy recommendation.
+- **Inventory synchronization is never real-time.** "Real-time sync" between platforms typically has 5-30 minute delay. Flag this whenever making inventory allocation decisions.
+- **Financial reconciliation needs source verification.** Platform payouts minus fees minus returns can be opaque. Trace each line item back to the original transaction before accepting the numbers.
+
 ## Anti-Patterns
 
 - Do NOT set and forget ad campaigns — daily optimization is non-negotiable on Amazon/TikTok
@@ -440,6 +451,6 @@ team-create(
 - Do NOT copy listings verbatim across platforms — each has unique SEO algorithms and format norms
 - Do NOT chase vanity metrics (total views, follower count) without tying to revenue — focus on conversion and margin
 - Do NOT skip the weekly financial close — small discrepancies compound into large losses
-- Do NOT use hard-sell language in TikTok content — native, entertaining content outperforms direct selling by 3-5x
+- Do NOT use hard-sell language in TikTok content — native, entertaining content consistently outperforms direct selling in engagement and conversion
 - Do NOT neglect tax compliance across jurisdictions — VAT/GST obligations differ wildly by country/platform
 - Do NOT launch more than 10 new SKUs simultaneously — test and iterate before scaling

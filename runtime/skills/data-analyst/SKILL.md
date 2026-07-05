@@ -5,10 +5,10 @@ description: >
   knowledge base. Converts natural-language questions into inspectable,
   reproducible analysis reports with cited data sources.
 allowed-tools: Read Bash(mindx *) Bash(python3 *) WebSearch WebFetch
-requires:
-  bins:
-    - python3
 metadata:
+  requires:
+    bins:
+      - python3
   name_zh: 数据分析师
   name_zh-tw: 資料分析師
   description_zh: 对用户文件和 MindX 知识库进行结构化数据分析，输出可验证、可复现的分析报告
