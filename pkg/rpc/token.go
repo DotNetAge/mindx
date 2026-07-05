@@ -20,6 +20,11 @@ type TokenUsageSessionParams struct {
 	SessionID string `json:"session_id"`
 }
 
+// TokenUsageSessionDetailParams are the params for token.usage.session.detail.
+type TokenUsageSessionDetailParams struct {
+	SessionID string `json:"session_id"`
+}
+
 func (c *Client) TokenUsageOverview() (json.RawMessage, error) {
 	return c.CallWithTimeout("token.usage.overview", nil)
 }
@@ -40,4 +45,8 @@ func (c *Client) TokenUsageTotal() (json.RawMessage, error) {
 
 func (c *Client) TokenUsageSession(sessionID string) (json.RawMessage, error) {
 	return c.CallWithTimeout("token.usage.session", TokenUsageSessionParams{SessionID: sessionID})
+}
+
+func (c *Client) TokenUsageSessionDetail(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("token.usage.session.detail", TokenUsageSessionDetailParams{SessionID: sessionID})
 }
