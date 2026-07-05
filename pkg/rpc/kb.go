@@ -44,10 +44,23 @@ func (c *Client) KBSearch(query string, limit int, minScore float64) (json.RawMe
 	})
 }
 
-func (c *Client) KBChunks(page, pageSize int) (json.RawMessage, error) {
-	return c.CallWithTimeout("kb.chunks", KBChunksParams{
+func (c *Client) KBChunks(page, pageSize int, filters ...FilterCondition) (json.RawMessage, error) {
+	params := KBChunksParams{
 		Page: page, PageSize: pageSize,
-	})
+	}
+	if len(filters) > 0 {
+		params.Filters = filters
+	}
+	return c.CallWithTimeout("kb.chunks", params)
+}
+
+// KBChunksGetParams are the params for kb.chunks.get.
+type KBChunksGetParams struct {
+	ID string `json:"id"`
+}
+
+func (c *Client) KBChunksGet(id string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.chunks.get", KBChunksGetParams{ID: id})
 }
 
 func (c *Client) KBStats(projectDir string) (json.RawMessage, error) {

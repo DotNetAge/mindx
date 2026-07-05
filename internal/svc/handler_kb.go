@@ -99,6 +99,69 @@ func (d *Daemon) handleKBChunks(_ context.Context, params json.RawMessage) (any,
 }
 
 // ---------------------------------------------------------------------------
+// kb.chunks.get — 按 ID 获取单个 Chunk 详情（JSON）
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleKBChunksGet(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+
+	if d.graphIndexer == nil {
+		reason := "GraphIndexer not initialized"
+		if d.graphIndexerErr != nil {
+			reason = d.graphIndexerErr.Error()
+		}
+		d.logger.Warn("kb.chunks.get rejected: " + reason)
+		return nil, fmt.Errorf("knowledge base not available: %s", reason)
+	}
+
+	// Iterate through vectorDB pages to find the chunk by ID
+	// (vectorDB stores full content; graphDB SearchByChunkIDs does not return content)
+	pageSize := 200
+	offset := 0
+	for {
+		hits, count, err := d.graphIndexer.ListFiltered(context.Background(), offset, pageSize, nil)
+		if err != nil {
+			return nil, fmt.Errorf("list chunks failed: %w", err)
+		}
+		for _, h := range hits {
+			if h.ID == p.ID {
+				parentID, _ := h.Metadata["parent_id"].(string)
+				mimeType, _ := h.Metadata["mime_type"].(string)
+				return rpc.ChunkItem{
+					ID:       h.ID,
+					ParentID: parentID,
+					DocID:    h.DocID,
+					MIMEType: mimeType,
+					Content:  h.Content,
+					Metadata: h.Metadata,
+					ChunkMeta: rpc.ChunkMetaItem{
+						Index:        h.ChunkMeta.Index,
+						StartPos:     h.ChunkMeta.StartPos,
+						EndPos:       h.ChunkMeta.EndPos,
+						HeadingLevel: h.ChunkMeta.HeadingLevel,
+						HeadingPath:  h.ChunkMeta.HeadingPath,
+					},
+				}, nil
+			}
+		}
+		if offset+pageSize >= count {
+			break
+		}
+		offset += pageSize
+	}
+
+	return nil, fmt.Errorf("chunk not found: %s", p.ID)
+}
+
+// ---------------------------------------------------------------------------
 // kb.sync_project — 对指定目录执行全量文件扫描和索引
 // ---------------------------------------------------------------------------
 
