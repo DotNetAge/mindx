@@ -13,7 +13,6 @@ import (
 	"github.com/DotNetAge/gochat"
 	"github.com/DotNetAge/goharness/agents"
 	"github.com/DotNetAge/goharness/config"
-	"github.com/DotNetAge/goharness/constants"
 	"github.com/DotNetAge/goharness/rule"
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/goharness/skill"
@@ -80,6 +79,10 @@ type App struct {
 	// envsOverride, if set, overrides the default Environment section in system
 	// prompts. Set via SetEnvsOverride().
 	envsOverride func(params agents.EnvsParams) string
+
+	// searchStrategyOverride, if set, overrides the default Search Strategy
+	// section in system prompts. Set via SetSearchStrategyOverride().
+	searchStrategyOverride func() string
 }
 
 func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
@@ -103,19 +106,6 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	err = godotenv.Load()
 	if err != nil {
 		logger.Warn("WARNING: failed to load .env file", "error", err)
-	}
-
-	constants.SYSTEM_INFO_NAME = "MindX"
-	constants.SYSTEM_INFO_VERSION = "2.0.0"
-
-	userPrompt := "\n- User preferences directory: " + settings.UserPreferences()
-	userPrompt += "\n- Skills directory: " + settings.SkillsDir()
-	userPrompt += "\n- Agents directory: " + settings.AgentsDir()
-	userPrompt += "\n- Python virtual environment: " + settings.VenvDir()
-	userPrompt += "\n- Now: " + time.Now().Format(time.DateTime)
-	constants.SYSTEM_INFO_USERS = userPrompt
-	constants.SYSTEM_ADDON_SECTIONS = []string{
-		BuildDelegationGuidance(),
 	}
 
 	logger.Info("loading agents", "dir", settings.AgentsDir())
@@ -342,6 +332,13 @@ func (a *App) SetEnvsOverride(fn func(params agents.EnvsParams) string) {
 	a.envsOverride = fn
 }
 
+// SetSearchStrategyOverride sets an optional function to override the default
+// Search Strategy section in the agent system prompt.
+// When set, it is applied via agents.WithSearchStrategy in createRuntime.
+func (a *App) SetSearchStrategyOverride(fn func() string) {
+	a.searchStrategyOverride = fn
+}
+
 // ReloadAgents re-scans the agents directory and atomically swaps the in-memory registry.
 // All cached runtimes for affected agents are invalidated so they pick up the new config
 // on next ResolveRuntime() call.
@@ -538,6 +535,10 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 
 	if a.envsOverride != nil {
 		opts = append(opts, agents.WithEnvs(a.envsOverride))
+	}
+
+	if a.searchStrategyOverride != nil {
+		opts = append(opts, agents.WithSearchStrategy(a.searchStrategyOverride))
 	}
 
 	agentDiscoveryIntro := "Agent discovery: when you need to find or list available agents, run 'mindx agent list' (or 'mindx agent list --json' for structured output). The list shows agent names, roles, descriptions, and their skills. Use this to find the right agent for delegation via SubAgent."

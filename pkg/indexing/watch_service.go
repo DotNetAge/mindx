@@ -403,12 +403,23 @@ func (s *FileWatchService) SyncDir(ctx context.Context, absDir string) {
 	// 只在文件有实际变化时重建 Region 摘要，避免无效 LLM 调用。
 	shouldRefreshRegion := result.Indexed > 0 || result.Updated > 0 || result.Removed > 0
 	if s.regionIndexer != nil && shouldRefreshRegion {
-		region, regionErr := s.regionIndexer.IndexRegion(s.ctx, absDir)
+		regionResult, regionErr := s.regionIndexer.IndexRegion(s.ctx, absDir)
 		if regionErr != nil && s.logger != nil {
 			s.logger.Error("filewatch.sync: region indexing failed", regionErr,
 				"dir", absDir)
-		} else if region != nil {
-			s.indexState.SetRegion(absDir, region.Title, region.Summary, region.Tags)
+		} else if regionResult != nil {
+			// 索引生成的 .README.md 文件，使其内容进入向量库和图数据库
+			if regionResult.RegionFilePath != "" {
+				if s.logger != nil {
+					s.logger.Info("filewatch.sync: indexing region descriptor",
+						"path", regionResult.RegionFilePath)
+				}
+				if idxErr := pi.IndexFile(s.ctx, absDir, regionResult.RegionFilePath); idxErr != nil && s.logger != nil {
+					s.logger.Error("filewatch.sync: region descriptor indexing failed", idxErr,
+						"path", regionResult.RegionFilePath)
+				}
+			}
+			s.indexState.SetRegion(absDir, regionResult.Title, regionResult.Summary, regionResult.Tags)
 		}
 	}
 

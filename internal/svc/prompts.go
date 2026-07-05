@@ -41,8 +41,9 @@ func NewSkillsPrompt() func([]*skill.Skill) string {
 
 // NewEnvironmentPrompt returns a builder function that overrides the default
 // Environment section in the agent system prompt. It enriches the base info
-// (ProjectDir, SessionDir) with SessionID and a local timestamp.
-func NewEnvironmentPrompt() func(agents.EnvsParams) string {
+// (ProjectDir, SessionDir) with SessionID, local time, user preferences dir,
+// and Python virtual environment path.
+func NewEnvironmentPrompt(userPrefsDir, venvDir string) func(agents.EnvsParams) string {
 	return func(params agents.EnvsParams) string {
 		var sb strings.Builder
 		sb.WriteString("## Environment\n")
@@ -65,11 +66,34 @@ func NewEnvironmentPrompt() func(agents.EnvsParams) string {
 		sb.WriteString("  A temporary workspace for the current conversation.\n")
 		sb.WriteString("  Contents are deleted when the conversation ends — do NOT put important work here.\n")
 
+		if userPrefsDir != "" {
+			sb.WriteString(fmt.Sprintf("- **User Prefs**: %s\n", userPrefsDir))
+			sb.WriteString("  Application configuration, skills, and agent definitions.\n")
+		}
+		if venvDir != "" {
+			sb.WriteString(fmt.Sprintf("- **Python Venv Dir**: %s\n", venvDir))
+		}
+
 		if params.SessionID != "" {
 			sb.WriteString(fmt.Sprintf("- **Session ID**: %s\n", params.SessionID))
 		}
-		sb.WriteString(fmt.Sprintf("- **Local Time**: %s\n", time.Now().Format("2006-01-02 15:04:05 MST")))
+		sb.WriteString(fmt.Sprintf("- **Local Time**: %s\n", time.Now().Format("2006-01-02")))
 
 		return sb.String()
+	}
+}
+
+// NewSearchStrategyPrompt returns a builder function that overrides the default
+// Search Strategy section. It tells the LLM to prioritize LocalSearch (semantic
+// search) over traditional file tools and web search for codebase questions.
+func NewSearchStrategyPrompt() func() string {
+	return func() string {
+		return "## Search Strategy\n\n" +
+			"1. For codebase questions, use LocalSearch (semantic mode) FIRST before Grep/Ls/Read/Glob — " +
+			"it searches by meaning, not just by filename or text pattern.\n" +
+			"2. Also try LocalSearch before WebSearch when the question might be about the user's own project.\n" +
+			"3. Fall back to web search (WebSearch) for external topics or when LocalSearch yields nothing.\n" +
+			"4. For browsing project structure, use LocalSearch (tree mode) FIRST before Ls or Glob — " +
+			"it returns the same directory tree with semantic summaries. Fall back to Ls/Glob when LocalSearch is unavailable or insufficient."
 	}
 }

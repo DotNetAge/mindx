@@ -77,7 +77,11 @@ func main() {
 		os.Exit(1)
 	}
 	app.SetSkillsPromptOverride(svc.NewSkillsPrompt())
-	app.SetEnvsOverride(svc.NewEnvironmentPrompt())
+	app.SetEnvsOverride(svc.NewEnvironmentPrompt(
+		app.Settings().UserPreferences(),
+		app.Settings().VenvDir(),
+	))
+	app.SetSearchStrategyOverride(svc.NewSearchStrategyPrompt())
 
 	for _, m := range app.Models().ListRaw() {
 		m.BaseURL = server.URL

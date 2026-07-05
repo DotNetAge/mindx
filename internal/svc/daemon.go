@@ -119,8 +119,13 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	// "mindx skill list -f" for detailed descriptions.
 	app.SetSkillsPromptOverride(NewSkillsPrompt())
 
-	// Inject custom environment prompt: enrich with SessionID and local time.
-	app.SetEnvsOverride(NewEnvironmentPrompt())
+	// Inject custom environment prompt: enrich with SessionID, local time,
+	// user prefs, and venv path.
+	app.SetEnvsOverride(NewEnvironmentPrompt(
+		app.Settings().UserPreferences(),
+		app.Settings().VenvDir(),
+	))
+	app.SetSearchStrategyOverride(NewSearchStrategyPrompt())
 
 	logDir := logging.ResolveLogDir()
 	logger := logging.DefaultZapLogger(&logging.ZapConfig{
