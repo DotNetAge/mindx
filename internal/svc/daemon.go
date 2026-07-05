@@ -59,6 +59,7 @@ type Daemon struct {
 	// initialized, reuses the same store instances.
 	watchListStore  *indexing.WatchListStore
 	indexStateStore *indexing.IndexStateStore
+	manifestStore   *indexing.ManifestStore
 	sharedMemory    *memory.RAGMemory
 
 	// knowledge-graph indexer (GraphIndexer)
@@ -106,6 +107,11 @@ type Daemon struct {
 	// hotReload watches agents/ and skills/ directories for file changes
 	// and automatically reloads registries.
 	hotReload *HotReloadWatcher
+
+	// manifestWorker fields for FIFO queue processing
+	manifestWorkerCancel context.CancelFunc
+	manifestNewFileCh    chan struct{}
+	manifestResumeCh     chan struct{}
 }
 
 func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
@@ -184,6 +190,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	if isErr != nil {
 		logger.Warn("filewatch: failed to create index state store", "error", isErr)
 	}
+	manifestStore := indexing.NewManifestStore(app.Settings().DataDir())
 
 	// ── GraphIndexer（知识库）─────────────────────────────────────
 	// 文件监控服务为 KB 服务，memory 仅为对话服务
@@ -251,6 +258,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		kbWatch:             kbWatch,
 		watchListStore:      watchListStore,
 		indexStateStore:     indexStateStore,
+		manifestStore:       manifestStore,
 		sharedMemory:        sharedMemory,
 		graphIndexer:        graphIndexer,
 		graphIndexerErr:     graphIndexerErr,
@@ -259,6 +267,8 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		logger:              logger,
 		pendingInteractions: make(map[string]*pendingInteraction),
 		restartCh:           make(chan struct{}, 1),
+		manifestNewFileCh:   make(chan struct{}, 1),
+		manifestResumeCh:    make(chan struct{}, 1),
 	}
 
 	// Pass GraphIndexer to App for use in LocalSearch tool
@@ -513,32 +523,12 @@ func (d *Daemon) wireFileIndexCallback(kw *indexing.FileWatchService) {
 	}
 }
 
-// restoreSessionWatches iterates all existing sessions and adds their
-// project_dir to the file watchlist if not already present. This ensures
-// sessions created outside the daemon RPC path (e.g. TUI auto-created
-// default session) also get their directories monitored for RAG indexing.
+// restoreSessionWatches is a no-op in manual indexing mode.
+// Sessions no longer auto-add directories to the file watchlist.
+// Users add files to the index manifest manually via the File Explorer.
 func (d *Daemon) restoreSessionWatches() {
-	sessDB := d.app.SessDB()
-	if sessDB == nil {
-		return
-	}
-	sessions, err := sessDB.ListSessions(context.Background())
-	if err != nil {
-		d.logger.Warn("restoreSessionWatches: failed to list sessions", "error", err)
-		return
-	}
-	for _, s := range sessions {
-		if s.ProjectDir == "" {
-			continue
-		}
-		if err := d.addWatchEntry(s.ProjectDir, s.AgentName); err != nil {
-			d.logger.Warn("restoreSessionWatches: failed to add watch entry",
-				"session_id", s.SessionID,
-				"project_dir", s.ProjectDir,
-				"agent", s.AgentName,
-				"error", err,
-			)
-		}
+	if d.logger != nil {
+		d.logger.Info("restoreSessionWatches: auto-indexing disabled (manual mode)")
 	}
 }
 
@@ -661,28 +651,22 @@ func (d *Daemon) Start(ctx context.Context) error {
 	}()
 
 	if d.kbWatch != nil {
-		// Restore persisted auto-indexing state: if user had enabled it before
-		// daemon restart, automatically resume file watching.
-		cfg := d.app.Config()
-		if cfg != nil && cfg.AutoIndexing {
-			d.logger.Info("filewatch service configured, restoring previous running state (auto_indexing=true)")
-			ctx, cancel := context.WithCancel(context.Background())
-			d.watchCancel = cancel
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						d.logger.Error("auto-restore filewatch: goroutine panic", fmt.Errorf("%v", r))
-					}
-				}()
-				if err := d.kbWatch.Start(ctx); err != nil {
-					d.logger.Warn("auto-restore: filewatch exited with error", "error", err)
-				}
-			}()
-		} else {
-			d.logger.Info("filewatch service configured but not started (user must call filewatch.start to activate)")
-		}
+		// Note: Auto-indexing via FileWatchService is disabled in manual mode.
+		// Users add files to the index manifest manually via the File Explorer,
+		// and indexing is started/stopped per-session via kb.manifest.start/stop.
+		// The FileWatchService is still available as an IndexService provider
+		// for on-demand file indexing (via kbWatch.GetIndexer()).
+		d.logger.Info("filewatch service configured but not auto-started (manual indexing mode)")
 	} else {
 		d.logger.Info("no filewatch configured, skipping")
+	}
+
+	// ── Start FIFO manifest worker ──────────────────────────────
+	if d.kbWatch != nil && d.graphIndexer != nil {
+		d.startManifestWorker(ctx)
+		d.logger.Info("manifest FIFO worker started")
+	} else {
+		d.logger.Info("manifest FIFO worker not started (kbWatch or graphIndexer unavailable)")
 	}
 
 	// Register system health / diagnostics endpoint.
@@ -761,6 +745,221 @@ func (d *Daemon) Restart() {
 	}
 }
 
+// startManifestWorker launches the FIFO queue worker goroutine for a given
+// project directory. It processes pending files one at a time (serial, FIFO).
+func (d *Daemon) startManifestWorker(ctx context.Context) {
+	d.logger.Info("manifest worker: starting FIFO queue worker")
+
+	ctx, cancel := context.WithCancel(ctx)
+	d.manifestWorkerCancel = cancel
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("manifest worker: panic recovered", fmt.Errorf("%v", r))
+			}
+		}()
+		defer d.logger.Info("manifest worker: stopped")
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			// Check if we have any active session/project dir with pending work
+			absDir, relFile := d.nextPendingFile()
+			if relFile == "" {
+				// Nothing to do — wait for a wake signal
+				select {
+				case <-d.manifestNewFileCh:
+					continue
+				case <-d.manifestResumeCh:
+					continue
+				case <-ctx.Done():
+					return
+				}
+			}
+
+			// Check if worker is paused
+			if !d.isManifestProcessing(absDir) {
+				select {
+				case <-d.manifestResumeCh:
+					continue
+				case <-d.manifestNewFileCh:
+					continue
+				case <-ctx.Done():
+					return
+				}
+			}
+
+			// Process one file
+			d.processManifestFile(ctx, absDir, relFile)
+		}
+	}()
+}
+
+// stopManifestWorker cancels the FIFO queue worker goroutine.
+func (d *Daemon) stopManifestWorker() {
+	if d.manifestWorkerCancel != nil {
+		d.manifestWorkerCancel()
+		d.manifestWorkerCancel = nil
+	}
+}
+
+// wakeManifestWorker signals the worker to check for new pending files.
+func (d *Daemon) wakeManifestWorker() {
+	select {
+	case d.manifestNewFileCh <- struct{}{}:
+	default:
+	}
+}
+
+// resumeManifestWorker signals the worker to resume processing after pause.
+func (d *Daemon) resumeManifestWorker() {
+	select {
+	case d.manifestResumeCh <- struct{}{}:
+	default:
+	}
+}
+
+// nextPendingFile iterates all manifests and returns the next pending file.
+func (d *Daemon) nextPendingFile() (absDir, relFile string) {
+	if d.manifestStore == nil {
+		return "", ""
+	}
+	for _, m := range d.manifestStore.All() {
+		if !m.Processing {
+			continue
+		}
+		p := m.PeekNext()
+		if p != "" {
+			return m.ProjectDir, p
+		}
+	}
+	return "", ""
+}
+
+// isManifestProcessing checks whether worker processing is active for a dir.
+func (d *Daemon) isManifestProcessing(absDir string) bool {
+	if d.manifestStore == nil {
+		return false
+	}
+	m := d.manifestStore.Get(absDir)
+	return m != nil && m.Processing
+}
+
+// processManifestFile indexes a single file from the manifest queue.
+func (d *Daemon) processManifestFile(ctx context.Context, absDir, relFile string) {
+	m := d.manifestStore.LoadOrCreate(absDir)
+	dequeued := m.DequeueNext()
+	if dequeued == "" {
+		return // already consumed
+	}
+	_ = d.manifestStore.Save(absDir)
+	d.logger.Info("manifest worker: processing file", "dir", absDir, "file", relFile)
+
+	// Broadcast indexing started
+	if d.gw != nil {
+		d.gw.BroadcastNotification("file_indexing", map[string]any{
+			"type": "file_indexing",
+			"data": map[string]string{
+				"file":      relFile,
+				"directory": absDir,
+				"state":     "processing",
+			},
+		})
+	}
+
+	if d.graphIndexer == nil || d.kbWatch == nil {
+		m.SetError(relFile, "indexer not available")
+		_ = d.manifestStore.Save(absDir)
+		d.logger.Warn("manifest worker: indexer not available, file failed", "file", relFile)
+		return
+	}
+
+	// Get the indexer for this directory
+	pi := d.kbWatch.GetIndexer(absDir)
+	if pi == nil {
+		m.SetError(relFile, "no indexer for this directory")
+		_ = d.manifestStore.Save(absDir)
+		d.logger.Warn("manifest worker: no indexer for dir", "dir", absDir)
+		return
+	}
+
+	// Sync the single file
+	result := pi.SyncFiles(ctx, absDir, []string{relFile}, false)
+
+	// Capture LLM token usage
+	tokens := &indexing.TokenUsage{}
+	if d.graphIndexer != nil {
+		tu := d.graphIndexer.LastTokenUsage()
+		if tu != nil {
+			tokens.InputTokens = tu.PromptTokens
+			tokens.OutputTokens = tu.CompletionTokens
+			tokens.Cost = calculateIndexCost(tu.PromptTokens, tu.CompletionTokens)
+		}
+	}
+
+	if len(result.FailedFiles) > 0 {
+		failedRec := result.FailedFiles[0]
+		m.SetError(relFile, failedRec.Error)
+		_ = d.manifestStore.Save(absDir)
+
+		if d.gw != nil {
+			d.gw.BroadcastNotification("file_indexing", map[string]any{
+				"type": "file_indexing",
+				"data": map[string]string{
+					"file":      relFile,
+					"directory": absDir,
+					"state":     "error",
+				},
+			})
+		}
+		d.logger.Warn("manifest worker: file indexing failed", "file", relFile, "error", failedRec.Error)
+	} else {
+		// Record completion
+		elapsedMs := int64(0)
+		chunks := result.Indexed
+		if len(result.CompletedFiles) > 0 {
+			cf := result.CompletedFiles[0]
+			elapsedMs = cf.Elapsed.Milliseconds()
+			if cf.Chunks > 0 {
+				chunks = cf.Chunks
+			}
+		}
+		tokens.ElapsedMs = elapsedMs
+		m.SetDone(relFile, tokens, elapsedMs, chunks)
+		_ = d.manifestStore.Save(absDir)
+
+		if d.gw != nil {
+			d.gw.BroadcastNotification("file_indexing", map[string]any{
+				"type": "file_indexing",
+				"data": map[string]string{
+					"file":      relFile,
+					"directory": absDir,
+					"state":     "done",
+				},
+			})
+		}
+		d.logger.Info("manifest worker: file indexed successfully", "file", relFile)
+	}
+}
+
+// calculateIndexCost estimates the USD cost for indexing a single file
+// based on LLM token consumption. Uses GPT-4o-mini pricing as default:
+//
+//	Input:  $0.15  / 1M tokens
+//	Output: $0.60  / 1M tokens
+func calculateIndexCost(inputTokens, outputTokens int) float64 {
+	const inputPricePerM = 0.15
+	const outputPricePerM = 0.60
+	inputCost := float64(inputTokens) / 1_000_000 * inputPricePerM
+	outputCost := float64(outputTokens) / 1_000_000 * outputPricePerM
+	return inputCost + outputCost
+}
+
 // stopService stops a service whose Stop method returns no error.
 func (d *Daemon) stopService(name string, stopper func()) {
 	if stopper == nil {
@@ -792,6 +991,10 @@ func (d *Daemon) stopBackgroundServices() {
 		d.cleanupCancel()
 		d.cleanupCancel = nil
 	}
+
+	d.stopService("manifest FIFO worker", func() {
+		d.stopManifestWorker()
+	})
 
 	d.stopService("hot-reload watcher", func() {
 		if d.hotReload != nil {

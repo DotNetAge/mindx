@@ -159,55 +159,8 @@ func (s *FileWatchService) Start(ctx context.Context) error {
 	s.wg.Add(1)
 	go s.eventLoop()
 
-	// Resume incomplete indexing for registered directories.
-	// SyncDir → Sync() loads the persisted file cache (mtime/size),
-	// so already-indexed files are skipped — work continues from
-	// where it left off, not restarted from zero.
-	if s.indexState != nil {
-		for dir := range added {
-			st := s.indexState.Get(dir)
-			if st != nil && st.State == "completed" {
-				continue
-			}
-			if s.logger != nil {
-				s.logger.Info("filewatch: resuming indexing",
-					"dir", dir,
-					"state", func() string {
-						if st != nil {
-							return st.State
-						}
-						return "pending (new)"
-					}(),
-				)
-			}
-			go s.SyncDir(s.ctx, dir)
-		}
-
-		// Also rebuild Region summaries for fully indexed directories on startup.
-		// This ensures Region vectors are up-to-date even when no files changed,
-		// e.g. after GoRAG version upgrade or LLM model changes.
-		if s.regionIndexer != nil {
-			for dir := range added {
-				st := s.indexState.Get(dir)
-				if st == nil || st.State != "completed" {
-					continue
-				}
-				go func(d string) {
-					if s.logger != nil {
-						s.logger.Info("filewatch: rebuilding region on startup",
-							"dir", d)
-					}
-					region, err := s.regionIndexer.IndexRegion(s.ctx, d)
-					if err != nil && s.logger != nil {
-						s.logger.Error("filewatch: region rebuild failed on startup", err,
-							"dir", d)
-					} else if region != nil {
-						s.indexState.SetRegion(d, region.Title, region.Summary, region.Tags)
-					}
-				}(dir)
-			}
-		}
-	}
+	// Note: Auto-resume of indexing on startup is disabled in manual mode.
+	// Indexing is triggered per-session via kb.manifest.start.
 
 	<-ctx.Done()
 	return nil

@@ -106,26 +106,25 @@ func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("session store not available")
 	}
 
-	// Capture project dir and agent from session meta before deleting,
-	// so we can remove the directory from the file watchlist.
-	var projectDir, agentName string
+	// Capture project dir from session meta before deleting,
+	// so we can clean up the index state.
+	var projectDir string
 	meta, metaErr := sessDB.GetSessionMeta(p.SessionID)
 	if metaErr == nil && meta != nil {
 		projectDir = meta.ProjectWorkingDir
-		agentName = meta.AgentName
 	}
 
 	if err := sessDB.DeleteSession(context.Background(), p.SessionID); err != nil {
 		return nil, fmt.Errorf("delete session %q failed: %w", p.SessionID, err)
 	}
 
-	// Remove project directory from file watchlist so it stops being auto-indexed.
-	if projectDir != "" && d.kbWatch != nil {
-		if err := d.kbWatch.RemoveWatch(projectDir, agentName); err != nil {
-			d.logger.Warn("failed to remove project dir from watchlist",
-				"dir", projectDir,
-				"agent", agentName,
-				"error", err,
+	// Clean up index state for this session's project dir
+	if projectDir != "" && d.indexStateStore != nil {
+		if absDir, absErr := filepath.Abs(projectDir); absErr == nil {
+			d.indexStateStore.Remove(absDir)
+			d.logger.Info("session.delete: removed index state for session",
+				"session_id", p.SessionID,
+				"project_dir", projectDir,
 			)
 		}
 	}
@@ -184,19 +183,14 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("create session failed: %w", err)
 	}
 
-	d.logger.Info("session.create: new session created",
+	d.logger.Info("session.create: new session created (manual indexing mode)",
 		"session_id", info.SessionID,
 		"project_dir", info.ProjectDir,
 	)
 
-	// Add project directory to file watchlist for auto-indexing (RAG).
-	// Unconditionally persists the entry to the watch list store.
-	// The FileWatchService, if running, will also register an fsnotify watcher
-	// via addWatchEntry. If the service is not yet available, the entry will
-	// be picked up later by restoreSessionWatches().
-	if err := d.addWatchEntry(p.ProjectDir, p.Agent); err != nil {
-		return nil, fmt.Errorf("add watch entry: %w", err)
-	}
+	// Note: Auto-indexing is disabled. Users add files to the index manifest
+	// manually via the File Explorer (clicking the cloud icon next to each file).
+	// Indexing is triggered via kb.manifest.start/stop per-session.
 
 	return map[string]any{
 		"session_id":  info.SessionID,
