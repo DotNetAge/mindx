@@ -34,12 +34,12 @@ name: <kebab-case-name>
 description: >
   <One sentence for LLM routing>
 allowed-tools: Read Edit Task Bash Grep Glob
-requires:
-  bins:
-    - python3
-  env:
-    - MY_API_KEY
 metadata:
+  requires:
+    bins:
+      - python3
+    env:
+      - MY_API_KEY
   name_zh: <中文名>
   description_zh: <中文描述>
 ---
@@ -52,10 +52,10 @@ metadata:
 | `name` | string | Yes | Unique skill identifier. Lowercase letters, digits, and hyphens only. Must start with a letter. |
 | `description` | string | Yes | Routing description for the LLM. Should state what the skill does and when to use it. Keep it under 1024 characters. |
 | `allowed-tools` | string | No | Space-separated list of tools the skill may use when loaded. Must be valid MindX tool names. |
-| `requires` | object | No | Runtime dependency declarations. If unmet at load time, the skill is quietly skipped. |
-| `requires.bins` | list of strings | No | Required executables on PATH. If any is missing, the skill is skipped. Example: `["python3", "git"]`. |
-| `requires.env` | list of strings | No | Required environment variables. If any is empty/not set, the skill is skipped. Example: `["MY_API_KEY"]`. |
-| `metadata` | object | No | Display metadata. Supports `name_zh`, `name_zh-tw`, `description_zh`, `description_zh-tw`. |
+| `metadata` | object | No | Arbitrary key-value metadata. Spec extensions (including `requires`) are stored here. |
+| `metadata.requires` | object | No | Runtime dependency declarations. If unmet at load time, the skill is quietly skipped. |
+| `metadata.requires.bins` | list of strings | No | Required executables on PATH. If any is missing, the skill is skipped. Example: `["python3", "git"]`. |
+| `metadata.requires.env` | list of strings | No | Required environment variables. If any is empty/not set, the skill is skipped. Example: `["MY_API_KEY"]`. |
 | `metadata.name_zh` | string | No | Simplified Chinese display name. |
 | `metadata.name_zh-tw` | string | No | Traditional Chinese display name. |
 | `metadata.description_zh` | string | No | Simplified Chinese description. |
@@ -66,8 +66,8 @@ metadata:
 - `name` must be unique within the skill registry
 - `description` must be non-empty and should not exceed 1024 characters
 - `allowed-tools` entries must be from the MindX tool set
-- `requires.bins` checks are performed by the daemon at load time via `exec.LookPath`; unmet bins cause the skill to be skipped
-- `requires.env` checks are performed by the daemon at load time via `os.Getenv`; missing/empty env vars cause the skill to be skipped
+- `metadata.requires.bins` checks are performed by the daemon at load time via `exec.LookPath`; unmet bins cause the skill to be skipped
+- `metadata.requires.env` checks are performed by the daemon at load time via `os.Getenv`; missing/empty env vars cause the skill to be skipped
 - Directory name should match the `name` field
 
 ## Example SKILL.md

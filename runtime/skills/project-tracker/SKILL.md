@@ -9,6 +9,9 @@ allowed-tools:
   - Bash(mindx agent list)
   - SubAgent
 metadata:
+  requires:
+    bins:
+      - python3
   name_zh: 项目跟踪
   name_zh-tw: 專案追蹤
   description_zh: 创建、编排和跟踪长期或周期性项目，可能涉及多个不同领域 agent 协作
@@ -159,3 +162,12 @@ Run this step when the user asks to view overall project progress.
    python3 scripts/project-tool.py report progress --project <project_id>
    ```
 2. Fill out and display the overall project progress report according to the format in `references/progress-report-format.md`.
+
+---
+
+## Gotchas
+
+- **Script output is only as reliable as the input data.** If the project-tool.py returns empty or incorrect data, check the project ID and file paths before reporting failures to the user.
+- **Task dependency cycles can deadlock.** If task A depends on B, and B depends on A, neither will start. Before creating linked tasks, verify the dependency graph has no cycles.
+- **Agent availability is not guaranteed.** A sub-agent may fail if the target agent is busy. Project coordination tasks should include a retry strategy and a fallback plan for each step.
+- **Schedule changes cascade.** Moving one task's deadline affects all downstream dependencies. When rescheduling, always check what other tasks are affected and update them.

@@ -6,6 +6,9 @@ description: >
   content programming, attendee engagement, sponsor management, and event analytics.
 allowed-tools: bash sub-agent collect-results task-create task-update task-get task-list team-create team-list team-get-tasks find-experts app-promotion content-factory
 metadata:
+  requires:
+    bins:
+      - python3
   name_zh: 活动策划
   name_zh-tw: 活動策劃
   description_zh: 从概念到复盘的全流程活动策划执行——会议、发布会、线上研讨会、社区聚会、黑客松、混合式体验
@@ -37,33 +40,33 @@ Plan and execute end-to-end events of any type and scale. This skill covers the 
 
 ## Event Type Classification
 
-| Type | Typical Size | Duration | Complexity | Key Success Metrics |
-|------|-------------|----------|-----------|---------------------|
-| **Webinar** | 50–500 attendees | 1–2 hours | Medium | Registration rate, attendance %, follow-up conversion, Q&A engagement |
-| **Product Launch** | 100–2,000 attendees | 2–4 hours | High | Press coverage, sign-ups, social buzz, demo completion rate |
-| **Conference** | 200–5,000 attendees | 1–3 days | Very High | NPS score, sponsor satisfaction, revenue vs. budget, session ratings |
-| **Community Meetup** | 20–100 attendees | 2–3 hours | Low–Medium | Attendance rate, engagement (questions/networking), repeat attendee rate |
-| **Hackathon** | 50–300 participants | 24–48 hours | High | Project submissions count, project quality scores, participant satisfaction |
-| **Virtual/Hybrid Event** | Varies widely | Varies | High | Cross-channel engagement metrics, platform stability, attendance by region |
+| Type                     | Typical Size        | Duration    | Complexity | Key Success Metrics                                                         |
+| ------------------------ | ------------------- | ----------- | ---------- | --------------------------------------------------------------------------- |
+| **Webinar**              | 50–500 attendees    | 1–2 hours   | Medium     | Registration rate, attendance %, follow-up conversion, Q&A engagement       |
+| **Product Launch**       | 100–2,000 attendees | 2–4 hours   | High       | Press coverage, sign-ups, social buzz, demo completion rate                 |
+| **Conference**           | 200–5,000 attendees | 1–3 days    | Very High  | NPS score, sponsor satisfaction, revenue vs. budget, session ratings        |
+| **Community Meetup**     | 20–100 attendees    | 2–3 hours   | Low–Medium | Attendance rate, engagement (questions/networking), repeat attendee rate    |
+| **Hackathon**            | 50–300 participants | 24–48 hours | High       | Project submissions count, project quality scores, participant satisfaction |
+| **Virtual/Hybrid Event** | Varies widely       | Varies      | High       | Cross-channel engagement metrics, platform stability, attendance by region  |
 
 ### Example Timelines by Event Type
 
-| Milestone | Webinar (4 wk) | Product Launch (6 wk) | Conference (12 wk) |
-|-----------|---------------|----------------------|-------------------|
-| Concept & Charter | Week -4 | Week -6 | Week -12 |
-| Venue/Platform Locked | Week -3 | Week -5 | Week -10 |
-| CFP / Speaker Outreach | Week -3 | Week -5 | Week -9 |
-| Landing Page Live | Week -2 | Week -4 | Week -8 |
-| Registration Open | Week -2 | Week -3 | Week -6 |
-| Sponsor Contracts Signed | N/A | Week -3 | Week -6 |
-| Agenda Finalized | Week -1 | Week -2 | Week -3 |
-| Marketing Push | Week -1 | Week -2 | Week -2 |
-| Speaker Rehearsal | Day -3 | Week -1 | Week -1 |
-| Dry Run / Tech Check | Day -1 | Day -3 | Day -3 |
-| **Event Day** | Day 0 | Day 0 | Day 0 |
-| Post-Event Survey | Day +1 | Day +1 | Day +1 |
-| Content Repurposed | Week +1 | Week +2 | Week +4 |
-| Final Report | Week +2 | Week +3 | Week +6 |
+| Milestone                | Webinar (4 wk) | Product Launch (6 wk) | Conference (12 wk) |
+| ------------------------ | -------------- | --------------------- | ------------------ |
+| Concept & Charter        | Week -4        | Week -6               | Week -12           |
+| Venue/Platform Locked    | Week -3        | Week -5               | Week -10           |
+| CFP / Speaker Outreach   | Week -3        | Week -5               | Week -9            |
+| Landing Page Live        | Week -2        | Week -4               | Week -8            |
+| Registration Open        | Week -2        | Week -3               | Week -6            |
+| Sponsor Contracts Signed | N/A            | Week -3               | Week -6            |
+| Agenda Finalized         | Week -1        | Week -2               | Week -3            |
+| Marketing Push           | Week -1        | Week -2               | Week -2            |
+| Speaker Rehearsal        | Day -3         | Week -1               | Week -1            |
+| Dry Run / Tech Check     | Day -1         | Day -3                | Day -3             |
+| **Event Day**            | Day 0          | Day 0                 | Day 0              |
+| Post-Event Survey        | Day +1         | Day +1                | Day +1             |
+| Content Repurposed       | Week +1        | Week +2               | Week +4            |
+| Final Report             | Week +2        | Week +3               | Week +6            |
 
 ---
 
@@ -110,14 +113,14 @@ mindx memory query "<equivalent in other language>"
 **Your superpower as LLM:** Humans write fixed hybrid queries. You write **dynamic Cypher** that traverses entity relationships in the Graph, then jumps to NativeRAG for full context via doc_id. This is what makes this architecture flexible.
 
 **When to use which:**
-| Need | Command |
-|------|---------|
-| Find relevant knowledge/documents | `mindx memory query` (semantic search) |
-| Store new insights/learnings | `mindx memory store` (vector index) |
-| Build structured business state (events, speakers, sponsors, venues) | `mindx graph upsert-nodes/edges` (entity graph) |
-| Query relationships between entities | `mindx graph query --cypher "..."` (Cypher traversal) |
-| Update business state | `mindx graph exec --cypher "SET ..."` (mutation) |
-| Cross-reference: entity → full context | Graph node → get source docs → `memory query` |
+| Need                                                                 | Command                                               |
+| -------------------------------------------------------------------- | ----------------------------------------------------- |
+| Find relevant knowledge/documents                                    | `mindx memory query` (semantic search)                |
+| Store new insights/learnings                                         | `mindx memory store` (vector index)                   |
+| Build structured business state (events, speakers, sponsors, venues) | `mindx graph upsert-nodes/edges` (entity graph)       |
+| Query relationships between entities                                 | `mindx graph query --cypher "..."` (Cypher traversal) |
+| Update business state                                                | `mindx graph exec --cypher "SET ..."` (mutation)      |
+| Cross-reference: entity → full context                               | Graph node → get source docs → `memory query`         |
 
 Leverage the following mindx capabilities for persistent event intelligence:
 
@@ -189,13 +192,13 @@ Event Node
 
 Work backwards from event date using the appropriate planning horizon:
 
-| Event Type | Planning Horizon | Critical Path Items |
-|------------|-----------------|---------------------|
-| Webinar | 4 weeks | Platform selection, speaker confirm, landing page |
-| Product Launch | 6 weeks | Press list, demo prep, VIP invites, sponsor coordination |
-| Conference | 12 weeks | Venue contract, CFP close, speaker travel, sponsorship sales |
-| Community Meetup | 3 weeks | Venue, speaker, promotion |
-| Hackathon | 8 weeks | Platform/tools setup, judge recruitment, prize sourcing |
+| Event Type       | Planning Horizon | Critical Path Items                                          |
+| ---------------- | ---------------- | ------------------------------------------------------------ |
+| Webinar          | 4 weeks          | Platform selection, speaker confirm, landing page            |
+| Product Launch   | 6 weeks          | Press list, demo prep, VIP invites, sponsor coordination     |
+| Conference       | 12 weeks         | Venue contract, CFP close, speaker travel, sponsorship sales |
+| Community Meetup | 3 weeks          | Venue, speaker, promotion                                    |
+| Hackathon        | 8 weeks          | Platform/tools setup, judge recruitment, prize sourcing      |
 
 #### Parallel Workstreams
 
@@ -203,42 +206,42 @@ Each workstream should be created via `task-create` with clear owners, deadlines
 
 ##### Workstream A: Venue / Platform
 
-| Task | Owner | Deadline | Dependency |
-|------|-------|----------|------------|
-| Requirements definition (capacity, AV needs, accessibility) | `logistics-manager` | Week X-10 | Charter approved |
-| RFP / vendor shortlist (3–5 options) | `logistics-manager` | Week X-9 | Requirements done |
-| Site visits / platform demos | `logistics-manager` | Week X-8 | Shortlist ready |
-| Contract negotiation & signing | `event-producer` | Week X-7 | Selection made |
-| Floor plan / platform config draft | `logistics-manager` | Week X-5 | Contract signed |
-| Final logistics spec (catering counts, AV rider) | `logistics-manager` | Week X-2 | Agenda finalized |
+| Task                                                        | Owner               | Deadline  | Dependency        |
+| ----------------------------------------------------------- | ------------------- | --------- | ----------------- |
+| Requirements definition (capacity, AV needs, accessibility) | `logistics-manager` | Week X-10 | Charter approved  |
+| RFP / vendor shortlist (3–5 options)                        | `logistics-manager` | Week X-9  | Requirements done |
+| Site visits / platform demos                                | `logistics-manager` | Week X-8  | Shortlist ready   |
+| Contract negotiation & signing                              | `event-producer`    | Week X-7  | Selection made    |
+| Floor plan / platform config draft                          | `logistics-manager` | Week X-5  | Contract signed   |
+| Final logistics spec (catering counts, AV rider)            | `logistics-manager` | Week X-2  | Agenda finalized  |
 
 **GraphRAG:** Create `Venue` or `Platform` node linked to `Event` node. Store capacity, cost, layout URL, and contact.
 
 ##### Workstream B: Speaker & Content Programming
 
-| Task | Owner | Deadline | Dependency |
-|------|-------|----------|------------|
-| Theme & track design | `content-programmer` | Week X-9 | Charter approved |
-| CFP open (if applicable) or speaker wishlist | `content-programmer` | Week X-9 | Theme done |
-| Speaker outreach & invitations | `content-programmer` | Week X-8 → ongoing | Wishlist/CFP ready |
-| Speaker confirmation & bio/photo collection | `content-programmer` | Week X-6 | Confirmations in |
-| Session scheduling (avoid conflicts, balance tracks) | `content-programmer` | Week X-4 | All speakers confirmed |
-| Slide deck review & coaching | `content-programmer` | Week X-2 | Schedule locked |
-| Rehearsal scheduling | `content-programmer` | Week X-1 | Decks reviewed |
+| Task                                                 | Owner                | Deadline           | Dependency             |
+| ---------------------------------------------------- | -------------------- | ------------------ | ---------------------- |
+| Theme & track design                                 | `content-programmer` | Week X-9           | Charter approved       |
+| CFP open (if applicable) or speaker wishlist         | `content-programmer` | Week X-9           | Theme done             |
+| Speaker outreach & invitations                       | `content-programmer` | Week X-8 → ongoing | Wishlist/CFP ready     |
+| Speaker confirmation & bio/photo collection          | `content-programmer` | Week X-6           | Confirmations in       |
+| Session scheduling (avoid conflicts, balance tracks) | `content-programmer` | Week X-4           | All speakers confirmed |
+| Slide deck review & coaching                         | `content-programmer` | Week X-2           | Schedule locked        |
+| Rehearsal scheduling                                 | `content-programmer` | Week X-1           | Decks reviewed         |
 
 **GraphRAG:** Create `Speaker` nodes with bio, topic expertise, past-performance rating. Create `Session` nodes linked to speakers, tracks, and time slots. Use `find-experts` to identify potential speakers from internal/external networks.
 
 ##### Workstream C: Marketing & Registration
 
-| Task | Owner | Deadline | Dependency |
-|------|-------|----------|------------|
-| Messaging & positioning brief | `marketing-coord` | Week X-8 | Charter approved |
-| Landing page build | `marketing-coord` | Week X-7 | Brief complete |
-| Email campaign sequences (save-the-date → reminder → day-of) | `marketing-coord` | Week X-6 | Landing page live |
-| Social media content calendar | `marketing-coord` | Week X-6 | Brief complete |
-| Registration system setup & testing | `marketing-coord` | Week X-5 | Landing page ready |
-| PR / press outreach (for launch/conference) | `marketing-coord` | Week X-4 | Key messaging done |
-| Attendee comms cadence (confirmation, prep info, day-before) | `marketing-coord` | Ongoing | Registration open |
+| Task                                                         | Owner             | Deadline | Dependency         |
+| ------------------------------------------------------------ | ----------------- | -------- | ------------------ |
+| Messaging & positioning brief                                | `marketing-coord` | Week X-8 | Charter approved   |
+| Landing page build                                           | `marketing-coord` | Week X-7 | Brief complete     |
+| Email campaign sequences (save-the-date → reminder → day-of) | `marketing-coord` | Week X-6 | Landing page live  |
+| Social media content calendar                                | `marketing-coord` | Week X-6 | Brief complete     |
+| Registration system setup & testing                          | `marketing-coord` | Week X-5 | Landing page ready |
+| PR / press outreach (for launch/conference)                  | `marketing-coord` | Week X-4 | Key messaging done |
+| Attendee comms cadence (confirmation, prep info, day-before) | `marketing-coord` | Ongoing  | Registration open  |
 
 > **Delegate to `app-promotion` skill** for multi-channel distribution strategy, copywriting for landing pages and emails, social content production, and conversion funnel optimization.
 
@@ -246,37 +249,37 @@ Each workstream should be created via `task-create` with clear owners, deadlines
 
 ##### Workstream D: Sponsorship
 
-| Task | Owner | Deadline | Dependency |
-|------|-------|----------|------------|
-| Sponsorship package design (tiers, benefits, pricing) | `sponsor-relations` | Week X-8 | Charter + budget approved |
-| Prospect list & outreach sequence | `sponsor-relations` | Week X-7 | Packages designed |
-| Contract negotiations | `sponsor-relations` | Week X-5 → ongoing | Interest received |
-| Benefit fulfillment planning (logo placement, booth, speaking slot) | `sponsor-relations` | Week X-3 | Contracts signed |
-| On-site/virtual sponsor experience design | `sponsor-relations` | Week X-2 | Fulfillment plan done |
-| Post-event ROI report | `sponsor-relations` | Week +3 | Event data available |
+| Task                                                                | Owner               | Deadline           | Dependency                |
+| ------------------------------------------------------------------- | ------------------- | ------------------ | ------------------------- |
+| Sponsorship package design (tiers, benefits, pricing)               | `sponsor-relations` | Week X-8           | Charter + budget approved |
+| Prospect list & outreach sequence                                   | `sponsor-relations` | Week X-7           | Packages designed         |
+| Contract negotiations                                               | `sponsor-relations` | Week X-5 → ongoing | Interest received         |
+| Benefit fulfillment planning (logo placement, booth, speaking slot) | `sponsor-relations` | Week X-3           | Contracts signed          |
+| On-site/virtual sponsor experience design                           | `sponsor-relations` | Week X-2           | Fulfillment plan done     |
+| Post-event ROI report                                               | `sponsor-relations` | Week +3            | Event data available      |
 
 **GraphRAG:** Create `Sponsor` nodes with tier, industry, contact, contract value, and fulfillment checklist status. Link to `Event` node.
 
 ##### Workstream E: Operations
 
-| Task | Owner | Deadline | Dependency |
-|------|-------|----------|------------|
-| Catering RFP & menu selection | `logistics-manager` | Week X-4 | Headcount estimate |
-| AV equipment & crew booking | `logistics-manager` | Week X-4 | Technical rider complete |
-| Swag design, production & shipping | `logistics-manager` | Week X-3 | Design approved |
-| Registration desk / check-in flow design | `logistics-manager` | Week X-2 | Platform chosen |
-| Volunteer / staff scheduling | `logistics-manager` | Week X-2 | Flow designed |
-| Emergency & safety plan | `logistics-manager` | Week X-2 | Venue confirmed |
+| Task                                     | Owner               | Deadline | Dependency               |
+| ---------------------------------------- | ------------------- | -------- | ------------------------ |
+| Catering RFP & menu selection            | `logistics-manager` | Week X-4 | Headcount estimate       |
+| AV equipment & crew booking              | `logistics-manager` | Week X-4 | Technical rider complete |
+| Swag design, production & shipping       | `logistics-manager` | Week X-3 | Design approved          |
+| Registration desk / check-in flow design | `logistics-manager` | Week X-2 | Platform chosen          |
+| Volunteer / staff scheduling             | `logistics-manager` | Week X-2 | Flow designed            |
+| Emergency & safety plan                  | `logistics-manager` | Week X-2 | Venue confirmed          |
 
 ##### Workstream F: Content Production
 
-| Task | Owner | Deadline | Dependency |
-|------|-------|----------|------------|
-| Event branding & visual identity | `content-programmer` | Week X-7 | Charter approved |
-| Agenda document (print/digital) | `content-programmer` | Week X-2 | Schedule finalized |
-| Slide templates & speaker guidelines | `content-programmer` | Week X-4 | Branding done |
+| Task                                          | Owner                | Deadline | Dependency         |
+| --------------------------------------------- | -------------------- | -------- | ------------------ |
+| Event branding & visual identity              | `content-programmer` | Week X-7 | Charter approved   |
+| Agenda document (print/digital)               | `content-programmer` | Week X-2 | Schedule finalized |
+| Slide templates & speaker guidelines          | `content-programmer` | Week X-4 | Branding done      |
 | Pre-event teaser content (social clips, blog) | `content-programmer` | Week X-3 | Speakers confirmed |
-| Day-of graphics & signage | `content-programmer` | Week -1 | Agenda final |
+| Day-of graphics & signage                     | `content-programmer` | Week -1  | Agenda final       |
 
 > **Delegate to `content-factory` skill** for producing agenda documents, slide decks, social media assets, email templates, signage designs, and post-event content repurposing packages.
 
@@ -286,14 +289,14 @@ Each workstream should be created via `task-create` with clear owners, deadlines
 
 Countdown checklist with escalating urgency:
 
-| Countdown | Focus Area | Key Actions | Owner |
-|-----------|-----------|-------------|-------|
-| **T-30 days** | Foundation lock | Registration fully open; all speakers confirmed (written); sponsor contracts executed; venue deposit paid; marketing campaigns launched | `event-producer` |
-| **T-14 days** | Amplification | Major marketing push (paid ads, partner cross-promo, influencer outreach); agenda published and shared; first attendee communication sent (what to expect, how to prepare); waitlist activated if near capacity | `marketing-coord` |
-| **T-7 days** | Logistics freeze | Final headcount to caterer/venue; AV final tech spec sent; swag shipment confirmed; volunteer briefing scheduled; speaker travel itineraries confirmed; backup plans documented for top 3 risks | `logistics-manager` |
-| **T-3 days** | Rehearsals | Speaker rehearsals (virtual or in-person); run-through of transitions, timings, and technical handoffs; test all streaming/recording equipment; verify backup internet connectivity | `content-programmer` |
-| **T-1 day** | Dry run | Full dry run with all key personnel; test registration/check-in flow; verify all slides load correctly; confirm real-time communication channel (Slack/WhatsApp) for day-of team; print run-of-show cards | `event-producer` |
-| **T-0 morning** | Go-live | Final venue/platform walk-through; all staff/volunteers briefed and positioned; registration desk open (in-person) or lobby page live (virtual); streaming tested one last time; green room ready | `logistics-manager` |
+| Countdown       | Focus Area       | Key Actions                                                                                                                                                                                                     | Owner                |
+| --------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| **T-30 days**   | Foundation lock  | Registration fully open; all speakers confirmed (written); sponsor contracts executed; venue deposit paid; marketing campaigns launched                                                                         | `event-producer`     |
+| **T-14 days**   | Amplification    | Major marketing push (paid ads, partner cross-promo, influencer outreach); agenda published and shared; first attendee communication sent (what to expect, how to prepare); waitlist activated if near capacity | `marketing-coord`    |
+| **T-7 days**    | Logistics freeze | Final headcount to caterer/venue; AV final tech spec sent; swag shipment confirmed; volunteer briefing scheduled; speaker travel itineraries confirmed; backup plans documented for top 3 risks                 | `logistics-manager`  |
+| **T-3 days**    | Rehearsals       | Speaker rehearsals (virtual or in-person); run-through of transitions, timings, and technical handoffs; test all streaming/recording equipment; verify backup internet connectivity                             | `content-programmer` |
+| **T-1 day**     | Dry run          | Full dry run with all key personnel; test registration/check-in flow; verify all slides load correctly; confirm real-time communication channel (Slack/WhatsApp) for day-of team; print run-of-show cards       | `event-producer`     |
+| **T-0 morning** | Go-live          | Final venue/platform walk-through; all staff/volunteers briefed and positioned; registration desk open (in-person) or lobby page live (virtual); streaming tested one last time; green room ready               | `logistics-manager`  |
 
 **Go-Live Checklist (T-0):**
 
@@ -318,28 +321,28 @@ Countdown checklist with escalating urgency:
 
 Produce a detailed run-of-show document organized by time slot, specifying:
 
-| Time | Activity | Location/Channel | Role Responsible | Notes |
-|------|----------|-----------------|------------------|-------|
-| 07:00 | Venue opens, staff arrives | Main Hall | `logistics-manager` | Unlock, lights, HVAC |
-| 07:30 | AV final check | All Rooms | AV Lead | Mic levels, slide advance |
-| 08:00 | Registration opens | Lobby | Reg Desk Team | Badges, swag bags |
-| 08:45 | Attendees seated | Main Hall | Floor Managers | Ushers in position |
-| 09:00 | Opening remarks + welcome | Main Hall | `event-producer` | House rules, wifi, schedule |
-| 09:15 | Keynote 1 | Main Hall | `content-programmer` | Introduce speaker |
-| ... | ... | ... | ... | ... |
-| 17:00 | Closing remarks + call-to-action | Main Hall | `event-producer` | Survey link, next steps |
-| 17:30 | Networking / teardown begins | All Areas | All Teams | Sponsor follow-ups start |
+| Time  | Activity                         | Location/Channel | Role Responsible     | Notes                       |
+| ----- | -------------------------------- | ---------------- | -------------------- | --------------------------- |
+| 07:00 | Venue opens, staff arrives       | Main Hall        | `logistics-manager`  | Unlock, lights, HVAC        |
+| 07:30 | AV final check                   | All Rooms        | AV Lead              | Mic levels, slide advance   |
+| 08:00 | Registration opens               | Lobby            | Reg Desk Team        | Badges, swag bags           |
+| 08:45 | Attendees seated                 | Main Hall        | Floor Managers       | Ushers in position          |
+| 09:00 | Opening remarks + welcome        | Main Hall        | `event-producer`     | House rules, wifi, schedule |
+| 09:15 | Keynote 1                        | Main Hall        | `content-programmer` | Introduce speaker           |
+| ...   | ...                              | ...              | ...                  | ...                         |
+| 17:00 | Closing remarks + call-to-action | Main Hall        | `event-producer`     | Survey link, next steps     |
+| 17:30 | Networking / teardown begins     | All Areas        | All Teams            | Sponsor follow-ups start    |
 
 > For virtual events, replace physical locations with stream channels/breakout rooms. Add pre-show lobby (15 min before), intermission entertainment, and post-show networking room.
 
 #### Real-Time Issue Escalation Protocol
 
-| Severity | Examples | Response | Escalate To | SLA |
-|----------|----------|----------|-------------|-----|
-| **P0 — Showstopper** | Stream down, main speaker no-show, power outage | Immediate workaround + communicate to audience | `event-producer` + venue manager | < 5 min |
-| **P1 — Major** | AV glitch, speaker running 15+ min late, registration crash | Activate backup plan, reassign resources | Workstream lead | < 15 min |
-| **P2 — Moderate** | Minor mic issue, catering delay, low chat engagement | Local fix, monitor | Role owner | < 30 min |
-| **P3 — Minor** | Signage typo, swag shortage, single no-show attendee | Note for post-event, continue | Log only | Next break |
+| Severity             | Examples                                                    | Response                                       | Escalate To                      | SLA        |
+| -------------------- | ----------------------------------------------------------- | ---------------------------------------------- | -------------------------------- | ---------- |
+| **P0 — Showstopper** | Stream down, main speaker no-show, power outage             | Immediate workaround + communicate to audience | `event-producer` + venue manager | < 5 min    |
+| **P1 — Major**       | AV glitch, speaker running 15+ min late, registration crash | Activate backup plan, reassign resources       | Workstream lead                  | < 15 min   |
+| **P2 — Moderate**    | Minor mic issue, catering delay, low chat engagement        | Local fix, monitor                             | Role owner                       | < 30 min   |
+| **P3 — Minor**       | Signage typo, swag shortage, single no-show attendee        | Note for post-event, continue                  | Log only                         | Next break |
 
 #### Engagement Monitoring
 
@@ -403,15 +406,15 @@ Execute within structured timeframe to maximize data quality and stakeholder val
 
 > **Delegate to `content-factory` skill** for systematic repurposing:
 
-| Source Asset | Repurposed Output | Channel | Timeline |
-|--------------|------------------|---------|----------|
-| Full session recordings | 3–5 min highlight clips | YouTube, LinkedIn, Twitter | Week +1 |
-| Keynote transcript | Blog post / article | Company blog, Medium | Week +1–2 |
-| Panel Q&A | Thread / carousel | LinkedIn, Twitter | Week +2 |
-| Best quotes | Quote graphics (5–10) | Instagram, LinkedIn, Twitter | Week +1 |
-| Attendee photos | Photo album + recap video | Social, email newsletter | Week +2 |
-| Survey insights | Industry report / trends piece | Blog, PR | Week +3–4 |
-| Speaker slides (with permission) | SlideShare / educational resource | Website, community | Week +2 |
+| Source Asset                     | Repurposed Output                 | Channel                      | Timeline  |
+| -------------------------------- | --------------------------------- | ---------------------------- | --------- |
+| Full session recordings          | 3–5 min highlight clips           | YouTube, LinkedIn, Twitter   | Week +1   |
+| Keynote transcript               | Blog post / article               | Company blog, Medium         | Week +1–2 |
+| Panel Q&A                        | Thread / carousel                 | LinkedIn, Twitter            | Week +2   |
+| Best quotes                      | Quote graphics (5–10)             | Instagram, LinkedIn, Twitter | Week +1   |
+| Attendee photos                  | Photo album + recap video         | Social, email newsletter     | Week +2   |
+| Survey insights                  | Industry report / trends piece    | Blog, PR                     | Week +3–4 |
+| Speaker slides (with permission) | SlideShare / educational resource | Website, community           | Week +2   |
 
 #### Sponsor ROI Report (T+2–3 weeks)
 
@@ -424,17 +427,17 @@ Deliver to each sponsor a customized report including:
 
 #### Budget Reconciliation (T+2–3 weeks)
 
-| Category | Budgeted | Actual | Variance | Notes |
-|----------|----------|--------|----------|-------|
-| Venue / Platform | $______ | $______ | $______ | |
-| Catering | $______ | $______ | $______ | |
-| AV / Streaming | $______ | $______ | $______ | |
-| Speaker fees/travel | $______ | $______ | $______ | |
-| Marketing | $______ | $______ | $______ | |
-| Swag | $______ | $______ | $______ | |
-| Staff/Volunteers | $______ | $______ | $______ | |
-| Contingency | $______ | $______ | $______ | |
-| **Total** | **$______** | **$______** | **$______** | |
+| Category            | Budgeted    | Actual      | Variance    | Notes |
+| ------------------- | ----------- | ----------- | ----------- | ----- |
+| Venue / Platform    | $______     | $______     | $______     |       |
+| Catering            | $______     | $______     | $______     |       |
+| AV / Streaming      | $______     | $______     | $______     |       |
+| Speaker fees/travel | $______     | $______     | $______     |       |
+| Marketing           | $______     | $______     | $______     |       |
+| Swag                | $______     | $______     | $______     |       |
+| Staff/Volunteers    | $______     | $______     | $______     |       |
+| Contingency         | $______     | $______     | $______     |       |
+| **Total**           | **$______** | **$______** | **$______** |       |
 
 #### Lessons Learned → Knowledge Persistence (T+3–4 weeks)
 
@@ -454,13 +457,13 @@ Deliver to each sponsor a customized report including:
 
 ## Team Composition
 
-| Role | Responsibility | Key Tools/Skills |
-|------|---------------|------------------|
-| **`event-producer`** | Overall ownership: timeline master, budget owner, stakeholder management, risk owner, final decision authority | Project management, budget tracking, stakeholder comms |
-| **`content-programmer`** | Agenda architecture, speaker curation & management, session design, content quality control, rehearsal facilitation | Speaker relations, program design, content review |
-| **`marketing-coord`** | Promotion strategy, registration funnel, attendee communications, social media, PR coordination — can delegate execution to `app-promotion` | Marketing automation, copywriting, analytics |
-| **`logistics-manager`** | Venue/vendor management, catering, AV, travel coordination, on-site operations, safety/compliance | Vendor negotiation, operations management, problem-solving |
-| **`sponsor-relations`** | Sponsor prospecting, package design, outreach, contract management, benefit fulfillment, ROI reporting | Sales, relationship management, reporting |
+| Role                     | Responsibility                                                                                                                              | Key Tools/Skills                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| **`event-producer`**     | Overall ownership: timeline master, budget owner, stakeholder management, risk owner, final decision authority                              | Project management, budget tracking, stakeholder comms     |
+| **`content-programmer`** | Agenda architecture, speaker curation & management, session design, content quality control, rehearsal facilitation                         | Speaker relations, program design, content review          |
+| **`marketing-coord`**    | Promotion strategy, registration funnel, attendee communications, social media, PR coordination — can delegate execution to `app-promotion` | Marketing automation, copywriting, analytics               |
+| **`logistics-manager`**  | Venue/vendor management, catering, AV, travel coordination, on-site operations, safety/compliance                                           | Vendor negotiation, operations management, problem-solving |
+| **`sponsor-relations`**  | Sponsor prospecting, package design, outreach, contract management, benefit fulfillment, ROI reporting                                      | Sales, relationship management, reporting                  |
 
 **Team setup via tools:**
 - Use `team-create` to establish the event team with the above roles
@@ -490,6 +493,14 @@ For repeating event programs (e.g., monthly webinars, quarterly meetups, annual 
 
 ---
 
+## Gotchas
+
+- **Venue availability ≠ venue booking.** Finding an available date means nothing until a contract is signed. Never present an available venue as "booked" — distinguish availability from confirmed booking.
+- **Speaker confirmation requires written agreement.** A verbal "yes" from a keynote speaker is not confirmed. Always follow up with a speaker agreement that covers logistics, content deadlines, and cancellation terms.
+- **Budget estimates drift upward.** Hidden costs — AV equipment rental, insurance, overtime staff, last-minute printing — often add significantly to the initial estimate. Build a contingency line item (industry practice suggests 10–20% of total budget).
+- **Attendee engagement metrics are not event success metrics.** High session attendance is not the same as high satisfaction or strong networking outcomes. Distinguish operational metrics from strategic outcomes.
+- **Post-event content takes longer than planned.** Raw recordings need editing, captioning, transcript creation, and platform-specific formatting. Allocate 2-3× the initial estimate for content repurposing.
+
 ## Anti-Patterns
 
 Avoid these common pitfalls that derail events:
@@ -498,7 +509,7 @@ Avoid these common pitfalls that derail events:
 
 2. **Underestimating AV/setup time.** Budget 2× your estimated setup time. Something always goes wrong — wrong cable adapter, software version conflict, last-minute layout change. Build buffer into the run-of-show.
 
-3. **Collecting feedback after the 72-hour window.** Attendee memories decay fast. Send the survey within 24 hours, with one reminder at 48 hours. Response rates drop 50%+ after 72 hours.
+3. **Collecting feedback after the 72-hour window.** Attendee memories decay fast. Send the survey within 24 hours, with one reminder at 48 hours. Response rates drop significantly after 72 hours.
 
 4. **Treating the run-of-show as static.** Events are dynamic. Assign a "run-of-show owner" who has authority to make real-time adjustments (swap sessions, extend breaks, cut overrunning speakers). Rigidity breaks events; adaptability saves them.
 
