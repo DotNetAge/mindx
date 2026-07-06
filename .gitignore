@@ -60,3 +60,9 @@ docs/docker-hub-readme.md
 credentials.txt
 
 __pycache__/
+
+# Compiled binaries (should not be committed)
+mindx-daemon
+intercept
+main
+mindx
