@@ -49,6 +49,10 @@ type FileWatchService struct {
 	// Set by Daemon to integrate with FileVersionStore.
 	VersionRecorder func(absPath string)
 
+	// PreSyncEntityDefs is propagated to each IndexService created by this service.
+	// Called before each Sync/IndexFile to set region-specific entity definitions.
+	PreSyncEntityDefs func(projectDir, regionID string)
+
 	// IndexEventCallback is called for each file before and after indexing.
 	// eventType is "indexing" before and "indexed" after.
 	// Set by Daemon to broadcast to WebUI clients.
@@ -502,6 +506,9 @@ func (s *FileWatchService) getIndexer(absDir string) *IndexService {
 		opts = append(opts, WithTokenUsageStore(s.usageStore, s.modelName))
 	}
 	pi := NewIndexService(s.indexer, cacheDir, s.logger, opts...)
+	if s.PreSyncEntityDefs != nil {
+		pi.PreSyncEntityDefs = s.PreSyncEntityDefs
+	}
 	s.indexers[absDir] = pi
 	return pi
 }

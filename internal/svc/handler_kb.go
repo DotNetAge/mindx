@@ -505,6 +505,14 @@ func (d *Daemon) handleKBIndex(_ context.Context, params json.RawMessage) (any, 
 		filepath.Join(cacheBase, indexing.SanitizeDirName(parentDir)),
 		d.logger,
 	)
+	if d.graphIndexer != nil {
+		pi.PreSyncEntityDefs = func(projectDir, regionID string) {
+			defs := d.entityDefsForProject(projectDir)
+			if len(defs) > 0 {
+				d.graphIndexer.SetEntityDefsByRegion(regionID, defs)
+			}
+		}
+	}
 
 	if p.Force {
 		pi.ClearCacheEntry(relPath)

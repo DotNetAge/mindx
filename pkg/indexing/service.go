@@ -43,6 +43,11 @@ type IndexService struct {
 	// Set by FileWatchService.SyncDir to broadcast per-file progress to WebUI.
 	SyncStepCallback func(absPath, relPath, state string) // "indexing" | "indexed"
 
+	// PreSyncEntityDefs is called before Sync/IndexFile to set region-specific
+	// entity definitions on the GraphIndexer. Allows per-project schema filtering.
+	// Set by svc layer when creating the IndexService.
+	PreSyncEntityDefs func(projectDir, regionID string)
+
 	// maxConcurrency limits the number of files indexed simultaneously
 	// during a full directory scan. Defaults to DefaultConcurrency (3).
 	maxConcurrency int
@@ -124,6 +129,11 @@ func (p *IndexService) Sync(ctx context.Context, projectDir string) *ProjectSync
 	// as metadata on each chunk. This decouples the region identifier from
 	// individual file paths — if a file moves within the same directory,
 	// only source_file changes, not region_id.
+
+	// Notify external callback to set region-specific entity definitions
+	if p.PreSyncEntityDefs != nil {
+		p.PreSyncEntityDefs(absDir, regionID)
+	}
 
 	if p.logger != nil {
 		p.logger.Info("index-service.sync.start",
@@ -587,6 +597,12 @@ func (p *IndexService) IndexFile(ctx context.Context, absDir, absPath string) er
 	relPath, err := filepath.Rel(absDir, absPath)
 	if err != nil {
 		return fmt.Errorf("index-service: resolve rel path: %w", err)
+	}
+
+	// Notify external callback to set region-specific entity definitions
+	regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(absDir)))
+	if p.PreSyncEntityDefs != nil {
+		p.PreSyncEntityDefs(absDir, regionID)
 	}
 
 	// ── Remove old chunks (if previously cached) ──

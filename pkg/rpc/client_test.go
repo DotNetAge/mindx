@@ -427,7 +427,19 @@ func TestKBMethods(t *testing.T) {
 
 	t.Run("Search", func(t *testing.T) {
 		testRPC(t, c, m, "kb.search", KBSearchParams{Query: "q", Limit: 5, MinScore: 0.7}, func() (json.RawMessage, error) {
-			return c.KBSearch("q", 5, 0.7)
+			return c.KBSearch("q", 5, 0.7, "")
+		})
+	})
+
+	t.Run("Count", func(t *testing.T) {
+		testRPC(t, c, m, "kb.count", KBCountParams{Region: "/p"}, func() (json.RawMessage, error) {
+			return c.KBCount("/p")
+		})
+	})
+
+	t.Run("CountAll", func(t *testing.T) {
+		testRPC(t, c, m, "kb.count", KBCountParams{}, func() (json.RawMessage, error) {
+			return c.KBCount("")
 		})
 	})
 

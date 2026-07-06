@@ -2,6 +2,7 @@ package svc
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -76,12 +77,81 @@ func (d *Daemon) schemasDir() string {
 	return filepath.Join(d.app.Settings().DataDir(), "..", "schemas")
 }
 
+// projectSchemasDir 返回 ~/.mindx/projects/<sha(projectDir)>/schemas/ 目录。
+func (d *Daemon) projectSchemasDir(projectDir string) string {
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(projectDir))))
+	return filepath.Join(d.app.Settings().DataDir(), "..", "projects", hash, "schemas")
+}
+
+// entityDefsForProject 加载 entity-defs.json，按 project 过滤只保留该 project 使用的 Schema。
+// 如果 projectSchemasDir 不存在或为空，返回全部 entityDefs（兼容无 project 设置的情况）。
+func (d *Daemon) entityDefsForProject(projectDir string) []goragindexer.EntityDef {
+	f, err := d.loadEntityDefs()
+	if err != nil || len(f.Types) == 0 {
+		return nil
+	}
+
+	// 检查 project 是否有独立的 schemas 目录
+	projSchemasDir := d.projectSchemasDir(projectDir)
+	hasProjectSchemas := false
+	if info, statErr := os.Stat(projSchemasDir); statErr == nil && info.IsDir() {
+		hasProjectSchemas = true
+	}
+
+	defs := make([]goragindexer.EntityDef, 0, len(f.Types))
+	for _, t := range f.Types {
+		if t.Name == "" {
+			continue
+		}
+
+		// 如果 project 有独立 schemas 目录，检查该类型对应的 schema 文件是否存在
+		if hasProjectSchemas && t.Category != "" {
+			schemaPath := filepath.Join(projSchemasDir, t.Category, t.Name+".json")
+			if _, err := os.Stat(schemaPath); os.IsNotExist(err) {
+				continue // 跳过，该 schema 未被复制到 project 目录
+			}
+		}
+
+		prompt := t.Prompt
+		if prompt == "" {
+			prompt = "**" + t.Name + "** — " + t.Desc
+		}
+		schema := t.Schema
+		if schema == "" {
+			schema = d.readSchemaFileForProject(t.Category, t.Name, projectDir)
+		}
+		defs = append(defs, goragindexer.EntityDef{
+			Prompt: prompt,
+			Schema: schema,
+		})
+	}
+
+	return defs
+}
+
 // readSchemaFile 读取 schema 文件，返回文件内容（JSON Schema 文本）。
+// 优先从 projectSchemasDir 读取，不存在时回退到全局 schemasDir。
+// projectDir 为空时直接从全局目录读取。
 // 文件不存在时返回空字符串。
 func (d *Daemon) readSchemaFile(category, name string) string {
+	return d.readSchemaFileForProject(category, name, "")
+}
+
+// readSchemaFileForProject 从指定 project 的 schemas 目录读取 schema 文件。
+// project 目录不存在时回退到全局目录。
+func (d *Daemon) readSchemaFileForProject(category, name, projectDir string) string {
 	if category == "" {
 		return ""
 	}
+	// 优先从 project 目录读取
+	if projectDir != "" {
+		path := filepath.Join(d.projectSchemasDir(projectDir), category, name+".json")
+		data, err := os.ReadFile(path)
+		if err == nil {
+			return strings.TrimSpace(string(data))
+		}
+	}
+	// 回退到全局目录
 	path := filepath.Join(d.schemasDir(), category, name+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -92,7 +162,8 @@ func (d *Daemon) readSchemaFile(category, name string) string {
 
 func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage) (any, error) {
 	var p struct {
-		Types []entityDefFileEntry `json:"types"`
+		Types      []entityDefFileEntry `json:"types"`
+		ProjectDir string               `json:"projectDir,omitempty"`
 	}
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
@@ -107,6 +178,25 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 		if t.Schema == "" {
 			t.Schema = d.readSchemaFile(t.Category, t.Name)
 		}
+	}
+
+	// ── 如果指定了 projectDir，将 schema 文件写入 project 目录 ───────────
+	if p.ProjectDir != "" {
+		projSchemasDir := d.projectSchemasDir(p.ProjectDir)
+		for _, t := range p.Types {
+			if t.Category == "" || t.Name == "" || t.Schema == "" {
+				continue
+			}
+			schemaPath := filepath.Join(projSchemasDir, t.Category, t.Name+".json")
+			if err := os.MkdirAll(filepath.Dir(schemaPath), 0755); err != nil {
+				d.logger.Warn("entity_tags.save: mkdir project schema dir", "path", schemaPath, "error", err)
+				continue
+			}
+			if err := os.WriteFile(schemaPath, []byte(t.Schema), 0644); err != nil {
+				d.logger.Warn("entity_tags.save: write project schema", "path", schemaPath, "error", err)
+			}
+		}
+		d.logger.Info("entity_tags.save: wrote project schemas", "projectDir", p.ProjectDir, "count", len(p.Types))
 	}
 
 	// 构建文件结构
@@ -146,8 +236,14 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 			}
 		}
 		if len(defs) > 0 {
-			d.graphIndexer.SetEntityDefs(defs)
-			d.logger.Info("entity_tags: updated GraphIndexer entity defs", "count", len(defs))
+			if p.ProjectDir != "" {
+				regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(p.ProjectDir))))
+				d.graphIndexer.SetEntityDefsByRegion(regionID, defs)
+				d.logger.Info("entity_tags: updated GraphIndexer region entity defs", "regionID", regionID, "count", len(defs))
+			} else {
+				d.graphIndexer.SetEntityDefs(defs)
+				d.logger.Info("entity_tags: updated GraphIndexer entity defs", "count", len(defs))
+			}
 		}
 	}
 

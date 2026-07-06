@@ -281,6 +281,16 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		app.SetGraphIndexer(graphIndexer)
 	}
 
+	// Wire per-project schema filtering for FileWatchService index operations
+	if kbWatch != nil && graphIndexer != nil {
+		kbWatch.PreSyncEntityDefs = func(projectDir, regionID string) {
+			defs := d.entityDefsForProject(projectDir)
+			if len(defs) > 0 {
+				graphIndexer.SetEntityDefsByRegion(regionID, defs)
+			}
+		}
+	}
+
 	// Wire graphDB to daemon fields (deferred because d is needed)
 	if graphDB != nil {
 		d.graphDB = graphDB
@@ -602,6 +612,14 @@ func (d *Daemon) ensureGraphIndexer() error {
 	d.graphIndexer = gi
 	d.app.SetGraphIndexer(gi)
 	d.kbWatch = kw
+
+	// Wire per-project schema filtering
+	kw.PreSyncEntityDefs = func(projectDir, regionID string) {
+		defs := d.entityDefsForProject(projectDir)
+		if len(defs) > 0 {
+			gi.SetEntityDefsByRegion(regionID, defs)
+		}
+	}
 
 	// Wire IndexEventCallback and restore existing watches if gateway already running.
 	if d.gw != nil {
