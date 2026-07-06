@@ -7,6 +7,7 @@ type KBSearchParams struct {
 	Query    string  `json:"query"`
 	Limit    int     `json:"limit,omitempty"`
 	MinScore float64 `json:"min_score,omitempty"`
+	Region   string  `json:"region,omitempty"`
 }
 
 // FilterCondition mirrors gorag/core.FilterCondition for JSON parsing.
@@ -38,9 +39,9 @@ type KBFileStatesParams struct {
 	ProjectDir string `json:"project_dir"`
 }
 
-func (c *Client) KBSearch(query string, limit int, minScore float64) (json.RawMessage, error) {
+func (c *Client) KBSearch(query string, limit int, minScore float64, region string) (json.RawMessage, error) {
 	return c.CallWithTimeout("kb.search", KBSearchParams{
-		Query: query, Limit: limit, MinScore: minScore,
+		Query: query, Limit: limit, MinScore: minScore, Region: region,
 	})
 }
 
@@ -92,51 +93,60 @@ func (c *Client) KBIndex(path string, force bool) (json.RawMessage, error) {
 	return c.CallWithTimeout("kb.index", KBIndexParams{Path: path, Force: force})
 }
 
-// ── kb.manifest.* ──
+// ── kb.index.* ──
 
-// KBManifestGetParams are the params for kb.manifest.get.
-type KBManifestGetParams struct {
+// KBIndexListParams are the params for kb.index.list.
+type KBIndexListParams struct {
 	SessionID string `json:"session_id"`
 }
 
-// KBManifestAddParams are the params for kb.manifest.add.
-type KBManifestAddParams struct {
+// KBIndexAddParams are the params for kb.index.add.
+type KBIndexAddParams struct {
 	SessionID string   `json:"session_id"`
 	Files     []string `json:"files"`
 }
 
-// KBManifestRemoveParams are the params for kb.manifest.remove.
-type KBManifestRemoveParams struct {
+// KBIndexRemoveParams are the params for kb.index.remove.
+type KBIndexRemoveParams struct {
 	SessionID string   `json:"session_id"`
 	Files     []string `json:"files"`
 }
 
-// KBManifestStartParams are the params for kb.manifest.start.
-type KBManifestStartParams struct {
+// KBIndexStartParams are the params for kb.index.start.
+type KBIndexStartParams struct {
 	SessionID string `json:"session_id"`
 }
 
-// KBManifestStopParams are the params for kb.manifest.stop.
-type KBManifestStopParams struct {
+// KBIndexStopParams are the params for kb.index.stop.
+type KBIndexStopParams struct {
 	SessionID string `json:"session_id"`
 }
 
-func (c *Client) KBManifestGet(sessionID string) (json.RawMessage, error) {
-	return c.CallWithTimeout("kb.manifest.get", KBManifestGetParams{SessionID: sessionID})
+func (c *Client) KBIndexList(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.index.list", KBIndexListParams{SessionID: sessionID})
 }
 
-func (c *Client) KBManifestAdd(sessionID string, files []string) (json.RawMessage, error) {
-	return c.CallWithTimeout("kb.manifest.add", KBManifestAddParams{SessionID: sessionID, Files: files})
+func (c *Client) KBIndexAdd(sessionID string, files []string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.index.add", KBIndexAddParams{SessionID: sessionID, Files: files})
 }
 
-func (c *Client) KBManifestRemove(sessionID string, files []string) (json.RawMessage, error) {
-	return c.CallWithTimeout("kb.manifest.remove", KBManifestRemoveParams{SessionID: sessionID, Files: files})
+func (c *Client) KBIndexRemove(sessionID string, files []string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.index.remove", KBIndexRemoveParams{SessionID: sessionID, Files: files})
 }
 
-func (c *Client) KBManifestStart(sessionID string) (json.RawMessage, error) {
-	return c.CallWithTimeout("kb.manifest.start", KBManifestStartParams{SessionID: sessionID})
+func (c *Client) KBIndexStart(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.index.start", KBIndexStartParams{SessionID: sessionID})
 }
 
-func (c *Client) KBManifestStop(sessionID string) (json.RawMessage, error) {
-	return c.CallWithTimeout("kb.manifest.stop", KBManifestStopParams{SessionID: sessionID})
+func (c *Client) KBIndexStop(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.index.stop", KBIndexStopParams{SessionID: sessionID})
+}
+
+// KBCountParams are the params for kb.count.
+type KBCountParams struct {
+	Region string `json:"region,omitempty"`
+}
+
+func (c *Client) KBCount(region string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.count", KBCountParams{Region: region})
 }

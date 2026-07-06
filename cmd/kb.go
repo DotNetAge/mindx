@@ -51,12 +51,13 @@ var kbSearchCmd = &cobra.Command{
 		limit, _ := cmd.Flags().GetInt("limit")
 		minScore, _ := cmd.Flags().GetFloat64("min-score")
 		jsonOut, _ := cmd.Flags().GetBool("json")
+		region, _ := cmd.Flags().GetString("region")
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = cl.Close() }()
-		result, err := cl.KBSearch(args[0], limit, minScore)
+		result, err := cl.KBSearch(args[0], limit, minScore, region)
 		if err != nil {
 			return err
 		}
@@ -270,6 +271,49 @@ Examples:
 		}
 
 		fmt.Printf("[%s] %s (%s)\n", resp.Status, resp.Path, resp.Type)
+		return nil
+	},
+}
+
+// ── kb count ──────────────────────────────────────────────────
+
+var kbCountCmd = &cobra.Command{
+	Use:   "count",
+	Short: "Count chunks in the knowledge base",
+	Long: `Count chunks in the knowledge base.
+
+Without -r, returns the total number of chunks across all regions.
+With -r <path>, returns the count of chunks whose source_file matches the path prefix.
+
+Examples:
+  mindx kb count
+  mindx kb count -r /path/to/project`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		region, _ := cmd.Flags().GetString("region")
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+		result, err := cl.KBCount(region)
+		if err != nil {
+			return err
+		}
+
+		var resp struct {
+			Total  int    `json:"total"`
+			Region string `json:"region,omitempty"`
+		}
+		if err := json.Unmarshal(result, &resp); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		if resp.Region != "" {
+			fmt.Printf("Total chunks in region %s: %d\n", resp.Region, resp.Total)
+		} else {
+			fmt.Printf("Total chunks: %d\n", resp.Total)
+		}
 		return nil
 	},
 }
@@ -545,6 +589,8 @@ func init() {
 	kbFileStatesCmd.Flags().Bool("json", false, "Output raw JSON")
 	kbIndexCmd.Flags().Bool("force", false, "Force re-index even if already cached")
 
+	kbCountCmd.Flags().StringP("region", "r", "", "Directory path to count chunks for (prefix match on source_file)")
+
 	kbChunksCmd.Flags().StringP("id", "i", "", "Chunk ID to show as JSON")
 	kbChunksCmd.Flags().IntP("page", "p", 1, "Page number")
 	kbChunksCmd.Flags().IntP("size", "s", 50, "Page size")
@@ -559,6 +605,7 @@ func init() {
 	kbCmd.AddCommand(kbSyncCmd)
 	kbCmd.AddCommand(kbFileStatesCmd)
 	kbCmd.AddCommand(kbIndexCmd)
+	kbCmd.AddCommand(kbCountCmd)
 	kbCmd.AddCommand(kbChunksCmd)
 	kbChunksCmd.AddCommand(kbChunksTreeCmd)
 }

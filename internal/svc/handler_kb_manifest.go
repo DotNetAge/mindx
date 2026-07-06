@@ -9,10 +9,10 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// kb.manifest.get — 获取项目目录的索引清单
+// kb.index.list — 获取项目目录的索引清单
 // ---------------------------------------------------------------------------
 
-func (d *Daemon) handleKBManifestGet(_ context.Context, params json.RawMessage) (any, error) {
+func (d *Daemon) handleKBIndexList(_ context.Context, params json.RawMessage) (any, error) {
 	var p struct {
 		ProjectDir string `json:"project_dir"`
 	}
@@ -128,10 +128,10 @@ func collectFilesRecursive(absRoot, absPath string) []string {
 }
 
 // ---------------------------------------------------------------------------
-// kb.manifest.add — 将文件或目录加入索引清单
+// kb.index.add — 将文件或目录加入索引清单
 // ---------------------------------------------------------------------------
 
-func (d *Daemon) handleKBManifestAdd(_ context.Context, params json.RawMessage) (any, error) {
+func (d *Daemon) handleKBIndexAdd(_ context.Context, params json.RawMessage) (any, error) {
 	var p struct {
 		ProjectDir string   `json:"project_dir"`
 		Files      []string `json:"files"`
@@ -180,10 +180,10 @@ func (d *Daemon) handleKBManifestAdd(_ context.Context, params json.RawMessage) 
 }
 
 // ---------------------------------------------------------------------------
-// kb.manifest.remove — 从索引清单移除文件
+// kb.index.remove — 从索引清单中移除文件或目录
 // ---------------------------------------------------------------------------
 
-func (d *Daemon) handleKBManifestRemove(_ context.Context, params json.RawMessage) (any, error) {
+func (d *Daemon) handleKBIndexRemove(_ context.Context, params json.RawMessage) (any, error) {
 	var p struct {
 		ProjectDir string   `json:"project_dir"`
 		Files      []string `json:"files"`
@@ -216,10 +216,10 @@ func (d *Daemon) handleKBManifestRemove(_ context.Context, params json.RawMessag
 }
 
 // ---------------------------------------------------------------------------
-// kb.manifest.start — 开始处理索引清单
+// kb.index.start — 开始处理索引清单中的待索引文件
 // ---------------------------------------------------------------------------
 
-func (d *Daemon) handleKBManifestStart(_ context.Context, params json.RawMessage) (any, error) {
+func (d *Daemon) handleKBIndexStart(_ context.Context, params json.RawMessage) (any, error) {
 	var p struct {
 		ProjectDir string `json:"project_dir"`
 	}
@@ -243,10 +243,10 @@ func (d *Daemon) handleKBManifestStart(_ context.Context, params json.RawMessage
 }
 
 // ---------------------------------------------------------------------------
-// kb.manifest.stop — 暂停处理索引清单
+// kb.index.stop — 停止处理索引清单
 // ---------------------------------------------------------------------------
 
-func (d *Daemon) handleKBManifestStop(_ context.Context, params json.RawMessage) (any, error) {
+func (d *Daemon) handleKBIndexStop(_ context.Context, params json.RawMessage) (any, error) {
 	var p struct {
 		ProjectDir string `json:"project_dir"`
 	}

@@ -537,7 +537,21 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		opts = append(opts, agents.WithEnvs(a.envsOverride))
 	}
 
-	if a.searchStrategyOverride != nil {
+	// Check if the current project has indexed data in the knowledge base
+	hasLocalData := false
+	if a.graphIndexer != nil && a.currentSessionMeta != nil && a.currentSessionMeta.ProjectDir != "" {
+		total, err := a.graphIndexer.CountByRegion(context.Background(), a.currentSessionMeta.ProjectDir)
+		if err == nil && total > 0 {
+			hasLocalData = true
+			a.logger.Info("createRuntime: project has indexed data, LocalSearch will be enabled",
+				"project_dir", a.currentSessionMeta.ProjectDir, "total", total)
+		} else {
+			a.logger.Info("createRuntime: no indexed data for project, LocalSearch will be skipped",
+				"project_dir", a.currentSessionMeta.ProjectDir, "total", total, "error", err)
+		}
+	}
+
+	if a.searchStrategyOverride != nil && hasLocalData {
 		opts = append(opts, agents.WithSearchStrategy(a.searchStrategyOverride))
 	}
 
@@ -622,8 +636,8 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	rt := agents.NewRuntime(opts...)
 	a.logger.Info("createRuntime: done", "agent", agentName)
 
-	// Register LocalSearch if GraphIndexer is available
-	if a.graphIndexer != nil {
+	// Register LocalSearch if the project has indexed data in knowledge base
+	if hasLocalData {
 		ls := mindxtools.NewLocalSearch(a.graphIndexer)
 		if err := rt.RegisterTool(ls); err != nil {
 			a.logger.Warn("createRuntime: failed to register LocalSearch", "agent", agentName, "error", err)

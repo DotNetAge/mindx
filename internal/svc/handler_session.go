@@ -190,7 +190,7 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 
 	// Note: Auto-indexing is disabled. Users add files to the index manifest
 	// manually via the File Explorer (clicking the cloud icon next to each file).
-	// Indexing is triggered via kb.manifest.start/stop per-session.
+	// Indexing is triggered via kb.index.start/stop per-session.
 
 	return map[string]any{
 		"session_id":  info.SessionID,

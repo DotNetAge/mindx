@@ -2,6 +2,7 @@ package svc
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
 	"github.com/DotNetAge/gograph/pkg/graph"
+	goragcore "github.com/DotNetAge/gorag/v2/core"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
@@ -313,6 +315,138 @@ func graphPropsToAny(props map[string]graph.PropertyValue) map[string]interface{
 		result[k] = v.InterfaceValue()
 	}
 	return result
+}
+
+// ---------------------------------------------------------------------------
+// graph.list_nodes_by_region — 按 project_dir 限定返回该 Region 下的节点和边
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleGraphListNodesByProject(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		ProjectDir string `json:"project_dir"`
+	}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.ProjectDir == "" {
+		return nil, fmt.Errorf("project_dir is required")
+	}
+
+	if d.graphIndexer == nil {
+		return nil, fmt.Errorf("knowledge base not available")
+	}
+	if d.graphStore == nil {
+		return nil, fmt.Errorf("graph store not available")
+	}
+
+	// 1. Compute region ID
+	absDir, err := filepath.Abs(p.ProjectDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve project dir: %w", err)
+	}
+	regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(absDir))))
+
+	// 2. Query vectorDB for all chunks with this region_id
+	vectors, _, err := d.graphIndexer.VectorDB().ListFiltered(context.Background(), 0, 100000, []goragcore.FilterCondition{
+		{Key: "region_id", Type: "exact", Value: regionID},
+	})
+	if err != nil {
+		d.logger.Warn("graph.list_nodes_by_region: vectorDB query failed", "error", err)
+		return nil, fmt.Errorf("query vectorDB: %w", err)
+	}
+
+	// 3. Collect all chunk IDs from this region
+	chunkIDSet := make(map[string]bool, len(vectors))
+	for _, v := range vectors {
+		chunkIDSet[v.ID] = true
+	}
+
+	// 4. Get all graph nodes and filter by chunk ID overlap
+	allNodes, err := d.graphStore.ListNodes()
+	if err != nil {
+		return nil, fmt.Errorf("list nodes failed: %w", err)
+	}
+
+	// Helper: check if a node's source_chunk_ids overlaps with chunkIDSet
+	nodeInRegion := func(n *graph.Node) bool {
+		v, ok := n.GetProperty("source_chunk_ids")
+		if !ok {
+			return false
+		}
+		raw := v.InterfaceValue()
+		switch ids := raw.(type) {
+		case []string:
+			for _, id := range ids {
+				if chunkIDSet[id] {
+					return true
+				}
+			}
+		case []interface{}:
+			for _, id := range ids {
+				if s, ok := id.(string); ok && chunkIDSet[s] {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	nodeIDs := make(map[string]bool, len(allNodes))
+	filteredNodes := make([]map[string]interface{}, 0)
+	for _, n := range allNodes {
+		if !nodeInRegion(n) {
+			continue
+		}
+		nodeIDs[n.ID] = true
+		props := graphPropsToAny(n.Properties)
+		// Ensure source_chunk_ids is included
+		if v, ok := n.GetProperty("source_chunk_ids"); ok {
+			props["source_chunk_ids"] = v.InterfaceValue()
+		}
+		if v, ok := n.GetProperty("source_doc_ids"); ok {
+			props["source_doc_ids"] = v.InterfaceValue()
+		}
+		if v, ok := n.GetProperty("name"); ok {
+			props["name"] = v.InterfaceValue()
+		}
+		filteredNodes = append(filteredNodes, map[string]interface{}{
+			"id":         n.ID,
+			"labels":     n.Labels,
+			"properties": props,
+		})
+	}
+
+	// 5. Filter edges: both source and target must be in the filtered node set
+	allEdges, err := d.graphStore.ListEdges()
+	if err != nil {
+		return nil, fmt.Errorf("list edges failed: %w", err)
+	}
+
+	filteredEdges := make([]map[string]interface{}, 0)
+	for _, e := range allEdges {
+		if nodeIDs[e.StartNodeID] && nodeIDs[e.EndNodeID] {
+			filteredEdges = append(filteredEdges, map[string]interface{}{
+				"id":           e.ID,
+				"from_node_id": e.StartNodeID,
+				"to_node_id":   e.EndNodeID,
+				"type":         e.Type,
+				"properties":   graphPropsToAny(e.Properties),
+			})
+		}
+	}
+
+	d.logger.Info("graph.list_nodes_by_region called",
+		"project_dir", p.ProjectDir,
+		"region_id", regionID,
+		"vectors", len(vectors),
+		"nodes", len(filteredNodes),
+		"edges", len(filteredEdges),
+	)
+
+	return map[string]interface{}{
+		"nodes": filteredNodes,
+		"edges": filteredEdges,
+	}, nil
 }
 
 // initGraphDB opens (or creates) the knowledge-graph database under ~/.mindx/data/.

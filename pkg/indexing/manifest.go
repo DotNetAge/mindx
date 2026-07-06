@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -326,6 +327,61 @@ func (s *ManifestStore) All() map[string]*Manifest {
 		result[k] = v
 	}
 	return result
+}
+
+// FindForPath returns the manifest whose project directory contains absPath,
+// or nil if no matching manifest is found. It checks the cache first, then
+// scans the data directory on disk. This ensures the file browser can
+// discover manifests without the KB dialog having loaded them first.
+func (s *ManifestStore) FindForPath(absPath string) *Manifest {
+	s.mu.RLock()
+	// Check cache first
+	for _, m := range s.cache {
+		if strings.HasPrefix(absPath, m.ProjectDir+string(filepath.Separator)) || absPath == m.ProjectDir {
+			s.mu.RUnlock()
+			return m
+		}
+	}
+	s.mu.RUnlock()
+
+	// Not in cache — scan disk for all manifest files
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Double-check after acquiring write lock (in case another goroutine loaded it)
+	for _, m := range s.cache {
+		if strings.HasPrefix(absPath, m.ProjectDir+string(filepath.Separator)) || absPath == m.ProjectDir {
+			return m
+		}
+	}
+
+	pattern := filepath.Join(s.dataDir, "manifest_*.json")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil
+	}
+	for _, mp := range matches {
+		data, err := os.ReadFile(mp)
+		if err != nil {
+			continue
+		}
+		var m Manifest
+		if json.Unmarshal(data, &m) != nil || m.ProjectDir == "" {
+			continue
+		}
+		// Cache it
+		stored := &Manifest{
+			ProjectDir: m.ProjectDir,
+			Files:      m.Files,
+			Queue:      m.Queue,
+			Processing: m.Processing,
+		}
+		s.cache[m.ProjectDir] = stored
+		if strings.HasPrefix(absPath, m.ProjectDir+string(filepath.Separator)) || absPath == m.ProjectDir {
+			return stored
+		}
+	}
+	return nil
 }
 
 // TokenUsage holds token and cost data for a completed indexing operation.

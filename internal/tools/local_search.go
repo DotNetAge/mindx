@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -171,9 +172,15 @@ func (t *LocalSearch) Execute(ctx context.Context, params map[string]any) (any, 
 		gq.SetDepth(1)
 	}
 
-	// Apply projectDir filter if specified
-	if raw, ok := params["projectDir"].(string); ok && raw != "" {
-		regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(raw)))
+	// Apply projectDir filter — default to current working directory
+	projectDir, _ := params["projectDir"].(string)
+	if projectDir == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			projectDir = cwd
+		}
+	}
+	if projectDir != "" {
+		regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(projectDir)))
 		gq.AddFilter("region_id", regionID)
 	}
 

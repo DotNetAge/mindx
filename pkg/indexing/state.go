@@ -70,7 +70,7 @@ type DirIndexState struct {
 
 	// Processing indicates whether the FIFO queue worker is actively consuming
 	// the pending list. When false, the worker is paused (current file finishes,
-	// then waits). Set via kb.manifest.start/stop RPC.
+	// then waits). Set via kb.index.start/stop RPC.
 	Processing bool `json:"processing"`
 
 	// CurrentFile is the relative path of the file currently being indexed

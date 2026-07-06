@@ -658,7 +658,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 	if d.kbWatch != nil {
 		// Note: Auto-indexing via FileWatchService is disabled in manual mode.
 		// Users add files to the index manifest manually via the File Explorer,
-		// and indexing is started/stopped per-session via kb.manifest.start/stop.
+		// and indexing is started/stopped per-session via kb.index.start/stop.
 		// The FileWatchService is still available as an IndexService provider
 		// for on-demand file indexing (via kbWatch.GetIndexer()).
 		d.logger.Info("filewatch service configured but not auto-started (manual indexing mode)")

@@ -160,7 +160,7 @@ func (s *FileWatchService) Start(ctx context.Context) error {
 	go s.eventLoop()
 
 	// Note: Auto-resume of indexing on startup is disabled in manual mode.
-	// Indexing is triggered per-session via kb.manifest.start.
+	// Indexing is triggered per-session via kb.index.start.
 
 	<-ctx.Done()
 	return nil

@@ -79,20 +79,15 @@ func (d *Daemon) handleFSList(_ context.Context, params json.RawMessage) (any, e
 
 	// Populate index_state for each file by checking ManifestStore
 	if d.manifestStore != nil {
-		// Find which project dir this path belongs to
-		var projectDir string
-		for _, m := range d.manifestStore.All() {
-			if strings.HasPrefix(absPath, m.ProjectDir+string(filepath.Separator)) || absPath == m.ProjectDir {
-				projectDir = m.ProjectDir
-				break
-			}
+		m := d.manifestStore.FindForPath(absPath)
+		// If FindForPath can't find a manifest (cache miss + no file on disk),
+		// fall back to LoadOrCreate which always returns a valid (possibly empty) manifest.
+		if m == nil {
+			m = d.manifestStore.LoadOrCreate(absPath)
 		}
-
-		if projectDir != "" {
-			m := d.manifestStore.LoadOrCreate(projectDir)
-
+		if m != nil {
 			for i := range result {
-				entryRelPath, _ := filepath.Rel(projectDir, result[i].Path)
+				entryRelPath, _ := filepath.Rel(m.ProjectDir, result[i].Path)
 
 				if result[i].IsDir {
 					// Check if any child of this directory is in the manifest
@@ -109,17 +104,17 @@ func (d *Daemon) handleFSList(_ context.Context, params json.RawMessage) (any, e
 						result[i].IndexState = "unindexed"
 					}
 				} else {
-					state := m.GetState(entryRelPath)
-					if state == "unindexed" {
+					switch m.GetState(entryRelPath) {
+					case "unindexed":
 						result[i].IndexState = "unindexed"
-					} else if state == "pending" {
+					case "pending":
 						result[i].IndexState = "pending"
-					} else if state == "processing" {
+					case "processing":
 						result[i].IndexState = "indexing"
-					} else if state == "done" {
+					case "done":
 						result[i].IndexState = "indexed"
-					} else if state == "error" {
-						result[i].IndexState = "indexed" // already indexed, but failed
+					case "error":
+						result[i].IndexState = "indexed"
 					}
 				}
 			}

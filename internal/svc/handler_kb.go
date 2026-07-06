@@ -2,6 +2,7 @@ package svc
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -296,6 +297,18 @@ func (d *Daemon) handleKBSearch(_ context.Context, params json.RawMessage) (any,
 	}
 	q := gq
 
+	// Apply region filter (source_file prefix match via region_id)
+	if p.Region != "" {
+		absDir, err := filepath.Abs(p.Region)
+		if err != nil {
+			return nil, fmt.Errorf("resolve region path: %w", err)
+		}
+		regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(absDir))))
+		if graphQ, ok := q.(*goragquery.GraphQuery); ok {
+			graphQ.AddFilter("region_id", regionID)
+		}
+	}
+
 	hits, err := d.graphIndexer.Search(context.Background(), q)
 	if err != nil {
 		return nil, fmt.Errorf("kb search failed: %w", err)
@@ -562,4 +575,38 @@ func (d *Daemon) handleKBIndex(_ context.Context, params json.RawMessage) (any, 
 		"path":   absPath,
 		"type":   "file",
 	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// kb.count — 返回分片总数（可选按 region 路径前缀过滤）
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleKBCount(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.KBCountParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+
+	if d.graphIndexer == nil {
+		reason := "GraphIndexer not initialized"
+		if d.graphIndexerErr != nil {
+			reason = d.graphIndexerErr.Error()
+		}
+		d.logger.Warn("kb.count rejected: " + reason)
+		return nil, fmt.Errorf("knowledge base not available: %s", reason)
+	}
+
+	if p.Region != "" {
+		total, err := d.graphIndexer.CountByRegion(context.Background(), p.Region)
+		if err != nil {
+			return nil, fmt.Errorf("kb count by region failed: %w", err)
+		}
+		return map[string]any{"total": total, "region": p.Region}, nil
+	}
+
+	total, err := d.graphIndexer.Count(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("kb count failed: %w", err)
+	}
+	return map[string]any{"total": total}, nil
 }
