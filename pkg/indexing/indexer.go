@@ -2,6 +2,7 @@ package indexing
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,15 +32,20 @@ const (
 // Indexer is the single public entry point for project file indexing.
 // Each instance is bound to one project directory.
 type Indexer struct {
-	projectDir string
-	baseDir    string // data directory for boltDB storage
-	indexer    goragcore.Indexer
-	manifest   *manifestStore
-	ignore     *ignoreRules
-	logger     logging.Logger
-	usageStore session.TokenUsageStore
-	modelName  string
-	callbacks  *IndexerCallbacks
+	projectDir    string
+	baseDir       string // data directory for boltDB storage
+	indexer       goragcore.Indexer
+	regionIndexer *goragindexer.RegionIndexer
+	manifest      *manifestStore
+	ignore        *ignoreRules
+	logger        logging.Logger
+	usageStore    session.TokenUsageStore
+	modelName     string
+	callbacks     *IndexerCallbacks
+
+	// Cost rates (per 1M tokens). If both are zero, cost is not estimated.
+	costInputPer1M  float64
+	costOutputPer1M float64
 
 	// FIFO queue worker state
 	mu       sync.Mutex
@@ -91,6 +97,22 @@ func WithTokenUsageStore(store session.TokenUsageStore, modelName string) Indexe
 	return func(ix *Indexer) {
 		ix.usageStore = store
 		ix.modelName = modelName
+	}
+}
+
+// WithRegionIndexer configures the RegionIndexer for directory summarization.
+func WithRegionIndexer(ri *goragindexer.RegionIndexer) IndexerOption {
+	return func(ix *Indexer) {
+		ix.regionIndexer = ri
+	}
+}
+
+// WithCostRates configures the cost rates (per 1M tokens) used to estimate
+// indexing cost. Set both to zero to disable cost estimation.
+func WithCostRates(inputPer1M, outputPer1M float64) IndexerOption {
+	return func(ix *Indexer) {
+		ix.costInputPer1M = inputPer1M
+		ix.costOutputPer1M = outputPer1M
 	}
 }
 
@@ -157,14 +179,21 @@ func (ix *Indexer) Add(ctx context.Context, files ...string) int {
 			continue
 		}
 
-		// Stat the file on disk
+		// Stat the path on disk
 		info, statErr := os.Stat(absPath)
-		if statErr != nil || info.IsDir() {
-			if statErr != nil && ix.logger != nil {
-				ix.logger.Error("indexer: failed to stat file", fmt.Errorf("%w", statErr), "path", absPath)
+		if statErr != nil {
+			if ix.logger != nil {
+				ix.logger.Error("indexer: failed to stat path", fmt.Errorf("%w", statErr), "path", absPath)
 			}
 			continue
 		}
+
+		// Skip directories — parent dir entries are auto-upserted from file entries
+		if info.IsDir() {
+			continue
+		}
+
+		// ── File entry ──
 
 		// Size limit check
 		if info.Size() > MaxFileSize {
@@ -176,7 +205,7 @@ func (ix *Indexer) Add(ctx context.Context, files ...string) int {
 
 		// Check if already in manifest with matching mtime/size
 		existing, getErr := ix.manifest.get(absPath)
-		if getErr == nil && existing != nil &&
+		if getErr == nil && existing != nil && !existing.IsDir &&
 			existing.Mtime == info.ModTime().UnixNano() &&
 			existing.Size == info.Size() &&
 			existing.State != FilePending &&
@@ -188,7 +217,7 @@ func (ix *Indexer) Add(ctx context.Context, files ...string) int {
 
 		// Write or update as pending
 		now := time.Now().Unix()
-		if existing != nil {
+		if existing != nil && !existing.IsDir {
 			// Clear old chunks if file content changed
 			if existing.Mtime != info.ModTime().UnixNano() || existing.Size != info.Size() {
 				if len(existing.ChunkIDs) > 0 {
@@ -196,6 +225,7 @@ func (ix *Indexer) Add(ctx context.Context, files ...string) int {
 				}
 			}
 			existing.State = FilePending
+			existing.IsDir = false
 			existing.Mtime = info.ModTime().UnixNano()
 			existing.Size = info.Size()
 			existing.Error = ""
@@ -217,6 +247,9 @@ func (ix *Indexer) Add(ctx context.Context, files ...string) int {
 		}
 		added++
 
+		// Auto-upsert parent directory entries
+		ix.upsertParentDirs(ctx, absPath)
+
 		// Trigger callback
 		if ix.callbacks.OnFileAdded != nil {
 			ix.callbacks.OnFileAdded(ctx, absPath)
@@ -232,29 +265,72 @@ func (ix *Indexer) Enqueue(ctx context.Context, files ...string) int {
 		return 0
 	}
 
-	var count int
+	var moved []string
 	if len(files) == 0 {
 		var err error
-		count, err = ix.manifest.movePendingToEnqueued()
+		moved, err = ix.manifest.movePendingToEnqueued()
 		if err != nil && ix.logger != nil {
 			ix.logger.Error("indexer: enqueue all failed", fmt.Errorf("%w", err))
 		}
 	} else {
 		var err error
-		count, err = ix.manifest.moveToEnqueuedByPaths(files)
+		moved, err = ix.manifest.moveToEnqueuedByPaths(files)
 		if err != nil && ix.logger != nil {
 			ix.logger.Error("indexer: enqueue files failed", fmt.Errorf("%w", err), "files", files)
 		}
 	}
 
-	if count > 0 {
+	if len(moved) > 0 {
+		if ix.callbacks.OnFilesEnqueued != nil {
+			ix.callbacks.OnFilesEnqueued(ctx, moved)
+		}
 		// Non-blocking send to wake worker
 		select {
 		case ix.notify <- struct{}{}:
 		default:
 		}
 	}
-	return count
+	return len(moved)
+}
+
+// upsertParentDirs ensures all parent directories of a file path have directory entries.
+// If an existing dir entry is in Indexed state, it is reset to Pending to trigger re-summarization.
+func (ix *Indexer) upsertParentDirs(ctx context.Context, absPath string) {
+	if ix.manifest == nil {
+		return
+	}
+	dir := filepath.Dir(absPath)
+	for {
+		if !strings.HasPrefix(dir, ix.projectDir) {
+			break
+		}
+
+		existing, err := ix.manifest.get(dir)
+		if err != nil || existing == nil {
+			// Create new directory entry
+			meta := &FileMeta{
+				Path:      dir,
+				State:     FilePending,
+				IsDir:     true,
+				UpdatedAt: time.Now().Unix(),
+			}
+			if err := ix.manifest.put(meta); err != nil && ix.logger != nil {
+				ix.logger.Error("indexer: failed to upsert parent dir", fmt.Errorf("%w", err), "dir", dir)
+			}
+		} else if existing.IsDir && existing.State == FileIndexed {
+			// Reset indexed dir to pending — content may have changed
+			existing.State = FilePending
+			existing.UpdatedAt = time.Now().Unix()
+			if err := ix.manifest.put(existing); err != nil && ix.logger != nil {
+				ix.logger.Error("indexer: failed to reset parent dir to pending", fmt.Errorf("%w", err), "dir", dir)
+			}
+		}
+
+		if dir == ix.projectDir || dir == "/" {
+			break
+		}
+		dir = filepath.Dir(dir)
+	}
 }
 
 // ── Other Operations ──
@@ -275,7 +351,8 @@ func (ix *Indexer) Summarize(ctx context.Context, dir string) error {
 	return nil
 }
 
-// RemoveFile removes a file from the manifest and cleans up its chunks.
+// RemoveFile removes a file or directory entry from the manifest and cleans up its chunks.
+// For directory entries, also removes the .README.md file if it exists.
 func (ix *Indexer) RemoveFile(ctx context.Context, path string) error {
 	if ix.manifest == nil {
 		return fmt.Errorf("manifest not available")
@@ -292,12 +369,22 @@ func (ix *Indexer) RemoveFile(ctx context.Context, path string) error {
 		return nil
 	}
 	if existing.State == FileProcessing {
-		return fmt.Errorf("cannot remove file while indexing: %s", path)
+		return fmt.Errorf("cannot remove entry while processing: %s", path)
 	}
 
 	// Remove chunks if any
 	if len(existing.ChunkIDs) > 0 {
 		ix.removeChunks(ctx, existing.ChunkIDs)
+	}
+
+	// For directories, clean up the .README.md file
+	if existing.IsDir {
+		regionFilePath := filepath.Join(path, goragindexer.RegionFileName)
+		if _, statErr := os.Stat(regionFilePath); statErr == nil {
+			if rmErr := os.Remove(regionFilePath); rmErr != nil && ix.logger != nil {
+				ix.logger.Error("indexer: failed to remove region file", fmt.Errorf("%w", rmErr), "path", regionFilePath)
+			}
+		}
 	}
 
 	// Delete from manifest
@@ -344,6 +431,9 @@ func (ix *Indexer) ListFiles(ctx context.Context, dir string, states ...FileStat
 
 	result := make([]*FileMeta, 0, len(all))
 	for _, m := range all {
+		if m.IsDir {
+			continue
+		}
 		if !strings.HasPrefix(m.Path, prefix) {
 			continue
 		}
@@ -360,7 +450,7 @@ func (ix *Indexer) ListFiles(ctx context.Context, dir string, states ...FileStat
 	return result, nil
 }
 
-// ListAllFiles returns all files under dir (recursive), optionally filtered by state.
+// ListAllFiles returns all files (excluding directory entries) under dir (recursive), optionally filtered by state.
 func (ix *Indexer) ListAllFiles(ctx context.Context, dir string, states ...FileState) ([]*FileMeta, error) {
 	if ix.manifest == nil {
 		return nil, fmt.Errorf("manifest not available")
@@ -380,6 +470,43 @@ func (ix *Indexer) ListAllFiles(ctx context.Context, dir string, states ...FileS
 
 	result := make([]*FileMeta, 0, len(all))
 	for _, m := range all {
+		if m.IsDir {
+			continue
+		}
+		if !strings.HasPrefix(m.Path, dir) {
+			continue
+		}
+		if len(states) > 0 && !stateSet[m.State] {
+			continue
+		}
+		result = append(result, m)
+	}
+	return result, nil
+}
+
+// ListDirs returns all directory entries under dir (recursive), optionally filtered by state.
+func (ix *Indexer) ListDirs(ctx context.Context, dir string, states ...FileState) ([]*FileMeta, error) {
+	if ix.manifest == nil {
+		return nil, fmt.Errorf("manifest not available")
+	}
+
+	dir = filepath.Clean(dir)
+
+	all, err := ix.manifest.list()
+	if err != nil {
+		return nil, err
+	}
+
+	stateSet := make(map[FileState]bool, len(states))
+	for _, s := range states {
+		stateSet[s] = true
+	}
+
+	result := make([]*FileMeta, 0, len(all))
+	for _, m := range all {
+		if !m.IsDir {
+			continue
+		}
 		if !strings.HasPrefix(m.Path, dir) {
 			continue
 		}
@@ -412,6 +539,9 @@ func (ix *Indexer) Count(ctx context.Context, dir string) (map[FileState]int, er
 
 	dir = filepath.Clean(dir)
 	for _, m := range all {
+		if m.IsDir {
+			continue
+		}
 		if strings.HasPrefix(m.Path, dir) {
 			result[m.State]++
 		}
@@ -419,25 +549,32 @@ func (ix *Indexer) Count(ctx context.Context, dir string) (map[FileState]int, er
 	return result, nil
 }
 
-// Status returns the current runtime state.
+// Status returns the current runtime state (files only, excluding directory entries).
 func (ix *Indexer) Status(ctx context.Context) IndexerStatus {
 	ix.mu.Lock()
 	running := ix.running
 	processing := ix.processing
 	ix.mu.Unlock()
 
-	stats := ix.manifest.countByState()
-
-	// Count total chunks
+	// Count by state, excluding directory entries
+	stats := map[FileState]int{
+		FilePending:    0,
+		FileEnqueued:   0,
+		FileProcessing: 0,
+		FileIndexed:    0,
+		FileFailed:     0,
+	}
 	totalChunks := 0
-	if err := ix.manifest.forEach(func(meta *FileMeta) bool {
+	_ = ix.manifest.forEach(func(meta *FileMeta) bool {
+		if meta.IsDir {
+			return true
+		}
+		stats[meta.State]++
 		if meta.State == FileIndexed {
 			totalChunks += meta.Chunks
 		}
 		return true
-	}); err != nil && ix.logger != nil {
-		ix.logger.Error("indexer: failed to iterate manifest for chunk count", fmt.Errorf("%w", err))
-	}
+	})
 
 	return IndexerStatus{
 		ProjectDir:   ix.projectDir,
@@ -508,7 +645,7 @@ func (ix *Indexer) workerLoop(ctx context.Context) {
 	}
 }
 
-// processNext indexes a single enqueued file and updates its state.
+// processNext processes a single enqueued entry (file or directory) and updates its state.
 func (ix *Indexer) processNext(ctx context.Context, file *FileMeta) bool {
 	select {
 	case <-ix.stop:
@@ -525,9 +662,96 @@ func (ix *Indexer) processNext(ctx context.Context, file *FileMeta) bool {
 
 	file.State = FileProcessing
 	if err := ix.manifest.put(file); err != nil && ix.logger != nil {
-		ix.logger.Error("indexer: failed to mark file as processing", fmt.Errorf("%w", err), "path", file.Path)
+		ix.logger.Error("indexer: failed to mark entry as processing", fmt.Errorf("%w", err), "path", file.Path)
 	}
 
+	// ── Directory entry: Summarize ──
+	if file.IsDir {
+		return ix.processDir(ctx, file)
+	}
+
+	// ── File entry: Index ──
+	return ix.processFile(ctx, file)
+}
+
+// processDir summarizes a directory via RegionIndexer.
+func (ix *Indexer) processDir(ctx context.Context, file *FileMeta) bool {
+	if ix.logger != nil {
+		ix.logger.Info("indexer: start summarizing directory", "path", file.Path)
+	}
+
+	if ix.callbacks.OnFileIndexStart != nil {
+		ix.callbacks.OnFileIndexStart(ctx, file.Path)
+	}
+
+	indexStart := time.Now()
+	var summarizeErr error
+
+	if ix.regionIndexer != nil {
+		result, riErr := ix.regionIndexer.IndexRegion(ctx, file.Path)
+		if riErr != nil {
+			summarizeErr = fmt.Errorf("index region: %w", riErr)
+		} else if result != nil && result.RegionFilePath != "" {
+			// Index the generated .README.md
+			chunks, idxErr := ix.indexFile(ctx, result.RegionFilePath)
+			if idxErr != nil && ix.logger != nil {
+				ix.logger.Error("indexer: failed to index region file", fmt.Errorf("%w", idxErr), "path", result.RegionFilePath)
+			}
+			if len(chunks) > 0 {
+				file.ChunkIDs = chunks
+				file.Chunks = len(chunks)
+			}
+		}
+	} else {
+		summarizeErr = fmt.Errorf("region indexer not available")
+	}
+
+	if summarizeErr != nil {
+		file.State = FileFailed
+		file.Error = summarizeErr.Error()
+		file.UpdatedAt = time.Now().Unix()
+		if err := ix.manifest.put(file); err != nil && ix.logger != nil {
+			ix.logger.Error("indexer: failed to mark directory as failed", fmt.Errorf("%w", err), "path", file.Path)
+		}
+		if ix.logger != nil {
+			ix.logger.Error("indexer: directory summarize failed", summarizeErr, "path", file.Path)
+		}
+		if ix.callbacks.OnFileIndexFail != nil {
+			ix.callbacks.OnFileIndexFail(ctx, file.Path, summarizeErr.Error())
+		}
+		ix.mu.Lock()
+		ix.processing = ""
+		ix.mu.Unlock()
+		return true
+	}
+
+	// Record elapsed time
+	file.ElapsedMs = time.Since(indexStart).Milliseconds()
+
+	file.State = FileIndexed
+	file.Error = ""
+	file.UpdatedAt = time.Now().Unix()
+	if err := ix.manifest.put(file); err != nil && ix.logger != nil {
+		ix.logger.Error("indexer: failed to mark directory as indexed", fmt.Errorf("%w", err), "path", file.Path)
+	}
+
+	if ix.logger != nil {
+		ix.logger.Info("indexer: directory summarize done", "path", file.Path)
+	}
+
+	if ix.callbacks.OnFileIndexDone != nil {
+		ix.callbacks.OnFileIndexDone(ctx, file.Path)
+	}
+
+	ix.mu.Lock()
+	ix.processing = ""
+	ix.mu.Unlock()
+
+	return true
+}
+
+// processFile indexes a single enqueued file and updates its state.
+func (ix *Indexer) processFile(ctx context.Context, file *FileMeta) bool {
 	if ix.logger != nil {
 		ix.logger.Info("indexer: start indexing file", "path", file.Path, "size", file.Size)
 	}
@@ -541,8 +765,8 @@ func (ix *Indexer) processNext(ctx context.Context, file *FileMeta) bool {
 	fileCtx, fileCancel := context.WithTimeout(ctx, maxFileIndexTimeout)
 	defer fileCancel()
 
-	// Set region ID from projectDir
-	regionID := fmt.Sprintf("%x", len(ix.projectDir))
+	// Set region ID from projectDir (sha256 hex to match entity_tags/kb handlers).
+	regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(ix.projectDir))))
 	fileCtx = goragindexer.WithRegionID(fileCtx, regionID)
 
 	indexStart := time.Now()
@@ -598,10 +822,11 @@ func (ix *Indexer) processNext(ctx context.Context, file *FileMeta) bool {
 		if tu := gi.LastTokenUsage(); tu != nil {
 			file.InputTokens = tu.PromptTokens
 			file.OutputTokens = tu.CompletionTokens
-			// Rough cost estimate using default Haiku pricing:
-			//   Input:  $0.25 / 1M tokens → 0.00025 / 1K
-			//   Output: $1.25 / 1M tokens → 0.00125 / 1K
-			file.Cost = (float64(tu.PromptTokens)*0.00025 + float64(tu.CompletionTokens)*0.00125) / 1000.0
+			// Cost estimate using configured model rates (if set).
+			if ix.costInputPer1M > 0 || ix.costOutputPer1M > 0 {
+				file.Cost = float64(tu.PromptTokens)*ix.costInputPer1M/1_000_000 +
+					float64(tu.CompletionTokens)*ix.costOutputPer1M/1_000_000
+			}
 		}
 		entitiesAfter, _ := gi.EntityStats()
 		file.Nodes = entitiesAfter - entitiesBefore

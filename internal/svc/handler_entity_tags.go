@@ -14,7 +14,9 @@ import (
 
 // ---------------------------------------------------------------------------
 // EntityTags JSON-RPC handlers
-// Data stored in ~/.mindx/data/entity-defs.json
+// Data stored in:
+//   - Global: ~/.mindx/data/entity-defs.json
+//   - Per-directory: ~/.mindx/projects/<sha(projectDir)>/entity-defs.json
 // ---------------------------------------------------------------------------
 
 // entityDefFileEntry 是 entity-defs.json 中单个实体类型条目。
@@ -35,14 +37,42 @@ type entityTagsFile struct {
 	Types  []entityDefFileEntry `json:"types"`
 }
 
-// entityDefsPath 返回 entity-defs.json 的完整路径。
+// regionIDForProject 返回 projectDir 的 region ID（sha256 hex）。
+func regionIDForProject(projectDir string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(projectDir))))
+}
+
+// entityDefsPath 返回全局 entity-defs.json 的完整路径。
 func (d *Daemon) entityDefsPath() string {
 	return filepath.Join(d.app.Settings().DataDir(), "entity-defs.json")
 }
 
-// loadEntityDefs 从磁盘加载 entity-defs.json，文件不存在时返回空结构。
+// entityDefsPathForProject 返回指定目录的局部 entity-defs.json 路径。
+func (d *Daemon) entityDefsPathForProject(projectDir string) string {
+	hash := regionIDForProject(projectDir)
+	return filepath.Join(d.app.Settings().UserPreferences(), "projects", hash, "entity-defs.json")
+}
+
+// loadEntityDefs 从磁盘加载全局 entity-defs.json，文件不存在时返回空结构。
 func (d *Daemon) loadEntityDefs() (*entityTagsFile, error) {
-	path := d.entityDefsPath()
+	return d.loadEntityDefsFromPath(d.entityDefsPath())
+}
+
+// loadEntityDefsForProject 加载指定目录的局部 entity-defs.json；
+// 局部文件不存在时回退到全局配置。
+func (d *Daemon) loadEntityDefsForProject(projectDir string) (*entityTagsFile, error) {
+	if projectDir == "" {
+		return d.loadEntityDefs()
+	}
+	localPath := d.entityDefsPathForProject(projectDir)
+	if _, err := os.Stat(localPath); err == nil {
+		return d.loadEntityDefsFromPath(localPath)
+	}
+	return d.loadEntityDefs()
+}
+
+// loadEntityDefsFromPath 从指定路径加载 entity-defs.json。
+func (d *Daemon) loadEntityDefsFromPath(path string) (*entityTagsFile, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -64,8 +94,34 @@ func (d *Daemon) loadEntityDefs() (*entityTagsFile, error) {
 	return &f, nil
 }
 
-func (d *Daemon) handleEntityTagsGet(_ context.Context, _ json.RawMessage) (any, error) {
-	f, err := d.loadEntityDefs()
+// writeEntityDefsFile 把 entityTagsFile 写入指定路径。
+func (d *Daemon) writeEntityDefsFile(path string, f *entityTagsFile) error {
+	data, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal json: %w", err)
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create dir: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("write file: %w", err)
+	}
+	return nil
+}
+
+func (d *Daemon) handleEntityTagsGet(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		ProjectDir string `json:"projectDir,omitempty"`
+	}
+	// 兼容旧调用：params 可能为空。
+	if len(params) > 0 && string(params) != "null" {
+		if err := unmarshalParams(params, &p); err != nil {
+			return nil, err
+		}
+	}
+
+	f, err := d.loadEntityDefsForProject(p.ProjectDir)
 	if err != nil {
 		return nil, fmt.Errorf("entity_tags.get: %w", err)
 	}
@@ -74,59 +130,13 @@ func (d *Daemon) handleEntityTagsGet(_ context.Context, _ json.RawMessage) (any,
 
 // schemasDir 返回 ~/.mindx/schemas/ 目录。
 func (d *Daemon) schemasDir() string {
-	return filepath.Join(d.app.Settings().DataDir(), "..", "schemas")
+	return filepath.Join(d.app.Settings().UserPreferences(), "schemas")
 }
 
 // projectSchemasDir 返回 ~/.mindx/projects/<sha(projectDir)>/schemas/ 目录。
 func (d *Daemon) projectSchemasDir(projectDir string) string {
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(projectDir))))
-	return filepath.Join(d.app.Settings().DataDir(), "..", "projects", hash, "schemas")
-}
-
-// entityDefsForProject 加载 entity-defs.json，按 project 过滤只保留该 project 使用的 Schema。
-// 如果 projectSchemasDir 不存在或为空，返回全部 entityDefs（兼容无 project 设置的情况）。
-func (d *Daemon) entityDefsForProject(projectDir string) []goragindexer.EntityDef {
-	f, err := d.loadEntityDefs()
-	if err != nil || len(f.Types) == 0 {
-		return nil
-	}
-
-	// 检查 project 是否有独立的 schemas 目录
-	projSchemasDir := d.projectSchemasDir(projectDir)
-	hasProjectSchemas := false
-	if info, statErr := os.Stat(projSchemasDir); statErr == nil && info.IsDir() {
-		hasProjectSchemas = true
-	}
-
-	defs := make([]goragindexer.EntityDef, 0, len(f.Types))
-	for _, t := range f.Types {
-		if t.Name == "" {
-			continue
-		}
-
-		// 如果 project 有独立 schemas 目录，检查该类型对应的 schema 文件是否存在
-		if hasProjectSchemas && t.Category != "" {
-			schemaPath := filepath.Join(projSchemasDir, t.Category, t.Name+".json")
-			if _, err := os.Stat(schemaPath); os.IsNotExist(err) {
-				continue // 跳过，该 schema 未被复制到 project 目录
-			}
-		}
-
-		prompt := t.Prompt
-		if prompt == "" {
-			prompt = "**" + t.Name + "** — " + t.Desc
-		}
-		schema := t.Schema
-		if schema == "" {
-			schema = d.readSchemaFileForProject(t.Category, t.Name, projectDir)
-		}
-		defs = append(defs, goragindexer.EntityDef{
-			Prompt: prompt,
-			Schema: schema,
-		})
-	}
-
-	return defs
+	hash := regionIDForProject(projectDir)
+	return filepath.Join(d.app.Settings().UserPreferences(), "projects", hash, "schemas")
 }
 
 // readSchemaFile 读取 schema 文件，返回文件内容（JSON Schema 文本）。
@@ -160,6 +170,63 @@ func (d *Daemon) readSchemaFileForProject(category, name, projectDir string) str
 	return strings.TrimSpace(string(data))
 }
 
+// copySchemaToProject 将全局 schema 复制到 project 目录；
+// 若 project 目录中已存在同名 schema，则保留现有文件以允许局部定制。
+func (d *Daemon) copySchemaToProject(category, name, projectDir string) {
+	if category == "" || name == "" || projectDir == "" {
+		return
+	}
+	srcPath := filepath.Join(d.schemasDir(), category, name+".json")
+	srcData, err := os.ReadFile(srcPath)
+	if err != nil {
+		return
+	}
+
+	projSchemasDir := d.projectSchemasDir(projectDir)
+	dstPath := filepath.Join(projSchemasDir, category, name+".json")
+	if _, statErr := os.Stat(dstPath); statErr == nil {
+		// 已存在局部 schema，保留用户定制。
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+		d.logger.Warn("entity_tags.save: mkdir project schema dir", "path", dstPath, "error", err)
+		return
+	}
+	if err := os.WriteFile(dstPath, srcData, 0644); err != nil {
+		d.logger.Warn("entity_tags.save: copy project schema", "path", dstPath, "error", err)
+	}
+}
+
+// effectiveEntityDefs 返回指定目录生效的 EntityDef 列表。
+// 若目录存在局部 entity-defs.json 则使用局部配置，否则回退全局。
+// Schema 优先从局部目录读取，不存在时回退全局。
+func (d *Daemon) effectiveEntityDefs(projectDir string) []goragindexer.EntityDef {
+	f, err := d.loadEntityDefsForProject(projectDir)
+	if err != nil || len(f.Types) == 0 {
+		return nil
+	}
+
+	defs := make([]goragindexer.EntityDef, 0, len(f.Types))
+	for _, t := range f.Types {
+		if t.Name == "" {
+			continue
+		}
+		prompt := t.Prompt
+		if prompt == "" {
+			prompt = "**" + t.Name + "** — " + t.Desc
+		}
+		schema := t.Schema
+		if schema == "" {
+			schema = d.readSchemaFileForProject(t.Category, t.Name, projectDir)
+		}
+		defs = append(defs, goragindexer.EntityDef{
+			Prompt: prompt,
+			Schema: schema,
+		})
+	}
+	return defs
+}
+
 func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage) (any, error) {
 	var p struct {
 		Types      []entityDefFileEntry `json:"types"`
@@ -169,7 +236,7 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 		return nil, err
 	}
 
-	// 补全 Prompt 和 Schema
+	// 补全 Prompt 和 Schema（全局 schema 作为来源）
 	for i := range p.Types {
 		t := &p.Types[i]
 		if t.Prompt == "" && t.Name != "" {
@@ -180,25 +247,6 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 		}
 	}
 
-	// ── 如果指定了 projectDir，将 schema 文件写入 project 目录 ───────────
-	if p.ProjectDir != "" {
-		projSchemasDir := d.projectSchemasDir(p.ProjectDir)
-		for _, t := range p.Types {
-			if t.Category == "" || t.Name == "" || t.Schema == "" {
-				continue
-			}
-			schemaPath := filepath.Join(projSchemasDir, t.Category, t.Name+".json")
-			if err := os.MkdirAll(filepath.Dir(schemaPath), 0755); err != nil {
-				d.logger.Warn("entity_tags.save: mkdir project schema dir", "path", schemaPath, "error", err)
-				continue
-			}
-			if err := os.WriteFile(schemaPath, []byte(t.Schema), 0644); err != nil {
-				d.logger.Warn("entity_tags.save: write project schema", "path", schemaPath, "error", err)
-			}
-		}
-		d.logger.Info("entity_tags.save: wrote project schemas", "projectDir", p.ProjectDir, "count", len(p.Types))
-	}
-
 	// 构建文件结构
 	f := entityTagsFile{
 		Domain: "user",
@@ -206,38 +254,35 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 		Types:  p.Types,
 	}
 
-	// 序列化为 JSON
-	data, err := json.MarshalIndent(&f, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("entity_tags.save: marshal json: %w", err)
-	}
+	if p.ProjectDir != "" {
+		// ── 局部配置：保存到 ~/.mindx/projects/<sha(projectDir)>/entity-defs.json ──
+		for _, t := range p.Types {
+			if t.Category == "" || t.Name == "" {
+				continue
+			}
+			// 将选中的 schema 从全局复制到局部（不覆盖已有局部定制）
+			d.copySchemaToProject(t.Category, t.Name, p.ProjectDir)
+		}
 
-	// 写入文件
-	path := d.entityDefsPath()
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("entity_tags.save: create dir: %w", err)
+		localPath := d.entityDefsPathForProject(p.ProjectDir)
+		if err := d.writeEntityDefsFile(localPath, &f); err != nil {
+			return nil, fmt.Errorf("entity_tags.save: write project entity-defs: %w", err)
+		}
+		d.logger.Info("entity_tags saved", "path", localPath, "projectDir", p.ProjectDir, "count", len(p.Types))
+	} else {
+		// ── 全局配置：保存到 ~/.mindx/data/entity-defs.json ──
+		if err := d.writeEntityDefsFile(d.entityDefsPath(), &f); err != nil {
+			return nil, fmt.Errorf("entity_tags.save: write global entity-defs: %w", err)
+		}
+		d.logger.Info("entity_tags saved", "path", d.entityDefsPath(), "count", len(p.Types))
 	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return nil, fmt.Errorf("entity_tags.save: write file: %w", err)
-	}
-
-	d.logger.Info("entity_tags saved", "path", path, "count", len(p.Types))
 
 	// ── 同步更新 GraphIndexer 的实体定义 ──────────────────────────
-	if d.graphIndexer != nil && len(p.Types) > 0 {
-		defs := make([]goragindexer.EntityDef, 0, len(p.Types))
-		for _, t := range p.Types {
-			if t.Name != "" {
-				defs = append(defs, goragindexer.EntityDef{
-					Prompt: t.Prompt,
-					Schema: t.Schema,
-				})
-			}
-		}
+	if d.graphIndexer != nil {
+		defs := d.effectiveEntityDefs(p.ProjectDir)
 		if len(defs) > 0 {
 			if p.ProjectDir != "" {
-				regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(p.ProjectDir))))
+				regionID := regionIDForProject(p.ProjectDir)
 				d.graphIndexer.SetEntityDefsByRegion(regionID, defs)
 				d.logger.Info("entity_tags: updated GraphIndexer region entity defs", "regionID", regionID, "count", len(defs))
 			} else {
@@ -251,33 +296,6 @@ func (d *Daemon) handleEntityTagsSave(_ context.Context, params json.RawMessage)
 		"status": "ok",
 		"count":  len(p.Types),
 	}, nil
-}
-
-// parseEntityDefsFromSavedTags 从 entity-defs.json 读取并解析为 EntityDef 列表。
-// 用于初始化 GraphIndexer 时加载用户此前保存的实体标签。
-//
-//nolint:unused
-func (d *Daemon) _parseEntityDefsFromSavedTags() []goragindexer.EntityDef {
-	f, err := d.loadEntityDefs()
-	if err != nil {
-		d.logger.Warn("entity_tags: failed to load saved tags, using defaults", "error", err)
-		return nil
-	}
-	if len(f.Types) == 0 {
-		return nil
-	}
-	defs := make([]goragindexer.EntityDef, 0, len(f.Types))
-	for _, t := range f.Types {
-		if t.Name == "" {
-			continue
-		}
-		defs = append(defs, goragindexer.EntityDef{
-			Prompt: t.Prompt,
-			Schema: t.Schema,
-		})
-	}
-	d.logger.Info("entity_tags: loaded saved entity defs", "count", len(defs))
-	return defs
 }
 
 // ---------------------------------------------------------------------------

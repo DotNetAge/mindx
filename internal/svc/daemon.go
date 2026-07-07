@@ -57,6 +57,9 @@ type Daemon struct {
 	graphIndexer    *goragindexer.GraphIndexer
 	graphIndexerErr error // init failure reason, exposed in KB handler errors
 
+	// region indexer for directory summarization
+	regionIndexer *goragindexer.RegionIndexer
+
 	// token usage recording for single-file index (kb.index)
 	usageStore    goharnesssession.TokenUsageStore
 	modelName     string
@@ -181,6 +184,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 
 	// ── GraphIndexer（知识库）─────────────────────────────────────
 	var graphIndexer *goragindexer.GraphIndexer
+	var regionIndexer *goragindexer.RegionIndexer
 	var graphIndexerErr error
 	var sharedMemory *memory.RAGMemory
 
@@ -189,7 +193,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 
 		// ── KB Stack: GraphIndexer + RegionIndexer ─────────────────
 		if coreGS != nil && llmModelCfg != nil {
-			gi, kbErr := newKBStack(
+			gi, ri, kbErr := newKBStack(
 				emb, coreGS, llmModelCfg,
 				app.Settings().DataDir(),
 				logger,
@@ -201,6 +205,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 				graphIndexerErr = kbErr
 			} else {
 				graphIndexer = gi
+				regionIndexer = ri
 			}
 		} else {
 			if coreGS == nil {
@@ -242,6 +247,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		sharedMemory:    sharedMemory,
 		graphIndexer:    graphIndexer,
 		graphIndexerErr: graphIndexerErr,
+		regionIndexer:   regionIndexer,
 		usageStore:      app.TokenUsageStore(),
 		modelName: func() string {
 			if llmModelCfg != nil {
@@ -485,7 +491,7 @@ func (d *Daemon) ensureGraphIndexer() error {
 		ContextLength: int(defaultModel.ContextLength),
 	}
 
-	gi, kbErr := newKBStack(
+	gi, ri, kbErr := newKBStack(
 		emb, coreGS, llmModelCfg,
 		d.app.Settings().DataDir(),
 		d.logger,
@@ -498,6 +504,7 @@ func (d *Daemon) ensureGraphIndexer() error {
 	}
 
 	d.graphIndexer = gi
+	d.regionIndexer = ri
 	d.app.SetGraphIndexer(gi)
 
 	return nil
@@ -642,6 +649,14 @@ func (d *Daemon) getIndexer(projectDir string) (*indexing.Indexer, error) {
 	if d.usageStore != nil && d.modelName != "" {
 		opts = append(opts, indexing.WithTokenUsageStore(d.usageStore, d.modelName))
 	}
+	if d.regionIndexer != nil {
+		opts = append(opts, indexing.WithRegionIndexer(d.regionIndexer))
+	}
+	if d.modelName != "" {
+		if mc, ok := d.app.ModelCost(d.modelName); ok && (mc.CostPer1MIn > 0 || mc.CostPer1MOut > 0) {
+			opts = append(opts, indexing.WithCostRates(mc.CostPer1MIn, mc.CostPer1MOut))
+		}
+	}
 
 	pi, err := indexing.NewIndexer(projectDir, d.graphIndexer, filepath.Dir(d.dataDir), d.logger, opts...)
 	if err != nil {
@@ -672,6 +687,18 @@ func (d *Daemon) getIndexer(projectDir string) (*indexing.Indexer, error) {
 						"state":     "removed",
 					},
 				})
+			},
+			OnFilesEnqueued: func(ctx interface{}, paths []string) {
+				for _, path := range paths {
+					d.gw.BroadcastNotification("file_indexing", map[string]any{
+						"type": "file_indexing",
+						"data": map[string]string{
+							"file":      path,
+							"directory": projectDir,
+							"state":     "enqueued",
+						},
+					})
+				}
 			},
 			OnFileIndexStart: func(ctx interface{}, path string) {
 				d.gw.BroadcastNotification("file_indexing", map[string]any{
@@ -719,6 +746,17 @@ func (d *Daemon) getIndexer(projectDir string) (*indexing.Indexer, error) {
 
 	// Wire version recorder
 	d.wireVersionRecorder(pi)
+
+	// Load effective entity defs for this project region so indexing uses the
+	// correct local (or global fallback) schemas from the start.
+	if d.graphIndexer != nil {
+		defs := d.effectiveEntityDefs(projectDir)
+		if len(defs) > 0 {
+			regionID := regionIDForProject(projectDir)
+			d.graphIndexer.SetEntityDefsByRegion(regionID, defs)
+			d.logger.Info("indexer: applied project entity defs", "project_dir", projectDir, "regionID", regionID, "count", len(defs))
+		}
+	}
 
 	d.indexers[projectDir] = pi
 	d.logger.Info("created Indexer for project", "project_dir", projectDir)

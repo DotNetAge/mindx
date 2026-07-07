@@ -37,6 +37,7 @@ const (
 type FileMeta struct {
 	Path     string    `json:"path"`                // absolute path, unique key
 	State    FileState `json:"state"`               // index state
+	IsDir    bool      `json:"is_dir,omitempty"`    // true if this entry is a directory (not a file)
 	Error    string    `json:"error,omitempty"`     // failure reason
 	Mtime    int64     `json:"mtime,omitempty"`     // modification time (nanoseconds)
 	Size     int64     `json:"size,omitempty"`      // file size (bytes)
@@ -70,6 +71,9 @@ type IndexerStatus struct {
 type IndexerCallbacks struct {
 	// OnFileAdded is called when Add() discovers a new or changed file.
 	OnFileAdded func(ctx interface{}, path string)
+
+	// OnFilesEnqueued is called when files are moved from Pending to Enqueued.
+	OnFilesEnqueued func(ctx interface{}, paths []string)
 
 	// OnFileIndexStart is called when worker begins indexing a file.
 	OnFileIndexStart func(ctx interface{}, path string)

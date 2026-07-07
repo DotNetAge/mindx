@@ -182,8 +182,9 @@ func (ms *manifestStore) firstEnqueued() *FileMeta {
 }
 
 // movePendingToEnqueued moves all Pending files to Enqueued.
-func (ms *manifestStore) movePendingToEnqueued() (int, error) {
-	count := 0
+// Returns the paths that were actually moved.
+func (ms *manifestStore) movePendingToEnqueued() ([]string, error) {
+	var moved []string
 	err := ms.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(filesBucket))
 		return b.ForEach(func(k, v []byte) error {
@@ -200,17 +201,18 @@ func (ms *manifestStore) movePendingToEnqueued() (int, error) {
 				if err := b.Put(k, data); err != nil {
 					return err
 				}
-				count++
+				moved = append(moved, meta.Path)
 			}
 			return nil
 		})
 	})
-	return count, err
+	return moved, err
 }
 
 // moveToEnqueuedByPaths moves specific Pending files to Enqueued.
-func (ms *manifestStore) moveToEnqueuedByPaths(paths []string) (int, error) {
-	count := 0
+// Returns the paths that were actually moved.
+func (ms *manifestStore) moveToEnqueuedByPaths(paths []string) ([]string, error) {
+	var moved []string
 	err := ms.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(filesBucket))
 		for _, p := range paths {
@@ -230,11 +232,11 @@ func (ms *manifestStore) moveToEnqueuedByPaths(paths []string) (int, error) {
 			if err := b.Put([]byte(p), data); err != nil {
 				continue
 			}
-			count++
+			moved = append(moved, meta.Path)
 		}
 		return nil
 	})
-	return count, err
+	return moved, err
 }
 
 // meta helpers for project-level metadata

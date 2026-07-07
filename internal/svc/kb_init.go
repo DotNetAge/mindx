@@ -27,7 +27,7 @@ func newKBStack(
 	logger logging.Logger,
 	tokenUsageStore goharnesssession.TokenUsageStore,
 	app *core.App,
-) (graphIndexer *goragindexer.GraphIndexer, err error) {
+) (graphIndexer *goragindexer.GraphIndexer, regionIndexer *goragindexer.RegionIndexer, err error) {
 
 	// ── 1. Load entity-defs.json ──────────────────────────────────
 	var entityDefs []goragindexer.EntityDef
@@ -61,7 +61,7 @@ func newKBStack(
 	// ── 2. Create KB vector store ─────────────────────────────────
 	kbVecDir := filepath.Join(dataDir, "kb-vectors")
 	if mkErr := os.MkdirAll(kbVecDir, 0755); mkErr != nil {
-		return nil, fmt.Errorf("KB vector directory creation failed: %w", mkErr)
+		return nil, nil, fmt.Errorf("KB vector directory creation failed: %w", mkErr)
 	}
 
 	kbVS, vsErr := govector.NewStore(
@@ -71,7 +71,7 @@ func newKBStack(
 		govector.WithHNSW(true),
 	)
 	if vsErr != nil {
-		return nil, fmt.Errorf("KB vector store creation failed: %w", vsErr)
+		return nil, nil, fmt.Errorf("KB vector store creation failed: %w", vsErr)
 	}
 
 	// ── 3. Create GraphIndexer ─────────────────────────────────────
@@ -94,17 +94,16 @@ func newKBStack(
 	)
 
 	// ── 4. Create RegionIndexer ────────────────────────────────────
-	regionIndexer := goragindexer.NewRegionIndexer(
+	ri := goragindexer.NewRegionIndexer(
 		*llmModelCfg,
 		emb,
 		kbVS,
 		goragindexer.RegionWithLogger(logger),
 		goragindexer.RegionWithGraphStore(coreGS),
 	)
-	_ = regionIndexer // kept for future use (Summarize)
 	logger.Info("RegionIndexer initialized for knowledge base")
 
-	return gi, nil
+	return gi, ri, nil
 }
 
 // wireVersionRecorder sets the OnFileIndexDone callback to record file versions.
