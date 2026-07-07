@@ -47,30 +47,25 @@ type pendingInteraction struct {
 }
 
 type Daemon struct {
-	app         *core.App
-	gw          *gateway.Server
-	scheduler   *scheduler.Scheduler
-	schedulerDB *scheduler.FileSchedulerStore
-	kbWatch     *indexing.FileWatchService
-	// watchListStore and indexStateStore are persisted stores for filewatch
-	// entries. They are created unconditionally (independent of GraphIndexer
-	// or FileWatchService) so that session creation can always persist a
-	// project directory to the watch list. The FileWatchService, when
-	// initialized, reuses the same store instances.
-	watchListStore  *indexing.WatchListStore
-	indexStateStore *indexing.IndexStateStore
-	manifestStore   *indexing.ManifestStore
-	sharedMemory    *memory.RAGMemory
+	app          *core.App
+	gw           *gateway.Server
+	scheduler    *scheduler.Scheduler
+	schedulerDB  *scheduler.FileSchedulerStore
+	sharedMemory *memory.RAGMemory
 
 	// knowledge-graph indexer (GraphIndexer)
 	graphIndexer    *goragindexer.GraphIndexer
 	graphIndexerErr error // init failure reason, exposed in KB handler errors
-	webServer       *WebServer
-	addr            string
-	wsPath          string
-	logger          logging.Logger
-	execMu          sync.Mutex
-	clientCancels   sync.Map
+
+	// token usage recording for single-file index (kb.index)
+	usageStore    goharnesssession.TokenUsageStore
+	modelName     string
+	webServer     *WebServer
+	addr          string
+	wsPath        string
+	logger        logging.Logger
+	execMu        sync.Mutex
+	clientCancels sync.Map
 
 	// activeSessions tracks live sessions by sessionID for FileModifyHook
 	// to look up the session's TrackModify function.
@@ -86,8 +81,8 @@ type Daemon struct {
 	// global key-value store (bbolt)
 	kvStore *bbolt.DB
 
-	// watchCancel cancels the currently running filewatch goroutine (if any).
-	watchCancel context.CancelFunc
+	// dataDir is ~/.mindx, passed to Indexer constructors.
+	dataDir string
 
 	// startTime records when the daemon started, used for uptime reporting.
 	startTime time.Time
@@ -108,10 +103,10 @@ type Daemon struct {
 	// and automatically reloads registries.
 	hotReload *HotReloadWatcher
 
-	// manifestWorker fields for FIFO queue processing
-	manifestWorkerCancel context.CancelFunc
-	manifestNewFileCh    chan struct{}
-	manifestResumeCh     chan struct{}
+	// indexers manages Indexer instances per projectDir (lazy-load)
+	indexers      map[string]*indexing.Indexer // key = projectDir
+	indexersMu    sync.RWMutex
+	indexerErrors map[string]error // cached NewIndexer errors, same key
 }
 
 func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
@@ -184,39 +179,21 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		)
 	}
 
-	// ── WatchListStore / IndexStateStore（持久化存储）────────────
-	// 与 FileWatchService 解耦，无条件创建，确保会话创建时始终能持久化
-	// 监控目录条目。当 FileWatchService 初始化后会自动恢复这些条目。
-	watchListStore, wlErr := indexing.NewWatchListStore(app.Settings().DataDir())
-	if wlErr != nil {
-		logger.Warn("filewatch: failed to create watchlist store", "error", wlErr)
-	}
-	indexStateStore, isErr := indexing.NewIndexStateStore(app.Settings().DataDir())
-	if isErr != nil {
-		logger.Warn("filewatch: failed to create index state store", "error", isErr)
-	}
-	manifestStore := indexing.NewManifestStore(app.Settings().DataDir())
-
 	// ── GraphIndexer（知识库）─────────────────────────────────────
-	// 文件监控服务为 KB 服务，memory 仅为对话服务
 	var graphIndexer *goragindexer.GraphIndexer
 	var graphIndexerErr error
 	var sharedMemory *memory.RAGMemory
-	var kbWatch *indexing.FileWatchService
 
 	if emb := app.Embedder(); emb != nil {
 		logger.Info("embedder found, initializing knowledge base and memory services")
 
-		// ── KB Stack: GraphIndexer + RegionIndexer + FileWatchService ─
-		// 需要 coreGS（graph store）、LLM 模型配置、以及持久化存储。
-		// 任一条件缺失时跳过 KB 服务，记录具体原因到 graphIndexerErr。
+		// ── KB Stack: GraphIndexer + RegionIndexer ─────────────────
 		if coreGS != nil && llmModelCfg != nil {
-			gi, kw, kbErr := newKBStack(
+			gi, kbErr := newKBStack(
 				emb, coreGS, llmModelCfg,
 				app.Settings().DataDir(),
 				logger,
 				app.TokenUsageStore(),
-				watchListStore, indexStateStore,
 				app,
 			)
 			if kbErr != nil {
@@ -224,7 +201,6 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 				graphIndexerErr = kbErr
 			} else {
 				graphIndexer = gi
-				kbWatch = kw
 			}
 		} else {
 			if coreGS == nil {
@@ -256,39 +232,33 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	}
 
 	d := &Daemon{
-		app:                 app,
-		addr:                addr,
-		wsPath:              wsPath,
-		schedulerDB:         schedulerDB,
-		kbWatch:             kbWatch,
-		watchListStore:      watchListStore,
-		indexStateStore:     indexStateStore,
-		manifestStore:       manifestStore,
-		sharedMemory:        sharedMemory,
-		graphIndexer:        graphIndexer,
-		graphIndexerErr:     graphIndexerErr,
+		app:             app,
+		addr:            addr,
+		wsPath:          wsPath,
+		schedulerDB:     schedulerDB,
+		indexers:        make(map[string]*indexing.Indexer),
+		indexerErrors:   make(map[string]error),
+		dataDir:         app.Settings().DataDir(),
+		sharedMemory:    sharedMemory,
+		graphIndexer:    graphIndexer,
+		graphIndexerErr: graphIndexerErr,
+		usageStore:      app.TokenUsageStore(),
+		modelName: func() string {
+			if llmModelCfg != nil {
+				return llmModelCfg.Model
+			}
+			return ""
+		}(),
 		runtimeFS:           runtimeFS,
 		webServer:           NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
 		logger:              logger,
 		pendingInteractions: make(map[string]*pendingInteraction),
 		restartCh:           make(chan struct{}, 1),
-		manifestNewFileCh:   make(chan struct{}, 1),
-		manifestResumeCh:    make(chan struct{}, 1),
 	}
 
 	// Pass GraphIndexer to App for use in LocalSearch tool
 	if graphIndexer != nil {
 		app.SetGraphIndexer(graphIndexer)
-	}
-
-	// Wire per-project schema filtering for FileWatchService index operations
-	if kbWatch != nil && graphIndexer != nil {
-		kbWatch.PreSyncEntityDefs = func(projectDir, regionID string) {
-			defs := d.entityDefsForProject(projectDir)
-			if len(defs) > 0 {
-				graphIndexer.SetEntityDefsByRegion(regionID, defs)
-			}
-		}
 	}
 
 	// Wire graphDB to daemon fields (deferred because d is needed)
@@ -365,7 +335,6 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 
 	d.logger.Info("=== Daemon initialization complete ===",
 		"has_scheduler", d.scheduler != nil,
-		"has_kb_watch", d.kbWatch != nil,
 		"has_shared_memory", d.sharedMemory != nil,
 		"has_graph_db", d.graphDB != nil,
 		"has_kvstore", d.kvStore != nil,
@@ -470,42 +439,6 @@ func (d *Daemon) autoUpdateLoop(ctx context.Context) {
 	}
 }
 
-// addWatchEntry persists a directory to the file watch list store
-// unconditionally (independent of FileWatchService status). When the
-// FileWatchService is running, it also registers the fsnotify watcher
-// for real-time monitoring. The store is idempotent — repeated calls
-// with the same (dir, agent) pair are safe (dedup by WatchListStore).
-func (d *Daemon) addWatchEntry(dir, agent string) error {
-	if d.watchListStore == nil {
-		return fmt.Errorf("addWatchEntry: watchListStore not initialized")
-	}
-
-	if err := d.watchListStore.Add(dir, agent); err != nil {
-		return fmt.Errorf("addWatchEntry: failed to persist watch entry: %w", err)
-	}
-	d.logger.Info("addWatchEntry: watch entry persisted",
-		"dir", dir,
-		"agent", agent,
-		"filewatch_active", d.kbWatch != nil,
-	)
-	if d.indexStateStore != nil {
-		absDir, _ := filepath.Abs(dir)
-		d.indexStateStore.SetPending(absDir)
-	}
-	// If FileWatchService is running, also register fsnotify watcher.
-	// AddWatch's internal store.Add is a no-op (dedup), so this is safe.
-	if d.kbWatch != nil {
-		if err := d.kbWatch.AddWatch(dir, agent); err != nil {
-			d.logger.Warn("addWatchEntry: failed to register fsnotify watcher",
-				"dir", dir,
-				"agent", agent,
-				"error", err,
-			)
-		}
-	}
-	return nil
-}
-
 // resolveIndexerLang returns the language string used by GraphIndexer's
 // ModelConfig based on the application language setting.
 func resolveIndexerLang(cfg *core.MindxConfig) string {
@@ -519,40 +452,12 @@ func resolveIndexerLang(cfg *core.MindxConfig) string {
 	return "Chinese"
 }
 
-// wireFileIndexCallback sets the file indexing broadcast callback on a
-// FileWatchService. The callback is idempotent — safe to call multiple times
-// (e.g., from both Start and ensureGraphIndexer).
-func (d *Daemon) wireFileIndexCallback(kw *indexing.FileWatchService) {
-	if kw == nil || d.gw == nil {
-		return
-	}
-	kw.IndexEventCallback = func(absPath, relPath, absDir, eventType string) {
-		d.gw.BroadcastNotification("file_indexing", map[string]any{
-			"type": "file_indexing",
-			"data": map[string]string{
-				"file":      relPath,
-				"directory": absDir,
-				"state":     eventType,
-			},
-		})
-	}
-}
-
-// restoreSessionWatches is a no-op in manual indexing mode.
-// Sessions no longer auto-add directories to the file watchlist.
-// Users add files to the index manifest manually via the File Explorer.
-func (d *Daemon) restoreSessionWatches() {
-	if d.logger != nil {
-		d.logger.Info("restoreSessionWatches: auto-indexing disabled (manual mode)")
-	}
-}
-
-// ensureGraphIndexer initializes GraphIndexer and FileWatchService at runtime
-// if they were not created during startup (e.g., because no LLM model was configured).
-// This allows model.switch to dynamically enable filewatch/auto-indexing.
+// ensureGraphIndexer initializes GraphIndexer at runtime
+// if it was not created during startup (e.g., because no LLM model was configured).
+// This allows model.switch to dynamically enable indexing.
 func (d *Daemon) ensureGraphIndexer() error {
-	if d.kbWatch != nil {
-		d.logger.Info("ensureGraphIndexer: kbWatch already initialized")
+	if d.graphIndexer != nil {
+		d.logger.Info("ensureGraphIndexer: graphIndexer already initialized")
 		return nil
 	}
 
@@ -580,28 +485,11 @@ func (d *Daemon) ensureGraphIndexer() error {
 		ContextLength: int(defaultModel.ContextLength),
 	}
 
-	// Ensure stores exist before building KB stack
-	if d.watchListStore == nil {
-		ws, wlErr := indexing.NewWatchListStore(d.app.Settings().DataDir())
-		if wlErr != nil {
-			return fmt.Errorf("create watchlist store: %w", wlErr)
-		}
-		d.watchListStore = ws
-	}
-	if d.indexStateStore == nil {
-		is, isErr := indexing.NewIndexStateStore(d.app.Settings().DataDir())
-		if isErr != nil {
-			return fmt.Errorf("create index state store: %w", isErr)
-		}
-		d.indexStateStore = is
-	}
-
-	gi, kw, kbErr := newKBStack(
+	gi, kbErr := newKBStack(
 		emb, coreGS, llmModelCfg,
 		d.app.Settings().DataDir(),
 		d.logger,
 		d.app.TokenUsageStore(),
-		d.watchListStore, d.indexStateStore,
 		d.app,
 	)
 	if kbErr != nil {
@@ -611,21 +499,6 @@ func (d *Daemon) ensureGraphIndexer() error {
 
 	d.graphIndexer = gi
 	d.app.SetGraphIndexer(gi)
-	d.kbWatch = kw
-
-	// Wire per-project schema filtering
-	kw.PreSyncEntityDefs = func(projectDir, regionID string) {
-		defs := d.entityDefsForProject(projectDir)
-		if len(defs) > 0 {
-			gi.SetEntityDefsByRegion(regionID, defs)
-		}
-	}
-
-	// Wire IndexEventCallback and restore existing watches if gateway already running.
-	if d.gw != nil {
-		d.wireFileIndexCallback(d.kbWatch)
-		d.restoreSessionWatches()
-	}
 
 	return nil
 }
@@ -637,13 +510,6 @@ func (d *Daemon) Start(ctx context.Context) error {
 	if d.gw == nil {
 		d.logger.Info("initializing gateway")
 		d.initGateway()
-	}
-
-	// Wire filewatch indexing events to WebUI broadcast
-	if d.kbWatch != nil {
-		d.wireFileIndexCallback(d.kbWatch)
-		// Restore watches for all existing sessions with a project_dir.
-		d.restoreSessionWatches()
 	}
 
 	if d.scheduler != nil {
@@ -672,25 +538,6 @@ func (d *Daemon) Start(ctx context.Context) error {
 			d.logger.Warn("hot-reload watcher exited with error", "error", err)
 		}
 	}()
-
-	if d.kbWatch != nil {
-		// Note: Auto-indexing via FileWatchService is disabled in manual mode.
-		// Users add files to the index manifest manually via the File Explorer,
-		// and indexing is started/stopped per-session via kb.index.start/stop.
-		// The FileWatchService is still available as an IndexService provider
-		// for on-demand file indexing (via kbWatch.GetIndexer()).
-		d.logger.Info("filewatch service configured but not auto-started (manual indexing mode)")
-	} else {
-		d.logger.Info("no filewatch configured, skipping")
-	}
-
-	// ── Start FIFO manifest worker ──────────────────────────────
-	if d.kbWatch != nil && d.graphIndexer != nil {
-		d.startManifestWorker(ctx)
-		d.logger.Info("manifest FIFO worker started")
-	} else {
-		d.logger.Info("manifest FIFO worker not started (kbWatch or graphIndexer unavailable)")
-	}
 
 	// Register system health / diagnostics endpoint.
 	d.webServer.HandleFunc("/api/health", d.handleHealth)
@@ -768,206 +615,114 @@ func (d *Daemon) Restart() {
 	}
 }
 
-// startManifestWorker launches the FIFO queue worker goroutine for a given
-// project directory. It processes pending files one at a time (serial, FIFO).
-func (d *Daemon) startManifestWorker(ctx context.Context) {
-	d.logger.Info("manifest worker: starting FIFO queue worker")
-
-	ctx, cancel := context.WithCancel(ctx)
-	d.manifestWorkerCancel = cancel
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				d.logger.Error("manifest worker: panic recovered", fmt.Errorf("%v", r))
-			}
-		}()
-		defer d.logger.Info("manifest worker: stopped")
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			// Check if we have any active session/project dir with pending work
-			absDir, relFile := d.nextPendingFile()
-			if relFile == "" {
-				// Nothing to do — wait for a wake signal
-				select {
-				case <-d.manifestNewFileCh:
-					continue
-				case <-d.manifestResumeCh:
-					continue
-				case <-ctx.Done():
-					return
-				}
-			}
-
-			// Check if worker is paused
-			if !d.isManifestProcessing(absDir) {
-				select {
-				case <-d.manifestResumeCh:
-					continue
-				case <-d.manifestNewFileCh:
-					continue
-				case <-ctx.Done():
-					return
-				}
-			}
-
-			// Process one file
-			d.processManifestFile(ctx, absDir, relFile)
+// getIndexer lazily creates or returns an Indexer for the given projectDir.
+func (d *Daemon) getIndexer(projectDir string) (*indexing.Indexer, error) {
+	d.indexersMu.RLock()
+	if p, ok := d.indexers[projectDir]; ok {
+		d.indexersMu.RUnlock()
+		if err := d.indexerErrors[projectDir]; err != nil {
+			return nil, err
 		}
-	}()
-}
-
-// stopManifestWorker cancels the FIFO queue worker goroutine.
-func (d *Daemon) stopManifestWorker() {
-	if d.manifestWorkerCancel != nil {
-		d.manifestWorkerCancel()
-		d.manifestWorkerCancel = nil
+		return p, nil
 	}
-}
+	d.indexersMu.RUnlock()
 
-// wakeManifestWorker signals the worker to check for new pending files.
-func (d *Daemon) wakeManifestWorker() {
-	select {
-	case d.manifestNewFileCh <- struct{}{}:
-	default:
-	}
-}
+	d.indexersMu.Lock()
+	defer d.indexersMu.Unlock()
 
-// resumeManifestWorker signals the worker to resume processing after pause.
-func (d *Daemon) resumeManifestWorker() {
-	select {
-	case d.manifestResumeCh <- struct{}{}:
-	default:
-	}
-}
-
-// nextPendingFile iterates all manifests and returns the next pending file.
-func (d *Daemon) nextPendingFile() (absDir, relFile string) {
-	if d.manifestStore == nil {
-		return "", ""
-	}
-	for _, m := range d.manifestStore.All() {
-		if !m.Processing {
-			continue
+	// double-check
+	if p, ok := d.indexers[projectDir]; ok {
+		if err := d.indexerErrors[projectDir]; err != nil {
+			return nil, err
 		}
-		p := m.PeekNext()
-		if p != "" {
-			return m.ProjectDir, p
-		}
+		return p, nil
 	}
-	return "", ""
-}
 
-// isManifestProcessing checks whether worker processing is active for a dir.
-func (d *Daemon) isManifestProcessing(absDir string) bool {
-	if d.manifestStore == nil {
-		return false
+	opts := []indexing.IndexerOption{}
+	if d.usageStore != nil && d.modelName != "" {
+		opts = append(opts, indexing.WithTokenUsageStore(d.usageStore, d.modelName))
 	}
-	m := d.manifestStore.Get(absDir)
-	return m != nil && m.Processing
-}
 
-// processManifestFile indexes a single file from the manifest queue.
-func (d *Daemon) processManifestFile(ctx context.Context, absDir, relFile string) {
-	m := d.manifestStore.LoadOrCreate(absDir)
-	dequeued := m.DequeueNext()
-	if dequeued == "" {
-		return // already consumed
+	pi, err := indexing.NewIndexer(projectDir, d.graphIndexer, filepath.Dir(d.dataDir), d.logger, opts...)
+	if err != nil {
+		d.logger.Error("indexer: failed to create Indexer", err, "project_dir", projectDir)
+		d.indexerErrors[projectDir] = err
+		return nil, err
 	}
-	_ = d.manifestStore.Save(absDir)
-	d.logger.Info("manifest worker: processing file", "dir", absDir, "file", relFile)
 
-	// Broadcast indexing started
+	// Wire callbacks for WebUI broadcast notifications
 	if d.gw != nil {
-		d.gw.BroadcastNotification("file_indexing", map[string]any{
-			"type": "file_indexing",
-			"data": map[string]string{
-				"file":      relFile,
-				"directory": absDir,
-				"state":     "processing",
+		cb := &indexing.IndexerCallbacks{
+			OnFileAdded: func(ctx interface{}, path string) {
+				d.gw.BroadcastNotification("file_indexing", map[string]any{
+					"type": "file_indexing",
+					"data": map[string]string{
+						"file":      path,
+						"directory": projectDir,
+						"state":     "added",
+					},
+				})
 			},
-		})
-	}
-
-	if d.graphIndexer == nil || d.kbWatch == nil {
-		m.SetError(relFile, "indexer not available")
-		_ = d.manifestStore.Save(absDir)
-		d.logger.Warn("manifest worker: indexer not available, file failed", "file", relFile)
-		return
-	}
-
-	// Get the indexer for this directory
-	pi := d.kbWatch.GetIndexer(absDir)
-	if pi == nil {
-		m.SetError(relFile, "no indexer for this directory")
-		_ = d.manifestStore.Save(absDir)
-		d.logger.Warn("manifest worker: no indexer for dir", "dir", absDir)
-		return
-	}
-
-	// Sync the single file
-	result := pi.SyncFiles(ctx, absDir, []string{relFile}, false)
-
-	// Capture LLM token usage
-	tokens := &indexing.TokenUsage{}
-	if d.graphIndexer != nil {
-		tu := d.graphIndexer.LastTokenUsage()
-		if tu != nil {
-			tokens.InputTokens = tu.PromptTokens
-			tokens.OutputTokens = tu.CompletionTokens
-			tokens.Cost = calculateIndexCost(tu.PromptTokens, tu.CompletionTokens)
+			OnFileRemoved: func(ctx interface{}, path string) {
+				d.gw.BroadcastNotification("file_indexing", map[string]any{
+					"type": "file_indexing",
+					"data": map[string]string{
+						"file":      path,
+						"directory": projectDir,
+						"state":     "removed",
+					},
+				})
+			},
+			OnFileIndexStart: func(ctx interface{}, path string) {
+				d.gw.BroadcastNotification("file_indexing", map[string]any{
+					"type": "file_indexing",
+					"data": map[string]string{
+						"file":      path,
+						"directory": projectDir,
+						"state":     "indexing",
+					},
+				})
+			},
+			OnFileIndexDone: func(ctx interface{}, path string) {
+				d.gw.BroadcastNotification("file_indexing", map[string]any{
+					"type": "file_indexing",
+					"data": map[string]string{
+						"file":      path,
+						"directory": projectDir,
+						"state":     "indexed",
+					},
+				})
+			},
+			OnFileIndexFail: func(ctx interface{}, path, errMsg string) {
+				d.gw.BroadcastNotification("file_indexing", map[string]any{
+					"type": "file_indexing",
+					"data": map[string]string{
+						"file":      path,
+						"directory": projectDir,
+						"error":     errMsg,
+						"state":     "error",
+					},
+				})
+			},
+			OnQueueEmpty: func(ctx interface{}) {
+				d.gw.BroadcastNotification("file_indexing", map[string]any{
+					"type": "file_indexing",
+					"data": map[string]string{
+						"directory": projectDir,
+						"state":     "queue_empty",
+					},
+				})
+			},
 		}
+		pi.SetCallbacks(cb)
 	}
 
-	if len(result.FailedFiles) > 0 {
-		failedRec := result.FailedFiles[0]
-		m.SetError(relFile, failedRec.Error)
-		_ = d.manifestStore.Save(absDir)
+	// Wire version recorder
+	d.wireVersionRecorder(pi)
 
-		if d.gw != nil {
-			d.gw.BroadcastNotification("file_indexing", map[string]any{
-				"type": "file_indexing",
-				"data": map[string]string{
-					"file":      relFile,
-					"directory": absDir,
-					"state":     "error",
-				},
-			})
-		}
-		d.logger.Warn("manifest worker: file indexing failed", "file", relFile, "error", failedRec.Error)
-	} else {
-		// Record completion
-		elapsedMs := int64(0)
-		chunks := result.Indexed
-		if len(result.CompletedFiles) > 0 {
-			cf := result.CompletedFiles[0]
-			elapsedMs = cf.Elapsed.Milliseconds()
-			if cf.Chunks > 0 {
-				chunks = cf.Chunks
-			}
-		}
-		tokens.ElapsedMs = elapsedMs
-		m.SetDone(relFile, tokens, elapsedMs, chunks)
-		_ = d.manifestStore.Save(absDir)
-
-		if d.gw != nil {
-			d.gw.BroadcastNotification("file_indexing", map[string]any{
-				"type": "file_indexing",
-				"data": map[string]string{
-					"file":      relFile,
-					"directory": absDir,
-					"state":     "done",
-				},
-			})
-		}
-		d.logger.Info("manifest worker: file indexed successfully", "file", relFile)
-	}
+	d.indexers[projectDir] = pi
+	d.logger.Info("created Indexer for project", "project_dir", projectDir)
+	return pi, nil
 }
 
 // calculateIndexCost estimates the USD cost for indexing a single file
@@ -1015,27 +770,11 @@ func (d *Daemon) stopBackgroundServices() {
 		d.cleanupCancel = nil
 	}
 
-	d.stopService("manifest FIFO worker", func() {
-		d.stopManifestWorker()
-	})
-
 	d.stopService("hot-reload watcher", func() {
 		if d.hotReload != nil {
 			d.hotReload.Stop()
 		}
 	})
-
-	if d.kbWatch != nil {
-		d.logger.Info("stopping filewatch service")
-		// Cancel the external watch context first so the Start() goroutine
-		// can unblock, then stop the internal eventLoop.
-		if d.watchCancel != nil {
-			d.watchCancel()
-			d.watchCancel = nil
-		}
-		d.kbWatch.Stop()
-		d.logger.Info("filewatch service stopped")
-	}
 
 	d.stopService("scheduler service", func() {
 		if d.scheduler != nil {
@@ -1115,15 +854,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// FileWatch
-	if d.kbWatch != nil {
-		fwStatus := "stopped"
-		if d.kbWatch.IsRunning() {
-			fwStatus = "running"
-		}
-		services["filewatch"] = map[string]any{"status": fwStatus}
-	} else {
-		services["filewatch"] = map[string]any{"status": "disabled"}
-	}
+	services["filewatch"] = map[string]any{"status": "disabled"}
 
 	// Scheduler
 	if d.scheduler != nil {

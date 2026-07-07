@@ -1,7 +1,5 @@
 package indexing
 
-import "time"
-
 // MaxFileSize is the maximum file size (in bytes) allowed for indexing.
 // Files larger than this are skipped with a warning.
 const MaxFileSize = 2202010 // ~2.1MB
@@ -24,76 +22,70 @@ var DefaultIgnoredDirs = map[string]bool{
 	".mindx":       true,
 }
 
-// FileIndexError records a single file indexing failure with diagnostics.
-type FileIndexError struct {
-	Path      string        `json:"path"`      // relative path within the project
-	Error     string        `json:"error"`     // error message with classification
-	Elapsed   time.Duration `json:"elapsed"`   // wall-clock time spent on this file
-	Timestamp time.Time     `json:"timestamp"` // when the failure occurred
-}
-
-// ErrorType returns the top-level classification of this error.
-func (e FileIndexError) ErrorType() string { return classifyErrorString(e.Error) }
-
-// CompletedFileInfo records a successfully indexed file with timing info
-// and LLM token consumption.
-type CompletedFileInfo struct {
-	Path      string        `json:"path"`
-	Chunks    int           `json:"chunks"`
-	Elapsed   time.Duration `json:"elapsed"`
-	Timestamp time.Time     `json:"timestamp"`
-
-	// Token usage and cost for this file.
-	InputTokens  int     `json:"input_tokens"`
-	OutputTokens int     `json:"output_tokens"`
-	CacheTokens  int     `json:"cache_tokens"`
-	Cost         float64 `json:"cost"`
-}
-
-// ProjectSyncResult summarizes a Sync operation.
-type ProjectSyncResult struct {
-	Indexed int      // files newly indexed
-	Updated int      // files re-indexed due to change
-	Skipped int      // files unchanged (cache hit)
-	Removed int      // chunks cleaned up from deleted files
-	Errors  []string // non-fatal error messages grouped by file
-	Err     error    // fatal error (operation aborted)
-	Elapsed time.Duration
-
-	// EntitiesCreated counts total entities extracted and written to graphDB
-	// during this sync operation.
-	EntitiesCreated int
-
-	// RelsCreated counts total relationships written to graphDB during this sync.
-	RelsCreated int
-
-	// FailedFiles records per-file indexing failures with timestamps
-	// and error classification. The frontend can surface this to the user
-	// rather than silently skipping failed files.
-	FailedFiles []FileIndexError
-
-	// CompletedFiles records successfully indexed files with timing info.
-	CompletedFiles []CompletedFileInfo
-}
-
-// FileState describes the indexing status of a single file.
-type FileState string
+// FileState is the index state of a single file.
+type FileState int
 
 const (
-	FileStateIndexed FileState = "indexed" // exists on disk and matches cache
-	FileStateChanged FileState = "changed" // exists on disk but mtime/size differs from cache
-	FileStateNew     FileState = "new"     // exists on disk but not in cache
-	FileStateRemoved FileState = "removed" // in cache but no longer on disk
-	FileStateSkipped FileState = "skipped" // excluded by ignore rules, size limit, or content check
+	FilePending    FileState = iota // in manifest, waiting for enqueue
+	FileEnqueued                    // enqueued, waiting for worker
+	FileProcessing                  // being indexed by worker
+	FileIndexed                     // indexed successfully
+	FileFailed                      // indexing failed
 )
 
-// FileStateInfo holds per-file scanning result from ScanFileStates.
-type FileStateInfo struct {
-	Path        string    `json:"path"`
-	State       FileState `json:"state"`
-	Size        int64     `json:"size,omitempty"`
-	Mtime       int64     `json:"mtime,omitempty"`
-	CachedSize  int64     `json:"cached_size,omitempty"`
-	CachedMtime int64     `json:"cached_mtime,omitempty"`
-	Error       string    `json:"error,omitempty"`
+// FileMeta is the per-file state entity stored in boltDB.
+type FileMeta struct {
+	Path     string    `json:"path"`                // absolute path, unique key
+	State    FileState `json:"state"`               // index state
+	Error    string    `json:"error,omitempty"`     // failure reason
+	Mtime    int64     `json:"mtime,omitempty"`     // modification time (nanoseconds)
+	Size     int64     `json:"size,omitempty"`      // file size (bytes)
+	ChunkIDs []string  `json:"chunk_ids,omitempty"` // indexed chunk IDs, for cleanup
+
+	// Audit / billing fields
+	InputTokens  int     `json:"input_tokens,omitempty"`
+	OutputTokens int     `json:"output_tokens,omitempty"`
+	CacheTokens  int     `json:"cache_tokens,omitempty"`
+	Cost         float64 `json:"cost,omitempty"`
+	Chunks       int     `json:"chunks,omitempty"`     // number of chunks
+	Nodes        int     `json:"nodes,omitempty"`      // number of graph nodes
+	ElapsedMs    int64   `json:"elapsed_ms,omitempty"` // processing time in ms
+	UpdatedAt    int64   `json:"updated_at"`           // unix timestamp of last update
 }
+
+// IndexerStatus is the runtime status returned by Status().
+type IndexerStatus struct {
+	ProjectDir   string `json:"project_dir"`
+	Running      bool   `json:"running"`
+	PendingCount int    `json:"pending_count"`
+	Enqueued     int    `json:"enqueued"`
+	Processing   string `json:"processing"` // current file being processed
+	DoneCount    int    `json:"done_count"`
+	ErrorCount   int    `json:"error_count"`
+	TotalChunks  int    `json:"total_chunks"`
+}
+
+// IndexerCallbacks holds event hooks. Daemon uses them to broadcast
+// JSON-RPC notifications to WebUI clients.
+type IndexerCallbacks struct {
+	// OnFileAdded is called when Add() discovers a new or changed file.
+	OnFileAdded func(ctx interface{}, path string)
+
+	// OnFileIndexStart is called when worker begins indexing a file.
+	OnFileIndexStart func(ctx interface{}, path string)
+
+	// OnFileIndexDone is called when a file has been indexed successfully.
+	OnFileIndexDone func(ctx interface{}, path string)
+
+	// OnFileIndexFail is called when indexing a file has failed.
+	OnFileIndexFail func(ctx interface{}, path, errMsg string)
+
+	// OnFileRemoved is called after a file chunk has been cleaned up.
+	OnFileRemoved func(ctx interface{}, path string)
+
+	// OnQueueEmpty is called when the queue becomes empty.
+	OnQueueEmpty func(ctx interface{})
+}
+
+// IndexerOption configures the Indexer.
+type IndexerOption func(*Indexer)

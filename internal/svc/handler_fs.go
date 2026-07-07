@@ -17,13 +17,12 @@ import (
 )
 
 type FSEntry struct {
-	Name       string    `json:"name"`
-	Path       string    `json:"path"`
-	Size       int64     `json:"size"`
-	IsDir      bool      `json:"is_dir"`
-	Mode       string    `json:"mode"`
-	ModTime    time.Time `json:"mod_time"`
-	IndexState string    `json:"index_state"` // "" | "indexed" | "unindexed" | "pending"
+	Name    string    `json:"name"`
+	Path    string    `json:"path"`
+	Size    int64     `json:"size"`
+	IsDir   bool      `json:"is_dir"`
+	Mode    string    `json:"mode"`
+	ModTime time.Time `json:"mod_time"`
 }
 
 func (d *Daemon) handleFSList(_ context.Context, params json.RawMessage) (any, error) {
@@ -75,50 +74,6 @@ func (d *Daemon) handleFSList(_ context.Context, params json.RawMessage) (any, e
 			Mode:    fi.Mode().String(),
 			ModTime: fi.ModTime(),
 		})
-	}
-
-	// Populate index_state for each file by checking ManifestStore
-	if d.manifestStore != nil {
-		m := d.manifestStore.FindForPath(absPath)
-		// If FindForPath can't find a manifest (cache miss + no file on disk),
-		// fall back to LoadOrCreate which always returns a valid (possibly empty) manifest.
-		if m == nil {
-			m = d.manifestStore.LoadOrCreate(absPath)
-		}
-		if m != nil {
-			for i := range result {
-				entryRelPath, _ := filepath.Rel(m.ProjectDir, result[i].Path)
-
-				if result[i].IsDir {
-					// Check if any child of this directory is in the manifest
-					hasAny := false
-					for p := range m.Files {
-						if strings.HasPrefix(p, entryRelPath+string(filepath.Separator)) {
-							hasAny = true
-							break
-						}
-					}
-					if hasAny {
-						result[i].IndexState = "indexed"
-					} else {
-						result[i].IndexState = "unindexed"
-					}
-				} else {
-					switch m.GetState(entryRelPath) {
-					case "unindexed":
-						result[i].IndexState = "unindexed"
-					case "pending":
-						result[i].IndexState = "pending"
-					case "processing":
-						result[i].IndexState = "indexing"
-					case "done":
-						result[i].IndexState = "indexed"
-					case "error":
-						result[i].IndexState = "indexed"
-					}
-				}
-			}
-		}
 	}
 
 	sort.Slice(result, func(i, j int) bool {

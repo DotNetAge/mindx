@@ -238,15 +238,18 @@ func (d *Daemon) handleTerminalResize(ctx context.Context, params json.RawMessag
 }
 
 // resolveTerminalCwd tries to find a sensible working directory when none is provided.
-// Priority: first watched KB directory > current working directory.
+// Priority: first indexed project directory > current working directory.
 func (d *Daemon) resolveTerminalCwd() string {
-	// Try the first watched directory from filewatch service
-	if d.kbWatch != nil {
-		status := d.kbWatch.Status()
-		if len(status.Watched) > 0 && status.Watched[0] != "" {
-			return status.Watched[0]
+	// Try the first indexed project directory
+	d.indexersMu.RLock()
+	for projectDir := range d.indexers {
+		d.indexersMu.RUnlock()
+		if projectDir != "" {
+			return projectDir
 		}
+		return ""
 	}
+	d.indexersMu.RUnlock()
 	// Fallback to current working directory
 	if cwd, err := os.Getwd(); err == nil {
 		return cwd

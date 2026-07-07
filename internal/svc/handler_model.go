@@ -99,11 +99,11 @@ func (d *Daemon) handleModelSwitch(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("failed to save config: %w", err)
 	}
 
-	// If filewatch was not initialized at startup (no model configured),
+	// If GraphIndexer was not initialized at startup (no model configured),
 	// try to initialize it now that a model is available.
-	if d.kbWatch == nil {
+	if d.graphIndexer == nil {
 		if initErr := d.ensureGraphIndexer(); initErr != nil {
-			d.logger.Warn("failed to initialize GraphIndexer/FileWatch after model switch",
+			d.logger.Warn("failed to initialize GraphIndexer after model switch",
 				"error", initErr,
 			)
 		}

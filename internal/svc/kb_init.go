@@ -17,9 +17,8 @@ import (
 	"github.com/DotNetAge/mindx/pkg/logging"
 )
 
-// newKBStack creates the full knowledge-base stack: GraphIndexer, RegionIndexer,
-// FileWatchService, and wires the VersionRecorder. Called from both NewDaemon
-// and ensureGraphIndexer to eliminate duplicate initialization logic.
+// newKBStack creates the full knowledge-base stack: GraphIndexer and RegionIndexer.
+// Called from both NewDaemon and ensureGraphIndexer to eliminate duplicate initialization logic.
 func newKBStack(
 	emb goragcore.Embedder,
 	coreGS goragcore.GraphStore,
@@ -27,10 +26,8 @@ func newKBStack(
 	dataDir string,
 	logger logging.Logger,
 	tokenUsageStore goharnesssession.TokenUsageStore,
-	watchListStore *indexing.WatchListStore,
-	indexStateStore *indexing.IndexStateStore,
 	app *core.App,
-) (graphIndexer *goragindexer.GraphIndexer, kbWatch *indexing.FileWatchService, err error) {
+) (graphIndexer *goragindexer.GraphIndexer, err error) {
 
 	// ── 1. Load entity-defs.json ──────────────────────────────────
 	var entityDefs []goragindexer.EntityDef
@@ -64,7 +61,7 @@ func newKBStack(
 	// ── 2. Create KB vector store ─────────────────────────────────
 	kbVecDir := filepath.Join(dataDir, "kb-vectors")
 	if mkErr := os.MkdirAll(kbVecDir, 0755); mkErr != nil {
-		return nil, nil, fmt.Errorf("KB vector directory creation failed: %w", mkErr)
+		return nil, fmt.Errorf("KB vector directory creation failed: %w", mkErr)
 	}
 
 	kbVS, vsErr := govector.NewStore(
@@ -74,7 +71,7 @@ func newKBStack(
 		govector.WithHNSW(true),
 	)
 	if vsErr != nil {
-		return nil, nil, fmt.Errorf("KB vector store creation failed: %w", vsErr)
+		return nil, fmt.Errorf("KB vector store creation failed: %w", vsErr)
 	}
 
 	// ── 3. Create GraphIndexer ─────────────────────────────────────
@@ -104,41 +101,35 @@ func newKBStack(
 		goragindexer.RegionWithLogger(logger),
 		goragindexer.RegionWithGraphStore(coreGS),
 	)
+	_ = regionIndexer // kept for future use (Summarize)
 	logger.Info("RegionIndexer initialized for knowledge base")
 
-	// ── 5. Create FileWatchService ─────────────────────────────────
-	kw := indexing.NewFileWatchService(
-		gi,
-		regionIndexer,
-		watchListStore,
-		indexStateStore,
-		filepath.Join(dataDir, "kb-cache"),
-		logger,
-		tokenUsageStore,
-		llmModelCfg.Model,
-	)
-	logger.Info("FileWatchService configured (backed by GraphIndexer)",
-		"cache_dir", filepath.Join(dataDir, "kb-cache"),
-	)
+	return gi, nil
+}
 
-	// ── 6. Wire VersionRecorder ────────────────────────────────────
-	kw.VersionRecorder = func(absPath string) {
-		if app.SessDB() == nil || app.FileVersions() == nil {
-			return
+// wireVersionRecorder sets the OnFileIndexDone callback to record file versions.
+func (d *Daemon) wireVersionRecorder(pi *indexing.Indexer) {
+	if d.app.SessDB() == nil || d.app.FileVersions() == nil {
+		return
+	}
+	cb := pi.GetCallbacks()
+	prevOnDone := cb.OnFileIndexDone
+	cb.OnFileIndexDone = func(ctx interface{}, path string) {
+		if prevOnDone != nil {
+			prevOnDone(ctx, path)
 		}
-		sessions, listErr := app.SessDB().ListSessions(context.Background())
+		sessions, listErr := d.app.SessDB().ListSessions(context.Background())
 		if listErr != nil {
 			return
 		}
 		for _, s := range sessions {
-			if s.ProjectDir == "" || !strings.HasPrefix(absPath, s.ProjectDir) {
+			if s.ProjectDir == "" || !strings.HasPrefix(path, s.ProjectDir) {
 				continue
 			}
 			if s.SessionDir != "" {
-				_ = app.FileVersions().Record(s.SessionDir, absPath)
+				_ = d.app.FileVersions().Record(s.SessionDir, path)
 			}
 		}
 	}
-
-	return gi, kw, nil
+	pi.SetCallbacks(cb)
 }

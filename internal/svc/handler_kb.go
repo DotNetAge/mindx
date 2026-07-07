@@ -86,7 +86,7 @@ func (d *Daemon) handleKBChunks(_ context.Context, params json.RawMessage) (any,
 		})
 	}
 
-	hasMore := len(chunks) == p.PageSize
+	hasMore := offset+len(chunks) < total
 
 	d.logger.Info("kb.chunks called", "page", p.Page, "page_size", p.PageSize, "returned", len(chunks), "total", total, "has_more", hasMore)
 
@@ -163,49 +163,6 @@ func (d *Daemon) handleKBChunksGet(_ context.Context, params json.RawMessage) (a
 }
 
 // ---------------------------------------------------------------------------
-// kb.sync_project — 对指定目录执行全量文件扫描和索引
-// ---------------------------------------------------------------------------
-
-func (d *Daemon) handleKBSyncProject(_ context.Context, params json.RawMessage) (any, error) {
-	var p struct {
-		ProjectDir string `json:"project_dir"`
-	}
-	if err := unmarshalParams(params, &p); err != nil {
-		return nil, err
-	}
-	if p.ProjectDir == "" {
-		return nil, fmt.Errorf("project_dir is required")
-	}
-
-	if d.kbWatch == nil {
-		return nil, fmt.Errorf("filewatch service not available")
-	}
-
-	absDir, absErr := filepath.Abs(p.ProjectDir)
-	if absErr != nil {
-		return nil, fmt.Errorf("resolve project dir: %w", absErr)
-	}
-
-	// Clear the indexing cache for this directory to force full re-index
-	cacheBase := filepath.Join(d.app.Settings().DataDir(), "kb-cache")
-	cacheDir := filepath.Join(cacheBase, sanitizeDirName(absDir))
-	if err := os.RemoveAll(cacheDir); err != nil {
-		d.logger.Warn("failed to remove cache dir, re-index may be partial", "cache_dir", cacheDir, "error", err)
-	} else {
-		d.logger.Info("cache cleared, forcing full re-index", "cache_dir", cacheDir)
-	}
-
-	// Perform full sync via FileWatchService.SyncDir
-	d.kbWatch.SyncDir(context.Background(), absDir)
-
-	d.logger.Info("kb.sync_project completed",
-		"project_dir", p.ProjectDir,
-	)
-
-	return map[string]string{"status": "completed", "project_dir": p.ProjectDir}, nil
-}
-
-// ---------------------------------------------------------------------------
 // kb.stats — 获取知识库文件索引进度统计
 // ---------------------------------------------------------------------------
 
@@ -228,16 +185,20 @@ func (d *Daemon) handleKBStats(_ context.Context, params json.RawMessage) (any, 
 		}
 	}
 
-	// Get file indexing stats from FileWatchService
+	// Get file indexing stats from Indexer
 	var totalFiles, indexedFiles int
-	if d.kbWatch != nil {
-		absDir, absErr := filepath.Abs(p.ProjectDir)
-		if absErr == nil {
-			st := d.kbWatch.Status()
-			if dirState, ok := st.IndexStates[absDir]; ok {
-				totalFiles = dirState.TotalFiles
-				indexedFiles = dirState.IndexedFiles
+	absDir, absErr := filepath.Abs(p.ProjectDir)
+	if absErr == nil {
+		pi, piErr := d.getIndexer(absDir)
+		if piErr != nil {
+			return nil, piErr
+		}
+		stats, err := pi.Count(context.Background(), absDir)
+		if err == nil {
+			for _, count := range stats {
+				totalFiles += count
 			}
+			indexedFiles = stats[indexing.FileIndexed]
 		}
 	}
 
@@ -358,7 +319,7 @@ func (d *Daemon) handleKBSearch(_ context.Context, params json.RawMessage) (any,
 // kb.file_states — 扫描项目目录文件状态（只读，不索引）
 // ---------------------------------------------------------------------------
 
-func (d *Daemon) handleKBFileStates(_ context.Context, params json.RawMessage) (any, error) {
+func (d *Daemon) handleKBFileStates(ctx context.Context, params json.RawMessage) (any, error) {
 	var p struct {
 		ProjectDir string `json:"project_dir"`
 	}
@@ -369,219 +330,78 @@ func (d *Daemon) handleKBFileStates(_ context.Context, params json.RawMessage) (
 		return nil, fmt.Errorf("project_dir is required")
 	}
 
-	// Determine cache dir from FileWatchService
-	var cacheDir string
-	if d.kbWatch != nil {
-		cacheBase := filepath.Join(d.app.Settings().DataDir(), "kb-cache")
-		cacheDir = filepath.Join(cacheBase, sanitizeDirName(p.ProjectDir))
-	}
-
-	// Prefer GraphIndexer for KB scanning, fall back to memory semantic indexer
-	var indexer goragcore.Indexer
-	if d.graphIndexer != nil {
-		indexer = d.graphIndexer
-	} else if d.sharedMemory != nil {
-		indexer = d.sharedMemory.Semantic()
-	} else {
-		reason := "no indexer initialized"
-		if d.graphIndexerErr != nil {
-			reason = "GraphIndexer not initialized: " + d.graphIndexerErr.Error()
-		}
-		d.logger.Warn("kb.file_states rejected: " + reason)
-		return nil, fmt.Errorf("knowledge base not available: %s", reason)
-	}
-
-	pi := indexing.NewIndexService(indexer, cacheDir, d.logger)
-	states, err := pi.ScanFileStates(context.Background(), p.ProjectDir)
+	// Get manifest data from Indexer
+	absDir, err := filepath.Abs(p.ProjectDir)
 	if err != nil {
-		return nil, fmt.Errorf("file states scan failed: %w", err)
+		return nil, fmt.Errorf("resolve project dir: %w", err)
+	}
+	pi, getErr := d.getIndexer(absDir)
+	if getErr != nil {
+		return nil, getErr
+	}
+	manifestFiles, _ := pi.ListAllFiles(ctx, "")
+	manifestMap := make(map[string]*indexing.FileMeta, len(manifestFiles))
+	for _, meta := range manifestFiles {
+		manifestMap[meta.Path] = meta
 	}
 
-	// Count by state
-	counts := map[string]int{
-		"indexed": 0,
-		"changed": 0,
-		"new":     0,
-		"removed": 0,
-		"skipped": 0,
-		"total":   len(states),
+	// Walk filesystem to discover all files on disk
+	diskFiles := make(map[string]os.FileInfo)
+	filepath.Walk(absDir, func(walkPath string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		diskFiles[walkPath] = info
+		return nil
+	})
+
+	// Merge: for each file on disk, determine state
+	type fileStateEntry struct {
+		Path  string `json:"path"`
+		State string `json:"state"`
 	}
-	for _, s := range states {
-		counts[string(s.State)]++
+	states := make([]fileStateEntry, 0, len(diskFiles))
+	counts := map[string]int{
+		"indexed": 0, "new": 0, "changed": 0, "skipped": 0, "total": 0,
+	}
+
+	for absPath, info := range diskFiles {
+		counts["total"]++
+		if meta, ok := manifestMap[absPath]; ok {
+			switch meta.State {
+			case indexing.FileIndexed:
+				// Compare mtime/size to detect changes
+				if info.ModTime().UnixNano() != meta.Mtime || info.Size() != meta.Size {
+					states = append(states, fileStateEntry{Path: absPath, State: "changed"})
+					counts["changed"]++
+				} else {
+					states = append(states, fileStateEntry{Path: absPath, State: "indexed"})
+					counts["indexed"]++
+				}
+			case indexing.FilePending, indexing.FileEnqueued, indexing.FileProcessing:
+				states = append(states, fileStateEntry{Path: absPath, State: "indexed"}) // treat as indexed
+				counts["indexed"]++
+			case indexing.FileFailed:
+				states = append(states, fileStateEntry{Path: absPath, State: "error"})
+				counts["error"]++
+			}
+		} else {
+			states = append(states, fileStateEntry{Path: absPath, State: "new"})
+			counts["new"]++
+		}
 	}
 
 	d.logger.Info("kb.file_states completed",
 		"project_dir", p.ProjectDir,
-		"total", len(states),
+		"total", counts["total"],
 		"indexed", counts["indexed"],
-		"changed", counts["changed"],
 		"new", counts["new"],
-		"removed", counts["removed"],
-		"skipped", counts["skipped"],
+		"changed", counts["changed"],
 	)
 
 	return map[string]any{
 		"states": states,
 		"counts": counts,
-	}, nil
-}
-
-// ---------------------------------------------------------------------------
-// kb.index — 对单个文件或目录执行索引（--force 强制重索引）
-// ---------------------------------------------------------------------------
-
-func (d *Daemon) handleKBIndex(_ context.Context, params json.RawMessage) (any, error) {
-	var p struct {
-		Path  string `json:"path"`
-		Force bool   `json:"force"`
-	}
-	if err := unmarshalParams(params, &p); err != nil {
-		return nil, err
-	}
-	if p.Path == "" {
-		return nil, fmt.Errorf("path is required")
-	}
-
-	if d.kbWatch == nil {
-		return nil, fmt.Errorf("filewatch service not available")
-	}
-	if d.graphIndexer == nil {
-		reason := "GraphIndexer not initialized"
-		if d.graphIndexerErr != nil {
-			reason = d.graphIndexerErr.Error()
-		}
-		return nil, fmt.Errorf("knowledge base not available: %s", reason)
-	}
-
-	absPath, err := filepath.Abs(p.Path)
-	if err != nil {
-		return nil, fmt.Errorf("resolve path: %w", err)
-	}
-
-	info, err := os.Stat(absPath)
-	if err != nil {
-		return nil, fmt.Errorf("stat path: %w", err)
-	}
-
-	cacheBase := filepath.Join(d.app.Settings().DataDir(), "kb-cache")
-
-	if info.IsDir() {
-		// ── Directory indexing ──
-		cacheDir := filepath.Join(cacheBase, indexing.SanitizeDirName(absPath))
-		if p.Force {
-			if err := os.RemoveAll(cacheDir); err != nil {
-				d.logger.Warn("failed to clear cache for dir", "dir", absPath, "error", err)
-			} else {
-				d.logger.Info("cache cleared for directory (force)", "dir", absPath)
-			}
-		}
-		d.kbWatch.SyncDir(context.Background(), absPath)
-		return map[string]any{"status": "completed", "path": absPath, "type": "directory"}, nil
-	}
-
-	// ── Single file indexing ──
-	parentDir := filepath.Dir(absPath)
-	relPath := filepath.Base(absPath)
-
-	// Broadcast "indexing" event to frontend
-	if d.gw != nil {
-		d.gw.BroadcastNotification("file_indexing", map[string]any{
-			"type": "file_indexing",
-			"data": map[string]string{
-				"file":      relPath,
-				"directory": parentDir,
-				"state":     "indexing",
-			},
-		})
-	}
-
-	// Set IndexStateStore to "indexing" BEFORE the actual indexing, so the
-	// frontend progress bar shows 0/1 (instead of 0/0) during processing.
-	if d.indexStateStore != nil {
-		d.indexStateStore.SetIndexing(parentDir, 1)
-	}
-
-	pi := indexing.NewIndexService(d.graphIndexer,
-		filepath.Join(cacheBase, indexing.SanitizeDirName(parentDir)),
-		d.logger,
-	)
-	if d.graphIndexer != nil {
-		pi.PreSyncEntityDefs = func(projectDir, regionID string) {
-			defs := d.entityDefsForProject(projectDir)
-			if len(defs) > 0 {
-				d.graphIndexer.SetEntityDefsByRegion(regionID, defs)
-			}
-		}
-	}
-
-	if p.Force {
-		pi.ClearCacheEntry(relPath)
-		d.logger.Info("cache entry cleared (force)", "file", relPath)
-	}
-
-	result := pi.SyncFiles(context.Background(), parentDir, []string{relPath}, false)
-
-	if len(result.Errors) > 0 {
-		if d.gw != nil {
-			d.gw.BroadcastNotification("file_indexing", map[string]any{
-				"type": "file_indexing",
-				"data": map[string]string{
-					"file":      relPath,
-					"directory": parentDir,
-					"state":     "error",
-				},
-			})
-		}
-		if d.indexStateStore != nil {
-			d.indexStateStore.SetFailed(parentDir, result.Errors[0])
-		}
-		return nil, fmt.Errorf("index failed: %s", result.Errors[0])
-	}
-
-	status := "skipped"
-	if result.Indexed > 0 {
-		status = "indexed"
-	} else if result.Updated > 0 {
-		status = "updated"
-	}
-
-	// Update IndexStateStore so the frontend progress bar reflects real data.
-	// The entry was already created (SetIndexing above), so we just promote it.
-	if d.indexStateStore != nil && (result.Indexed > 0 || result.Updated > 0) {
-		d.indexStateStore.IncrementIndexedFiles(parentDir)
-		// IncrementIndexedFiles only works when state=="indexing", which we
-		// set above. After incrementing, mark as completed with real stats.
-		d.indexStateStore.SetCompletedWithStats(parentDir, result.Indexed, result.Skipped, 0, 0, 0,
-			[]indexing.CompletedFileRecord{{
-				Path:   relPath,
-				Chunks: result.Indexed,
-			}},
-		)
-	}
-
-	// Broadcast "indexed" event to frontend (AFTER IndexStateStore update,
-	// so the 2s polling timer can pick up the completed state).
-	if d.gw != nil && (result.Indexed > 0 || result.Updated > 0) {
-		d.gw.BroadcastNotification("file_indexing", map[string]any{
-			"type": "file_indexing",
-			"data": map[string]string{
-				"file":      relPath,
-				"directory": parentDir,
-				"state":     "indexed",
-			},
-		})
-	}
-
-	d.logger.Info("kb.index completed",
-		"path", relPath,
-		"status", status,
-		"force", p.Force,
-	)
-
-	return map[string]any{
-		"status": status,
-		"path":   absPath,
-		"type":   "file",
 	}, nil
 }
 

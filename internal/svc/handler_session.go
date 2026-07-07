@@ -118,11 +118,13 @@ func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("delete session %q failed: %w", p.SessionID, err)
 	}
 
-	// Clean up index state for this session's project dir
-	if projectDir != "" && d.indexStateStore != nil {
-		if absDir, absErr := filepath.Abs(projectDir); absErr == nil {
-			d.indexStateStore.Remove(absDir)
-			d.logger.Info("session.delete: removed index state for session",
+	// Note: per-session index state cleanup is handled by the Indexer lifecycle.
+	_ = projectDir // kept for future use
+	if absDir, absErr := filepath.Abs(projectDir); absErr == nil {
+		pi, piErr := d.getIndexer(absDir)
+		if piErr == nil && pi != nil {
+			pi.Stop()
+			d.logger.Info("session.delete: stopped indexing for session",
 				"session_id", p.SessionID,
 				"project_dir", projectDir,
 			)
@@ -150,7 +152,7 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 	d.logger.Info("session.create: called",
 		"agent", p.Agent,
 		"project_dir", p.ProjectDir,
-		"kbWatch_available", d.kbWatch != nil,
+		"graph_indexer_available", d.graphIndexer != nil,
 	)
 
 	sessDB := d.app.SessDB()
