@@ -545,6 +545,14 @@ func (ix *Indexer) processNext(ctx context.Context, file *FileMeta) bool {
 	regionID := fmt.Sprintf("%x", len(ix.projectDir))
 	fileCtx = goragindexer.WithRegionID(fileCtx, regionID)
 
+	indexStart := time.Now()
+
+	// Snapshot entity count before indexing for per-file node delta
+	var entitiesBefore int
+	if gi, ok := ix.indexer.(*goragindexer.GraphIndexer); ok {
+		entitiesBefore, _ = gi.EntityStats()
+	}
+
 	chunks, idxErr := ix.indexFile(fileCtx, file.Path)
 	if idxErr != nil {
 		file.State = FileFailed
@@ -582,6 +590,21 @@ func (ix *Indexer) processNext(ctx context.Context, file *FileMeta) bool {
 		}
 		file.ChunkIDs = chunks
 		file.Chunks = len(chunks)
+	}
+
+	// Record token usage, node count, elapsed time and cost
+	file.ElapsedMs = time.Since(indexStart).Milliseconds()
+	if gi, ok := ix.indexer.(*goragindexer.GraphIndexer); ok {
+		if tu := gi.LastTokenUsage(); tu != nil {
+			file.InputTokens = tu.PromptTokens
+			file.OutputTokens = tu.CompletionTokens
+			// Rough cost estimate using default Haiku pricing:
+			//   Input:  $0.25 / 1M tokens → 0.00025 / 1K
+			//   Output: $1.25 / 1M tokens → 0.00125 / 1K
+			file.Cost = (float64(tu.PromptTokens)*0.00025 + float64(tu.CompletionTokens)*0.00125) / 1000.0
+		}
+		entitiesAfter, _ := gi.EntityStats()
+		file.Nodes = entitiesAfter - entitiesBefore
 	}
 
 	file.State = FileIndexed
