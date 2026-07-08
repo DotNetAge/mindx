@@ -357,20 +357,49 @@ func (d *Daemon) handleGraphListNodesByProject(_ context.Context, params json.Ra
 	}
 
 	// 3. Collect all chunk IDs from this region
+	// NOTE: v.ID is "vec_"+chunkID (vector primary key), while source_chunk_ids
+	// on graph nodes store the raw chunk ID. Use v.ChunkID for matching.
 	chunkIDSet := make(map[string]bool, len(vectors))
 	for _, v := range vectors {
-		chunkIDSet[v.ID] = true
+		chunkIDSet[v.ChunkID] = true
 	}
 
-	// 4. Get all graph nodes and filter by chunk ID overlap
+	// 4. Get all graph nodes
 	allNodes, err := d.graphStore.ListNodes()
 	if err != nil {
 		return nil, fmt.Errorf("list nodes failed: %w", err)
 	}
 
-	// Helper: check if a node's source_chunk_ids overlaps with chunkIDSet
-	// Region 节点没有 source_chunk_ids，通过 dir 属性前缀匹配
+	// 4a. 回退：如果 vectorDB 未返回任何分片（region 关联断裂），
+	//     则跳过 source_chunk_ids 过滤，返回全部节点（仅保留 Region dir 前缀检查）。
+	//     这样可以确保图始终有数据可显示。
+	noChunks := len(chunkIDSet) == 0
+	if noChunks {
+		d.logger.Warn("graph.list_nodes_by_region: no chunks found for region, falling back to full graph",
+			"project_dir", p.ProjectDir, "region_id", regionID)
+	}
+
+	// Helper: check if a node belongs to this region
 	nodeInRegion := func(n *graph.Node) bool {
+		// 回退模式下：仅对 Region 节点做 dir 前缀检查，其他节点全部通过
+		if noChunks {
+			for _, label := range n.Labels {
+				if label == "Region" {
+					if dirV, dirOK := n.GetProperty("dir"); dirOK {
+						if dirStr, ok := dirV.InterfaceValue().(string); ok {
+							if strings.HasPrefix(dirStr, absDir) {
+								return true
+							}
+						}
+					}
+					// Region 节点 dir 不匹配 → 排除
+					return false
+				}
+			}
+			return true
+		}
+
+		// 正常模式：通过 source_chunk_ids 重叠判断
 		v, ok := n.GetProperty("source_chunk_ids")
 		if ok {
 			raw := v.InterfaceValue()

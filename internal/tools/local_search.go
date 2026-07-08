@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -37,18 +38,18 @@ func NewLocalSearch(indexer *goragindexer.GraphIndexer) tools.FuncTool {
 func (t *LocalSearch) Info() *tools.ToolInfo {
 	return &tools.ToolInfo{
 		Name:        "LocalSearch",
-		Description: "Quickly explore the project's codebase by meaning rather than by filename. Use this BEFORE falling back to Grep/LS/Read — it understands code semantics and project structure. Can also check local knowledge before hitting WebSearch.",
+		Description: "Quickly explore the project's knowledge base by meaning rather than by filename. Use this BEFORE falling back to Grep/LS/Read — it understands semantics and project structure. Can also check local knowledge before hitting WebSearch.",
 		Prompt: `Search the project's knowledge base by meaning and structure, not by filename. Try this FIRST before using Grep/LS/Read — it saves time and finds things those tools miss.
 
-Also consider using this before WebSearch when the user's question might be about their own codebase.
+Also consider using this before WebSearch when the user's question might be about their own knowledge base.
 
 Three modes for different needs:
 
-- **semantic** (default): The user asks "how does X work?", "find the Y module", "what is Z?". Returns relevant code/docs chunks with their entity context. Think of it as "grep by meaning".
-- **graph**: The user asks "what depends on X?", "how are Y and Z connected?". Traverses entity relationships. Think of it as "a map of the codebase".
+- **semantic** (default): The user asks "how does X work?", "find the Y module", "what is Z?". Returns relevant knowledge chunks with their entity context. Think of it as "grep by meaning".
+- **graph**: The user asks "what depends on X?", "how are Y and Z connected?". Traverses entity relationships multiple hops deep. Think of it as "a map of the knowledge graph".
 - **tree**: The user asks "show me the project layout", "what's in this directory?", "browse the knowledge". Returns a directory tree of the project with summaries for each file. Think of it as "ls -R with meaning".
 
-Semantic and graph modes return up to 3 results. Use LocalFetch to read full content of any chunk or node.`,
+Results: semantic/graph modes return up to 20 results (default 5). Use LocalFetch to read full content of any chunk or node.`,
 		IsReadOnly: true,
 		Parameters: []tools.Parameter{
 			{
@@ -80,9 +81,15 @@ Semantic and graph modes return up to 3 results. Use LocalFetch to read full con
 				Default:     float64(1),
 			},
 			{
-				Name:        "entity_types",
+				Name:        "edge_types",
 				Type:        "array",
-				Description: "Filter entity types e.g. [\"Person\",\"Organization\"]. Only for graph mode.",
+				Description: "Filter traversal by edge types e.g. [\"CONTAINS\",\"RELATED_TO\"]. Only for graph mode.",
+				Required:    false,
+			},
+			{
+				Name:        "entity_labels",
+				Type:        "array",
+				Description: "Post-filter entity node labels e.g. [\"Concept\",\"Term\"] to narrow result entity types. Works in semantic and graph modes.",
 				Required:    false,
 			},
 			{
@@ -152,7 +159,7 @@ func (t *LocalSearch) Execute(ctx context.Context, params map[string]any) (any, 
 	}
 
 	var entityTypes []string
-	if raw, ok := params["entity_types"].([]any); ok && mode == "graph" {
+	if raw, ok := params["edge_types"].([]any); ok && mode == "graph" {
 		for _, v := range raw {
 			if s, ok := v.(string); ok {
 				entityTypes = append(entityTypes, s)
@@ -180,13 +187,25 @@ func (t *LocalSearch) Execute(ctx context.Context, params map[string]any) (any, 
 		}
 	}
 	if projectDir != "" {
-		regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(projectDir)))
+		regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(projectDir))))
 		gq.AddFilter("region_id", regionID)
 	}
 
 	hits, err := t.indexer.Search(ctx, gq)
 	if err != nil {
 		return nil, fmt.Errorf("LocalSearch failed: %w", err)
+	}
+
+	// 回退：region 过滤无结果时，去掉 region_id 过滤重试
+	if len(hits) == 0 {
+		gq2 := query.NewGraphQuery(queryStr).(*query.GraphQuery)
+		gq2.SetTextQuery("")
+		gq2.SetLimit(limit)
+		gq2.SetDepth(depth)
+		hits2, err2 := t.indexer.Search(ctx, gq2)
+		if err2 == nil && len(hits2) > 0 {
+			hits = hits2
+		}
 	}
 
 	// Filter by tags if specified (post-filter)
@@ -202,8 +221,24 @@ func (t *LocalSearch) Execute(ctx context.Context, params map[string]any) (any, 
 		}
 	}
 
+	// Filter by entity_labels if specified (post-filter on hit.Entities)
+	if raw, ok := params["entity_labels"].([]any); ok && len(raw) > 0 {
+		var filterLabels []string
+		for _, v := range raw {
+			if s, ok := v.(string); ok {
+				filterLabels = append(filterLabels, s)
+			}
+		}
+		if len(filterLabels) > 0 {
+			hits = filterHitsByEntityLabels(hits, filterLabels)
+		}
+	}
+
 	if len(hits) == 0 {
 		return "", nil
+	}
+	if mode == "graph" {
+		return formatGraphSearchResults(queryStr, hits), nil
 	}
 	return formatLocalSearchResults(queryStr, hits), nil
 }
@@ -229,7 +264,7 @@ func (t *LocalSearch) execTree(ctx context.Context, params map[string]any) (any,
 
 	var regionID string
 	if regionPath != "" {
-		regionID = fmt.Sprintf("%x", sha256.Sum256([]byte(regionPath)))
+		regionID = fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(regionPath))))
 	}
 
 	root, err := t.indexer.Tree(ctx, regionID, depth)
@@ -466,20 +501,176 @@ func filterHitsByTags(hits []core.Hit, tags []string) []core.Hit {
 	return filtered
 }
 
+// filterHitsByEntityLabels post-filters each hit's Entities to only keep
+// entities whose Labels intersect with the specified labels.
+// If a hit has no remaining entities after filtering, its Entities list
+// is set to nil (the hit itself is kept — the chunk result is still valid).
+func filterHitsByEntityLabels(hits []core.Hit, labels []string) []core.Hit {
+	if len(labels) == 0 {
+		return hits
+	}
+	labelSet := make(map[string]bool, len(labels))
+	for _, l := range labels {
+		labelSet[l] = true
+	}
+	for i := range hits {
+		if len(hits[i].Entities) == 0 {
+			continue
+		}
+		filtered := make([]*core.Node, 0, len(hits[i].Entities))
+		for _, e := range hits[i].Entities {
+			for _, l := range e.Labels {
+				if labelSet[l] {
+					filtered = append(filtered, e)
+					break
+				}
+			}
+		}
+		if len(filtered) == 0 {
+			hits[i].Entities = nil
+		} else {
+			hits[i].Entities = filtered
+		}
+	}
+	return hits
+}
+
 // ── Format ────────────────────────────────────────────────────────────────────────
 
+// formatGraphSearchResults produces graph-traversal-oriented output.
+// Shows a consolidated entity graph (all unique entities + relations) first,
+// then per-hit details with their entity context.
+func formatGraphSearchResults(query string, hits []core.Hit) string {
+	var sb strings.Builder
+
+	sb.WriteString("## Graph Traversal\n\n")
+
+	// ── Collect all unique entities & relations ──
+	entityMap := make(map[string]*core.Node)
+	var allRelations []*core.Edge
+	for _, hit := range hits {
+		for _, e := range hit.Entities {
+			entityMap[e.ID] = e
+		}
+		allRelations = append(allRelations, hit.Relations...)
+	}
+
+	// ── Consolidated entity table ──
+	entities := make([]*core.Node, 0, len(entityMap))
+	for _, e := range entityMap {
+		entities = append(entities, e)
+	}
+	sb.WriteString(fmt.Sprintf("### Entities Found (%d total)\n\n", len(entities)))
+	if len(entities) > 0 {
+		sb.WriteString(formatEntityTable(entities))
+	} else {
+		sb.WriteString("(no entities)\n")
+	}
+	sb.WriteString("\n")
+
+	// ── Consolidated relations (connectivity view) ──
+	if len(allRelations) > 0 {
+		sb.WriteString(fmt.Sprintf("### Connections (%d edges)\n\n", len(allRelations)))
+		// Deduplicate by showing unique Source--Predicate-->Target
+		seen := make(map[string]bool)
+		for _, r := range allRelations {
+			pred := r.Predicate
+			if pred == "" {
+				pred = r.Type
+			}
+			srcName := entityName(entities, r.Source)
+			tgtName := entityName(entities, r.Target)
+			if srcName == "" {
+				srcName = r.Source
+			}
+			if tgtName == "" {
+				tgtName = r.Target
+			}
+			key := srcName + pred + tgtName
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			sb.WriteString(fmt.Sprintf("- **%s** --%s--> **%s**\n", srcName, pred, tgtName))
+		}
+		sb.WriteString("\n")
+	}
+
+	// ── Per-hit details ──
+	sb.WriteString("---\n\n### Per-Hit Details\n\n")
+	display := hits
+	if len(display) > 5 {
+		display = display[:5]
+	}
+	for _, hit := range display {
+		summary := hitSummary(&hit)
+		file := hitSourceFile(&hit)
+		startLine, endLine := hitLineRange(&hit)
+		tags := hitTags(&hit)
+		chunkType := hitChunkType(&hit)
+		parentID := hitParentID(&hit)
+
+		sb.WriteString("[")
+		sb.WriteString(summary)
+		sb.WriteString("] - ")
+		sb.WriteString("[file:")
+		sb.WriteString(file)
+		sb.WriteString("]")
+		if startLine > 0 || endLine > 0 {
+			sb.WriteString(fmt.Sprintf("[POS:L%d,%d]", startLine+1, endLine+1))
+		}
+		sb.WriteString("[ID:")
+		sb.WriteString(hit.ID)
+		sb.WriteString("]")
+		if chunkType == "root" {
+			sb.WriteString("[TYPE:document]")
+		}
+		if len(tags) > 0 {
+			sb.WriteString("[TAGS:")
+			sb.WriteString(strings.Join(tags, ", "))
+			sb.WriteString("]")
+		}
+		if parentID != "" {
+			sb.WriteString("[PARENT:")
+			sb.WriteString(parentID)
+			sb.WriteString("]")
+		}
+		sb.WriteString("\n")
+
+		// Per-hit entities (if not already in global table)
+		if len(hit.Entities) > 0 {
+			sb.WriteString("\n  Nodes: ")
+			names := make([]string, 0, len(hit.Entities))
+			for _, e := range hit.Entities {
+				label := "-"
+				if len(e.Labels) > 0 {
+					label = e.Labels[0]
+				}
+				names = append(names, fmt.Sprintf("%s (%s)", e.Name, label))
+			}
+			sb.WriteString(strings.Join(names, ", "))
+			sb.WriteString("\n")
+		}
+
+		sb.WriteString("\n---\n\n")
+	}
+
+	sb.WriteString("Graph traversal result. Use LocalFetch for full node details.\n")
+	return sb.String()
+}
+
 // formatLocalSearchResults produces concise, clue-oriented output.
-// Max 3 results shown. Each result is a one-line chunk identifier
+// Max 5 results shown. Each result is a one-line chunk identifier
 // followed by entity and relation context.
 func formatLocalSearchResults(query string, hits []core.Hit) string {
 	var sb strings.Builder
 
 	sb.WriteString("## Search Result\n\n")
 
-	// Cap at 3 results
+	// Cap at 5 results (matches default limit)
 	display := hits
-	if len(display) > 3 {
-		display = display[:3]
+	if len(display) > 5 {
+		display = display[:5]
 	}
 
 	for _, hit := range display {
