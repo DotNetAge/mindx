@@ -654,7 +654,7 @@ func (d *Daemon) getIndexer(projectDir string) (*indexing.Indexer, error) {
 	}
 	if d.modelName != "" {
 		if mc, ok := d.app.ModelCost(d.modelName); ok && (mc.CostPer1MIn > 0 || mc.CostPer1MOut > 0) {
-			opts = append(opts, indexing.WithCostRates(mc.CostPer1MIn, mc.CostPer1MOut))
+			opts = append(opts, indexing.WithCostRates(mc.CostPer1MIn, mc.CostPer1MOut, mc.CostPer1MInCached))
 		}
 	}
 

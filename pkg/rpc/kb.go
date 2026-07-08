@@ -150,3 +150,23 @@ type KBCountParams struct {
 func (c *Client) KBCount(region string) (json.RawMessage, error) {
 	return c.CallWithTimeout("kb.count", KBCountParams{Region: region})
 }
+
+// ── kb.repair_region ──
+
+type KBRepairRegionParams struct {
+	ProjectDir string `json:"project_dir"`
+}
+
+func (c *Client) KBRepairRegion(projectDir string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.repair_region", KBRepairRegionParams{ProjectDir: projectDir})
+}
+
+// ── kb.check_region_health ──
+
+type KBCheckRegionHealthParams struct {
+	ProjectDir string `json:"project_dir"`
+}
+
+func (c *Client) KBCheckRegionHealth(projectDir string) (json.RawMessage, error) {
+	return c.CallWithTimeout("kb.check_region_health", KBCheckRegionHealthParams{ProjectDir: projectDir})
+}

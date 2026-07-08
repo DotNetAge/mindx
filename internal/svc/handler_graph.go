@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
 	"github.com/DotNetAge/gograph/pkg/graph"
@@ -368,23 +369,35 @@ func (d *Daemon) handleGraphListNodesByProject(_ context.Context, params json.Ra
 	}
 
 	// Helper: check if a node's source_chunk_ids overlaps with chunkIDSet
+	// Region 节点没有 source_chunk_ids，通过 dir 属性前缀匹配
 	nodeInRegion := func(n *graph.Node) bool {
 		v, ok := n.GetProperty("source_chunk_ids")
-		if !ok {
-			return false
-		}
-		raw := v.InterfaceValue()
-		switch ids := raw.(type) {
-		case []string:
-			for _, id := range ids {
-				if chunkIDSet[id] {
-					return true
+		if ok {
+			raw := v.InterfaceValue()
+			switch ids := raw.(type) {
+			case []string:
+				for _, id := range ids {
+					if chunkIDSet[id] {
+						return true
+					}
+				}
+			case []interface{}:
+				for _, id := range ids {
+					if s, ok := id.(string); ok && chunkIDSet[s] {
+						return true
+					}
 				}
 			}
-		case []interface{}:
-			for _, id := range ids {
-				if s, ok := id.(string); ok && chunkIDSet[s] {
-					return true
+		}
+		// Region 节点：通过 dir 属性前缀匹配
+		for _, label := range n.Labels {
+			if label == "Region" {
+				if dirV, dirOK := n.GetProperty("dir"); dirOK {
+					if dirStr, ok := dirV.InterfaceValue().(string); ok {
+						if strings.HasPrefix(dirStr, absDir) {
+							return true
+						}
+					}
 				}
 			}
 		}

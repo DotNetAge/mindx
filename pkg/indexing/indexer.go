@@ -43,9 +43,10 @@ type Indexer struct {
 	modelName     string
 	callbacks     *IndexerCallbacks
 
-	// Cost rates (per 1M tokens). If both are zero, cost is not estimated.
-	costInputPer1M  float64
-	costOutputPer1M float64
+	// Cost rates (per 1M tokens). If all are zero, cost is not estimated.
+	costInputPer1M       float64
+	costOutputPer1M      float64
+	costInputCachedPer1M float64
 
 	// FIFO queue worker state
 	mu       sync.Mutex
@@ -82,6 +83,10 @@ func NewIndexer(projectDir string, indexer goragcore.Indexer, baseDir string, lo
 	}
 	ix.manifest = manifest
 
+	// Reset any stale FileProcessing entries left from a previous crash/panic.
+	// At startup no file is actually being processed, so every FileProcessing is stale.
+	ix.resetStaleProcessing()
+
 	// Load ignore rules
 	ix.ignore = loadIgnoreRules(projectDir)
 
@@ -108,11 +113,14 @@ func WithRegionIndexer(ri *goragindexer.RegionIndexer) IndexerOption {
 }
 
 // WithCostRates configures the cost rates (per 1M tokens) used to estimate
-// indexing cost. Set both to zero to disable cost estimation.
-func WithCostRates(inputPer1M, outputPer1M float64) IndexerOption {
+// indexing cost. cachedInputPer1M is the rate for cached prompt tokens;
+// if zero, cached tokens are treated as free (charged at 0).
+// Set inputPer1M and outputPer1M both to zero to disable cost estimation.
+func WithCostRates(inputPer1M, outputPer1M, cachedInputPer1M float64) IndexerOption {
 	return func(ix *Indexer) {
 		ix.costInputPer1M = inputPer1M
 		ix.costOutputPer1M = outputPer1M
+		ix.costInputCachedPer1M = cachedInputPer1M
 	}
 }
 
@@ -607,14 +615,34 @@ func (ix *Indexer) GetCallbacks() *IndexerCallbacks {
 
 // ── Internal: Worker Loop ──
 
-func (ix *Indexer) workerLoop(ctx context.Context) {
-	defer func() {
-		if r := recover(); r != nil {
+// resetStaleProcessing resets any files left in FileProcessing state after a
+// crash/panic. At startup no file is actually being processed, so all such
+// entries are stale and should be marked as failed.
+func (ix *Indexer) resetStaleProcessing() {
+	all, err := ix.manifest.list()
+	if err != nil {
+		if ix.logger != nil {
+			ix.logger.Error("indexer: failed to list manifest for stale reset", fmt.Errorf("%w", err))
+		}
+		return
+	}
+	for _, m := range all {
+		if m.State == FileProcessing {
+			m.State = FileFailed
+			m.Error = "interrupted: the previous indexing session was terminated unexpectedly"
+			m.UpdatedAt = time.Now().Unix()
+			if err := ix.manifest.put(m); err != nil && ix.logger != nil {
+				ix.logger.Error("indexer: failed to reset stale processing entry", fmt.Errorf("%w", err), "path", m.Path)
+				continue
+			}
 			if ix.logger != nil {
-				ix.logger.Error("indexer: worker panic", fmt.Errorf("%v", r))
+				ix.logger.Info("indexer: reset stale FileProcessing entry", "path", m.Path)
 			}
 		}
-	}()
+	}
+}
+
+func (ix *Indexer) workerLoop(ctx context.Context) {
 	for {
 		// Check for work
 		file := ix.manifest.firstEnqueued()
@@ -637,11 +665,37 @@ func (ix *Indexer) workerLoop(ctx context.Context) {
 			ix.logger.Info("indexer: dequeue file", "path", file.Path)
 		}
 
-		// Process the file
-		if !ix.processNext(ctx, file) {
-			// Stop requested
-			return
-		}
+		// Process the file with panic recovery so a single file failure
+		// does not kill the entire worker loop.
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// Mark the current processing file as failed and notify frontend
+					ix.mu.Lock()
+					procPath := ix.processing
+					ix.processing = ""
+					ix.mu.Unlock()
+
+					if procPath != "" {
+						fm, _ := ix.manifest.get(procPath)
+						if fm != nil {
+							fm.State = FileFailed
+							fm.Error = fmt.Sprintf("worker panic: %v", r)
+							fm.UpdatedAt = time.Now().Unix()
+							_ = ix.manifest.put(fm)
+						}
+						if ix.callbacks.OnFileIndexFail != nil {
+							ix.callbacks.OnFileIndexFail(ctx, procPath, fmt.Sprintf("worker panic: %v", r))
+						}
+					}
+
+					if ix.logger != nil {
+						ix.logger.Error("indexer: worker panic", fmt.Errorf("%v", r), "path", procPath)
+					}
+				}
+			}()
+			ix.processNext(ctx, file)
+		}()
 	}
 }
 
@@ -777,6 +831,28 @@ func (ix *Indexer) processFile(ctx context.Context, file *FileMeta) bool {
 		entitiesBefore, _ = gi.EntityStats()
 	}
 
+	// 在 LLM 调用前检查索引器组件是否就绪，避免浪费 token
+	if gi, ok := ix.indexer.(*goragindexer.GraphIndexer); ok {
+		if err := gi.CheckReady(); err != nil {
+			file.State = FileFailed
+			file.Error = err.Error()
+			file.UpdatedAt = time.Now().Unix()
+			if merr := ix.manifest.put(file); merr != nil && ix.logger != nil {
+				ix.logger.Error("indexer: failed to mark file as failed", fmt.Errorf("%w", merr), "path", file.Path)
+			}
+			if ix.logger != nil {
+				ix.logger.Error("indexer: indexer not ready, skipping file", err, "path", file.Path)
+			}
+			if ix.callbacks.OnFileIndexFail != nil {
+				ix.callbacks.OnFileIndexFail(ctx, file.Path, err.Error())
+			}
+			ix.mu.Lock()
+			ix.processing = ""
+			ix.mu.Unlock()
+			return true
+		}
+	}
+
 	chunks, idxErr := ix.indexFile(fileCtx, file.Path)
 	if idxErr != nil {
 		file.State = FileFailed
@@ -822,9 +898,17 @@ func (ix *Indexer) processFile(ctx context.Context, file *FileMeta) bool {
 		if tu := gi.LastTokenUsage(); tu != nil {
 			file.InputTokens = tu.PromptTokens
 			file.OutputTokens = tu.CompletionTokens
+			file.CacheTokens = tu.CacheTokens
 			// Cost estimate using configured model rates (if set).
+			// Formula matches core.CalculateCost: chargeable input = total input - cached input,
+			// plus cached input at a lower rate.
 			if ix.costInputPer1M > 0 || ix.costOutputPer1M > 0 {
-				file.Cost = float64(tu.PromptTokens)*ix.costInputPer1M/1_000_000 +
+				chargeableInput := tu.PromptTokens - tu.CacheTokens
+				if chargeableInput < 0 {
+					chargeableInput = 0
+				}
+				file.Cost = float64(chargeableInput)*ix.costInputPer1M/1_000_000 +
+					float64(tu.CacheTokens)*ix.costInputCachedPer1M/1_000_000 +
 					float64(tu.CompletionTokens)*ix.costOutputPer1M/1_000_000
 			}
 		}
