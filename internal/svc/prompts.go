@@ -74,6 +74,7 @@ func NewEnvironmentPrompt(userPrefsDir, venvDir string) func(agents.EnvsParams) 
 		// }
 		if venvDir != "" {
 			sb.WriteString(fmt.Sprintf("- **Python Venv Dir**: %s\n", venvDir))
+			sb.WriteString("  The Python virtual environment used for python script execution.\n")
 		}
 
 		if params.SessionID != "" {

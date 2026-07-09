@@ -142,4 +142,4 @@ replace github.com/coder/hnsw => ./third_party/hnsw
 
 // replace github.com/DotNetAge/gorag/v2 => ../gorag
 
-// replace github.com/DotNetAge/goharness => ../goharness
+replace github.com/DotNetAge/goharness => ../goharness

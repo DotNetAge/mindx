@@ -124,6 +124,15 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"terminal.list":              r.daemon.handleTerminalList,
 		"translate.rpc":              r.daemon.handleTranslate,
 		"optimize.rpc":               r.daemon.handleOptimize,
+
+		// MCP server & manifest management
+		"mcp.server.add":      r.daemon.handleMCPServerAdd,
+		"mcp.server.remove":   r.daemon.handleMCPServerRemove,
+		"mcp.server.list":     r.daemon.handleMCPServerList,
+		"mcp.server.test":     r.daemon.handleMCPServerTest,
+		"mcp.server.discover": r.daemon.handleMCPServerDiscover,
+		"mcp.manifest.save":   r.daemon.handleMCPManifestSave,
+		"mcp.manifest.get":    r.daemon.handleMCPManifestGet,
 	}
 }
 

@@ -292,7 +292,6 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 	dailyMap := make(map[string]*dayAgg)
 	modelMap := make(map[string]*modelAgg)
 	totalCost := 0.0
-	totalTokens := 0
 
 	for _, r := range records {
 		dateKey := r.Timestamp.Format("2006-01-02")
@@ -303,7 +302,7 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 		}
 		dayData.inputTokens += r.PromptTokens
 		dayData.outputTokens += r.CompletionTokens
-		dayData.totalTokens += r.TotalTokens
+		dayData.cachedTokens += r.CachedTokens
 		dayData.requestCount++
 		dayData.model = r.ModelName
 
@@ -316,9 +315,9 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 			}
 			modelMap[mKey] = mData
 		}
-		mData.totalTokens += r.TotalTokens
 		mData.inputTokens += r.PromptTokens
 		mData.outputTokens += r.CompletionTokens
+		mData.cachedTokens += r.CachedTokens
 		mData.requestCount++
 
 		mc, hasMC := d.app.Costs().Get(r.ModelName)
@@ -328,17 +327,29 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 			mData.totalCost += cost
 			totalCost += cost
 		}
+	}
 
-		totalTokens += r.TotalTokens
+	// 总词元 = 输入 + 输出 - 缓存（chargeable tokens）
+	totalTokens := 0
+	for _, da := range dailyMap {
+		totalTokens += da.inputTokens + da.outputTokens - da.cachedTokens
+	}
+	if totalTokens < 0 {
+		totalTokens = 0
 	}
 
 	dailyUsage := make([]any, 0, len(dailyMap))
 	for dateStr, da := range dailyMap {
+		dayTotal := da.inputTokens + da.outputTokens - da.cachedTokens
+		if dayTotal < 0 {
+			dayTotal = 0
+		}
 		dailyUsage = append(dailyUsage, map[string]any{
 			"date":          dateStr,
 			"input_tokens":  da.inputTokens,
 			"output_tokens": da.outputTokens,
-			"total_tokens":  da.totalTokens,
+			"cached_tokens": da.cachedTokens,
+			"total_tokens":  dayTotal,
 			"cost":          roundCost(da.cost),
 			"request_count": da.requestCount,
 			"model":         da.model,
@@ -347,16 +358,21 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 
 	modelBreakdown := make([]any, 0, len(modelMap))
 	for _, ma := range modelMap {
+		modelTotal := ma.inputTokens + ma.outputTokens - ma.cachedTokens
+		if modelTotal < 0 {
+			modelTotal = 0
+		}
 		avgReq := 0
 		if ma.requestCount > 0 {
-			avgReq = ma.totalTokens / ma.requestCount
+			avgReq = modelTotal / ma.requestCount
 		}
 		modelBreakdown = append(modelBreakdown, map[string]any{
 			"model":                  ma.model,
 			"provider":               ma.provider,
-			"total_tokens":           ma.totalTokens,
+			"total_tokens":           modelTotal,
 			"input_tokens":           ma.inputTokens,
 			"output_tokens":          ma.outputTokens,
+			"cached_tokens":          ma.cachedTokens,
 			"total_cost":             roundCost(ma.totalCost),
 			"request_count":          ma.requestCount,
 			"avg_tokens_per_request": avgReq,
@@ -387,7 +403,7 @@ func (d *Daemon) listAvailableModels() []string {
 type dayAgg struct {
 	inputTokens  int
 	outputTokens int
-	totalTokens  int
+	cachedTokens int
 	requestCount int
 	cost         float64
 	model        string
@@ -396,9 +412,9 @@ type dayAgg struct {
 type modelAgg struct {
 	model        string
 	provider     string
-	totalTokens  int
 	inputTokens  int
 	outputTokens int
+	cachedTokens int
 	requestCount int
 	totalCost    float64
 }

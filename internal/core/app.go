@@ -17,6 +17,7 @@ import (
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/goharness/skill"
 	"github.com/DotNetAge/goharness/store"
+	"github.com/DotNetAge/goharness/tools"
 	goragcore "github.com/DotNetAge/gorag/v2/core"
 	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
 	mindxtools "github.com/DotNetAge/mindx/internal/tools"
@@ -26,6 +27,12 @@ import (
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 	"github.com/joho/godotenv"
 )
+
+// MCPToolProvider provides MCP tools for registration in goharness.
+// The concrete implementation lives in internal/mcp and is injected by the Daemon.
+type MCPToolProvider interface {
+	EnabledTools() []tools.FuncTool
+}
 
 type App struct {
 	settings    *Settings
@@ -56,6 +63,9 @@ type App struct {
 
 	// Knowledge graph indexer (injected by Daemon after initialization)
 	graphIndexer *goragindexer.GraphIndexer
+
+	// MCP manager (injected by Daemon after initialization)
+	mcpMgr MCPToolProvider
 
 	// Embedded app icon filesystem (for favicon / .app bundle)
 	iconFS fs.FS
@@ -224,6 +234,11 @@ func (a *App) Embedder() goragcore.Embedder {
 // SetGraphIndexer injects the knowledge graph indexer for LocalSearch tool.
 func (a *App) SetGraphIndexer(gi *goragindexer.GraphIndexer) {
 	a.graphIndexer = gi
+}
+
+// SetMCPManager injects the MCP manager for MCP tool registration.
+func (a *App) SetMCPManager(mgr MCPToolProvider) {
+	a.mcpMgr = mgr
 }
 
 // IconFS returns the embedded filesystem containing the app icon, or nil if not set.
@@ -622,6 +637,28 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	rt := agents.NewRuntime(opts...)
 	a.logger.Info("createRuntime: done", "agent", agentName)
 
+	// Configure Read tool whitelist: allow reading files under the user
+	// preferences directory (e.g. ~/.mindx) even when outside the project
+	// workspace. This is needed for reading config, logs, and other data
+	// that lives outside the user's project directory.
+	if t, ok := rt.ToolRegistry().Get("Read"); ok {
+		if r, ok := t.(*tools.Read); ok {
+			r.AddWhiteList(a.settings.UserPreferences())
+			a.logger.Info("createRuntime: Read whitelist configured",
+				"agent", agentName, "dir", a.settings.UserPreferences())
+		}
+	}
+
+	// Configure RunScript tool: use the mindx-managed Python venv instead
+	// of auto-creating per-skill virtual environments.
+	if t, ok := rt.ToolRegistry().Get("RunScript"); ok {
+		if rs, ok := t.(*tools.RunScript); ok {
+			rs.SetPythonVenv(a.settings.VenvDir())
+			a.logger.Info("createRuntime: RunScript venv configured",
+				"agent", agentName, "venv", a.settings.VenvDir())
+		}
+	}
+
 	// Register LocalSearch whenever the graph indexer is available.
 	// The tool resolves projectDir at runtime from the session/cwd,
 	// so we do not depend on currentSessionMeta here.
@@ -631,6 +668,18 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 			a.logger.Warn("createRuntime: failed to register LocalSearch", "agent", agentName, "error", err)
 		} else {
 			a.logger.Info("createRuntime: LocalSearch registered", "agent", agentName)
+		}
+	}
+
+	// Register MCP tools from MCPManager (injected by Daemon).
+	// Each MCP tool is a separate FuncTool instance registered in goharness.
+	if a.mcpMgr != nil {
+		for _, tool := range a.mcpMgr.EnabledTools() {
+			if err := rt.RegisterTool(tool); err != nil {
+				a.logger.Warn("createRuntime: failed to register MCP tool", "agent", agentName, "tool", tool.Info().Name, "error", err)
+			} else {
+				a.logger.Info("createRuntime: MCP tool registered", "agent", agentName, "tool", tool.Info().Name)
+			}
 		}
 	}
 

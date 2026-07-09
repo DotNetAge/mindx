@@ -25,6 +25,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/appicon"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
+	"github.com/DotNetAge/mindx/internal/mcp"
 	"github.com/DotNetAge/mindx/internal/update"
 	"github.com/DotNetAge/mindx/pkg/indexing"
 	"github.com/DotNetAge/mindx/pkg/logging"
@@ -83,6 +84,9 @@ type Daemon struct {
 
 	// global key-value store (bbolt)
 	kvStore *bbolt.DB
+
+	// mcp manager for MCP server integration
+	mcpMgr *mcp.Manager
 
 	// dataDir is ~/.mindx, passed to Indexer constructors.
 	dataDir string
@@ -317,6 +321,12 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		logger.Info("kvstore initialized",
 			"path", filepath.Join(app.Settings().DataDir(), "kvstore.db"),
 		)
+
+		// Initialize MCP Manager with the bbolt-based storage
+		credStore := core.NewCredentialStore(app.Settings().UserPreferences())
+		d.mcpMgr = mcp.NewManager(logger, mcp.NewStorage(kvDB), credStore)
+		app.SetMCPManager(d.mcpMgr)
+		logger.Info("mcp manager initialized")
 	}
 
 	// ── 自动升级 ──────────────────────────────────────────────
@@ -830,6 +840,13 @@ func (d *Daemon) stopBackgroundServices() {
 	d.stopCloseable("kvstore", func() error {
 		if d.kvStore != nil {
 			return d.kvStore.Close()
+		}
+		return nil
+	})
+
+	d.stopCloseable("mcp", func() error {
+		if d.mcpMgr != nil {
+			d.mcpMgr.Shutdown()
 		}
 		return nil
 	})
