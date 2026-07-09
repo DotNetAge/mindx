@@ -34,13 +34,19 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharn
 	if d.gw == nil {
 		return
 	}
-	d.logger.Debug("sendExecutionSummary",
-		"total_tokens", summary.TokensUsed.TotalTokens,
-		"input", summary.TokensUsed.InputTokens,
-		"output", summary.TokensUsed.OutputTokens)
 	tokensUsed := summary.TokensUsed
+	// Effective token consumption: cached/reused tokens should not be counted as billed usage.
+	effectiveTotal := tokensUsed.InputTokens + tokensUsed.OutputTokens - tokensUsed.CachedTokens
+	if effectiveTotal < 0 {
+		effectiveTotal = 0
+	}
+	d.logger.Debug("sendExecutionSummary",
+		"effective_total", effectiveTotal,
+		"input", tokensUsed.InputTokens,
+		"output", tokensUsed.OutputTokens,
+		"cached", tokensUsed.CachedTokens)
 	tokenValue := fmt.Sprintf("%d (in:%d out:%d cached:%d reasoning:%d)",
-		tokensUsed.TotalTokens, tokensUsed.InputTokens, tokensUsed.OutputTokens,
+		effectiveTotal, tokensUsed.InputTokens, tokensUsed.OutputTokens,
 		tokensUsed.CachedTokens, tokensUsed.ReasoningTokens)
 	tableData := map[string]any{
 		"headers": []string{"Metric", "Value"},
@@ -57,11 +63,11 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharn
 		gateway.WithSessionID(sessionID),
 		gateway.WithResponseMeta(map[string]any{
 			"tokens_used": map[string]any{
-				"total_tokens":     summary.TokensUsed.TotalTokens,
-				"input_tokens":     summary.TokensUsed.InputTokens,
-				"output_tokens":    summary.TokensUsed.OutputTokens,
-				"cached_tokens":    summary.TokensUsed.CachedTokens,
-				"reasoning_tokens": summary.TokensUsed.ReasoningTokens,
+				"total_tokens":     effectiveTotal,
+				"input_tokens":     tokensUsed.InputTokens,
+				"output_tokens":    tokensUsed.OutputTokens,
+				"cached_tokens":    tokensUsed.CachedTokens,
+				"reasoning_tokens": tokensUsed.ReasoningTokens,
 			},
 			"iterations": summary.TotalIterations,
 			"tool_calls": summary.ToolCalls,
@@ -93,11 +99,8 @@ func buildSubtaskCompletedMarkdown(result goharnessevents.SubtaskResult) string 
 }
 
 func buildTaskSummaryMarkdown(ts goharnessevents.TaskSummaryData) string {
-	return fmt.Sprintf("### %s\n\n%s\n\n**%s**: %s %s / %s %s / %s %s\n",
-		i18n.T("svc.md.task.summary"), ts.Summary,
-		i18n.T("svc.md.task.token"), i18n.T("svc.md.token.input"), formatTokenCount(ts.TokenUsage.InputTokens),
-		i18n.T("svc.md.token.output"), formatTokenCount(ts.TokenUsage.OutputTokens),
-		i18n.T("svc.md.token.total"), formatTokenCount(ts.TokenUsage.TotalTokens))
+	return fmt.Sprintf("### %s\n\n%s\n",
+		i18n.T("svc.md.task.summary"), ts.Summary)
 }
 
 // formatTokenCount converts a large number to a human-readable K/M format.

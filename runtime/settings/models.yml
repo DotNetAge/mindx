@@ -88,7 +88,7 @@ models:
     provider: deepseek
     cost_per_1m_in: 3
     cost_per_1m_out: 6
-    max_tokens: 131072
+    max_tokens: 384000
     context_length: 1000000
     is_local: false
     func_calling: true
@@ -108,7 +108,7 @@ models:
     provider: deepseek
     cost_per_1m_in: 1
     cost_per_1m_out: 2
-    max_tokens: 131072
+    max_tokens: 384000
     context_length: 1000000
     is_local: false
     func_calling: true

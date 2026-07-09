@@ -189,6 +189,14 @@ func (t *LocalSearch) Execute(ctx context.Context, params map[string]any) (any, 
 	if projectDir != "" {
 		regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(projectDir))))
 		gq.AddFilter("region_id", regionID)
+
+		// Pre-check: skip search if no indexed data for this region
+		total, countErr := t.indexer.CountByRegion(ctx, projectDir)
+		if countErr == nil && total == 0 {
+			return map[string]any{
+				"message": "No data in local knowledge base yet. Use Grep/Glob/Read or WebSearch instead.",
+			}, nil
+		}
 	}
 
 	hits, err := t.indexer.Search(ctx, gq)
@@ -265,6 +273,14 @@ func (t *LocalSearch) execTree(ctx context.Context, params map[string]any) (any,
 	var regionID string
 	if regionPath != "" {
 		regionID = fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(regionPath))))
+
+		// Pre-check: skip tree if no indexed data for this region
+		total, countErr := t.indexer.CountByRegion(ctx, regionPath)
+		if countErr == nil && total == 0 {
+			return map[string]any{
+				"message": "No data in local knowledge base yet. Use Ls/Glob to browse files instead.",
+			}, nil
+		}
 	}
 
 	root, err := t.indexer.Tree(ctx, regionID, depth)

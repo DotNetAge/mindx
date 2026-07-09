@@ -26,9 +26,11 @@ func NewSkillsPrompt() func([]*skill.Skill) string {
 			"When your existing tools cannot fully address the user's request, check whether one of the following specialized skills covers the domain. If a skill matches, use the Skill tool to load its instructions, which will guide you through domain-specific workflows and expose additional tools.\n"
 
 		footer := "\n### Loading Strategy\n" +
-			"- Load skills LAZILY: only when you're about to perform a task that requires it\n" +
-			"- Each skill persists once loaded into conversation context \u2014 do NOT reload already-loaded skills\n" +
-			"- To view detailed descriptions of a skill, use `mindx skill list -f \"<skill_name>,<skill_name>,...\"`\n"
+			"Capacities lists your role's standard tools. When a task matches a listed skill's domain:\n" +
+			"1. Use `mindx skill list -f \"<skill1_name>,<skill2_name>,...\"` to check current description\n" +
+			"2. Confirm matching → Load via Skill tool → Execute per instructions\n" +
+			"Only skip loading if you have verified no skill in Capacities matches the task.\n" +
+			"Forbidden: Starting domain work without first loading the corresponding skill."
 
 		var nameBuilder strings.Builder
 		for _, s := range skills {
@@ -66,10 +68,10 @@ func NewEnvironmentPrompt(userPrefsDir, venvDir string) func(agents.EnvsParams) 
 		sb.WriteString("  A temporary workspace for the current conversation.\n")
 		sb.WriteString("  Contents are deleted when the conversation ends — do NOT put important work here.\n")
 
-		if userPrefsDir != "" {
-			sb.WriteString(fmt.Sprintf("- **User Prefs**: %s\n", userPrefsDir))
-			sb.WriteString("  Application configuration, skills, and agent definitions.\n")
-		}
+		// if userPrefsDir != "" {
+		// 	sb.WriteString(fmt.Sprintf("- **User Prefs**: %s\n", userPrefsDir))
+		// 	sb.WriteString("  Application configuration, skills, and agent definitions.\n")
+		// }
 		if venvDir != "" {
 			sb.WriteString(fmt.Sprintf("- **Python Venv Dir**: %s\n", venvDir))
 		}
