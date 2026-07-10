@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/DotNetAge/goharness/rule"
 	"github.com/DotNetAge/mindx/internal/i18n"
@@ -27,6 +28,7 @@ type PythonConfig struct {
 }
 
 type MindxConfig struct {
+	mu              sync.Mutex
 	Version         int          `json:"version"`
 	AppVersion      string       `json:"-"` // runtime app version, not persisted
 	Initialized     bool         `json:"initialized"`
@@ -109,6 +111,9 @@ func LoadMindxConfig(workspaceDir string) (*MindxConfig, error) {
 }
 
 func (c *MindxConfig) Save() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.filePath == "" {
 		return errors.New(i18n.T("config.error.path.unset"))
 	}

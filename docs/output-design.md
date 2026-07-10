@@ -1,4 +1,4 @@
-# LocalSearch 输出格式设计
+# QuickSearch 输出格式设计
 
 ## 限制
 - 每个 GraphIndex 搜索最多显示 3 条结果

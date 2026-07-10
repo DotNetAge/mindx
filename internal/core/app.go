@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/rules"
+	"github.com/DotNetAge/mindx/pkg/scheduler"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 	"github.com/joho/godotenv"
 )
@@ -66,6 +68,9 @@ type App struct {
 
 	// MCP manager (injected by Daemon after initialization)
 	mcpMgr MCPToolProvider
+
+	// Scheduler store (injected by Daemon after initialization)
+	schedulerStore *scheduler.FileSchedulerStore
 
 	// Embedded app icon filesystem (for favicon / .app bundle)
 	iconFS fs.FS
@@ -231,7 +236,7 @@ func (a *App) Embedder() goragcore.Embedder {
 	return a.embedder
 }
 
-// SetGraphIndexer injects the knowledge graph indexer for LocalSearch tool.
+// SetGraphIndexer injects the knowledge graph indexer for knowledge base tools.
 func (a *App) SetGraphIndexer(gi *goragindexer.GraphIndexer) {
 	a.graphIndexer = gi
 }
@@ -239,6 +244,16 @@ func (a *App) SetGraphIndexer(gi *goragindexer.GraphIndexer) {
 // SetMCPManager injects the MCP manager for MCP tool registration.
 func (a *App) SetMCPManager(mgr MCPToolProvider) {
 	a.mcpMgr = mgr
+}
+
+// SetSchedulerStore injects the scheduler store for Cron tool registration.
+func (a *App) SetSchedulerStore(store *scheduler.FileSchedulerStore) {
+	a.schedulerStore = store
+}
+
+// SchedulerStore returns the scheduler store, or nil if not set.
+func (a *App) SchedulerStore() *scheduler.FileSchedulerStore {
+	return a.schedulerStore
 }
 
 // IconFS returns the embedded filesystem containing the app icon, or nil if not set.
@@ -659,15 +674,28 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		}
 	}
 
-	// Register LocalSearch whenever the graph indexer is available.
-	// The tool resolves projectDir at runtime from the session/cwd,
-	// so we do not depend on currentSessionMeta here.
+	// Register knowledge base tools whenever the graph indexer is available.
+	// Each tool resolves projectDir at runtime from the session/cwd.
 	if a.graphIndexer != nil {
-		ls := mindxtools.NewLocalSearch(a.graphIndexer)
-		if err := rt.RegisterTool(ls); err != nil {
-			a.logger.Warn("createRuntime: failed to register LocalSearch", "agent", agentName, "error", err)
+		qs := mindxtools.NewQuickSearch(a.graphIndexer)
+		if err := rt.RegisterTool(qs); err != nil {
+			a.logger.Warn("createRuntime: failed to register QuickSearch", "agent", agentName, "error", err)
 		} else {
-			a.logger.Info("createRuntime: LocalSearch registered", "agent", agentName)
+			a.logger.Info("createRuntime: QuickSearch registered", "agent", agentName)
+		}
+
+		qe := mindxtools.NewQuickExplore(a.graphIndexer)
+		if err := rt.RegisterTool(qe); err != nil {
+			a.logger.Warn("createRuntime: failed to register QuickExplore", "agent", agentName, "error", err)
+		} else {
+			a.logger.Info("createRuntime: QuickExplore registered", "agent", agentName)
+		}
+
+		fr := mindxtools.NewFindRelation(a.graphIndexer)
+		if err := rt.RegisterTool(fr); err != nil {
+			a.logger.Warn("createRuntime: failed to register FindRelation", "agent", agentName, "error", err)
+		} else {
+			a.logger.Info("createRuntime: FindRelation registered", "agent", agentName)
 		}
 	}
 
@@ -680,6 +708,26 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 			} else {
 				a.logger.Info("createRuntime: MCP tool registered", "agent", agentName, "tool", tool.Info().Name)
 			}
+		}
+	}
+
+	// Register Cron tool whenever the scheduler store is available.
+	if a.schedulerStore != nil {
+		cronTool := mindxtools.NewCron(a.schedulerStore)
+		if err := rt.RegisterTool(cronTool); err != nil {
+			a.logger.Warn("createRuntime: failed to register Cron", "agent", agentName, "error", err)
+		} else {
+			a.logger.Info("createRuntime: Cron registered", "agent", agentName)
+		}
+	}
+
+	// Register SendMessage tool (macOS only).
+	if runtime.GOOS == "darwin" {
+		msgTool := mindxtools.NewSendMessage()
+		if err := rt.RegisterTool(msgTool); err != nil {
+			a.logger.Warn("createRuntime: failed to register SendMessage", "agent", agentName, "error", err)
+		} else {
+			a.logger.Info("createRuntime: SendMessage registered", "agent", agentName)
 		}
 	}
 

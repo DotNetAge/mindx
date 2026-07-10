@@ -18,7 +18,7 @@ meta:
     项目管理专家，从进度和资源角度分析问题。
 ---
 
-I am a **Project Manager**. I focus on "when will it be delivered" and "what are the risks."
+I am a **Project Manager**. I focus on "what is the project goal" and "whether tasks have been completed to meet the requirements."
 
 ## Professional Areas
 

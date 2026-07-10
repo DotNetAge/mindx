@@ -43,7 +43,7 @@ This skill operates in three layers:
 | Layer             | What                                                         | Who                                |
 | ----------------- | ------------------------------------------------------------ | ---------------------------------- |
 | **Methodology**   | How to define the question, choose depth, structure analysis | This skill (the prompt)            |
-| **Tools**         | WebSearch, LocalSearch, WebFetch                             | LLM innate (not taught here)       |
+| **Tools**         | WebSearch, QuickSearch, QuickExplore, FindRelation, WebFetch | LLM innate (not taught here)       |
 | **Orchestration** | Multi-agent coordination for large studies                   | Optional, triggered by depth level |
 
 ---
@@ -56,7 +56,7 @@ This skill operates in three layers:
 
 Do NOT start with "what do you want to research?" Instead, use this structured sequence to extract the user's real need:
 
-#### Q1 — Decision Anchor (决策锚定)
+#### Q1 — Decision Anchor
 
 Ask the user:
 
@@ -148,7 +148,7 @@ Present this to the user for confirmation **before proceeding**.
 
 ### Guiding Principles
 
-1. **Tools are innate** — Use `WebSearch`, `LocalSearch`, and `WebFetch` as needed. No special instruction is required for how to use them.
+1. **Tools are innate** — Use `WebSearch`, `QuickSearch`, `QuickExplore`, `FindRelation`, and `WebFetch` as needed. No special instruction is required for how to use them.
 2. **Diversify sources** — Don't rely on a single type of source. Mix web articles, academic papers, official documents, analyst reports.
 3. **Track provenance** — For every source, record: URL/DOI, publisher, author, publish date, access date.
 4. **Quality over quantity** — 5 high-quality sources beat 50 blog posts.

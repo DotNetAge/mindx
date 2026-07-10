@@ -87,16 +87,18 @@ func NewEnvironmentPrompt(userPrefsDir, venvDir string) func(agents.EnvsParams) 
 }
 
 // NewSearchStrategyPrompt returns a builder function that overrides the default
-// Search Strategy section. It tells the LLM to prioritize LocalSearch (semantic
-// search) over traditional file tools and web search for codebase questions.
+// Search Strategy section. It tells the LLM to prioritize knowledge base tools
+// (QuickSearch, QuickExplore, FindRelation) over traditional file tools and web search.
 func NewSearchStrategyPrompt() func() string {
 	return func() string {
 		return "## Search Strategy\n\n" +
-			"1. For codebase questions, use LocalSearch (semantic mode) FIRST before Grep/Ls/Read/Glob — " +
+			"1. For codebase questions, use QuickSearch FIRST before Grep — " +
 			"it searches by meaning, not just by filename or text pattern.\n" +
-			"2. Also try LocalSearch before WebSearch when the question might be about the user's own project.\n" +
-			"3. Fall back to web search (WebSearch) for external topics or when LocalSearch yields nothing.\n" +
-			"4. For browsing project structure, use LocalSearch (tree mode) FIRST before Ls or Glob — " +
-			"it returns the same directory tree with semantic summaries. Fall back to Ls/Glob when LocalSearch is unavailable or insufficient."
+			"2. Also try QuickSearch before WebSearch when the question might be about the user's own project.\n" +
+			"3. Fall back to web search (WebSearch) for external topics or when QuickSearch yields nothing.\n" +
+			"4. For browsing project structure, use QuickExplore FIRST before LS or Glob — " +
+			"it returns the same directory tree with semantic summaries. Fall back to LS/Glob when QuickExplore is unavailable or insufficient.\n" +
+			"5. For dependency or relationship questions, use FindRelation — " +
+			"it traverses the knowledge graph to show how entities are connected."
 	}
 }

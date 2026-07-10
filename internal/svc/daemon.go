@@ -266,7 +266,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		restartCh:           make(chan struct{}, 1),
 	}
 
-	// Pass GraphIndexer to App for use in LocalSearch tool
+	// Pass GraphIndexer to App for use in knowledge base tools
 	if graphIndexer != nil {
 		app.SetGraphIndexer(graphIndexer)
 	}
@@ -291,6 +291,9 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	if schedulerDB != nil {
 		d.scheduler = scheduler.NewScheduler(schedulerDB, d.executeScheduleCommand, logger)
 		logger.Info("scheduler instance created")
+
+		// Inject scheduler store into App for Cron tool registration.
+		app.SetSchedulerStore(schedulerDB)
 
 		// Wire lifecycle callback to broadcast job events to all connected clients.
 		d.scheduler.OnLifecycle(func(info scheduler.JobLifecycleInfo) {

@@ -37,7 +37,7 @@ metadata:
 | 层次 | 内容 | 负责方 |
 |------|------|--------|
 | **方法论** | 如何定义问题、选择深度、构建分析 | 本技能（提示词） |
-| **工具** | WebSearch、LocalSearch、WebFetch | LLM 天生能力（不在此教授） |
+| **工具** | WebSearch、QuickSearch、QuickExplore、FindRelation、WebFetch | LLM 天生能力（不在此教授） |
 | **编排** | 大型研究的多智能体协调 | 可选，由深度级别触发 |
 
 ---
@@ -142,7 +142,7 @@ metadata:
 
 ### 指导原则
 
-1. **工具是天生能力** — 按需使用 `WebSearch`、`LocalSearch`、`WebFetch`。无需特殊说明。
+1. **工具是天生能力** — 按需使用 `WebSearch`、`QuickSearch`、`QuickExplore`、`FindRelation`、`WebFetch`。无需特殊说明。
 2. **来源多样化** — 不要依赖单一类型来源。混合网络文章、学术论文、官方文件、分析师报告。
 3. **记录来源信息** — 对每个来源记录：URL/DOI、发布者、作者、发布日期、获取日期。
 4. **质量优于数量** — 5 个高质量来源胜过 50 篇博客文章。

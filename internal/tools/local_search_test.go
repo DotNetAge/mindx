@@ -25,7 +25,7 @@ func assertContains(t *testing.T, haystack, needle string) {
 
 // ── Real-data integration test ────────────────────────────────────────────────────
 
-// TestLocalSearchWithRealData initializes a GraphIndexer from the real knowledge base
+// TestQuickSearchWithRealData initializes a GraphIndexer from the real knowledge base
 // at ~/.mindx/data and verifies that Search produces correctly formatted output.
 //
 // Skips if:
@@ -33,9 +33,9 @@ func assertContains(t *testing.T, haystack, needle string) {
 //   - ONNX Runtime is not available
 //   - the model file is missing
 //
-// Run:  GOROOT=/usr/local/Cellar/go/1.26.4/libexec go test ./internal/tools/ -v -run TestLocalSearchWithRealData
+// Run:  GOROOT=/usr/local/Cellar/go/1.26.4/libexec go test ./internal/tools/ -v -run TestQuickSearchWithRealData
 // Stop daemon first: kill $(lsof -ti:8765) or mindx stop
-func TestLocalSearchWithRealData(t *testing.T) {
+func TestQuickSearchWithRealData(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal("cannot determine home directory:", err)
@@ -99,8 +99,8 @@ func TestLocalSearchWithRealData(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	// kbVS is backed by read-only bbolt; no explicit Close needed
 
-	// ── 5. Create LocalSearch and query ───────────────────────────────
-	ls := &LocalSearch{indexer: gi}
+	// ── 5. Create QuickSearch and query ───────────────────────────────
+	qs := &QuickSearch{indexer: gi}
 
 	ctx := context.Background()
 
@@ -115,7 +115,7 @@ func TestLocalSearchWithRealData(t *testing.T) {
 	var output string
 	var found bool
 	for _, q := range queries {
-		result, err := ls.Execute(ctx, map[string]any{
+		result, err := qs.Execute(ctx, map[string]any{
 			"query": q,
 			"limit": float64(5),
 		})
@@ -183,7 +183,7 @@ func TestLocalSearchWithRealData(t *testing.T) {
 	}
 
 	// Footer
-	assertContains(t, output, "LocalSearch clue result.")
+	assertContains(t, output, "QuickSearch clue result")
 
 	// If there are entity tables, verify table structure
 	if strings.Contains(output, "### Relevant Nodes") {
