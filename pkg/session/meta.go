@@ -26,6 +26,7 @@ func generateSessionID() string {
 type SessionMeta struct {
 	SessionID string    `json:"session_id"`
 	AgentName string    `json:"agent_name"`
+	Sponsor   string    `json:"sponsor,omitempty"` // Agent that created this session (empty = user-initiated)
 	Title     string    `json:"title"` // First user message content (truncated), for session list display
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

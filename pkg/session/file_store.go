@@ -188,7 +188,7 @@ func (s *FileSessionStore) findSessionDir(sessionID string) string {
 	return result
 }
 
-func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentName string, msg goharnesssession.Message) error {
+func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentName string, sponsor string, msg goharnesssession.Message) error {
 	s.ioMu.Lock()
 	defer s.ioMu.Unlock()
 
@@ -244,7 +244,7 @@ func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentNa
 		}
 	}
 
-	s.updateSessionMeta(dir)
+	s.updateSessionMeta(dir, agentName, sponsor)
 
 	return nil
 }
@@ -635,6 +635,7 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goharnessses
 
 	meta, metaErr := LoadSessionMeta(sessionDirPath)
 	if metaErr == nil {
+		si.Sponsor = meta.Sponsor
 		si.ProjectDir = meta.ProjectWorkingDir
 		si.Title = meta.Title
 		si.CreatedAt = meta.CreatedAt
@@ -650,6 +651,7 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goharnessses
 		defaultMeta := &SessionMeta{
 			SessionID:         sessionID,
 			AgentName:         agentName,
+			Sponsor:           si.Sponsor,
 			ProjectWorkingDir: si.ProjectDir,
 			CreatedAt:         info.ModTime(),
 			LastActivityAt:    info.ModTime(),
@@ -679,11 +681,21 @@ func (s *FileSessionStore) GetSessionMeta(sessionID string) (*SessionMeta, error
 }
 
 // updateSessionMeta updates the UpdatedAt and LastActivityAt timestamps in meta.json.
+// If meta.json does not exist (first append), it creates one with available session info.
 // This is called after each message append to keep metadata current.
-func (s *FileSessionStore) updateSessionMeta(sessionDir string) {
+func (s *FileSessionStore) updateSessionMeta(sessionDir, agentName, sponsor string) {
 	meta, err := LoadSessionMeta(sessionDir)
 	if err != nil {
-		return
+		// First append — create meta.json with available info
+		sessionID := filepath.Base(sessionDir)
+		meta = &SessionMeta{
+			SessionID:         sessionID,
+			AgentName:         agentName,
+			Sponsor:           sponsor,
+			ProjectWorkingDir: "",
+			CreatedAt:         time.Now(),
+			LastActivityAt:    time.Now(),
+		}
 	}
 	meta.UpdatedAt = time.Now()
 	meta.LastActivityAt = time.Now()
@@ -736,6 +748,7 @@ func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...g
 	meta := &SessionMeta{
 		SessionID:         sessionID,
 		AgentName:         agentName,
+		Sponsor:           sessionInfo.Sponsor,
 		ProjectWorkingDir: sessionInfo.ProjectDir,
 		CreatedAt:         time.Now(),
 		LastActivityAt:    time.Now(),
@@ -765,6 +778,7 @@ func (s *FileSessionStore) GetMeta(_ context.Context, sessionID string) (*goharn
 	return &goharnesssession.SessionInfo{
 		SessionID:      sessionID,
 		AgentName:      meta.AgentName,
+		Sponsor:        meta.Sponsor,
 		ProjectDir:     meta.ProjectWorkingDir,
 		SessionDir:     dirPath,
 		LastActivityAt: meta.LastActivityAt,

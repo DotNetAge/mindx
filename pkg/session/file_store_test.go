@@ -72,7 +72,7 @@ func TestFileStoreWithComplexContent(t *testing.T) {
 					Timestamp: time.Now().UnixMilli() + int64(i),
 				}
 
-				err := store.Append(ctx, sessionID, agentName, msg)
+				err := store.Append(ctx, sessionID, agentName, "", msg)
 				if err != nil {
 					t.Errorf("Append failed for %s: %v", tc.name, err)
 					return
@@ -163,7 +163,7 @@ func TestFileStoreYAMLFormat(t *testing.T) {
 		Timestamp: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC).UnixMilli(),
 	}
 
-	err = store.Append(ctx, sessionID, agentName, msg)
+	err = store.Append(ctx, sessionID, agentName, "", msg)
 	if err != nil {
 		t.Fatalf("Append failed: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestFileStoreConcurrentAppend(t *testing.T) {
 					Content:   fmt.Sprintf("goroutine-%d-msg-%d", id, j),
 					Timestamp: time.Now().UnixMilli() + int64(id*msgsPerGoroutine+j),
 				}
-				if err := store.Append(ctx, sessionID, agentName, msg); err != nil {
+				if err := store.Append(ctx, sessionID, agentName, "", msg); err != nil {
 					t.Errorf("Append failed: %v", err)
 					return
 				}
@@ -277,7 +277,7 @@ func TestFileStoreDeleteSession(t *testing.T) {
 		Content:   "hello",
 		Timestamp: time.Now().UnixMilli(),
 	}
-	if err := store.Append(ctx, info.SessionID, agentName, msg); err != nil {
+	if err := store.Append(ctx, info.SessionID, agentName, "", msg); err != nil {
 		t.Fatalf("Append failed: %v", err)
 	}
 

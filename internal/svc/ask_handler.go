@@ -114,6 +114,11 @@ func newClientAskHandlers(
 	s *goharnesssession.Session,
 	getAgentName func() string,
 ) askEventHandlers {
+	// Snapshot of files already tracked before the current tool executes.
+	// Used in ToolEnd to broadcast only files newly modified by this tool,
+	// preventing the same file from being re-emitted on every subsequent tool.
+	toolStartModFiles := make(map[string]struct{})
+
 	return askEventHandlers{
 		Thinking: func(chunk string) {
 			_ = gw.SendResponse(clientID, gateway.RespThinkingDelta, i18n.T("svc.event.thinking"), chunk, gateway.WithSessionID(sid), withAgent())
@@ -133,6 +138,12 @@ func newClientAskHandlers(
 			_ = gw.SendResponse(clientID, gateway.RespToolExecStart, i18n.T("svc.event.tool.start"), map[string]any{
 				"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
 			}, gateway.WithSessionID(sid), withAgent())
+			// Snapshot the current tracked files so ToolEnd can detect only
+			// files newly added during this tool execution.
+			toolStartModFiles = make(map[string]struct{})
+			for _, fp := range s.GetModifyFiles() {
+				toolStartModFiles[fp] = struct{}{}
+			}
 		},
 		ToolEnd: func(data goharnessevents.ToolExecEndData) {
 			_ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.end"), map[string]any{
@@ -140,11 +151,19 @@ func newClientAskHandlers(
 				"success": data.Success, "result": data.Result, "error": data.Error,
 				"duration_ms": int(data.Duration.Milliseconds()),
 			}, gateway.WithSessionID(sid), withAgent())
-			// Broadcast file modification state after tool execution.
+			// Broadcast only files that were newly tracked during this tool execution.
+			// Previous implementation broadcast the full cumulative list on every ToolEnd,
+			// causing the same file to be emitted repeatedly after unrelated tools.
 			modFiles := s.GetModifyFiles()
-			if len(modFiles) > 0 {
-				fileInfos := make([]fileDiffInfo, 0, len(modFiles))
-				for _, fp := range modFiles {
+			var newlyTracked []string
+			for _, fp := range modFiles {
+				if _, already := toolStartModFiles[fp]; !already {
+					newlyTracked = append(newlyTracked, fp)
+				}
+			}
+			if len(newlyTracked) > 0 {
+				fileInfos := make([]fileDiffInfo, 0, len(newlyTracked))
+				for _, fp := range newlyTracked {
 					fileInfos = append(fileInfos, computeFileDiff(s, fp))
 				}
 				_ = gw.SendResponse(clientID, gateway.RespFileModified, i18n.T("svc.event.file.modified"), map[string]any{
