@@ -1,25 +1,25 @@
 {
   "type": "object",
-  "description": "Customer, client, account, or partner entity representing a business relationship",
+  "description": "客户、甲方、账户或合作伙伴，代表一种商业关系",
   "properties": {
-    "name": { "type": "string", "description": "Customer or account name" },
+    "name": { "type": "string", "description": "客户或账户名称" },
     "type": {
       "type": "string",
       "enum": ["customer", "client", "partner", "vendor"],
-      "description": "Relationship type classifying the nature of the business relationship"
+      "description": "关系类型，界定商业关系的性质"
     },
     "industry": {
       "type": "string",
-      "description": "Industry sector the customer operates in (e.g., technology, healthcare, finance)"
+      "description": "客户所在的行业（如科技、医疗、金融）"
     },
     "contact": {
       "type": "string",
-      "description": "Primary contact person name or email for this customer"
+      "description": "该客户的主要联系人姓名或邮箱"
     },
     "status": {
       "type": "string",
       "enum": ["active", "inactive", "former"],
-      "description": "Current relationship status with the customer"
+      "description": "与该客户的当前合作状态"
     }
   },
   "required": ["name", "type"]

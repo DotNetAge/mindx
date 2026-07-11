@@ -4,7 +4,7 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "Name or keyword of the topic, e.g. AI换脸, 春节营销, 元宇宙"
+      "description": "主题的名称或关键词，例如：AI换脸、春节营销、元宇宙"
     },
     "category": {
       "type": "string",
@@ -22,7 +22,7 @@
     },
     "platform": {
       "type": "string",
-      "description": "Platform where this topic is trending or relevant"
+      "description": "该主题正在流行或相关的平台"
     }
   },
   "required": ["name"]

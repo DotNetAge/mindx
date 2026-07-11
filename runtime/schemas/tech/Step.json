@@ -1,34 +1,34 @@
 {
   "type": "object",
-  "description": "An individual step, stage, or phase within a larger process or workflow",
+  "description": "较大流程或工作流中的单个步骤、阶段或环节",
   "properties": {
-    "name": { "type": "string", "description": "Name or title of the step" },
+    "name": { "type": "string", "description": "步骤的名称或标题" },
     "step_number": {
       "type": "number",
-      "description": "Ordinal position of the step within the sequence"
+      "description": "步骤在序列中的序号位置"
     },
     "description": {
       "type": "string",
-      "description": "What is accomplished during this step and any notable details"
+      "description": "该步骤完成的内容以及任何值得注意的细节"
     },
     "duration_estimate": {
       "type": "string",
-      "description": "Estimated time to complete the step (e.g., '30 minutes', '2-3 days')"
+      "description": "完成该步骤的预计时间（例如“30 分钟”、“2-3 天”）"
     },
     "inputs": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Artifacts, data, or resources required to begin this step"
+      "description": "开始该步骤所需的产物、数据或资源"
     },
     "outputs": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Artifacts, data, or results produced by completing this step"
+      "description": "完成该步骤后产生的产物、数据或结果"
     },
     "depends_on": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Names of steps that must be completed before this step can begin"
+      "description": "在该步骤开始之前必须完成的步骤名称"
     }
   },
   "required": ["name", "step_number", "description"]

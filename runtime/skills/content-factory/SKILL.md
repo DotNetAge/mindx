@@ -1,8 +1,7 @@
 ---
 name: content-factory
 description: >
-  Write high-quality, platform-native content for Chinese social media
-  platforms (Xiaohongshu/WeChat OA/Douyin/Bilibili/Zhihu/Weibo).
+  为中国社交平台(小红书/微信公众号/抖音/B站/知乎/微博)撰写高质量、平台原生的内容。
 metadata:
   name_zh: 内容创作
   name_zh-tw: 內容創作
@@ -10,77 +9,77 @@ metadata:
   description_zh-tw: 為中國社交平台撰寫高質量、平台原生的內容。
 ---
 
-## When to Use
+## 适用场景
 
-- User asks to write content for a Chinese platform (Xiaohongshu/Douyin/WeChat OA/Bilibili/Zhihu/Weibo)
-- User needs content adapted from one platform to another
-- User wants copy, scripts, or posts for Chinese social media
+- 用户要求为中国平台撰写内容(小红书/抖音/微信公众号/B站/知乎/微博)
+- 用户需要将内容从一个平台适配到另一个平台
+- 用户需要为中国社交媒体撰写文案、脚本或帖子
 
-## How It Works
+## 工作原理
 
-Before writing anything, load the target platform's reference file from `references/{platform}.md`. It contains:
+撰写内容前，先从 `references/{platform}.md` 加载目标平台的参考文件，其中包含：
 
-- What the platform's algorithm rewards
-- Title formulas proven for that platform
-- Content structure template
-- Writing style expectations
-- Quality checklist
+- 平台算法的偏好
+- 该平台验证有效的标题公式
+- 内容结构模板
+- 写作风格要求
+- 质量检查清单
 
-Each platform has different rules. The same topic written for Xiaohongshu, Zhihu, and Douyin will look completely different — different structure, different opening, different hook, different length.
+每个平台规则不同。同一个话题为小红书、知乎和抖音撰写的内容看起来完全不同——结构不同、开头不同、钩子不同、长度也不同。
 
-## Elicitation Pattern — Reason, Recommend, Alternatives
+## 引导模式 — 理由、推荐、替代方案
 
-Before writing, establish what is needed. Do not interrogate the user with a list of questions. Instead:
+写作前先搞清楚需求，不要用一连串问题审问用户，而是：
 
-1. Extract whatever context the user already provided
-2. Think through what makes sense — which platform, what angle, what format
-3. Present your recommended approach with your reasoning
-4. Offer 1-2 alternatives for dimensions where reasonable people might disagree
-5. Let the user choose, adjust, or propose something new
+1. 提取用户已经提供的上下文
+2. 思考什么合理——哪个平台、什么角度、什么格式
+3. 展示推荐方案及理由
+4. 提供 1-2 个替代方案，用于存在合理分歧的维度
+5. 让用户选择、调整或提出新方案
 
 ```
-Based on what you've told me:
-- Platform: Xiaohongshu makes sense because [your content is visual + tutorial]
-- Angle: Step-by-step guide, because Xiaohongshu users save actionable content
-- Format: Carousel post with 6 slides
+根据你告诉我的:
+- 平台:小红书比较合适,因为[你的内容是视觉+教程类的]
+- 角度:分步指南,因为小红书用户会收藏可操作的内容
+- 格式:轮播图,6 张幻灯片
 
-Recommended:
-  Title: "3 steps to [result] in [timeframe]"
-  Structure: Pain → Method 1 → Method 2 → Method 3 → Before/After → CTA
+推荐:
+  标题:"3 步在[时间]内[达成结果]"
+  结构:痛点 → 方法 1 → 方法 2 → 方法 3 → 前后对比 → 行动号召
 
-Alternatives:
-  A: Single image + long caption (less production work, lower save rate)
-  B: Video version adapted for Douyin if you want reach over saves
+替代方案:
+  A:单图 + 长文案(制作工作量少,收藏率较低)
+  B:适配抖音的视频版本,如果你更看重曝光量而非收藏量
 
-Which direction?
+选哪个方向?
 ```
 
-Iterate if the user has new ideas.
+如果用户有新想法,继续迭代。
 
-## Cross-Platform Adaptation
+## 跨平台适配
 
-When adapting content from one platform to another, load both platform reference files. Understand the structural differences. For example:
+将内容从一个平台适配到另一个平台时，加载两个平台的参考文件，理解结构差异。例如：
 
-- A Zhihu answer (2000 words, pyramid structure, evidence-heavy) → Xiaohongshu note (500 words, emoji-segmented, save-optimized)
-- A Douyin video (3s hook, fast cuts, oral script) → Weibo post (140 chars, suspense in main post, payoff in comments)
+- 知乎回答（2000 字，金字塔结构，大量论据）→ 小红书笔记（500 字，emoji 分段，优化收藏）
+- 抖音视频（3 秒钩子，快剪辑，口播脚本）→ 微博帖子（140 字，正文设悬念，答案在评论区）
 
-## Quality Standards — Universal
+## 质量标准 — 通用
 
-Every piece of content must pass these checks before delivery:
+每条内容交付前必须通过以下检查：
 
-| Check                 | What to Verify                                                             |
-| --------------------- | -------------------------------------------------------------------------- |
-| Platform-native       | Does this match the platform's content format and user expectations?       |
-| Human voice           | Does this sound like a person wrote it? No boilerplate, no corporate tone. |
-| Value density         | Does every sentence earn its place? Would a user regret reading this?      |
-| Specificity           | Are there concrete details, examples, or data — not just general advice?   |
-| Emotional entry point | Does it make the reader feel something (curious, relieved, seen)?          |
+| 检查项   | 验证内容                                       |
+| -------- | ---------------------------------------------- |
+| 平台原生 | 是否符合该平台的内容格式和用户期望？           |
+| 人声     | 听起来像真人写的吗？没有套话，没有企业腔调。   |
+| 价值密度 | 每句话都有存在的价值吗？用户会后悔读这个吗？   |
+| 具体性   | 有具体的细节、例子或数据，而不只是笼统的建议？ |
+| 情感入口 | 让读者感受到什么（好奇、释然、被理解）？       |
 
-Plus the platform-specific checklist from `references/{platform}.md`.
+再加上 `references/{platform}.md` 中特定于平台的检查清单。
 
-## Hard Rules
+## 硬性规则
 
-- Load the target platform's `references/{platform}.md` before writing anything.
-- All content produced must be written in Chinese.
-- Adapt content to the platform's native format — do not produce "one size fits all" text.
-- Content must pass platform-specific quality checklist before delivery.
+- 撰写内容前，先加载目标平台的 `references/{platform}.md`
+- 所有产出的内容必须用中文撰写
+- 将内容适配到平台的原生格式，不要生产"一刀切"的文本
+- 内容交付前必须通过特定于平台的质量检查清单

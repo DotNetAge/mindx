@@ -1,6 +1,6 @@
-# Go Development Guidelines
+# Go 开发指南
 
-## Project Structure (Standard Layout)
+## 项目结构（标准布局）
 
 ```
 project_name/
@@ -44,29 +44,29 @@ project_name/
 └── Dockerfile
 ```
 
-**Key rule from Go community:**
-- `internal/` = private, cannot be imported by other projects
-- `cmd/` = entry points only, no business logic
-- `pkg/` = public libraries intended for external consumption
+**Go 社区的核心规则：**
+- `internal/` = 私有代码，其他项目无法导入
+- `cmd/` = 仅存放入口点，不包含业务逻辑
+- `pkg/` = 公共库，供外部代码使用
 
-## Naming Conventions
+## 命名约定
 
-| Element | Convention | Example |
+| 元素 | 约定 | 示例 |
 |---------|-----------|---------|
-| Package | `lowercase`, short, no underscores | `user`, `httputil`, `orderrepo` |
-| File | `snake_case.go` | `user_service.go`, `http_handler.go` |
-| Exported | `PascalCase` | `UserService`, `GetUserByID`, `MaxRetries` |
-| Unexported | `camelCase` | `getUser`, `dbConn`, `logger` |
-| Interface | `PascalCase` or `-er` suffix | `Reader`, `UserRepository`, `Service` |
-| Interface (single method) | Method name + `er` | `Reader`, `Writer`, `Formatter` |
-| Constant | `PascalCase` or `camelCase` | `MaxRetries`, `defaultTimeout` |
-| Error variables | `Err` prefix | `ErrUserNotFound`, `ErrInvalidInput` |
-| Test file | `xxx_test.go` | `user_service_test.go` |
-| Test function | `Test` + PascalCase | `TestGetUserByID_Success`, `TestCreateOrder_DuplicateError` |
-| Benchmark | `Benchmark` + PascalCase | `BenchmarkGetUserByID` |
-| Example | `Example` + PascalCase | `ExampleNewUserService` |
+| 包名 | `lowercase`，简短，无下划线 | `user`, `httputil`, `orderrepo` |
+| 文件名 | `snake_case.go` | `user_service.go`, `http_handler.go` |
+| 导出标识符 | `PascalCase` | `UserService`, `GetUserByID`, `MaxRetries` |
+| 非导出标识符 | `camelCase` | `getUser`, `dbConn`, `logger` |
+| 接口 | `PascalCase` 或 `-er` 后缀 | `Reader`, `UserRepository`, `Service` |
+| 接口（单方法） | 方法名 + `er` | `Reader`, `Writer`, `Formatter` |
+| 常量 | `PascalCase` 或 `camelCase` | `MaxRetries`, `defaultTimeout` |
+| 错误变量 | `Err` 前缀 | `ErrUserNotFound`, `ErrInvalidInput` |
+| 测试文件 | `xxx_test.go` | `user_service_test.go` |
+| 测试函数 | `Test` + PascalCase | `TestGetUserByID_Success`, `TestCreateOrder_DuplicateError` |
+| 基准测试 | `Benchmark` + PascalCase | `BenchmarkGetUserByID` |
+| 示例 | `Example` + PascalCase | `ExampleNewUserService` |
 
-### Package Naming Rules
+### 包命名规则
 
 ```go
 // ✅ GOOD: Short, clear package names
@@ -80,9 +80,9 @@ package util            // too vague
 package myhelpers       // useless prefix
 ```
 
-## Code Organization
+## 代码组织
 
-### Import Grouping (gofumpt/goimports)
+### 导入分组（gofumpt/goimports）
 
 ```go
 package handler
@@ -107,12 +107,12 @@ import (
 // Blank line between groups. No blank lines within a group.
 ```
 
-**Rules:**
-- Use `gofumpt` (stricter than gofmt) + `goimports` for formatting
-- No unused imports — compiler error anyway, but keep clean
-- Alias only to resolve conflicts: `fqdnv1 "github.com/example/api/v1"`
+**规则：**
+- 使用 `gofumpt`（比 gofmt 更严格）+ `goimports` 进行格式化
+- 不允许未使用的导入——编译器会报错，保持代码整洁
+- 仅在解决冲突时使用别名：`fqdnv1 "github.com/example/api/v1"`
 
-### File Organization
+### 文件组织
 
 ```go
 // Order within a file:
@@ -165,9 +165,9 @@ func (s *UserService) GetByID(ctx context.Context, id string) (*model.User, erro
 }
 ```
 
-## Error Handling Patterns
+## 错误处理模式
 
-### Custom Error Types
+### 自定义错误类型
 
 ```go
 // internal/pkg/errors/errors.go
@@ -225,7 +225,7 @@ func Is(err error, target *AppError) bool {
 }
 ```
 
-### Error Handling in Practice
+### 实际错误处理
 
 ```go
 // ✅ GOOD: Check specific sentinels, wrap with context on unexpected errors
@@ -281,17 +281,17 @@ func badHandler() (string, error) {
 }
 ```
 
-### Key Go Error Principles
+### Go 错误处理核心原则
 
-1. **Explicit error handling** — Go forces you to handle every error. Embrace it.
-2. **Wrap with context** — Use `%w` in `fmt.Errorf` at each layer boundary.
-3. **Sentinel errors for expected cases** — `ErrNotFound`, `ErrConflict`.
-4. **Never ignore errors** — `_ = someFunc()` is almost always wrong.
-5. **Don't panic in library/business code** — Panic only for truly unrecoverable programmer errors (nil pointer dereference that shouldn't happen).
+1. **显式错误处理** —— Go 强制你处理每个错误，接受这一点。
+2. **带上下文包装** —— 在每个层级边界使用 `fmt.Errorf` 的 `%w`。
+3. **哨兵错误用于预期情况** —— `ErrNotFound`, `ErrConflict`。
+4. **绝不忽略错误** —— `_ = someFunc()` 几乎总是错的。
+5. **库/业务代码中不要 panic** —— 只在真正不可恢复的程序员错误时使用 panic（如不应该发生的空指针解引用）。
 
-## Testing Standards
+## 测试标准
 
-### Table-Driven Tests (The Go Way)
+### 表驱动测试（Go 的标准方式）
 
 ```go
 // test/user_service_test.go
@@ -353,50 +353,50 @@ func TestUserService_GetByID(t *testing.T) {
 }
 ```
 
-**Rules:**
-- **Table-driven tests** are the standard pattern in Go
-- Subtests via `t.Run()` for readability
-- Use `testify` or plain stdlib (both acceptable; prefer stdlib for new projects)
-- Mock interfaces with `mockgen` (interface-based mocking)
-- Target >80% coverage on services/repositories
+**规则：**
+- **表驱动测试** 是 Go 的标准模式
+- 通过 `t.Run()` 使用子测试提高可读性
+- 使用 `testify` 或纯标准库（两者都可接受；新项目优先使用标准库）
+- 使用 `mockgen` 模拟接口（基于接口的模拟）
+- 服务/仓库的目标覆盖率 >80%
 
-## Security Checklist (Go-Specific)
+## 安全检查清单（Go 特定）
 
-| Check | Rule |
+| 检查项 | 规则 |
 |-------|------|
-| SQL Injection | Use `database/sql` parameterized queries (`$1`, `$2`). Never `fmt.Sprintf` into SQL |
-| Path Traversal | Use `filepath.Clean` + validate path prefix. Never concatenate user input |
-| Command Injection | Never pass user input to `exec.Command` without sanitization. Use allowlists |
-| Race Conditions | Run `-race` flag in CI: `go test -race ./...` |
-| Memory Safety | Check for goroutine leaks (no `WaitGroup.Done()` calls). Use `errgroup` for structured concurrency |
-| Deserialization | Be careful with `encoding/gob` and `encoding/json` (don't call `Unmarshal` on untrusted data with struct fields that have side effects) |
+| SQL 注入 | 使用 `database/sql` 参数化查询（`$1`, `$2`）。绝不在 SQL 中使用 `fmt.Sprintf` |
+| 路径遍历 | 使用 `filepath.Clean` + 验证路径前缀。绝不拼接用户输入 |
+| 命令注入 | 未经清理绝不将用户输入传递给 `exec.Command`。使用白名单 |
+| 竞态条件 | 在 CI 中运行 `-race` 标志：`go test -race ./...` |
+| 内存安全 | 检查 goroutine 泄漏（没有 `WaitGroup.Done()` 调用）。使用 `errgroup` 进行结构化并发 |
+| 反序列化 | 小心使用 `encoding/gob` 和 `encoding/json`（不要对不受信任的数据调用 `Unmarshal`，特别是当结构体字段有副作用时） |
 
-## Performance Patterns
+## 性能模式
 
-| Pattern | Anti-Pattern |
+| 模式 | 反模式 |
 |---------|-------------|
-| `sync.Pool` for frequently allocated objects | Repeated allocation of large structs |
-| `strings.Builder` for string concatenation | `+` operator in loops |
-| `io.Copy` / `io.CopyBuffer` for I/O | Manual byte-by-byte copy |
-| Pre-allocate slices with `make([]T, 0, cap)` when size known | Repeated `append` causing reallocation |
-| Buffered channels for throughput | Unbuffered channels in hot paths |
-| `context` for cancellation/timeout | Fire-and-forget goroutines without lifecycle management |
-| `sync.Map` only for specific cache-like patterns (rare) | Using sync.Map everywhere (usually a regular map + mutex is better) |
+| 频繁分配的对象使用 `sync.Pool` | 重复分配大型结构体 |
+| 字符串拼接使用 `strings.Builder` | 循环中使用 `+` 运算符 |
+| I/O 使用 `io.Copy` / `io.CopyBuffer` | 手动逐字节复制 |
+| 已知大小时使用 `make([]T, 0, cap)` 预分配切片 | 重复 `append` 导致重新分配 |
+| 吞吐量使用带缓冲的 channel | 热路径中使用无缓冲 channel |
+| 取消/超时使用 `context` | 没有生命周期管理的 fire-and-forget goroutine |
+| `sync.Map` 仅用于特定的类缓存模式（罕见） | 到处使用 sync.Map（通常普通 map + mutex 更好） |
 
-## Ecosystem Toolchain
+## 生态工具链
 
-| Tool | Purpose |
+| 工具 | 用途 |
 |------|---------|
-| **gofumpt** | Formatter (stricter gofmt) |
-| **golangci-lint** | Linter aggregator (runs ~50 linters) |
-| **staticcheck** | Advanced static analysis (included in golangci-lint) |
-| **go vet** | Built-in static analysis |
-| **go test -race** | Race detector |
-| **mockgen** | Interface mock generation |
-| **pprof** | CPU/memory profiling |
-| **dlv** | Debugger |
+| **gofumpt** | 格式化器（更严格的 gofmt） |
+| **golangci-lint** | Linter 聚合器（运行约 50 个 linter） |
+| **staticcheck** | 高级静态分析（包含在 golangci-lint 中） |
+| **go vet** | 内置静态分析 |
+| **go test -race** | 竞态检测器 |
+| **mockgen** | 接口模拟生成 |
+| **pprof** | CPU/内存分析 |
+| **dlv** | 调试器 |
 
-### golangci-lint Minimal Config
+### golangci-lint 最小配置
 
 ```yaml
 # .golangci.yml
@@ -414,3 +414,4 @@ linters:
     - nakedret       # naked returns
     - unconvert      # unnecessary conversions
     - unparam        # unused parameters
+```

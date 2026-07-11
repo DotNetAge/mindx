@@ -1,9 +1,7 @@
 ---
 name: research-pipeline
 description: >
-  Structured research skill — define the real question first, then gather evidence, synthesize findings, and
-  produce a verified Markdown report. Designed for deep-dive analysis that aligns with the user's actual decision
-  needs. Supports multi-agent scaling for large studies.
+  深度研究技能——先定义真正的问题，再收集证据、综合发现，输出经过验证的 Markdown 报告。专为符合用户实际决策需求的深度分析而设计。支持大型研究的多智能体扩展。
 allowed-tools: bash sub-agent collect-results task-create task-update task-get task-list team-create team-list team-get-tasks find-experts firecrawl
 metadata:
   requires:
@@ -11,411 +9,410 @@ metadata:
       - python3
   name_zh: 研究管线
   name_zh-tw: 研究管線
-  description_zh: 结构化研究技能——先定义真正的问题，再收集证据、综合发现，输出经过验证的 Markdown 报告
+  description_zh: 系统化研究技能——先定义真正的问题，再收集证据、综合发现，输出经过验证的 Markdown 报告
   description_zh-tw: 結構化研究技能——先定義真正的問題，再收集證據、綜合發現，輸出經過驗證的 Markdown 報告
 ---
 
-# Research Pipeline — Deep Research & Knowledge Production Skill
+# 研究管线 — 深度研究与知识生产技能
 
-## When to use
+## 使用场景
 
-**Use this skill when:** the user needs in-depth, structured research including but not limited to:
+**使用此技能当：** 用户需要深入、系统化的研究，包括但不限于：
 
-- **Market analysis** — market sizing, TAM/SAM/SOM, growth trends, segment dynamics
-- **Competitive intelligence** — competitor mapping, feature comparison, positioning analysis, win/loss patterns
-- **Academic literature review** — systematic survey of papers, citation networks, research gap identification
-- **Investment due diligence** — target company deep-dive, financial + technical + team assessment
-- **Technology assessment** — tech stack evaluation, emerging technology radar, build-vs-buy analysis
-- **Industry report** — sector overview, regulatory landscape, ecosystem mapping, future outlook
+- **市场分析** — 市场规模、TAM/SAM/SOM、增长趋势、细分市场动态
+- **竞争情报** — 竞争对手映射、功能对比、定位分析、胜负模式
+- **学术文献综述** — 系统性论文调查、引用网络、研究空白识别
+- **投资尽职调查** — 目标公司深度调研、财务 + 技术 + 团队评估
+- **技术评估** — 技术栈评估、新兴技术雷达、自建与购买分析
+- **行业报告** — 行业概览、监管环境、生态系统映射、未来展望
 
-**Do NOT use this skill for:** quick fact-checking, single-question lookups, or trivial information retrieval. For those cases, use a direct query or simple web search. This skill is designed for research that produces structured, citable, decision-grade outputs.
-
----
-
-## Core Principle: Question Before Method
-
-> The most expensive mistake in research is answering the wrong question perfectly.
-
-This skill is built around one core idea: **the definition of the question determines the value of the answer**. The tools (web search, knowledge graph search, document fetching) are innate capabilities of the LLM — they don't need to be taught. What needs to be taught is how to **ask the right questions, plan the right depth, and verify that the output truly answers what was asked.**
-
-This skill operates in three layers:
-
-| Layer             | What                                                         | Who                                |
-| ----------------- | ------------------------------------------------------------ | ---------------------------------- |
-| **Methodology**   | How to define the question, choose depth, structure analysis | This skill (the prompt)            |
-| **Tools**         | WebSearch, QuickSearch, QuickExplore, FindRelation, WebFetch | LLM innate (not taught here)       |
-| **Orchestration** | Multi-agent coordination for large studies                   | Optional, triggered by depth level |
+**不要使用此技能当：** 快速事实核查、单一问题查询或琐碎信息检索。这些情况使用直接查询或简单网络搜索。此技能专为生成系统化、可引用、决策级输出的研究而设计。
 
 ---
 
-## Phase 1: Problem Definition
+## 核心原则：问题先于方法
 
-**Goal:** Transform a vague request into a precise, verifiable research objective. This is the most important phase — invest 10-15% of total time here.
+> 研究中最昂贵的错误是完美地回答了错误的问题。
 
-### Step 1.1 — Four-Question Elicitation Framework
+此技能围绕一个核心理念构建：**问题的定义决定了答案的价值**。如何**提出正确的问题、规划合适的深度，并验证输出真正回答了所问的内容**。
 
-Do NOT start with "what do you want to research?" Instead, use this structured sequence to extract the user's real need:
+此技能在三个层面运作：
 
-#### Q1 — Decision Anchor
+| 层面       | 内容                                                         | 执行者                 |
+| ---------- | ------------------------------------------------------------ | ---------------------- |
+| **方法论** | 如何定义问题、选择深度、构建分析                             | 此技能（提示词）       |
+| **工具**   | WebSearch、QuickSearch、QuickExplore、FindRelation、WebFetch | LLM 固有（不在此教授） |
+| **编排**   | 大型研究的多智能体协调                                       | 可选，由深度级别触发   |
 
-Ask the user:
+---
 
-> "What decision will this research inform? What action will you take based on the results?"
+## 阶段 1：问题定义
 
-This is the single most important question. It determines:
-- **Precision required** — a $10M investment decision vs. a casual curiosity need very different rigor
-- **Output format** — board deck, internal memo, personal knowledge
-- **Confidence threshold** — how sure do you need to be?
+**目标：** 将模糊的请求转化为精确、可验证的研究目标。这是最重要的阶段 — 投入总时间的 10-15%。
 
-Examples of anchoring answers:
-- "I need to decide whether to invest in company X" → Full Study, high confidence required
-- "I'm exploring if we should enter the APAC market" → Deep Dive, directional confidence
-- "I want to understand how vector databases work" → Quick Scan, low stakes
+### 步骤 1.1 — 四问题引导框架
 
-#### Q2 — Known/Unknown Separation 
+不要以"你想研究什么？"开始。相反，使用这个系统化序列来提取用户的真实需求：
 
-Ask the user:
+#### Q1 — 决策锚点
 
-> "What do you already know about this topic? And what are the specific unknowns you want to resolve?"
+问用户：
 
-This prevents wasted effort on re-discovering known information and focuses research on the real gaps.
+> "这项研究将为哪个决策提供信息？你将基于结果采取什么行动？"
 
-Document the output as:
+这是最重要的问题，它决定了：
+- **所需精度** — 1000 万美元的投资决策与随意的好奇心需要非常不同的严谨度
+- **输出格式** — 董事会演示文稿、内部备忘录、个人知识
+- **置信度阈值** — 你需要多确定？
+
+锚定答案示例：
+- "我需要决定是否投资公司 X" → 完整研究，需要高置信度
+- "我在探索是否应该进入亚太市场" → 深度调研，方向性置信度
+- "我想了解向量数据库如何工作" → 快速扫描，低风险
+
+#### Q2 — 已知/未知分离
+
+问用户：
+
+> "关于这个主题你已经知道什么？你想解决的具体未知问题是什么？"
+
+这防止了在重新发现已知信息上浪费精力，将研究集中在真正的空白上。
+
+将输出记录为：
 
 ```
-Known:
-- [fact 1]
-- [fact 2]
+已知：
+- [事实 1]
+- [事实 2]
 
-Unknowns (research targets):
-- [gap 1]
-- [gap 2]
+未知（研究目标）：
+- [空白 1]
+- [空白 2]
 ```
 
-#### Q3 — First Principles Decomposition
+#### Q3 — 第一性原理分解
 
-Ask the user:
+问用户：
 
-> "Let's strip away the assumptions. What is this fundamentally about?"
+> "让我们剥离假设。这本质上是什么？"
 
-Guide the user to decompose the problem into its irreducible elements. For example, "AI agents in healthcare" decomposes to:
-- Who is the buyer? (hospital systems? insurers? patients?)
-- What specific problem is solved? (cost reduction? accuracy? access?)
-- Why now? (regulatory change? technology maturity? market pressure?)
-- What would need to be true for this to work?
+引导用户将问题分解为不可约的元素。例如，"医疗保健中的 AI 智能体"分解为：
+- 谁是买家？（医院系统？保险公司？患者？）
+- 解决了什么具体问题？（成本降低？准确性？可及性？）
+- 为什么是现在？（监管变化？技术成熟？市场压力？）
+- 要使其成功需要什么条件？
 
-This step prevents the user's own framing from biasing the research direction.
+这一步防止用户自己的框架偏见影响研究方向。
 
-#### Q4 — Depth Calibration 
+#### Q4 — 深度校准
 
-Ask the user:
+问用户：
 
-> "What's the cost of being wrong? If this research led you to the wrong conclusion, what would happen?"
+> "错误的代价是什么？如果这项研究导致你得出错误结论，会发生什么？"
 
-Use the answer to determine the research level:
+根据答案确定研究级别：
 
-| If wrong answer means...             | Research Level             | Approach                                  |
-| ------------------------------------ | -------------------------- | ----------------------------------------- |
-| Minor inconvenience                  | **Level 1 — Quick Scan**   | Single agent, <10 sources, half-day       |
-| Wasted effort/resources              | **Level 2 — Deep Dive**    | Single agent, 10-30 sources, 1-2 days     |
-| Significant financial/strategic loss | **Level 3 — Full Study**   | Multi-agent, 30+ sources, cross-validated |
-| Ongoing competitive disadvantage     | **Level 4 — Living Intel** | Multi-agent + periodic refresh cycles     |
+| 如果错误答案意味着... | 研究级别              | 方法                           |
+| --------------------- | --------------------- | ------------------------------ |
+| 轻微不便              | **级别 1 — 快速扫描** | 单智能体，<10 个来源，半天     |
+| 浪费精力/资源         | **级别 2 — 深度调研** | 单智能体，10-30 个来源，1-2 天 |
+| 重大财务/战略损失     | **级别 3 — 完整研究** | 多智能体，30+ 个来源，交叉验证 |
+| 持续竞争劣势          | **级别 4 — 持续情报** | 多智能体 + 周期性刷新周期      |
 
-### Step 1.2 — Document the Research Protocol
+### 步骤 1.2 — 记录研究协议
 
-After the four questions, synthesize into a concise protocol:
+四个问题后，综合成简洁的协议：
 
 ```markdown
-## Research Protocol
+## 研究协议
 
-**Decision:** [what will this inform?]
-**Primary Question:** [single, precise question]
-**Sub-Questions:** [2-5 specific unknowns]
-**Scope:** [geographic, temporal, domain boundaries]
-**Level:** [Quick Scan / Deep Dive / Full Study / Living Intel]
-**Confidence Required:** [high / medium / directional]
-**Output:** [report, memo, brief, etc.]
-**Deadline:** [time constraint]
+**决策：** [这将为什么决策提供信息？]
+**主要问题：** [单一、精确的问题]
+**子问题：** [2-5 个具体未知问题]
+**范围：** [地理、时间、领域边界]
+**级别：** [快速扫描 / 深度调研 / 完整研究 / 持续情报]
+**所需置信度：** [高 / 中 / 方向性]
+**输出：** [报告、备忘录、简报等]
+**截止日期：** [时间约束]
 ```
 
-Present this to the user for confirmation **before proceeding**.
+在继续之前将此呈现给用户确认。
 
 ---
 
-## Phase 2: Evidence Collection
+## 阶段 2：证据收集
 
-**Goal:** Gather diverse, high-quality sources that directly address the research questions.
+**目标：** 收集直接解决研究问题的多样化、高质量来源。
 
-### Guiding Principles
+### 指导原则
 
-1. **Tools are innate** — Use `WebSearch`, `QuickSearch`, `QuickExplore`, `FindRelation`, and `WebFetch` as needed. No special instruction is required for how to use them.
-2. **Diversify sources** — Don't rely on a single type of source. Mix web articles, academic papers, official documents, analyst reports.
-3. **Track provenance** — For every source, record: URL/DOI, publisher, author, publish date, access date.
-4. **Quality over quantity** — 5 high-quality sources beat 50 blog posts.
+1. **工具是固有的** — 根据需要使用 `WebSearch`、`QuickSearch`、`QuickExplore`、`FindRelation` 和 `WebFetch`。不需要关于如何使用它们的特殊指导。
+2. **来源多样化** — 不要依赖单一类型的来源。混合使用网络文章、学术论文、官方文件、分析师报告。
+3. **追踪来源** — 对于每个来源，记录：URL/DOI、出版商、作者、发布日期、访问日期。
+4. **质量优于数量** — 5 个高质量来源胜过 50 篇博客文章。
 
-### Source Quality Scoring
+### 来源质量评分
 
-Score each source on 4 dimensions (1-5 scale):
+对每个来源在 4 个维度上评分（1-5 分）：
 
-| Dimension       | What It Measures                          | Red Flags                                        |
-| --------------- | ----------------------------------------- | ------------------------------------------------ |
-| **Credibility** | Publisher authority, methodology rigor    | Anonymous blog, no methodology cited, known bias |
-| **Recency**     | How current is the information?           | Data >2 years old for fast-moving domains        |
-| **Relevance**   | Directly addresses the research question? | Tangential mention only                          |
-| **Bias Check**  | Balanced perspective or advocacy?         | Vendor-sponsored "research", no counter-evidence |
+| 维度         | 测量内容                   | 危险信号                         |
+| ------------ | -------------------------- | -------------------------------- |
+| **可信度**   | 出版商权威性、方法论严谨性 | 匿名博客、未引用方法论、已知偏见 |
+| **时效性**   | 信息有多新？               | 快速变化领域的数据超过 2 年      |
+| **相关性**   | 直接解决研究问题？         | 仅边缘提及                       |
+| **偏见检查** | 平衡视角还是倡导？         | 供应商赞助的"研究"、无反面证据   |
 
-**Minimum threshold:** Average score ≥ 3.5 for inclusion in final synthesis. Flag low-scoring sources but don't discard — they may still provide useful context.
+**最低阈值：** 平均得分 ≥ 3.5 才纳入最终综合。标记低分来源但不要丢弃，它们可能仍提供有用的上下文。
 
-### Collection Checklist
+### 收集清单
 
-- [ ] At least 2 independent sources per key claim
-- [ ] Sources span multiple perspectives (bull, bear, neutral)
-- [ ] Primary sources preferred over secondary (original data > someone's interpretation)
-- [ ] Sources are documented with full citation metadata
-
----
-
-## Phase 3: Multi-Agent Orchestration
-
-**Goal:** Scale research effort proportionally to the decision at stake.
-
-### When to Scale
-
-| Research Level         | Agent Count   | When to Deploy Additional Agents                                     |
-| ---------------------- | ------------- | -------------------------------------------------------------------- |
-| Level 1 — Quick Scan   | 1 (lead only) | Never                                                                |
-| Level 2 — Deep Dive    | 1-2           | If sources span very different domains (e.g., technical + financial) |
-| Level 3 — Full Study   | 2-4           | Always — parallel workstreams                                        |
-| Level 4 — Living Intel | 2-4 + ongoing | Always                                                               |
-
-### Role Definitions
-
-| Role                      | Responsibility                                                           | Trigger                                      |
-| ------------------------- | ------------------------------------------------------------------------ | -------------------------------------------- |
-| **Lead Researcher**       | Question design, source coordination, synthesis, quality control         | Always                                       |
-| **Data Analyst**          | Quantitative analysis, statistical work, data cleaning, chart production | When quantitative data is a major component  |
-| **Subject Matter Expert** | Domain-specific validation, methodology review, sanity-check             | When domain-specific expertise is required   |
-| **Writer**                | Report drafting, narrative structure, executive summary                  | When output is a formal report (Full Study+) |
-
-Use `team-create` and `task-create` / `task-update` to coordinate parallel workstreams.
+- [ ] 每个关键主张至少有 2 个独立来源
+- [ ] 来源涵盖多个视角（乐观、悲观、中立）
+- [ ] 优先使用一手来源而非二手来源（原始数据 > 他人解释）
+- [ ] 来源记录了完整的引用元数据
 
 ---
 
-## Phase 4: Analysis & Synthesis
+## 阶段 3：多智能体编排
 
-**Goal:** Turn collected evidence into insights, patterns, and actionable conclusions.
+**目标：** 按决策风险比例扩展研究工作量。
 
-### Step 4.1 — Evidence Mapping
+### 何时扩展
 
-For each sub-question from the protocol, map the evidence:
+| 研究级别          | 智能体数量    | 何时部署额外智能体                              |
+| ----------------- | ------------- | ----------------------------------------------- |
+| 级别 1 — 快速扫描 | 1（仅负责人） | 从不                                            |
+| 级别 2 — 深度调研 | 1-2           | 如果来源涵盖非常不同的领域（例如，技术 + 财务） |
+| 级别 3 — 完整研究 | 2-4           | 总是 — 并行工作流                               |
+| 级别 4 — 持续情报 | 2-4 + 持续    | 总是                                            |
+
+### 角色定义
+
+| 角色           | 职责                                   | 触发条件                        |
+| -------------- | -------------------------------------- | ------------------------------- |
+| **首席研究员** | 问题设计、来源协调、综合、质量控制     | 总是                            |
+| **数据分析师** | 定量分析、统计工作、数据清理、图表制作 | 当定量数据是主要组成部分时      |
+| **领域专家**   | 领域特定验证、方法论审查、合理性检查   | 当需要领域特定专业知识时        |
+| **撰稿人**     | 报告起草、叙事结构、执行摘要           | 当输出是正式报告时（完整研究+） |
+
+使用 `team-create` 和 `task-create` / `task-update` 协调并行工作流。
+
+---
+
+## 阶段 4：分析与综合
+
+**目标：** 将收集的证据转化为洞察、模式和可操作的结论。
+
+### 步骤 4.1 — 证据映射
+
+对于协议中的每个子问题，映射证据：
 
 ```
-Sub-Question: [from protocol]
+子问题：[来自协议]
 
-Supporting Evidence:
-- [claim] → [source citation] (confidence: high/medium/low)
-- [claim] → [source citation] (confidence: high/medium/low)
+支持证据：
+- [主张] → [来源引用]（置信度：高/中/低）
+- [主张] → [来源引用]（置信度：高/中/低）
 
-Contradicting Evidence:
-- [claim] → [source citation] (confidence: high/medium/low)
+矛盾证据：
+- [主张] → [来源引用]（置信度：高/中/低）
 
-Gaps:
-- [what we still don't know or have insufficient evidence for]
+空白：
+- [我们仍然不知道或证据不足的内容]
 ```
 
-### Step 4.2 — Pattern Detection
+### 步骤 4.2 — 模式检测
 
-Look for:
-- **Convergence** — Multiple independent sources reaching similar conclusions (increases confidence)
-- **Divergence** — Sources disagreeing (note the disagreement, don't smooth it over)
-- **Gaps** — Questions with insufficient evidence (flag as uncertainty)
-- **Temporal trends** — How things change over time
+寻找：
+- **收敛** — 多个独立来源得出相似结论（增加置信度）
+- **发散** — 来源存在分歧（记录分歧，不要掩盖）
+- **空白** — 证据不足的问题（标记为不确定性）
+- **时间趋势** — 事物如何随时间变化
 
-### Step 4.3 — Hypothesis Formation
+### 步骤 4.3 — 假设形成
 
-For each major finding:
+对于每个主要发现：
 
-1. State the hypothesis clearly
-2. Identify supporting evidence (with source citations)
-3. Identify contradictory evidence (actively seek disconfirmation)
-4. Assign confidence level based on evidence strength
-5. Note remaining uncertainties
+1. 清晰陈述假设
+2. 识别支持证据（附来源引用）
+3. 识别矛盾证据（积极寻求反驳）
+4. 根据证据强度分配置信度级别
+5. 记录剩余的不确定性
 
-### Step 4.4 — Fact vs. Assumption Separation
+### 步骤 4.4 — 事实与假设分离
 
-**Every conclusion must be tagged as one of:**
+**每个结论必须标记为以下之一：**
 
-| Tag                     | Meaning                                                                                                    | Example                                                                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **Fact**                | Directly supported by 2+ independent, high-quality sources                                                 | "Company X raised $500M Series D in March 2025 (Source A, Source B)"                                                     |
-| **Synthesized Finding** | Derived from combining multiple data points; each data point is factual but the conclusion is interpretive | "Company X is expanding into APAC based on hiring patterns and partnership announcements (Source C, Source D)"           |
-| **Assumption**          | Reasonable inference with limited direct support; explicitly labeled                                       | "Assuming current growth rate continues, Company X will need another round in 18 months (extrapolation from Source E)"   |
-| **Speculation**         | Informed opinion with insufficient evidence; must be flagged                                               | "Company X could be an acquisition target for Big Tech (no direct evidence; inferred from market consolidation pattern)" |
+| 标签         | 含义                                                         | 示例                                                                       |
+| ------------ | ------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| **事实**     | 直接由 2 个以上独立、高质量来源支持                          | "公司 X 在 2025 年 3 月完成了 5 亿美元 D 轮融资（来源 A、来源 B）"         |
+| **综合发现** | 从组合多个数据点得出；每个数据点是事实性的，但结论是解释性的 | "基于招聘模式和合作公告，公司 X 正在向亚太扩张（来源 C、来源 D）"          |
+| **假设**     | 有限直接支持的合理推断；明确标记                             | "假设当前增长率持续，公司 X 将在 18 个月内需要另一轮融资（从来源 E 推断）" |
+| **推测**     | 证据不足但有根据的意见；必须标记                             | "公司 X 可能是大型科技公司的收购目标（无直接证据；从市场整合模式推断）"    |
 
-**Never present an Assumption or Speculation as a Fact.** If the user needs higher confidence, flag which sources would resolve the uncertainty.
+**永远不要将假设或推测呈现为事实。** 如果用户需要更高的置信度，标记哪些来源可以解决不确定性。
 
-### Confidence Levels
+### 置信度级别
 
-| Level      | Criteria                                                                                                      |
-| ---------- | ------------------------------------------------------------------------------------------------------------- |
-| **High**   | Supported by 3+ independent, high-quality sources; quantitative data available; no significant contradictions |
-| **Medium** | Supported by 2+ sources with some limitations; qualitative consensus; minor contradictions exist              |
-| **Low**    | Single source or limited corroboration; significant contradictions; largely speculative                       |
+| 级别   | 标准                                                       |
+| ------ | ---------------------------------------------------------- |
+| **高** | 由 3 个以上独立、高质量来源支持；有定量数据；无重大矛盾    |
+| **中** | 由 2 个以上有一些限制的来源支持；定性共识；存在 minor 矛盾 |
+| **低** | 单一来源或有限的佐证；重大矛盾；主要是推测性               |
 
 ---
 
-## Phase 5: Report Production
+## 阶段 5：报告生成
 
-**Goal:** Produce a structured Markdown file saved to the current working directory.
+**目标：** 生成系统化的 Markdown 文件并保存到当前工作目录。
 
-### Output Location
+### 输出位置
 
-Save the report as a `.md` file in the current working directory with a clear, descriptive filename:
+将报告保存为当前工作目录中的 `.md` 文件，使用清晰、描述性的文件名：
 
 ```
 <project-dir>/research-<topic-slug>-<YYYY-MM-DD>.md
 ```
 
-For example: `research-ai-healthcare-diagnostics-2025-06-24.md`
+例如：`research-ai-healthcare-diagnostics-2025-06-24.md`
 
-### Required Report Structure
+### 必需的报告结构
 
 ```markdown
-# Research: [Title]
+# 研究：[标题]
 
-**Date:** YYYY-MM-DD
-**Research Level:** Quick Scan / Deep Dive / Full Study / Living Intel
-**Decision Context:** [what decision this research informs]
-
----
-
-## Executive Summary
-
-[One-paragraph bottom line. 3-5 key findings with confidence levels. Recommendations if applicable.]
+**日期：** YYYY-MM-DD
+**研究级别：** 快速扫描 / 深度调研 / 完整研究 / 持续情报
+**决策背景：** [这项研究为哪个决策提供信息]
 
 ---
 
-## 1. Research Methodology
+## 执行摘要
 
-- **Primary Question:** [from protocol]
-- **Scope:** [geographic, temporal, domain boundaries]
-- **Sources:** [count by type, quality distribution]
-- **Limitations:** [what this research does NOT cover]
-
-## 2. Findings
-
-[Organized by theme, not by source. Each finding includes claim, supporting evidence with citations, confidence level.]
-
-## 3. Analysis
-
-[Cross-finding synthesis, pattern interpretation, implications.]
-
-## 4. Conclusions
-
-[Direct answers to the primary question and sub-questions. Tagged by fact/synthesized finding/assumption/speculation.]
-
-## 5. Recommendations
-
-[Actionable, prioritized, with supporting evidence references.]
+[一段话的底线。3-5 个关键发现及置信度级别。适用时提供建议。]
 
 ---
 
-## Appendix
+## 1. 研究方法
 
-### A. Source List
+- **主要问题：** [来自协议]
+- **范围：** [地理、时间、领域边界]
+- **来源：** [按类型计数，质量分布]
+- **局限性：** [本研究未涵盖的内容]
 
-| #   | Title | Publisher | Date | Credibility | Recency | Relevance | Bias | URL |
-| --- | ----- | --------- | ---- | ----------- | ------- | --------- | ---- | --- |
+## 2. 发现
 
-### B. Uncertainties & Gaps
+[按主题组织，而非按来源。每个发现包括主张、支持证据及引用、置信度级别。]
 
-[What remains unknown. What would resolve it.]
+## 3. 分析
 
-### C. Protocol (Original)
+[跨发现综合、模式解释、影响。]
 
-[Copy of the research protocol from Phase 1 for traceability.]
+## 4. 结论
+
+[对主要问题和子问题的直接回答。按事实/综合发现/假设/推测标记。]
+
+## 5. 建议
+
+[可操作的、有优先级的，附支持证据引用。]
+
+---
+
+## 附录
+
+### A. 来源列表
+
+| #   | 标题 | 出版商 | 日期 | 可信度 | 时效性 | 相关性 | 偏见 | URL |
+| --- | ---- | ------ | ---- | ------ | ------ | ------ | ---- | --- |
+
+### B. 不确定性与空白
+
+[仍然未知的内容。什么可以解决它。]
+
+### C. 协议（原始）
+
+[阶段 1 研究协议的副本，用于可追溯性。]
 ```
 
-### Citation Rules
+### 引用规则
 
-1. **Every factual claim must have ≥1 source citation** — format: `[Source N]`
-2. **Conflicting sources must be acknowledged** — don't hide disagreement
-3. **Distinguish between** direct quotes, paraphrases, and synthesized conclusions
-4. **Assumptions and speculations must be labeled** — use the tags from Phase 4.4
-
----
-
-## Phase 6: Verification & Reflection
-
-**Goal:** Before delivering the output, verify that the report genuinely answers the original research question with integrity.
-
-### Step 6.1 — Goal Alignment Check
-
-Re-read the original Research Protocol and ask:
-
-- [ ] Does the report directly answer the primary question? (not a different question, not a nearby question)
-- [ ] Does it address every sub-question from the protocol?
-- [ ] Are all conclusions within the agreed scope? (no scope creep that wasn't agreed upon)
-- [ ] If the decision anchor was "should I invest in X", does the report give a clear answer or actionable framework for that decision?
-
-If any check fails, the report is incomplete — revise or note the gap explicitly.
-
-### Step 6.2 — Evidence Integrity Check
-
-- [ ] Is every factual claim backed by at least one source citation?
-- [ ] Are confidence levels assigned to every major finding?
-- [ ] Are assumptions and speculations clearly labeled as such? (no "conclusion dressing" — don't write an assumption like it's a fact)
-- [ ] Are contradictory or dissenting sources acknowledged?
-- [ ] Are any claims made with "no evidence" tag? (if so, remove or flag as speculation)
-
-### Step 6.3 — Reasoning Integrity Check
-
-- [ ] Does the reasoning chain from evidence → conclusion hold? Or are there logical leaps?
-- [ ] Are all numerical claims traceable to their source calculation? (e.g., "market will reach $X by 2030" — which analyst, what methodology?)
-- [ ] Are correlations distinguished from causations?
-- [ ] If the report makes a prediction or forecast, is the underlying model/assumption stated?
-
-### Step 6.4 — Final Confidence Statement
-
-End with an honest assessment:
-
-> **Confidence in this report:** [High / Medium / Low]
->
-> **Key uncertainties:** [what would change the conclusions if new evidence emerged]
->
-> **Recommended follow-up:** [what to do if higher confidence is needed — e.g., "commission a primary survey", "interview 3 industry executives", "purchase Gartner report X"]
+1. **每个事实主张必须有 ≥1 个来源引用** — 格式：`[来源 N]`
+2. **必须承认冲突的来源** — 不要隐藏分歧
+3. **区分** 直接引用、释义和综合结论
+4. **必须标记假设和推测** — 使用阶段 4.4 的标签
 
 ---
 
-## Gotchas
+## 阶段 6：验证与反思
 
-- **Source recency ≠ authority.** A blog post from last week may be less reliable than a 2022 peer-reviewed paper. Apply source quality scoring by methodology, not publication date.
-- **The research question shifts as you find evidence.** If early findings contradict the premise, do not force the answer. Surface the contradiction and let the user redirect.
-- **Fact vs assumption is not always clear.** Speculation in a source can look like fact. Tag aggressively: if it's not independently verifiable, it's assumption.
-- **"No evidence" is not "evidence of absence."** If a search returns nothing relevant, state the scope of the search explicitly — which sources were checked, with which queries.
+**目标：** 在交付输出之前，验证报告确实以诚信回答了原始研究问题。
 
-## Anti-Patterns
+### 步骤 6.1 — 目标对齐检查
 
-1. **Confirmation Bias / Cherry-Picking**
-   Don't selectively include sources that support a pre-existing conclusion while ignoring contradicting evidence. Actively seek out disconfirming sources. If you can't find them, note that absence as a limitation.
+重新阅读原始研究协议并问：
 
-2. **Answering a Different Question**
-   The most common failure mode. A user asks about "market opportunity" but gets a "technology overview." Stay anchored to the protocol. If new questions emerge during research, separate them into "additional findings" rather than letting them redirect the report.
+- [ ] 报告是否直接回答了主要问题？（不是不同的问题，不是附近的问题）
+- [ ] 是否解决了协议中的每个子问题？
+- [ ] 所有结论是否在约定的范围内？（没有未约定的范围蔓延）
+- [ ] 如果决策锚点是"我是否应该投资 X"，报告是否为该决策提供了清晰的答案或可操作的框架？
 
-3. **Presenting Assumptions as Facts**
-   Never write "Company X will enter this market" when what the evidence supports is "Company X's job postings suggest they are exploring this market." The difference matters. Label it.
+如果任何检查失败，报告不完整，修改或明确注明空白。
 
-4. **Confusing Correlation with Causation**
-   Just because two trends co-occur doesn't mean one caused the other. Be explicit about what the evidence shows vs. what you infer.
+### 步骤 6.2 — 证据完整性检查
 
-5. **Ignoring Source Bias**
-   Every source has a perspective. A vendor's whitepaper promotes their solution. A short seller's report highlights risks. An academic paper may have funding conflicts. Characterize and disclose source bias.
+- [ ] 每个事实主张是否有至少一个来源引用支持？
+- [ ] 是否为每个主要发现分配了置信度级别？
+- [ ] 假设和推测是否清楚地标记为这样？（不要"结论包装"，不要把假设写得像事实）
+- [ ] 是否承认了矛盾或不同意见的来源？
+- [ ] 是否有任何主张带有"无证据"标签？（如果有，删除或标记为推测）
 
-6. **Over-Generalizing from Limited Samples**
-   "We analyzed 5 companies and found..." is not the same as "Across the industry...". Be precise about scope and sample size. Extrapolation should always be flagged as such.
+### 步骤 6.3 — 推理完整性检查
 
-7. **Skipping the Problem Definition Phase**
-   Jumping straight to web searches without defining the research question leads to scope creep, wasted effort, and unfocused outputs. Spend 10-15% of total time on Phase 1.
+- [ ] 从证据 → 结论的推理链是否成立？还是有逻辑跳跃？
+- [ ] 所有数值主张是否可追溯到其来源计算？（例如，"市场将在 2030 年达到 X 美元"，哪位分析师，什么方法论？）
+- [ ] 相关性是否与因果关系区分？
+- [ ] 如果报告做出预测或预报，是否陈述了底层模型/假设？
 
-8. **Producing a Report Without Verification**
-   Skipping Phase 6 means delivering a report that may not actually answer the question. Always run the verification checks before presenting the output.
+### 步骤 6.4 — 最终置信度声明
+
+以诚实的评估结束：
+
+> **本报告的置信度：** [高 / 中 / 低]
+>
+> **关键不确定性：** [如果出现新证据，什么会改变结论]
+>
+> **建议的后续行动：** [如果需要更高的置信度该怎么做，例如"委托进行一手调查"、"采访 3 位行业高管"、"购买 Gartner 报告 X"]
+
+---
+
+## 注意事项
+
+- **来源时效性 ≠ 权威性。** 上周的博客文章可能不如 2022 年的同行评审论文可靠。按方法论应用来源质量评分，而非出版日期。
+- **研究问题会随着你发现证据而转变。** 如果早期发现与前提矛盾，不要强行得出答案。揭示矛盾并让用户重新定向。
+- **事实与假设并不总是清晰的。** 来源中的推测可能看起来像事实。积极标记：如果它不能独立验证，就是假设。
+- **"无证据"不是"缺席的证据"。** 如果搜索没有返回相关内容，明确说明搜索范围，检查了哪些来源，使用了哪些查询。
+
+## 反模式
+
+1. **确认偏见/摘樱桃**
+   不要选择性地包括支持预先存在结论的来源而忽略矛盾证据。积极寻找反驳来源。如果找不到，将这种缺席记录为局限性。
+
+2. **回答不同的问题**
+   最常见的失败模式。用户问"市场机会"但得到"技术概述"。坚持锚定协议。如果研究过程中出现新问题，将它们分离到"额外发现"中，而不是让它们重新定向报告。
+
+3. **将假设呈现为事实**
+   永远不要写"公司 X 将进入这个市场"，而证据支持的是"公司 X 的招聘帖子表明他们正在探索这个市场"。差异很重要，标记它。
+
+4. **混淆相关性与因果关系**
+   仅仅因为两个趋势同时发生并不意味着一个导致了另一个。明确说明证据显示的内容与你推断的内容。
+
+5. **忽略来源偏见**
+   每个来源都有视角。供应商的白皮书推广他们的解决方案。做空者的报告强调风险。学术论文可能有资金冲突。描述并披露来源偏见。
+
+6. **从有限样本过度概括**
+   "我们分析了 5 家公司并发现..."与"在整个行业中..."不同。精确说明范围和样本量。外推应始终标记为这样。
+
+7. **跳过问题定义阶段**
+   在没有定义研究问题的情况下直接跳转到网络搜索会导致范围蔓延、浪费精力和缺乏重点的输出。在阶段 1 花费总时间的 10-15%。
+
+8. **生成未经

@@ -1,217 +1,217 @@
-# Copy Frameworks Reference
+# 文案框架参考
 
-Headline formulas, page section types, and structural templates.
+标题公式、页面区块类型与结构模板。
 
-## Contents
-- Headline Formulas (outcome-focused, problem-focused, audience-focused, differentiation-focused, proof-focused, additional formulas)
-- Landing Page Section Types (core sections, supporting sections)
-- Page Structure Templates (feature-heavy page, varied engaging page, compact landing page, enterprise/B2B landing page, product launch page)
-- Section Writing Tips (problem section, benefits section, how it works section, testimonial selection)
+## 目录
+- 标题公式（成果导向、问题导向、受众导向、差异化导向、证据导向、其他公式）
+- 落地页区块类型（核心区块、辅助区块）
+- 页面结构模板（功能堆砌型页面、丰富 engaging 型页面、紧凑型落地页、企业/B2B 落地页、产品发布页）
+- 区块写作技巧（问题区块、收益区块、工作原理区块、客户评价筛选）
 
-## Headline Formulas
+## 标题公式
 
-### Outcome-Focused
+### 成果导向
 
-**{Achieve desirable outcome} without {pain point}**
-> Understand how users are really experiencing your site without drowning in numbers
+**{实现理想结果}，无需{痛点}**
+> 不用淹没在数字堆里，也能真正了解用户在你网站上的体验
 
-**{Achieve desirable outcome} by {how product makes it possible}**
-> Generate more leads by seeing which companies visit your site
+**通过{产品实现方式}，{实现理想结果}**
+> 看看哪些公司访问了你的网站，从而获取更多潜在客户
 
-**Turn {input} into {outcome}**
-> Turn your hard-earned sales into repeat customers
+**把{输入}变成{结果}**
+> 把你辛苦得来的销售线索转化为回头客
 
-**[Achieve outcome] in [timeframe]**
-> Get your tax refund in 10 days
-
----
-
-### Problem-Focused
-
-**Never {unpleasant event} again**
-> Never miss a sales opportunity again
-
-**{Question highlighting the main pain point}**
-> Hate returning stuff to Amazon?
-
-**Stop [pain]. Start [pleasure].**
-> Stop chasing invoices. Start getting paid on time.
+**在[时间]内[实现结果]**
+> 10 天内拿到你的退税
 
 ---
 
-### Audience-Focused
+### 问题导向
 
-**{Key feature/product type} for {target audience}**
-> Advanced analytics for Shopify e-commerce
+**再也不会{不愉快的事}**
+> 再也不会错过任何销售机会
 
-**{Key feature/product type} for {target audience} to {what it's used for}**
-> An online whiteboard for teams to ideate and brainstorm together
+**{突出主要痛点的问题}**
+> 讨厌把东西退给亚马逊？
 
-**You don't have to {skills or resources} to {achieve desirable outcome}**
-> With Ahrefs, you don't have to be an SEO pro to rank higher and get more traffic
-
----
-
-### Differentiation-Focused
-
-**The {opposite of usual process} way to {achieve desirable outcome}**
-> The easiest way to turn your passion into income
-
-**The [category] that [key differentiator]**
-> The CRM that updates itself
+**停止[痛苦]。开始[愉悦]。**
+> 停止追着发票跑。开始准时收到钱。
 
 ---
 
-### Proof-Focused
+### 受众导向
 
-**[Number] [people] use [product] to [outcome]**
-> 50,000 marketers use Drip to send better emails
+**面向{目标受众}的{核心功能/产品类型}**
+> 面向 Shopify 电商的高级数据分析
 
-**{Key benefit of your product}**
-> Sound clear in online meetings
+**面向{目标受众}的{核心功能/产品类型}，用于{用途}**
+> 一个让团队在线协作构思和头脑风暴的白板
 
----
-
-### Additional Formulas
-
-**The simple way to {outcome}**
-> The simple way to track your time
-
-**Finally, {category} that {benefit}**
-> Finally, accounting software that doesn't suck
-
-**{Outcome} without {common pain}**
-> Build your website without writing code
-
-**Get {benefit} from your {thing}**
-> Get more revenue from your existing traffic
-
-**{Action verb} your {thing} like {admirable example}**
-> Market your SaaS like a Fortune 500
-
-**What if you could {desirable outcome}?**
-> What if you could close deals 30% faster?
-
-**Everything you need to {outcome}**
-> Everything you need to launch your course
-
-**The {adjective} {category} built for {audience}**
-> The lightweight CRM built for startups
+**你不需要{技能或资源}，也能{实现理想结果}**
+> 有了 Ahrefs，你不需要成为 SEO 专家也能提升排名、获取更多流量
 
 ---
 
-## Landing Page Section Types
+### 差异化导向
 
-### Core Sections
+**用{与常规相反的方式}来{实现理想结果}**
+> 把你的热爱变成收入，这是最简单的方式
 
-**Hero (Above the Fold)**
-- Headline + subheadline
-- Primary CTA
-- Supporting visual (product screenshot, hero image)
-- Optional: Social proof bar
-
-**Social Proof Bar**
-- Customer logos (recognizable > many)
-- Key metric ("10,000+ teams")
-- Star rating with review count
-- Short testimonial snippet
-
-**Problem/Pain Section**
-- Articulate their problem better than they can
-- Create recognition ("that's exactly my situation")
-- Hint at cost of not solving it
-
-**Solution/Benefits Section**
-- Bridge from problem to your solution
-- 3-5 key benefits (not 10)
-- Each: headline + explanation + proof if available
-
-**How It Works**
-- 3-4 numbered steps
-- Reduces perceived complexity
-- Each step: action + outcome
-
-**Final CTA Section**
-- Recap value proposition
-- Repeat primary CTA
-- Risk reversal (guarantee, free trial)
+**[品类]中[关键差异化点]的那个**
+> 能自动更新的 CRM
 
 ---
 
-### Supporting Sections
+### 证据导向
 
-**Testimonials**
-- Full quotes with names, roles, companies
-- Photos when possible
-- Specific results over vague praise
-- Formats: quote cards, video, tweet embeds
+**[数字]个[人群]使用[产品]来[实现结果]**
+> 50,000 名营销人员使用 Drip 发送更优质的邮件
 
-**Case Studies**
-- Problem → Solution → Results
-- Specific metrics and outcomes
-- Customer name and context
-- Can be snippets with "Read more" links
-
-**Use Cases**
-- Different ways product is used
-- Helps visitors self-identify
-- "For marketers who need X" format
-
-**Personas / "Built For" Sections**
-- Explicitly call out target audience
-- "Perfect for [role]" blocks
-- Addresses "Is this for me?" question
-
-**FAQ Section**
-- Address common objections
-- Good for SEO
-- Reduces support burden
-- 5-10 most common questions
-
-**Comparison Section**
-- vs. competitors (name them or don't)
-- vs. status quo (spreadsheets, manual processes)
-- Tables or side-by-side format
-
-**Integrations / Partners**
-- Logos of tools you connect with
-- "Works with your stack" messaging
-- Builds credibility
-
-**Founder Story / Manifesto**
-- Why you built this
-- What you believe
-- Emotional connection
-- Differentiates from faceless competitors
-
-**Demo / Product Tour**
-- Interactive demos
-- Video walkthroughs
-- GIF previews
-- Shows product in action
-
-**Pricing Preview**
-- Teaser even on non-pricing pages
-- Starting price or "from $X/mo"
-- Moves decision-makers forward
-
-**Guarantee / Risk Reversal**
-- Money-back guarantee
-- Free trial terms
-- "Cancel anytime"
-- Reduces friction
-
-**Stats Section**
-- Key metrics that build credibility
-- "10,000+ customers"
-- "4.9/5 rating"
-- "$2M saved for customers"
+**{产品的核心收益}**
+> 在线会议中声音清晰
 
 ---
 
-## Page Structure Templates
+### 其他公式
 
-### Feature-Heavy Page (Weak)
+**{实现结果}的简单方法**
+> 追踪时间的简单方法
+
+**终于，{品类}也能{收益}了**
+> 终于，有一款不那么难用的会计软件
+
+**{实现结果}，没有{常见痛点}**
+> 不用写代码也能建网站
+
+**从你的{事物}中获得{收益}**
+> 从现有流量中获取更多收入
+
+**像{值得学习的榜样}一样{行动动词}你的{事物}**
+> 像财富 500 强企业一样营销你的 SaaS
+
+**如果你能{理想结果}呢？**
+> 如果你能快 30% 成交呢？
+
+**{实现结果}所需的一切**
+> 上线你的课程所需的一切
+
+**专为{受众}打造的{形容词}{品类}**
+> 专为初创公司打造的轻量级 CRM
+
+---
+
+## 落地页区块类型
+
+### 核心区块
+
+**首屏（Hero 区域）**
+- 标题 + 副标题
+- 主 CTA（行动号召）
+- 辅助视觉元素（产品截图、首屏大图）
+- 可选：社会证明条
+
+**社会证明条**
+- 客户 Logo（辨识度 > 数量）
+- 关键数据（"10,000+ 团队"）
+- 星级评分及评价数量
+- 简短的客户评价摘录
+
+**问题/痛点区块**
+- 用比用户自己更精准的语言描述他们的问题
+- 制造共鸣感（"这说的就是我的情况"）
+- 暗示不解决问题的代价
+
+**解决方案/收益区块**
+- 从问题过渡到你的解决方案
+- 3-5 个核心收益（不是 10 个）
+- 每个收益：标题 + 说明 + 可用时附上证据
+
+**工作原理**
+- 3-4 个编号步骤
+- 降低感知复杂度
+- 每步：操作 + 结果
+
+**最终 CTA 区块**
+- 重申价值主张
+- 重复主 CTA
+- 风险逆转（保证、免费试用）
+
+---
+
+### 辅助区块
+
+**客户评价**
+- 完整引用，包含姓名、职位、公司
+- 尽量附上照片
+- 具体成果优于泛泛赞美
+- 形式：引用卡片、视频、推文嵌入
+
+**案例研究**
+- 问题 → 解决方案 → 成果
+- 具体指标和结果
+- 客户名称及背景
+- 可以是带"阅读更多"链接的摘要
+
+**使用场景**
+- 产品的不同使用方式
+- 帮助访客对号入座
+- "面向需要 X 的营销人员"格式
+
+**人物画像 / "专为谁打造"区块**
+- 明确点出目标受众
+- "非常适合[角色]"模块
+- 回答"这适合我吗？"这个问题
+
+**FAQ 区块**
+- 回应常见疑虑
+- 有利于 SEO
+- 减轻客服压力
+- 5-10 个最常见的问题
+
+**对比区块**
+- 与竞品对比（点名或不点名）
+- 与现状对比（电子表格、手动流程）
+- 表格或并排对比格式
+
+**集成 / 合作伙伴**
+- 你连接的工具 Logo
+- "与你现有工具栈无缝协作"的信息
+- 建立可信度
+
+**创始人故事 / 宣言**
+- 你为什么做这个
+- 你相信什么
+- 建立情感连接
+- 与没有面孔的竞争对手区分开来
+
+**演示 / 产品导览**
+- 交互式演示
+- 视频 walkthrough
+- GIF 预览
+- 展示产品的实际运作
+
+**定价预览**
+- 即使在非定价页也给出价格提示
+- 起步价或"低至 $X/月"
+- 推动决策者继续前进
+
+**保证 / 风险逆转**
+- 退款保证
+- 免费试用条款
+- "随时取消"
+- 降低决策阻力
+
+**数据区块**
+- 建立可信度的关键指标
+- "10,000+ 客户"
+- "4.9/5 评分"
+- "为客户节省了 $2M"
+
+---
+
+## 页面结构模板
+
+### 功能堆砌型页面（弱）
 
 ```
 1. Hero
@@ -222,11 +222,11 @@ Headline formulas, page section types, and structural templates.
 6. CTA
 ```
 
-This is a list, not a persuasive narrative.
+这只是个列表，不是有说服力的叙事。
 
 ---
 
-### Varied, Engaging Page (Strong)
+### 丰富 engaging 型页面（强）
 
 ```
 1. Hero with clear value prop
@@ -242,11 +242,11 @@ This is a list, not a persuasive narrative.
 11. Final CTA with guarantee
 ```
 
-This tells a story and addresses objections.
+这讲了一个故事，并回应了各种疑虑。
 
 ---
 
-### Compact Landing Page
+### 紧凑型落地页
 
 ```
 1. Hero (headline, subhead, CTA, image)
@@ -257,11 +257,11 @@ This tells a story and addresses objections.
 6. Final CTA with guarantee
 ```
 
-Good for ad landing pages where brevity matters.
+适合广告落地页，简洁至上。
 
 ---
 
-### Enterprise/B2B Landing Page
+### 企业/B2B 落地页
 
 ```
 1. Hero (outcome-focused headline)
@@ -276,11 +276,11 @@ Good for ad landing pages where brevity matters.
 10. Contact/demo CTA
 ```
 
-Addresses enterprise buyer concerns.
+回应企业买家的核心关切。
 
 ---
 
-### Product Launch Page
+### 产品发布页
 
 ```
 1. Hero with launch announcement
@@ -292,53 +292,53 @@ Addresses enterprise buyer concerns.
 7. CTA with urgency
 ```
 
-Good for ProductHunt, launches, or announcements.
+适合 ProductHunt、产品发布或公告。
 
 ---
 
-## Section Writing Tips
+## 区块写作技巧
 
-### Problem Section
+### 问题区块
 
-Start with phrases like:
-- "You know the feeling..."
-- "If you're like most [role]..."
-- "Every day, [audience] struggles with..."
-- "We've all been there..."
+可以用这些短语开头：
+- "你知道那种感觉……"
+- "如果你和大多数[角色]一样……"
+- "每一天，[受众]都在为……而苦恼"
+- "我们都经历过……"
 
-Then describe:
-- The specific frustration
-- The time/money wasted
-- The impact on their work/life
+然后描述：
+- 具体的挫败感
+- 浪费的时间和金钱
+- 对工作/生活的影响
 
-### Benefits Section
+### 收益区块
 
-For each benefit, include:
-- **Headline**: The outcome they get
-- **Body**: How it works (1-2 sentences)
-- **Proof**: Number, testimonial, or example (optional)
+每个收益应包含：
+- **标题**：他们能获得的结果
+- **正文**：怎么实现的（1-2 句话）
+- **证据**：数字、客户评价或案例（可选）
 
-### How It Works Section
+### 工作原理区块
 
-Each step should be:
-- **Numbered**: Creates sense of progress
-- **Simple verb**: "Connect," "Set up," "Get"
-- **Outcome-oriented**: What they get from this step
+每一步应该：
+- **编号**：营造进度感
+- **简单动词**："连接"、"设置"、"获取"
+- **结果导向**：这一步能得到什么
 
-Example:
-1. Connect your tools (takes 2 minutes)
-2. Set your preferences
-3. Get automated reports every Monday
+示例：
+1. 连接你的工具（只需 2 分钟）
+2. 设置你的偏好
+3. 每周一自动收到报告
 
-### Testimonial Selection
+### 客户评价筛选
 
-Best testimonials include:
-- Specific results ("increased conversions by 32%")
-- Before/after context ("We used to spend hours...")
-- Role + company for credibility
-- Something quotable and specific
+好的客户评价应包含：
+- 具体成果（"转化率提升了 32%"）
+- 使用前后对比（"我们以前要花好几个小时……"）
+- 角色 + 公司以增加可信度
+- 值得引用且具体的内容
 
-Avoid testimonials that just say:
-- "Great product!"
-- "Love it!"
-- "Easy to use!"
+避免使用只说这些的评价：
+- "好产品！"
+- "太喜欢了！"
+- "很容易用！"

@@ -1,65 +1,72 @@
-## Instructions
-You are being asked to write a company-wide newsletter update. You are meant to summarize the past week/month of a company in the form of a newsletter that the entire company will read. It should be maybe ~20-25 bullet points long. It will be sent via Slack and email, so make it consumable for that.
+## 说明
 
-Ideally it includes the following attributes:
-- Lots of links: pulling documents from Google Drive that are very relevant, linking to prominent Slack messages in announce channels and from executives, perhgaps referencing emails that went company-wide, highlighting significant things that have happened in the company.
-- Short and to-the-point: each bullet should probably be no longer than ~1-2 sentences
-- Use the "we" tense, as you are part of the company. Many of the bullets should say "we did this" or "we did that"
+你正在撰写一份**公司内部通报/全员简报**。目的是总结过去一周或一个月公司的重要动态，以通报形式发送给全体员工。篇幅约 20-25 条要点，通过内部通讯工具（飞书/钉钉/企微）和邮件发送，需要易于快速浏览。
 
-## Tools to use
-If you have access to the following tools, please try to use them. If not, you can also let the user know directly that their responses would be better if they gave them access.
+理想情况下应包含以下特点：
+- 丰富的链接：引用文档平台上的重要文档、管理层在内部群发的公告、全员邮件中提到的事项，突出公司近期的重要事件
+- 简短精炼：每条要点不超过 1-2 句话
+- 使用"公司"视角叙述，而非"他们"
 
-- Slack: look for messages in channels with lots of people, with lots of reactions or lots of responses within the thread
-- Email: look for things from executives that discuss company-wide announcements
-- Calendar: if there were meetings with large attendee lists, particularly things like All-Hands meetings, big company announcements, etc. If there were documents attached to those meetings, those are great links to include.
-- Documents: if there were new docs published in the last week or two that got a lot of attention, you can link them. These should be things like company-wide vision docs, plans for the upcoming quarter or half, things authored by critical executives, etc.
-- External press: if you see references to articles or press we've received over the past week, that could be really cool too.
+## 信息来源
 
-If you don't have access to any of these things, you can ask the user for things they want to cover. In this case, you'll mostly just be polishing up and fitting to this format more directly.
+如果有以下工具的访问权限，请优先使用。如果没有，告知用户授权后信息质量会更好。
 
-## Sections
-The company is pretty big: 1000+ people. There are a variety of different teams and initiatives going on across the company. To make sure the update works well, try breaking it into sections of similar things. You might break into clusters like {product development, go to market, finance} or {recruiting, execution, vision}, or {external news, internal news} etc. Try to make sure the different areas of the company are highlighted well.
+- 即时通讯（飞书/钉钉/企微）：关注大群里的消息，尤其是回复多、互动多的公告和讨论
+- 邮件：管理层发送的全员公告和重要通知
+- 日历/会议：大型会议（如全员会、季度总结会等），以及会议关联的文档
+- 文档平台：近一两周发布的高关注度文档，如公司战略文档、季度规划、管理层发布的方案等
+- 外部报道：公司近期获得的媒体报道、行业奖项等
 
-## Prioritization
-Focus on:
-- Company-wide impact (not team-specific details)
-- Announcements from leadership
-- Major milestones and achievements
-- Information that affects most employees
-- External recognition or press
+如果没有工具权限，直接向用户索取需要覆盖的内容，你主要负责整理和润色。
 
-Avoid:
-- Overly granular team updates (save those for 3Ps)
-- Information only relevant to small groups
-- Duplicate information already communicated
+## 板块划分
 
-## Example Formats
+公司规模较大时，不同条线的工作需要分类呈现。根据实际内容灵活划分板块，常见的分类方式：
 
-:megaphone: Company Announcements
-- Announcement 1
-- Announcement 2
-- Announcement 3
+- 按业务线：{产品研发、市场销售、职能支撑}
+- 按主题：{战略动态、业务进展、组织建设、企业文化}
+- 按内外：{对外动态、对内动态}
 
-:dart: Progress on Priorities
-- Area 1
-    - Sub-area 1
-    - Sub-area 2
-    - Sub-area 3
-- Area 2
-    - Sub-area 1
-    - Sub-area 2
-    - Sub-area 3
-- Area 3
-    - Sub-area 1
-    - Sub-area 2
-    - Sub-area 3
+确保公司各主要板块都有所覆盖。
 
-:pillar: Leadership Updates
-- Post 1
-- Post 2
-- Post 3
+## 优先级
 
-:thread: Social Updates
-- Update 1
-- Update 2
-- Update 3
+重点关注：
+- 公司层面的影响（而非某个小组的细节）
+- 管理层的公告和决策
+- 重大里程碑和成果
+- 涉及大多数员工的信息
+- 外部认可或媒体报道
+
+避免：
+- 过于细粒度的团队更新（那些放在周报里）
+- 只与少数人相关的信息
+- 已经沟通过的信息重复
+
+## 参考格式
+
+```
+【公司内部通报】YYYY.MM.DD - YYYY.MM.DD
+
+📢 公司公告
+- [公告内容]
+- [公告内容]
+
+🎯 业务进展
+- 产品线 A
+    - [进展]
+    - [进展]
+- 产品线 B
+    - [进展]
+    - [进展]
+- 市场/销售
+    - [进展]
+    - [进展]
+
+👥 组织建设
+- [人事变动/招聘进展/培训等]
+- [团队活动/文化建设等]
+
+📰 外部动态
+- [媒体报道/行业奖项/合作伙伴等]
+```

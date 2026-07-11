@@ -1,9 +1,8 @@
 ---
 name: agent-creator
 description: >
-  Creates and registers a new agent with a specific role, expertise,
-  or capability. Use when you need a specialist in a particular domain
-  and no existing agent fits the requirement.
+  创建并注册具有特定角色、专业知识或能力的新智能体（Agent）。当你需要某个特定领域的专家
+  且没有现有智能体（Agent）符合要求时使用。
 allowed-tools: sub-agent bash task-create task-list
 metadata:
   requires:
@@ -15,155 +14,90 @@ metadata:
   description_zh-tw: 建立和註冊具有特定角色、專業知識或能力的新智慧體
 ---
 
-## When to Use
+## 适用时机
 
-- User says "I need a XXX expert", "I need someone who knows XXX", "create an agent for XXX"
-- A workflow requires a specialist and no existing agent is suitable
+- 当用户说"我需要一个 XXX 专家"、"我需要一个懂 XXX 的人"、"为 XXX 创建一个智能体"
+- 当处理某项专业领域中的工作，但没有现有智能体合适
 
-**Do NOT use** when a suitable agent already exists.
+已有合适智能体（Agent）时**不要使用**。
 
-## Guiding Principle: Hypothetical Options First
+## 指导原则：先提供假设选项
 
-When collecting information, do NOT simply ask open-ended questions. Instead:
+收集信息时，不要直接问开放式问题。应该这样做：
 
-1. **Interpret the user's intent** and generate 2-4 specific hypothetical options
-2. **Present them for confirmation** — let the user pick or refine
-3. Only ask open-ended if none of the options fit
+1. **解读用户意图**，生成 2-4 个具体的假设选项
+2. **呈现选项**，让用户选择或完善
+3. 所有选项都不合适时，再提出开放式问题
 
-**Example**: If the user says "I need a project manager", respond with:
+**示例**：如果用户说"我需要一个项目经理"，回应：
 
-> I can create a project management agent. Which type fits best?
+> 我可以创建一个项目管理智能体。哪种类型最合适？
 > 
-> - **Software Project Manager** — manages development sprints, task tracking, agile workflows, and team coordination
-> - **Construction Project Manager** — oversees building projects, timelines, resource allocation, and compliance
-> - **Marketing Campaign Manager** — plans and executes marketing initiatives, tracks KPIs, manages content calendars
-> - **Other** — describe your specific needs
+> - **软件项目经理** — 管理开发冲刺、任务跟踪、敏捷工作流和团队协调
+> - **建筑项目经理** — 监督建筑项目、时间表、资源分配和合规性
+> - **营销活动经理** — 规划和执行营销活动、跟踪 KPI、管理内容日历
+> - **其他** — 描述你的具体需求
 >
-> Or do you have something else in mind?
+> 或者你有其他想法？
 
-Apply this technique to all data collection below. It reduces back-and-forth and helps the user articulate their needs faster.
+以下所有数据收集都采用这种方法。这样可以减少来回沟通，帮助用户更快明确需求。
 
-## Prerequisite: Collect Required Information
+## 前提条件：收集所需信息
 
-Before proceeding, verify whether ALL of the following information has been collected. If any item is unclear or missing, use the hypothetical-options technique above to clarify with the user.
+继续之前，先确认是否已收集所有必要信息。如果有不清楚或缺失的项目，用上述假设选项方法与用户澄清。
 
-### (a) Agent Name
+### (a) 智能体名称
 
-- Lowercase-hyphen format, noun-based, reflects the role (e.g. `python-engineer`, `security-auditor`)
+- 小写连字符格式，基于名词，反映角色（例如 `python-engineer`、`security-auditor`）
 
-### (b) Domain / Role
+### (b) 领域 / 角色
 
-- What domain does this expert belong to?
-- This becomes the human-readable role title (e.g. "Senior Frontend Engineer")
-- Include seniority if helpful
+- 这个专家属于哪个领域？
+- 这将成为人类可读的角色标题（例如"高级前端工程师"）
+- 如果有帮助，包含资历级别
 
-### (c) Work Scope & Responsibilities
+### (c) 工作范围与职责
 
-- What specific tasks will this expert handle?
-- What are the boundaries (IN scope / OUT of scope)?
-- What quality standards should they follow?
-- This information feeds into the Markdown body (the system prompt content)
+- 这个专家将处理哪些具体任务？
+- 边界是什么（范围内 / 范围外）？
+- 他们应该遵循什么质量标准？
+- 这些信息将输入到 Markdown 正文（系统提示内容）
 
-### (d) Required Skills
+### (d) 所需技能
 
-- Based on domain and responsibilities, run `mindx skill list --json` to see available skills
-- Pre-select the skills this expert needs
-- Skills are **LLM operating instructions** — each skill tells the LLM what behaviors to activate
-- Keep the list minimal — each skill adds context overhead
+- 根据领域和职责，运行 `mindx skill list --json` 查看可用技能
+- 预选专家需要的技能
+- 技能是 **LLM 操作指令**，告诉 LLM 激活什么行为
+- 保持列表精简，每个技能都会增加上下文开销
 
-### (e) Required Tools
+### (e) 所需工具
 
-- Which MindX tools does the agent need? (e.g. `Read`, `Edit`, `Bash`, `SubAgent`, `TeamCreate`)
-- Most agents need: Read, Edit, Grep, Glob, WebSearch, WebFetch, Write, Ls, AskUser, Skill — these are near-universally needed
-- Specialist agents may need: Bash (engineers), SubAgent/CollectResults (managers), Team\* (team leads), Task\* (project managers)
-- This becomes the `allowed-tools` frontmatter field
+- 智能体需要哪些工具？（例如 `Read`、`Edit`、`Bash`、`SubAgent`、`TeamCreate`）
+- 大多数智能体都需要：Read、Edit、Grep、Glob、WebSearch、WebFetch、Write、Ls、AskUser、Skill，这些几乎必不可少
+- 专家智能体可能与特定工具有相关性：Bash（工程师）、SubAgent/CollectResults（管理者）、Team\*（团队负责人）、Task\*（项目经理）
+- 这会写入 `allowed-tools` frontmatter 字段
 
-### (f) Excluded Tools
+### (f) 排除的工具
 
-- Which tools should the agent NOT have access to?
-- Determine based on role: if the agent doesn't need to delegate, exclude SubAgent/CollectResults; if it doesn't manage others, exclude Team\* tools; if it doesn't run shell commands, exclude Bash
-- This becomes the `exclude_tools` frontmatter field
+- 智能体不应该访问哪些工具？
+- 根据角色确定：不需要委派就排除 SubAgent/CollectResults；不管理他人就排除 Team\* 工具；不运行 shell 命令就排除 Bash
+- 这会写入 `exclude_tools` frontmatter 字段
 
-> If the user's description is vague, do not guess blindly — propose specific role categories and let them choose.
+> 用户描述模糊时，不要盲目猜测，提出具体的角色类别让他们选择。
 
-## Agent Definition Writing Guide
+## 智能体定义编写指南
 
-The agent definition is a Markdown file with YAML frontmatter. It must match the exact format used by existing agents in `runtime/agents/`.
+智能体定义是一个带 YAML frontmatter 的 Markdown 文件，格式必须与**完整模板**完全一致。
 
-### File Structure
 
-```markdown
----
-name: <kebab-case-id>
-role: <English Role Title>
-description: >
-  <One sentence for LLM routing: responsibility, output, boundary>
-skills:
-  - <skill-1>
-  - <skill-2>
-meta:
-  name_zh: <中文名>
-  role_zh: <中文角色>
-  description_zh: |
-    <一句话职责>，从<xxx>角度分析问题。
----
-
-I am a **<Role>**. I focus on "..." and "..."
-
-## Professional Areas
-
-...
-
-## Core Deliverables
-
-...
-
-## Behavior Rules
-
-...
-```
-
-### Frontmatter Fields
-
-| Field                 | Format           | Purpose                                                       |
-| --------------------- | ---------------- | ------------------------------------------------------------- |
-| `name`                | lowercase-hyphen | Unique machine ID                                             |
-| `role`                | ~2-5 words       | Human-readable role title                                     |
-| `description`         | <1024 chars      | For LLM routing; include responsibility, output, and boundary |
-| `skills`              | list             | Only domain-relevant skills; each adds context overhead       |
-| `allowed-tools`       | space-separated  | Tools the agent may use (list); inherit defaults if absent    |
-| `exclude_tools`       | comma-separated  | Tools the agent must NOT use (list)                           |
-| `requires.bins`       | list             | Required executables; agent skipped if bins not on PATH       |
-| `requires.env`        | list             | Required env vars; agent skipped if missing                   |
-| `meta.name_zh`        | 2-6 chars        | Chinese display name                                          |
-| `meta.role_zh`        | 2-6 chars        | Chinese role title                                            |
-| `meta.description_zh` | 1-2 sentences    | Chinese description, ending with “从...角度分析问题”          |
-
-### Body: Four-Section Format
-
-Every agent body follows this exact structure:
-
-1. **Identity Statement** — One or two sentences. State who you are and what you do NOT do. Use bold for the role name and `**not**` for boundaries.
-2. **Professional Areas** — Bullet list of domain capabilities. Format: `**Title** — explanation`.
-3. **Core Deliverables** — Bullet list of named outputs. Format: `**Deliverable Name** — what it contains`.
-4. **Behavior Rules** — Imperative rules. Each rule has a bold title and a specific, enforceable standard. Include explicit boundary rules (`Don't...`).
-
-### Style Rules
-
-- Use direct, short, imperative language.
-- Prefer absolute terms: `Every`, `All`, `Always`, `Never`, `No`, `must not`.
-- Every proposal or deliverable must state what it includes and what it excludes.
-- The definition is a **constraint list**, not a capability brag.
-- Chinese `description_zh` should end with the perspective phrase: “从...角度分析问题”.
-
-### Full Template
+### 完整模板
 
 ```markdown
 ---
 name: <kebab-case-id>
-role: <Role Title>
+role: <角色标题>
 description: >
-  <Responsibility>. <Concrete outputs>. <Scope boundary>.
+  <职责>。<具体输出>。<范围边界>。
 skills:
   - <skill-1>
   - <skill-2>
@@ -178,131 +112,161 @@ meta:
     <一句话职责>，从<xxx>角度分析问题。
 ---
 
-I am a **<Role>**. I focus on "<...>" and "<...>."
+我是 **<角色>**。我专注于"<...>"和"<...>"。
 
-## Professional Areas
+## 专业领域
 
-- **<Area 1>** — <brief description>
-- **<Area 2>** — <brief description>
-- **<Area 3>** — <brief description>
+- **<领域 1>** — <简要描述>
+- **<领域 2>** — <简要描述>
+- **<领域 3>** — <简要描述>
 
-## Core Deliverables
+## 核心交付物
 
-- **<Deliverable 1>** — <what it contains>
-- **<Deliverable 2>** — <what it contains>
+- **<交付物 1>** — <包含内容>
+- **<交付物 2>** — <包含内容>
 
-## Behavior Rules
+## 行为规则
 
-### <Imperative Rule 1>
+### <祈使规则 1>
 
-<Specific, enforceable standard.>
+<具体、可执行的标准。>
 
-### <Imperative Rule 2>
+### <祈使规则 2>
 
-<Specific, enforceable standard.>
+<具体、可执行的标准。>
 
-### Don't <Overstep>
+### 不要<越界>
 
-<Clear boundary of what this agent does NOT do.>
+<这个智能体不做什么的清晰边界。>
 ```
 
-### Examples
+### Frontmatter 字段
 
-See existing agents such as `runtime/agents/backend-engineer.md` and `runtime/agents/product-manager.md`.
+| 字段            | 格式        | 用途                                                 |
+| --------------- | ----------- | ---------------------------------------------------- |
+| `name`          | 小写连字符  | 唯一的机器 ID                                        |
+| `role`          | 约 2-5 个词 | 人类可读的角色标题                                   |
+| `description`   | <1024 字符  | 用于 LLM 路由；包含职责、输出和边界                  |
+| `skills`        | 列表        | 仅领域相关技能；每个都会增加上下文开销               |
+| `allowed-tools` | 空格分隔    | 智能体可使用的工具（列表）；缺失时继承默认值         |
+| `exclude_tools` | 逗号分隔    | 智能体不能使用的工具（列表）                         |
+| `requires.bins` | 列表        | 必需的可执行文件；如果 bins 不在 PATH 中则跳过智能体 |
+| `requires.env`  | 列表        | 必需的环境变量；如果缺失则跳过智能体                 |
+| `meta.name_zh`  | 2-6 个字符  | 中文显示名称                                         |
 
-## Workflow
 
-### Step 1: Check for Existing Agents
+### 正文：四部分格式
+
+每个智能体正文都遵循以下结构：
+
+1. **身份声明** — 一两句话说明你是谁、不做什么。角色名称用粗体，边界用 `**not**`。
+2. **专业领域** — 列出领域能力。格式：`**标题** — 解释`。
+3. **核心交付物** — 列出命名输出。格式：`**交付物名称** — 包含内容`。
+4. **行为规则** — 用祈使句写规则。每条规则有粗体标题和具体可执行的标准，包含明确的边界规则（`不要...`）。
+
+### 样式规则
+
+- 语言直接、简短、用祈使句。
+- 优先使用绝对术语：`每个`、`所有`、`总是`、`从不`、`没有`、`不得`。
+- 每个提案或交付物必须说明包含什么、不包含什么。
+- 定义是**约束列表**，不是能力吹嘘。
+- 中文 `description` 以视角短语结尾："从...角度分析问题"。
+
+
+### 示例
+
+参见现有智能体，如 `runtime/agents/backend-engineer.md` 和 `runtime/agents/product-manager.md`。
+
+## 工作流
+
+### 步骤 1：检查现有智能体
 
 ```bash
 mindx agent list --json
 ```
 
-- If an agent with the **same name** or **overlapping domain** already exists, **inform the user and stop**
-- Show which existing agent overlaps and let the user decide whether to proceed with a different role
+- 如果已存在**相同名称**或**领域重叠**的智能体，**通知用户并停止**
+- 显示哪个现有智能体重叠，让用户决定是否继续创建不同角色
 
-You can also check a specific name:
+你也可以检查特定名称：
 
 ```bash
 mindx agent get <proposed-name>
 ```
 
-### Step 2: Review Writing Guidelines
+### 步骤 2：审查编写指南
 
-Read the **Agent Definition Writing Guide** above and `references/agent-best-practices.md` before writing anything. They contain the exact format, field rules, and style constraints.
+编写之前，先阅读上面的**智能体定义编写指南**和 [Agent定义最佳实践](references/agent-best-practices.md) 文件，了解精确的格式、字段规则和样式约束。
 
-### Step 3: Query Available Skills and Models
+### 步骤 3：查询可用技能和模型
 
 ```bash
 mindx skill list --json
 mindx model list --json
 ```
 
-- Select only domain-relevant skills that **implement the behaviors this agent needs**
-- Match model complexity to task — don't waste expensive models on trivial work
+- 只选择**实现智能体所需行为**的领域相关技能
+- 根据任务复杂度匹配模型，不要在琐碎工作上用昂贵模型
 
-### Step 4: Determine Tool Access
+### 步骤 4：确定工具访问权限
 
-Based on the agent's role, determine `allowed-tools` and `exclude_tools`.
+根据智能体的角色，确定 `allowed-tools` 和 `exclude_tools`。
 
-**Manager roles** (coordinate others, delegate work):
-- Need SubAgent + CollectResults for delegation
-- May need TeamCreate/TeamDelete/TeamList/TeamGetTasks for team coordination
-- May need TaskCreate/TaskList/TaskGet/TaskUpdate for task tracking
+**管理者角色**（协调他人、委派工作）：
+- 需要 SubAgent + CollectResults 进行委派
+- 可能需要 TeamCreate/TeamDelete/TeamList/TeamGetTasks 进行团队协调
+- 可能需要 TaskCreate/TaskList/TaskGet/TaskUpdate 进行任务跟踪
 
-**Worker roles** (focused individual contributor):
-- Do NOT need SubAgent, CollectResults (no delegation)
-- Do NOT need Team* tools (no team management)
-- May still need Task* tools for self-management
+**工作者角色**（专注的个人贡献者）：
+- 不需要 SubAgent、CollectResults（不委派）
+- 不需要 Team* 工具（不管理团队）
+- 可能仍需要 Task* 工具进行自我管理
 
-**Engineer roles** (build, test, deploy):
-- Need Bash for build tools and testing
-- Do NOT need Team* tools
+**工程师角色**（构建、测试、部署）：
+- 需要 Bash 用于构建工具和测试
+- 不需要 Team* 工具（exclude_tools不支持通配符，只能指定具体工具名）
 
-**Universal tools** (keep for ALL agents):
-Read, Edit, Grep, Glob, Write, SearchReplace, Ls, AskUser, WebSearch, WebFetch, Skill, MemorySearch
+### 步骤 5：编写智能体定义
 
-### Step 5: Write the Agent Definition
+按**智能体定义编写指南**中的模板和样式规则编写 YAML frontmatter 和 Markdown 正文，正文将成为智能体的系统提示和工作指令。
 
-Use the template and style rules in the **Agent Definition Writing Guide** to write the YAML frontmatter and the Markdown body. The body becomes the agent's system prompt / working instructions.
-
-### Step 6: Create the Agent
+### 步骤 6：创建智能体
 
 ```bash
 mindx agent add <agent-name> \
     --role "Senior Role Title" \
-    --description "description for LLM routing" \
+    --description "该知能体的角色描述" \
     --skills "skill1,skill2"
 ```
 
-### Step 7: Verify
+### 步骤 7：验证
 
 ```bash
 mindx agent list --json
 ```
 
-The agent is now registered and ready for delegation.
+智能体现在已注册并准备好进行委派。
 
-## Gotchas
+## 注意事项
 
-- **Too many skills = context bloat.** Each skill adds its full text to the agent's context. 5 skills can easily consume 80% of the context window. Stick to 2-3 skills max unless the role genuinely requires more.
-- **Skills override, not supplement.** If two skills give conflicting instructions ("always include tests" vs "never write tests"), the LLM may flip between them unpredictably. Check skill boundaries before attaching both.
-- **`allowed-tools` is a restrictlist, not an allowlist for all tools.** The runtime starts with all tools available; `allowed-tools` narrows. If you list 3 tools, everything else is blocked — include ALL needed tools, not just the special ones.
-- **`exclude_tools` takes priority over `allowed-tools`.** A tool listed in both will be excluded. Use one or the other, not both.
-- **Worker agents managing people.** If you give SubAgent to a worker agent, it may start delegating work instead of doing it. Only grant delegation tools to roles that explicitly coordinate others.
-- **Inconsistent Chinese descriptions.** Mismatched `name_zh`/`description_zh` between agents makes it hard for Chinese-speaking users to discover the right agent. Keep naming consistent: a "后端工程师" should be the `backend-engineer` agent.
+- **技能太多会导致上下文膨胀。** 每个技能的完整文本都会加入智能体上下文，5 个技能可能消耗 80% 的上下文窗口。除非角色确实需要，否则最多 2-3 个技能。
+- **技能会相互覆盖，而非补充。** 两个技能如果给出冲突指令（"总是包含测试"与"从不编写测试"），LLM 可能在它们之间不可预测地切换。添加前检查技能边界。
+- **`allowed-tools` 是限制列表，不是允许列表。** 运行时所有工具默认可用，`allowed-tools` 用来缩小范围。如果只列 3 个工具，其他工具都会被禁用，所以要包含所有需要的工具，不只是特殊的。
+- **`exclude_tools` 优先于 `allowed-tools`。** 同时列在两者中的工具会被排除，二选一使用。
+- **工作者智能体可能开始管理他人。** 给工作者智能体 SubAgent 后，它可能开始委派工作而不是自己做。只把委派工具授予明确需要协调他人的角色。
+- **中文描述要一致。** 智能体间不匹配的 `name_zh`/`description_zh` 会让中文用户难以找到正确的智能体。保持命名一致："后端工程师"对应 `backend-engineer` 智能体。
 
-## Anti-Patterns
+## 反模式
 
-- **Creating an agent when a skill would suffice** — if the user needs a behavior (reusable instruction), make a skill. If they need a persona with hard boundaries, make an agent.
-- **Over-scoped descriptions** — a description that promises too much leads to misrouting and failed expectations. Be precise about what the agent does and doesn't.
-- **Generic agents** — "I am a helpful assistant" adds nothing. Every agent should have a specific domain, perspective, and set of constraints.
-- **Copying without customization** — using another agent's template as-is without adapting the behavior rules to the new role.
-- **Skipping the existing check** — running `mindx agent add` without checking if a suitable agent already exists.
+- **技能够用却创建智能体** — 用户需要可重用指令就创建技能，需要硬边界角色才创建智能体。
+- **描述范围过大** — 承诺太多会导致错误路由和期望落空，精确说明智能体做什么、不做什么。
+- **通用智能体** — "我是一个有用的助手"毫无意义，每个智能体应有特定领域、视角和约束。
+- **复制不定制** — 直接套用其他智能体模板而不调整行为规则到新角色。
+- **跳过现有检查** — 没检查是否已有合适智能体就运行 `mindx agent add`。
 
-## Important Notes
+## 重要说明
 
-- **All fields are for LLM consumption unless explicitly stated otherwise.** Write clearly and precisely — vague descriptions lead to misrouting.
-- **Skills are operating instructions** that tell the LLM what behaviors to exhibit, not feature flags for human users.
-- **Less is more** — an overly broad agent with too many skills will be less effective than a focused specialist.
-- **Always propose options before asking open-ended questions.** This makes the interaction faster and helps users clarify their own needs.
+- **所有字段都供 LLM 使用，除非另有说明。** 写得清晰精确，模糊描述会导致错误路由。
+- **技能是操作指令**，告诉 LLM 表现什么行为，不是给用户的功能开关。
+- **少即是多** — 技能太多、范围太广的智能体不如专注的专家有效。
+- **提开放式问题前先提供选项。** 这样交互更快，也能帮助用户厘清需求。

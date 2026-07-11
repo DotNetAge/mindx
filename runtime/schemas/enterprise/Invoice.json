@@ -1,39 +1,39 @@
 {
   "type": "object",
-  "description": "Invoice, bill, receipt, or payment record representing a request for payment",
+  "description": "发票、账单、收据或付款记录，代表付款请求",
   "properties": {
     "invoice_number": {
       "type": "string",
-      "description": "Unique invoice identifier or reference number (e.g., INV-2024-001)"
+      "description": "发票唯一标识或参考编号（如 INV-2024-001）"
     },
     "customer": {
       "type": "string",
-      "description": "Customer or recipient name the invoice is issued to"
+      "description": "发票开具的客户或收件人名称"
     },
-    "amount": { "type": "number", "description": "Total invoice amount due" },
+    "amount": { "type": "number", "description": "发票应付总金额" },
     "currency": {
       "type": "string",
-      "description": "Currency code for the invoice amount (e.g., USD, EUR, CNY)"
+      "description": "发票金额的货币代码（例如：USD、EUR、CNY）"
     },
     "issue_date": {
       "type": "string",
       "format": "date",
-      "description": "Date the invoice was issued (ISO 8601 format)"
+      "description": "发票开具日期（ISO 8601 格式）"
     },
     "due_date": {
       "type": "string",
       "format": "date",
-      "description": "Payment due date (ISO 8601 format)"
+      "description": "付款截止日期（ISO 8601 格式）"
     },
     "status": {
       "type": "string",
       "enum": ["draft", "sent", "paid", "overdue", "cancelled"],
-      "description": "Current payment status of the invoice"
+      "description": "发票当前的付款状态"
     },
     "line_items": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "List of line items or services described on the invoice"
+      "description": "发票上描述的明细项目或服务列表"
     }
   },
   "required": ["invoice_number", "customer", "amount"]

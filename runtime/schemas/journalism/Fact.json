@@ -1,31 +1,31 @@
 {
   "type": "object",
-  "description": "A verified fact, data point, or statistic used in journalism",
+  "description": "新闻报道中使用的已核实事实、数据点或统计数据",
   "properties": {
     "statement": {
       "type": "string",
-      "description": "The factual statement or data point"
+      "description": "事实性陈述或数据点"
     },
     "category": {
       "type": "string",
-      "description": "The type of factual information",
+      "description": "事实信息的类型",
       "enum": ["data", "statistic", "verified_info", "historical", "legal"]
     },
     "source": {
       "type": "string",
-      "description": "The original source or authority providing this fact"
+      "description": "提供该事实的原始来源或权威机构"
     },
     "date_verified": {
       "type": "string",
-      "description": "The date this fact was last verified (ISO 8601 format preferred)"
+      "description": "该事实最后一次核实的日期（优先使用 ISO 8601 格式）"
     },
     "methodology": {
       "type": "string",
-      "description": "The method used to obtain or verify this fact, if applicable"
+      "description": "获取或核实该事实所使用的方法（如适用）"
     },
     "related_claims": {
       "type": "array",
-      "description": "References to claims that relate to this fact",
+      "description": "与该事实相关的声明引用",
       "items": {
         "type": "string"
       }

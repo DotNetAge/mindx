@@ -1,8 +1,8 @@
 {
   "type": "object",
-  "description": "Treatment, therapy, regimen, or medication class",
+  "description": "治疗、疗法、方案或药物类别",
   "properties": {
-    "name": { "type": "string", "description": "Treatment or therapy name" },
+    "name": { "type": "string", "description": "治疗或疗法名称" },
     "treatment_type": {
       "type": "string",
       "enum": ["therapy", "medication", "surgery", "lifestyle"],
@@ -20,11 +20,11 @@
     "side_effects": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Possible side effects"
+      "description": "可能的副作用"
     },
     "duration": {
       "type": "string",
-      "description": "Typical treatment duration"
+      "description": "典型的治疗周期"
     }
   },
   "required": ["name"]

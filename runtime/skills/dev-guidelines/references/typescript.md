@@ -1,6 +1,6 @@
-# TypeScript / Node.js Backend Development Guidelines
+# TypeScript / Node.js 后端开发指南
 
-## Project Structure (2026 Standard)
+## 项目结构（2026 标准）
 
 ```
 project_name/
@@ -46,26 +46,26 @@ project_name/
 └── scripts/
 ```
 
-**Key principle: Feature-based (modules/) over layer-based. Each module is a bounded context with its own model/service/repository/routes.**
+**关键原则：基于特性（modules/）优于基于层级。每个模块都是一个有界上下文，包含自己的 model/service/repository/routes。**
 
-## Naming Conventions
+## 命名约定
 
-| Element | Convention | Example |
+| 元素 | 约定 | 示例 |
 |---------|-----------|---------|
-| File | `kebab-case.ts` | `user-service.ts`, `app-error.ts` |
-| Class | `PascalCase` | `UserService`, `AppError` |
-| Interface | `PascalCase` or `I` prefix (team choice, be consistent) | `IUserRepository` or `UserRepository` |
-| Type alias | `PascalCase` | `CreateUserRequest`, `UserId` |
-| Enum | `PascalCase` | `UserRole`, `OrderStatus` |
-| Function/method | `camelCase` | `getById()`, `calculateTotal()` |
-| Variable/const | `camelCase` | `userId`, `is_active`, `maxRetries` |
-| Constant (true const) | `UPPER_SNAKE_CASE` | `MAX_RETRY_COUNT`, `DEFAULT_TIMEOUT_MS` |
-| Boolean | `is/has/can/should` prefix | `isValid`, `hasPermission`, `canDelete` |
-| Private | `_prefix` (optional) | `_internalCache` |
-| Generic type parameter | `T`, single letter | `Promise<T>`, `Repository<T>` |
-| Test file | `*.spec.ts` or `*.test.ts` | `user.service.spec.ts` |
+| 文件 | `kebab-case.ts` | `user-service.ts`, `app-error.ts` |
+| 类 | `PascalCase` | `UserService`, `AppError` |
+| 接口 | `PascalCase` 或 `I` 前缀（团队选择，保持一致） | `IUserRepository` 或 `UserRepository` |
+| 类型别名 | `PascalCase` | `CreateUserRequest`, `UserId` |
+| 枚举 | `PascalCase` | `UserRole`, `OrderStatus` |
+| 函数/方法 | `camelCase` | `getById()`, `calculateTotal()` |
+| 变量/const | `camelCase` | `userId`, `is_active`, `maxRetries` |
+| 常量（真正的 const） | `UPPER_SNAKE_CASE` | `MAX_RETRY_COUNT`, `DEFAULT_TIMEOUT_MS` |
+| 布尔值 | `is/has/can/should` 前缀 | `isValid`, `hasPermission`, `canDelete` |
+| 私有成员 | `_prefix`（可选） | `_internalCache` |
+| 泛型类型参数 | `T`，单字母 | `Promise<T>`, `Repository<T>` |
+| 测试文件 | `*.spec.ts` 或 `*.test.ts` | `user.service.spec.ts` |
 
-### Import Order (eslint import plugin)
+### 导入顺序（eslint import 插件）
 
 ```typescript
 // 1. Node builtins (rare in modern TS)
@@ -85,14 +85,14 @@ import { validateEmail } from "./user.validators.js";
 import type { CreateUserDTO } from "./user.dto.js";
 ```
 
-**Rules:**
-- Always use `.js` extension in imports (required by ESM in Node.js)
-- Use path aliases (`@/`) for cross-module imports — no deep relative paths (`../../../`)
-- Use `import type` for type-only imports (tree-shakeable)
+**规则：**
+- 导入中始终使用 `.js` 扩展名（Node.js 中 ESM 要求）
+- 跨模块导入使用路径别名（`@/`）—— 不使用深层相对路径（`../../../`）
+- 仅类型导入使用 `import type`（可 tree-shake）
 
-## Code Organization
+## 代码组织
 
-### Error Handling Pattern
+### 错误处理模式
 
 ```typescript
 // common/errors/app-error.ts
@@ -152,7 +152,7 @@ async getByIdBad(userId: string): Promise<User | null> {
 }
 ```
 
-### Service Pattern
+### Service 模式
 
 ```typescript
 // modules/user/user.service.ts
@@ -195,18 +195,18 @@ export class UserService {
 }
 ```
 
-## Testing Standards
+## 测试标准
 
-### Framework Stack
+### 框架栈
 
-| Layer | Framework | Purpose |
+| 层级 | 框架 | 用途 |
 |-------|-----------|---------|
-| Unit | **Vitest** | Business logic, pure functions |
-| Mocking | **vitest mocks** or **ts-mockito** | External dependencies |
-| API testing | **supertest** + app factory | Endpoint contracts |
-| Snapshot | **@snapshot/** or vitest snapshot | Output stability |
+| 单元测试 | **Vitest** | 业务逻辑，纯函数 |
+| Mock | **vitest mocks** 或 **ts-mockito** | 外部依赖 |
+| API 测试 | **supertest** + app factory | 端点契约 |
+| 快照测试 | **@snapshot/** 或 vitest snapshot | 输出稳定性 |
 
-### Test Structure
+### 测试结构
 
 ```typescript
 // tests/unit/modules/user/user.service.spec.ts
@@ -257,53 +257,53 @@ describe("UserService", () => {
 });
 ```
 
-**Rules:**
-- `describe` → `it` structure (Jest/Vitest style)
-- `beforeEach` for clean state per test
-- Mock external dependencies, test business logic in isolation
-- Test name: `"should {expected behavior} when {condition}"`
-- Target >80% coverage on services/repositories
+**规则：**
+- `describe` → `it` 结构（Jest/Vitest 风格）
+- `beforeEach` 为每个测试提供干净状态
+- 模拟外部依赖，隔离测试业务逻辑
+- 测试名称：`"should {expected behavior} when {condition}"`
+- 服务/仓库的目标覆盖率 >80%
 
-## Security Checklist (TypeScript-Specific)
+## 安全检查清单（TypeScript 特定）
 
-| Check | Rule |
+| 检查项 | 规则 |
 |-------|------|
-| SQL Injection | Use ORM parameterized queries (Prisma/drizzle/Knex). Never template literals for SQL |
-| XSS | Sanitize user input before rendering. Use DOMPurify for HTML context |
-| Prototype Pollution | Validate objects against Zod schemas before use. Never `Object.assign(req.body, ...)` without validation |
-| Dependency Confusion | Lock `package-lock`. Run `npm audit` or `pnpm audit` in CI. Use `pnpm` over npm (better security) |
-| Secret Leakage | No secrets in source. Use `.env` + validation via `zod-env-safe` or similar |
-| Regex DoS | Avoid unvalidated regex on user input (ReDoS). Use safe-regex or limit input length |
-| eval / Function() | NEVER use `eval()`, `new Function()`, or `vm.runInThisContext()` with user input |
+| SQL 注入 | 使用 ORM 参数化查询（Prisma/drizzle/Knex）。绝不在 SQL 中使用模板字面量 |
+| XSS | 渲染前清理用户输入。HTML 上下文使用 DOMPurify |
+| 原型污染 | 使用前根据 Zod schema 验证对象。未经验证绝不使用 `Object.assign(req.body, ...)` |
+| 依赖混淆 | 锁定 `package-lock`。在 CI 中运行 `npm audit` 或 `pnpm audit`。优先使用 `pnpm` 而非 npm（更好的安全性） |
+| 密钥泄漏 | 源代码中不包含密钥。使用 `.env` + 通过 `zod-env-safe` 或类似工具验证 |
+| 正则 DoS | 避免对用户输入使用未验证的正则（ReDoS）。使用 safe-regex 或限制输入长度 |
+| eval / Function() | 绝不使用 `eval()`、`new Function()`，或带用户输入的 `vm.runInThisContext()` |
 
-## Performance Patterns
+## 性能模式
 
-| Pattern | Anti-Pattern |
+| 模式 | 反模式 |
 |---------|-------------|
-| `Promise.all()` for parallel I/O | Sequential `await` in a loop |
-| `for...of` with `await` inside for sequential needs | `Promise.all` when order doesn't matter |
-| Streaming for large payloads (`ReadableStream`) | Loading everything into memory |
-| Response caching (Redis/CDN) for repeated reads | Hitting DB every time |
-| Connection pooling (pg pool) | Creating new connections per request |
-| Lazy loading dynamic imports (`import()`) | Eager loading unused modules |
-| Debounce/throttle for rate-limited APIs | Fire-and-forget without rate limiting |
-| Worker threads for CPU-intensive tasks | Blocking the event loop |
+| 并行 I/O 使用 `Promise.all()` | 循环中顺序 `await` |
+| 顺序需求时在 `for...of` 内使用 `await` | 顺序无关时使用 `Promise.all` |
+| 大负载使用流式处理（`ReadableStream`） | 将所有内容加载到内存 |
+| 重复读取使用响应缓存（Redis/CDN） | 每次都查询数据库 |
+| 连接池（pg pool） | 每个请求创建新连接 |
+| 动态导入延迟加载（`import()`） | 预加载未使用的模块 |
+| 限流 API 使用防抖/节流 | 无限流的 fire-and-forget |
+| CPU 密集型任务使用 Worker threads | 阻塞事件循环 |
 
-## Ecosystem Toolchain
+## 生态工具链
 
-| Tool | Purpose |
+| 工具 | 用途 |
 |------|---------|
-| **TypeScript** (strict mode) | Type system |
-| **Biome** (or ESLint + Prettier) | Linter + formatter (Biome is faster, all-in-one) |
-| **Vitest** | Testing framework |
-| **tsx** | TypeScript execution (dev/test) |
-| **tsx / tsup** | Build tooling |
-| **Zod** | Runtime schema validation |
-| **Prisma** / **drizzle-orm** | Database ORM |
-| **tRPC** | End-to-end typed APIs (optional but recommended) |
-| **pnpm** | Package manager (fast, disk-efficient) |
+| **TypeScript**（严格模式） | 类型系统 |
+| **Biome**（或 ESLint + Prettier） | Linter + 格式化器（Biome 更快，一体化） |
+| **Vitest** | 测试框架 |
+| **tsx** | TypeScript 执行（开发/测试） |
+| **tsx / tsup** | 构建工具 |
+| **Zod** | 运行时 schema 验证 |
+| **Prisma** / **drizzle-orm** | 数据库 ORM |
+| **tRPC** | 端到端类型化 API（可选但推荐） |
+| **pnpm** | 包管理器（快速，磁盘高效） |
 
-### Biome Config (Recommended)
+### Biome 配置（推荐）
 
 ```jsonc
 // biome.json

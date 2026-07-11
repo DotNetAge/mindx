@@ -21,36 +21,28 @@ func NewSendMessage() tools.FuncTool {
 func (t *SendMessage) Info() *tools.ToolInfo {
 	return &tools.ToolInfo{
 		Name:        "SendMessage",
-		Description: "Send a notification to the macOS Notification Center. Only registered on macOS.",
-		Prompt: `Send a notification to the macOS Notification Center using osascript. This tool is only available on macOS.
+		Description: "向 macOS 通知中心发送通知。仅在 macOS 上可用。",
+		Prompt: `使用 osascript 向 macOS 通知中心发送通知。此工具仅在 macOS 上可用。
 
-Use this to alert the user about long-running task completions, important updates, or when input is needed.
-
-The notification appears as a standard macOS notification banner/alert. The subtitle field is optional but helps organize related notifications.
-
-Examples:
-- Notify when a background task completes: title="Build Complete", message="The project build finished successfully"
-- Remind about updates: title="Daily Report", message="Your daily summary is ready", subtitle="Scheduled Task"
-
-Only supported on macOS. Returns an error on Linux or Windows.`,
+通知显示为标准的 macOS 通知横幅/提醒。副标题字段可选，有助于组织相关通知。`,
 		IsReadOnly: true,
 		Parameters: []tools.Parameter{
 			{
 				Name:        "title",
 				Type:        "string",
-				Description: "Notification title (bold text at the top of the notification).",
+				Description: "通知标题（通知顶部的粗体文本）。",
 				Required:    true,
 			},
 			{
 				Name:        "message",
 				Type:        "string",
-				Description: "Notification body text (the main message content).",
+				Description: "通知正文（主要消息内容）。",
 				Required:    true,
 			},
 			{
 				Name:        "subtitle",
 				Type:        "string",
-				Description: "Optional subtitle text (smaller text below the title).",
+				Description: "可选副标题（标题下方较小的文本）。",
 				Required:    false,
 			},
 		},
@@ -60,12 +52,12 @@ Only supported on macOS. Returns an error on Linux or Windows.`,
 func (t *SendMessage) Execute(ctx context.Context, params map[string]any) (any, error) {
 	title, err := tools.ValidateRequiredString(params, "title")
 	if err != nil {
-		return nil, fmt.Errorf("SendMessage: title is required: %w", err)
+		return nil, fmt.Errorf("SendMessage：title 为必填项：%w", err)
 	}
 
 	message, err := tools.ValidateRequiredString(params, "message")
 	if err != nil {
-		return nil, fmt.Errorf("SendMessage: message is required: %w", err)
+		return nil, fmt.Errorf("SendMessage：message 为必填项：%w", err)
 	}
 
 	subtitle, _ := params["subtitle"].(string)
@@ -83,7 +75,7 @@ func (t *SendMessage) Execute(ctx context.Context, params map[string]any) (any, 
 
 	cmd := exec.CommandContext(ctx, "osascript", "-e", script.String())
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("SendMessage: failed to send notification: %w", err)
+		return nil, fmt.Errorf("SendMessage：发送通知失败：%w", err)
 	}
 
 	return map[string]any{

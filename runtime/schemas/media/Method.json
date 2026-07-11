@@ -17,7 +17,7 @@
     "steps": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Step-by-step instructions for implementing the method"
+      "description": "实施该方法的分步指导"
     },
     "platform": {
       "type": "string",
@@ -25,7 +25,7 @@
     },
     "effectiveness": {
       "type": "string",
-      "description": "Observed or expected effectiveness of the method, e.g. 高, 中, 低 or specific metrics"
+      "description": "该方法观察到的或预期的效果，例如：高、中、低或具体指标"
     }
   },
   "required": ["name"]

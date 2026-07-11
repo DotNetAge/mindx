@@ -6,15 +6,15 @@
     "procedure_type": {
       "type": "string",
       "enum": ["surgery", "examination", "diagnostic"],
-      "description": "Category of procedure"
+      "description": "程序类别"
     },
     "description": {
       "type": "string",
-      "description": "Detailed description of the procedure"
+      "description": "程序的详细描述"
     },
     "duration": {
       "type": "string",
-      "description": "Typical duration of the procedure"
+      "description": "程序的典型持续时间"
     },
     "risks": {
       "type": "array",
@@ -23,7 +23,7 @@
     },
     "recovery_time": {
       "type": "string",
-      "description": "Typical recovery time after the procedure"
+      "description": "程序后的典型恢复时间"
     }
   },
   "required": ["name"]

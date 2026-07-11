@@ -1,71 +1,71 @@
-# Douyin (抖音) — Content Reference
+# 抖音 — 内容参考
 
-## Platform Context
+## 平台背景
 
-- Algorithm optimized for user behavior signals, not tags.
-- 3-second hook determines whether video gets through cold start.
-- Key metrics: completion rate → replay rate → interaction rate → share rate
-- Vertical video (9:16), fast-paced, visually dense.
-- 15-60s is standard. 1-3min long-form is rising for knowledge content.
+- 算法基于用户行为信号优化，而非标签。
+- 前3秒的钩子决定视频能否通过冷启动。
+- 关键指标：完播率 → 重播率 → 互动率 → 分享率
+- 竖屏视频（9:16），节奏快，视觉信息密集。
+- 15-60秒为标准时长，知识类内容正在向1-3分钟长视频发展。
 
-## Script Structure — "3秒钩子+中间锚点+结尾引导"
+## 脚本结构 — "3秒钩子+中间锚点+结尾引导"
 
 ```
-0-3 seconds: Hook (must stop scroll)
-  Type A — Suspense: "90% of people don't know..." + visual surprise
-  Type B — Pain point: extreme close-up of the problem
-  Type C — Counter-intuitive: "Stop doing [common habit] right now"
+0-3秒：钩子（必须让用户停下滑动）
+  A类 — 悬念："90%的人都不知道..." + 视觉冲击
+  B类 — 痛点：问题的极致特写
+  C类 — 反常识："别再[常见习惯]了，马上停"
 
-3-15 seconds: Pain concretization
-  Make the problem feel real with data and scenarios
-  "You spend [N] hours a week on [X] without realizing"
+3-15秒：痛点具象化
+  用数据和场景让问题变得真实可感
+  "你每周在[某事]上花了[N]小时，自己却没意识到"
 
-15-30 seconds: Solution reveal
-  Show the method/product with step-by-step or demo
-  Fast cuts, text overlays, zoom on key details
+15-30秒：解决方案揭晓
+  逐步展示方法/产品，配合演示
+  快速剪辑、文字叠加、关键细节放大
 
-30s+: Depth expansion
-  Flip camera angle every 3-5 seconds
-  Every 5 seconds: one interest point (data point, example, joke)
-  Include interaction prompts mid-video
+30秒以上：深度展开
+  每3-5秒切换镜头角度
+  每5秒：一个兴趣点（数据、案例、笑点）
+  视频中穿插互动引导
 
-Closing: Call to action
-  "Save this for later" (boosts收藏/replay)
-  "Share with someone who needs this"
-  "Comment [keyword] for the full guide"
+结尾：行动号召
+  "先收藏，早晚用得上"（提升收藏/重播率）
+  "转给需要的朋友"
+  "评论区回复[关键词]领取完整攻略"
 ```
 
-## Writing Style
+## 写作风格
 
-- Oral language. Speak like you're talking to a friend.
-- "Short sentences + emotional punctuation" rhythm.
-- Every 10s: one emotional spike (reversal, laugh, surprise, realization).
-- No written Chinese intonation — it sounds like a script when read aloud.
-- Keywords embedded naturally for recommendation matching.
+- 口语化表达，像跟朋友聊天一样。
+- "短句+情绪化标点"的节奏感。
+- 每10秒：一个情绪高点（反转、笑点、惊喜、顿悟）。
+- 避免书面语腔调——念出来像念稿就失败了。
+- 关键词自然嵌入，便于推荐算法匹配。
 
-## Visual Standards
+## 视觉标准
 
-- 9:16 vertical. 1080x1920 minimum.
-- Caption overlays on screen (many users watch without sound).
-- Text animation: 0.3s flash effects for key claims.
-- Every 3-5 seconds: scene/angle change.
-- First 0.5 seconds: visual "bomb" (slow-motion, extreme close-up, dramatic movement).
+- 9:16竖屏，最低1080x1920分辨率。
+- 画面叠加字幕（很多用户静音刷视频）。
+- 文字动画：关键论点用0.3秒闪现效果。
+- 每3-5秒：切换场景或角度。
+- 前0.5秒：视觉"炸弹"（慢动作、极致特写、戏剧性运动）。
 
-## Emotional Anchor Types
+## 情绪锚点类型
 
-- **Satisfaction**: before/after, problem → fixed, messy → organized
-- **Anxiety → relief**: "Your [X] is damaging [Y]. Here's how to fix it."
-- **Novelty**: counter-intuitive fact, hidden feature, "nobody told you this"
-- **Relatability**: shared frustration, "anyone else...?"
+- **满足感**：前后对比，问题→解决，混乱→整洁
+- **焦虑→释然**："你的[某物]正在损害[某事]。教你一招搞定。"
+- **新鲜感**：反常识的事实、隐藏功能、"没人告诉过你这个"
+- **共鸣感**：共同的困扰、"有没有人也..."
 
-## Quality Checklist
+## 质量检查清单
 
-- [ ] First 0.5s has visual impact
-- [ ] Hook within 3 seconds
-- [ ] Every 5s has an interest point
-- [ ] Caption overlays for key information
-- [ ] Scene changes every 3-5 seconds
-- [ ] Emotional anchor built into script
-- [ ] CTA included in closing
-- [ ] Duration appropriate for content type (30-60s typical)
-- [ ] Vertical 9:16 format
+- [ ] 前0.5秒有视觉冲击力
+- [ ] 3秒内出现钩子
+- [ ] 每5秒有一个兴趣点
+- [ ] 关键信息有字幕叠加
+- [ ] 每3-5秒切换场景
+- [ ] 脚本中设计了情绪锚点
+- [ ] 结尾包含行动号召
+- [ ] 时长与内容类型匹配（通常30-60秒）
+- [ ] 竖屏9:16格式

@@ -1,11 +1,11 @@
 {
   "type": "object",
-  "description": "Specific drug, medication, dosage, or formulation",
+  "description": "特定药物、药品、剂量或制剂",
   "properties": {
-    "name": { "type": "string", "description": "Brand or common drug name" },
+    "name": { "type": "string", "description": "药品品牌名或通用名" },
     "generic_name": {
       "type": "string",
-      "description": "Generic/INN name of the drug"
+      "description": "药物的通用名/INN 名称"
     },
     "drug_class": {
       "type": "string",
@@ -23,7 +23,7 @@
     "side_effects": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Common or notable side effects"
+      "description": "常见或显著的副作用"
     }
   },
   "required": ["name"]

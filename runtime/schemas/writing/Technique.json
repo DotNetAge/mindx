@@ -17,11 +17,11 @@
     },
     "effect": {
       "type": "string",
-      "description": "The artistic or rhetorical effect produced by this technique"
+      "description": "该技巧所产生的艺术或修辞效果"
     },
     "example_usage": {
       "type": "string",
-      "description": "A concrete example illustrating how this technique is applied in practice"
+      "description": "说明该技巧在实际中如何应用的具体示例"
     }
   },
   "required": ["name"]

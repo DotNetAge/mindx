@@ -1,9 +1,9 @@
 {
   "type": "object",
-  "description": "Disease, condition, diagnosis",
+  "description": "疾病、病症、诊断",
   "properties": {
-    "name": { "type": "string", "description": "Disease or condition name" },
-    "icd_code": { "type": "string", "description": "ICD code if available" },
+    "name": { "type": "string", "description": "疾病或病症名称" },
+    "icd_code": { "type": "string", "description": "ICD 编码（如有）" },
     "symptoms": {
       "type": "array",
       "items": { "type": "string" },
@@ -19,7 +19,7 @@
       "items": { "type": "string" },
       "description": "Common treatments or therapies"
     },
-    "specialty": { "type": "string", "description": "Medical specialty" }
+    "specialty": { "type": "string", "description": "医学专科" }
   },
   "required": ["name"]
 }

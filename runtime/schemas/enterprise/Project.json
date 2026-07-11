@@ -14,7 +14,7 @@
     "status": {
       "type": "string",
       "enum": ["planned", "in_progress", "on_hold", "completed", "cancelled"],
-      "description": "Current phase or status of the project"
+      "description": "项目当前的阶段或状态"
     },
     "start_date": {
       "type": "string",
@@ -24,11 +24,11 @@
     "end_date": {
       "type": "string",
       "format": "date",
-      "description": "Project end or target completion date (ISO 8601 format)"
+      "description": "项目结束或目标完成日期（ISO 8601 格式）"
     },
     "budget": {
       "type": "number",
-      "description": "Approved budget or allocated funds for the project"
+      "description": "项目已批准的预算或已拨付的资金"
     }
   },
   "required": ["name"]

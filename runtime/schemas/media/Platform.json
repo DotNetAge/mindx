@@ -9,7 +9,7 @@
     "platform_type": {
       "type": "string",
       "enum": ["social", "video", "live", "audio", "text"],
-      "description": "Category of the platform: social (social network), video (video sharing), live (live streaming), audio (podcast/music), text (blog/article)"
+      "description": "平台类别：social（社交网络）、video（视频分享）、live（直播）、audio（播客/音乐）、text（博客/文章）"
     },
     "region": {
       "type": "string",
@@ -17,12 +17,12 @@
     },
     "user_base_size": {
       "type": "string",
-      "description": "Estimated size of the platform's user base, e.g. 1B+ MAU, 100M+ DAU"
+      "description": "平台用户规模的估算值，例如：10亿+ MAU、1亿+ DAU"
     },
     "url": {
       "type": "string",
       "format": "uri",
-      "description": "Official website URL of the platform"
+      "description": "平台的官方网站地址"
     }
   },
   "required": ["name"]

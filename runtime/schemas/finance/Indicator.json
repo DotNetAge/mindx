@@ -1,28 +1,28 @@
 {
   "type": "object",
-  "description": "Economic or technical indicator — K-line, PE ratio, GDP, CPI, moving average, RSI",
+  "description": "经济或技术指标 — K线、市盈率、GDP、CPI、移动平均线、RSI",
   "properties": {
-    "name": { "type": "string", "description": "Indicator name" },
+    "name": { "type": "string", "description": "指标名称" },
     "indicator_type": {
       "type": "string",
       "enum": ["economic", "technical", "fundamental"],
-      "description": "Category of the indicator"
+      "description": "指标类别"
     },
     "value": {
       "type": "number",
-      "description": "Current numeric value of the indicator"
+      "description": "指标的当前数值"
     },
     "unit": {
       "type": "string",
-      "description": "Unit of measurement (e.g., %, points, USD, ratio)"
+      "description": "计量单位（如 %、点、USD、比率）"
     },
     "frequency": {
       "type": "string",
-      "description": "Reporting frequency (e.g., daily, weekly, monthly, quarterly, annual)"
+      "description": "发布频率（如每日、每周、每月、每季度、每年）"
     },
     "source": {
       "type": "string",
-      "description": "Data source or publisher of the indicator"
+      "description": "指标的数据来源或发布机构"
     }
   },
   "required": ["name", "indicator_type"]

@@ -1,18 +1,18 @@
 {
   "type": "object",
-  "description": "Business metrics: market share, growth rate, DAU, NPS, etc.",
+  "description": "业务指标：市场份额、增长率、DAU、NPS 等",
   "properties": {
-    "name": { "type": "string", "description": "Metric name" },
+    "name": { "type": "string", "description": "指标名称" },
     "metric_type": {
       "type": "string",
-      "description": "Metric type: market_share, growth, DAU, NPS, or revenue"
+      "description": "指标类型：市场份额、增长、DAU、NPS 或营收"
     },
-    "value": { "type": "string", "description": "Metric value" },
+    "value": { "type": "string", "description": "指标数值" },
     "benchmark": {
       "type": "string",
-      "description": "Industry benchmark or comparison"
+      "description": "行业基准或对比数据"
     },
-    "source": { "type": "string", "description": "Data source" }
+    "source": { "type": "string", "description": "数据来源" }
   },
   "required": ["name"]
 }

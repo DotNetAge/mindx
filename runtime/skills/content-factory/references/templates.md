@@ -1,73 +1,73 @@
-# Content Ops Templates
+# 内容运营模板
 
-## Content Brief
+## 内容简报
 
 ```markdown
-# Content Brief — [Brand/Project]
+# 内容简报 — [品牌/项目]
 
-## Overview
-[One-line description]
+## 概述
+[一句话描述]
 
-## Target Platforms
-- Primary: [platform]
-- Secondary: [platforms]
+## 目标平台
+- 主平台：[平台]
+- 辅助平台：[平台]
 
-## Audience Persona
-- Demographics: [age, gender, city tier]
-- Psychographics: [interests, pain points]
-- Content preferences: [what they engage with]
+## 受众画像
+- 人口统计：[年龄、性别、城市线级]
+- 心理特征：[兴趣、痛点]
+- 内容偏好：[他们喜欢消费什么内容]
 
-## Success Metrics
-- [Platform]: [KPI targets]
+## 成功指标
+- [平台]：[KPI目标]
 
-## Brand Voice
-[Tone, style, personality]
+## 品牌调性
+[语气、风格、人设]
 
-## Cadence
-- [Platform]: [frequency]
+## 发布节奏
+- [平台]：[频率]
 
-## Competitor References
-- [Competitor]: [what they do well]
+## 竞品参考
+- [竞品]：[他们做得好的地方]
 ```
 
-## Content Calendar
+## 内容日历
 
 ```markdown
-# Content Calendar — [Brand] — Week [N] of [M]
+# 内容日历 — [品牌] — 第[N]周/共[M]周
 
-| Week | Mon              | Tue              | Wed       | Thu               | Fri         |
+| 周次 | 周一              | 周二              | 周三       | 周四               | 周五         |
 | ---- | ---------------- | ---------------- | --------- | ----------------- | ----------- |
-| W1   | Xiaohongshu:[t]  | WeChat OA:[t]    | Research  | Douyin:[t]        | Edit        |
-| W2   | Xiaohongshu:[t]  | Douyin:[t]       | WeChat:[t]| Bilibili:[t]      | Weibo:[t]   |
+| W1   | 小红书:[t]        | 公众号:[t]        | 调研       | 抖音:[t]           | 剪辑         |
+| W2   | 小红书:[t]        | 抖音:[t]          | 公众号:[t] | B站:[t]            | 微博:[t]      |
 ```
 
-## Quality Gate Report
+## 质量关卡报告
 
 ```
-Quality Gate Report — [Title] ([Platform])
-Gate 1 — Brand Voice:      PASS / FAIL
-Gate 2 — Factual Accuracy: PASS / FAIL
-Gate 3 — Platform Quality:  PASS / FAIL
-Gate 4 — Visual:            PASS / FAIL
-Gate 5 — Performance:       PASS / FAIL
-Overall: APPROVED / REVISIONS REQUIRED
+质量关卡报告 — [标题]（[平台]）
+关卡1 — 品牌调性：      通过 / 未通过
+关卡2 — 事实准确性：    通过 / 未通过
+关卡3 — 平台质量：      通过 / 未通过
+关卡4 — 视觉质量：      通过 / 未通过
+关卡5 — 传播效果：      通过 / 未通过
+综合评定：通过 / 需要修改
 ```
 
-## Performance Report
+## 数据报告
 
 ```markdown
-## Performance Report — [Brand] — Week [N]
+## 数据报告 — [品牌] — 第[N]周
 
-### [Platform]
-Published: [N] | Key metric: [value]
-Best: "[title]" — [metric] — Why: [analysis]
-Worst: "[title]" — [metric] — Fix: [action]
+### [平台]
+发布：[N]篇 | 核心指标：[数值]
+最佳："[标题]" — [指标] — 原因：[分析]
+最差："[标题]" — [指标] — 改进：[措施]
 
-### Cross-Platform Recycling
-Best piece "[title]" from [platform] -> adapt to [target] next week
+### 跨平台内容复用
+[平台]最佳内容"[标题]" -> 下周改编投放到[目标平台]
 
-### Next Week
-- Increase [platform] investment
-- Test [new content type]
-- Review [failure]
+### 下周计划
+- 加大[平台]投入
+- 测试[新内容形式]
+- 复盘[失败案例]
 ```

@@ -1,22 +1,22 @@
 {
   "type": "object",
-  "description": "Company, institution, brand, or agency",
+  "description": "公司、机构、品牌或代理机构",
   "properties": {
-    "name": { "type": "string", "description": "Organization name" },
+    "name": { "type": "string", "description": "组织名称" },
     "org_type": {
       "type": "string",
-      "description": "Organization type: company, institution, brand, or agency"
+      "description": "组织类型：公司、机构、品牌或代理机构"
     },
-    "industry": { "type": "string", "description": "Primary industry" },
+    "industry": { "type": "string", "description": "主营业务" },
     "headquarters": {
       "type": "string",
-      "description": "Headquarters location"
+      "description": "总部所在地"
     },
-    "size": { "type": "string", "description": "Organization size" },
+    "size": { "type": "string", "description": "组织规模" },
     "key_products": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Key products or services"
+      "description": "核心产品或服务"
     }
   },
   "required": ["name"]

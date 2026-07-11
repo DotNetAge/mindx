@@ -1,21 +1,21 @@
 {
   "type": "object",
-  "description": "Research or analysis method: SWOT, Porter's Five Forces, survey, etc.",
+  "description": "研究或分析方法：SWOT、波特五力、调研等",
   "properties": {
-    "name": { "type": "string", "description": "Method name" },
+    "name": { "type": "string", "description": "方法名称" },
     "method_type": {
       "type": "string",
-      "description": "Method type: SWOT, survey, framework, or analysis"
+      "description": "方法类型：SWOT、调研、框架或分析"
     },
-    "description": { "type": "string", "description": "Method description" },
+    "description": { "type": "string", "description": "方法描述" },
     "steps": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Steps to execute the method"
+      "description": "方法执行步骤"
     },
     "when_to_use": {
       "type": "string",
-      "description": "When this method is most applicable"
+      "description": "该方法的适用场景"
     }
   },
   "required": ["name"]

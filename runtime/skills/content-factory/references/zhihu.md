@@ -1,77 +1,77 @@
-# Zhihu (知乎) — Content Reference
+# 知乎 — 内容参考
 
-## Platform Context
+## 平台背景
 
-- Q&A platform. Long-form text answers (1000-3000+ words).
-- Users value: information density, unique perspective, practical value.
-- Algorithm factors: upvotes > comments > share. Credibility signals weighted heavily.
-- New creators: answer questions first, write articles later (after establishing followers).
-- High-quality answers get long-tail traffic via search for months or years.
+- 问答平台，长文回答为主（1000-3000+字）。
+- 用户看重：信息密度、独特视角、实用价值。
+- 算法因子：赞同 > 评论 > 分享，可信度信号权重很高。
+- 新创作者：先回答问题，积累粉丝后再写文章。
+- 高质量回答能通过搜索获得数月甚至数年的长尾流量。
 
-## Answer Structure — "金字塔结构" (Pyramid)
+## 回答结构 — "金字塔结构"
 
 ```
-Opening (first 3 lines — must hook):
-  State your unique angle in one sentence.
-  "I've been [doing X] for [N] years and handled [Y] cases. Here's what I learned."
-  Avoid: "I think", "In my opinion". Lead with substance.
+开头（前3行——必须抓住读者）：
+  一句话亮出你的独特视角。
+  "我做了[N]年[某事]，经手过[Y]个案例。以下是我的经验总结。"
+  避免："我觉得"、"在我看来"。直接上干货。
 
-Body:
-  Core argument → supporting evidence → specific examples
-  3-5 major points. Each with subheading if >300 words.
-  Structure flow:
-    1. Claim (bold it — this is the headline of that section)
-    2. Evidence (data, source citation, personal case)
-    3. Application (how the reader can use this)
+正文：
+  核心论点 → 支撑证据 → 具体案例
+  3-5个主要观点，超过300字的观点配小标题。
+  结构流程：
+    1. 观点（加粗——这是该段的小标题）
+    2. 证据（数据、来源引用、亲身案例）
+    3. 应用（读者如何用上这个结论）
 
-Closing:
-  Synthesis (1-3 sentence summary)
-  Actionable checklist or next steps
-  Invite discussion: "If you're working on [topic], comment your specific scenario."
+结尾：
+  综合总结（1-3句话）
+  可操作的清单或下一步行动
+  引导讨论："如果你正在做[话题]，评论区说说你的具体情况。"
 ```
 
-## Title Formula
+## 标题公式
 
-(For writing answers — adapt to the question title)
+（适用于回答——根据问题标题调整）
 
-- `How to [achieve result] in [timeframe] — a [credential]'s guide`
-- `What nobody tells you about [topic] before [consequence]`
-- `I tried [method] for [duration], here's the unfiltered truth`
-- `The difference between [good practice] and [bad practice] in [scenario]`
+- `如何在[时间]内[达成结果] — 一个[身份]的实操指南`
+- `[某事]之前没人告诉你的真相`
+- `我用了[方法][时长]，以下是未经过滤的真实体验`
+- `[好做法]和[坏做法]在[场景]中的区别`
 
-## Writing Style
+## 写作风格
 
-- **Authority through specifics**: cite verifiable experience, projects, cases
-  - "As a [role] who handled [N] projects over [timeframe], I can confirm..."
-  - "This claim is sourced from [publication] [year] report, page [X]"
-- **Conversational but substantive**: no filler paragraphs
-- **Emotional honesty**: share failures and doubts, not just successes
-- **Avoid**: platitudes, generic advice, Wikipedia summaries, promotional tone
+- **用细节建立权威**：引用可验证的经历、项目、案例
+  - "作为一个在[时间段]内经手[N]个项目的[角色]，我可以确认..."
+  - "这个数据来自[出版物][年份]报告第[X]页"
+- **对话感但有深度**：不写凑字数的段落
+- **真诚表达**：分享失败和困惑，不只讲成功
+- **避免**：空话套话、泛泛的建议、百科式摘要、推销腔
 
-## Trust-Building Elements
+## 信任建设要素
 
-- Personal credential woven naturally into opening (not a boast paragraph)
-- Data sourced with reference details (publication, date, page if applicable)
-- Counter-arguments acknowledged before presenting your view
-- Limitations of your advice stated clearly ("This applies to [context], not [context]")
+- 个人背景自然融入开头（不是单独吹嘘的段落）
+- 数据标注来源细节（出版物、日期、页码）
+- 先承认反面观点，再阐述自己的看法
+- 明确说明建议的适用范围（"这适用于[场景]，不适用于[场景]"）
 
-## Critical Anti-Patterns (Never Write)
+## 必须避免的反模式
 
-- Pure theory without practical application
-- "Copy and paste" from other sources without original insight
-- Overwhelming jargon without explanation
-- Claims without evidence
-- Marketing or sales content disguised as answers
+- 纯理论，没有实际应用
+- 从其他来源复制粘贴，没有原创见解
+- 堆砌术语不加解释
+- 没有证据的断言
+- 伪装成回答的营销或推销内容
 
-## Quality Checklist
+## 质量检查清单
 
-- [ ] Opening hooks within 3 lines with a unique angle
-- [ ] Body structured in 3-5 clear points
-- [ ] Each claim has evidence (data, case, or source)
-- [ ] Personal credential mentioned naturally in opening
-- [ ] Practical value: reader can apply something immediately
-- [ ] Closing includes actionable summary
-- [ ] Answer length: 1000-2000+ words (depth expected)
-- [ ] No promotional or sales language
-- [ ] Limitations of advice acknowledged
-- [ ] Sources cited for key data points
+- [ ] 开头3行内用独特视角抓住读者
+- [ ] 正文分为3-5个清晰的要点
+- [ ] 每个观点有证据支撑（数据、案例或来源）
+- [ ] 个人背景在开头自然提及
+- [ ] 实用价值：读者能立刻用上某些内容
+- [ ] 结尾包含可操作的总结
+- [ ] 回答长度：1000-2000+字（需要有深度）
+- [ ] 无推销或营销用语
+- [ ] 已说明建议的局限性
+- [ ] 关键数据标注了来源

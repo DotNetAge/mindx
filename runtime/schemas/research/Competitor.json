@@ -1,30 +1,30 @@
 {
   "type": "object",
-  "description": "Competing company, product, or alternative",
+  "description": "竞争对手、竞品产品或替代方案",
   "properties": {
-    "name": { "type": "string", "description": "Competitor name" },
+    "name": { "type": "string", "description": "竞争对手名称" },
     "market_position": {
       "type": "string",
-      "description": "Competitive market position (e.g., leader, challenger, niche)"
+      "description": "竞争市场地位（如领导者、挑战者、细分领域玩家）"
     },
     "strengths": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Competitive strengths"
+      "description": "竞争优势"
     },
     "weaknesses": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Competitive weaknesses"
+      "description": "竞争劣势"
     },
     "market_share": {
       "type": "string",
-      "description": "Market share estimate"
+      "description": "市场份额估算"
     },
     "products": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Key products or services"
+      "description": "核心产品或服务"
     }
   },
   "required": ["name"]

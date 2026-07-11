@@ -1,6 +1,6 @@
-# Python Development Guidelines
+# Python 开发指南
 
-## Project Structure (2026 Standard)
+## 项目结构（2026 标准）
 
 ```
 project_name/
@@ -54,23 +54,23 @@ project_name/
 └── alembic/                    # DB migrations (if using SQLAlchemy)
 ```
 
-## Naming Conventions
+## 命名约定
 
-| Element | Convention | Example |
+| 元素 | 约定 | 示例 |
 |---------|-----------|---------|
-| Module/file | `snake_case.py` | `user_service.py`, `order_repository.py` |
-| Class | `PascalCase` | `UserService`, `OrderRepository` |
-| Function/method | `snake_case` | `get_user_by_id()`, `calculate_total()` |
-| Variable | `snake_case` | `user_list`, `is_active` |
-| Constant | `UPPER_SNAKE_CASE` | `MAX_RETRY_COUNT`, `DEFAULT_PAGE_SIZE` |
-| Private | `_leading_underscore` | `_internal_cache`, `_validate_input()` |
-| "Dunder" | `__double_underscore__` | `__init__`, `__repr__` |
-| Type variable | `PascalCase, single char` | `T`, `UserT` |
-| Exception | `PascalError` suffix | `UserNotFoundError`, `PaymentFailedError` |
+| 模块/文件 | `snake_case.py` | `user_service.py`, `order_repository.py` |
+| 类 | `PascalCase` | `UserService`, `OrderRepository` |
+| 函数/方法 | `snake_case` | `get_user_by_id()`, `calculate_total()` |
+| 变量 | `snake_case` | `user_list`, `is_active` |
+| 常量 | `UPPER_SNAKE_CASE` | `MAX_RETRY_COUNT`, `DEFAULT_PAGE_SIZE` |
+| 私有成员 | `_leading_underscore` | `_internal_cache`, `_validate_input()` |
+| "Dunder" 方法 | `__double_underscore__` | `__init__`, `__repr__` |
+| 类型变量 | `PascalCase, 单字符` | `T`, `UserT` |
+| 异常 | `PascalError` 后缀 | `UserNotFoundError`, `PaymentFailedError` |
 
-## Code Organization
+## 代码组织
 
-### Import Order (ruff isort)
+### 导入顺序（ruff isort）
 
 ```python
 # 1. Stdlib (alphabetical)
@@ -88,20 +88,20 @@ from project_name.core.exceptions import NotFoundError
 from project_name.models.user import User
 ```
 
-**Rules:**
-- No relative imports (`from ..models import user`) — use absolute paths
-- No wildcard imports (`from module import *`) — except `__init__.py` re-exports
-- Type-only imports in `if TYPE_CHECKING:` blocks to avoid circular imports
+**规则：**
+- 不使用相对导入（`from ..models import user`）—— 使用绝对路径
+- 不使用通配符导入（`from module import *`）—— 除非是 `__init__.py` 的重新导出
+- 仅在类型导入时使用 `if TYPE_CHECKING:` 块，避免循环导入
 
-### Module Length
+### 模块长度
 
-- **Max 300 lines** per module — if longer, split
-- **Max 50 lines** per function — if longer, decompose
-- **Max 7 parameters** — if more, use a dataclass/pydantic model
+- **每个模块最多 300 行** —— 超过则拆分
+- **每个函数最多 50 行** —— 超过则分解
+- **最多 7 个参数** —— 超过则使用 dataclass/pydantic model
 
-## Error Handling Patterns
+## 错误处理模式
 
-### Custom Exception Hierarchy
+### 自定义异常层次结构
 
 ```python
 # core/exceptions.py
@@ -133,7 +133,7 @@ class ValidationError(AppError):
         super().__init__(message, code="VALIDATION_ERROR", status_code=422)
 ```
 
-### Error Handling in Services
+### Service 中的错误处理
 
 ```python
 # ✅ GOOD: Wrap with context, let it propagate
@@ -154,7 +154,7 @@ async def get_user_bad(self, user_id: UUID) -> User | None:
         return None  # Silent failure — bug hidden forever
 ```
 
-### Context Managers for Resource Cleanup
+### 使用上下文管理器清理资源
 
 ```python
 # Always use context managers for I/O resources
@@ -168,18 +168,18 @@ async def get_db() -> AsyncGenerator[Session, None]:
         # Auto rollback on exception, auto commit on success (or explicit control)
 ```
 
-## Testing Standards
+## 测试标准
 
-### Framework Stack
+### 框架栈
 
-| Layer | Framework | Purpose |
+| 层级 | 框架 | 用途 |
 |-------|-----------|---------|
-| Unit | `pytest` + `pytest-asyncio` | Business logic, pure functions |
-| Mocking | `unittest.mock` / `pytest-mock` | External dependencies |
-| API testing | `httpx.AsyncClient` + FastAPI `TestClient` | Endpoint contracts |
-| Fixtures | `pytest` fixtures in `conftest.py` | Shared test state |
+| 单元测试 | `pytest` + `pytest-asyncio` | 业务逻辑，纯函数 |
+| Mock | `unittest.mock` / `pytest-mock` | 外部依赖 |
+| API 测试 | `httpx.AsyncClient` + FastAPI `TestClient` | 端点契约 |
+| Fixtures | `conftest.py` 中的 `pytest` fixtures | 共享测试状态 |
 
-### Test Naming & Structure
+### 测试命名与结构
 
 ```python
 # tests/unit/test_user_service.py
@@ -216,47 +216,47 @@ class TestGetUserById:
             await user_service.get_by_id("not-a-uuid")  # type: ignore[arg-type]
 ```
 
-**Rules:**
-- Test name = `test_{expected_behavior}_when_{condition}`
-- One assertion per test when possible (Arrange-Act-Assert pattern)
-- Use fixtures, not setup/teardown methods
-- Target >80% coverage on services/repositories; >90% on core logic
+**规则：**
+- 测试名称 = `test_{expected_behavior}_when_{condition}`
+- 每个测试尽可能只有一个断言（Arrange-Act-Assert 模式）
+- 使用 fixtures，而非 setup/teardown 方法
+- 服务/仓库的目标覆盖率 >80%；核心逻辑 >90%
 
-## Security Checklist (Python-Specific)
+## 安全检查清单（Python 特定）
 
-| Check | Rule |
+| 检查项 | 规则 |
 |-------|------|
-| SQL Injection | Always use SQLAlchemy ORM parameterized queries. Never `f"SELECT * FROM users WHERE id = {user_id}"` |
-| Path Traversal | Use `pathlib.Path.resolve()` and validate prefix. Never concatenate user input into file paths |
-| Deserialization | Never use `pickle.loads()` on untrusted data. Use JSON or msgpack instead |
-| Dependency Vulnerabilities | Run `pip-audit` or `uv pip audit` regularly in CI |
-| Secret Leakage | No secrets in source code. Use `python-dotenv` + `.env` in `.gitignore` |
-| YAML Safety | Use `yaml.safe_load()`, never `yaml.load()` (executes arbitrary Python) |
-| Template Injection | Jinja2: set `autoescape=True`. Never render user input in templates without escaping |
+| SQL 注入 | 始终使用 SQLAlchemy ORM 参数化查询。绝不使用 `f"SELECT * FROM users WHERE id = {user_id}"` |
+| 路径遍历 | 使用 `pathlib.Path.resolve()` 并验证前缀。绝不将用户输入拼接到文件路径 |
+| 反序列化 | 绝不使用 `pickle.loads()` 处理不受信任的数据。改用 JSON 或 msgpack |
+| 依赖漏洞 | 在 CI 中定期运行 `pip-audit` 或 `uv pip audit` |
+| 密钥泄漏 | 源代码中不包含密钥。使用 `python-dotenv` + `.env` 并添加到 `.gitignore` |
+| YAML 安全 | 使用 `yaml.safe_load()`，绝不使用 `yaml.load()`（会执行任意 Python 代码） |
+| 模板注入 | Jinja2：设置 `autoescape=True`。绝不在未转义的情况下在模板中渲染用户输入 |
 
-## Performance Patterns
+## 性能模式
 
-| Pattern | Anti-Pattern |
+| 模式 | 反模式 |
 |---------|-------------|
-| `asyncio.gather(*tasks)` for parallel I/O | Sequential `await` in a loop |
-| `functools.lru_cache` for pure function memoization | Recalculating same value repeatedly |
-| Generators (`yield`) for large datasets | Loading everything into memory (`list()`) |
-| `__slots__` on classes with many instances | Regular `__dict__` for data classes with millions of instances |
-| `bisect` for sorted lookups | Linear scan through sorted list |
-| `str.join(list)` for string concatenation | `+` operator in loops (O(n^2)) |
+| 并行 I/O 使用 `asyncio.gather(*tasks)` | 循环中顺序 `await` |
+| 纯函数记忆化使用 `functools.lru_cache` | 重复计算相同值 |
+| 大数据集使用生成器（`yield`） | 将所有内容加载到内存（`list()`） |
+| 多实例类使用 `__slots__` | 数百万实例的数据类使用常规 `__dict__` |
+| 排序查找使用 `bisect` | 对排序列表进行线性扫描 |
+| 字符串拼接使用 `str.join(list)` | 循环中使用 `+` 运算符（O(n^2)） |
 
-## Ecosystem Toolchain
+## 生态工具链
 
-| Tool | Purpose | Config Location |
+| 工具 | 用途 | 配置位置 |
 |------|---------|-----------------|
-| **ruff** | Linter + formatter (replaces flake8 + black + isort) | `pyproject.toml \[tool.ruff\]` |
-| **mypy** or **pyright** | Static type checking | `pyproject.toml \[tool.mypy\]` |
-| **pytest** + **pytest-cov** | Testing + coverage | `pyproject.toml \[tool.pytest\]` |
-| **pre-commit** | Git hooks (ruff, mypy, etc.) | `.pre-commit-config.yaml` |
-| **uv** | Package manager (fast, rust-based) | `pyproject.toml` |
-| **alembic** | DB migrations | `alembic.ini` |
+| **ruff** | Linter + 格式化器（替代 flake8 + black + isort） | `pyproject.toml \[tool.ruff\]` |
+| **mypy** 或 **pyright** | 静态类型检查 | `pyproject.toml \[tool.mypy\]` |
+| **pytest** + **pytest-cov** | 测试 + 覆盖率 | `pyproject.toml \[tool.pytest\]` |
+| **pre-commit** | Git hooks（ruff, mypy 等） | `.pre-commit-config.yaml` |
+| **uv** | 包管理器（快速，基于 Rust） | `pyproject.toml` |
+| **alembic** | 数据库迁移 | `alembic.ini` |
 
-### ruff Configuration (Minimal Recommended)
+### ruff 配置（最小推荐配置）
 
 ```toml
 [tool.ruff]
@@ -277,3 +277,4 @@ select = [
     "RUF",    # Ruff-specific rules
 ]
 ignore = ["E501"]  # ruff formatter handles line length
+```

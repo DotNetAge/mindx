@@ -1,6 +1,6 @@
-# Rust Development Guidelines
+# Rust 开发指南
 
-## Project Structure (Cargo Workspace Standard)
+## 项目结构（Cargo Workspace 标准）
 
 ```
 project_name/
@@ -39,26 +39,26 @@ project_name/
 └── Dockerfile
 ```
 
-## Naming Conventions (Rust API Guidelines)
+## 命名约定（Rust API 指南）
 
-| Element | Convention | Example |
+| 元素 | 约定 | 示例 |
 |---------|-----------|---------|
 | Crate | `kebab-case` | `project-name`, `user-service` |
-| Module/file | `snake_case.rs` | `user_service.rs`, `mod.rs` |
-| Type/Struct/Enum/Type Alias | `PascalCase` | `UserService`, `UserRepository`, `Result<T>` |
-| Function/Method | `snake_case` | `get_user_by_id()`, `calculate_total()` |
-| Local variable | `snake_case` | `user_id`, `is_active` |
-| Constant (`const`) | `SCREAMING_SNAKE_CASE` | `MAX_RETRY_COUNT`, `DEFAULT_TIMEOUT_MS` |
-| Static (`static`) | `SCREAMING_SNAKE_CASE` | `CONFIG_FILE_PATH` |
-| Lifetime | Short lowercase, `'a`, `'b` | `fn foo<'a>(x: &'a str)` |
-| Type Parameter | `PascalCase`, single letter `T` | `fn parse<T: FromStr>(s: &str) -> Result<T>` |
-| Trait | **PascalCase**, often adjective-like | `Send`, `Sync`, `Read`, `Write`, `Iterator`, `FromStr` |
-| Error Enum Variant | `PascalCase` or `KebabCase` for long names | `NotFound`, `InvalidInput`, `DatabaseConnectionFailed` |
-| Feature flag | kebab-case in Cargo.toml | `postgres`, `redis-cache` |
+| 模块/文件 | `snake_case.rs` | `user_service.rs`, `mod.rs` |
+| 类型/结构体/枚举/类型别名 | `PascalCase` | `UserService`, `UserRepository`, `Result<T>` |
+| 函数/方法 | `snake_case` | `get_user_by_id()`, `calculate_total()` |
+| 局部变量 | `snake_case` | `user_id`, `is_active` |
+| 常量（`const`） | `SCREAMING_SNAKE_CASE` | `MAX_RETRY_COUNT`, `DEFAULT_TIMEOUT_MS` |
+| 静态变量（`static`） | `SCREAMING_SNAKE_CASE` | `CONFIG_FILE_PATH` |
+| 生命周期 | 短小写，`'a`, `'b` | `fn foo<'a>(x: &'a str)` |
+| 类型参数 | `PascalCase`，单字母 `T` | `fn parse<T: FromStr>(s: &str) -> Result<T>` |
+| Trait | **PascalCase**，常为形容词形式 | `Send`, `Sync`, `Read`, `Write`, `Iterator`, `FromStr` |
+| 错误枚举变体 | `PascalCase` 或长名称使用 `KebabCase` | `NotFound`, `InvalidInput`, `DatabaseConnectionFailed` |
+| Feature flag | Cargo.toml 中使用 kebab-case | `postgres`, `redis-cache` |
 
-## Code Organization
+## 代码组织
 
-### Module Visibility Rule
+### 模块可见性规则
 
 ```rust
 // lib.rs — Public API surface (thin re-export layer)
@@ -81,12 +81,12 @@ use crate::service::UserService;
 // NOT: use super::super::model::User;  // ❌ Avoid deep relative paths
 ```
 
-**Rules:**
-- `lib.rs` is the public API gatekeeper — only re-export what's public
-- Internal modules use `pub(crate)` for intra-crate visibility
-- Prefer `crate::` absolute paths over `super::` / `self::` relative paths
+**规则：**
+- `lib.rs` 是公共 API 的守门人 —— 仅重新导出需要公开的内容
+- 内部模块使用 `pub(crate)` 进行 crate 内可见性控制
+- 优先使用 `crate::` 绝对路径而非 `super::` / `self::` 相对路径
 
-### Struct Construction Pattern
+### 结构体构造模式
 
 ```rust
 // ✅ GOOD: Builder pattern for complex structs with many optional fields
@@ -129,9 +129,9 @@ impl UserServiceBuilder {
 }
 ```
 
-## Error Handling Patterns
+## 错误处理模式
 
-### The `thiserror` + `anyhow` Pattern
+### `thiserror` + `anyhow` 模式
 
 ```rust
 // error.rs
@@ -180,7 +180,7 @@ impl AppError {
 pub type Result<T> = std::result::Result<T, AppError>;
 ```
 
-### Error Handling in Practice
+### 实际错误处理
 
 ```rust
 // ✅ GOOD: Use ? operator, let context bubble up naturally
@@ -223,15 +223,15 @@ match service.get_by_id(user_id).await {
 }
 ```
 
-### Key Rust Error Principles
+### Rust 错误处理核心原则
 
-1. **`thiserror`** for typed, enum-based errors that need programmatic handling
-2. **`anyhow`** for untyped errors in application code (via `From<anyhow::Error>`)
-3. **`?` operator everywhere** — Rust's greatest feature for error handling ergonomics
-4. **Never use `unwrap()` in production code** — use `?`, `expect()` with message, or `ok()/context()`
-5. **`panic!` only for unrecoverable programmer errors** — invariant violations, not user input
+1. **`thiserror`** 用于需要程序化处理的类型化、基于枚举的错误
+2. **`anyhow`** 用于应用代码中的非类型化错误（通过 `From<anyhow::Error>`）
+3. **到处使用 `?` 运算符** —— Rust 错误处理人体工程学最伟大的特性
+4. **生产代码中绝不使用 `unwrap()`** —— 使用 `?`、带消息的 `expect()`，或 `ok()/context()`
+5. **`panic!` 仅用于不可恢复的程序员错误** —— 不变量违反，而非用户输入
 
-## Testing Standards
+## 测试标准
 
 ```rust
 // tests/integration_test.rs or src/service/user_service_test.rs
@@ -263,57 +263,57 @@ mod tests {
 }
 ```
 
-**Rules:**
-- Use `#[tokio::test]` for async tests
-- Use `assert_matches!` macro for enum variant matching (or `matches!`)
-- Mock traits via mockall or hand-written mock impls
-- Integration tests go in `tests/` directory (outside crate)
-- Unit tests inline via `mod tests { ... }` within source files
-- Target >80% coverage
+**规则：**
+- 异步测试使用 `#[tokio::test]`
+- 枚举变体匹配使用 `assert_matches!` 宏（或 `matches!`）
+- 通过 mockall 或手写 mock 实现来模拟 trait
+- 集成测试放在 `tests/` 目录（crate 外部）
+- 单元测试通过源文件中的 `mod tests { ... }` 内联编写
+- 目标覆盖率 >80%
 
-## Security Checklist (Rust-Specific)
+## 安全检查清单（Rust 特定）
 
-| Check | Rule |
+| 检查项 | 规则 |
 |-------|------|
-| Memory Safety | Rust's ownership model handles most issues. Still audit unsafe blocks. |
-| Unsafe Blocks | Every `unsafe {}` must have a SAFETY comment explaining why it's safe |
-| Deserialization | Never call `serde_json::from_str` on untrusted input without validation. Use `serde(de deny_unknown_fields)` |
-| Command Injection | Never pass user input to `std::process::Command`. Validate against allowlist |
-| Path Traversal | Validate path prefix after canonicalization. No string concatenation into paths |
-| Integer Overflow | Debug mode panics on overflow (good). Release mode wraps by default — use `wrapping_add` explicitly or enable `overflow-checks` in release |
-| Dependency Vulnerabilities | Run `cargo audit` in CI. Use `cargo-deny` for policy enforcement |
+| 内存安全 | Rust 的所有权模型处理了大部分问题。仍需审计 unsafe 块。 |
+| Unsafe 块 | 每个 `unsafe {}` 必须有 SAFETY 注释说明为何安全 |
+| 反序列化 | 验证前绝不使用 `serde_json::from_str` 处理不受信任的输入。使用 `serde(de deny_unknown_fields)` |
+| 命令注入 | 绝不将用户输入传递给 `std::process::Command`。根据白名单验证 |
+| 路径遍历 | 规范化后验证路径前缀。不将字符串拼接到路径中 |
+| 整数溢出 | Debug 模式下溢出会 panic（好）。Release 模式默认回绕 —— 显式使用 `wrapping_add` 或在 release 中启用 `overflow-checks` |
+| 依赖漏洞 | 在 CI 中运行 `cargo audit`。使用 `cargo-deny` 进行策略执行 |
 
-## Performance Patterns
+## 性能模式
 
-| Pattern | Anti-Pattern |
+| 模式 | 反模式 |
 |---------|-------------|
-| `Arc` for shared read-only data | Cloning large structs everywhere |
-| `Cow<str>` / `Cow<[u8]>` for conditional ownership | Always allocating owned strings |
-| `Vec::with_capacity(n)` when size known | Repeated reallocation |
-| `Box<dyn Trait>` for dynamic dispatch sparingly | Overusing trait objects in hot paths (monomorphize instead) |
-| `iter()` / `iter_mut()` / `into_iter()` correctly | Collecting to Vec just to iterate once |
-| `String::reserve()` for known append sizes | Repeated allocation during string building |
-| `rayon` for parallel iteration | Sequential processing of embarrassingly parallel workloads |
-| Zero-copy parsing where possible | Parsing into intermediate String allocations |
-| `parking_lot` Mutex/RwLock over stdlib | stdlib mutex has higher overhead and no poisoning protection needed |
+| 共享只读数据使用 `Arc` | 到处克隆大型结构体 |
+| 条件所有权使用 `Cow<str>` / `Cow<[u8]>` | 始终分配拥有所有权的字符串 |
+| 已知大小时使用 `Vec::with_capacity(n)` | 重复重新分配 |
+| 动态分发谨慎使用 `Box<dyn Trait>` | 热路径中过度使用 trait 对象（改为单态化） |
+| 正确使用 `iter()` / `iter_mut()` / `into_iter()` | 仅为了迭代一次就收集到 Vec |
+| 已知追加大小时使用 `String::reserve()` | 字符串构建过程中重复分配 |
+| 并行迭代使用 `rayon` | 顺序处理明显可并行的工作负载 |
+| 尽可能使用零拷贝解析 | 解析到中间 String 分配 |
+| 优先使用 `parking_lot` Mutex/RwLock 而非标准库 | 标准库 mutex 开销更高且不需要 poisoning 保护 |
 
-## Ecosystem Toolchain
+## 生态工具链
 
-| Tool | Purpose |
+| 工具 | 用途 |
 |------|---------|
-| **clippy** | Linter (catches common mistakes, performance issues) |
-| **rustfmt** | Formatter (opinionated but standard) |
-| **cargo-audit** | Dependency vulnerability scanner |
-| **cargo-deny** | Dependency policy enforcement |
-| **cargo-nextest** | Faster test runner (parallel by default) |
-| **mockall** | Auto-generated mock implementations for traits |
-| **thiserror** | Typed error enum derivation |
-| **anyhow** | Untyped error handling in app code |
-| **tokio** | Async runtime (standard choice for 2026) |
-| **sqlx** | Compile-time checked SQL (type-safe queries) |
-| **axum** / **actix-web** | Web framework choices |
+| **clippy** | Linter（捕获常见错误、性能问题） |
+| **rustfmt** | 格式化器（有主见但标准化） |
+| **cargo-audit** | 依赖漏洞扫描器 |
+| **cargo-deny** | 依赖策略执行 |
+| **cargo-nextest** | 更快的测试运行器（默认并行） |
+| **mockall** | 为 trait 自动生成 mock 实现 |
+| **thiserror** | 类型化错误枚举派生 |
+| **anyhow** | 应用代码中的非类型化错误处理 |
+| **tokio** | 异步运行时（2026 年的标准选择） |
+| **sqlx** | 编译时检查的 SQL（类型安全查询） |
+| **axum** / **actix-web** | Web 框架选择 |
 
-### clippy Must-Have Lints (allow by default, enable these)
+### clippy 必备 Lints（默认允许，启用这些）
 
 ```toml
 # .clippy.toml or in lib.rs

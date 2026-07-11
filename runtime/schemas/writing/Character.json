@@ -1,34 +1,34 @@
 {
   "type": "object",
-  "description": "A fictional character, role, or archetype within a narrative work.",
+  "description": "叙事作品中的虚构角色、身份或原型。",
   "properties": {
     "name": {
       "type": "string",
-      "description": "The name or title of the character"
+      "description": "角色的名称或头衔"
     },
     "role": {
       "type": "string",
-      "description": "The character's narrative function in the story",
+      "description": "角色在故事中的叙事功能",
       "enum": ["protagonist", "antagonist", "supporting"]
     },
     "archetype": {
       "type": "string",
-      "description": "The archetypal pattern the character embodies, e.g. hero, mentor, trickster, shadow"
+      "description": "角色所体现的原型模式，如英雄、导师、骗子、阴影"
     },
     "traits": {
       "type": "array",
-      "description": "Distinguishing personality attributes, habits, or physical characteristics",
+      "description": "独特的个性特征、习惯或外貌特点",
       "items": {
         "type": "string"
       }
     },
     "motivation": {
       "type": "string",
-      "description": "The character's primary drive, goal, or desire that propels their actions"
+      "description": "驱动角色行动的主要动机、目标或愿望"
     },
     "arc_description": {
       "type": "string",
-      "description": "A summary of the character's transformation or development throughout the narrative"
+      "description": "角色在整个叙事过程中的转变或发展概述"
     }
   },
   "required": ["name"]

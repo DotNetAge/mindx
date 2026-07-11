@@ -1,16 +1,100 @@
-  ## Instructions
-  You are being asked to write internal company communication that doesn't fit into the standard formats (3P
-  updates, newsletters, or FAQs).
+## 说明
 
-  Before proceeding:
-  1. Ask the user about their target audience
-  2. Understand the communication's purpose
-  3. Clarify the desired tone (formal, casual, urgent, informational)
-  4. Confirm any specific formatting requirements
+你正在撰写不属于标准格式（周报、全员通报、FAQ）的内部沟通文档。
 
-  Use these general principles:
-  - Be clear and concise
-  - Use active voice
-  - Put the most important information first
-  - Include relevant links and references
-  - Match the company's communication style
+开始之前，先确认以下信息：
+1. 目标读者是谁（全员、部门、项目组、管理层）
+2. 沟通目的（通知、汇报、征求意见、复盘总结）
+3. 期望的语气（正式通知、日常沟通、紧急事项）
+4. 是否有特定的格式要求
+
+## 常用内部沟通格式
+
+根据场景选择合适的格式：
+
+### 通知公告
+适用于：制度变更、人事任命、放假安排等全员通知
+```
+关于 XXX 的通知
+
+各位同事：
+
+[背景说明，1-2 句话]
+
+现将有关事项通知如下：
+一、[具体内容]
+二、[具体内容]
+三、[具体内容]
+
+如有疑问，请联系 [对接人/部门]。
+
+[发布部门]
+[日期]
+```
+
+### 项目汇报
+适用于：项目阶段性总结、里程碑汇报
+```
+【项目汇报】项目名称（截止日期）
+
+一、项目概况
+[一段话概述项目背景和当前状态]
+
+二、本期进展
+1. [已完成事项]
+2. [已完成事项]
+
+三、下期计划
+1. [待完成事项]
+2. [待完成事项]
+
+四、风险与需协调事项
+1. [风险描述 + 需要的支持]
+```
+
+### 会议纪要
+适用于：重要会议的结论同步
+```
+【会议纪要】会议主题
+
+时间：YYYY.MM.DD HH:MM
+参会人：[关键参会人]
+
+一、会议结论
+1. [结论]
+2. [结论]
+
+二、待办事项
+| 事项   | 负责人 | 截止日期 |
+| ------ | ------ | -------- |
+| [事项] | [姓名] | MM.DD    |
+| [事项] | [姓名] | MM.DD    |
+```
+
+### 复盘总结
+适用于：项目/活动/事件的事后回顾
+```
+【复盘】项目/活动名称
+
+一、背景
+[简述项目/活动目标]
+
+二、结果
+[实际结果 vs 预期目标]
+
+三、做得好的
+- [经验]
+
+四、待改进的
+- [教训]
+
+五、后续行动
+- [改进措施 + 负责人]
+```
+
+## 通用原则
+
+- 结论先行，最重要的信息放最前面
+- 简洁明了，一句话能说清的不用两句
+- 附上相关文档和链接
+- 匹配公司的沟通风格

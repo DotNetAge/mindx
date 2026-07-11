@@ -1,28 +1,28 @@
 {
   "type": "object",
-  "description": "A version, release, or revision of a software component, document, or artifact",
+  "description": "软件组件、文档或产物的版本、发布版或修订版",
   "properties": {
     "version_number": {
       "type": "string",
-      "description": "Semantic version identifier (e.g., '1.2.3', 'v2.0.0-beta')"
+      "description": "语义化版本标识符（例如 '1.2.3'、'v2.0.0-beta'）"
     },
     "release_date": {
       "type": "string",
-      "description": "Date when the version was released or published (ISO 8601 format)"
+      "description": "该版本发布或公布的日期（ISO 8601 格式）"
     },
     "changes": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "List of notable changes, additions, fixes, or deprecations in this version"
+      "description": "此版本中的重大变更、新增内容、修复或弃用项列表"
     },
     "compatibility": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Other versions or systems with which this version is compatible"
+      "description": "与此版本兼容的其他版本或系统"
     },
     "status": {
       "type": "string",
-      "description": "Release maturity (e.g., alpha, beta, release-candidate, stable, deprecated)"
+      "description": "发布成熟度（例如 alpha、beta、release-candidate、stable、deprecated）"
     }
   },
   "required": ["version_number", "status"]

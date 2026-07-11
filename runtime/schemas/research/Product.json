@@ -1,20 +1,20 @@
 {
   "type": "object",
-  "description": "Product, service, offering, or feature",
+  "description": "产品、服务、解决方案或功能",
   "properties": {
-    "name": { "type": "string", "description": "Product name" },
-    "category": { "type": "string", "description": "Product category" },
-    "pricing": { "type": "string", "description": "Pricing model" },
-    "description": { "type": "string", "description": "Product description" },
+    "name": { "type": "string", "description": "产品名称" },
+    "category": { "type": "string", "description": "产品类别" },
+    "pricing": { "type": "string", "description": "定价模式" },
+    "description": { "type": "string", "description": "产品描述" },
     "stage": {
       "type": "string",
       "enum": ["development", "launch", "mature", "decline"],
-      "description": "Product lifecycle stage"
+      "description": "产品生命周期阶段"
     },
     "competitors": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Competing products"
+      "description": "竞争产品"
     }
   },
   "required": ["name"]

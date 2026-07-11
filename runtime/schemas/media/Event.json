@@ -26,16 +26,16 @@
     },
     "platform": {
       "type": "string",
-      "description": "Platform where the event takes place or is primarily discussed"
+      "description": "事件发生或主要被讨论的平台"
     },
     "participants": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Notable participants, creators, or brands involved in the event"
+      "description": "参与该事件的知名参与者、创作者或品牌"
     },
     "impact": {
       "type": "string",
-      "description": "Description of the event's impact or significance, including reach or engagement"
+      "description": "事件影响力或重要性的描述，包括覆盖范围或互动量"
     }
   },
   "required": ["name"]

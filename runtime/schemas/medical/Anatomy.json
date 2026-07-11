@@ -1,29 +1,29 @@
 {
   "type": "object",
-  "description": "Anatomical structure, organ, or body system",
+  "description": "解剖结构、器官或身体系统",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Anatomical structure or organ name"
+      "description": "解剖结构或器官名称"
     },
     "anatomy_type": {
       "type": "string",
       "enum": ["organ", "tissue", "system", "structure"],
-      "description": "Category of anatomical entity"
+      "description": "解剖实体类别"
     },
     "description": {
       "type": "string",
-      "description": "Detailed description of the anatomical structure"
+      "description": "解剖结构的详细描述"
     },
-    "location": { "type": "string", "description": "Location within the body" },
+    "location": { "type": "string", "description": "在身体中的位置" },
     "function": {
       "type": "string",
-      "description": "Primary physiological function"
+      "description": "主要生理功能"
     },
     "related_structures": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Related or connected anatomical structures"
+      "description": "相关或连接的解剖结构"
     }
   },
   "required": ["name"]

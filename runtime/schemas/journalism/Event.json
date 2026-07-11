@@ -26,11 +26,11 @@
     },
     "location": {
       "type": "string",
-      "description": "The geographic location where the event took place"
+      "description": "事件发生的地理位置"
     },
     "participants": {
       "type": "array",
-      "description": "Key persons, organizations, or entities involved in the event",
+      "description": "参与该事件的关键人物、组织或实体",
       "items": {
         "type": "string"
       }

@@ -1,17 +1,17 @@
 {
   "type": "object",
-  "description": "KPI, measurement, score, statistic",
+  "description": "KPI、度量、分数、统计数据",
   "properties": {
-    "name": { "type": "string", "description": "Metric name" },
+    "name": { "type": "string", "description": "指标名称" },
     "description": {
       "type": "string",
-      "description": "What this metric measures and how it is interpreted"
+      "description": "该指标衡量的内容及其解读方式"
     },
-    "value": { "type": "number", "description": "Current observed value" },
-    "unit": { "type": "string", "description": "Unit of measurement" },
+    "value": { "type": "number", "description": "当前观测值" },
+    "unit": { "type": "string", "description": "度量单位" },
     "benchmark": {
       "type": "number",
-      "description": "Benchmark or target value for comparison"
+      "description": "用于比较的基准值或目标值"
     }
   },
   "required": ["name"]

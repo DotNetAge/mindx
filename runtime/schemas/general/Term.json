@@ -1,14 +1,14 @@
 {
   "type": "object",
-  "description": "Domain-specific term, jargon, noun",
+  "description": "领域特定术语、行话、名词",
   "properties": {
-    "name": { "type": "string", "description": "The term itself" },
-    "definition": { "type": "string", "description": "Definition of the term" },
-    "domain": { "type": "string", "description": "Domain or field of use" },
+    "name": { "type": "string", "description": "术语本身" },
+    "definition": { "type": "string", "description": "术语的定义" },
+    "domain": { "type": "string", "description": "使用领域或学科" },
     "synonyms": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Alternative terms or synonyms"
+      "description": "替代术语或同义词"
     }
   },
   "required": ["name", "definition"]

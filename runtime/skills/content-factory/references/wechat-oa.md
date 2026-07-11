@@ -1,65 +1,65 @@
-# WeChat OA (公众号) — Content Reference
+# 微信公众号 — 内容参考
 
-## Platform Context
+## 平台背景
 
-- Subscription-based push. Users subscribe then receive content in their feed.
-- "Strong reminder" feature available for important posts (Android users get red dot).
-- Algorithm factors: open rate → read completion → engagement (shares, comments).
-- Long-form content (1500-3000 words typical). Depth valued over brevity.
-- Fixed publishing schedule builds reader habit.
+- 订阅制推送，用户关注后在信息流中接收内容。
+- 重要文章可使用"强提醒"功能（安卓用户会收到红点提示）。
+- 算法因子：打开率 → 阅读完成度 → 互动（分享、评论）。
+- 长文为主（通常1500-3000字），深度比简短更有价值。
+- 固定的发布时间有助于培养读者的阅读习惯。
 
-## Title Formula
+## 标题公式
 
-Validated templates:
-- `Why [common belief] is wrong — [N] reasons from [credible source]` — Contrarian
-- `[Year]必学的[N]个[领域]技巧，第[N]个最关键` — Numbered list (if user writes Chinese)
-- `同样[做某事]，为什么别人的[效果]是你的[N]倍？` — Comparison
-- `[Problem]？[Solution]，亲测有效` — Pain-solution
+经验证的模板：
+- `为什么[普遍认知]是错的 — [权威来源]给出的[N]个理由` — 反常识类
+- `[年份]必学的[N]个[领域]技巧，第[N]个最关键` — 数字列表类
+- `同样[做某事]，为什么别人的[效果]是你的[N]倍？` — 对比类
+- `[问题]？[解决方案]，亲测有效` — 痛点-方案类
 
-Avoid clickbait ("震惊", "出大事了"). WeChat algorithm penalizes deceptive titles.
+避免标题党（"震惊"、"出大事了"）。微信算法会惩罚误导性标题。
 
-## Content Structure
+## 内容结构
 
 ```
-Opening: Hook with a story, scenario, or pain point.
-  "Recently, a reader asked me..."
-  "I used to think [X] until I discovered..."
-  "If you're struggling with [problem], you're not alone."
+开头：用故事、场景或痛点做钩子。
+  "最近有位读者问我..."
+  "我以前也觉得[某事]，直到我发现了..."
+  "如果你也在为[问题]困扰，你不是一个人。"
 
-Body: Structured into 3-5 sections with subheadings.
-  Each section: claim → evidence/example → actionable takeaway
-  ~300 words per section, separated by a relevant image
-  Bold key sentences. Use blockquotes for emphasis.
-  Include data, citations, or real examples.
+正文：分为3-5个段落，每段配小标题。
+  每段结构：观点 → 证据/案例 → 可操作的要点
+  每段约300字，段落间插入相关配图
+  加粗关键句，用引用块做强调
+  加入数据、引用或真实案例
 
-Closing: Summary + call to action.
-  Summarize in 3 bullet points
-  Invite comments: "What do you think? Let me know in comments."
-  Preview next post to build subscription habit.
+结尾：总结 + 行动号召。
+  用3个要点总结全文
+  引导评论："你怎么看？评论区聊聊。"
+  预告下期内容，培养订阅习惯。
 ```
 
-## Writing Style
+## 写作风格
 
-- Professional but accessible. Avoid jargon unless your audience expects it.
-- First-person perspective builds trust ("I experienced", "My team tested").
-- "Gold content density": every paragraph should justify its existence.
-- Use Chinese paragraph rhythm: shorter sentences, natural flow.
+- 专业但不晦涩，除非读者群体本身习惯专业术语。
+- 第一人称视角更容易建立信任（"我亲身经历过"、"我们团队实测"）。
+- "干货密度"：每段都要有存在的价值，不凑字数。
+- 符合中文行文节奏：短句为主，自然流畅。
 
-## Visual Standards
+## 视觉标准
 
-- Feature image: 900x500px, clean composition, text-safe zone centered
-- In-text images: every 300-500 words, relevant to adjacent content
-- Infographics and data visualizations encouraged for complex topics
-- Font: 14-16px body, colored highlights for emphasis (not underline)
+- 封面图：900x500px，构图简洁，文字安全区居中。
+- 文内配图：每300-500字一张，与上下文内容相关。
+- 复杂话题建议使用信息图和数据可视化。
+- 字号：正文14-16px，用彩色高亮做强调（不用下划线）。
 
-## Quality Checklist
+## 质量检查清单
 
-- [ ] Title generates curiosity without deception
-- [ ] Opening hooks within first 3 paragraphs
-- [ ] Body has clear section breaks with subheadings
-- [ ] Each section provides actionable value
-- [ ] Images placed every ~300 words
-- [ ] Data and claims have cited sources
-- [ ] Closing has clear call to action
-- [ ] Read-through: would a subscriber look forward to the next post?
-- [ ] No clickbait or platform-flagged phrases
+- [ ] 标题引发好奇但不误导
+- [ ] 开头3段内出现钩子
+- [ ] 正文有清晰的分段和小标题
+- [ ] 每段提供可操作的价值
+- [ ] 每约300字插入配图
+- [ ] 数据和观点有来源标注
+- [ ] 结尾有明确的行动号召
+- [ ] 通读一遍：读者会期待下一篇文章吗？
+- [ ] 无标题党或平台敏感词

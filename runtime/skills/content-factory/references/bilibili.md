@@ -1,76 +1,76 @@
-# Bilibili (B站) — Content Reference
+# Bilibili（B站）— 内容参考
 
-## Platform Context
+## 平台背景
 
-- Long-form video platform (10min+ typical). Community-driven with danmaku (弹幕).
-- Core metrics: completion rate > danmaku density > coins (三连) > share.
-- Users want substance — "有料、有趣、有共鸣".
-- Chapter markers strongly encouraged (Bilibili's chapter feature).
-- Knowledge category: reward depth with strong search + long-tail recommendation.
-- Danmaku rate is a direct signal to the algorithm — design for it.
+- 长视频平台（通常10分钟以上），社区驱动，弹幕文化浓厚。
+- 核心指标：完播率 > 弹幕密度 > 三连（投币/收藏/点赞） > 分享。
+- 用户追求有深度的内容——"有料、有趣、有共鸣"。
+- 强烈建议使用章节标记（B站自带的章节功能）。
+- 知识区：深度内容有搜索和长尾推荐的双重加持。
+- 弹幕率是算法的直接信号——内容设计要为此服务。
 
-## Content Structure
+## 内容结构
 
 ```
-0-3 seconds: Hook
-  Pain/suspense that sets up the video's core question
-  "How I went from [state A] to [state B] in [timeframe]"
-  "This is the most common mistake in [topic], and almost everyone does it."
+0-3秒：钩子
+  用痛点或悬念引出视频核心问题
+  "我是怎么在[时间段]内从[状态A]到[状态B]的"
+  "这是[话题]里最常见的错误，几乎每个人都踩过。"
 
-0s-5min: Setup & Core Framework
-  State the problem clearly
-  Provide context and framework before diving deep
-  Every 30s: deliver one point of new information
-  Insert danmaku trigger points:
-    - "Have you encountered this too?" → triggers sharing experiences
-    - "Bet you didn't know this" → triggers "下次一定"/"懂了" danmaku
-    - Leave 2-3s silence after a question → users fill the gap with danmaku
+0秒-5分钟：铺垫与核心框架
+  清晰陈述问题
+  深入之前先给出背景和框架
+  每30秒：传递一个新信息点
+  插入弹幕触发点：
+    - "你也遇到过这种情况？" → 引发用户分享经历
+    - "这个你肯定不知道" → 触发"下次一定"/"懂了"弹幕
+    - 提问后留2-3秒空白 → 用户会用弹幕填补
 
-5min-10min: Deep Dive
-  Expand each framework component with evidence, cases, data
-  Use chapter markers for navigation
-  Insert a "彩蛋" (easter egg) mid-video to reward attentive viewers
-  Every 2-3 minutes: visual variety (B-roll, animation, on-screen text)
+5分钟-10分钟：深入展开
+  用证据、案例、数据展开框架的每个部分
+  使用章节标记方便导航
+  视频中段插入"彩蛋"，奖励认真观看的观众
+  每2-3分钟：切换视觉形式（B-roll、动画、屏幕文字）
 
-10min-End: Synthesis & CTA
-  Summarize framework
-  Tease next video
-  "If this helped, a coin would mean a lot" (Bilibili-specific ask)
-  "What topic should I cover next? Comment your idea."
+10分钟-结尾：总结与行动号召
+  总结框架
+  预告下期视频
+  "觉得有用的话，投个币支持一下"（B站特有的互动方式）
+  "下期想看什么？评论区告诉我。"
 ```
 
-## Title Formula
+## 标题公式
 
-- `[Topic]: [Core insight] | [N]分钟彻底搞懂[Subject]` — Knowledge
-- `从[起点]到[终点]，我是怎么做到的？` — Story/transformation
-- `[Controversial statement]？聊聊我的看法` — Discussion
-- `全网首个[Topic]教程，[unique angle]` — First-of-its-kind
+- `[话题]：[核心洞察] | [N]分钟彻底搞懂[主题]` — 知识类
+- `从[起点]到[终点]，我是怎么做到的？` — 故事/蜕变类
+- `[争议性观点]？聊聊我的看法` — 讨论类
+- `全网首个[话题]教程，[独特角度]` — 首创类
 
-## Writing Style
+## 写作风格
 
-- Balance authority with approachability. No textbook tone.
-- Self-deprecating humor is rewarded ("翻车现场", "我也是试了N次才...")
-- Use analogies extensively: abstract concepts → familiar metaphors
-- Occasional "梗" (memes) appropriate for community engagement
-- Avoid: corporate tone, excessive self-promotion, obvious script reading
+- 权威感与亲和力并重，避免教科书腔调。
+- 自嘲式幽默很受欢迎（"翻车现场"，"我也是试了N次才..."）。
+- 大量使用类比：抽象概念 → 生活化的比喻。
+- 适时使用"梗"，契合社区氛围。
+- 避免：企业腔、过度自我推销、明显的念稿感。
 
-## Community Interaction Design
+## 社区互动设计
 
-- **Danmaku triggers**: predefined moments where danmaku naturally surges
-  - Time-stamped "梗" pre-placed at specific timestamps (e.g., 05:20, 13:14)
-  - Controversial statement with 2s pause for reaction danmaku
-  - "Choose A or B? Type your answer" moments
-- **Comment strategy**: pin a discussion-starting comment immediately after posting
-- **Interaction window**: respond to top comments within 30 minutes of posting
+- **弹幕触发点**：预设弹幕自然爆发的时刻
+  - 在特定时间戳预埋"梗"（如05:20、13:14）
+  - 抛出争议性观点后停顿2秒，等待反应弹幕
+  - "选A还是B？把你的答案打出来"的互动环节
+- **评论策略**：发布后立即置顶一条能引发讨论的评论
+- **互动窗口**：发布后30分钟内回复热门评论
 
-## Quality Checklist
+## 质量检查清单
 
-- [ ] Opening hook within 3 seconds
-- [ ] Every 30s delivers one new information point
-- [ ] Danmaku trigger points designed in script
-- [ ] Chapter markers applied
-- [ ] Each 2-3 minutes has scene/visual change
-- [ ] CTA includes Bilibili-specific element (coin/follow)
-- [ ] Comment strategy prepared (pinned comment drafted)
-- [ ] Duration appropriate: 8-15min (knowledge), 5-8min (entertainment)
-- [ ] Background music licensed or Bilibili library
+- [ ] 开头3秒内有钩子
+- [ ] 每30秒传递一个新信息点
+- [ ] 脚本中设计了弹幕触发点
+- [ ] 已添加章节标记
+- [ ] 每2-3分钟有场景/画面切换
+- [ ] 行动号召包含B站特有元素（投币/关注）
+- [ ] 评论策略已准备（置顶评论已拟好）
+- [ ] 时长合理：知识类8-15分钟，娱乐类5-8分钟
+- [ ] 背景音乐已获授权或使用B站音乐库

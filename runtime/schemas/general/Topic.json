@@ -1,20 +1,20 @@
 {
   "type": "object",
-  "description": "Subject, domain, category, tag",
+  "description": "主题、领域、分类、标签",
   "properties": {
-    "name": { "type": "string", "description": "Topic or subject name" },
+    "name": { "type": "string", "description": "主题或学科名称" },
     "description": {
       "type": "string",
-      "description": "Description of the topic and its scope"
+      "description": "主题及其范围的描述"
     },
     "parent_topic": {
       "type": "string",
-      "description": "Broader parent topic or category this belongs to"
+      "description": "该主题所属的更广泛的父主题或分类"
     },
     "keywords": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Related keywords or search terms"
+      "description": "相关关键词或搜索词"
     }
   },
   "required": ["name"]

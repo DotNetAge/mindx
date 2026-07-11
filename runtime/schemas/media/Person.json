@@ -24,7 +24,7 @@
     },
     "followers_count": {
       "type": "string",
-      "description": "Number of followers or subscribers, e.g. 5000万, 100万+"
+      "description": "粉丝或订阅者数量，例如：5000万、100万+"
     },
     "niche": {
       "type": "string",
@@ -32,7 +32,7 @@
     },
     "account_handle": {
       "type": "string",
-      "description": "Unique account handle or ID on the platform"
+      "description": "平台上的唯一账号标识或 ID"
     }
   },
   "required": ["name"]

@@ -1,48 +1,48 @@
-# Overall Project Progress Report
+# 项目整体进度报告
 
-## 1. Project Overview
+## 1. 项目概览
 
-- Project name: {project_name}
-- Project ID: {project_id}
-- Current status: {project_status}
-- Report generated at: {generated_at}
+- 项目名称：{project_name}
+- 项目 ID：{project_id}
+- 当前状态：{project_status}
+- 报告生成时间：{generated_at}
 
-## 2. Goals and Milestones
+## 2. 目标与里程碑
 
-{total_goals} goal(s), {completed_goals} completed.
+共 {total_goals} 个目标，已完成 {completed_goals} 个。
 
 {goals}
 
-Example entry:
+示例条目：
 
-- Goal: {goal_title}
-  - Status: {goal_status}
-  - Acceptance criteria: {goal_acceptance_criteria}
+- 目标：{goal_title}
+  - 状态：{goal_status}
+  - 验收标准：{goal_acceptance_criteria}
 
-## 3. Task Statistics
+## 3. 任务统计
 
-- Total tasks: {total_tasks}
-- Completed: {completed_tasks}
-- In progress: {in_progress_tasks}
-- Pending: {pending_tasks}
-- Failed: {failed_tasks}
+- 总任务数：{total_tasks}
+- 已完成：{completed_tasks}
+- 进行中：{in_progress_tasks}
+- 待处理：{pending_tasks}
+- 已失败：{failed_tasks}
 
-## 4. Task Details
+## 4. 任务详情
 
 {tasks}
 
-Example entry:
+示例条目：
 
-- Task: {task_description}
-  - Assigned agent: {agent}
-  - Status: {status}
-  - Due date: {due_date}
-  - Result summary: {result_summary}
+- 任务：{task_description}
+  - 负责代理：{agent}
+  - 状态：{status}
+  - 截止日期：{due_date}
+  - 结果摘要：{result_summary}
 
-## 5. Risks and Blockers
+## 5. 风险与阻碍
 
 {risks}
 
-## 6. Next Steps
+## 6. 后续步骤
 
 {next_steps}

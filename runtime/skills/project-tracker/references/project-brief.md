@@ -1,36 +1,36 @@
-# Project Brief
+# 项目简介
 
-## 1. Project Name
+## 1. 项目名称
 
 {project_name}
 
-## 2. Project ID
+## 2. 项目 ID
 
 {project_id}
 
-## 3. Project Objective
+## 3. 项目目标
 
 {project_objective}
 
-## 4. Project Description
+## 4. 项目描述
 
 {project_description}
 
-## 5. Duration
+## 5. 时间周期
 
-- Start date: {start_date}
-- End date: {end_date}
+- 开始日期：{start_date}
+- 结束日期：{end_date}
 
-## 6. Acceptance Criteria
+## 6. 验收标准
 
 {acceptance_criteria}
 
-## 7. Recurring Task
+## 7. 周期性任务
 
 {is_recurring}
 
-- If recurring, acceptance criteria per unit period: {recurring_criteria}
+- 如果是周期性任务，每个周期的验收标准：{recurring_criteria}
 
-## 8. Notes
+## 8. 备注
 
 {notes}

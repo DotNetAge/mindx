@@ -1,204 +1,204 @@
 ---
 name: lead-research-assistant
-description: Identifies high-quality leads for your product or service by analyzing your business, searching for target companies, and providing actionable contact strategies. Perfect for sales, business development, and marketing professionals.
+description: 通过分析你的业务、搜索目标公司并提供可操作的联络策略，识别高质量的销售线索。非常适合销售、商务拓展和市场营销专业人士使用。
 metadata:
-  name_zh: 线索研究助手
-  name_zh-tw: 線索研究助手
+  name_zh: 线索研究
+  name_zh-tw: 線索研究
   description_zh: 通过分析你的业务、搜索目标公司并提供可操作的联络策略，识别高质量销售线索
   description_zh-tw: 透過分析你的業務、搜尋目標公司並提供可操作的聯絡策略，辨識高品質銷售線索
 ---
 
-# Lead Research Assistant
+# 线索研究
 
-This skill helps you identify and qualify potential leads for your business by analyzing your product/service, understanding your ideal customer profile, and providing actionable outreach strategies.
+此技能分析你的产品/服务，理解理想客户画像，提供可操作的拓展策略，帮你识别和筛选潜在销售线索。
 
-## When to Use This Skill
+## 何时使用
 
-- Finding potential customers or clients for your product/service
-- Building a list of companies to reach out to for partnerships
-- Identifying target accounts for sales outreach
-- Researching companies that match your ideal customer profile
-- Preparing for business development activities
+- 为产品/服务寻找潜在客户或合作方
+- 建立待联络的合作公司清单
+- 识别销售拓展的目标客户
+- 调研符合理想客户画像的公司
+- 为商务拓展活动做准备
 
-## What This Skill Does
+## 功能说明
 
-1. **Understands Your Business**: Analyzes your product/service, value proposition, and target market
-2. **Identifies Target Companies**: Finds companies that match your ideal customer profile based on:
-   - Industry and sector
-   - Company size and location
-   - Technology stack and tools they use
-   - Growth stage and funding
-   - Pain points your product solves
-3. **Prioritizes Leads**: Ranks companies based on fit score and relevance
-4. **Provides Contact Strategies**: Suggests how to approach each lead with personalized messaging
-5. **Enriches Data**: Gathers relevant information about decision-makers and company context
+1. **理解你的业务**：分析产品/服务、价值主张和目标市场
+2. **识别目标公司**：基于以下条件寻找符合理想客户画像的公司：
+   - 行业和领域
+   - 公司规模和所在地
+   - 技术栈和使用的工具
+   - 发展阶段和融资情况
+   - 你的产品能解决的痛点
+3. **线索优先级排序**：根据匹配度和相关性对公司排名
+4. **提供联络策略**：建议如何用个性化信息接触每个线索
+5. **丰富数据**：收集决策者和公司背景的相关信息
 
-## How to Use
+## 使用方法
 
-### Basic Usage
+### 基础用法
 
-Simply describe your product/service and what you're looking for:
-
-```
-I'm building [product description]. Find me 10 companies in [location/industry] 
-that would be good leads for this.
-```
-
-### With Your Codebase
-
-For even better results, run this from your product's source code directory:
+描述你的产品/服务和目标：
 
 ```
-Look at what I'm building in this repository and identify the top 10 companies 
-in [location/industry] that would benefit from this product.
+我正在开发 [产品描述]。帮我找 10 家 [地点/行业] 的公司，
+它们应该是这个产品的良好线索。
 ```
 
-### Advanced Usage
+### 结合代码库使用
 
-For more targeted research:
+在产品源代码目录下运行，效果更好：
 
 ```
-My product: [description]
-Ideal customer profile:
-- Industry: [industry]
-- Company size: [size range]
-- Location: [location]
-- Current pain points: [pain points]
-- Technologies they use: [tech stack]
-
-Find me 20 qualified leads with contact strategies for each.
+看看我在这个仓库里正在构建什么，识别 [地点/行业] 中
+最可能从这个产品受益的前 10 家公司。
 ```
 
-## Instructions
+### 高级用法
 
-When a user requests lead research:
+更精准的研究：
 
-1. **Understand the Product/Service**
-   - If in a code directory, analyze the codebase to understand the product
-   - Ask clarifying questions about the value proposition
-   - Identify key features and benefits
-   - Understand what problems it solves
+```
+我的产品：[描述]
+理想客户画像：
+- 行业：[行业]
+- 公司规模：[规模范围]
+- 地点：[地点]
+- 当前痛点：[痛点]
+- 使用的技术：[技术栈]
 
-2. **Define Ideal Customer Profile**
-   - Determine target industries and sectors
-   - Identify company size ranges
-   - Consider geographic preferences
-   - Understand relevant pain points
-   - Note any technology requirements
+帮我找 20 个合格线索，并为每个提供联络策略。
+```
 
-3. **Research and Identify Leads**
-   - Search for companies matching the criteria
-   - Look for signals of need (job postings, tech stack, recent news)
-   - Consider growth indicators (funding, expansion, hiring)
-   - Identify companies with complementary products/services
-   - Check for budget indicators
+## 操作指引
 
-4. **Prioritize and Score**
-   - Create a fit score (1-10) for each lead
-   - Consider factors like:
-     - Alignment with ICP
-     - Signals of immediate need
-     - Budget availability
-     - Competitive landscape
-     - Timing indicators
+收到线索研究请求时：
 
-5. **Provide Actionable Output**
+1. **理解产品/服务**
+   - 在代码目录下时，分析代码库理解产品
+   - 询问价值主张的相关问题
+   - 识别关键特性和优势
+   - 理解它解决了什么问题
+
+2. **定义理想客户画像**
+   - 确定目标行业和领域
+   - 识别公司规模范围
+   - 考虑地理偏好
+   - 理解相关痛点
+   - 注意技术要求
+
+3. **调研和识别线索**
+   - 搜索符合标准的公司
+   - 寻找需求信号（招聘广告、技术栈、近期新闻）
+   - 考虑增长指标（融资、扩张、招聘）
+   - 识别拥有互补产品/服务的公司
+   - 检查预算指标
+
+4. **优先级排序和评分**
+   - 为每个线索创建匹配度评分（1-10）
+   - 考虑以下因素：
+     - 与理想客户画像的契合度
+     - 即时需求信号
+     - 预算可用性
+     - 竞争格局
+     - 时机指标
+
+5. **提供可操作的输出**
    
-   For each lead, provide:
-   - **Company Name** and website
-   - **Why They're a Good Fit**: Specific reasons based on their business
-   - **Priority Score**: 1-10 with explanation
-   - **Decision Maker**: Role/title to target (e.g., "VP of Engineering")
-   - **Contact Strategy**: Personalized approach suggestions
-   - **Value Proposition**: How your product solves their specific problem
-   - **Conversation Starters**: Specific points to mention in outreach
-   - **LinkedIn URL**: If available, for easy connection
+   为每个线索提供：
+   - **公司名称**和网站
+   - **为何匹配**：基于其业务的具体原因
+   - **优先级评分**：1-10 分并附说明
+   - **决策者**：目标角色/职位（例如"工程副总裁"）
+   - **联络策略**：个性化接触建议
+   - **价值主张**：你的产品如何解决他们的具体问题
+   - **对话切入点**：接触中要提及的具体要点
+   - **LinkedIn 链接**：如有，便于建立联系
 
-6. **Format the Output**
+6. **格式化输出**
 
-   Present results in a clear, scannable format:
+   以清晰、易扫描的格式呈现结果：
 
    ```markdown
-   # Lead Research Results
+   # 线索研究结果
    
-   ## Summary
-   - Total leads found: [X]
-   - High priority (8-10): [X]
-   - Medium priority (5-7): [X]
-   - Average fit score: [X]
-   
-   ---
-   
-   ## Lead 1: [Company Name]
-   
-   **Website**: [URL]
-   **Priority Score**: [X/10]
-   **Industry**: [Industry]
-   **Size**: [Employee count/revenue range]
-   
-   **Why They're a Good Fit**:
-   [2-3 specific reasons based on their business]
-   
-   **Target Decision Maker**: [Role/Title]
-   **LinkedIn**: [URL if available]
-   
-   **Value Proposition for Them**:
-   [Specific benefit for this company]
-   
-   **Outreach Strategy**:
-   [Personalized approach - mention specific pain points, recent company news, or relevant context]
-   
-   **Conversation Starters**:
-   - [Specific point 1]
-   - [Specific point 2]
+   ## 摘要
+   - 找到的总线索数：[X]
+   - 高优先级（8-10）：[X]
+   - 中优先级（5-7）：[X]
+   - 平均匹配度评分：[X]
    
    ---
    
-   [Repeat for each lead]
+   ## 线索 1：[公司名称]
+   
+   **网站**：[URL]
+   **优先级评分**：[X/10]
+   **行业**：[行业]
+   **规模**：[员工数/营收范围]
+   
+   **为何匹配**：
+   [基于其业务的 2-3 个具体原因]
+   
+   **目标决策者**：[角色/职位]
+   **LinkedIn**：[URL（如有）]
+   
+   **对他们的价值主张**：
+   [对这家公司的具体收益]
+   
+   **拓展策略**：
+   [个性化方法 - 提及具体痛点、近期公司新闻或相关背景]
+   
+   **对话切入点**：
+   - [具体要点 1]
+   - [具体要点 2]
+   
+   ---
+   
+   [对每个线索重复]
    ```
 
-7. **Offer Next Steps**
-   - Suggest saving results to a CSV for CRM import
-   - Offer to draft personalized outreach messages
-   - Recommend prioritization based on timing
-   - Suggest follow-up research for top leads
+7. **提供后续步骤建议**
+   - 建议将结果保存为 CSV 以便导入 CRM
+   - 提供起草个性化拓展信息的服务
+   - 根据时机推荐优先级排序
+   - 建议对顶级线索进行后续研究
 
-## Examples
+## 示例
 
-### Example 1: From Lenny's Newsletter
+### 示例 1：来自 Lenny's Newsletter
 
-**User**: "I'm building a tool that masks sensitive data in AI coding assistant queries. Find potential leads."
+**用户**："我正在开发一个工具，用于在 AI 编程助手查询中遮蔽敏感数据。帮我找潜在线索。"
 
-**Output**: Creates a prioritized list of companies that:
-- Use AI coding assistants (Copilot, Cursor, etc.)
-- Handle sensitive data (fintech, healthcare, legal)
-- Have evidence in their GitHub repos of using coding agents
-- May have accidentally exposed sensitive data in code
-- Includes LinkedIn URLs of relevant decision-makers
+**输出**：创建按优先级排序的公司列表，这些公司：
+- 使用 AI 编程助手（Copilot、Cursor 等）
+- 处理敏感数据（金融科技、医疗保健、法律）
+- 在 GitHub 仓库中有使用编程代理的证据
+- 可能在代码中意外暴露了敏感数据
+- 包含相关决策者的 LinkedIn 链接
 
-### Example 2: Local Business
+### 示例 2：本地业务
 
-**User**: "I run a consulting practice for remote team productivity. Find me 10 companies in the Bay Area that recently went remote."
+**用户**："我经营一家远程团队生产力咨询公司。帮我找 10 家最近转为远程办公的湾区公司。"
 
-**Output**: Identifies companies that:
-- Recently posted remote job listings
-- Announced remote-first policies
-- Are hiring distributed teams
-- Show signs of remote work challenges
-- Provides personalized outreach strategies for each
+**输出**：识别以下公司：
+- 最近发布了远程职位
+- 宣布了远程优先政策
+- 正在招聘分布式团队
+- 显示出远程工作挑战的迹象
+- 为每家公司提供个性化拓展策略
 
-## Tips for Best Results
+## 最佳实践
 
-- **Be specific** about your product and its unique value
-- **Run from your codebase** if applicable for automatic context
-- **Provide context** about your ideal customer profile
-- **Specify constraints** like industry, location, or company size
-- **Request follow-up** research on promising leads for deeper insights
+- **具体描述**产品及其独特价值
+- **在代码库中运行**（如适用）自动获取上下文
+- **提供上下文**说明理想客户画像
+- **指定约束条件**如行业、地点或公司规模
+- **请求后续研究**获取有前景线索的更深入洞察
 
-## Related Use Cases
+## 相关场景
 
-- Drafting personalized outreach emails after identifying leads
-- Building a CRM-ready CSV of qualified prospects
-- Researching specific companies in detail
-- Analyzing competitor customer bases
-- Identifying partnership opportunities
+- 识别线索后起草个性化拓展邮件
+- 构建可导入 CRM 的合格潜在客户 CSV
+- 详细研究特定公司
+- 分析竞争对手的客户群
+- 识别合作机会

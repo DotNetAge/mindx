@@ -1,30 +1,30 @@
 {
   "type": "object",
-  "description": "Market event — rate decision, earnings report, IPO, merger, economic data release",
+  "description": "市场事件 — 利率决议、财报发布、IPO、并购、经济数据发布",
   "properties": {
-    "name": { "type": "string", "description": "Event name or title" },
+    "name": { "type": "string", "description": "事件名称或标题" },
     "event_type": {
       "type": "string",
       "enum": ["rate_decision", "earnings", "IPO", "merger"],
-      "description": "Category of the event"
+      "description": "事件类别"
     },
     "date": {
       "type": "string",
-      "description": "Date or timestamp of the event"
+      "description": "事件发生的日期或时间戳"
     },
     "impact_level": {
       "type": "string",
       "enum": ["low", "medium", "high"],
-      "description": "Perceived market impact level"
+      "description": "预估的市场影响程度"
     },
     "affected_assets": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Assets or sectors impacted by this event"
+      "description": "受此事件影响的资产或行业"
     },
     "details": {
       "type": "string",
-      "description": "Additional context or description of the event"
+      "description": "事件的附加背景或描述"
     }
   },
   "required": ["name", "event_type"]

@@ -1,24 +1,24 @@
 {
   "type": "object",
-  "description": "Market trend, pattern, or directional shift",
+  "description": "市场趋势、规律或方向性变化",
   "properties": {
-    "name": { "type": "string", "description": "Trend name" },
+    "name": { "type": "string", "description": "趋势名称" },
     "direction": {
       "type": "string",
-      "description": "Trend direction: rising, stable, or declining"
+      "description": "趋势方向：上升、稳定或下降"
     },
     "category": {
       "type": "string",
-      "description": "Trend category: tech, social, or economic"
+      "description": "趋势类别：技术、社会或经济"
     },
     "evidence": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Supporting evidence for the trend"
+      "description": "支撑该趋势的证据"
     },
     "impact_level": {
       "type": "string",
-      "description": "Impact level (e.g., high, medium, low)"
+      "description": "影响程度（如高、中、低）"
     }
   },
   "required": ["name"]

@@ -1,25 +1,25 @@
 {
   "type": "object",
-  "description": "Financial asset — stock, bond, real estate, commodity, crypto",
+  "description": "金融资产 — 股票、债券、房地产、大宗商品、加密货币",
   "properties": {
-    "name": { "type": "string", "description": "Asset name" },
+    "name": { "type": "string", "description": "资产名称" },
     "type": {
       "type": "string",
       "enum": ["stock", "bond", "real_estate", "commodity", "crypto", "other"],
-      "description": "Asset class"
+      "description": "资产类别"
     },
     "ticker": {
       "type": "string",
-      "description": "Ticker symbol (if applicable)"
+      "description": "交易代码（如适用）"
     },
-    "value": { "type": "number", "description": "Current value or price" },
+    "value": { "type": "number", "description": "当前价值或价格" },
     "currency": {
       "type": "string",
-      "description": "Currency denomination (e.g., USD, CNY, EUR)"
+      "description": "货币单位（如 USD、CNY、EUR）"
     },
     "market": {
       "type": "string",
-      "description": "Market or exchange where the asset is traded (e.g., NYSE, SSE, HKEX)"
+      "description": "资产交易所在的市场或交易所（如 NYSE、SSE、HKEX）"
     }
   },
   "required": ["name", "type"]

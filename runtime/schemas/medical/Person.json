@@ -1,25 +1,25 @@
 {
   "type": "object",
-  "description": "Healthcare professional: doctor, researcher, specialist, or nurse",
+  "description": "医疗专业人员：医生、研究人员、专科医师或护士",
   "properties": {
-    "name": { "type": "string", "description": "Person's full name" },
+    "name": { "type": "string", "description": "人员全名" },
     "role": {
       "type": "string",
       "enum": ["doctor", "researcher", "specialist", "nurse"],
-      "description": "Professional role in healthcare"
+      "description": "在医疗保健中的职业角色"
     },
     "specialty": {
       "type": "string",
-      "description": "Medical specialty or field of expertise"
+      "description": "医学专科或专业领域"
     },
     "affiliation": {
       "type": "string",
-      "description": "Institutional affiliation (hospital, university, etc.)"
+      "description": "所属机构（医院、大学等）"
     },
     "credentials": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Professional credentials and qualifications (e.g., MD, PhD, RN)"
+      "description": "专业资质和资格（如医学博士、哲学博士、注册护士）"
     }
   },
   "required": ["name"]

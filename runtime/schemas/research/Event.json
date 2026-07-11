@@ -1,25 +1,25 @@
 {
   "type": "object",
-  "description": "Business event: funding, launch, policy change, merger, etc.",
+  "description": "商业事件：融资、发布、政策变更、并购等",
   "properties": {
-    "name": { "type": "string", "description": "Event name" },
+    "name": { "type": "string", "description": "事件名称" },
     "event_type": {
       "type": "string",
-      "description": "Event type: funding, launch, policy, or merger"
+      "description": "事件类型：融资、发布、政策或并购"
     },
-    "date": { "type": "string", "description": "Event date" },
+    "date": { "type": "string", "description": "事件日期" },
     "participants": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Key participants or parties involved"
+      "description": "主要参与方或相关方"
     },
     "financial_details": {
       "type": "string",
-      "description": "Financial details if applicable"
+      "description": "相关财务细节（如适用）"
     },
     "impact": {
       "type": "string",
-      "description": "Business impact of the event"
+      "description": "事件对业务的影响"
     }
   },
   "required": ["name"]

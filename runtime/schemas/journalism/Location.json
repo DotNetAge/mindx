@@ -13,7 +13,7 @@
     },
     "coordinates": {
       "type": "object",
-      "description": "Geographic coordinates of the location",
+      "description": "该地点的地理坐标",
       "properties": {
         "latitude": { "type": "number" },
         "longitude": { "type": "number" }
@@ -21,11 +21,11 @@
     },
     "significance": {
       "type": "string",
-      "description": "Why this location is significant in the current news context"
+      "description": "该地点在当前新闻背景中的重要性"
     },
     "related_events": {
       "type": "array",
-      "description": "Names or references of events associated with this location",
+      "description": "与该地点相关的事件名称或引用",
       "items": {
         "type": "string"
       }

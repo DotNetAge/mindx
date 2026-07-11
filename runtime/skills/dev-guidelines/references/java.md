@@ -1,6 +1,6 @@
-# Java / Spring Boot Development Guidelines
+# Java / Spring Boot 开发指南
 
-## Project Structure (Standard Spring Boot Layout)
+## 项目结构（标准 Spring Boot 布局）
 
 ```
 project-name/
@@ -50,28 +50,28 @@ project-name/
 └── .github/workflows/ci.yml
 ```
 
-**Layering rule:**
-- `web` → calls → `service` → calls → `repository`
-- Never skip layers (web must not call repository directly)
-- Domain entities are layer-agnostic
+**分层规则：**
+- `web` → 调用 → `service` → 调用 → `repository`
+- 不得跳过层级（web 不能直接调用 repository）
+- Domain 实体与层级无关
 
-## Naming Conventions (Java Standard)
+## 命名约定（Java 标准）
 
-| Element | Convention | Example |
+| 元素 | 约定 | 示例 |
 |---------|-----------|---------|
-| Package | `lowercase`, reverse DNS | `com.example.project.service` |
-| Class / Interface / Enum / Record | `PascalCase` | `UserService`, `UserRepository`, `OrderStatus` |
-| Interface implementation | `PascalCase + Impl` suffix or descriptive name | `UserServiceImpl`, `JpaUserRepository` |
-| Method | **camelCase**, verb-first for actions | `getById()`, `calculateTotal()`, `isValid()` |
-| Local variable | **camelCase** | `userList`, `isActive` |
-| Constant (`static final`) | `UPPER_SNAKE_CASE` | `MAX_RETRY_COUNT`, `DEFAULT_TIMEOUT_MS` |
-| Enum constant | `UPPER_SNAKE_CASE` | `PENDING`, `IN_PROGRESS`, `COMPLETED` |
-| Type parameter | Single uppercase letter | `<T>`, `<E>`, `<K, V>`, `<R extends Entity>` |
-| Test class | `{ClassName}Test` | `UserServiceTest` |
-| Test method | `should{ExpectedBehavior}WhenCondition` | `shouldReturnUserWhenExists` |
-| Bean name (Spring) | camelCase | `userService`, `userRepo`, `jwtTokenProvider` |
+| 包名 | `lowercase`，反向 DNS | `com.example.project.service` |
+| 类 / 接口 / 枚举 / Record | `PascalCase` | `UserService`, `UserRepository`, `OrderStatus` |
+| 接口实现 | `PascalCase + Impl` 后缀或描述性名称 | `UserServiceImpl`, `JpaUserRepository` |
+| 方法 | **camelCase**，动词优先表示动作 | `getById()`, `calculateTotal()`, `isValid()` |
+| 局部变量 | **camelCase** | `userList`, `isActive` |
+| 常量（`static final`） | `UPPER_SNAKE_CASE` | `MAX_RETRY_COUNT`, `DEFAULT_TIMEOUT_MS` |
+| 枚举常量 | `UPPER_SNAKE_CASE` | `PENDING`, `IN_PROGRESS`, `COMPLETED` |
+| 类型参数 | 单个大写字母 | `<T>`, `<E>`, `<K, V>`, `<R extends Entity>` |
+| 测试类 | `{ClassName}Test` | `UserServiceTest` |
+| 测试方法 | `should{ExpectedBehavior}WhenCondition` | `shouldReturnUserWhenExists` |
+| Bean 名称（Spring） | camelCase | `userService`, `userRepo`, `jwtTokenProvider` |
 
-### Package Structure Rules
+### 包结构规则
 
 ```java
 // ✅ GOOD: Clear package boundaries
@@ -86,9 +86,9 @@ class UserServiceImpl implements UserService { ... }
 // For large projects, feature-based packaging is preferred.
 ```
 
-## Code Organization
+## 代码组织
 
-### Controller Pattern (Thin)
+### Controller 模式（薄层）
 
 ```java
 @RestController
@@ -114,7 +114,7 @@ public class UserController {
 }
 ```
 
-### Service Pattern (Business Logic)
+### Service 模式（业务逻辑）
 
 ```java
 @Service
@@ -164,9 +164,9 @@ public class UserServiceImpl implements UserService {
 }
 ```
 
-## Error Handling Patterns
+## 错误处理模式
 
-### Custom Exception Hierarchy
+### 自定义异常层次结构
 
 ```java
 // common/exception/AppException.java
@@ -206,7 +206,7 @@ public class ValidationException extends AppException {
 }
 ```
 
-### Global Exception Handler
+### 全局异常处理器
 
 ```java
 @RestControllerAdvice
@@ -239,18 +239,18 @@ public class GlobalExceptionHandler {
 public record ErrorResponse(String code, String message) {}
 ```
 
-## Testing Standards
+## 测试标准
 
-### Framework Stack
+### 框架栈
 
-| Layer | Framework | Purpose |
+| 层级 | 框架 | 用途 |
 |-------|-----------|---------|
-| Unit | **JUnit 5** + **Mockito** | Business logic, pure functions |
-| API testing | **MockMvc** + **@WebMvcTest** | Endpoint contracts |
-| Integration | **@SpringBootTest** + **Testcontainers** | Full stack with real DB |
-| Assertions | **AssertJ** | Fluent assertions (better than JUnit built-in) |
+| 单元测试 | **JUnit 5** + **Mockito** | 业务逻辑，纯函数 |
+| API 测试 | **MockMvc** + **@WebMvcTest** | 端点契约 |
+| 集成测试 | **@SpringBootTest** + **Testcontainers** | 完整栈与真实数据库 |
+| 断言 | **AssertJ** | 流式断言（比 JUnit 内置更好） |
 
-### Unit Test Example
+### 单元测试示例
 
 ```java
 @ExtendWith(MockitoExtension.class)
@@ -318,51 +318,51 @@ class UserServiceImplTest {
 }
 ```
 
-**Rules:**
-- BDD-style naming: `shouldXxx_whenYyy`
-- Given/When/Then comments in test body
-- Use AssertJ fluent assertions over JUnit's `assertEquals`
-- Mock only direct dependencies of the class under test
-- Target >80% coverage on services/repositories
+**规则：**
+- BDD 风格命名：`shouldXxx_whenYyy`
+- 测试体中使用 Given/When/Then 注释
+- 使用 AssertJ 流式断言而非 JUnit 的 `assertEquals`
+- 仅模拟被测类的直接依赖
+- 服务/仓库的目标覆盖率 >80%
 
-## Security Checklist (Java-Specific)
+## 安全检查清单（Java 特定）
 
-| Check | Rule |
+| 检查项 | 规则 |
 |-------|------|
-| SQL Injection | Always use Spring Data JPA / JDBC parameterized queries. Never string concatenation in JPQL/HQL |
-| XSS | Set `escapeHtml=true` on Thymeleaf if used. Sanitize output via OWASP Java HTML sanitizer |
-| CSRF | Enable CSRF protection in Spring Security (default). Disable only for stateless APIs using tokens |
-| Deserialization | Never accept `ObjectInputStream` from untrusted sources. Use JSON with strict type binding |
-| Path Traversal | Validate file paths against allowed directories. Use `Path.normalize()` and check prefix |
-| Dependency Vulnerabilities | Run OWASP Dependency Check or Snyk in CI Maven/Gradle phase |
-| Secret Management | No properties files with secrets in VCS. Use Vault, AWS Secrets Manager, or Kubernetes secrets |
-| Logging | Never log sensitive data (passwords, tokens, PII). Use masking in log patterns |
+| SQL 注入 | 始终使用 Spring Data JPA / JDBC 参数化查询。绝不在 JPQL/HQL 中拼接字符串 |
+| XSS | 如果使用 Thymeleaf，设置 `escapeHtml=true`。通过 OWASP Java HTML sanitizer 清理输出 |
+| CSRF | 在 Spring Security 中启用 CSRF 保护（默认）。仅对使用 token 的无状态 API 禁用 |
+| 反序列化 | 绝不接受来自不受信任来源的 `ObjectInputStream`。使用带有严格类型绑定的 JSON |
+| 路径遍历 | 根据允许的目录验证文件路径。使用 `Path.normalize()` 并检查前缀 |
+| 依赖漏洞 | 在 CI Maven/Gradle 阶段运行 OWASP Dependency Check 或 Snyk |
+| 密钥管理 | VCS 中不包含带密钥的 properties 文件。使用 Vault、AWS Secrets Manager 或 Kubernetes secrets |
+| 日志记录 | 绝不记录敏感数据（密码、token、PII）。在日志模式中使用脱敏 |
 
-## Performance Patterns
+## 性能模式
 
-| Pattern | Anti-Pattern |
+| 模式 | 反模式 |
 |---------|-------------|
-| `@Transactional(readOnly = true)` for read operations | Unnecessary write transactions for reads |
-| `@EntityGraph` / `JOIN FETCH` for N+1 prevention | Lazy loading causing N+1 queries |
-| Pagination (`Pageable`) for list endpoints | Returning unbounded lists |
-| Caching (`@Cacheable`) for frequently read data | Repeated DB queries for static/reference data |
-| Async processing (`@Async`) for non-critical paths | Blocking HTTP thread on slow I/O |
-| Connection pooling (HikariCP — default in Spring Boot) | Creating connections manually |
-| Streaming response for large payloads | Loading entire result set into memory |
-| DTO projection for partial data needs | Fetching full entity graphs when only 2 fields needed |
+| 读操作使用 `@Transactional(readOnly = true)` | 读操作使用不必要的写事务 |
+| 使用 `@EntityGraph` / `JOIN FETCH` 防止 N+1 | 延迟加载导致 N+1 查询 |
+| 列表端点使用分页（`Pageable`） | 返回无界列表 |
+| 频繁读取的数据使用缓存（`@Cacheable`） | 对静态/参考数据重复查询数据库 |
+| 非关键路径使用异步处理（`@Async`） | 在慢 I/O 上阻塞 HTTP 线程 |
+| 连接池（HikariCP —— Spring Boot 默认） | 手动创建连接 |
+| 大负载使用流式响应 | 将整个结果集加载到内存 |
+| 部分数据需求使用 DTO 投影 | 只需要 2 个字段时获取完整实体图 |
 
-## Ecosystem Toolchain
+## 生态工具链
 
-| Tool | Purpose |
+| 工具 | 用途 |
 |------|---------|
-| **Spotless** or **Google Java Format** | Code formatter |
-| **Checkstyle** + **SpotBugs** | Static analysis |
-| **Error Prone** (Google) | Compile-time bug detection |
-| **JUnit 5** + **Mockito** + **AssertJ** | Testing |
-| **Testcontainers** | Integration tests with real databases |
-| **MapStruct** | Type-safe bean mapping |
-| **Lombok** | Boilerplate reduction (use sparingly — prefer records where possible) |
-| **Spring Boot Actuator** | Health checks, metrics, observability |
-| **Micrometer** + **Prometheus/Grafana** | Metrics collection |
-| **Flyway** or **Liquibase** | Database versioned migrations |
-| **Gradle (Kotlin DSL)** or **Maven** | Build tool (Gradle preferred for new projects) |
+| **Spotless** 或 **Google Java Format** | 代码格式化器 |
+| **Checkstyle** + **SpotBugs** | 静态分析 |
+| **Error Prone**（Google） | 编译时错误检测 |
+| **JUnit 5** + **Mockito** + **AssertJ** | 测试 |
+| **Testcontainers** | 使用真实数据库的集成测试 |
+| **MapStruct** | 类型安全的 Bean 映射 |
+| **Lombok** | 减少样板代码（谨慎使用 —— 优先使用 record） |
+| **Spring Boot Actuator** | 健康检查、指标、可观测性 |
+| **Micrometer** + **Prometheus/Grafana** | 指标收集 |
+| **Flyway** 或 **Liquibase** | 数据库版本化迁移 |
+| **Gradle（Kotlin DSL）** 或 **Maven** | 构建工具（新项目优先使用 Gradle） |

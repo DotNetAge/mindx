@@ -1,6 +1,6 @@
 ---
 name: file-organizer
-description: Intelligently organizes your files and folders across your computer by understanding context, finding duplicates, suggesting better structures, and automating cleanup tasks. Reduces cognitive load and keeps your digital workspace tidy without manual effort.
+description: 通过理解上下文、查找重复文件、建议更优结构并自动化清理任务，智能整理电脑上的文件和文件夹。降低认知负担，无需手动操作即可保持数字工作空间整洁有序。
 metadata:
   name_zh: 文件整理
   name_zh-tw: 檔案整理
@@ -8,316 +8,276 @@ metadata:
   description_zh-tw: 透過理解上下文、查找重複檔案、建議更好結構並自動化清理任務，智慧整理檔案
 ---
 
-# File Organizer
+# 文件整理
 
-This skill acts as your personal organization assistant, helping you maintain a clean, logical file structure across your computer without the mental overhead of constant manual organization.
+本技能是你的个人整理助手，帮你把整台电脑的文件维护得干净、有条理，再也不用为手动整理费脑子。
 
-## When to Use This Skill
+## 何时使用本技能
 
-- Your Downloads folder is a chaotic mess
-- You can't find files because they're scattered everywhere
-- You have duplicate files taking up space
-- Your folder structure doesn't make sense anymore
-- You want to establish better organization habits
-- You're starting a new project and need a good structure
-- You're cleaning up before archiving old projects
+- 下载文件夹乱成一团
+- 文件到处散落，想找的东西找不到
+- 重复文件占了不少空间
+- 文件夹结构乱七八糟，不合逻辑
+- 想养成更好的整理习惯
+- 启动新项目，需要规划好目录结构
+- 归档旧项目之前，想先清理一番
 
-## What This Skill Does
+## 本技能的功能
 
-1. **Analyzes Current Structure**: Reviews your folders and files to understand what you have
-2. **Finds Duplicates**: Identifies duplicate files across your system
-3. **Suggests Organization**: Proposes logical folder structures based on your content
-4. **Automates Cleanup**: Moves, renames, and organizes files with your approval
-5. **Maintains Context**: Makes smart decisions based on file types, dates, and content
-6. **Reduces Clutter**: Identifies old files you probably don't need anymore
+1. **分析当前结构**：扫描文件夹和文件，摸清现有内容
+2. **查找重复文件**：找出系统中的重复项
+3. **建议整理方案**：根据内容推荐合理的文件夹结构
+4. **自动化清理**：经你确认后，自动移动、重命名和整理文件
+5. **智能决策**：根据文件类型、日期和内容做出判断
+6. **减少杂乱**：找出你可能不再需要的旧文件
 
-## How to Use
+## 操作指南
 
-### From Your Home Directory
+当用户请求文件整理帮助时：
 
-```
-cd ~
-```
-
-Then run Claude Code and ask for help:
-
-```
-Help me organize my Downloads folder
-```
-
-```
-Find duplicate files in my Documents folder
-```
-
-```
-Review my project directories and suggest improvements
-```
-
-### Specific Organization Tasks
-
-```
-Organize these downloads into proper folders based on what they are
-```
-
-```
-Find duplicate files and help me decide which to keep
-```
-
-```
-Clean up old files I haven't touched in 6+ months
-```
-
-```
-Create a better folder structure for my [work/projects/photos/etc]
-```
-
-## Instructions
-
-When a user requests file organization help:
-
-1. **Understand the Scope**
+1. **了解范围**
    
-   Ask clarifying questions:
-   - Which directory needs organization? (Downloads, Documents, entire home folder?)
-   - What's the main problem? (Can't find things, duplicates, too messy, no structure?)
-   - Any files or folders to avoid? (Current projects, sensitive data?)
-   - How aggressively to organize? (Conservative vs. comprehensive cleanup)
+   提出澄清问题：
+   - 哪个目录需要整理？（下载、文档、整个主目录？）
+   - 主要问题是什么？（找不到东西、重复文件、太乱、没有结构？）
+   - 有哪些文件或文件夹需要避开？（当前项目、敏感数据？）
+   - 整理力度如何？（保守整理 vs 全面清理）
 
-2. **Analyze Current State**
+2. **分析当前状态**
    
-   Review the target directory:
+   审查目标目录：
    ```bash
-   # Get overview of current structure
+   # 获取当前结构概览
    ls -la [target_directory]
    
-   # Check file types and sizes
+   # 检查文件类型和大小
    find [target_directory] -type f -exec file {} \; | head -20
    
-   # Identify largest files
+   # 识别最大文件
    du -sh [target_directory]/* | sort -rh | head -20
    
-   # Count file types
+   # 统计文件类型
    find [target_directory] -type f | sed 's/.*\.//' | sort | uniq -c | sort -rn
    ```
    
-   Summarize findings:
-   - Total files and folders
-   - File type breakdown
-   - Size distribution
-   - Date ranges
-   - Obvious organization issues
+   总结发现：
+   - 文件和文件夹总数
+   - 文件类型分布
+   - 大小分布
+   - 日期范围
+   - 明显的整理问题
 
-3. **Identify Organization Patterns**
+3. **识别整理模式**
    
-   Based on the files, determine logical groupings:
+   根据文件内容确定合理的分组：
    
-   **By Type**:
-   - Documents (PDFs, DOCX, TXT)
-   - Images (JPG, PNG, SVG)
-   - Videos (MP4, MOV)
-   - Archives (ZIP, TAR, DMG)
-   - Code/Projects (directories with code)
-   - Spreadsheets (XLSX, CSV)
-   - Presentations (PPTX, KEY)
+   **按类型**：
+   - 文档（PDF、DOCX、TXT）
+   - 图片（JPG、PNG、SVG）
+   - 视频（MP4、MOV）
+   - 压缩包（ZIP、TAR、DMG）
+   - 代码/项目（包含代码的目录）
+   - 表格（XLSX、CSV）
+   - 演示文稿（PPTX、KEY）
    
-   **By Purpose**:
-   - Work vs. Personal
-   - Active vs. Archive
-   - Project-specific
-   - Reference materials
-   - Temporary/scratch files
+   **按用途**：
+   - 工作 vs 个人
+   - 活跃 vs 归档
+   - 特定项目
+   - 参考资料
+   - 临时/草稿文件
    
-   **By Date**:
-   - Current year/month
-   - Previous years
-   - Very old (archive candidates)
+   **按日期**：
+   - 当前年/月
+   - 往年
+   - 非常旧（归档候选）
 
-4. **Find Duplicates**
+4. **查找重复文件**
    
-   When requested, search for duplicates:
+   根据要求搜索重复文件：
    ```bash
-   # Find exact duplicates by hash
+   # 通过哈希查找完全相同的重复文件
    find [directory] -type f -exec md5 {} \; | sort | uniq -d
    
-   # Find files with same name
+   # 查找同名文件
    find [directory] -type f -printf '%f\n' | sort | uniq -d
    
-   # Find similar-sized files
+   # 查找大小相似的文件
    find [directory] -type f -printf '%s %p\n' | sort -n
    ```
    
-   For each set of duplicates:
-   - Show all file paths
-   - Display sizes and modification dates
-   - Recommend which to keep (usually newest or best-named)
-   - **Important**: Always ask for confirmation before deleting
+   对每组重复文件：
+   - 显示所有文件路径
+   - 显示大小和修改日期
+   - 推荐保留哪个（通常是最新或命名最规范的）
+   - **重要**：删除前务必征求确认
 
-5. **Propose Organization Plan**
+5. **提出整理方案**
    
-   Present a clear plan before making changes:
+   在进行更改前展示清晰的方案：
    
    ```markdown
-   # Organization Plan for [Directory]
+   # [目录] 整理方案
    
-   ## Current State
-   - X files across Y folders
-   - [Size] total
-   - File types: [breakdown]
-   - Issues: [list problems]
+   ## 当前状态
+   - X 个文件分布在 Y 个文件夹中
+   - 总计 [大小]
+   - 文件类型：[分布]
+   - 问题：[列出问题]
    
-   ## Proposed Structure
+   ## 建议结构
    
    ```
-   [Directory]/
-   ├── Work/
-   │   ├── Projects/
-   │   ├── Documents/
-   │   └── Archive/
-   ├── Personal/
-   │   ├── Photos/
-   │   ├── Documents/
-   │   └── Media/
-   └── Downloads/
-       ├── To-Sort/
-       └── Archive/
+   [目录]/
+   ├── 工作/
+   │   ├── 项目/
+   │   ├── 文档/
+   │   └── 归档/
+   ├── 个人/
+   │   ├── 照片/
+   │   ├── 文档/
+   │   └── 媒体/
+   └── 下载/
+       ├── 待整理/
+       └── 归档/
    ```
    
-   ## Changes I'll Make
+   ## 我将进行的更改
    
-   1. **Create new folders**: [list]
-   2. **Move files**:
-      - X PDFs → Work/Documents/
-      - Y images → Personal/Photos/
-      - Z old files → Archive/
-   3. **Rename files**: [any renaming patterns]
-   4. **Delete**: [duplicates or trash files]
+   1. **创建新文件夹**：[列表]
+   2. **移动文件**：
+      - X 个 PDF → 工作/文档/
+      - Y 张图片 → 个人/照片/
+      - Z 个旧文件 → 归档/
+   3. **重命名文件**：[任何重命名模式]
+   4. **删除**：[重复文件或垃圾文件]
    
-   ## Files Needing Your Decision
+   ## 需要你决定的文件
    
-   - [List any files you're unsure about]
+   - [列出任何不确定的文件]
    
-   Ready to proceed? (yes/no/modify)
+   准备好继续了吗？（是/否/修改）
    ```
 
-6. **Execute Organization**
+6. **执行整理**
    
-   After approval, organize systematically:
+   获得批准后，系统性地整理：
    
    ```bash
-   # Create folder structure
+   # 创建文件夹结构
    mkdir -p "path/to/new/folders"
    
-   # Move files with clear logging
+   # 移动文件并清晰记录日志
    mv "old/path/file.pdf" "new/path/file.pdf"
    
-   # Rename files with consistent patterns
-   # Example: "YYYY-MM-DD - Description.ext"
+   # 使用一致的模式重命名文件
+   # 示例："YYYY-MM-DD - 描述.扩展名"
    ```
    
-   **Important Rules**:
-   - Always confirm before deleting anything
-   - Log all moves for potential undo
-   - Preserve original modification dates
-   - Handle filename conflicts gracefully
-   - Stop and ask if you encounter unexpected situations
+   **重要规则**：
+   - 删除任何内容前务必确认
+   - 记录所有移动操作以便必要时撤销
+   - 保留原始修改日期
+   - 优雅处理文件名冲突
+   - 遇到意外情况时停下来询问
 
-7. **Provide Summary and Maintenance Tips**
+7. **提供总结和维护建议**
    
-   After organizing:
+   整理完成后：
    
    ```markdown
-   # Organization Complete! ✨
+   # 整理完成！✨
    
-   ## What Changed
+   ## 变更内容
    
-   - Created [X] new folders
-   - Organized [Y] files
-   - Freed [Z] GB by removing duplicates
-   - Archived [W] old files
+   - 创建了 [X] 个新文件夹
+   - 整理了 [Y] 个文件
+   - 通过删除重复文件释放了 [Z] GB 空间
+   - 归档了 [W] 个旧文件
    
-   ## New Structure
+   ## 新结构
    
-   [Show the new folder tree]
+   [显示新的文件夹树]
    
-   ## Maintenance Tips
+   ## 维护建议
    
-   To keep this organized:
+   保持整洁的方法：
    
-   1. **Weekly**: Sort new downloads
-   2. **Monthly**: Review and archive completed projects
-   3. **Quarterly**: Check for new duplicates
-   4. **Yearly**: Archive old files
+   1. **每周**：整理新下载的文件
+   2. **每月**：审查并归档已完成的项目
+   3. **每季度**：检查新的重复文件
+   4. **每年**：归档旧文件
    
-   ## Quick Commands for You
+   ## 给你的快捷命令
    
    ```bash
-   # Find files modified this week
+   # 查找本周修改的文件
    find . -type f -mtime -7
    
-   # Sort downloads by type
-   [custom command for their setup]
+   # 按类型整理下载
+   [针对其设置的自定义命令]
    
-   # Find duplicates
-   [custom command]
+   # 查找重复文件
+   [自定义命令]
    ```
    
-   Want to organize another folder?
+   想整理另一个文件夹吗？
    ```
 
-## Examples
+## 示例
 
-### Example 1: Organizing Downloads (From Justin Dielmann)
+### 示例 1：整理下载文件夹（来自 Justin Dielmann）
 
-**User**: "My Downloads folder is a mess with 500+ files. Help me organize it."
+**用户**："我的下载文件夹里有 500 多个文件，乱成一团。帮我整理一下。"
 
-**Process**:
-1. Analyzes Downloads folder
-2. Finds patterns: work docs, personal photos, installers, random PDFs
-3. Proposes structure:
-   - Downloads/
-     - Work/
-     - Personal/
-     - Installers/ (DMG, PKG files)
-     - Archive/
-     - ToSort/ (things needing decisions)
-4. Asks for confirmation
-5. Moves files intelligently based on content and names
-6. Results: 500 files → 5 organized folders
+**流程**：
+1. 分析下载文件夹
+2. 发现规律：工作文档、个人照片、安装程序、零散 PDF
+3. 提出结构建议：
+   - 下载/
+     - 工作/
+     - 个人/
+     - 安装程序/（DMG、PKG 文件）
+     - 归档/
+     - 待整理/（需要决定的文件）
+4. 征求确认
+5. 根据内容和文件名智能移动文件
+6. 结果：500 个文件 → 5 个整理好的文件夹
 
-### Example 2: Finding and Removing Duplicates
+### 示例 2：查找并删除重复文件
 
-**User**: "Find duplicate files in my Documents and help me decide which to keep."
+**用户**："找出我文档文件夹里的重复文件，帮我决定保留哪些。"
 
-**Output**:
+**输出**：
 ```markdown
-# Found 23 Sets of Duplicates (156 MB total)
+# 发现 23 组重复文件（共 156 MB）
 
-## Duplicate Set 1: "proposal.pdf"
-- `/Documents/proposal.pdf` (2.3 MB, modified: 2024-03-15)
-- `/Documents/old/proposal.pdf` (2.3 MB, modified: 2024-03-15)
-- `/Desktop/proposal.pdf` (2.3 MB, modified: 2024-03-10)
+## 重复组 1："proposal.pdf"
+- `/Documents/proposal.pdf`（2.3 MB，修改于：2024-03-15）
+- `/Documents/old/proposal.pdf`（2.3 MB，修改于：2024-03-15）
+- `/Desktop/proposal.pdf`（2.3 MB，修改于：2024-03-10）
 
-**Recommendation**: Keep `/Documents/proposal.pdf` (most recent in correct location)
-Delete the other 2 copies?
+**建议**：保留 `/Documents/proposal.pdf`（最新且在正确位置）
+删除其他 2 个副本？
 
-[Continue for all duplicates...]
+[继续列出所有重复文件...]
 ```
 
-### Example 3: Restructuring Projects Folder
+### 示例 3：重构项目文件夹
 
-**User**: "Review my ~/Projects directory and suggest improvements."
+**用户**："审查我的 ~/Projects 目录并提出改进建议。"
 
-**Output**:
+**输出**：
 ```markdown
-# Analysis of ~/Projects
+# ~/Projects 分析
 
-## Current Structure Issues
-- Mix of active and archived projects (3+ years old)
-- No consistent naming convention
-- Some projects at root, others in random subfolders
-- Duplicate folders (project-name, project-name-old, project-name-v2)
+## 当前结构问题
+- 活跃项目和已归档项目混杂（3 年以上的项目）
+- 没有一致的命名规范
+- 有些项目在根目录，有些在随机子文件夹中
+- 重复文件夹（project-name、project-name-old、project-name-v2）
 
-## Proposed Structure
+## 建议结构
 
 ```
 Projects/
@@ -332,20 +292,20 @@ Projects/
 └── Templates/
 ```
 
-## Specific Changes
-1. Move 12 projects not touched since 2022 → Archive/
-2. Consolidate 4 duplicate project folders
-3. Rename projects to consistent format: "client-name-project-name"
-4. Create Archive for old work
+## 具体更改
+1. 将 12 个自 2022 年以来未动过的项目移至 → Archive/
+2. 合并 4 个重复的项目文件夹
+3. 将项目重命名为一致格式："client-name-project-name"
+4. 为旧工作创建归档
 
-Want me to implement this?
+要我执行这些更改吗？
 ```
 
-### Example 4: Organizing Photos by Date
+### 示例 4：按日期整理照片
 
-**User**: "Organize my photo folders by year and month."
+**用户**："按年月整理我的照片文件夹。"
 
-**Output**: Creates structure like:
+**输出**：创建如下结构：
 ```
 Photos/
 ├── 2023/
@@ -358,81 +318,79 @@ Photos/
 └── Unsorted/
 ```
 
-Then moves photos based on EXIF data or file modification dates.
+然后根据 EXIF 数据或文件修改日期移动照片。
 
-## Common Organization Tasks
+## 常见整理任务
 
-### Downloads Cleanup
+### 下载清理
 ```
-Organize my Downloads folder - move documents to Documents, 
-images to Pictures, keep installers separate, and archive files 
-older than 3 months.
-```
-
-### Project Organization
-```
-Review my Projects folder structure and help me separate active 
-projects from old ones I should archive.
+整理我的下载文件夹 - 将文档移到文档文件夹，
+图片移到图片文件夹，安装程序单独存放，
+归档 3 个月前的文件。
 ```
 
-### Duplicate Removal
+### 项目整理
 ```
-Find all duplicate files in my Documents folder and help me 
-decide which ones to keep.
-```
-
-### Desktop Cleanup
-```
-My Desktop is covered in files. Help me organize everything into 
-my Documents folder properly.
+审查我的项目文件夹结构，帮我区分活跃项目
+和应该归档的旧项目。
 ```
 
-### Photo Organization
+### 删除重复文件
 ```
-Organize all photos in this folder by date (year/month) based 
-on when they were taken.
-```
-
-### Work/Personal Separation
-```
-Help me separate my work files from personal files across my 
-Documents folder.
+找出文档文件夹中所有重复文件，
+帮我决定保留哪些。
 ```
 
-## Pro Tips
+### 桌面清理
+```
+我的桌面堆满了文件。帮我把所有东西
+妥善整理到文档文件夹。
+```
 
-1. **Start Small**: Begin with one messy folder (like Downloads) to build trust
-2. **Regular Maintenance**: Run weekly cleanup on Downloads
-3. **Consistent Naming**: Use "YYYY-MM-DD - Description" format for important files
-4. **Archive Aggressively**: Move old projects to Archive instead of deleting
-5. **Keep Active Separate**: Maintain clear boundaries between active and archived work
-6. **Trust the Process**: Let Claude handle the cognitive load of where things go
+### 照片整理
+```
+按拍摄日期（年/月）整理这个文件夹里的所有照片。
+```
 
-## Best Practices
+### 工作/个人分离
+```
+帮我把文档文件夹中的工作文件和个人文件分开。
+```
 
-### Folder Naming
-- Use clear, descriptive names
-- Avoid spaces (use hyphens or underscores)
-- Be specific: "client-proposals" not "docs"
-- Use prefixes for ordering: "01-current", "02-archive"
+## 专业技巧
 
-### File Naming
-- Include dates: "2024-10-17-meeting-notes.md"
-- Be descriptive: "q3-financial-report.xlsx"
-- Avoid version numbers in names (use version control instead)
-- Remove download artifacts: "document-final-v2 (1).pdf" → "document.pdf"
+1. **从小处开始**：先整理一个混乱的文件夹（如下载），建立信任
+2. **定期维护**：每周清理下载文件夹
+3. **一致命名**：对重要文件使用"YYYY-MM-DD - 描述"格式
+4. **积极归档**：将旧项目移到归档而不是删除
+5. **保持活跃分离**：在活跃工作和归档工作之间保持清晰界限
+6. **信任流程**：让 Claude 处理文件归类的认知负担
 
-### When to Archive
-- Projects not touched in 6+ months
-- Completed work that might be referenced later
-- Old versions after migration to new systems
-- Files you're hesitant to delete (archive first)
+## 最佳实践
 
-## Related Use Cases
+### 文件夹命名
+- 使用清晰、描述性的名称
+- 避免空格（使用连字符或下划线）
+- 具体明确："client-proposals" 而不是 "docs"
+- 使用前缀排序："01-current"、"02-archive"
 
-- Setting up organization for a new computer
-- Preparing files for backup/archiving
-- Cleaning up before storage cleanup
-- Organizing shared team folders
-- Structuring new project directories
+### 文件命名
+- 包含日期："2024-10-17-meeting-notes.md"
+- 描述性强："q3-financial-report.xlsx"
+- 避免在文件名中使用版本号（改用版本控制）
+- 删除下载痕迹："document-final-v2 (1).pdf" → "document.pdf"
+
+### 何时归档
+- 6 个月以上未动过的项目
+- 可能以后会参考的已完成工作
+- 迁移到新系统后的旧版本
+- 犹豫是否要删除的文件（先归档）
+
+## 相关用例
+
+- 为新电脑设置整理结构
+- 为备份/归档准备文件
+- 在存储清理前整理
+- 整理共享团队文件夹
+- 构建新项目目录结构
 

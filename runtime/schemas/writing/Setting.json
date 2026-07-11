@@ -17,11 +17,11 @@
     },
     "time_period": {
       "type": "string",
-      "description": "The historical era, season, or time frame in which the story takes place"
+      "description": "故事发生的历史时代、季节或时间框架"
     },
     "location": {
       "type": "string",
-      "description": "The geographical or spatial context of the narrative"
+      "description": "叙事的地理或空间背景"
     },
     "mood": {
       "type": "string",

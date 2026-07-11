@@ -1,10 +1,7 @@
 ---
 name: dev-guidelines
 description: >
-  Universal coding standards and language-specific best practices that define
-  how production-quality code should be written. Inject this into any developer
-  agent to establish a consistent quality baseline — code quality is not about
-  model capability, it is about following disciplined standards.
+  通用编码标准与各语言最佳实践，定义生产级代码的编写规范。注入任何开发者 Agent 以建立一致的质量基线——代码质量取决于遵循的标准，而非模型能力本身。
 allowed-tools: bash read glob grep
 metadata:
   name_zh: 开发守则
@@ -13,95 +10,93 @@ metadata:
   description_zh-tw: 通用編碼標準與各語言最佳實踐，定義生產級程式碼的編寫規範。注入任何開發者 Agent 以建立一致的品質基線——程式碼品質取決於遵循的標準，而非模型能力本身
 ---
 
-## When to Use
+## 使用时机
 
-This skill is **always active** when writing or reviewing code. It is not triggered
-by user request — it is injected as a baseline discipline.
+编写或审查代码时，此技能**始终生效**。无需用户请求触发——它作为基线纪律自动注入。
 
-**Do NOT use** for architecture decisions (use `architect`), deployment ops (use `sysops`),
-or non-code tasks.
+**请勿用于**架构决策（使用 `architect`）、部署运维（使用 `sysops`）或非代码任务。
 
-## Core Principle
+## 核心原则
 
-> Code quality = Standards compliance, not model intelligence.
+> 代码质量 = 遵循标准，而非模型智能。
 >
-> A model without standards produces inconsistent code.
-> A model WITH standards produces predictable, maintainable output.
+> 缺乏标准的模型，产出往往不一致。
+> 遵循标准的模型，产出可预测、可维护。
 
-## Language Selection
+## 语言选择
 
-Before coding, identify the target language and load its specific guidelines:
+在编码前，识别目标语言并加载其特定指南：
 
-| If user asks about... | Load reference | Key framework context |
-|----------------------|---------------|----------------------|
-| Python backend | `references/python.md` | FastAPI / Django / Flask |
-| Go service | `references/go.md` | Standard lib / Gin / Echo |
-| Rust service | `references/rust.md` | Actix-web / Axum |
-| Node.js/TS backend | `references/typescript.md` | Express / Fastify / NestJS |
-| Java service | `references/java.md` | Spring Boot / Quarkus |
-| Any language | `references/universal.md` | Cross-cutting principles |
+| 如果用户询问... | 加载参考                   | 关键框架上下文             |
+| --------------- | -------------------------- | -------------------------- |
+| Python 后端     | `references/python.md`     | FastAPI / Django / Flask   |
+| Go 服务         | `references/go.md`         | 标准库 / Gin / Echo        |
+| Rust 服务       | `references/rust.md`       | Actix-web / Axum           |
+| Node.js/TS 后端 | `references/typescript.md` | Express / Fastify / NestJS |
+| Java 服务       | `references/java.md`       | Spring Boot / Quarkus      |
+| 任何语言        | `references/universal.md`  | 跨领域原则                 |
 
-**Always load `universal.md` first**, then the language-specific reference.
+**始终先加载 `universal.md`**，然后加载语言特定参考。
 
-## Quality Gates
+## 质量门禁
 
-Every piece of code must pass these gates before delivery:
+代码交付前，必须通过以下门禁：
 
-### Gate 1: Style Compliance
-- Follows the language's official style guide (PEP 8, effective go, rustfmt, etc.)
-- Consistent naming conventions throughout the codebase
-- No TODO/FIXME/HACK comments in delivered code
+### 门禁 1：风格合规
+- 遵循语言的官方风格指南（PEP 8、effective go、rustfmt 等）
+- 整个代码库保持一致的命名约定
+- 交付代码中没有 TODO/FIXME/HACK 注释
 
-### Gate 2: Error Handling
-- Every fallible operation has explicit error handling
-- Errors are wrapped with context (not bare re-raises)
-- No silent error swallowing (`except: pass`, empty catch blocks)
-- Panic/recover or equivalent used only for unrecoverable states
+### 门禁 2：错误处理
+- 每个可能失败的操作都有显式错误处理
+- 错误带有上下文包装（不是简单的重新抛出）
+- 没有静默吞掉错误（`except: pass`、空 catch 块）
+- Panic/recover 或等价机制仅用于不可恢复状态
 
-### Gate 3: Security Basics
-- User input is always validated and sanitized
-- No hardcoded secrets, credentials, or tokens
-- SQL queries use parameterized statements (no string concatenation)
-- Authentication/authorization checks on every endpoint
+### 门禁 3：安全基础
+- 始终验证和清理用户输入
+- 没有硬编码的密钥、凭证或令牌
+- SQL 查询使用参数化语句（不拼接字符串）
+- 每个端点都有认证/授权检查
 
-### Gate 4: Testability
-- Functions are small, single-responsibility, side-effect-free where possible
-- Dependencies are injectable (no global singletons in business logic)
-- Public APIs have corresponding test cases
+### 门禁 4：可测试性
+- 函数小而单一职责，尽可能无副作用
+- 依赖可注入（业务逻辑中没有全局单例）
+- 公共 API 有对应的测试用例
 
-### Gate 5: Performance Awareness
-- No O(n^2) where O(n) suffices (obvious algorithmic choices)
-- No unnecessary allocations in hot paths
-- I/O operations are async/non-blocking where the runtime supports it
-- Database queries are minimized (N+1 awareness)
+### 门禁 5：性能意识
+- 能 O(n) 解决的问题，不用 O(n^2)——算法选择要明显
+- 热路径避免不必要的内存分配
+- 运行时支持时，I/O 操作使用异步/非阻塞方式
+- 最小化数据库查询（警惕 N+1 问题）
 
-## Anti-Patterns (Language-Agnostic)
+## 反模式（语言无关）
 
-These patterns are **never acceptable** regardless of language:
+以下模式在任何语言中都**不可接受**：
 
-| Anti-Pattern | Why | Correct Approach |
-|-------------|-----|-----------------|
-| Copy-paste programming | DRY violation, double maintenance | Extract to function/module |
-| God objects/classes | SRD violation, untestable | Decompose by responsibility |
-| Magic numbers/strings | Unreadable, error-prone | Named constants or enums |
-| Deeply nested control flow | Cognitive overload >7 levels | Early returns, guard clauses |
-| Comments explaining *what* | Code should be self-explanatory | Rename variables/functions; comment *why* only |
-| Catch-all exception handlers | Swallows bugs | Catch specific exceptions; let unknowns propagate |
-| Global mutable state | Untestable, race-prone | Dependency injection, immutable data |
-| Synchronous I/O in async context | Blocks event loop, kills throughput | Use async variants consistently |
-| Hardcoded environment values | Works on dev, fails in prod | Config files, env vars, feature flags |
+| 反模式                 | 原因                       | 正确方法                        |
+| ---------------------- | -------------------------- | ------------------------------- |
+| 复制粘贴编程           | 违反 DRY，双重维护         | 提取到函数/模块                 |
+| 上帝对象/类            | 违反 SRD，不可测试         | 按职责分解                      |
+| 魔法数字/字符串        | 不可读，易出错             | 命名常量或枚举                  |
+| 深层嵌套控制流         | 认知负荷 >7 层             | 提前返回，守卫子句              |
+| 注释解释*做什么*       | 代码应该自解释             | 重命名变量/函数；只注释*为什么* |
+| 捕获所有异常处理器     | 吞掉 bug                   | 捕获特定异常；让未知异常传播    |
+| 全局可变状态           | 不可测试，易竞态           | 依赖注入，不可变数据            |
+| 异步上下文中的同步 I/O | 阻塞事件循环，降低吞吐     | 一致使用异步变体                |
+| 硬编码环境值           | 开发环境有效，生产环境失败 | 配置文件，环境变量，特性开关    |
 
-## Reference Files
+## 参考文件
 
-Each language reference contains:
+每个语言参考包含：
 
-1. **Project Structure** — Standard directory layout
-2. **Naming Conventions** — File/class/function/variable naming rules
-3. **Code Organization** — Module/package boundaries, import ordering
-4. **Error Handling Patterns** — Idiomatic error handling for that language
-5. **Testing Standards** — Framework choice, coverage expectations, fixture patterns
-6. **Security Checklist** — Language-specific security gotchas
-7. **Performance Patterns** — Common optimizations and anti-patterns
-8. **Ecosystem Toolchain** — Linters, formatters, type checkers to use
+1. **项目结构** — 标准目录布局
+2. **命名约定** — 文件/类/函数/变量命名规则
+3. **代码组织** — 模块/包边界，导入顺序
+4. **错误处理模式** — 该语言的惯用错误处理
+5. **测试标准** — 框架选择，覆盖率期望，fixture 模式
+6. **安全检查清单** — 语言特定的安全陷阱
+7. **性能模式** — 常见优化和反模式
+8. **生态工具链** — 使用的 linter、formatter、类型检查器
 
-Load the appropriate reference before writing any code.
+编写代码前，先加载相应参考。

@@ -1,67 +1,67 @@
-# Xiaohongshu (小红书) — Content Reference
+# 小红书 — 内容参考
 
-## Platform Context
+## 平台背景
 
-- Search-driven (40-60% of traffic from search). Users come with questions.
-- Dual-column feed — cover image determines click-through rate.
-- CES scoring: 收藏=8 > 转发=4 > 评论=4 > 点赞=1
-- Accounts with <10K followers produce 62% of viral content.
-- Single post per note. Never cram multiple topics.
+- 搜索驱动（40-60%的流量来自搜索），用户带着问题来。
+- 双列信息流——封面图决定点击率。
+- CES评分机制：收藏=8 > 转发=4 > 评论=4 > 点赞=1
+- 粉丝不到1万的账号贡献了62%的爆款内容。
+- 每篇笔记只讲一个主题，绝不堆砌多个话题。
 
-## Title Formula
-
-```
-[Audience] + [Pain Point] + [Solution] + [Proof Hook]
-```
-
-Validated templates:
-- "How I solved [problem] in [N] steps" — Step-by-step guide angle
-- "[N] [topic] tips that actually work for [audience]" — List-based
-- "I tried [product/method] for [duration], here's the truth" — Honest review
-- "Don't [common mistake] anymore! [N] better ways to..." — Pain point reversal
-
-Keep under 20 characters. Include search keywords naturally.
-
-## Content Structure
+## 标题公式
 
 ```
-Opening (15%): Directly state the pain or problem. Don't waste words.
-  "Anyone else [specific struggle]?"
-  "I tried [N] methods and only [one] worked."
-
-Body (70%): 3-5 actionable points. One point per paragraph.
-  Use emoji markers for visual breaks (✨✅💡)
-  Keep paragraphs to 1-3 lines. No dense text blocks.
-  Bold key terms. Use number lists.
-  Every point must be actionable, not abstract.
-
-Closing (15%): Brief summary + interaction prompt.
-  "Save this for later 🌟"
-  "What's your go-to method? Comment below 👇"
+[目标人群] + [痛点] + [解决方案] + [证据钩子]
 ```
 
-## Writing Style
+经验证的模板：
+- "我是怎么用[N]步解决[问题]的" — 步骤指南类
+- "[N]个对[人群]真正有效的[话题]技巧" — 列表类
+- "我用了[产品/方法][时长]，来说说真实感受" — 真实测评类
+- "别再[常见错误]了！[N]个更好的方法..." — 痛点反转类
 
-- Conversational, first-person ("I tried", "I found", "I used to think")
-- No academic language. No marketing copy. No boilerplate.
-- Use emojis sparingly as visual separators (not as decoration).
-- Every post must answer a question a real user would search for.
+标题控制在20字以内，自然嵌入搜索关键词。
 
-## Visual Standards
+## 内容结构
 
-- Cover: clean, text overlay (3-5 word title), high contrast
-- Infographic-style images: <50 characters text per image
-- Photo ratio: 3:4 (full-screen on feed)
-- Consistent filter/color palette across posts
+```
+开头（15%）：直击痛点或问题，不废话。
+  "有没有人也[具体的困扰]？"
+  "我试了[N]种方法，只有[某一种]管用。"
 
-## Quality Checklist
+正文（70%）：3-5个可操作要点，每段一个要点。
+  用emoji做视觉分隔（✨✅💡）
+  每段1-3行，不出现大段文字
+  加粗关键词，使用数字列表
+  每个要点必须可操作，不能是空泛的概念
 
-- [ ] Title contains search keywords
-- [ ] Cover has readable text overlay
-- [ ] Opening hooks within first 2 lines
-- [ ] Body is 3-5 actionable points
-- [ ] Each paragraph ≤ 3 lines
-- [ ] Emoji used as separator, not decoration
-- [ ] Closing has interaction prompt
-- [ ] Single topic per post (no kitchen-sink posts)
-- [ ] Free of platform-sensitive words
+结尾（15%）：简短总结 + 互动引导。
+  "先收藏起来 🌟"
+  "你平时用什么方法？评论区聊聊 👇"
+```
+
+## 写作风格
+
+- 对话式、第一人称（"我试了"、"我发现"、"我以前以为"）。
+- 不用学术用语，不用营销文案，不用套话。
+- emoji克制使用，作为视觉分隔符（不是装饰）。
+- 每篇笔记必须回答一个真实用户会搜索的问题。
+
+## 视觉标准
+
+- 封面：干净简洁，叠加文字标题（3-5个字），高对比度。
+- 信息图风格：每张图文字不超过50字。
+- 图片比例：3:4（信息流全屏展示）。
+- 跨笔记保持统一的滤镜/配色风格。
+
+## 质量检查清单
+
+- [ ] 标题包含搜索关键词
+- [ ] 封面有清晰可读的文字叠加
+- [ ] 开头2行内出现钩子
+- [ ] 正文3-5个可操作要点
+- [ ] 每段不超过3行
+- [ ] emoji用作分隔符而非装饰
+- [ ] 结尾有互动引导
+- [ ] 每篇笔记只讲一个主题（不堆砌）
+- [ ] 无平台敏感词

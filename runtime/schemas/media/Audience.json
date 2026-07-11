@@ -1,10 +1,10 @@
 {
   "type": "object",
-  "description": "A target audience segment or follower persona characterized by demographics, interests, and platform presence",
+  "description": "一个目标受众群体或粉丝画像，通过人口统计特征、兴趣爱好和平台活跃度来刻画",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Name or label of the audience segment, e.g. Z世代美妆爱好者, 科技从业者"
+      "description": "受众群体的名称或标签，例如：Z世代美妆爱好者、科技从业者"
     },
     "demographics": {
       "type": "string",
@@ -21,7 +21,7 @@
     },
     "platform": {
       "type": "string",
-      "description": "Primary platform where this audience is active"
+      "description": "该受众群体主要活跃的社交平台"
     }
   },
   "required": ["name"]

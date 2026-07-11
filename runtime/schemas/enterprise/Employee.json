@@ -1,28 +1,28 @@
 {
   "type": "object",
-  "description": "Employee, staff member, colleague, or stakeholder within the organization",
+  "description": "组织内的员工、同事或利益相关者",
   "properties": {
-    "name": { "type": "string", "description": "Full name of the employee" },
+    "name": { "type": "string", "description": "员工全名" },
     "title": {
       "type": "string",
-      "description": "Job title or position (e.g., Software Engineer, VP of Sales)"
+      "description": "职位或岗位（如软件工程师、销售副总裁）"
     },
     "department": {
       "type": "string",
-      "description": "Department or team the employee belongs to"
+      "description": "员工所属的部门或团队"
     },
     "email": {
       "type": "string",
       "format": "email",
-      "description": "Employee email address"
+      "description": "员工邮箱地址"
     },
     "role": {
       "type": "string",
-      "description": "Role category or function (e.g., individual contributor, manager, executive)"
+      "description": "角色类别或职能（如个人贡献者、经理、高管）"
     },
     "manager": {
       "type": "string",
-      "description": "Manager or supervisor name the employee reports to"
+      "description": "员工汇报对象的经理或主管姓名"
     }
   },
   "required": ["name", "email"]

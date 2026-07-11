@@ -1,24 +1,24 @@
 {
   "type": "object",
-  "description": "Contract, agreement, SLA, terms, or policy defining a binding arrangement between parties",
+  "description": "合同、协议、SLA、条款或政策，定义各方之间的约束性安排",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Contract title or reference name"
+      "description": "合同标题或参考名称"
     },
     "parties": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "List of involved parties or signatories in the contract"
+      "description": "合同中涉及的各方或签署方列表"
     },
     "type": {
       "type": "string",
-      "description": "Type of contract (e.g., service agreement, NDA, license, SLA, employment)"
+      "description": "合同类型（如服务协议、保密协议、许可证、SLA、劳动合同）"
     },
     "effective_date": {
       "type": "string",
       "format": "date",
-      "description": "Date the contract becomes effective (ISO 8601 format)"
+      "description": "合同生效日期（ISO 8601 格式）"
     },
     "expiry_date": {
       "type": "string",
@@ -28,12 +28,12 @@
     "status": {
       "type": "string",
       "enum": ["draft", "active", "expired", "terminated", "renewed"],
-      "description": "Current lifecycle status of the contract"
+      "description": "合同当前的生命周期状态"
     },
     "key_terms": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Key contractual terms, clauses, or conditions (e.g., payment terms, termination notice)"
+      "description": "合同关键条款、条件或约定（如付款条款、终止通知）"
     }
   },
   "required": ["name", "parties"]

@@ -8,7 +8,7 @@
     },
     "structure_type": {
       "type": "string",
-      "description": "A standardized label for the structural pattern",
+      "description": "结构模式的标准化标签",
       "enum": ["three_act", "kishotenketsu", "nonlinear"]
     },
     "parts": {
@@ -24,7 +24,7 @@
     },
     "example_works": {
       "type": "array",
-      "description": "Notable works that exemplify this narrative structure",
+      "description": "体现该叙事结构的著名作品",
       "items": {
         "type": "string"
       }

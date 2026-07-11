@@ -8,7 +8,7 @@
     },
     "author": {
       "type": "string",
-      "description": "The name of the author who created this work"
+      "description": "创作该作品的作者姓名"
     },
     "work_type": {
       "type": "string",
@@ -29,7 +29,7 @@
     },
     "characters": {
       "type": "array",
-      "description": "Key characters appearing in this work",
+      "description": "作品中出现的主要角色",
       "items": {
         "type": "string"
       }

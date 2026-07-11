@@ -14,11 +14,11 @@
     "status": {
       "type": "string",
       "enum": ["active", "inactive", "suspended", "former"],
-      "description": "Current engagement status with the supplier"
+      "description": "与供应商的当前合作状态"
     },
     "products_services": {
       "type": "string",
-      "description": "Description of the key products or services provided by the supplier"
+      "description": "供应商提供的主要产品或服务的描述"
     }
   },
   "required": ["name"]

@@ -1,30 +1,30 @@
 {
   "type": "object",
-  "description": "Creative output: blog, video, story, artwork, code",
+  "description": "创作成果：博客、视频、故事、艺术作品、代码",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Title or name of the creative work"
+      "description": "创作成果的标题或名称"
     },
     "creator": {
       "type": "string",
-      "description": "Creator, author, or artist who produced the work"
+      "description": "创作该作品的创作者、作者或艺术家"
     },
     "type": {
       "type": "string",
-      "description": "Work type: blog, video, artwork, code, story, music, design, etc."
+      "description": "作品类型：博客、视频、艺术作品、代码、故事、音乐、设计等"
     },
     "description": {
       "type": "string",
-      "description": "Description or summary of the work"
+      "description": "作品的描述或概要"
     },
     "url": {
       "type": "string",
-      "description": "URL or link to access the work"
+      "description": "访问该作品的 URL 或链接"
     },
     "created_date": {
       "type": "string",
-      "description": "Creation or publication date in YYYY-MM-DD format"
+      "description": "创作或发表日期，格式为 YYYY-MM-DD"
     }
   },
   "required": ["name"]

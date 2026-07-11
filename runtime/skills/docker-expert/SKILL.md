@@ -1,16 +1,7 @@
 ---
 name: docker-expert
 description: >
-  This skill should be used when the user asks to "create a Dockerfile", "optimize Docker image",
-  "multi-stage build", "container security", "Docker Compose", "docker-compose.yml",
-  "reduce image size", "Docker best practices", "containerize this app", "Docker health check",
-  "dockerignore", "Docker networking", "Docker volume", "Docker secrets", "container orchestration",
-  "Docker build optimization", "non-root container", "Docker layer caching", or any request
-  involving Docker containerization, image building, container security hardening, or
-  Docker Compose service orchestration. Also use when reviewing Docker configurations,
-  diagnosing build failures, troubleshooting container networking, or setting up development
-  containers with hot reload. Provides comprehensive Docker expertise including multi-stage
-  build optimization, security hardening, image size reduction, and production-ready patterns.
+  当用户要求"创建 Dockerfile"、"优化 Docker 镜像"、"多阶段构建"、"容器安全"、"Docker Compose"、"docker-compose.yml"、"减小镜像体积"、"Docker 最佳实践"、"容器化这个应用"、"Docker 健康检查"、"dockerignore"、"Docker 网络"、"Docker 卷"、"Docker 密钥"、"容器编排"、"Docker 构建优化"、"非 root 容器"、"Docker 层缓存"，或涉及 Docker 容器化、镜像构建、容器安全加固、Docker Compose 服务编排的任何请求时使用此技能。也适用于审查 Docker 配置、诊断构建失败、排查容器网络问题或搭建带热重载的开发容器。提供全面的 Docker 专业能力，包括多阶段构建优化、安全加固、镜像瘦身和生产级模式。
 allowed-tools: bash read_file write_file
 metadata:
   name_zh: Docker 专家
@@ -19,104 +10,104 @@ metadata:
   description_zh-tw: Docker 容器化優化、多階段建置、安全加固與生產級部署配置
 ---
 
-# Docker Expert Skill
+# Docker 专家技能
 
-Transform Docker configurations from functional to production-grade with focus on optimization, security, and maintainability. Use this when working with Dockerfiles, Docker Compose configurations, container builds, or any containerization task — from initial setup to production hardening.
+将 Docker 配置从可用级别提升到生产级，聚焦优化、安全和可维护性。适用于 Dockerfile、Docker Compose 配置、容器构建或任何容器化任务——从初始搭建到生产加固。
 
-## When to Use This Skill
+## 何时使用此技能
 
-- The user wants to create or improve a Dockerfile for any language or framework
-- Someone asks to optimize an existing Docker image (size, build speed, caching)
-- A project needs to be containerized from scratch or migrated to containers
-- The user wants to set up Docker Compose for multi-service applications
-- Security scanning reveals vulnerabilities in a container image
-- Builds are slow and someone asks to speed up Docker layer caching
-- A container needs security hardening (non-root user, secrets management, capabilities)
-- The user asks to review a Docker configuration for production readiness
-- Development workflow needs container setup with hot reload and debugging
-- Someone encounters Docker networking issues between services
-- The user asks about multi-architecture builds or cross-platform containerization
+- 用户想为任何语言或框架创建或改进 Dockerfile
+- 用户要求优化现有 Docker 镜像（体积、构建速度、缓存）
+- 项目需要从零开始容器化，或迁移到容器
+- 用户想为多服务应用搭建 Docker Compose
+- 安全扫描发现容器镜像存在漏洞
+- 构建缓慢，用户要求加速 Docker 层缓存
+- 容器需要安全加固（非 root 用户、密钥管理、权限控制）
+- 用户要求审查 Docker 配置的生产就绪状态
+- 开发工作流需要带热重载和调试的容器配置
+- 用户遇到服务间的 Docker 网络问题
+- 用户询问多架构构建或跨平台容器化
 
-## What This Skill Does
+## 此技能的功能
 
-1. **Analyzes existing Docker setups** — detects patterns, identifies anti-patterns, assesses production readiness
-2. **Creates production-grade Dockerfiles** — multi-stage builds, layer optimization, security hardening
-3. **Designs Docker Compose configurations** — service orchestration, networking, health checks, secrets
-4. **Optimizes image size and build speed** — from bloated images to lean, cached builds
-5. **Hardens container security** — non-root users, minimal attack surface, secrets management
-6. **Diagnoses container issues** — build failures, networking problems, resource constraints
+1. **分析现有 Docker 配置** — 检测模式、识别反模式、评估生产就绪度
+2. **创建生产级 Dockerfile** — 多阶段构建、层优化、安全加固
+3. **设计 Docker Compose 配置** — 服务编排、网络、健康检查、密钥管理
+4. **优化镜像体积和构建速度** — 从臃肿镜像到精简、缓存友好的构建
+5. **加固容器安全** — 非 root 用户、最小攻击面、密钥管理
+6. **诊断容器问题** — 构建失败、网络问题、资源限制
 
-## How to Use
-
-```
-Create a Dockerfile for this Go API server
-```
+## 使用方式
 
 ```
-My Docker build takes 10 minutes. Can you optimize it and speed up the caching?
+为这个 Go API 服务器创建 Dockerfile
 ```
 
 ```
-Review our docker-compose.yml for production readiness — we're deploying next week
+我的 Docker 构建需要 10 分钟。能优化一下加速缓存吗？
 ```
 
 ```
-Containerize this Node.js app with multi-stage builds for production
+审查我们的 docker-compose.yml 是否达到生产就绪——下周就要部署了
 ```
 
 ```
-Our container security scan found 15 vulnerabilities. Help me harden the image.
+用多阶段构建将这个 Node.js 应用容器化用于生产
 ```
 
 ```
-Set up a development Docker Compose environment with hot reload for this React + Express app
+容器安全扫描发现了 15 个漏洞。帮我加固镜像。
 ```
 
-## Workflow Overview
+```
+为这个 React + Express 应用搭建带热重载的开发 Docker Compose 环境
+```
+
+## 工作流概览
 
 ```
-User describes a Docker task
+用户描述 Docker 任务
         │
         ▼
-  Phase 1: Environment Detection — what Docker version, what project structure, what exists
+  阶段 1：环境检测 — Docker 版本、项目结构、现有配置
         │
         ▼
-  Phase 2: Problem Analysis — categorize: build, security, networking, orchestration, optimization
+  阶段 2：问题分析 — 分类：构建、安全、网络、编排、优化
         │
         ▼
-  Phase 3: Solution Design — apply best-practice patterns matching the user's stack
+  阶段 3：方案设计 — 应用匹配用户技术栈的最佳实践模式
         │
         ▼
-  Phase 4: Implementation — write or modify Dockerfiles, compose files, .dockerignore
+  阶段 4：实施 — 编写或修改 Dockerfile、compose 文件、.dockerignore
         │
         ▼
-  Phase 5: Validation — build test, security scan, runtime verification
+  阶段 5：验证 — 构建测试、安全扫描、运行时验证
 ```
 
 ---
 
-## Instructions
+## 操作指南
 
-### Phase 1: Environment Detection
+### 阶段 1：环境检测
 
-**Trigger:** Any Docker-related request. Always detect the environment first before making recommendations.
+**触发条件：** 任何 Docker 相关请求。在给出建议前始终先检测环境。
 
-#### Step 1.1 - Check Docker Availability
+#### 步骤 1.1 - 检查 Docker 可用性
 
 ```bash
 docker --version 2>/dev/null || echo "Docker not installed"
 docker info --format '{{.ServerVersion}}' 2>/dev/null || echo "Docker daemon not running"
 ```
 
-| Condition              | Action                                                                 |
-| ---------------------- | ---------------------------------------------------------------------- |
-| Docker not installed   | Guide user to install Docker Desktop or Docker Engine before proceeding |
-| Daemon not running     | Ask user to start Docker first                                         |
-| Docker ready           | Proceed to Step 1.2                                                    |
+| 条件           | 操作                                           |
+| -------------- | ---------------------------------------------- |
+| Docker 未安装  | 引导用户先安装 Docker Desktop 或 Docker Engine |
+| 守护进程未运行 | 请用户先启动 Docker                            |
+| Docker 就绪    | 进入步骤 1.2                                   |
 
-#### Step 1.2 - Scan Project Structure
+#### 步骤 1.2 - 扫描项目结构
 
-Find all Docker-related files in the project:
+查找项目中所有 Docker 相关文件：
 
 ```bash
 find . -name "Dockerfile*" -type f | head -10
@@ -124,69 +115,69 @@ find . -name "*compose*.yml" -o -name "*compose*.yaml" -type f | head -5
 find . -name ".dockerignore" -type f | head -3
 ```
 
-#### Step 1.3 - Assess Existing State
+#### 步骤 1.3 - 评估现有状态
 
-If Dockerfiles exist, examine them for patterns:
+如果已有 Dockerfile，检查以下模式：
 
-| What to Check                              | Why It Matters                                  |
-| ------------------------------------------ | ----------------------------------------------- |
-| Base image choice (Alpine, slim, distroless) | Affects size and security surface              |
-| Multi-stage builds present?                | Key optimization opportunity if missing          |
-| Layer ordering (deps before source?)       | Main cause of slow builds / cache invalidation   |
-| USER directive present?                    | Security baseline — should never run as root     |
-| HEALTHCHECK defined?                       | Needed for orchestration and production          |
-| EXPOSE vs actual ports                     | Must match application listening port            |
+| 检查项                                   | 重要性                       |
+| ---------------------------------------- | ---------------------------- |
+| 基础镜像选择（Alpine、slim、distroless） | 影响体积和安全面             |
+| 是否有多阶段构建？                       | 如果缺失，这是关键优化机会   |
+| 层顺序（依赖在源码之前？）               | 构建缓慢、缓存失效的主要原因 |
+| 是否有 USER 指令？                       | 安全基线——绝不应以 root 运行 |
+| 是否定义了 HEALTHCHECK？                 | 编排和生产环境必需           |
+| EXPOSE 与实际端口                        | 必须匹配应用监听端口         |
 
-#### Step 1.4 - Check Running State (if applicable)
+#### 步骤 1.4 - 检查运行状态（如适用）
 
 ```bash
 docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}" | head -10
 docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | head -10
 ```
 
-### Phase 2: Problem Analysis
+### 阶段 2：问题分析
 
-**Trigger:** After environment detection. Categorize the user's request to apply the right solution approach.
+**触发条件：** 环境检测完成后。对用户请求进行分类以应用正确的解决方案。
 
-#### Step 2.1 - Categorize the Request
+#### 步骤 2.1 - 请求分类
 
-| Category            | Typical Trigger Phrases                                        | Solution Focus                   |
-| ------------------- | -------------------------------------------------------------- | -------------------------------- |
-| **New Dockerfile**  | "create a Dockerfile", "containerize", "Dockerize this app"    | Multi-stage build from scratch   |
-| **Build Optimization** | "slow build", "cache issue", "rebuilds everything"          | Layer ordering, cache mounts     |
-| **Image Size**      | "image too large", "reduce size", "minimize image"             | Distroless, multi-stage, cleanup |
-| **Security**        | "vulnerabilities", "security scan", "run as non-root"          | Non-root user, secrets, minimal  |
-| **Compose Setup**   | "docker-compose", "orchestrate", "multi-service"               | Services, networks, health check |
-| **Networking**      | "can't connect", "service not found", "DNS resolution"         | Network config, service discovery|
-| **Review**          | "review my Docker", "production ready?", "best practices"      | Full checklist audit             |
-| **Development**     | "hot reload", "dev container", "debug in Docker"               | Dev targets, volume mounts       |
+| 类别                | 典型触发短语                                      | 解决重点                   |
+| ------------------- | ------------------------------------------------- | -------------------------- |
+| **新建 Dockerfile** | "创建 Dockerfile"、"容器化"、"Dockerize 这个应用" | 从零搭建多阶段构建         |
+| **构建优化**        | "构建慢"、"缓存问题"、"每次都全量重建"            | 层顺序、缓存挂载           |
+| **镜像体积**        | "镜像太大"、"减小体积"、"精简镜像"                | Distroless、多阶段、清理   |
+| **安全**            | "漏洞"、"安全扫描"、"以非 root 运行"              | 非 root 用户、密钥、最小化 |
+| **Compose 搭建**    | "docker-compose"、"编排"、"多服务"                | 服务、网络、健康检查       |
+| **网络**            | "连不上"、"找不到服务"、"DNS 解析"                | 网络配置、服务发现         |
+| **审查**            | "审查我的 Docker"、"生产就绪？"、"最佳实践"       | 完整清单审计               |
+| **开发**            | "热重载"、"开发容器"、"在 Docker 中调试"          | 开发目标、卷挂载           |
 
-#### Common Anti-Patterns to Spot Immediately
+#### 需立即识别的常见反模式
 
-- **Root user without USER directive** — security risk, fix first
-- **Source code copied before dependencies** — kills layer caching, slow builds
-- **`npm install` instead of `npm ci`** — non-deterministic builds
-- **Secrets in ENV or COPY** — exposed in image layers
-- **No .dockerignore** — bloated build context, slow transfers
-- **`latest` tag in base image** — non-reproducible builds
-- **Multiple services in one container** — violates single-responsibility principle
+- **没有 USER 指令的 root 用户** — 安全风险，优先修复
+- **源码在依赖之前复制** — 破坏层缓存，构建缓慢
+- **`npm install` 而非 `npm ci`** — 构建不可复现
+- **ENV 或 COPY 中包含密钥** — 在镜像层中暴露
+- **没有 .dockerignore** — 构建上下文臃肿，传输缓慢
+- **基础镜像使用 `latest` 标签** — 构建不可复现
+- **一个容器中运行多个服务** — 违反单一职责原则
 
-### Phase 3: Solution Design — Core Patterns
+### 阶段 3：方案设计 — 核心模式
 
-**Trigger:** After problem categorization. Apply the appropriate pattern based on the user's stack.
+**触发条件：** 问题分类完成后。根据用户技术栈应用相应模式。
 
-#### Pattern 1: Multi-Stage Build (Universal Starting Point)
+#### 模式 1：多阶段构建（通用起点）
 
-This is the foundation for almost every production Dockerfile. Separate build dependencies from runtime artifacts:
+这是几乎所有生产 Dockerfile 的基础。将构建依赖与运行时产物分离：
 
 ```dockerfile
-# Stage 1: Install dependencies (cache-friendly)
+# 阶段 1：安装依赖（缓存友好）
 FROM node:18-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
-# Stage 2: Build the application
+# 阶段 2：构建应用
 FROM node:18-alpine AS build
 WORKDIR /app
 COPY package*.json ./
@@ -194,7 +185,7 @@ RUN npm ci
 COPY . .
 RUN npm run build && npm prune --production
 
-# Stage 3: Production runtime (minimal)
+# 阶段 3：生产运行时（最小化）
 FROM node:18-alpine AS runtime
 RUN addgroup -g 1001 -S nodejs && adduser -S appuser -u 1001 -G nodejs
 WORKDIR /app
@@ -208,17 +199,17 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 CMD ["node", "dist/index.js"]
 ```
 
-**Key principles in this pattern:**
-- `deps` stage isolates dependency installation → only rebuilds when package.json changes
-- `build` stage has full toolchain → separated from runtime
-- `runtime` stage is minimal → no build tools, non-root user, health check included
-- `--chown` on COPY ensures correct file ownership with non-root user
+**此模式的关键原则：**
+- `deps` 阶段隔离依赖安装 → 仅在 package.json 变更时重新构建
+- `build` 阶段包含完整工具链 → 与运行时分离
+- `runtime` 阶段最小化 → 无构建工具、非 root 用户、包含健康检查
+- COPY 上的 `--chown` 确保非 root 用户下的正确文件所有权
 
-#### Pattern 2: Language-Specific Optimizations
+#### 模式 2：语言特定优化
 
-Adapt the multi-stage pattern for each language ecosystem:
+针对每种语言生态调整多阶段模式：
 
-**Go — use scratch or distroless (no runtime needed):**
+**Go — 使用 scratch 或 distroless（无需运行时）：**
 ```dockerfile
 FROM golang:1.21-alpine AS build
 WORKDIR /app
@@ -234,7 +225,7 @@ EXPOSE 8080
 CMD ["/server"]
 ```
 
-**Python — use virtualenv and slim base:**
+**Python — 使用 virtualenv 和 slim 基础镜像：**
 ```dockerfile
 FROM python:3.12-slim AS build
 WORKDIR /app
@@ -251,7 +242,7 @@ EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-**Java/Maven — build in one stage, run JRE in another:**
+**Java/Maven — 一个阶段构建，另一个阶段用 JRE 运行：**
 ```dockerfile
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
@@ -268,7 +259,7 @@ EXPOSE 8080
 CMD ["java", "-jar", "/app/app.jar"]
 ```
 
-#### Pattern 3: Docker Compose Production Setup
+#### 模式 3：Docker Compose 生产配置
 
 ```yaml
 version: '3.8'
@@ -339,19 +330,19 @@ secrets:
     external: true
 ```
 
-**Key decisions in this compose file:**
-- `condition: service_healthy` ensures database is ready before app starts
-- `backend` network is `internal: true` — database not exposed to external traffic
-- Secrets use `_FILE` variants — never in environment variables directly
-- Resource limits prevent any one service from starving others
-- `restart: unless-stopped` for production resilience
+**此 compose 文件的关键决策：**
+- `condition: service_healthy` 确保数据库就绪后应用才启动
+- `backend` 网络设为 `internal: true` — 数据库不对外部流量暴露
+- 密钥使用 `_FILE` 变体 — 绝不直接放在环境变量中
+- 资源限制防止任何服务独占资源
+- `restart: unless-stopped` 保障生产弹性
 
-#### Pattern 4: Development Environment Override
+#### 模式 4：开发环境覆盖
 
-Use a separate compose override file for development:
+使用单独的 compose 覆盖文件用于开发：
 
 ```yaml
-# docker-compose.override.yml (development)
+# docker-compose.override.yml（开发环境）
 services:
   app:
     build:
@@ -367,7 +358,7 @@ services:
     command: npm run dev
 ```
 
-Or use a profile-based approach in a single compose file:
+或在单个 compose 文件中使用基于 profile 的方式：
 
 ```yaml
 services:
@@ -376,27 +367,27 @@ services:
       context: .
       target: ${BUILD_TARGET:-production}
     volumes:
-      - ${DEV_VOLUME:-}  # Only set in .env.dev
+      - ${DEV_VOLUME:-}  # 仅在 .env.dev 中设置
     profiles:
       - ${PROFILE:-production}
 ```
 
-#### Pattern 5: Security Hardening Checklist
+#### 模式 5：安全加固清单
 
-Every production Dockerfile must include these security measures. Apply them in priority order:
+每个生产 Dockerfile 必须包含以下安全措施。按优先级顺序应用：
 
-| Priority | Measure                         | How to Implement                                      |
-| -------- | ------------------------------- | ----------------------------------------------------- |
-| 🔴 P0    | Non-root user                   | `USER 1001` with explicit UID/GID creation            |
-| 🔴 P0    | No secrets in image layers      | BuildKit secrets mount or runtime secrets only         |
-| 🟠 P1    | Minimal base image              | Alpine or distroless, not full OS images               |
-| 🟠 P1    | Pinned base image digests       | `FROM node:18-alpine@sha256:...` instead of tags      |
-| 🟡 P2    | HEALTHCHECK defined             | HTTP endpoint or process check                         |
-| 🟡 P2    | Drop Linux capabilities         | `--cap-drop=ALL --cap-add=NET_BIND_SERVICE` at minimum |
-| 🟢 P3    | Read-only root filesystem       | `--read-only` with tmpfs for writable paths            |
-| 🟢 P3    | No package manager in runtime   | Only copy built artifacts to production stage          |
+| 优先级 | 措施               | 实施方式                                         |
+| ------ | ------------------ | ------------------------------------------------ |
+| 🔴 P0   | 非 root 用户       | `USER 1001` 配合显式 UID/GID 创建                |
+| 🔴 P0   | 镜像层中无密钥     | 仅使用 BuildKit 密钥挂载或运行时密钥             |
+| 🟠 P1   | 最小化基础镜像     | Alpine 或 distroless，不使用完整 OS 镜像         |
+| 🟠 P1   | 固定基础镜像摘要   | `FROM node:18-alpine@sha256:...` 而非标签        |
+| 🟡 P2   | 定义 HEALTHCHECK   | HTTP 端点或进程检查                              |
+| 🟡 P2   | 移除 Linux 权限    | 至少 `--cap-drop=ALL --cap-add=NET_BIND_SERVICE` |
+| 🟢 P3   | 只读根文件系统     | `--read-only` 配合 tmpfs 用于可写路径            |
+| 🟢 P3   | 运行时不含包管理器 | 仅将构建产物复制到生产阶段                       |
 
-**BuildKit secrets example (never leaves a layer):**
+**BuildKit 密钥示例（不会留在镜像层中）：**
 ```dockerfile
 # syntax=docker/dockerfile:1
 FROM node:18-alpine
@@ -405,7 +396,7 @@ RUN --mount=type=secret,id=npm_token \
     npm ci --only=production
 ```
 
-#### Pattern 6: Build Cache Optimization with BuildKit
+#### 模式 6：使用 BuildKit 优化构建缓存
 
 ```dockerfile
 # syntax=docker/dockerfile:1
@@ -416,33 +407,33 @@ RUN --mount=type=cache,target=/root/.npm \
     npm ci --only=production
 ```
 
-For package managers with cache directories:
+各包管理器的缓存挂载目标：
 
-| Package Manager | Cache Mount Target    |
-| --------------- | --------------------- |
-| npm             | `/root/.npm`          |
-| yarn            | `/usr/local/share/.cache/yarn` |
-| pip             | `/root/.cache/pip`    |
-| go modules      | `/go/pkg/mod`         |
-| maven           | `/root/.m2`           |
-| apt             | `/var/cache/apt`      |
+| 包管理器   | 缓存挂载目标                   |
+| ---------- | ------------------------------ |
+| npm        | `/root/.npm`                   |
+| yarn       | `/usr/local/share/.cache/yarn` |
+| pip        | `/root/.cache/pip`             |
+| go modules | `/go/pkg/mod`                  |
+| maven      | `/root/.m2`                    |
+| apt        | `/var/cache/apt`               |
 
-### Phase 4: Implementation
+### 阶段 4：实施
 
-**Trigger:** After solution design is confirmed. Write or modify files.
+**触发条件：** 方案设计确认后。编写或修改文件。
 
-#### Step 4.1 - Determine File Creation Strategy
+#### 步骤 4.1 - 确定文件创建策略
 
-| Scenario                                 | Action                                              |
-| ---------------------------------------- | --------------------------------------------------- |
-| No Dockerfile exists                     | Create `Dockerfile` from scratch                    |
-| Existing Dockerfile needs optimization   | Use `SearchReplace` to modify specific sections     |
-| Multiple services need orchestration     | Create or modify `docker-compose.yml`               |
-| Build context is slow                    | Create or update `.dockerignore`                    |
+| 场景                   | 操作                              |
+| ---------------------- | --------------------------------- |
+| 不存在 Dockerfile      | 从零创建 `Dockerfile`             |
+| 现有 Dockerfile 需优化 | 使用 `SearchReplace` 修改特定部分 |
+| 多服务需要编排         | 创建或修改 `docker-compose.yml`   |
+| 构建上下文缓慢         | 创建或更新 `.dockerignore`        |
 
-#### Step 4.2 - .dockerignore Template
+#### 步骤 4.2 - .dockerignore 模板
 
-Always ensure a comprehensive `.dockerignore` exists. This dramatically speeds up builds by reducing context size:
+始终确保存在全面的 `.dockerignore`。这通过减小上下文体积显著加速构建：
 
 ```
 node_modules
@@ -464,79 +455,79 @@ docker-compose*.yml
 Dockerfile*
 ```
 
-Adapt to the project's stack — exclude test files, documentation, and any directory that gets regenerated in the build.
+根据项目技术栈调整——排除测试文件、文档和构建中会重新生成的任何目录。
 
-#### Step 4.3 - Layer Ordering Principles
+#### 步骤 4.3 - 层顺序原则
 
-When writing or modifying a Dockerfile, always respect this ordering:
+编写或修改 Dockerfile 时，始终遵循以下顺序：
 
 ```
-1. Base image (FROM)              — changes rarely
-2. System dependencies (apt/apk)  — changes rarely
-3. Package manager files (COPY)   — changes occasionally
-4. Dependency installation (RUN)  — changes when deps change
-5. Application source (COPY)      — changes frequently
-6. Build steps (RUN)              — changes frequently
-7. Runtime configuration          — changes occasionally
+1. 基础镜像（FROM）           — 很少变更
+2. 系统依赖（apt/apk）        — 很少变更
+3. 包管理器文件（COPY）       — 偶尔变更
+4. 依赖安装（RUN）            — 依赖变更时变更
+5. 应用源码（COPY）           — 频繁变更
+6. 构建步骤（RUN）            — 频繁变更
+7. 运行时配置                 — 偶尔变更
 ```
 
-**The golden rule:** Everything that changes rarely goes FIRST. Everything that changes frequently goes LAST.
+**黄金法则：** 很少变更的内容放最前面。频繁变更的内容放最后面。
 
-#### Common Layer Ordering Mistakes
+#### 常见层顺序错误
 
-**Wrong (source before dependencies):**
+**错误（源码在依赖之前）：**
 ```dockerfile
 COPY . .
 RUN npm ci
 ```
-Every code change invalidates the npm cache → re-downloads everything.
+每次代码变更都会使 npm 缓存失效 → 重新下载所有内容。
 
-**Correct (dependencies before source):**
+**正确（依赖在源码之前）：**
 ```dockerfile
 COPY package*.json ./
 RUN npm ci
 COPY . .
 ```
-Only re-runs `npm ci` when `package.json` changes.
+仅在 `package.json` 变更时才重新运行 `npm ci`。
 
-### Phase 5: Validation
+### 阶段 5：验证
 
-**Trigger:** After every Dockerfile or compose file change. Always validate before considering the task complete.
+**触发条件：** 每次 Dockerfile 或 compose 文件变更后。在认为任务完成前始终验证。
 
-#### Step 5.1 - Build Validation
+#### 步骤 5.1 - 构建验证
 
 ```bash
 docker build --no-cache -t test-build .
 ```
 
-If the build fails:
-- Check base image availability (`docker pull <image>`)
-- Verify COPY paths exist in the build context
-- Check for syntax errors in RUN commands
-- Ensure multi-stage COPY --from targets exist
+如果构建失败：
+- 检查基础镜像可用性（`docker pull <image>`）
+- 验证 COPY 路径在构建上下文中存在
+- 检查 RUN 命令的语法错误
+- 确保多阶段 COPY --from 目标存在
 
-#### Step 5.2 - Image Size Inspection
+#### 步骤 5.2 - 镜像体积检查
 
 ```bash
 docker images test-build --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
 docker history test-build --no-trunc --format "table {{.Size}}\t{{.CreatedBy}}" | head -10
 ```
 
-| Size Concern      | Threshold | Action                                    |
-| ----------------- | --------- | ----------------------------------------- |
-| Acceptable        | < 500MB   | Good for most applications                |
-| Needs Attention   | 500MB-1GB | Check for build tools or caches in image  |
-| Too Large         | > 1GB     | Apply multi-stage build, switch to distroless |
+| 体积状况 | 阈值      | 操作                              |
+| -------- | --------- | --------------------------------- |
+| 可接受   | < 500MB   | 对大多数应用来说良好              |
+| 需关注   | 500MB-1GB | 检查镜像中是否有构建工具或缓存    |
+| 过大     | > 1GB     | 应用多阶段构建，切换到 distroless |
 
-#### Step 5.3 - Security Scan (if available)
+#### 步骤 5.3 - 安全扫描（如可用）
 
 ```bash
 docker scout quickview test-build 2>/dev/null || echo "Docker Scout not available"
 ```
 
-If Docker Scout is not available, recommend the user runs a scan with their preferred tool.
+如果 Docker Scout 不可用，建议用户使用其首选工具运行扫描。
 
-#### Step 5.4 - Runtime Verification
+#### 步骤 5.4 - 运行时验证
 
 ```bash
 docker run --rm -d --name validate-test test-build
@@ -546,14 +537,14 @@ docker logs validate-test --tail 20
 docker stop validate-test
 ```
 
-Check for:
-- Container starts without immediate crash
-- Application binds to the expected port
-- Health check passes (if defined)
-- No permission errors (correct USER setup)
-- Logs show expected startup messages
+检查项：
+- 容器启动后不会立即崩溃
+- 应用绑定到预期端口
+- 健康检查通过（如已定义）
+- 无权限错误（USER 设置正确）
+- 日志显示预期的启动信息
 
-#### Step 5.5 - Compose Validation (if applicable)
+#### 步骤 5.5 - Compose 验证（如适用）
 
 ```bash
 docker-compose config 2>/dev/null && echo "Compose config valid"
@@ -562,79 +553,79 @@ docker-compose ps
 docker-compose down
 ```
 
-## Reference: Code Review Checklist
+## 参考：代码审查清单
 
-When reviewing existing Docker configurations, check each item below. Report findings organized by severity:
+审查现有 Docker 配置时，逐项检查以下内容。按严重程度分类报告发现：
 
-### Dockerfile Quality
-- [ ] Dependencies copied before source code for optimal layer caching
-- [ ] Multi-stage builds separate build and runtime environments
-- [ ] Production stage only includes necessary artifacts
-- [ ] Build context optimized with comprehensive .dockerignore
-- [ ] Base image selection appropriate for the stack and constraints
-- [ ] RUN commands consolidated to minimize layers where beneficial
+### Dockerfile 质量
+- [ ] 依赖在源码之前复制以优化层缓存
+- [ ] 多阶段构建分离了构建和运行时环境
+- [ ] 生产阶段仅包含必要产物
+- [ ] 通过全面的 .dockerignore 优化了构建上下文
+- [ ] 基础镜像选择适合技术栈和约束
+- [ ] RUN 命令在有益时合并以减少层数
 
-### Container Security
-- [ ] Non-root user created with specific UID/GID (not default)
-- [ ] Container runs as non-root user (USER directive present)
-- [ ] Secrets managed properly (not in ENV vars or image layers)
-- [ ] Base images kept up-to-date and scanned for vulnerabilities
-- [ ] Minimal attack surface (only necessary packages installed)
-- [ ] Health checks implemented for container monitoring
+### 容器安全
+- [ ] 使用特定 UID/GID 创建了非 root 用户（非默认值）
+- [ ] 容器以非 root 用户运行（存在 USER 指令）
+- [ ] 密钥管理得当（不在环境变量或镜像层中）
+- [ ] 基础镜像保持更新并扫描漏洞
+- [ ] 最小攻击面（仅安装必要包）
+- [ ] 实现了健康检查用于容器监控
 
-### Docker Compose & Orchestration
-- [ ] Service dependencies properly defined with health checks
-- [ ] Custom networks configured for service isolation
-- [ ] Environment-specific configurations separated (dev/prod)
-- [ ] Volume strategies appropriate for data persistence needs
-- [ ] Resource limits defined to prevent resource exhaustion
-- [ ] Restart policies configured for production resilience
+### Docker Compose 与编排
+- [ ] 服务依赖通过健康检查正确定义
+- [ ] 配置了自定义网络用于服务隔离
+- [ ] 环境特定配置已分离（开发/生产）
+- [ ] 卷策略适合数据持久化需求
+- [ ] 定义了资源限制以防止资源耗尽
+- [ ] 配置了重启策略以保障生产弹性
 
-### Performance & Size
-- [ ] Final image size under 500MB (unless justified)
-- [ ] Build cache optimization implemented (mounts or layer ordering)
-- [ ] Multi-architecture builds considered if needed
-- [ ] Artifact copying selective (only required files)
-- [ ] Package manager cache cleaned in same RUN layer
+### 性能与体积
+- [ ] 最终镜像体积在 500MB 以下（除非有正当理由）
+- [ ] 实现了构建缓存优化（挂载或层顺序）
+- [ ] 如需要已考虑多架构构建
+- [ ] 选择性复制产物（仅必要文件）
+- [ ] 包管理器缓存在同一 RUN 层中清理
 
-### Development Workflow
-- [ ] Development targets separate from production
-- [ ] Hot reloading configured properly with volume mounts
-- [ ] Debug ports exposed when needed
-- [ ] Environment variables properly configured for different stages
-- [ ] Testing containers isolated from production builds
+### 开发工作流
+- [ ] 开发目标与生产分离
+- [ ] 通过卷挂载正确配置了热重载
+- [ ] 需要时暴露了调试端口
+- [ ] 不同阶段的环境变量配置正确
+- [ ] 测试容器与生产构建隔离
 
-## Reference: Troubleshooting Common Issues
+## 参考：常见问题排查
 
-### Build Performance Issues
-**Symptoms**: Slow builds (10+ minutes), frequent cache invalidation
-**Root causes**: Poor layer ordering, large build context, no caching strategy
-**Fix**: Reorder layers (deps before source), add .dockerignore, use BuildKit cache mounts
+### 构建性能问题
+**症状**：构建缓慢（10+ 分钟）、频繁缓存失效
+**根因**：层顺序不当、构建上下文过大、无缓存策略
+**修复**：重新排序层（依赖在源码之前）、添加 .dockerignore、使用 BuildKit 缓存挂载
 
-### Security Vulnerabilities
-**Symptoms**: Security scan failures, exposed secrets, root execution
-**Root causes**: Outdated base images, hardcoded secrets, default user
-**Fix**: Pin base image digests, use BuildKit secrets, add non-root USER directive
+### 安全漏洞
+**症状**：安全扫描失败、密钥暴露、以 root 执行
+**根因**：基础镜像过时、硬编码密钥、默认用户
+**修复**：固定基础镜像摘要、使用 BuildKit 密钥、添加非 root USER 指令
 
-### Image Size Problems
-**Symptoms**: Images over 1GB, deployment slowness
-**Root causes**: Unnecessary files, build tools in production, poor base selection
-**Fix**: Switch to distroless, multi-stage optimization, selective artifact copying
+### 镜像体积问题
+**症状**：镜像超过 1GB、部署缓慢
+**根因**：不必要文件、生产中包含构建工具、基础镜像选择不当
+**修复**：切换到 distroless、多阶段优化、选择性产物复制
 
-### Networking Issues
-**Symptoms**: Service communication failures, DNS resolution errors
-**Root causes**: Missing networks, port conflicts, service naming
-**Fix**: Define custom networks, add health checks with `depends_on: condition: service_healthy`
+### 网络问题
+**症状**：服务通信失败、DNS 解析错误
+**根因**：缺少网络定义、端口冲突、服务命名
+**修复**：定义自定义网络、添加健康检查配合 `depends_on: condition: service_healthy`
 
-### Development Workflow Problems
-**Symptoms**: Hot reload failures, debugging difficulties, slow iteration
-**Root causes**: Volume mounting issues, port configuration, environment mismatch
-**Fix**: Create development-specific targets, proper volume strategy, debug configuration
+### 开发工作流问题
+**症状**：热重载失败、调试困难、迭代缓慢
+**根因**：卷挂载问题、端口配置、环境不匹配
+**修复**：创建开发专用目标、合理的卷策略、调试配置
 
-## Reference: Integration Boundaries
+## 参考：集成边界
 
-**When to recommend other skills/experts:**
-- **Kubernetes pods, services, ingress** → Not in scope. Docker runs single containers; K8s orchestrates clusters.
-- **CI/CD pipeline with containers** → Combine this skill with GitHub Actions or CI platform expertise.
-- **Cloud-specific container services (ECS, Fargate, Cloud Run)** → Docker patterns apply, but deployment specifics need cloud expertise.
-- **Database containerization with complex persistence** → Basic patterns here; complex backup/HA strategies need database expertise.
+**何时推荐其他技能/专家：**
+- **Kubernetes Pod、Service、Ingress** → 不在范围内。Docker 运行单个容器；K8s 编排集群。
+- **使用容器的 CI/CD 流水线** → 将此技能与 GitHub Actions 或 CI 平台专业知识结合。
+- **云特定容器服务（ECS、Fargate、Cloud Run）** → Docker 模式适用，但部署细节需要云专业知识。
+- **复杂持久化的数据库容器化** → 此处提供基础模式；复杂备份/HA 策略需要数据库专业知识。

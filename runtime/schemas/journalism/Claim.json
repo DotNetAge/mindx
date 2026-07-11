@@ -31,7 +31,7 @@
     },
     "evidence": {
       "type": "array",
-      "description": "Supporting or refuting evidence for the claim",
+      "description": "支持或反驳该声明的证据",
       "items": {
         "type": "string"
       }

@@ -1,31 +1,31 @@
 {
   "type": "object",
-  "description": "A source document, section, or chunk of content that serves as a reference for knowledge extraction",
+  "description": "作为知识提取参考的源文档、章节或内容片段",
   "properties": {
     "title": {
       "type": "string",
-      "description": "Title of the document or section"
+      "description": "文档或章节的标题"
     },
     "document_type": {
       "type": "string",
-      "description": "Type of document (e.g., specification, tutorial, API reference, README, design doc)"
+      "description": "文档类型（例如规范、教程、API 参考、README、设计文档）"
     },
     "author": {
       "type": "string",
-      "description": "Author or maintainer of the document"
+      "description": "文档的作者或维护者"
     },
     "sections": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Top-level sections or major topics covered in the document"
+      "description": "文档中涵盖的顶级章节或主要主题"
     },
     "summary": {
       "type": "string",
-      "description": "Brief summary of the document's content and purpose"
+      "description": "文档内容和目的的简要概述"
     },
     "version": {
       "type": "string",
-      "description": "Document version or revision identifier"
+      "description": "文档版本或修订标识符"
     }
   },
   "required": ["title", "document_type"]

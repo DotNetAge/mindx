@@ -27,29 +27,22 @@ func NewQuickExplore(indexer *goragindexer.GraphIndexer) tools.FuncTool {
 func (t *QuickExplore) Info() *tools.ToolInfo {
 	return &tools.ToolInfo{
 		Name:        "QuickExplore",
-		Description: "Browse the project's knowledge directory tree — see what files exist with semantic summaries. Use this FIRST before LS/Glob when you want to understand project layout or explore what's in a directory.",
-		Prompt: `Browse the project's knowledge directory tree. Think of it as "ls -R with meaning" — returns a directory tree where each file includes a semantic summary of its contents.
+		Description: "目录快览，快速浏览项目的语义化目录树，无需读取文件就能对摘要一览无遗。",
+		Prompt: `目录快览，快速浏览项目的语义化目录树，无需读取文件就能对摘要一览无遗。将其视为"带语义的 ls -R" — 返回目录树，每个文件附带内容的语义摘要。
 
-Use QuickExplore FIRST before LS or Glob when:
-- "show me the project layout"
-- "what's in this directory?"
-- "browse the project structure"
-
-Unlike LS/Glob, QuickExplore includes per-file summaries so you can understand what each file does without reading it.
-
-Fall back to LS/Glob when the knowledge base isn't indexed yet or you need raw file listing.`,
+与 LS/Glob 不同，QuickExplore 包含每个文件的摘要，无需读取即可了解文件用途。`,
 		IsReadOnly: true,
 		Parameters: []tools.Parameter{
 			{
 				Name:        "projectDir",
 				Type:        "string",
-				Description: "Limit browsing to a specific subdirectory. Omit to browse the entire project.",
+				Description: "将浏览限制在特定子目录。省略则浏览整个项目。",
 				Required:    false,
 			},
 			{
 				Name:        "depth",
 				Type:        "integer",
-				Description: "Tree depth (1–5, default: 2).",
+				Description: "树深度（1-5，默认：2）。",
 				Required:    false,
 				Default:     float64(2),
 			},
@@ -59,7 +52,7 @@ Fall back to LS/Glob when the knowledge base isn't indexed yet or you need raw f
 
 func (t *QuickExplore) Execute(ctx context.Context, params map[string]any) (any, error) {
 	if t.indexer == nil {
-		return nil, fmt.Errorf("QuickExplore: knowledge base indexer is not initialized")
+		return nil, fmt.Errorf("QuickExplore：知识库索引器未初始化")
 	}
 
 	var regionPath string
@@ -84,14 +77,14 @@ func (t *QuickExplore) Execute(ctx context.Context, params map[string]any) (any,
 		total, countErr := t.indexer.CountByRegion(ctx, regionPath)
 		if countErr == nil && total == 0 {
 			return map[string]any{
-				"message": "No data in local knowledge base yet. Use LS/Glob to browse files instead.",
+				"message": "本地知识库中暂时没有任何数据。请改用 LS/Glob 浏览文件。",
 			}, nil
 		}
 	}
 
 	root, err := t.indexer.Tree(ctx, regionID, depth)
 	if err != nil {
-		return nil, fmt.Errorf("QuickExplore tree failed: %w", err)
+		return nil, fmt.Errorf("QuickExplore 目录树查询失败：%w", err)
 	}
 
 	if root == nil {
@@ -116,7 +109,7 @@ func formatTreeResult(node *core.ChunkNode, prefix string) string {
 			sb.WriteString(formatTreeBranch(child, prefix, isLast))
 		}
 		if sb.Len() == 0 {
-			sb.WriteString("(empty)")
+			sb.WriteString("（空）")
 		}
 		return sb.String()
 	}

@@ -1,198 +1,198 @@
-# Meeting Record Format Specification
+# 会议记录格式规范
 
-## Table of Contents
-- [Meeting Record Structure](#meeting-record-structure)
-- [Section Details](#section-details)
-- [Format Example](#format-example)
-- [Output Specifications](#output-specifications)
+## 目录
+- [会议记录结构](#会议记录结构)
+- [各部分详情](#各部分详情)
+- [格式示例](#格式示例)
+- [输出规范](#输出规范)
 
-## Overview
-This document defines the standard output format for the Multi-Agent Meeting skill. Meeting records are in Markdown format, clearly presenting meeting basic info, the full discussion process, decision conclusions, and follow-up actions.
+## 概述
+本文档定义了多智能体会议技能的标准输出格式。会议记录采用 Markdown 格式，清晰呈现会议基本信息、完整讨论过程、决策结论和后续行动。
 
-## Meeting Record Structure
+## 会议记录结构
 
 ```
-1. Meeting Basic Info
-2. Participating Agents
-3. Discussion Process
-   - Phase 1: Opening Statements
-   - Phase 2: Free Discussion
-   - Phase 3: Deep Debate
-   - Phase 4: Consensus Convergence
-   - Phase 5: Decision Generation
-4. Decision Conclusion
-5. Key Arguments Summary
-6. Risk Warnings
-7. Follow-up Action Items
+1. 会议基本信息
+2. 参会智能体
+3. 讨论过程
+   - 阶段 1：开场陈述
+   - 阶段 2：自由讨论
+   - 阶段 3：深入辩论
+   - 阶段 4：共识收敛
+   - 阶段 5：决策生成
+4. 决策结论
+5. 关键论点总结
+6. 风险提示
+7. 后续行动项
 ```
 
-## Section Details
+## 各部分详情
 
-### 1. Meeting Basic Info
-- **Topic**: Concise description of the core issue discussed
-- **Time**: Simulated meeting time (optional)
-- **Goal**: Type of decision expected
-- **Constraints**: Limitations to consider
+### 1. 会议基本信息
+- **主题**：简洁描述讨论的核心问题
+- **时间**：模拟会议时间（可选）
+- **目标**：期望的决策类型
+- **约束条件**：需要考虑的限制因素
 
-### 2. Participating Agents
-Show all participating agents' role information in a table or list:
-- Role name
-- Domain
-- Characteristics
+### 2. 参会智能体
+以表格或列表形式展示所有参会智能体的角色信息：
+- 角色名称
+- 专业领域
+- 特点
 
-### 3. Discussion Process
-Record the discussion content chronologically by phase. Each entry includes:
-- **Speaker**: Agent role name
-- **Content**: Full statement
-- **Key Points** (optional): Extracted highlights
+### 3. 讨论过程
+按阶段顺序记录讨论内容。每条记录包括：
+- **发言人**：智能体角色名称
+- **内容**：完整陈述
+- **要点**（可选）：提取的关键点
 
-**Format rules**:
-- Use blockquote `>` to mark each statement
-- Clearly label the phase and sequence number
-- Preserve the original meaning and logic of the discussion
+**格式规则**：
+- 使用引用块 `>` 标记每次发言
+- 清晰标注阶段和序号
+- 保留讨论的原意和逻辑
 
-### 4. Decision Conclusion
-Concisely state the final decision:
-- Clear decision result (yes/no/which option)
-- Primary basis for the decision
-- Scope and conditions of applicability
+### 4. 决策结论
+简洁陈述最终决策：
+- 明确的决策结果（是/否/哪个方案）
+- 决策的主要依据
+- 适用范围和条件
 
-### 5. Key Arguments Summary
-Summarize the main arguments supporting the decision, categorized by viewpoint:
-- **Supporting Arguments**: 3-5 core arguments
-- **Opposing Arguments**: Main arguments that were overruled
-- **Compromise**: The final compromise approach
+### 5. 关键论点总结
+总结支持决策的主要论点，按观点分类：
+- **支持论点**：3-5 个核心论点
+- **反对论点**：被否决的主要论点
+- **妥协方案**：最终达成的妥协方式
 
-### 6. Risk Warnings
-Identify potential risks of the decision:
-- **Technical Risk**: Risks in technical implementation
-- **Business Risk**: Market and business risks
-- **Operational Risk**: Execution and operational risks
-- **Compliance Risk**: Legal and regulatory risks
-- **Mitigation Measures**: Recommended countermeasures for each risk
+### 6. 风险提示
+识别决策的潜在风险：
+- **技术风险**：技术实现中的风险
+- **业务风险**：市场和业务风险
+- **运营风险**：执行和运营风险
+- **合规风险**：法律和监管风险
+- **缓解措施**：针对每个风险的应对建议
 
-### 7. Follow-up Action Items
-Provide specific follow-up action recommendations:
-- **Immediate Actions**: Steps to execute right away
-- **Short-term Plan**: Actions for the next 1-3 months
-- **Long-term Plan**: Medium-to-long-term direction
-- **Responsibility Assignment**: Suggested division of work (if applicable)
+### 7. 后续行动项
+提供具体的后续行动建议：
+- **即时行动**：立即执行的步骤
+- **短期计划**：未来 1-3 个月的行动
+- **长期计划**：中长期方向
+- **责任分配**：建议的工作分工（如适用）
 
-## Format Example
+## 格式示例
 
 ```markdown
-# Meeting Record: Microservices Architecture Feasibility Assessment
+# 微服务架构可行性评估会议记录
 
-## 1. Meeting Basic Info
-- **Topic**: Whether to migrate the existing monolith to a microservices architecture
-- **Goal**: Assess feasibility and form a decision recommendation
-- **Constraints**: Budget $500K, timeline 6 months, team size 20
+## 1. 会议基本信息
+- **主题**：是否将现有单体应用迁移到微服务架构
+- **目标**：评估可行性并形成决策建议
+- **约束条件**：预算 50 万美元，周期 6 个月，团队规模 20 人
 
-## 2. Participating Agents
-| Role              | Domain                                    | Characteristics                        |
-| ----------------- | ----------------------------------------- | -------------------------------------- |
-| Architect         | System architecture, tech selection       | Rational, rigorous, pursues excellence |
-| DevOps engineer   | Deployment, CI/CD                         | Pragmatic, risk-aware                  |
-| Frontend engineer | UX, frontend performance                  | User-oriented, detail-focused          |
-| Project manager   | Project management, resource coordination | Holistic, time-sensitive               |
+## 2. 参会智能体
+| 角色          | 专业领域           | 特点                 |
+| ------------- | ------------------ | -------------------- |
+| 架构师        | 系统架构、技术选型 | 理性、严谨、追求卓越 |
+| DevOps 工程师 | 部署、CI/CD        | 务实、风险意识强     |
+| 前端工程师    | 用户体验、前端性能 | 用户导向、注重细节   |
+| 项目经理      | 项目管理、资源协调 | 全局观、时间敏感     |
 
-## 3. Discussion Process
+## 3. 讨论过程
 
-### Phase 1: Opening Statements
+### 阶段 1：开场陈述
 
-> **Chair**: Today we are discussing whether to adopt a microservices architecture. Please share your professional perspectives.
+> **主席**：今天我们讨论是否采用微服务架构。请各位分享专业观点。
 
-> **Architect**: From an architectural standpoint, the current monolith has reached 5 million lines of code with a deployment cycle of 2 hours. Microservices can bring better scalability and team autonomy, but require addressing inter-service communication and data consistency issues. I lean toward a cautious approach.
+> **架构师**：从架构角度看，当前单体应用已达 500 万行代码，部署周期 2 小时。微服务能带来更好的可扩展性和团队自主性，但需要解决服务间通信和数据一致性问题。我倾向于谨慎推进。
 
-> **DevOps engineer**: From an ops perspective, microservices increase deployment complexity and monitoring costs. Our current automated test coverage is only 60%. Splitting into 50+ services would multiply management overhead. I recommend strengthening infrastructure capabilities first.
+> **DevOps 工程师**：从运维角度看，微服务增加了部署复杂度和监控成本。我们当前自动化测试覆盖率只有 60%。拆分成 50+ 个服务会让管理成本成倍增长。建议先加强基础设施能力。
 
-> **Frontend engineer**: On the UX side, we want sub-second response times and independent feature iteration. Microservices give the frontend team more flexibility, but API fragmentation adds integration complexity. I suggest piloting with core services first.
+> **前端工程师**：从用户体验角度，我们希望实现秒级响应和独立的功能迭代。微服务给前端团队更大灵活性，但 API 碎片化增加了集成复杂度。建议先试点核心服务。
 
-> **Project manager**: Overall assessment — 20 people migrating a 5M-line monolith in 6 months carries high risk. I recommend an incremental approach: pilot core modules first. Team skill gaps need to be addressed through training.
+> **项目经理**：综合评估——20 个人在 6 个月内迁移 500 万行代码的单体应用风险很高。建议采用渐进式方案：先试点核心模块。团队技能缺口需要通过培训解决。
 
-### Phase 2: Free Discussion
-(Detailed discussion content omitted, key points retained)
+### 阶段 2：自由讨论
+（详细讨论内容省略，保留要点）
 
-### Phase 3: Deep Debate
-(Detailed debate content omitted, key points retained)
+### 阶段 3：深入辩论
+（详细辩论内容省略，保留要点）
 
-### Phase 4: Consensus Convergence
-(Detailed convergence content omitted, key points retained)
+### 阶段 4：共识收敛
+（详细收敛内容省略，保留要点）
 
-### Phase 5: Decision Generation
+### 阶段 5：决策生成
 
-> **Chair**: Synthesizing everyone's input, we have reached the following consensus...
+> **主席**：综合各位意见，我们达成以下共识……
 
-## 4. Decision Conclusion
-**Adopt incremental microservices migration**, specifically:
+## 4. 决策结论
+**采用渐进式微服务迁移**，具体为：
 
-1. **Phase 1 (3 months)**: Pilot splitting user service and order service to validate feasibility
-2. **Phase 2 (6 months)**: Split 5-8 core services, establish microservices infrastructure
-3. **Hold full migration**: Pause remaining service splitting until pilot is validated
+1. **第一阶段（3 个月）**：试点拆分用户服务和订单服务，验证可行性
+2. **第二阶段（6 个月）**：拆分 5-8 个核心服务，建立微服务基础设施
+3. **暂缓全面迁移**：在试点验证前，暂停其余服务拆分
 
-**Basis**:
-- Technical direction is correct, but current team and infrastructure readiness are insufficient
-- Incremental approach controls risk — validate first, then expand
-- Fits within budget and timeline constraints, avoids over-investment
+**依据**：
+- 技术方向正确，但当前团队和基础设施准备不足
+- 渐进式方案控制风险——先验证再扩展
+- 符合预算和周期约束，避免过度投入
 
-## 5. Key Arguments Summary
+## 5. 关键论点总结
 
-### Supporting Arguments
-1. Monolith has reached 5M LOC, hard to maintain, deployment takes 2 hours
-2. Microservices improve team autonomy and iteration speed
-3. Industry trends support microservices architecture
+### 支持论点
+1. 单体应用已达 500 万行代码，难以维护，部署需要 2 小时
+2. 微服务提升团队自主性和迭代速度
+3. 行业趋势支持微服务架构
 
-### Opposing Arguments
-1. Test coverage below 60%, microservices increase management complexity
-2. Team skills insufficient, requires training investment
-3. Data consistency and inter-service communication are technical challenges
+### 反对论点
+1. 测试覆盖率低于 60%，微服务增加管理复杂度
+2. 团队技能不足，需要培训投入
+3. 数据一致性和服务间通信是技术挑战
 
-### Compromise
-Adopt incremental migration — pilot first to validate, avoid big-bang risk
+### 妥协方案
+采用渐进式迁移——先试点验证，避免大爆炸式风险
 
-## 6. Risk Warnings
+## 6. 风险提示
 
-| Risk Type   | Description                               | Severity | Mitigation                     |
-| ----------- | ----------------------------------------- | -------- | ------------------------------ |
-| Technical   | Inter-service latency affects performance | Medium   | Service mesh + caching         |
-| Operational | Team skill gaps delay progress            | High     | Pre-training, external experts |
-| Cost        | Infrastructure exceeds budget             | Medium   | Pay-as-you-go cloud services   |
+| 风险类型 | 描述                 | 严重程度 | 缓解措施               |
+| -------- | -------------------- | -------- | ---------------------- |
+| 技术风险 | 服务间延迟影响性能   | 中       | 服务网格 + 缓存        |
+| 运营风险 | 团队技能缺口延误进度 | 高       | 提前培训、引入外部专家 |
+| 成本风险 | 基础设施超出预算     | 中       | 按需付费的云服务       |
 
-## 7. Follow-up Action Items
+## 7. 后续行动项
 
-### Immediate (this week)
-- [ ] Form microservices migration task force
-- [ ] Assess current system, define splitting plan
-- [ ] Start team training program
+### 即时行动（本周）
+- [ ] 成立微服务迁移专项小组
+- [ ] 评估现有系统，定义拆分方案
+- [ ] 启动团队培训计划
 
-### Short-term (3 months)
-- [ ] Complete user service microservices migration
-- [ ] Set up CI/CD infrastructure
-- [ ] Implement monitoring and logging
+### 短期计划（3 个月）
+- [ ] 完成用户服务微服务化迁移
+- [ ] 搭建 CI/CD 基础设施
+- [ ] 实施监控和日志系统
 
-### Long-term (6-12 months)
-- [ ] Split 5-8 core services
-- [ ] Establish microservices governance framework
-- [ ] Evaluate full-scale rollout
+### 长期计划（6-12 个月）
+- [ ] 拆分 5-8 个核心服务
+- [ ] 建立微服务治理框架
+- [ ] 评估全面推广
 ```
 
-## Output Specifications
+## 输出规范
 
-### Format Requirements
-- Output in Markdown format
-- Clear heading hierarchy, no more than 4 levels
-- Use tables for structured information
-- Use blockquotes for discussion content
+### 格式要求
+- 使用 Markdown 格式输出
+- 标题层次清晰，不超过 4 级
+- 结构化信息使用表格展示
+- 讨论内容使用引用块
 
-### Content Quality
-- Discussion content should be natural and fit the agent's role
-- Discussion process should be logical with clear point/counterpoint
-- Decision conclusions should be clear with sufficient supporting arguments
-- Risk identification should be comprehensive with feasible mitigation measures
-- Action items should be actionable with clear timelines
+### 内容质量
+- 讨论内容自然，符合智能体角色定位
+- 讨论过程逻辑清晰，有来有往
+- 决策结论明确，有充分论据支撑
+- 风险识别全面，缓解措施可行
+- 行动项具体可执行，时间节点明确
 
-### Length Control
-- Full meeting record recommended no more than 3000 lines
-- Discussion section can be expanded or condensed as needed
-- Decision conclusions and key arguments should be concise
-- Risks and action items should be specific but not redundant
+### 长度控制
+- 完整会议记录建议不超过 3000 行
+- 讨论过程可根据需要详略得当
+- 决策结论和关键论点要精炼
+- 风险和行动项要具体但不冗余

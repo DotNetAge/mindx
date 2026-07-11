@@ -1,14 +1,14 @@
 {
   "type": "object",
-  "description": "A news topic, issue, or beat (e.g., diplomacy, economy, technology)",
+  "description": "新闻主题、议题或报道领域（如外交、经济、科技）",
   "properties": {
     "name": {
       "type": "string",
-      "description": "The name of the news topic or beat"
+      "description": "新闻主题或报道领域的名称"
     },
     "topic_type": {
       "type": "string",
-      "description": "The category of the topic",
+      "description": "主题的类别",
       "enum": [
         "diplomacy",
         "economy",
@@ -23,18 +23,18 @@
     },
     "description": {
       "type": "string",
-      "description": "A brief description of what this topic covers"
+      "description": "该主题涵盖内容的简要描述"
     },
     "sub_topics": {
       "type": "array",
-      "description": "Related sub-topics or specific areas within this topic",
+      "description": "该主题内的相关子主题或具体领域",
       "items": {
         "type": "string"
       }
     },
     "trending": {
       "type": "boolean",
-      "description": "Indicates whether this topic is currently trending in the news cycle"
+      "description": "指示该主题当前是否在新闻周期中热门"
     }
   },
   "required": ["name", "topic_type"]

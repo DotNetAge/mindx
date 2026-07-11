@@ -1,14 +1,14 @@
 {
   "type": "object",
-  "description": "A stated or observed bias, perspective, or spin in news coverage",
+  "description": "新闻报道中明确或隐含的偏见、立场或倾向性报道",
   "properties": {
     "name": {
       "type": "string",
-      "description": "A label for the identified bias or perspective"
+      "description": "对所识别的偏见或立场的标签"
     },
     "bias_type": {
       "type": "string",
-      "description": "The category of bias",
+      "description": "偏见的类别",
       "enum": [
         "political",
         "cultural",
@@ -20,22 +20,22 @@
     },
     "direction": {
       "type": "string",
-      "description": "The direction or leaning of the bias (e.g., left-leaning, right-leaning, pro-government, critical)"
+      "description": "偏见的方向或倾向（如左倾、右倾、亲政府、批评性）"
     },
     "description": {
       "type": "string",
-      "description": "A detailed description of the bias and how it manifests in coverage"
+      "description": "对该偏见及其在报道中如何表现的详细描述"
     },
     "evidence": {
       "type": "array",
-      "description": "Specific examples or evidence supporting the identified bias",
+      "description": "支持所识别偏见的具体示例或证据",
       "items": {
         "type": "string"
       }
     },
     "source": {
       "type": "string",
-      "description": "The source or outlet where the bias was observed"
+      "description": "观察到该偏见的信息来源或媒体机构"
     }
   },
   "required": ["name", "bias_type"]

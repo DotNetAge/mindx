@@ -1,20 +1,20 @@
 {
   "type": "object",
-  "description": "Core idea, theory, principle, paradigm",
+  "description": "核心概念、理论、原则、范式",
   "properties": {
-    "name": { "type": "string", "description": "The concept name" },
+    "name": { "type": "string", "description": "概念名称" },
     "description": {
       "type": "string",
-      "description": "Definition or explanation of the concept"
+      "description": "概念的定义或解释"
     },
     "category": {
       "type": "string",
-      "description": "Broader category this concept belongs to"
+      "description": "该概念所属的更广泛类别"
     },
     "related_concepts": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Related or closely associated concepts"
+      "description": "相关或紧密关联的概念"
     }
   },
   "required": ["name", "description"]

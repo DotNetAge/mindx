@@ -1,29 +1,29 @@
 {
   "type": "object",
-  "description": "A solution, fix, workaround, or answer that addresses one or more problems",
+  "description": "解决一个或多个问题的解决方案、修复方法、变通措施或答案",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Name or title of the solution"
+      "description": "解决方案的名称或标题"
     },
     "description": {
       "type": "string",
-      "description": "Explanation of how the solution resolves the problem"
+      "description": "解释该解决方案如何解决该问题"
     },
     "applicable_to": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Problems or scenarios this solution addresses"
+      "description": "该解决方案所针对的问题或场景"
     },
     "steps": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Ordered list of actions required to implement the solution"
+      "description": "实施该解决方案所需的有序操作步骤列表"
     },
     "prerequisites": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Conditions, tools, or knowledge needed before applying the solution"
+      "description": "应用该解决方案之前所需的条件、工具或知识"
     }
   },
   "required": ["name", "description"]

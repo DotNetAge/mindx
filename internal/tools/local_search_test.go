@@ -142,7 +142,7 @@ func TestQuickSearchWithRealData(t *testing.T) {
 	// ── 6. Verify output format structure ──────────────────────────────
 
 	// Root header
-	assertContains(t, output, "## Search Result")
+	assertContains(t, output, "## 搜索结果")
 
 	// Each result line contains [summary], [file:], [ID:]
 	lines := strings.Split(output, "\n")
@@ -183,10 +183,10 @@ func TestQuickSearchWithRealData(t *testing.T) {
 	}
 
 	// Footer
-	assertContains(t, output, "QuickSearch clue result")
+	assertContains(t, output, "QuickSearch 结果。")
 
 	// If there are entity tables, verify table structure
-	if strings.Contains(output, "### Relevant Nodes") {
+	if strings.Contains(output, "### 相关节点") {
 		assertContains(t, output, "| ID | Name | Type")
 	}
 

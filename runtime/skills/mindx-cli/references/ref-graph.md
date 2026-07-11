@@ -1,45 +1,42 @@
-# Knowledge Graph (GraphRAG)
+# 知识图谱（GraphRAG）
 
-The graph stores **entity relationships** as nodes and edges. This is where
-structured knowledge lives — customers, projects, tasks, campaigns, and their
-interconnections. The LLM's superpower is writing **dynamic Cypher queries** that
-humans cannot easily compose.
+图谱以节点和边的形式存储**实体关系**。这里是结构化知识的存放地 —— 客户、项目、任务、营销活动以及它们之间的关联。LLM 的强项在于编写**动态 Cypher 查询**，这是人工难以手工组合的。
 
-**All commands require the daemon to be running.**
+**所有命令都需要守护进程处于运行状态。**
 
-## Core Operations
+## 核心操作
 
-### Query (Read)
+### 查询（读取）
 
-| Task | Command | Notes |
-|------|---------|-------|
-| Execute Cypher (read) | `mindx graph query --cypher "MATCH (n) RETURN n LIMIT 10"` | SELECT-style, read-only |
-| Pass parameters | `mindx graph query --cypher "MATCH (n {id:$id}) RETURN n" --params '{"id":"abc"}'` | Parameterized queries |
-| Get single node | `mindx graph get-node --id <node-id>` | Quick lookup by ID |
-| Find neighbors | `mindx graph neighbors --id <node-id> --depth 2` | Traverse relationships |
-| Limit neighbor results | `mindx graph neighbors ... --limit 20` | Cap result count |
-| Filter by edge types | `mindx graph neighbors ... --types MANAGES,HAS_GOAL` | Only specific relationship types |
+| 任务 | 命令 | 说明 |
+|------|------|------|
+| 执行 Cypher 查询（只读） | `mindx graph query --cypher "MATCH (n) RETURN n LIMIT 10"` | 类似 SELECT，只读操作 |
+| 传递参数 | `mindx graph query --cypher "MATCH (n {id:$id}) RETURN n" --params '{"id":"abc"}'` | 参数化查询 |
+| 获取单个节点 | `mindx graph get-node --id <node-id>` | 按 ID 快速查找 |
+| 查找邻居节点 | `mindx graph neighbors --id <node-id> --depth 2` | 遍历关系 |
+| 限制邻居结果数 | `mindx graph neighbors ... --limit 20` | 限制返回数量 |
+| 按边类型过滤 | `mindx graph neighbors ... --types MANAGES,HAS_GOAL` | 仅返回特定关系类型 |
 
-### Write (Mutate)
+### 写入（变更）
 
-| Task | Command | Notes |
-|------|---------|-------|
-| Execute Cypher (write) | `mindx graph exec --cypher "MATCH (n {id:'x'}) SET n.status='active'"` | CREATE/SET/DELETE/MERGE |
-| Batch upsert nodes | `mindx graph upsert-nodes --nodes '[{...},{...}]'` | Create or update multiple nodes |
-| Batch upsert edges | `mindx graph upsert-edges --edges '[{...},{...}]'` | Create or update multiple edges |
+| 任务 | 命令 | 说明 |
+|------|------|------|
+| 执行 Cypher 写入 | `mindx graph exec --cypher "MATCH (n {id:'x'}) SET n.status='active'"` | CREATE/SET/DELETE/MERGE |
+| 批量 Upsert 节点 | `mindx graph upsert-nodes --nodes '[{...},{...}]'` | 创建或更新多个节点 |
+| 批量 Upsert 边 | `mindx graph upsert-edges --edges '[{...},{...}]'` | 创建或更新多条边 |
 
-## Node & Edge Structure
+## 节点与边的数据结构
 
-### Node JSON Format
+### 节点 JSON 格式
 ```json
 {
   "id": "unique-id",
-  "labels": ["EntityTypeName"],     // e.g., ["Customer", "Account"]
+  "labels": ["EntityTypeName"],     // 例如 ["Customer", "Account"]
   "properties": {
     "name": "Display Name",
-    "description": "...",           // Always present
-    "confidence": 0.9,              // Always present (0-1)
-    // Custom business fields:
+    "description": "...",           // 始终存在
+    "confidence": 0.9,              // 始终存在 (0-1)
+    // 自定义业务字段：
     "status": "active",
     "health_score": 72,
     "arr": 50000,
@@ -48,38 +45,38 @@ humans cannot easily compose.
 }
 ```
 
-### Edge JSON Format
+### 边 JSON 格式
 ```json
 {
   "from_node_id": "source-node-id",
   "to_node_id": "target-node-id",
-  "type": "RELATIONSHIP_TYPE",      // e.g., MANAGES, HAS_GOAL, DEPENDS_ON
+  "type": "RELATIONSHIP_TYPE",      // 例如 MANAGES、HAS_GOAL、DEPENDS_ON
   "predicate": "human-readable description of this relationship",
   "properties": {
     "description": "...",
     "confidence": 0.9,
-    // Custom fields:
+    // 自定义字段：
     "since": "2026-01-15",
     "weight": 1.0
   }
 }
 ```
 
-## Common Patterns
+## 常见用法
 
-### Build a Project Structure
+### 构建项目结构
 ```bash
 PROJ_ID=$(mindx utils uuid)
 GOAL_ID=$(mindx utils uuid)
 
-# Create project node
+# 创建项目节点
 mindx graph upsert-nodes --nodes "[{
   \"id\":\"$PROJ_ID\",
   \"labels\":[\"Project\"],
   \"properties\":{\"name\":\"App Launch\",\"status\":\"active\",\"progress\":0.0}
 }]"
 
-# Create goal under project
+# 在项目下创建目标
 mindx graph upsert-nodes --nodes "[{
   \"id\":\"$GOAL_ID\",
   \"labels\":[\"Goal\"],
@@ -92,9 +89,9 @@ mindx graph upsert-edges --edges "[{
 echo "Project: $PROJ_ID  Goal: $GOAL_ID"
 ```
 
-### Track Customer Health (customer-success skill pattern)
+### 追踪客户健康度（customer-success Skill 模式）
 ```bash
-# Create customer account
+# 创建客户账户
 CUSTOMER_ID=$(mindx utils uuid)
 mindx graph upsert-nodes --nodes "[{
   \"id\":\"$CUSTOMER_ID\",
@@ -108,14 +105,14 @@ mindx graph upsert-nodes --nodes "[{
   }
 }]"
 
-# Later — update health score
+# 之后 —— 更新健康分数
 mindx graph exec --cypher "
   MATCH (c:Customer {id:'$CUSTOMER_ID'})
   SET c.health_score = 72, c.updated_at = timestamp()
   RETURN c.company, c.health_score
 "
 
-# Query at-risk customers
+# 查询有风险的客户
 mindx graph query --cypher "
   MATCH (c:Customer)
   WHERE c.health_score < 60 AND c.status = 'active'
@@ -125,22 +122,22 @@ mindx graph query --cypher "
 "
 ```
 
-### Cross-reference Graph → Memory
+### 跨层查询：图谱 → 记忆
 ```bash
-# 1. Find a node in the graph
+# 1. 在图谱中查找节点
 mindx graph query --cypher "MATCH (p:Project {name:'App Launch'}) RETURN p.id"
 
-# 2. Use its source docs to search memory
+# 2. 利用其来源文档搜索记忆
 mindx memory query "App Launch requirements decisions" --min-score 0.7
 ```
 
-## Cypher Tips for LLM
+## LLM 编写 Cypher 的要点
 
-Since you (the LLM) write Cypher dynamically:
+由于你（LLM）需要动态编写 Cypher 查询：
 
-1. **Always use parameterized values for user input** (`--params`) to avoid injection
-2. **Prefer `query` for reads and `exec` for writes** — they have different permission levels
-3. **Use `upsert-nodes/upsert-edges for bulk operations** — more efficient than individual Cypher SET/MERGE
-4. **Node IDs should be unique and stable** — use `mindx utils uuid` for new entities
-5. **Labels are your index** — query by label first, then filter properties
-6. **`neighbors` is optimized for graph traversal** — prefer it over manual MATCH chains for depth-first exploration
+1. **用户输入务必使用参数化值**（`--params`），防止注入攻击
+2. **读取用 `query`，写入用 `exec`** —— 两者权限级别不同
+3. **批量操作使用 `upsert-nodes/upsert-edges`** —— 比逐条 Cypher SET/MERGE 更高效
+4. **节点 ID 必须唯一且稳定** —— 新实体请使用 `mindx utils uuid` 生成
+5. **标签就是你的索引** —— 先按标签查询，再过滤属性
+6. **`neighbors` 专为图遍历优化** —— 深度优先探索时优先使用它，而非手动拼接 MATCH 链

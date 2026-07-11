@@ -27,11 +27,11 @@
     },
     "unit": {
       "type": "string",
-      "description": "Unit of measurement, e.g. 万, 亿, %, count"
+      "description": "计量单位，例如：万、亿、%、次"
     },
     "platform": {
       "type": "string",
-      "description": "Platform this metric is sourced from"
+      "description": "该指标的数据来源平台"
     },
     "period": {
       "type": "string",

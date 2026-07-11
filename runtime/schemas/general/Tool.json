@@ -1,23 +1,23 @@
 {
   "type": "object",
-  "description": "Software, platform, device, utility",
+  "description": "软件、平台、设备、工具",
   "properties": {
-    "name": { "type": "string", "description": "Tool name" },
+    "name": { "type": "string", "description": "工具名称" },
     "purpose": {
       "type": "string",
-      "description": "Primary purpose or function"
+      "description": "主要用途或功能"
     },
-    "version": { "type": "string", "description": "Version or release" },
-    "vendor": { "type": "string", "description": "Developer or vendor" },
+    "version": { "type": "string", "description": "版本或发行版" },
+    "vendor": { "type": "string", "description": "开发者或供应商" },
     "platform": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Supported platforms"
+      "description": "支持的平台"
     },
     "features": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Key features or capabilities"
+      "description": "核心特性或能力"
     }
   },
   "required": ["name", "purpose"]

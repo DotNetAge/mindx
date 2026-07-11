@@ -1,8 +1,8 @@
 ---
 name: multi-agent-meeting
 description: >
-  When encountering cross-domain collaboration problems, organize a topic-specific meeting, invite relevant experts to participate, collect professional opinions, and generate a structured meeting record.
-allowed-tools: subagent bash agent-talk sleep
+  当遇到跨领域协作问题时，组织专题会议，邀请相关专家参与，收集专业意见，生成结构化的会议记录。
+allowed-tools: subagent bash ask-user sleep
 metadata:
   requires:
     bins:
@@ -12,184 +12,186 @@ metadata:
   description_zh: 当遇到需要跨领域合作的问题时，组织专题会议，邀请相关专家参与，收集专业意见，生成结构化的会议记录。
 ---
 
-# Multi-Agent Topic Meeting
+# 多智能体专题会议
 
-## When to Use
+## 使用场景
 
-- When a complex problem requires cross-domain expertise and multi-party collaboration
-- When multi-angle analysis and structured expert opinions are needed on a specific topic
-- When a structured meeting record with conclusions, key arguments, risks, and action items is required
+- 面对的问题极其复杂，涉及多种领域，需要不同的专家进行多方协作共同讨论
+- 需要多角度分析特定主题，收集结构化的专家意见
+- 需要包含结论、关键论点、风险和行动项的会议记录
 
-## Workflow
+## 工作流程
 
-### 1. Define the Topic and Goal
+### 1. 定义主题和目标
 
-Extract from user input:
+根据用户输入，明确以下信息：
 
-- **Topic**: The core issue to discuss
-- **Goal**: The type of decision expected (feasibility assessment, option selection, risk identification, etc.)
-- **Constraints**: Limitations to consider (budget, timeline, tech stack, etc.)
+- **主题**：要讨论的核心问题
+- **目标**：期望的决策类型（可行性评估、方案选择、风险识别等）
+- **约束条件**：需要考虑的限制因素（预算、时间线、技术栈等）
 
-### 2. Select Participants
+采用假设式提问，用AskUser工具向用户提供多个可能的答案供用户选择，必须充分且明确收集用户召开这次会议的目的与意义才能进行下一步。
 
-Run `mindx agents list` to see all available agents. **Only invite agents whose domain matches the agenda items.**
+### 2. 选择参与者
 
-### 3. Orchestrate the Meeting
+运行 `mindx agents list` 查看所有可用的智能体。**仅邀请其专业领域与议程项目匹配的智能体。**
 
-#### Phase 1: Set the Agenda
+### 3. 组织会议
 
-Confirm the agenda with the user, then assign agenda items to relevant agents:
+#### 阶段 1：设定议程
+
+与用户确认议程，然后将议程项目分配给相关智能体：
 
 ```
-Topic: X
-Agenda:
-1. [Issue A] → Need input from Agent A and Agent B
-2. [Issue B] → Need input from Agent C
-3. [Decision] → Synthesize all inputs and make a recommendation
+主题：X
+议程：
+1. [问题 A] → 需要智能体 A 和智能体 B 的意见
+2. [问题 B] → 需要智能体 C 的意见
+3. [决策] → 综合所有意见并给出建议
 ```
 
-#### Phase 2: Collect Initial Input
+#### 阶段 2：收集初始意见
 
-Use SubAgent to asynchronously gather structured input from each participant in parallel. Each agent must provide:
+通过 SubAgent 并行收集每位参与者的结构化意见。每个智能体需提供：
 
-- **Position**: Stance or recommendation on the topic
-- **Rationale**: Reasoning and domain analysis supporting the position
-- **Evidence**: Data, facts, or citations supporting the rationale
-- **Confidence**: High / Medium / Low — level of certainty in their position
-- **Concerns**: Risks, edge cases, or conditions that could invalidate their position
-- **Questions for others**: Questions directed at other participants
+- **立场**：对主题的看法或建议
+- **理由**：支持该立场的推理和领域分析
+- **证据**：支撑理由的数据、事实或引用
+- **置信度**：高 / 中 / 低，表示对该立场的确定程度
+- **顾虑**：可能推翻立场的风险、边界情况或条件
+- **对他人的问题**：针对其他参与者的提问
 
-**Principles**:
-  - Independent agenda items can be sent in parallel; dependent items must be serial
-  - Each agent only answers questions within its domain
-  - Pass topic, relevant agenda, and constraints as context
+**原则**：
+  - 独立议程并行处理，依赖议程串行处理
+  - 每个智能体只回答专业领域内的问题
+  - 传递主题、相关议程和约束条件作为上下文
 
-#### Phase 3: Discussion and Debate
+#### 阶段 3：讨论和辩论
 
-Using the initial input from Phase 2, conduct multi-round debate with the `scripts/debate.py` state machine.
+基于阶段 2 的初始意见，通过 `scripts/debate.py` 状态机进行多轮辩论。
 
-**Create a debate session:**
+**创建辩论会话：**
 
 ```bash
-# Generate a Session ID (ULID format — used for both AgentTalk session_id and work-dir)
+# 生成会话 ID（ULID 格式，同时用于 session_id 和工作目录）
 SESSION_ID=$(python scripts/debate.py gen-ulid)
 
-# Initialize debate state in the session directory
+# 在会话目录中初始化辩论状态
 python scripts/debate.py init \
   --work-dir "$SESSION_DIR/debate-$SESSION_ID" \
-  --topic "<topic>" \
-  --agents <AgentA> <AgentB> ... \
+  --topic "<主题>" \
+  --agents <智能体A> <智能体B> ... \
   [--max-rounds 3]
 ```
 
-The `$SESSION_ID` variable is reused in subsequent steps.
+后续步骤重复使用 `$SESSION_ID` 变量。
 
-**Advance round by round:**
+**逐轮推进：**
 
-Round 1:
+第 1 轮：
 1. `python scripts/debate.py prepare --work-dir "$SESSION_DIR/debate-$SESSION_ID" --round 1`
-2. Use AgentTalk to notify each agent — provide the topic and context file path, ask for their position. **Reuse `$SESSION_ID` as the AgentTalk `session_id` parameter for every agent** to maintain conversation continuity
-3. Wait for replies
-4. For each reply: `python scripts/debate.py record --work-dir "$SESSION_DIR/debate-$SESSION_ID" --round 1 --agent <name> --response '<json>'`
+2. 通过 AgentTalk 通知每个智能体，提供主题和上下文文件路径，询问其立场。**对每个智能体重用 `$SESSION_ID` 作为 AgentTalk 的 `session_id` 参数**，保持对话连续性
+3. 等待回复
+4. 记录每个回复：`python scripts/debate.py record --work-dir "$SESSION_DIR/debate-$SESSION_ID" --round 1 --agent <名称> --response '<json>'`
 5. `python scripts/debate.py check --work-dir "$SESSION_DIR/debate-$SESSION_ID"`
 
-Round N (N ≥ 2):
-1. Confirm all agents replied in the previous round
+第 N 轮（N ≥ 2）：
+1. 确认所有智能体在上一轮都已回复
 2. `python scripts/debate.py prepare --work-dir "$SESSION_DIR/debate-$SESSION_ID" --round N`
-3. Use AgentTalk to notify each agent for the next round (reuse `$SESSION_ID`)
-4. Wait for replies and record
+3. 通过 AgentTalk 通知每个智能体进入下一轮（重用 `$SESSION_ID`）
+4. 等待回复并记录
 5. `python scripts/debate.py check --work-dir "$SESSION_DIR/debate-$SESSION_ID"`
 
-`check` return values:
-- `converged` → debate ends
-- `stalled` → escalate to user
-- `diverged` → continue to next round
-- `max_rounds_reached` → debate ends
+`check` 返回值：
+- `converged` → 辩论结束
+- `stalled` → 上报给用户
+- `diverged` → 继续下一轮
+- `max_rounds_reached` → 辩论结束
 
-After debate ends:
+辩论结束后：
 
 ```bash
 python scripts/debate.py summary --work-dir "$SESSION_DIR/debate-$SESSION_ID"
 ```
 
-**Parallel debates**: Each issue group uses an independent `$SESSION_ID` and work-dir (e.g. `debate-$SESSION_ID-issue1`, `debate-$SESSION_ID-issue2`). Interleave rounds across groups.
+**并行辩论**：每个问题组使用独立的 `$SESSION_ID` 和工作目录（例如 `debate-$SESSION_ID-issue1`、`debate-$SESSION_ID-issue2`）。不同组之间交错进行各轮。
 
-#### Phase 4: Closure Judgment
+#### 阶段 4：结论判定
 
-Determine closure status for each issue based on debate outcome:
+根据辩论结果确定每个问题的结论状态：
 
-| Status                  | Definition                                     | Action                                                  |
-| ----------------------- | ---------------------------------------------- | ------------------------------------------------------- |
-| ✅ **Consensus**         | All relevant agents agree                      | Adopt directly, record supporting arguments             |
-| ⚠️ **Partial agreement** | General direction agreed, details contested    | Record core consensus + disputed details with positions |
-| 🔴 **Deadlock**          | Fundamental disagreement persists after debate | Submit both positions and reasoning to the user         |
-| ❓ **Insufficient info** | Unable to form a position                      | Record missing information, suggest further research    |
+| 状态           | 定义                     | 行动                              |
+| -------------- | ------------------------ | --------------------------------- |
+| ✅ **达成共识** | 所有相关智能体同意       | 直接采纳，记录支持论点            |
+| ⚠️ **部分同意** | 总体方向一致，细节有争议 | 记录核心共识 + 争议细节及各方立场 |
+| 🔴 **陷入僵局** | 辩论后仍存在根本性分歧   | 将双方立场和推理提交给用户        |
+| ❓ **信息不足** | 无法形成立场             | 记录缺失信息，建议进一步研究      |
 
-**Closure rules**:
-  - If 2+ agents independently raise the same concern, treat it as a validated risk — do not ignore
-  - If an agent changes its position during debate, record the old → new position and the reason
-  - If agents from different domains reach the same conclusion via different reasoning paths, mark it as strong corroboration
-  - Escalate to the user when:
-    (a) A critical-path issue is deadlocked
-    (b) The decision involves trade-offs the chair cannot judge
-    (c) New information outside existing participants is needed
+**结论规则**：
+  - 2 个或以上智能体独立提出相同顾虑，视为已验证风险，不可忽略
+  - 智能体在辩论中改变立场，记录旧立场 → 新立场及原因
+  - 不同领域智能体通过不同推理路径得出相同结论，标记为强有力佐证
+  - 以下情况上报给用户：
+    (a) 关键路径问题陷入僵局
+    (b) 决策涉及主持人无法判断的权衡取舍
+    (c) 需要现有参与者之外的新信息
 
-#### Phase 5: Output Meeting Record
+#### 阶段 5：输出会议记录
 
-Generate the meeting record following `references/meeting-record-format.md`. **The output must use the same language as the user.**
+按照 `references/meeting-record-format.md` 生成会议记录。**输出必须使用与用户相同的语言。**
 
-Include:
-- Meeting basic info
-- Participant list
-- Summary of each agent's input
-- Debate process record (position changes per round)
-- Decision conclusions and key arguments
-- Risks and action items
+包含：
+- 会议基本信息
+- 参与者列表
+- 每个智能体意见的摘要
+- 辩论过程记录（每轮的立场变化）
+- 决策结论和关键论点
+- 风险和行动项
 
-### 4. Output
+### 4. 输出
 
-Output a structured meeting record containing all of the above.
+输出包含以上所有内容的结构化会议记录。
 
-## Resources
+## 资源
 
-- Record format: [references/meeting-record-format.md](references/meeting-record-format.md)
-- Meeting templates: [assets/meeting-templates/](assets/meeting-templates/)
-- Debate state machine: [scripts/debate.py](scripts/debate.py)
-- View available agents: `mindx agents list`
+- 记录格式：[references/meeting-record-format.md](references/meeting-record-format.md)
+- 会议模板：[assets/meeting-templates/](assets/meeting-templates/)
+- 辩论状态机：[scripts/debate.py](scripts/debate.py)
+- 查看可用智能体：`mindx agents list`
 
-## Examples
+## 示例
 
-### Example 1: Technical Architecture Decision
+### 示例 1：技术架构决策
 
-- **Goal**: Evaluate whether to adopt microservices
-- **Participants**: Architect, DevOps engineer, Frontend engineer, Backend engineer
-- **Output**: Professional assessment from each agent, decision recommendation, risk identification, roadmap
+- **目标**：评估是否采用微服务架构
+- **参与者**：架构师、DevOps 工程师、前端工程师、后端工程师
+- **输出**：各智能体的专业评估、决策建议、风险识别、路线图
 
-### Example 2: Product Pricing Strategy
+### 示例 2：产品定价策略
 
-- **Goal**: Set pricing for a new product
-- **Participants**: Market analyst, Product manager, Financial advisor
-- **Output**: Competitive pricing analysis, GTM strategy, cost estimation, pricing recommendation
+- **目标**：制定新产品定价
+- **参与者**：市场分析师、产品经理、财务顾问
+- **输出**：竞争性定价分析、上市策略、成本估算、定价建议
 
-### Example 3: Project Risk Assessment
+### 示例 3：项目风险评估
 
-- **Goal**: Identify and evaluate project risks
-- **Participants**: Project manager, relevant engineers, Financial advisor
-- **Output**: Risk checklist, impact assessment, mitigation measures, timeline impact
+- **目标**：识别和评估项目风险
+- **参与者**：项目经理、相关工程师、财务顾问
+- **输出**：风险清单、影响评估、缓解措施、时间线影响
 
-## Gotchas
+## 注意事项
 
-- **Experts are LLMs, not humans.** A meeting of 5 agents produces 5 parallel analyses, not 5 different perspectives in the human sense. The diversity comes from assigned skills and contexts, not genuine disagreement.
-- **Debate script output needs human review.** The closure judgment framework is a heuristic. Do not auto-accept debate conclusions — present them for user confirmation.
-- **Expert availability is not guaranteed.** If an expert agent is already busy in another task, the team creation may fail. Include fallback: suggest a similar expert or proceed with fewer participants.
-- **Meeting records are not decisions.** A structured meeting record captures discussion, but explicit action items and owners need to be stated separately. Always generate action items at the end.
+- **专家是 LLM，不是人类。** 5 个智能体开会，产生的是 5 个并行分析，不是人类意义上的 5 种不同视角。多样性来自分配的技能和上下文，不是真正的分歧。
+- **辩论脚本输出需要人工审查。** 结论判定框架是启发式的，不要自动接受辩论结论，应提交给用户确认。
+- **专家可用性不保证。** 如果专家智能体已在处理其他任务，团队创建可能失败。需要回退方案：建议类似专家或以较少参与者继续。
+- **会议记录不是决策。** 结构化会议记录只捕获讨论内容，明确的行动项和负责人需要单独说明。始终在最后生成行动项。
 
-## Notes
+## 备注
 
-- Each agent only speaks to its own domain — do not ask agents to comment outside their expertise
-- Independent issues can be debated in parallel by different agent groups for efficiency
-- The meeting record is written by the chair synthesizing real agent outputs, not via role-playing
-- Disagreement is healthy — different agents have different perspectives; divergence signals a genuine trade-off
-- The debate phase (Phase 3) is the core value of the meeting — a meeting without debate is just opinion collection, not a discussed conclusion
-- The chair's role is to set the debate framework and judge when convergence is reached, not to relay messages between rounds
-- The final decision rests with the user; the meeting outputs are recommendations
+- 每个智能体只讨论其专业领域，不要要求智能体评论专业范围外的内容
+- 独立问题可以由不同的智能体组并行辩论，提高效率
+- 会议记录由主持人综合真实智能体输出撰写，不是通过角色扮演
+- 分歧是正常的，不同智能体有不同视角；分歧信号表示真正的权衡取舍
+- 辩论阶段（阶段 3）是会议的核心价值，没有辩论的会议只是意见收集，不是讨论后的结论
+- 主持人的角色是设定辩论框架并判断何时达成共识，不是在轮次之间传递消息
+- 最终决定权在用户，会议输出的是建议

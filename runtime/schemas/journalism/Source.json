@@ -29,11 +29,11 @@
     },
     "url": {
       "type": "string",
-      "description": "Primary website or URL of the source"
+      "description": "来源的主要网站或 URL"
     },
     "political_lean": {
       "type": "string",
-      "description": "Stated or observed political leaning of the source, if any"
+      "description": "来源声明或观察到的政治倾向（如有）"
     }
   },
   "required": ["name", "source_type"]

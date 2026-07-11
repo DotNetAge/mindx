@@ -1,28 +1,28 @@
 {
   "type": "object",
-  "description": "Regulatory body, policy, or regulation — SEC, central bank policy, monetary policy rule, Basel accord",
+  "description": "监管机构、政策或法规 — SEC、央行政策、货币政策规则、巴塞尔协议",
   "properties": {
-    "name": { "type": "string", "description": "Regulation or policy name" },
+    "name": { "type": "string", "description": "法规或政策名称" },
     "regulatory_body": {
       "type": "string",
-      "description": "Enforcing authority or institution"
+      "description": "执行机构或监管部门"
     },
     "jurisdiction": {
       "type": "string",
-      "description": "Geographic or legal jurisdiction of the regulation"
+      "description": "法规适用的地理或法律管辖区"
     },
     "effective_date": {
       "type": "string",
-      "description": "Date when the regulation takes effect"
+      "description": "法规生效日期"
     },
     "description": {
       "type": "string",
-      "description": "Summary of the regulation and its purpose"
+      "description": "法规内容及其目的的概述"
     },
     "affected_sectors": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Financial sectors or industries affected by this regulation"
+      "description": "受此法规影响的金融部门或行业"
     }
   },
   "required": ["name", "regulatory_body"]

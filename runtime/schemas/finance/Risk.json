@@ -1,26 +1,26 @@
 {
   "type": "object",
-  "description": "Risk factor in finance — volatility, credit risk, inflation risk, liquidity risk, market risk",
+  "description": "金融中的风险因素 — 波动率、信用风险、通胀风险、流动性风险、市场风险"
   "properties": {
-    "name": { "type": "string", "description": "Risk factor name" },
+    "name": { "type": "string", "description": "风险因素名称" },
     "risk_type": {
       "type": "string",
       "enum": ["market", "credit", "liquidity", "inflation", "volatility"],
-      "description": "Category of risk"
+      "description": "风险类别"
     },
     "description": {
       "type": "string",
-      "description": "Explanation of the risk factor and its impact"
+      "description": "风险因素及其影响的说明"
     },
     "severity": {
       "type": "string",
       "enum": ["low", "medium", "high", "critical"],
-      "description": "Severity level of the risk"
+      "description": "风险严重程度"
     },
     "mitigation_methods": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Common methods to mitigate this risk"
+      "description": "缓解此风险的常用方法"
     }
   },
   "required": ["name", "risk_type"]

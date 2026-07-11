@@ -1,31 +1,31 @@
 {
   "type": "object",
-  "description": "A problem, bug, issue, or error encountered in a technical context",
+  "description": "在技术环境中遇到的问题、缺陷、故障或错误",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Short identifying name or title of the problem"
+      "description": "问题的简短识别名称或标题"
     },
     "description": {
       "type": "string",
-      "description": "Detailed description of the problem, including symptoms and context"
+      "description": "问题的详细描述，包括症状和上下文"
     },
     "severity": {
       "type": "string",
       "enum": ["critical", "major", "minor"],
-      "description": "Impact level of the problem"
+      "description": "问题的影响级别"
     },
     "status": {
       "type": "string",
-      "description": "Current status (e.g., open, investigating, resolved, closed)"
+      "description": "当前状态（例如打开、调查中、已解决、已关闭）"
     },
     "affected_component": {
       "type": "string",
-      "description": "The component, module, or system area affected by the problem"
+      "description": "受问题影响的组件、模块或系统区域"
     },
     "workaround": {
       "type": "string",
-      "description": "Temporary mitigation or alternative approach while a permanent fix is pending"
+      "description": "在永久修复完成之前的临时缓解措施或替代方案"
     }
   },
   "required": ["name", "description"]

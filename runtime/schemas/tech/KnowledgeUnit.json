@@ -1,26 +1,26 @@
 {
   "type": "object",
-  "description": "An independent knowledge point representing a specific method, process, technique, formula, or framework",
+  "description": "表示特定方法、流程、技术、公式或框架的独立知识点",
   "properties": {
-    "name": { "type": "string", "description": "Name of the knowledge unit" },
+    "name": { "type": "string", "description": "知识点的名称" },
     "type": {
       "type": "string",
       "enum": ["method", "process", "technique", "formula", "framework"],
-      "description": "Category of the knowledge unit"
+      "description": "知识点的类别"
     },
     "description": {
       "type": "string",
-      "description": "Detailed explanation of what the knowledge unit entails and how it is used"
+      "description": "对该知识点包含的内容及其使用方式的详细说明"
     },
     "prerequisites": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Prior knowledge or skills required to understand or apply this unit"
+      "description": "理解或应用该知识点所需的先决知识或技能"
     },
     "applications": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Common use cases or scenarios where this knowledge unit is applied"
+      "description": "该知识点被应用的常见用例或场景"
     }
   },
   "required": ["name", "type", "description"]

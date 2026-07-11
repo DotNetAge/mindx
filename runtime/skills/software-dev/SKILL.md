@@ -1,8 +1,8 @@
 ---
 name: software-dev
 description: >
-  Follow this agile development process: requirements analysis → architecture design → sprint planning →
-  sprint execution → quality gates → release → monitoring. Each phase produces specific artifacts.
+  遵循敏捷开发流程：需求分析 → 架构设计 → Sprint 规划 →
+  Sprint 执行 → 质量门禁 → 发布 → 监控。每个阶段产出特定交付物。
 allowed-tools: bash sub-agent collect-results task-create task-update task-get task-list team-create team-list team-get-tasks find-experts
 metadata:
   requires:
@@ -15,298 +15,298 @@ metadata:
   description_zh-tw: 遵循敏捷開發流程：需求分析 → 架構設計 → Sprint 規劃 → Sprint 執行 → 質量門禁 → 發佈 → 監控
 ---
 
-## When to Use
+## 何时使用
 
-Activate this skill when:
-- User wants to build a software feature, module, or entire product
-- User mentions: develop, implement, build, sprint, release, refactor, architecture
-- The task spans multiple files or multiple sessions
+遇到以下情况时激活此技能：
+- 用户想要构建软件功能、模块或完整产品
+- 用户提到：开发、实现、构建、冲刺、发布、重构、架构
+- 任务涉及多个文件或跨多个会话
 
-Do NOT activate for: single-file edits, trivial bug fixes — do those directly.
+以下情况无需激活：单文件编辑、简单的 Bug 修复——直接处理即可。
 
 ---
 
-## Phase 1 — Requirements Analysis
+## 阶段 1 — 需求分析
 
-**Mandatory first phase. Do not skip to coding.**
+**必须首先完成此阶段。不要直接跳到编码。**
 
-### Step 1.1 — Elicit Requirements from the User
+### 步骤 1.1 — 从用户处获取需求
 
-Ask the user these five questions in order. Wait for each answer before proceeding.
+按顺序向用户提出以下五个问题。等待每个回答后再继续。
 
-1. **Core problem** — "What problem are you trying to solve? What scenario are you implementing?"
-2. **Users & scope** — "Who will use this? At what scale?"
-3. **Specific features** — "What exactly needs to be built? List the core features. Which are MVP vs. future?"
-4. **Constraints** — "Any technical, platform, timeline, or resource constraints?"
-5. **Definition of done** — "How do we verify it's complete? What are the acceptance criteria?"
+1. **核心问题** — "你要解决什么问题？要实现什么场景？"
+2. **用户与规模** — "谁会使用？规模多大？"
+3. **具体功能** — "具体需要构建什么？列出核心功能。哪些是 MVP，哪些是后续迭代？"
+4. **约束条件** — "有技术、平台、时间线或资源方面的限制吗？"
+5. **完成标准** — "如何验证已完成？验收标准是什么？"
 
-During the conversation, actively guide:
+对话过程中要主动引导：
 
-- User is vague → ask clarifying follow-ups
-- User lists too many features → help prioritize ("Which 3 are the most critical?")
-- User describes a solution instead of a problem → dig deeper ("What underlying problem does this solve?")
+- 用户描述模糊 → 追问澄清
+- 用户列了太多功能 → 帮排优先级（"哪 3 个最关键？"）
+- 用户说的是方案而非问题 → 往下挖（"这背后要解决什么问题？"）
 
-### Step 1.2 — Output Requirements Brief
+### 步骤 1.2 — 输出需求简报
 
-Synthesize answers into this document. Save to `docs/requirements.md`. Show to the user for confirmation before proceeding:
+把回答整合为以下文档，保存到 `docs/requirements.md`，继续之前先展示给用户确认：
 
 ```markdown
-# Requirements Brief
+# 需求简报
 
-## Overview
-[One-line summary of what to build]
+## 概述
+[一句话总结要构建什么]
 
-## Core Problem
-[The pain point or goal]
+## 核心问题
+[痛点或目标]
 
-## Target Users
-[Who and at what scale]
+## 目标用户
+[谁，以及什么规模]
 
-## MVP Features
-1. [Feature A]
-2. [Feature B]
-3. [Feature C]
+## MVP 功能
+1. [功能 A]
+2. [功能 B]
+3. [功能 C]
 
-## Future Scope (excluded from this round)
-- [Feature D]
-- [Feature E]
+## 后续范围（本轮不包含）
+- [功能 D]
+- [功能 E]
 
-## Constraints
-- Tech stack: [e.g. Go + React + PostgreSQL]
-- Platform: [e.g. Web / iOS / Android]
-- Timeline: [e.g. 2 weeks]
-- Other:
+## 约束条件
+- 技术栈：[例如 Go + React + PostgreSQL]
+- 平台：[例如 Web / iOS / Android]
+- 时间线：[例如 2 周]
+- 其他：
 
-## Acceptance Criteria
-- [ ] [Verifiable criterion 1]
-- [ ] [Verifiable criterion 2]
-- [ ] [Verifiable criterion 3]
+## 验收标准
+- [ ] [可验证的标准 1]
+- [ ] [可验证的标准 2]
+- [ ] [可验证的标准 3]
 
-## Success Metric
-[How to measure success]
+## 成功指标
+[如何衡量成功]
 ```
 
-> **Phase 1 is complete when `docs/requirements.md` is saved to the project directory and confirmed by the user.**
+> **阶段 1 在 `docs/requirements.md` 保存到项目目录并经用户确认后完成。**
 
 ---
 
-## Phase 2 — Architecture Design
+## 阶段 2 — 架构设计
 
-Based on the confirmed requirements brief, produce the architecture blueprint. Save to `docs/architecture.md`.
+基于已确认的需求简报，产出架构蓝图。保存到 `docs/architecture.md`。
 
-### Output: Architecture Blueprint
+### 输出：架构蓝图
 
 ```markdown
-# Architecture Blueprint
+# 架构蓝图
 
-## 1. System Architecture Diagram
+## 1. 系统架构图
 
-[Use Mermaid to draw: Client → API Gateway → Service Layer → Data Layer, etc.]
+[使用 Mermaid 绘制：客户端 → API 网关 → 服务层 → 数据层，等等]
 
-## 2. Project Directory Structure
+## 2. 项目目录结构
 
 ```
 project-root/
-├── cmd/              # Entry points
+├── cmd/              # 入口点
 ├── internal/
-│   ├── api/          # HTTP/gRPC handlers
-│   ├── service/      # Business logic
-│   ├── repository/   # Data access
-│   └── model/        # Data models
-├── pkg/              # Shared libraries
-├── migrations/       # Database migrations
-├── configs/          # Configuration
-└── deploy/           # Deployment files
+│   ├── api/          # HTTP/gRPC 处理器
+│   ├── service/      # 业务逻辑
+│   ├── repository/   # 数据访问
+│   └── model/        # 数据模型
+├── pkg/              # 共享库
+├── migrations/       # 数据库迁移
+├── configs/          # 配置文件
+└── deploy/           # 部署文件
 ```
 
-## 3. Core Data Models
+## 3. 核心数据模型
 
-- [Entity 1]: {fields, relationships}
-- [Entity 2]: {fields, relationships}
+- [实体 1]：{字段, 关系}
+- [实体 2]：{字段, 关系}
 
-## 4. API Surface
+## 4. API 接口
 
-- `POST /api/resource` — Create resource
-- `GET /api/resource/:id` — Get resource
+- `POST /api/resource` — 创建资源
+- `GET /api/resource/:id` — 获取资源
 - ...
 
-## 5. Component Dependencies
+## 5. 组件依赖关系
 
-- Component B depends on A (build A first)
-- Component C is independent (can parallelize with A/B)
+- 组件 B 依赖 A（先构建 A）
+- 组件 C 是独立的（可以与 A/B 并行）
 ```
 
-> **Phase 2 is complete when `docs/architecture.md` is saved to the project directory.**
+> **阶段 2 在 `docs/architecture.md` 保存到项目目录后完成。**
 
 ---
 
-## Phase 3 — Sprint Planning
+## 阶段 3 — Sprint 规划
 
-Every sprint is requirement-driven. Select requirement(s) from the Requirements Brief to deliver in this sprint. The sprint goal is to deliver those specific requirements. Do not create tasks from the architecture alone — tasks serve requirements.
+每个 Sprint 以需求为驱动。从需求简报中选出本 Sprint 要交付的需求，Sprint 的目标就是交付这些具体需求。不要脱离需求、仅从架构出发创建任务——任务是为需求服务的。
 
-### Step 3.1 — Select Sprint Requirements
+### 步骤 3.1 — 选择 Sprint 需求
 
-Pick a subset of requirements from the Requirements Brief that can be delivered in one sprint cycle. The sprint goal must reference specific requirements by name.
+从需求简报中选取一个 Sprint 周期内能交付的子集。Sprint 目标必须明确引用具体的需求名称。
 
-### Step 3.2 — Discover Available Agents
+### 步骤 3.2 — 发现可用智能体
 
-Run `mindx agent list` to see available agents and their capabilities. Use this to determine who can handle each task.
+运行 `mindx agent list` 查看可用的智能体及其能力。据此确定每个任务由谁负责。
 
-### Step 3.3 — Break Requirements Into Tasks
+### 步骤 3.3 — 将需求分解为任务
 
-For each selected requirement, decompose into executable tasks organized by dependency waves. Every task must map back to a requirement from the sprint goal.
+针对每个选定的需求，按依赖关系分波次拆解为可执行的任务。每个任务都必须关联到 Sprint 目标中的某个需求。
 
-### Step 3.4 — Output Sprint Plan
+### 步骤 3.4 — 输出 Sprint 计划
 
-Save sprint plan to `docs/sprint-plan.md`.
+将 Sprint 计划保存到 `docs/sprint-plan.md`。
 
 ```markdown
-# Sprint 1: [derived from requirements — e.g. "user authentication & profile"]
+# Sprint 1：[源自需求——例如 "用户认证与个人资料"]
 
-Requirement(s) addressed:
-  - [Requirement A from Requirements Brief]
-  - [Requirement B from Requirements Brief]
+要解决的需求：
+  - [需求简报中的需求 A]
+  - [需求简报中的需求 B]
 
-Wave 1 (no dependencies, parallel):
-  Task: [Feature A] — Requirement: [Req A] — Owner: [agent] — Est: M
-  Task: [Feature B] — Requirement: [Req A] — Owner: [agent] — Est: M
+波次 1（无依赖，可并行）：
+  任务：[功能 A] — 需求：[需求 A] — 负责人：[智能体] — 预估：M
+  任务：[功能 B] — 需求：[需求 A] — 负责人：[智能体] — 预估：M
 
-Wave 2 (depends on Wave 1):
-  Task: [Integration A+B] — Requirement: [Req A] — Owner: [agent] — Est: S
-  Task: [Tests A+B] — Requirement: [Req B] — Owner: [agent] — Est: S
+波次 2（依赖波次 1）：
+  任务：[集成 A+B] — 需求：[需求 A] — 负责人：[智能体] — 预估：S
+  任务：[测试 A+B] — 需求：[需求 B] — 负责人：[智能体] — 预估：S
 
-Wave 3 (depends on Wave 2):
-  Task: [E2E tests] — Requirement: [Req A, Req B] — Owner: [agent] — Est: M
+波次 3（依赖波次 2）：
+  任务：[端到端测试] — 需求：[需求 A, 需求 B] — 负责人：[智能体] — 预估：M
 ```
 
-Create tasks and wire dependencies:
+创建任务并设置依赖关系：
 
 ```
-task-create(subject="[Req X] Task name", description="AC from requirements: {criteria}. Files to modify: {paths}.")
+task-create(subject="[需求 X] 任务名称", description="来自需求的验收标准：{criteria}。需修改的文件：{paths}。")
 task-update(task_id=B, addBlockedBy=[A])
 ```
 
-> **Phase 3 is complete when `docs/sprint-plan.md` is saved and all tasks are created in the system with dependencies wired.**
+> **阶段 3 在 `docs/sprint-plan.md` 保存且所有任务在系统中创建并设置好依赖关系后完成。**
 
 ---
 
-## Phase 4 — Sprint Execution
+## 阶段 4 — Sprint 执行
 
-Execute tasks wave by wave. Run parallel tasks concurrently using sub-agents.
+按波次执行任务。使用子智能体并行运行任务。
 
-### Step 4.1 — Agent Discovery
+### 步骤 4.1 — 智能体发现
 
-Use `mindx agent list` to find the right agent for each task. Match task requirements against each agent's capabilities.
+用 `mindx agent list` 为每个任务匹配合适的智能体，把任务需求与各智能体的能力对应起来。
 
-### Step 4.2 — Sub-Agent Task Template
+### 步骤 4.2 — 子智能体任务模板
 
-Every delegated task must include these five elements, with ACCEPTANCE pulled directly from the Requirements Brief:
+每个委派的任务必须包含以下五个要素，其中 ACCEPTANCE 直接来自需求简报：
 
 ```
-subject: clear task name
+subject: 清晰的任务名称
 description: |
-  GOAL: what to achieve
-  ACCEPTANCE: [copied from requirements — these are the same criteria used to mark this task complete]
-  SCOPE: exact files/paths to modify
-  CONSTRAINTS: tech stack, conventions, patterns to follow
-  DELIVERABLE: expected output format
+  GOAL: 要达成什么
+  ACCEPTANCE: [从需求简报复制——这些就是标记任务完成所用的相同标准]
+  SCOPE: 需要修改的确切文件/路径
+  CONSTRAINTS: 技术栈、约定、需遵循的模式
+  DELIVERABLE: 期望的输出格式
 ```
 
-### Step 4.3 — Execution Pattern
+### 步骤 4.3 — 执行模式
 
 ```
-# Wave 1: parallel
+# 波次 1：并行
 task-update(wave1_tasks, status="in_progress")
-sub-agent([agent_name], task="{goal}. Accept when: {acceptance}. Scope: {paths}. Standards: {tech}.")
-sub-agent([agent_name], task="{goal}. Accept when: {acceptance}. Scope: {paths}. Standards: {tech}.")
+sub-agent([agent_name], task="{goal}。验收标准：{acceptance}。范围：{paths}。规范：{tech}。")
+sub-agent([agent_name], task="{goal}。验收标准：{acceptance}。范围：{paths}。规范：{tech}。")
 collect-results(...)
-→ Verify each result against its acceptance criteria. Run tests. Mark complete only when all pass.
+→ 根据各自的验收标准验证每个结果。运行测试。仅在全部通过后标记完成。
 task-update(wave1_tasks, status="completed")
 
-# Wave 2: sequential
+# 波次 2：顺序
 task-update(wave2_tasks, status="in_progress")
-sub-agent([agent_name], task="{goal}. Accept when: {acceptance}. Scope: {paths}.")
+sub-agent([agent_name], task="{goal}。验收标准：{acceptance}。范围：{paths}。")
 collect-results(...)
-→ Verify against acceptance criteria. Run integration tests.
+→ 根据验收标准验证。运行集成测试。
 task-update(wave2_tasks, status="completed")
 ```
 
 ---
 
-## Phase 5 — Quality Gates
+## 阶段 5 — 质量门禁
 
-Before marking any task or sprint complete, run these checks in order:
+标记任何任务或 Sprint 完成之前，依次运行以下检查：
 
-| Gate                 | Action                                    | Fail →             |
-| -------------------- | ----------------------------------------- | ------------------ |
-| 1. Code complete     | Verify all planned code is written        | Fix or defer       |
-| 2. Unit tests        | Run test suite, coverage ≥70% on new code | Fix failing tests  |
-| 3. Integration smoke | Run primary user flow end-to-end          | Debug and fix      |
-| 4. Code review       | Read key files for structural issues      | Refactor if needed |
-| 5. No regressions    | Run all pre-existing tests                | Fix regressions    |
+| 门禁 | 操作 | 失败处理 |
+|------|------|----------|
+| 1. 代码完成 | 验证所有计划代码已编写 | 修复或推迟 |
+| 2. 单元测试 | 运行测试套件，新代码覆盖率 ≥70% | 修复失败的测试 |
+| 3. 集成冒烟测试 | 端到端运行主要用户流程 | 调试并修复 |
+| 4. 代码审查 | 阅读关键文件检查结构性问题 | 必要时重构 |
+| 5. 无回归 | 运行所有已有测试 | 修复回归 |
 
-After passing all gates, save a quality report to `docs/quality-report.md` documenting results for each gate.
+通过所有门禁后，将质量报告保存到 `docs/quality-report.md`，记录每个门禁的结果。
 
-> **Phase 5 is complete when all gates pass and `docs/quality-report.md` is saved.**
+> **阶段 5 在所有门禁通过且 `docs/quality-report.md` 保存后完成。**
 
 ---
 
-## Phase 6 — Release
+## 阶段 6 — 发布
 
-When all quality gates pass, save release notes to `docs/release-notes.md` and communicate:
+所有质量门禁通过后，把发布说明保存到 `docs/release-notes.md` 并通报：
 
 ```
-Sprint 1 Complete — [Project]
+Sprint 1 完成 — [项目名]
 
-Delivered:
-  ✅ [Feature]: [summary]
-  ✅ [Feature]: [summary]
+已交付：
+  ✅ [功能]：[摘要]
+  ✅ [功能]：[摘要]
 
-Quality:
-  Tests: X/Y passing | Coverage: X%
-  Known issues: N (tracked)
+质量：
+  测试：X/Y 通过 | 覆盖率：X%
+  已知问题：N（已跟踪）
 
-Next sprint:
-  · [item 1]
-  · [item 2]
+下个 Sprint：
+  · [事项 1]
+  · [事项 2]
 ```
 
-> **Phase 6 is complete when `docs/release-notes.md` is saved.**
+> **阶段 6 在 `docs/release-notes.md` 保存后完成。**
 
 ---
 
-## Phase 7 — Monitor
+## 阶段 7 — 监控
 
-Post-release checks:
+发布后检查：
 
-| Check        | When       | How                          |
-| ------------ | ---------- | ---------------------------- |
-| Error spikes | Daily      | Check logs                   |
-| Performance  | Within 24h | Benchmark vs baseline        |
-| User bugs    | Ongoing    | Triage reports               |
-| Tech debt    | Per sprint | Count TODO/FIXME in new code |
-
----
-
-## Hard Rules
-
-- **Each phase is complete only when its deliverable document is saved.** No document = incomplete phase.
-- Phase 1 complete → `docs/requirements.md` saved and user confirmed.
-- Phase 2 complete → `docs/architecture.md` saved.
-- Phase 3 complete → `docs/sprint-plan.md` saved and tasks wired.
-- Phase 5 complete → all quality gates passed and `docs/quality-report.md` saved.
-- Phase 6 complete → `docs/release-notes.md` saved.
-- Phase 1 must complete before Phase 2. Phase 2 before Phase 3. Phase 5 before Phase 6. No exceptions.
-- Every task must have a clear acceptance criterion before execution.
-- Do not modify files outside the agreed scope without re-confirming with the user.
-- All output documents must be written in the same language as the user's input.
-- **The acceptance criteria defined in Phase 1 are the sole standard for verifying all outputs. If the criteria are insufficient to verify a result, the deficiency is in Phase 1 — go back and refine requirements before proceeding.**
+| 检查项 | 频率 | 方式 |
+|--------|------|------|
+| 错误激增 | 每日 | 检查日志 |
+| 性能 | 24 小时内 | 与基准对比 |
+| 用户反馈的 Bug | 持续 | 分类报告 |
+| 技术债务 | 每个 Sprint | 统计新代码中的 TODO/FIXME |
 
 ---
 
-## Gotchas
+## 硬性规则
 
-- **Acceptance criteria drift during implementation.** What the user wants may shift as they see the output. When this happens, do NOT silently adjust — update the requirements document and re-confirm before proceeding.
-- **Sprint velocity is not a delivery guarantee.** A 2-week sprint with 10 story points can slip if the team discovers unknown unknowns mid-sprint. Never promise a hard delivery date based on velocity alone.
-- **Phase dependencies are strict.** Testing without completed development, or deployment without passing quality gates, produces unreliable output. Do NOT skip phases to save time — the Hard Rules exist for a reason.
-- **Third-party dependency changes break builds.** A library update, API deprecation, or package removal can break the build at any time. When encountering build failures, always check if a dependency changed before debugging the code.
+- **每个阶段的交付文档保存后才算完成。** 没有文档 = 没做完。
+- 阶段 1 完成 → `docs/requirements.md` 已保存且用户已确认。
+- 阶段 2 完成 → `docs/architecture.md` 已保存。
+- 阶段 3 完成 → `docs/sprint-plan.md` 已保存且任务已关联。
+- 阶段 5 完成 → 所有质量门禁已通过且 `docs/quality-report.md` 已保存。
+- 阶段 6 完成 → `docs/release-notes.md` 已保存。
+- 阶段 1 必须在阶段 2 之前完成，阶段 2 在阶段 3 之前，阶段 5 在阶段 6 之前。没有例外。
+- 每个任务执行前必须有明确的验收标准。
+- 未经与用户重新确认，不要修改约定范围之外的文件。
+- 所有输出文档必须使用与用户输入相同的语言。
+- **阶段 1 定义的验收标准是验证所有输出的唯一标准。如果标准不足以验证结果，问题出在阶段 1——回去完善需求再继续。**
+
+---
+
+## 注意事项
+
+- **验收标准在实现过程中可能会变。** 用户看到产出后想法可能会变，此时不要默默调整——更新需求文档并重新确认后再继续。
+- **Sprint 速度不是交付保证。** 一个 2 周 10 个故事点的 Sprint，如果团队中途遇到未知问题，也可能延期。永远不要仅凭速度承诺硬性交付日期。
+- **阶段依赖是严格的。** 开发没完成就测试，或质量门禁没通过就部署，产出不可靠。不要为了省时间跳过阶段——硬性规则存在是有原因的。
+- **第三方依赖变更会破坏构建。** 库更新、API 弃用或包移除随时可能让构建挂掉。遇到构建失败时，先检查是否有依赖变更，再去调试代码。

@@ -13,16 +13,16 @@
     },
     "description": {
       "type": "string",
-      "description": "Detailed description of the prevention method"
+      "description": "预防方法的详细描述"
     },
     "target_conditions": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Conditions this method aims to prevent"
+      "description": "此方法旨在预防的疾病"
     },
     "effectiveness": {
       "type": "string",
-      "description": "Effectiveness or efficacy of the prevention method"
+      "description": "预防方法的有效性或功效"
     }
   },
   "required": ["name"]

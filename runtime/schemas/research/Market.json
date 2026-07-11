@@ -1,22 +1,22 @@
 {
   "type": "object",
-  "description": "Market, industry, sector, or vertical",
+  "description": "市场、行业、细分领域或垂直领域",
   "properties": {
-    "name": { "type": "string", "description": "Market name" },
+    "name": { "type": "string", "description": "市场名称" },
     "market_type": {
       "type": "string",
-      "description": "Market type: industry, sector, or vertical"
+      "description": "市场类型：行业、细分领域或垂直领域"
     },
-    "region": { "type": "string", "description": "Geographic region" },
+    "region": { "type": "string", "description": "地理区域" },
     "size_estimate": {
       "type": "string",
-      "description": "Estimated market size"
+      "description": "市场规模估算"
     },
-    "growth_rate": { "type": "string", "description": "Market growth rate" },
+    "growth_rate": { "type": "string", "description": "市场增长率" },
     "key_players": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Key companies in this market"
+      "description": "该市场的主要企业"
     }
   },
   "required": ["name"]

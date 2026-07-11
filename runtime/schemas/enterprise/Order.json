@@ -1,33 +1,33 @@
 {
   "type": "object",
-  "description": "Order, purchase order, sales order, or transaction representing a request to fulfill goods or services",
+  "description": "订单、采购单、销售单或交易，代表商品或服务的交付请求",
   "properties": {
     "order_id": {
       "type": "string",
-      "description": "Unique identifier for the order (e.g., PO-2024-001)"
+      "description": "订单唯一标识（如 PO-2024-001）"
     },
     "customer": {
       "type": "string",
-      "description": "Customer or account name associated with the order"
+      "description": "与订单关联的客户或账户名称"
     },
     "amount": {
       "type": "number",
-      "description": "Total monetary value of the order"
+      "description": "订单总金额"
     },
     "status": {
       "type": "string",
       "enum": ["pending", "confirmed", "shipped", "completed", "cancelled"],
-      "description": "Current fulfillment status of the order"
+      "description": "订单当前的履约状态"
     },
     "date": {
       "type": "string",
       "format": "date",
-      "description": "Date the order was placed (ISO 8601 format)"
+      "description": "订单下单日期（ISO 8601 格式）"
     },
     "items": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "List of items or line items included in the order"
+      "description": "订单中包含的商品或明细项目列表"
     }
   },
   "required": ["order_id", "customer"]

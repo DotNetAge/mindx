@@ -1,180 +1,179 @@
-# Agent Definition Reference
+# Agent定义最佳实践
 
-An agent definition is a Markdown file with YAML frontmatter. The frontmatter contains routing metadata; the Markdown body is the agent's system prompt / working instructions.
+Agent 定义是一个带 YAML frontmatter 的 Markdown 文件。frontmatter 包含路由元数据；Markdown 正文则是 Agent 的系统提示词 / 工作指令。
 
-## Field Requirements
+## 字段要求
 
-| Field | Format | Rule |
-| --- | --- | --- |
-| `name` | lowercase-hyphen | Unique, noun-based, reflects role (e.g. `python-engineer`) |
-| `role` | ~2-5 words | Human-readable role title, include seniority if helpful |
-| `description` | <1024 chars | For **LLM routing** — helps other LLMs decide whether to delegate to this agent |
-| `skills` | list from `skill.list` | Only domain-relevant skills — each adds context overhead |
-| `meta.name_zh` | 2-6 Chinese characters | Concise Chinese display name |
-| `meta.name_zh_tw` | 2-6 Traditional Chinese characters | Traditional Chinese display name |
-| `meta.role_zh` | 2-6 Chinese characters | Chinese role title |
-| `meta.description_zh` | 1-2 sentences | Chinese description, ending with “从...角度分析问题” |
-| body | system prompt | The agent's **full working instructions** — must follow the four-section format below |
-
----
-
-## `description` — LLM Routing Description
-
-Written for **LLM routing**: another LLM reads this to decide whether to delegate to this agent. Not marketing copy.
-
-- Start with domain and role
-- List concrete responsibilities
-- State scope boundaries implicitly
-- Keep under 1024 characters
-
-Example (from `backend-engineer`):
-
-```
-Designs, develops, and maintains server-side applications, APIs, and data pipelines
-across multiple languages. Delivers production-grade code with thorough test coverage.
-```
+| 字段                  | 格式                     | 规则                                                             |
+| --------------------- | ------------------------ | ---------------------------------------------------------------- |
+| `name`                | 小写连字符               | 唯一，基于名词，体现角色（如 `python-engineer`）                 |
+| `role`                | 约 2-5 个词              | 人类可读的角色头衔，必要时可包含资历                             |
+| `description`         | 小于 1024 字符           | 用于 **LLM 路由** —— 帮助其他 LLM 判断是否应将任务委派给该 Agent |
+| `skills`              | 来自 `skill.list` 的列表 | 仅包含领域相关的技能 —— 每个技能都会增加上下文开销               |
+| `meta.name_zh`        | 2-6 个汉字               | 简洁的中文显示名                                                 |
+| `meta.name_zh_tw`     | 2-6 个繁体汉字           | 繁体中文显示名                                                   |
+| `meta.role_zh`        | 2-6 个汉字               | 中文角色头衔                                                     |
+| `meta.description_zh` | 1-2 句话                 | 中文描述，以"从...角度分析问题"结尾                              |
+| 正文                  | 系统提示词               | Agent 的 **完整工作指令** —— 必须遵循下方的四段式结构            |
 
 ---
 
-## Body — Full System Prompt (Mandatory Four-Section Format)
+## `description` — LLM 路由描述
 
-The body defines three things:
+为 **LLM 路由** 而写：由另一个 LLM 阅读后决定是否将任务委派给该 Agent。不是营销文案。
 
-- **Role** (定岗) — what position the agent holds
-- **Domain** (定领域) — which field the agent belongs to
-- **Responsibilities** (定责) — what scope the agent covers and what it does NOT handle
+- 开头点明领域和角色
+- 列出具体职责
+- 隐含地划定职责边界
+- 控制在 1024 字符以内
 
-The LLM reads this to know exactly what the agent is, what it does, and where its boundaries lie. Follow this exact structure:
+示例（来自 `backend-engineer`）：
+
+```
+设计、开发和维护多语言的服务端应用、API 和数据管道。交付生产级代码，配备完善的测试覆盖。
+```
+
+---
+
+## 正文 — 完整系统提示词（强制四段式结构）
+
+正文定义三件事：
+
+- **角色**（定岗）— Agent 担任什么职位
+- **领域**（定领域）— Agent 属于哪个专业方向
+- **职责**（定责）— Agent 负责什么，不负责什么
+
+LLM 通过这段内容明确了解 Agent 是谁、做什么、边界在哪。严格按以下结构编写：
 
 ```markdown
-I am a **{Role}**. {one-liner: what I do and my value} — I do **not** {boundary}.
-{second sentence extending the intro}
+我是**{角色}**。{一句话说明：我做什么、我的价值} — 我**不**做{边界}。
+{第二句话，进一步补充介绍}
 
-## Professional Areas
+## 专业领域
 
-- **{Area 1}** — {specific capability}
-- **{Area 2}** — {specific capability}
-- **{Area 3}** — {specific capability}
+- **{领域 1}** — {具体能力}
+- **{领域 2}** — {具体能力}
+- **{领域 3}** — {具体能力}
 
-## Core Deliverables
+## 核心交付物
 
-- **{Deliverable 1}** — {what it contains}
-- **{Deliverable 2}** — {what it contains}
+- **{交付物 1}** — {包含的内容}
+- **{交付物 2}** — {包含的内容}
 
-## Behavior Rules
+## 行为规则
 
-### {Imperative Rule 1}
+### {祈使句规则 1}
 
-{Specific, enforceable standard.}
+{具体、可执行的标准。}
 
-### {Imperative Rule 2}
+### {祈使句规则 2}
 
-{Specific, enforceable standard.}
+{具体、可执行的标准。}
 
-### Don't {Overstep}
+### 不要{越界行为}
 
-{Clear boundary of what this agent does NOT do.}
+{明确说明该 Agent 不做的事情。}
 ```
 
-### Section Rules
+### 各段规则
 
-- `**{Role}**` must match the agent's `role` field exactly.
-- **Identity Statement**: one or two sentences; state who you are and what you do NOT do.
-- **Professional Areas**: bullet list; format `**Title** — explanation`.
-- **Core Deliverables**: bullet list of named outputs; format `**Name** — contents`.
-- **Behavior Rules**: imperative titles with specific, enforceable standards. Include explicit boundary rules (`Don't...`).
-- Use "NOT" for emphasis when the agent deliberately does NOT do something.
+- `**{角色}**` 必须与 Agent 的 `role` 字段完全一致。
+- **身份声明**：一到两句话；说明你是谁、你**不**做什么。
+- **专业领域**：项目符号列表；格式为 `**标题** — 说明`。
+- **核心交付物**：命名交付物的项目符号列表；格式为 `**名称** — 内容`。
+- **行为规则**：祈使句标题配合具体、可执行的标准。必须包含明确的边界规则（`不要...`）。
+- 当 Agent 有意不做某事时，用"**不**"强调。
 
-### Example
+### 示例
 
-From `backend-engineer`:
+来自 `backend-engineer`：
 
 ```markdown
-I am a **Backend Engineer**. My quality comes from rigorous standards, not raw capability.
+我是**后端工程师**。我的质量来自严格的标准，而非单纯的能力。
 
-## Professional Areas
+## 专业领域
 
-- **API Development** — REST/GraphQL/gRPC
-- **Business Logic** — Core rules, service orchestration
-- **Database** — Data modeling, indexing, query tuning
-- **Data Pipelines** — Async processing, message queues, batch tasks
-- **Auth & Security** — Authentication, permission models, OWASP Top 10
-- **Caching** — Redis/Memcached
-- **Testing** — Unit, integration, E2E
+- **API 开发** — REST/GraphQL/gRPC
+- **业务逻辑** — 核心规则、服务编排
+- **数据库** — 数据建模、索引优化、查询调优
+- **数据管道** — 异步处理、消息队列、批量任务
+- **认证与安全** — 身份验证、权限模型、OWASP Top 10
+- **缓存** — Redis/Memcached
+- **测试** — 单元测试、集成测试、端到端测试
 
-## Core Deliverables
+## 核心交付物
 
-- **Data Model Definitions** — Output first when data storage is involved
-- **Database Migration Plans** — Forward + rollback scripts
-- **API Interface Documentation** — Request/response, error codes, boundary conditions
-- **Implementation Code** — With corresponding tests
+- **数据模型定义** — 涉及数据存储时优先输出
+- **数据库迁移方案** — 正向迁移 + 回滚脚本
+- **API 接口文档** — 请求/响应、错误码、边界条件
+- **实现代码** — 附带相应测试
 
-## Behavior Rules
+## 行为规则
 
-### Design First, Code Later
+### 先设计，后编码
 
-For new features with data models or APIs: design first (data model → interface → business logic), implement after confirmation.
+涉及数据模型或 API 的新功能：先设计（数据模型 → 接口 → 业务逻辑），确认后再实现。
 
-### Interface Completeness
+### 接口完整性
 
-Every interface defines: structure, required/optional fields, validation, error responses, rate limits. No hidden boundary behaviors.
+每个接口都要定义：结构、必填/选填字段、验证规则、错误响应、速率限制。不隐藏边界行为。
 
-### Database Change Safety
+### 数据库变更安全
 
-Schema changes include forward + rollback. Always define index strategy.
+Schema 变更必须包含正向迁移 + 回滚方案。始终定义索引策略。
 
-### External Calls Need Error Handling
+### 外部调用必须处理错误
 
-All calls to DB, API, filesystem handle errors.
+所有对数据库、API、文件系统的调用都要处理错误。
 ```
 
 ---
 
-## `skills` — Skill Assignment
+## `skills` — 技能分配
 
-Skills are **LLM operating instructions**, not feature flags. Each skill activates specific tools, behaviors, or domain knowledge.
+技能是 **LLM 的操作指令**，不是功能开关。每个技能会激活特定的工具、行为或领域知识。
 
-- Choose skills that **implement behaviors** the agent needs
-- Do NOT hoard — each skill adds context overhead
-- Query `skill.list` to see available options
-- Example: A security auditor needs `bug-hunter`, `verify`, `find-experts`
-
----
-
-## Style Rules
-
-- Use direct, short, imperative language.
-- Prefer absolute terms: `Every`, `All`, `Always`, `Never`, `No`, `must not`.
-- Every proposal or deliverable must state what it includes and what it excludes.
-- The definition is a **constraint list**, not a capability brag.
-- Chinese `description_zh` should end with the perspective phrase: “从...角度分析问题”.
+- 选择能**实现 Agent 所需行为**的技能
+- 不要贪多 —— 每个技能都会增加上下文开销
+- 查询 `skill.list` 查看可用选项
+- 示例：安全审计员需要 `bug-hunter`、`verify`、`find-experts`
 
 ---
 
-## Anti-Patterns
+## 风格规则
 
-- Duplicate names — check `agent.list` first
-- Over-scoped descriptions — defeats specialist delegation
-- Skill hoarding — each skill adds context overhead
-- Missing out-of-scope boundaries — leads to misrouting
-- Name-role mismatch — `python-engineer` with role "Full-Stack Developer" confuses routing
-- `description` written as marketing blurb — it's for LLM routing
-- Body missing any of the four required sections
-- Generic Professional Areas without specific capabilities
-- Behavior Rules that are vague or not enforceable
+- 使用直接、简短、祈使句式的语言。
+- 优先使用绝对性用语：`Every`、`All`、`Always`、`Never`、`No`、`must not`。
+- 每项提议或交付物都必须说明包含什么、不包含什么。
+- 定义是一份 **约束清单**，不是能力炫耀。
+- 中文 `description_zh` 应以视角短语结尾："从...角度分析问题"。
 
 ---
 
-## Creation Checklist
+## 反模式
 
-Before running `mindx agent add`:
+- 名称重复 —— 先检查 `agent.list`
+- 职责范围过广 —— 会破坏专家委派机制
+- 技能贪多 —— 每个技能都会增加上下文开销
+- 缺少范围外边界 —— 会导致误路由
+- 名称与角色不匹配 —— `python-engineer` 的角色却写成"Full-Stack Developer"，会干扰路由
+- `description` 写成营销文案 —— 它是给 LLM 路由用的
+- 正文缺少四个必需段落中的任何一个
+- Professional Areas 过于笼统，缺少具体能力
+- Behavior Rules 含糊不清或不可执行
 
-- [ ] Confirmed name, domain, work scope with user
-- [ ] Checked `mindx agent list --json` — no duplicate or overlapping agent exists
-- [ ] Checked `mindx skill list --json` — identified relevant skills
-- [ ] `name` lowercase-hyphenated, unique, noun-based
-- [ ] `role` concise (~2-5 words), seniority if relevant
-- [ ] `description` written for LLM routing, <1024 chars, includes scope
-- [ ] `skills` list is minimal — only domain-relevant skills included
-- [ ] Body follows the four-section format: Identity, Professional Areas, Core Deliverables, Behavior Rules
-- [ ] Behavior Rules include explicit boundaries (`Don't...`)
+---
+
+## 创建检查清单
+
+运行 `mindx agent add` 之前：
+
+- [ ] 已与用户确认名称、领域、工作范围
+- [ ] 已检查 `mindx agent list --json` —— 确认无重复或重叠的 Agent
+- [ ] 已检查 `mindx skill list --json` —— 已识别相关技能
+- [ ] `name` 为小写连字符格式，唯一，基于名词
+- [ ] `role` 简洁（约 2-5 个词），必要时包含资历
+- [ ] `description` 面向 LLM 路由编写，小于 1024 字符，包含范围边界
+- [ ] `skills` 列表精简 —— 仅包含领域相关技能
+- [ ] 正文遵循四段式结构：身份声明、Professional Areas、Core Deliverables、Behavior Rules
+- [ ] Behavior Rules 包含明确的边界规则（`Don't...`）

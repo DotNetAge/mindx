@@ -1,73 +1,73 @@
-# Weibo (微博) — Content Reference
+# 微博 — 内容参考
 
-## Platform Context
+## 平台背景
 
-- Short-form social media. Trending topics (热搜) drive massive traffic.
-- 6.2B MAU (2025). Core demographic: 18-35 (90s + 00s = 60%).
-- Content forms: short text + image, short video, live, interactive (polls, Q&A).
-- Algorithm favors: topic relevance, interaction velocity, emotional resonance.
-- First 10 characters determine click-through rate.
-- Key strategy: main post creates suspense, comments deliver the payoff.
+- 短内容社交媒体，热搜话题带来巨大流量。
+- 月活6.2亿（2025年），核心用户群18-35岁（90后+00后占60%）。
+- 内容形式：短文+图片、短视频、直播、互动（投票、问答）。
+- 算法偏好：话题相关性、互动速度、情绪共鸣。
+- 前10个字决定点击率。
+- 核心策略：正文制造悬念，评论区揭晓答案。
 
-## Post Structure
+## 帖子结构
 
 ```
-Main Post (140-280 characters typical):
-  First 10 chars: must contain hook (question mark, number, or surprise)
+正文（通常140-280字）：
+  前10个字：必须有钩子（问号、数字或出人意料的内容）
     "3个被低估的[技巧]，第2个惊了"
     "为什么[N]的人都[结果]？真相是..."
 
-  Middle: core information or setup
-    State the observation, phenomenon, or question
-    Include 1-2 emoji for emotional marking (⚠️💡)
-    Emotional punctuation every 40 characters (! ? …)
+  中间：核心信息或铺垫
+    陈述观察到的现象或提出的问题
+    穿插1-2个emoji做情绪标记（⚠️💡）
+    每40个字至少一个情绪化标点（！？…）
 
-  Closing: suspense or interaction prompt
+  结尾：悬念或互动引导
     "你选A还是B？评论区告诉我"
-    "转发抽[N]人送[resource]"
-    "下一条讲[teaser]，关注不迷路"
+    "转发抽[N]人送[资源]"
+    "下一条讲[预告]，关注不迷路"
 
-Comment Strategy (vital — this is where depth lives):
-  Comment 1: "Step 1 is [X]. Step 2 in reply '2'"
-  Comment 2: Deliver step 2 or key insight
-  Pin: a discussion-prompting comment for engagement
+评论策略（至关重要——深度内容在评论区）：
+  评论1："第一步是[某事]。第二步回复'2'解锁"
+  评论2：揭晓第二步或核心洞察
+  置顶：一条能引发讨论的评论，拉动互动
 ```
 
-## Content Strategy
+## 内容策略
 
-- **Trend-jacking**: find logical connection between trending topic and your niche
-  - Check 热搜, filter top 10 relevant to your domain
-  - Find top 3 high-praise comments in that topic for emotional consensus
-  - Write your take starting with "你是否也..." to trigger relatability
-- **Series content**: split one topic into 2-3 posts over consecutive days
+- **蹭热点**：找到热搜话题与你所在领域的逻辑关联
+  - 查看热搜，筛选前10条与你领域相关的
+  - 在该话题下找点赞最高的3条评论，把握情绪共识
+  - 以"你是否也..."开头写你的观点，引发共鸣
+- **系列内容**：将一个话题拆成2-3条，连续几天发布
   - "今天讲第一个，明天更新第二个，关注不错过"
-  - Builds anticipation, increases return visits
-- **Interactive content**: polls, A/B choices, "this or that" formatting
-  - Conversion rate is 58% higher for interactive formats
+  - 制造期待感，提升回访率
+- **互动内容**：投票、A/B选择、"这个还是那个"的格式
+  - 互动形式的转化率高出58%
 
-## Writing Style
+## 写作风格
 
-- Punchy, fast-paced. Strip every unnecessary word.
-- First-person voice preferred ("我试了", "我来告诉你真相")
-- Emotional punctuation frequency: every 40 characters minimum
-- Quote marks for key phrases people might share/retweet
-- No polite openings. No "谢谢大家" filler.
+- 干脆利落，节奏快，删掉一切多余的字。
+- 优先使用第一人称（"我试了"、"我来告诉你真相"）。
+- 情绪化标点频率：至少每40个字一个。
+- 关键短语加引号，方便用户转发引用。
+- 不要客套开场，不要"谢谢大家"之类的废话。
 
-## Visual Standards
+## 视觉标准
 
-- Image ratio: 1:1 (square) or 3:4 (portrait) for feed
-- Text-image ratio: ~1:2:1 (text + image + hashtags)
-- 2-3 hashtags maximum. No hashtag stuffing.
-- Short video: 15-30s preferred for feed consumption
+- 图片比例：1:1（方形）或3:4（竖版），适合信息流展示。
+- 图文比例：约1:2:1（正文 + 图片 + 话题标签）。
+- 最多2-3个话题标签，不要堆砌。
+- 短视频：15-30秒最佳，适配信息流消费。
 
-## Quality Checklist
+## 质量检查清单
 
-- [ ] First 10 characters contain hook (question, number, or surprise)
-- [ ] Main post is 140-280 characters (not a wall of text)
-- [ ] Emotional punctuation every 40 chars
-- [ ] 1-2 emoji max, not decorative but functional
-- [ ] Comment strategy defined (suspense → pay off in comments)
-- [ ] 2-3 relevant hashtags only
-- [ ] Visual: square or 3:4 ratio, clean
-- [ ] Interactive element (poll, question, choice)
-- [ ] No clickbait that contradicts content
+- [ ] 前10个字有钩子（提问、数字或出人意料）
+- [ ] 正文140-280字（不是一大坨文字）
+- [ ] 每40个字有情绪化标点
+- [ ] 最多1-2个emoji，功能性的而非装饰性的
+- [ ] 评论策略已明确（正文设悬念 → 评论区揭晓）
+- [ ] 仅2-3个相关话题标签
+- [ ] 视觉：方形或3:4比例，画面干净
+- [ ] 包含互动元素（投票、提问、选择）
+- [ ] 标题党不与内容矛盾

@@ -1,27 +1,27 @@
 {
   "type": "object",
-  "description": "Formal definition or specification of a term, concept, or standard within a technical domain",
+  "description": "技术领域中术语、概念或标准的形式化定义或规范",
   "properties": {
     "term": {
       "type": "string",
-      "description": "The term or concept being defined"
+      "description": "被定义的术语或概念"
     },
     "definition": {
       "type": "string",
-      "description": "Precise and unambiguous definition of the term"
+      "description": "对该术语精确且无歧义的定义"
     },
     "domain": {
       "type": "string",
-      "description": "Technical domain or field to which the definition belongs"
+      "description": "该定义所属的技术领域或学科"
     },
     "source": {
       "type": "string",
-      "description": "Origin of the definition (e.g., specification document, standard body, authoritative reference)"
+      "description": "定义的来源（例如规范文档、标准组织、权威参考文献）"
     },
     "examples": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Illustrative examples that clarify the definition in practice"
+      "description": "用于在实践中阐明该定义的示例"
     }
   },
   "required": ["term", "definition"]

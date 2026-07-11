@@ -1,25 +1,25 @@
 {
   "type": "object",
-  "description": "Key individual: analyst, executive, influencer",
+  "description": "关键人物：分析师、高管、意见领袖",
   "properties": {
-    "name": { "type": "string", "description": "Person name" },
+    "name": { "type": "string", "description": "人物姓名" },
     "role": {
       "type": "string",
-      "description": "Role: analyst, executive, or influencer"
+      "description": "角色：分析师、高管或意见领袖"
     },
     "organization": {
       "type": "string",
-      "description": "Affiliated organization"
+      "description": "所属组织"
     },
     "expertise": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Areas of expertise"
+      "description": "专业领域"
     },
     "notable_contributions": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Notable contributions or achievements"
+      "description": "重要贡献或成就"
     }
   },
   "required": ["name"]

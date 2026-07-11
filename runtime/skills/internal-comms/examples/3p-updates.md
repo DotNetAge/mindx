@@ -1,47 +1,57 @@
-## Instructions
-You are being asked to write a 3P update. 3P updates stand for "Progress, Plans, Problems." The main audience is for executives, leadership, other teammates, etc. They're meant to be very succinct and to-the-point: think something you can read in 30-60sec or less. They're also for people with some, but not a lot of context on what the team does.
+## 说明
 
-3Ps can cover a team of any size, ranging all the way up to the entire company. The bigger the team, the less granular the tasks should be. For example, "mobile team" might have "shipped feature" or "fixed bugs," whereas the company might have really meaty 3Ps, like "hired 20 new people" or "closed 10 new deals." 
+你正在撰写一份**周报/工作简报**。这是团队向管理层和协作方同步工作进展的标准格式。要求简洁扼要，30-60 秒内能读完。读者对团队工作有一定了解，但不掌握全部细节。
 
-They represent the work of the team across a time period, almost always one week. They include three sections:
-1) Progress: what the team has accomplished over the next time period. Focus mainly on things shipped, milestones achieved, tasks created, etc.
-2) Plans: what the team plans to do over the next time period. Focus on what things are top-of-mind, really high priority, etc. for the team.
-3) Problems: anything that is slowing the team down. This could be things like too few people, bugs or blockers that are preventing the team from moving forward, some deal that fell through, etc.
+周报适用于任意规模的团队，从小组到整个部门。团队越大，内容越要聚焦关键成果，而非罗列细节。例如，"移动端小组"可能是"上线了 XX 功能"或"修复了 XX 个线上问题"，而部门级别则可能是"完成了 3 个核心岗位招聘"或"签下了 10 个新客户"。
 
-Before writing them, make sure that you know the team name. If it's not specified, you can ask explicitly what the team name you're writing for is.
+周报覆盖一个时间段（通常是一周）的工作，包含三个板块：
+1) **本周完成**：团队在本周期内完成的事项。聚焦已交付的成果、达成的里程碑、关键节点等。
+2) **下周计划**：团队下一周期的重点工作。列出优先级最高、最需要关注的事项。
+3) **风险与问题**：任何拖慢进度的事项。可能是人手不足、技术卡点、依赖方延迟、客户流失风险等。
 
+撰写前，确认团队名称。如果未指定，主动询问。
 
-## Tools Available
-Whenever possible, try to pull from available sources to get the information you need:
-- Slack: posts from team members with their updates - ideally look for posts in large channels with lots of reactions
-- Google Drive: docs written from critical team members with lots of views
-- Email: emails with lots of responses of lots of content that seems relevant
-- Calendar: non-recurring meetings that have a lot of importance, like product reviews, etc.
+## 信息来源
 
+尽量从现有渠道收集信息：
+- 即时通讯（飞书/钉钉/企微）：团队成员发布的工作动态，尤其是大群里的进展同步和讨论
+- 文档平台（飞书文档/语雀/Confluence）：核心成员撰写的方案、总结等被浏览较多的文档
+- 邮件：回复较多的相关邮件
+- 日历/会议：本周的重要会议，如产品评审、项目复盘等
 
-Try to gather as much context as you can, focusing on the things that covered the time period you're writing for:
-- Progress: anything between a week ago and today
-- Plans: anything from today to the next week
-- Problems: anything between a week ago and today
+收集信息时，聚焦对应时间段：
+- 本周完成：上周一到今天
+- 下周计划：今天到下周五
+- 风险与问题：上周一到今天
 
+如果没有工具权限，直接向用户索取需要覆盖的内容，你主要负责格式化和润色。
 
-If you don't have access, you can ask the user for things they want to cover. They might also include these things to you directly, in which case you're mostly just formatting for this particular format.
+## 工作流程
 
-## Workflow
+1. **确认范围**：确认团队名称和时间段
+2. **收集信息**：通过工具获取或直接向用户询问
+3. **起草周报**：严格按照格式要求
+4. **审阅**：确保简洁（30-60 秒可读完）、数据说话
 
-1. **Clarify scope**: Confirm the team name and time period (usually past week for Progress/Problems, next
-week for Plans)
-2. **Gather information**: Use available tools or ask the user directly
-3. **Draft the update**: Follow the strict formatting guidelines
-4. **Review**: Ensure it's concise (30-60 seconds to read) and data-driven
+## 格式要求
 
-## Formatting
+格式固定，不要使用其他排版方式。
 
-The format is always the same, very strict formatting. Never use any formatting other than this. Pick an emoji that is fun and captures the vibe of the team and update.
+```
+【团队名称】周报（MM.DD - MM.DD）
 
-[pick an emoji] [Team Name] (Dates Covered, usually a week)
-Progress: [1-3 sentences of content]
-Plans: [1-3 sentences of content]
-Problems: [1-3 sentences of content]
+■ 本周完成
+1. [具体成果，尽量带数据]
+2. [具体成果]
+3. [具体成果]
 
-Each section should be no more than 1-3 sentences: clear, to the point. It should be data-driven, and generally include metrics where possible. The tone should be very matter-of-fact, not super prose-heavy.
+■ 下周计划
+1. [重点工作]
+2. [重点工作]
+
+■ 风险与问题
+1. [问题描述 + 影响 + 需要的支持]
+2. [问题描述 + 影响 + 需要的支持]
+```
+
+每个板块 1-5 条，每条一两句话，简洁直接。尽量用数据说话，避免空泛描述。语气客观务实，不堆砌修饰词。

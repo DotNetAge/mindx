@@ -24,7 +24,7 @@
     },
     "platform": {
       "type": "string",
-      "description": "Platform this format is commonly associated with, e.g. 抖音, B站, 小红书"
+      "description": "该格式通常关联的平台，例如：抖音、B站、小红书"
     }
   },
   "required": ["name"]

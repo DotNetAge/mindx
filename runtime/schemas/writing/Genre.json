@@ -4,7 +4,7 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "The name of the genre, e.g. 科幻, 言情, 悬疑, 现实主义, 奇幻"
+      "description": "体裁名称，如科幻、言情、悬疑、现实主义、奇幻"
     },
     "genre_type": {
       "type": "string",
@@ -17,14 +17,14 @@
     },
     "examples": {
       "type": "array",
-      "description": "Representative works of this genre",
+      "description": "该体裁的代表作品",
       "items": {
         "type": "string"
       }
     },
     "conventions": {
       "type": "array",
-      "description": "Common tropes, structural elements, and stylistic conventions associated with this genre",
+      "description": "与该体裁相关的常见主题、结构要素和风格惯例",
       "items": {
         "type": "string"
       }

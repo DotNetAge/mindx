@@ -1,25 +1,25 @@
 {
   "type": "object",
-  "description": "Key figure in finance — analyst, economist, fund manager, trader, industry expert",
+  "description": "金融界关键人物 — 分析师、经济学家、基金经理、交易员、行业专家",
   "properties": {
-    "name": { "type": "string", "description": "Person's full name" },
+    "name": { "type": "string", "description": "人物全名" },
     "role": {
       "type": "string",
       "enum": ["analyst", "economist", "manager", "trader"],
-      "description": "Professional role"
+      "description": "职业角色"
     },
     "organization": {
       "type": "string",
-      "description": "Affiliated organization or employer"
+      "description": "所属机构或雇主"
     },
     "specializations": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Areas of expertise or specialization"
+      "description": "专业领域或专长"
     },
     "reputation": {
       "type": "string",
-      "description": "Market reputation or influence level (e.g., renowned, respected, controversial)"
+      "description": "市场声誉或影响力等级（如知名、受尊敬、有争议）"
     }
   },
   "required": ["name", "role"]

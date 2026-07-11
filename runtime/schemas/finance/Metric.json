@@ -1,25 +1,25 @@
 {
   "type": "object",
-  "description": "Performance metric — yield, Sharpe ratio, ROI, volatility, alpha, beta",
+  "description": "绩效指标 — 收益率、夏普比率、ROI、波动率、阿尔法、贝塔",
   "properties": {
-    "name": { "type": "string", "description": "Metric name" },
+    "name": { "type": "string", "description": "指标名称" },
     "metric_type": {
       "type": "string",
       "enum": ["return", "ratio", "volatility"],
-      "description": "Category of the metric"
+      "description": "指标类别"
     },
-    "value": { "type": "number", "description": "Numeric value of the metric" },
+    "value": { "type": "number", "description": "指标的数值" },
     "benchmark": {
       "type": "string",
-      "description": "Benchmark used for comparison (if applicable)"
+      "description": "用于比较的基准（如适用）"
     },
     "period": {
       "type": "string",
-      "description": "Time period over which the metric is calculated (e.g., 1Y, YTD, 3M)"
+      "description": "指标计算的时间周期（如 1Y、YTD、3M）"
     },
     "interpretation": {
       "type": "string",
-      "description": "Brief interpretation or significance of the metric value"
+      "description": "指标值的简要解读或意义"
     }
   },
   "required": ["name", "metric_type"]

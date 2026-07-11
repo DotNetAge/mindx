@@ -1,6 +1,6 @@
 {
   "type": "object",
-  "description": "Sign, symptom, or clinical presentation",
+  "description": "体征、症状或临床表现",
   "properties": {
     "name": { "type": "string", "description": "Symptom or sign name" },
     "description": {
@@ -10,7 +10,7 @@
     "associated_diseases": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Diseases commonly associated with this symptom"
+      "description": "与此症状常见相关的疾病"
     },
     "severity_range": {
       "type": "string",
@@ -22,7 +22,7 @@
     },
     "body_system": {
       "type": "string",
-      "description": "Related body system (e.g., cardiovascular, respiratory)"
+      "description": "相关身体系统（如心血管、呼吸系统）"
     }
   },
   "required": ["name"]

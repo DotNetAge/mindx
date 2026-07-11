@@ -1,10 +1,10 @@
 {
   "type": "object",
-  "description": "A real person in the writing and literary domain, such as an author, critic, or editor.",
+  "description": "写作和文学领域的真实人物，如作者、评论家或编辑。",
   "properties": {
     "name": {
       "type": "string",
-      "description": "The full name of the person"
+      "description": "人物的全名"
     },
     "role": {
       "type": "string",
@@ -20,7 +20,7 @@
     },
     "genre": {
       "type": "string",
-      "description": "The primary genre or literary tradition this person is associated with"
+      "description": "该人物主要关联的文学体裁或传统"
     },
     "nationality": {
       "type": "string",
@@ -28,7 +28,7 @@
     },
     "period": {
       "type": "string",
-      "description": "The historical period during which this person was active"
+      "description": "该人物活跃的历史时期"
     }
   },
   "required": ["name"]

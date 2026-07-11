@@ -1,25 +1,25 @@
 {
   "type": "object",
-  "description": "Financial institution — bank, investment fund, brokerage firm, regulatory agency",
+  "description": "金融机构 — 银行、投资基金、券商、监管机构",
   "properties": {
-    "name": { "type": "string", "description": "Institution name" },
+    "name": { "type": "string", "description": "机构名称" },
     "institution_type": {
       "type": "string",
       "enum": ["bank", "fund", "brokerage", "regulator"],
-      "description": "Type of financial institution"
+      "description": "金融机构类型"
     },
     "region": {
       "type": "string",
-      "description": "Primary region or country of operation"
+      "description": "主要运营地区或国家"
     },
     "assets_under_management": {
       "type": "number",
-      "description": "Total assets under management in USD (if applicable)"
+      "description": "以美元计价的资产管理总规模（如适用）"
     },
     "specializations": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Areas of specialization or expertise"
+      "description": "专业领域或专长"
     }
   },
   "required": ["name", "institution_type"]

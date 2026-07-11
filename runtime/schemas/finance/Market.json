@@ -1,25 +1,25 @@
 {
   "type": "object",
-  "description": "Financial market or exchange — stock exchange, bond market, commodity market, forex market, derivatives market",
+  "description": "金融市场或交易所 — 证券交易所、债券市场、商品市场、外汇市场、衍生品市场"
   "properties": {
-    "name": { "type": "string", "description": "Market or exchange name" },
+    "name": { "type": "string", "description": "市场或交易所名称" },
     "market_type": {
       "type": "string",
       "enum": ["stock", "bond", "commodity", "derivative", "forex"],
-      "description": "Type of financial market"
+      "description": "金融市场类型"
     },
     "region": {
       "type": "string",
-      "description": "Geographic region or country of the market"
+      "description": "市场所在的地理区域或国家"
     },
     "operating_hours": {
       "type": "string",
-      "description": "Trading hours and timezone (e.g., 9:30-16:00 ET)"
+      "description": "交易时间和时区（如 9:30-16:00 ET）"
     },
     "index_tickers": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Key benchmark index tickers associated with this market"
+      "description": "与该市场相关的主要基准指数代码"
     }
   },
   "required": ["name", "market_type"]

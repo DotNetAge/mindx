@@ -1,14 +1,14 @@
 {
   "type": "object",
-  "description": "An organization, government body, NGO, or company involved in news coverage",
+  "description": "参与新闻报道的组织、政府机构、非政府组织或公司",
   "properties": {
     "name": {
       "type": "string",
-      "description": "The full name of the organization"
+      "description": "组织的全称"
     },
     "org_type": {
       "type": "string",
-      "description": "The type of organization",
+      "description": "组织的类型",
       "enum": [
         "government",
         "NGO",
@@ -21,15 +21,15 @@
     },
     "sector": {
       "type": "string",
-      "description": "The industry or sector the organization operates in"
+      "description": "该组织运营所在的行业或领域"
     },
     "headquarters": {
       "type": "string",
-      "description": "The location of the organization's headquarters"
+      "description": "该组织总部所在地"
     },
     "leadership": {
       "type": "string",
-      "description": "Key leader(s) or representative(s) of the organization"
+      "description": "该组织的主要领导者或代表"
     }
   },
   "required": ["name", "org_type"]

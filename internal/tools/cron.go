@@ -24,66 +24,64 @@ func NewCron(store *scheduler.FileSchedulerStore) tools.FuncTool {
 func (t *Cron) Info() *tools.ToolInfo {
 	return &tools.ToolInfo{
 		Name:        "Cron",
-		Description: "Manage scheduled cron tasks. Create, list, update, and delete scheduled tasks that run periodically on a cron schedule.",
-		Prompt: `Manage cron-scheduled tasks. Each task runs a prompt against an agent on a cron schedule.
+		Description: "管理定时任务。创建、列出、更新和删除按计划运行的定时任务。",
+		Prompt: `管理定时任务。每个任务按计划向代理发送提示词。
 
-Actions:
-- **list**: List all scheduled tasks with their status and next run info.
-- **create**: Create a new scheduled task. Requires id (optional — auto-generated if omitted), agent, content (the prompt to send), and cron_expr (6-field cron expression with seconds support, e.g. "0 0 9 * * *" for daily at 9am).
-- **update**: Update an existing scheduled task by id. Only provided fields will be updated.
-- **delete**: Delete a scheduled task by id.
-
-Use this whenever the user wants to set up a recurring task like "send a status report every morning at 9am" or "check for updates every hour".`,
+操作：
+- **list**：列出所有定时任务及其状态和下次运行信息。
+- **create**：创建新的定时任务。需要 agent、content（要发送的提示词）和 cron_expr（6 字段 cron 表达式，支持秒级，如 "0 0 9 * * *" 表示每天 9 点）。
+- **update**：按 id 更新现有定时任务。只更新提供的字段。
+- **delete**：按 id 删除定时任务。`,
 		IsReadOnly: false,
 		Parameters: []tools.Parameter{
 			{
 				Name:        "action",
 				Type:        "string",
-				Description: "Operation to perform: \"list\", \"create\", \"update\", or \"delete\".",
+				Description: "操作类型：\"list\"、\"create\"、\"update\" 或 \"delete\"。",
 				Required:    true,
 				Enum:        []any{"list", "create", "update", "delete"},
 			},
 			{
 				Name:        "id",
 				Type:        "string",
-				Description: "Schedule entry ID. Required for update and delete. Optional for create (auto-generated if omitted).",
+				Description: "定时任务 ID。update 和 delete 必需。create 可选（省略时自动生成）。",
 				Required:    false,
 			},
 			{
 				Name:        "agent",
 				Type:        "string",
-				Description: "Agent name to run the task against (e.g. \"myagent\"). Required for create.",
+				Description: "执行任务的代理名称（如 \"myagent\"）。create 必需。",
 				Required:    false,
 			},
 			{
 				Name:        "content",
 				Type:        "string",
-				Description: "The prompt/content to send to the agent when the task runs. Required for create.",
+				Description: "任务运行时发送给代理的提示词内容。create 必需。",
 				Required:    false,
 			},
 			{
 				Name:        "cron_expr",
 				Type:        "string",
-				Description: "6-field cron expression with seconds support (e.g. \"0 0 9 * * *\" for daily at 9am, \"0 */30 * * * *\" for every 30 minutes). Required for create.",
+				Description: "6 字段 cron 表达式，支持秒级（如 \"0 0 9 * * *\" 表示每天 9 点，\"0 */30 * * * *\" 表示每 30 分钟）。create 必需。",
 				Required:    false,
 			},
 			{
 				Name:        "enabled",
 				Type:        "boolean",
-				Description: "Whether the task is enabled (default: true for new entries).",
+				Description: "是否启用任务（默认：新建任务为 true）。",
 				Required:    false,
 				Default:     true,
 			},
 			{
 				Name:        "session_id",
 				Type:        "string",
-				Description: "Session ID to associate with the task. If empty or \"new\", a new session will be created on each run.",
+				Description: "关联的会话 ID。如果为空或 \"new\"，每次运行时创建新会话。",
 				Required:    false,
 			},
 			{
 				Name:        "project_dir",
 				Type:        "string",
-				Description: "Working directory for the task execution.",
+				Description: "任务执行的工作目录。",
 				Required:    false,
 			},
 		},
@@ -92,7 +90,7 @@ Use this whenever the user wants to set up a recurring task like "send a status 
 
 func (t *Cron) Execute(ctx context.Context, params map[string]any) (any, error) {
 	if t.store == nil {
-		return nil, fmt.Errorf("Cron: scheduler store is not available")
+		return nil, fmt.Errorf("Cron：调度器存储不可用")
 	}
 
 	action, err := tools.ValidateRequiredString(params, "action")
@@ -110,14 +108,14 @@ func (t *Cron) Execute(ctx context.Context, params map[string]any) (any, error) 
 	case "delete":
 		return t.deleteEntry(ctx, params)
 	default:
-		return nil, fmt.Errorf("Cron: unknown action %q", action)
+		return nil, fmt.Errorf("Cron：未知操作 %q", action)
 	}
 }
 
 func (t *Cron) listEntries(ctx context.Context) (any, error) {
 	entries, err := t.store.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("Cron: failed to list entries: %w", err)
+		return nil, fmt.Errorf("Cron：列出任务失败：%w", err)
 	}
 	if entries == nil {
 		entries = []scheduler.ScheduleEntry{}
@@ -128,15 +126,15 @@ func (t *Cron) listEntries(ctx context.Context) (any, error) {
 func (t *Cron) createEntry(ctx context.Context, params map[string]any) (any, error) {
 	agent, err := tools.ValidateRequiredString(params, "agent")
 	if err != nil {
-		return nil, fmt.Errorf("Cron: agent is required for create: %w", err)
+		return nil, fmt.Errorf("Cron：create 需要 agent：%w", err)
 	}
 	content, err := tools.ValidateRequiredString(params, "content")
 	if err != nil {
-		return nil, fmt.Errorf("Cron: content is required for create: %w", err)
+		return nil, fmt.Errorf("Cron：create 需要 content：%w", err)
 	}
 	cronExpr, err := tools.ValidateRequiredString(params, "cron_expr")
 	if err != nil {
-		return nil, fmt.Errorf("Cron: cron_expr is required for create: %w", err)
+		return nil, fmt.Errorf("Cron：create 需要 cron_expr：%w", err)
 	}
 
 	id, _ := params["id"].(string)
@@ -166,12 +164,12 @@ func (t *Cron) createEntry(ctx context.Context, params map[string]any) (any, err
 	}
 
 	if err := t.store.Save(ctx, entry); err != nil {
-		return nil, fmt.Errorf("Cron: failed to save entry: %w", err)
+		return nil, fmt.Errorf("Cron：保存任务失败：%w", err)
 	}
 
 	return map[string]any{
 		"id":      id,
-		"message": fmt.Sprintf("Scheduled task %q created successfully", id),
+		"message": fmt.Sprintf("定时任务 %q 创建成功", id),
 		"entry":   entry,
 	}, nil
 }
@@ -179,12 +177,12 @@ func (t *Cron) createEntry(ctx context.Context, params map[string]any) (any, err
 func (t *Cron) updateEntry(ctx context.Context, params map[string]any) (any, error) {
 	id, err := tools.ValidateRequiredString(params, "id")
 	if err != nil {
-		return nil, fmt.Errorf("Cron: id is required for update: %w", err)
+		return nil, fmt.Errorf("Cron：update 需要 id：%w", err)
 	}
 
 	existing, err := t.store.Load(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("Cron: entry %q not found: %w", id, err)
+		return nil, fmt.Errorf("Cron：任务 %q 未找到：%w", id, err)
 	}
 
 	if v, ok := params["agent"].(string); ok && v != "" {
@@ -207,12 +205,12 @@ func (t *Cron) updateEntry(ctx context.Context, params map[string]any) (any, err
 	}
 
 	if err := t.store.Save(ctx, existing); err != nil {
-		return nil, fmt.Errorf("Cron: failed to update entry: %w", err)
+		return nil, fmt.Errorf("Cron：更新任务失败：%w", err)
 	}
 
 	return map[string]any{
 		"id":      id,
-		"message": fmt.Sprintf("Scheduled task %q updated successfully", id),
+		"message": fmt.Sprintf("定时任务 %q 更新成功", id),
 		"entry":   existing,
 	}, nil
 }
@@ -220,15 +218,15 @@ func (t *Cron) updateEntry(ctx context.Context, params map[string]any) (any, err
 func (t *Cron) deleteEntry(ctx context.Context, params map[string]any) (any, error) {
 	id, err := tools.ValidateRequiredString(params, "id")
 	if err != nil {
-		return nil, fmt.Errorf("Cron: id is required for delete: %w", err)
+		return nil, fmt.Errorf("Cron：delete 需要 id：%w", err)
 	}
 
 	if err := t.store.Delete(ctx, id); err != nil {
-		return nil, fmt.Errorf("Cron: failed to delete entry: %w", err)
+		return nil, fmt.Errorf("Cron：删除任务失败：%w", err)
 	}
 
 	return map[string]any{
 		"id":      id,
-		"message": fmt.Sprintf("Scheduled task %q deleted successfully", id),
+		"message": fmt.Sprintf("定时任务 %q 删除成功", id),
 	}, nil
 }

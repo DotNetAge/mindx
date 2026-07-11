@@ -1,6 +1,6 @@
 {
   "type": "object",
-  "description": "A tool, software, or application used in media content creation, editing, analytics, or design",
+  "description": "用于媒体内容创作、剪辑、数据分析或设计的工具、软件或应用",
   "properties": {
     "name": {
       "type": "string",
@@ -16,7 +16,7 @@
         "management",
         "production"
       ],
-      "description": "Category of the tool: editor (video/image editor), analytics (data analysis), design (graphic design), scheduling (content planning), management (account management), production (production software)"
+      "description": "工具类别：editor（视频/图像编辑）、analytics（数据分析）、design（平面设计）、scheduling（内容排期）、management（账号管理）、production（制作软件）"
     },
     "platform": {
       "type": "string",
@@ -29,7 +29,7 @@
     "features": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "List of key features or capabilities of the tool"
+      "description": "工具的主要功能或能力列表"
     }
   },
   "required": ["name"]

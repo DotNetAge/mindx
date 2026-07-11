@@ -1,6 +1,6 @@
 {
   "type": "object",
-  "description": "A published piece of content, such as a video, article, or post, created and distributed on a media platform",
+  "description": "在媒体平台上创作并发布的已发布内容，例如视频、文章或帖子"
   "properties": {
     "title": {
       "type": "string",
@@ -12,7 +12,7 @@
     },
     "platform": {
       "type": "string",
-      "description": "Platform where the work was published"
+      "description": "作品发布的平台"
     },
     "url": {
       "type": "string",
@@ -32,13 +32,13 @@
       "type": "object",
       "description": "Key performance indicators for this work",
       "properties": {
-        "views": { "type": "integer", "description": "Number of views/plays" },
-        "likes": { "type": "integer", "description": "Number of likes" },
+        "views": { "type": "integer", "description": "观看/播放次数" },
+        "likes": { "type": "integer", "description": "点赞数" },
         "shares": {
           "type": "integer",
           "description": "Number of shares/retweets"
         },
-        "comments": { "type": "integer", "description": "Number of comments" }
+        "comments": { "type": "integer", "description": "评论数" }
       },
       "additionalProperties": true
     }

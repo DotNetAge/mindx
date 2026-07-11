@@ -1,9 +1,7 @@
 ---
 name: skill-creator
 description: >
-  Creates and improves MindX skills. Use when the user wants a new reusable
-  capability, when an existing skill needs refinement, or when you need to
-  structure domain knowledge into a skill that can be attached to agents.
+  创建和改进 MindX 技能。当用户需要新的可复用能力、现有技能需要改进，或者需要将领域知识结构化为可挂载到智能体的技能时使用。
 metadata:
   name_zh: 技能创建者
   name_zh-tw: 技能建立者
@@ -11,197 +9,182 @@ metadata:
   description_zh-tw: 建立和改進 MindX 技能，將領域知識封裝為可掛載到智慧體的複用能力
 ---
 
-# Skill Creator
+# 技能创建器
 
-Create and improve MindX skills.
+创建和改进 MindX 技能。
 
-## When to Use
+## 何时使用
 
-- User says "I need a skill for X", "create a skill that does X", "help me write a skill"
-- A workflow would benefit from reusable instructions that can be attached to multiple agents
-- An existing skill is unclear, triggers incorrectly, or needs better boundaries
+- 用户说"我需要一个能处理 X 的技能"、"帮我写个技能"
+- 工作流需要可复用的指令，且能附加到多个智能体
+- 现有技能触发不准、边界不清、需要优化
 
-**Do NOT use** when a suitable skill already exists.
+**已有合适技能时不要使用。**
 
-## Principles
+## 核心原则
 
-### Hypothetical Options First
+### 先给选项，再问问题
 
-When collecting requirements, do NOT ask open-ended questions. Instead:
+收集需求时，不要直接问开放式问题：
 
-0. **If the user gives no specifics** (e.g., "create a skill" without detail),
-   default to extracting content and experience from the current conversation
-   as the skill's subject matter. Capture patterns, knowledge, or workflow shown.
-   Skip to [Prerequisite](#prerequisite-collect-required-information).
-1. **Interpret intent** and generate 2-4 specific hypothetical options
-2. **Present for confirmation** — let the user pick or refine
-3. Only ask open-ended if none of the options fit
+0. **用户没说细节时**（如"帮我创建个技能"），从当前对话中提取经验和模式作为技能主题。直接跳到[信息收集](#信息收集)。
+1. **理解意图**，给出 2-4 个具体选项
+2. **让用户选择或调整**
+3. 所有选项都不合适时，再问开放式问题
 
-**Example**: User says "I need a skill for working with databases":
+**示例**：用户说"我需要一个处理数据库的技能"：
 
-> I can create a database skill. Which type fits best?
+> 我可以创建一个数据库技能。哪种类型最合适？
 >
-> - **SQL Reviewer** — checks queries for correctness, performance, and injection risks
-> - **Schema Designer** — helps design tables, indexes, and migrations
-> - **Query Optimizer** — suggests indexes and rewrites for slow queries
-> - **Other** — describe your needs
+> - **SQL 审查器** — 检查查询正确性、性能和注入风险
+> - **模式设计器** — 设计表结构、索引和迁移方案
+> - **查询优化器** — 为慢查询建议索引和重写方案
+> - **其他** — 描述你的具体需求
 
-### Ground in Real Expertise
+### 基于真实专业知识
 
-Effective skills come from domain-specific knowledge, not generic advice.
-Source material can come from:
+好技能来自领域经验，不是通用建议。源材料可以是：
 
-- **Current conversation** — extract corrections the user made, steps that worked,
-  conventions the agent didn't already know, input/output data shapes
-- **Project artifacts** — internal docs, API specs, code review comments, runbooks,
-  incident reports, version control history (patches reveal real patterns)
-- **Domain knowledge** — schemas, failure modes, configuration files, edge cases
+- **当前对话** — 用户的纠正、有效的步骤、智能体之前不知道的约定
+- **项目文档** — 内部文档、API 规范、代码审查评论、操作手册、事故报告
+- **领域知识** — 常见模式、失败模式、边界情况
 
-If the user hasn't provided enough context, ask for relevant source material.
-The skill is only as good as the context it's built from.
+用户提供的上下文不够时，主动要求提供相关源材料。技能的质量取决于构建它时所依据的上下文。
 
-### Spend Context Wisely
+### 精简上下文
 
-Once loaded, the full SKILL.md enters the agent's context alongside everything else.
-Every token competes.
+完整的 SKILL.md 会占用智能体的上下文窗口，每个 token 都会分散模型的注意力。
 
-- **Add what the agent lacks, omit what it knows** — don't explain what a PDF is
-- **Prefer procedures over declarations** — teach *how to approach*, not *what to produce*
-- **Provide defaults, not menus** — pick one approach, mention alternatives briefly
-- **Match specificity to fragility** — prescriptive for fragile ops, flexible for creative tasks
+- **只补智能体不知道的，省略它已经懂的** — 不用解释什么是 PDF
+- **重过程，轻声明** — 教*怎么做*，而非*做什么*
+- **给默认方案，别列一堆选项** — 选定一种方法，简要提及替代方案即可
+- **越容易出错的操作，规定越要具体** — 脆弱操作写详细，创造性任务留空间
 
-## Prerequisite: Collect Required Information
+## 信息收集
 
-Before writing, verify ALL of the following are clear. Use hypothetical options to clarify.
+编写前，先确认以下信息都已明确。如果不确定，提供假设选项让用户确认。
 
-### (a) Skill Name
+### (a) 技能名称
 
-Lowercase-hyphen, noun-based, unique in registry. Example: `git-commit-helper`.
+小写连字符，基于名词，注册表中唯一。如：`git-commit-helper`。
 
-### (b) Trigger Condition → `description` field
+### (b) 触发条件 → `description` 字段
 
-When should the skill activate? What user query patterns indicate relevance?
-This drives LLM routing.
+什么情况下激活？哪些用户查询模式表明相关？这决定 LLM 路由。
 
-### (c) Work Scope & Boundaries
+### (c) 工作范围和边界
 
-What does the skill handle? What is OUT of scope? Output format?
+技能处理什么？什么超出范围？输出格式是什么？
 
-### (d) Required Tools → `allowed-tools` field
+### (d) 必需工具 → `allowed-tools` 字段
 
-Which MindX tools does the skill need? Keep the list minimal.
+需要哪些 MindX 工具？保持列表最小化。
 
-### (e) Runtime Requirements → `metadata.requires`
+### (e) 运行时要求 → `metadata.requires`
 
-Does the skill need executables on PATH (e.g. `python3`, `git`)?
-Does it need environment variables (e.g. `API_KEY`)?
+是否需要 PATH 上的可执行文件（如 `python3`、`git`）？是否需要环境变量（如 `API_KEY`）？
 
-## Workflow
+## 工作流
 
-### Design
+### 设计阶段
 
-#### Step 1: Check for Existing Skills
+#### 步骤 1：检查现有技能
 
 ```bash
 mindx skill list --json
 ```
-Check if a skill with the same name or overlapping domain exists.
-If yes, inform the user and let them decide.
+
+检查是否存在同名或领域重叠的技能。存在则通知用户，让他们决定。
 
 ```bash
 mindx skill get <proposed-name>
 ```
 
-#### Step 2: Confirm Requirements
+#### 步骤 2：确认需求
 
-Walk through all items in [Prerequisite](#prerequisite-collect-required-information).
-Do NOT proceed until (a) through (e) are clear.
+逐项检查[信息收集](#信息收集)中的所有项目，(a) 到 (e) 全部明确后才能继续。
 
-### Create
+### 创建阶段
 
-#### Step 3: Create the Skill Directory
+#### 步骤 3：创建技能目录
 
 ```
 <skill-name>/
   SKILL.md
 ```
 
-#### Step 4: Read Schema Reference
+#### 步骤 4：读取模式参考
 
-Read `references/schemas.md` for full frontmatter schema details.
+读取 `references/schemas.md` 获取完整的 frontmatter 规范。
 
-#### Step 5: Write SKILL.md
+#### 步骤 5：编写 SKILL.md
 
-Write the skill body. Key focus areas:
+编写技能主体。关键关注点：
 
-**`description` field** (controls triggering):
-- Use imperative phrasing: "Use this skill when..."
-- Focus on user intent, not implementation
-- Err on the side of being pushy about when the skill applies
-- Keep under 1024 characters
+**`description` 字段**（决定技能何时触发）：
+- 用祈使句式："当...时使用此技能"
+- 聚焦用户意图，别写实现细节
+- 宁可触发积极一些，也别漏掉该触发的场景
+- 长度控制在 1024 字符以内
 
-**`metadata.requires`**: Declare needed bins and env vars so the runtime
-skips the skill if the environment doesn't meet requirements.
+**`metadata.requires`**：声明需要的二进制文件和环境变量。运行环境不满足时，系统会自动跳过这个技能。
 
-**Workflow**: Numbered steps with concrete, executable instructions.
+**工作流**：带具体、可执行指令的编号步骤。
 
-**Gotchas section**: The highest-value content in many skills. Document
-corrections to mistakes the agent will make without being told:
+**注意事项**：这是技能中最有价值的部分。记录智能体在没有提示时容易犯的错误：
 
 ```markdown
-## Gotchas
+## 注意事项
 
-- The `users` table uses soft deletes. Queries must include
-  `WHERE deleted_at IS NULL`.
-- The `/health` endpoint returns 200 even if the DB is down;
-  use `/ready` for full health check.
+- `users` 表使用软删除。查询必须包含 `WHERE deleted_at IS NULL`。
+- `/health` 端点即使数据库关闭也返回 200；用 `/ready` 做完整健康检查。
 ```
 
-When testing reveals an agent mistake, add the correction as a gotcha.
+测试中发现问题时，把修正方案补充到注意事项里。
 
-**Plan-Validate-Execute** pattern for destructive or batch operations:
+**计划-验证-执行**模式用于破坏性或批量操作：
 
 ```markdown
-1. Create a plan in `plan.json`
-2. Validate: `script/validate.py plan.json`
-3. If validation fails, revise and re-validate
-4. Execute: `script/apply.py plan.json`
+1. 在 `plan.json` 中创建计划
+2. 验证：`script/validate.py plan.json`
+3. 验证失败则修改并重新验证
+4. 执行：`script/apply.py plan.json`
 ```
 
-**Checklists** for multi-step workflows to track progress.
-**Validation loops**: "do work → validate → fix → re-validate → proceed."
+**清单**用于多步骤工作流跟踪进度。
+**验证循环**："做工作 → 验证 → 修复 → 重新验证 → 继续。"
 
-For designing scripts the skill bundles, see [Script Design Guidelines](#script-design-guidelines).
+脚本设计详见[脚本设计指南](#脚本设计指南)。
 
-### Install
+### 安装阶段
 
-#### Step 6: Install the Skill
+#### 步骤 6：安装技能
 
 ```bash
 mindx skill add <path-to-skill-directory>
 ```
 
-Verify installation:
+验证安装：
 
 ```bash
 mindx skill get <skill-name>
 ```
 
-#### Step 7: Validate
+#### 步骤 7：验证
 
 ```bash
 mindx skill validate <skill-name>
 ```
 
-This catches frontmatter errors using the same loader as the daemon.
+这会捕获 frontmatter 错误，使用与守护进程相同的加载器。
 
-### Optimize Description
+### 优化触发
 
-The `description` field determines whether the skill triggers. Optimize it systematically.
+`description` 字段决定技能是否会被触发，需要系统地优化。
 
-#### Step 8a: Create Trigger Eval Queries
+#### 步骤 8a：创建触发评估查询
 
-Create `evals/trigger_queries.json` with ~20 queries:
+创建 `evals/trigger_queries.json`，包含约 20 个查询：
 
 ```json
 [
@@ -210,30 +193,28 @@ Create `evals/trigger_queries.json` with ~20 queries:
 ]
 ```
 
-- **Should-trigger**: vary by phrasing, explicitness, detail level
-- **Should-not-trigger**: use near-misses — prompts that share keywords but need a different skill
-- Split into **train (60%)** and **validation (40%)** to prevent overfitting
+- **应触发**：措辞、明确性、详细程度要有变化
+- **不应触发**：用近似匹配 — 共享关键词但需要不同技能的提示
+- 分为**训练集 (60%)** 和**验证集 (40%)** 防止过拟合
 
-#### Step 8b: Test Trigger Rate
+#### 步骤 8b：测试触发率
 
-Attach the skill to an agent. For each query, run 3 times and observe
-whether the `Skill` tool was invoked. A should-trigger query passes if
-trigger rate >= 0.5. A should-not-trigger passes if rate < 0.5.
+把技能挂载到智能体上。每个查询运行 3 次，观察是否调用了 `Skill` 工具。应该触发的查询，触发率 >= 0.5 才算通过；不该触发的查询，触发率 < 0.5 才算通过。
 
-#### Step 8c: Optimize
+#### 步骤 8c：优化
 
-- Should-trigger failing → description too narrow — broaden scope
-- Should-not-trigger false-triggering → description too broad — add specificity
-- Avoid adding specific keywords from failed queries (overfitting)
-- Re-test with train set, then check validation set for generalization
+- 应触发失败 → 描述太窄 — 扩大范围
+- 不应触发误触发 → 描述太宽 — 增加具体性
+- 避免从失败查询添加特定关键词（过拟合）
+- 用训练集重新测试，然后检查验证集验证泛化能力
 
-Iterate until train queries pass or improvement plateaus (~5 iterations).
+迭代直到训练查询通过或改进停滞（约 5 次迭代）。
 
-### Evaluate Output Quality
+### 评估输出质量
 
-#### Step 9a: Create Test Cases
+#### 步骤 9a：创建测试用例
 
-Create `evals/evals.json` with 2-3 test cases:
+创建 `evals/evals.json`，包含 2-3 个测试用例：
 
 ```json
 {
@@ -253,17 +234,15 @@ Create `evals/evals.json` with 2-3 test cases:
 }
 ```
 
-Use realistic context (file paths, column names). Cover edge cases.
+用真实上下文（文件路径、列名）。覆盖边界情况。
 
-#### Step 9b: Run Baseline Comparison
+#### 步骤 9b：运行基线比较
 
-Run each test case twice — **with the skill** and **without it**.
-Save outputs to `evals/workspace/iteration-N/eval-ID/{with,without}_skill/`.
-Record tokens and duration for each run.
+每个测试用例运行两次——一次**使用技能**，一次**不使用技能**。输出保存到 `evals/workspace/iteration-N/eval-ID/{with,without}_skill/`。记录每次运行的 token 消耗和耗时。
 
-#### Step 9c: Grade Assertions
+#### 步骤 9c：评估断言
 
-Evaluate each assertion as PASS or FAIL with specific evidence:
+对每个断言判定通过或失败，并给出具体证据：
 
 ```json
 {
@@ -275,64 +254,57 @@ Evaluate each assertion as PASS or FAIL with specific evidence:
 }
 ```
 
-Use LLM judgment for subjective checks, scripts for mechanical checks
-(file exists, valid JSON, row count).
+主观性检查交给 LLM 判断，机械性检查用脚本（比如检查文件是否存在、JSON 是否有效、行数是否符合）。
 
-#### Step 9d: Aggregate
+#### 步骤 9d：汇总
 
-Compute pass rate, token cost, and duration delta between with-skill
-and without-skill. A skill that adds 50% pass rate for minor token
-overhead is valuable.
+对比使用技能和不使用技能的通过率、token 消耗和耗时差异。通过率提升 50% 但 token 开销增加不多的技能，才是有价值的。
 
-Remove assertions that pass in both configs (not informative).
-Investigate assertions that always fail (broken or too hard).
+删除两种配置都通过的断言（没有区分度）。对于总是失败的断言，要排查是断言本身写错了，还是任务确实太难。
 
-### Iterate
+### 迭代
 
-#### Step 10: Improve from Signal
+#### 步骤 10：从信号改进
 
-Three signal sources:
+三个信号源：
 
-- **Failed assertions** — specific gaps: missing step, unclear instruction
-- **Execution transcripts** — *why* things went wrong: ambiguous instruction,
-  unnecessary steps, wasted work
-- **Trigger failures** — wrong queries triggered or missed
+- **失败的断言** — 具体差距：缺少的步骤、不清晰的指令
+- **执行记录** — 事情出错的原因：模糊的指令、不必要的步骤、浪费的工作
+- **触发失败** — 错误的查询触发或遗漏
 
-Feed all signals plus the current SKILL.md to an LLM for improvements:
+把所有信号连同当前 SKILL.md 一起交给 LLM 来改进：
 
-- Generalize from feedback — fix underlying issues, not narrow patches
-- Keep the skill lean — fewer, better instructions beat exhaustive rules
-- Explain the why — reasoning-based instructions work better than rigid directives
-- Bundle repeated work — if the agent writes the same helper each run,
-  move it into `scripts/`
+- 从反馈中提炼通用规律 — 解决根本问题，别只打补丁
+- 保持技能精简 — 少而精的指令胜过面面俱到的规则
+- 解释原因 — 讲清楚"为什么"比死板的规定更有效
+- 合并重复工作 — 智能体每次运行都写相同的辅助函数时，把它移到 `scripts/` 里
 
-After changes, re-install and re-run relevant phases. Stop when feedback
-is empty or improvement plateaus.
+修改后，重新安装并重新运行相关阶段。如果没有更多反馈或改进已经停滞，就停止迭代。
 
-## File Structure Conventions
+## 文件结构约定
 
 ```
 <skill-name>/
-  SKILL.md              # Required. The skill definition.
-  scripts/              # Optional. Reusable scripts for agentic use.
+  SKILL.md              # 必需。技能定义。
+  scripts/              # 可选。供智能体使用的可复用脚本。
     validate.sh
     process.py
-  references/           # Optional. Schemas, examples, reference docs.
+  references/           # 可选。模式、示例、参考文档。
     schemas.md
-  evals/                # Optional. Test cases and evaluation artifacts.
+  evals/                # 可选。测试用例和评估工件。
     trigger_queries.json
     evals.json
-    files/              # Test input files
-    workspace/          # Eval run outputs
+    files/              # 测试输入文件
+    workspace/          # 评估运行输出
 ```
 
-## Script Design Guidelines
+## 脚本设计指南
 
-Skills can bundle scripts in `scripts/` that the agent runs during execution.
+技能可以在 `scripts/` 目录中放置脚本，供智能体在执行时调用。
 
-### One-Off Commands
+### 一次性命令
 
-When an existing package does what's needed, reference it directly in SKILL.md:
+当现有包就能完成所需工作时，直接在 SKILL.md 中引用即可：
 
 ```bash
 npx eslint@9 --fix .
@@ -340,13 +312,13 @@ uvx ruff@0.8.0 check .
 go run golang.org/x/tools/cmd/goimports@v0.28.0 .
 ```
 
-Pin versions. State prerequisites (Node.js 18+, Python 3.10+).
+固定版本号。注明前提条件（Node.js 18+、Python 3.10+）。
 
-### Self-Contained Scripts
+### 自包含脚本
 
-Scripts can declare dependencies inline — no separate manifest:
+脚本可以直接在文件内声明依赖，无需单独的清单文件：
 
-**Python (PEP 723)** — run with `uv run`:
+**Python (PEP 723)** — 用 `uv run` 运行：
 ```python
 # /// script
 # dependencies = ["beautifulsoup4>=4.12,<5"]
@@ -354,63 +326,59 @@ Scripts can declare dependencies inline — no separate manifest:
 from bs4 import BeautifulSoup
 ```
 
-**Deno** — `npm:` import specifiers:
+**Deno** — `npm:` 导入说明符：
 ```typescript
 #!/usr/bin/env -S deno run
 import * as cheerio from "npm:cheerio@1.0.0";
 ```
 
-**Bun** — version in import path:
+**Bun** — 导入路径中带版本：
 ```typescript
 #!/usr/bin/env bun
 import * as cheerio from "cheerio@1.0.0";
 ```
 
-### Designing for Agentic Use
+### 为智能体使用设计
 
-- **No interactive prompts** — agents can't TTY. All input via flags/env/stdin
-- **`--help` is the primary interface** — description, flags, examples
-- **Structured output** — JSON over free-form text; data on stdout,
-  diagnostics on stderr
-- **Meaningful exit codes** — distinct codes for different failure types
-- **Idempotency** — "create if not exists" safer than "fail on duplicate"
-- **Dry-run support** — `--dry-run` for destructive operations
-- **Predictable output size** — truncate or use `--offset` for large output
+- **不要交互式提示** — 智能体无法使用 TTY，所有输入通过命令行参数、环境变量或标准输入传入
+- **`--help` 是主要接口** — 写清描述、参数说明和示例
+- **结构化输出** — 优先输出 JSON；数据走标准输出，诊断信息走标准错误
+- **退出码要有意义** — 不同失败类型用不同退出码
+- **尽量幂等** — "不存在则创建"比"重复执行就报错"更安全
+- **支持试运行** — 破坏性操作提供 `--dry-run` 选项
+- **输出大小可预期** — 大输出做截断或提供 `--offset` 参数
 
-## Writing Style & Patterns
+## 写作风格
 
-- **Direct and imperative**: "Do X", "Check Y", "Return Z"
-- **Specific over vague**: "List the files" is better than "Handle the files"
-- **Example-driven**: Include examples for input/output formats
-- **Progressive**: Most important instructions first; details later
-- **Templates for output** — provide markdown or JSON templates.
-  Agents pattern-match better against concrete structures than prose
-- **Checklists** — track progress with `- [ ]` items
-- **Validation loops** — do work → validate → fix → re-validate
-- **Gotchas** — document specific mistakes the agent will make without instruction
-- **Progressive disclosure** — move deep reference material to separate files
-  in `references/` and tell the agent *when* to load each one
+- **直接下达指令**："做 X"、"检查 Y"、"返回 Z"
+- **具体胜过模糊**："列出文件"比"处理文件"更清晰
+- **示例驱动**：给出输入/输出格式示例
+- **由主到次**：最重要的指令放前面，细节放后面
+- **输出模板** — 提供 markdown 或 JSON 模板。智能体对具体结构的模式匹配能力远强于理解大段文字
+- **清单** — 用 `- [ ]` 跟踪进度
+- **验证循环** — 执行 → 验证 → 修复 → 重新验证
+- **注意事项** — 记录智能体没有提示时容易犯的错误
+- **渐进式披露** — 深度参考材料放到 `references/` 目录的单独文件中，告诉智能体*什么时候*去加载
 
-## Anti-Patterns
+## 反模式
 
-- Generic names (`helper`, `utils`, `assistant`)
-- Descriptions that are marketing copy instead of routing signals
-- Skills that try to do everything — split them
-- Missing boundaries — leads to misrouting and overstepping
-- Declaring tools in `allowed-tools` the skill never uses
-- Overly prescriptive — let the agent exercise judgment for flexible tasks
-- Generic skills with no domain-specific context
-- Too many equal options without a clear default
-- Overfitting the description to specific test queries instead of generalizing
+- 通用名称（`helper`、`utils`、`assistant`）
+- 描述写得像营销文案，而不是触发路由信号
+- 一个技能想做所有事 — 应该拆分成多个
+- 缺少边界 — 导致错误触发和越界操作
+- 在 `allowed-tools` 中声明了技能根本不会用到的工具
+- 过度规定 — 灵活任务应留给智能体自行判断
+- 没有领域特定上下文的泛泛技能
+- 列了一堆平级选项却不给默认值
+- 描述针对特定测试查询过拟合，缺乏泛化能力
 
-## Important Notes
+## 重要说明
 
-- **All fields are for LLM consumption unless stated otherwise.** Write clearly.
-- **Skills are operating instructions**, not feature flags.
-- **Less is more.** A focused skill beats a broad one.
-- **Propose options before asking open-ended questions** — speeds up requirements.
-- **Test before declaring done.** Validation + trigger test + at least one manual eval.
-- **Description optimization ≠ output evaluation.** A skill can trigger correctly
-  but produce bad output, or produce good output but never trigger. Test both.
-- **Start small.** 2-3 test cases for the first eval round. Expand as you go.
-- **Run each eval with clean context** — no leftover state from prior runs.
+- **除非另有说明，所有字段都是给 LLM 看的。** 写得清楚明白。
+- **技能是操作指令**，不是功能开关。
+- **少即是多。** 专注的技能胜过包罗万象的技能。
+- **问开放式问题前先给选项** — 加速需求收集。
+- **宣布完成前必须测试。** 验证 + 触发测试 + 至少一次手动评估。
+- **触发优化 ≠ 输出评估。** 技能可能正确触发了但输出很烂，也可能输出不错但根本没被触发。两者都要测。
+- **从小处开始。** 第一轮评估用 2-3 个测试用例，后续再逐步扩展。
+- **每次评估用干净的上下文** — 不要残留上一次运行的状态。

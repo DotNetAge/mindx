@@ -1,9 +1,7 @@
 ---
 name: introspect
 description: >
-  Discover available skills and match them against your agent profile to
-  recommend which skills to equip or remove. Use when the user asks about your
-  capabilities or wants to optimize your skill set.
+  发现可用技能并与你的智能体画像匹配，推荐应配备或移除哪些技能。当用户询问你的能力或希望优化技能集时使用。
 allowed-tools: bash
 metadata:
   name_zh: 自我审视
@@ -12,99 +10,99 @@ metadata:
   description_zh-tw: 發現可用技能並與你的智慧體畫像匹配，推薦應配備或移除哪些技能
 ---
 
-## Trigger Decision
+## 触发条件
 
-Use this skill when:
+遇到以下情况时使用此技能：
 
-- User asks "what can you do?", "recommend skills", "audit me", "introspect", "optimize"
-- New skills were recently installed or generated (e.g. by `evolve`)
-- You need to reassess skill fit after a role/description change
+- 用户问"你能做什么？"、"推荐技能"、"审查我"、"自我审视"、"优化"
+- 最近安装或生成了新技能（例如通过 `evolve`）
+- 角色或描述变更后，需要重新评估技能匹配度
 
-**Do NOT use** for tasks you can already handle with equipped skills.
+**不要**在已有技能能够处理的任务中使用。
 
-## Workflow
+## 工作流程
 
-### 1: Gather Data
-
-```bash
-mindx agent list --json        # find your own entry
-mindx agent get <your-name>     # get your full config (role, description, current skills)
-mindx skill list --json         # all available skills in the system
-```
-
-Extract from the results:
-- Your `name`, `role`, `description`, `model`, current `skills[]`
-- The pool of available skill names + their descriptions
-
-### 2: Analyze — Score Each Available Skill
-
-For every skill in the pool that is **not already equipped**, evaluate on these dimensions:
-
-| Dimension       | Weight   | Question                                                  |
-| --------------- | -------- | --------------------------------------------------------- |
-| Role match      | High     | Does the skill's purpose align with my role keywords?     |
-| Description fit | High     | Would this skill help with tasks matching my description? |
-| Tool complement | Medium   | Does it provide tools/abilities I don't currently have?   |
-| Overlap risk    | Negative | Does it duplicate functionality I already have?           |
-
-Score each dimension 1-3, sum weighted scores. Only recommend skills above threshold.
-
-### 3: Output Recommendations
-
-Present as:
-
-```
-Introspect complete — <name> (<role>)
-
-Current setup:
-  Model: <model>
-  Equipped (N): skill-a, skill-b, skill-c
-
-Recommended to add (M):
-  ⭐ skill-x  — <why it fits, which dimension scored high>
-  ⭐ skill-y  — <why it fits>
-
-Not recommended:
-  skill-p  — <reason: overlap / out-of-scope / low relevance>
-
-Potentially redundant (already equipped):
-  skill-b  — <reason: may overlap with skill-a / no longer needed>
-
-Would you like me to apply these changes?
-```
-
-### 4: Apply Changes (if user confirms)
-
-When the user approves, execute updates:
+### 1. 收集数据
 
 ```bash
-# Add new skills (append to existing, do not replace)
+mindx agent list --json        # 找到自己的条目
+mindx agent get <your-name>     # 获取完整配置（角色、描述、当前技能）
+mindx skill list --json         # 系统中所有可用技能
+```
+
+从结果中提取：
+- 你的 `name`、`role`、`description`、`model`、当前 `skills[]`
+- 可用技能池的名称和描述
+
+### 2. 分析评分
+
+对技能池中**尚未配备**的每个技能，从以下维度评估：
+
+| 维度       | 权重 | 评估问题                             |
+| ---------- | ---- | ------------------------------------ |
+| 角色匹配度 | 高   | 技能目标与我的角色关键词是否一致？   |
+| 描述契合度 | 高   | 此技能是否有助于处理我描述中的任务？ |
+| 工具互补性 | 中   | 是否提供我当前没有的工具或能力？     |
+| 重叠风险   | 负向 | 是否与已有功能重复？                 |
+
+每个维度打 1-3 分，计算加权总分。只推荐超过阈值的技能。
+
+### 3. 输出推荐
+
+按以下格式呈现：
+
+```
+审视完成 — <name> (<role>)
+
+当前配置：
+  模型：<model>
+  已配备 (N)：skill-a, skill-b, skill-c
+
+建议添加 (M)：
+  ⭐ skill-x  — <适合原因，哪个维度得分高>
+  ⭐ skill-y  — <适合原因>
+
+不推荐：
+  skill-p  — <原因：重叠 / 超出范围 / 相关度低>
+
+可能冗余（已配备）：
+  skill-b  — <原因：可能与 skill-a 重叠 / 不再需要>
+
+是否需要我应用这些更改？
+```
+
+### 4. 应用更改（用户确认后）
+
+用户批准后执行更新：
+
+```bash
+# 添加新技能（追加到现有列表，不替换）
 mindx agent update --agent-name "<your-name>" --skills "existing-skill-1,existing-skill-2,<new-skill-x>,<new-skill-y>"
 
-# Optionally update role/description if they evolved
+# 可选：如果角色/描述有变化则更新
 # mindx agent update --agent-name "<your-name>" --role "Updated role"
 ```
 
-**Important**: The `--skills` flag replaces the entire skills list. Always include all current skills plus any new ones.
+**重要**：`--skills` 参数会替换整个技能列表。务必包含所有当前技能和新技能。
 
-If the user wants to remove redundant skills, omit them from the `--skills` list.
+如果用户想移除冗余技能，在 `--skills` 列表中省略即可。
 
-### 5: Reverse Introspection (Audit)
+### 5. 反向审视（审计）
 
-Also check for issues in the current configuration:
+同时检查当前配置中的问题：
 
-| Check                                        | Action if issue found                         |
-| -------------------------------------------- | --------------------------------------------- |
-| Skills with no matching available skill file | Warn user — skill may have been deleted/moved |
-| Role vs skills mismatch                      | Suggest role or skills update                 |
-| More than 8 equipped skills                  | Warn about context bloat — suggest pruning    |
-| No skills equipped at all                    | Strongly recommend adding foundational skills |
+| 检查项                         | 发现问题时的操作                 |
+| ------------------------------ | -------------------------------- |
+| 已配备技能找不到对应的技能文件 | 警告用户 — 技能可能已被删除/移动 |
+| 角色与技能不匹配               | 建议更新角色或技能               |
+| 已配备技能超过 8 个            | 警告上下文膨胀 — 建议精简        |
+| 完全没有配备任何技能           | 强烈建议添加基础技能             |
 
-Report findings as part of step 3 output under an "Audit notes" section.
+将发现作为第 3 步输出的一部分，放在"审计备注"部分下。
 
-## Anti-Patterns
+## 反模式
 
-- Do not recommend skills the user already has equipped
-- Do not replace the entire skill list without preserving existing ones
-- Do not recommend based solely on keyword matching — consider actual utility
-- Do not skip the reverse audit — finding what to remove is as valuable as finding what to add
+- 不要推荐用户已经配备的技能
+- 替换技能列表时不要遗漏现有技能
+- 不要仅基于关键词匹配推荐 — 要考虑实际效用
+- 不要跳过反向审计 — 发现需要移除的内容和发现需要添加的内容同样重要

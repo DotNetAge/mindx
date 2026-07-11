@@ -1,10 +1,10 @@
 {
   "type": "object",
-  "description": "A central theme, motif, or underlying idea explored in a literary work.",
+  "description": "文学作品中探讨的核心主题、母题或潜在思想。",
   "properties": {
     "name": {
       "type": "string",
-      "description": "The name of the theme, e.g. 爱, 自由, 科技与人, 成长"
+      "description": "主题名称，如爱、自由、科技与人、成长"
     },
     "description": {
       "type": "string",
@@ -19,14 +19,14 @@
     },
     "works": {
       "type": "array",
-      "description": "Example works that prominently feature this theme",
+      "description": "突出体现该主题的示例作品",
       "items": {
         "type": "string"
       }
     },
     "significance": {
       "type": "string",
-      "description": "The thematic importance or cultural relevance of this motif"
+      "description": "该母题的主题重要性或文化相关性"
     }
   },
   "required": ["name"]

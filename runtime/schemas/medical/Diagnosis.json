@@ -1,15 +1,15 @@
 {
   "type": "object",
-  "description": "Diagnostic criteria, test, or biomarker",
+  "description": "诊断标准、检测或生物标志物",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Diagnosis method or test name"
+      "description": "诊断方法或检测名称"
     },
     "diagnosis_type": {
       "type": "string",
       "enum": ["criteria", "test", "biomarker", "imaging"],
-      "description": "Category of diagnostic method"
+      "description": "诊断方法类别"
     },
     "description": {
       "type": "string",
@@ -22,7 +22,7 @@
     },
     "accuracy": {
       "type": "string",
-      "description": "Typical accuracy, sensitivity, or specificity"
+      "description": "典型的准确性、敏感性或特异性"
     }
   },
   "required": ["name"]

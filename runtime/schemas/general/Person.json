@@ -1,20 +1,20 @@
 {
   "type": "object",
-  "description": "Person — author, expert, contributor, role",
+  "description": "人物——作者、专家、贡献者、角色",
   "properties": {
-    "name": { "type": "string", "description": "Full name of the person" },
+    "name": { "type": "string", "description": "人物的全名" },
     "role": {
       "type": "string",
-      "description": "Role, title, or position held by the person"
+      "description": "人物担任的角色、头衔或职位"
     },
     "affiliation": {
       "type": "string",
-      "description": "Organization or team the person is associated with"
+      "description": "人物所属的组织或团队"
     },
     "expertise": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Areas of expertise or specialization"
+      "description": "专业领域或专长方向"
     }
   },
   "required": ["name"]

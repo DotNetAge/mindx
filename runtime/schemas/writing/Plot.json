@@ -1,6 +1,6 @@
 {
   "type": "object",
-  "description": "The storyline, conflict, and narrative arc that drives a literary work forward.",
+  "description": "推动文学作品发展的故事情节、冲突和叙事弧线。",
   "properties": {
     "name": {
       "type": "string",
@@ -8,7 +8,7 @@
     },
     "story": {
       "type": "string",
-      "description": "A summary of the sequence of events that constitute this plot thread"
+      "description": "构成该情节线索的事件序列概述"
     },
     "conflict_type": {
       "type": "string",
@@ -22,11 +22,11 @@
     },
     "structure_beat": {
       "type": "string",
-      "description": "Where this plot element falls in the narrative structure, e.g. inciting incident, rising action, climax, resolution"
+      "description": "该情节要素在叙事结构中的位置，如激励事件、上升动作、高潮、结局"
     },
     "resolution": {
       "type": "string",
-      "description": "How the conflict or storyline is resolved or left open"
+      "description": "冲突或故事线如何被解决或留下悬念"
     }
   },
   "required": ["name"]

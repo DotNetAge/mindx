@@ -8,7 +8,7 @@
     },
     "perspective": {
       "type": "string",
-      "description": "The point of view from which the story is told",
+      "description": "故事讲述的视角",
       "enum": ["first_person", "third_person", "omniscient"]
     },
     "voice_tone": {
@@ -17,14 +17,14 @@
     },
     "stylistic_markers": {
       "type": "array",
-      "description": "Recurring stylistic features such as sentence rhythm, diction, figurative language patterns",
+      "description": "反复出现的风格特征，如句子节奏、措辞、修辞语言模式",
       "items": {
         "type": "string"
       }
     },
     "influences": {
       "type": "string",
-      "description": "Literary or cultural influences that shaped this writing style"
+      "description": "塑造该写作风格的文学或文化影响"
     }
   },
   "required": ["name"]

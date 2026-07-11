@@ -1,28 +1,28 @@
 {
   "type": "object",
-  "description": "Milestone, meeting, occurrence, historical event",
+  "description": "里程碑、会议、事件、历史事件",
   "properties": {
-    "name": { "type": "string", "description": "Event name or title" },
+    "name": { "type": "string", "description": "事件名称或标题" },
     "date": {
       "type": "string",
-      "description": "Event date in YYYY-MM-DD format"
+      "description": "事件日期，格式为 YYYY-MM-DD"
     },
     "location": {
       "type": "string",
-      "description": "Physical location or virtual venue of the event"
+      "description": "事件的物理位置或虚拟场所"
     },
     "participants": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Key participants, speakers, or attendees"
+      "description": "主要参与者、演讲者或与会者"
     },
     "description": {
       "type": "string",
-      "description": "Description of what occurred during the event"
+      "description": "事件期间发生内容的描述"
     },
     "type": {
       "type": "string",
-      "description": "Event type: milestone, meeting, release, conference, workshop, etc."
+      "description": "事件类型：里程碑、会议、发布、大会、研讨会等"
     }
   },
   "required": ["name"]

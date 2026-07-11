@@ -1,47 +1,47 @@
-# Universal Coding Principles
+# 通用编码原则
 
-Language-agnostic principles that apply to ALL code, regardless of language.
+与语言无关的原则，适用于所有代码，无论使用何种语言。
 
-## SOLID Principles
+## SOLID 原则
 
-| Principle | Definition | Code Smell When Violated |
+| 原则 | 定义 | 违反时的代码异味 |
 |-----------|-----------|------------------------|
-| **S** — Single Responsibility | One class/module/function = one reason to change | "God class" with 1000+ lines doing 5 things |
-| **O** — Open/Closed | Open for extension, closed for modification | Adding a feature requires editing 10 existing files |
-| **L** — Liskov Substitution | Subtypes must be substitutable for base types | Override breaks parent contract (throws unexpected errors) |
-| **I** — Interface Segregation | Many specific interfaces > one fat interface | Client forced to implement methods it doesn't use |
-| **D** — Dependency Inversion | Depend on abstractions, not concretions | `new ConcreteService()` scattered everywhere |
+| **S** —— 单一职责 | 一个类/模块/函数 = 一个变更的理由 | 1000+ 行做 5 件事的"上帝类" |
+| **O** —— 开闭原则 | 对扩展开放，对修改关闭 | 添加一个特性需要编辑 10 个现有文件 |
+| **L** —— 里氏替换 | 子类型必须能替换基类型 | 重写破坏父类契约（抛出意外错误） |
+| **I** —— 接口隔离 | 多个特定接口 > 一个臃肿接口 | 客户端被迫实现不使用的方法 |
+| **D** —— 依赖倒置 | 依赖抽象，而非具体实现 | `new ConcreteService()` 到处散布 |
 
 ## DRY / KISS / YAGNI
 
-| Principle | Rule |
+| 原则 | 规则 |
 |-----------|------|
-| **DRY** (Don't Repeat Yourself) | Every piece of knowledge has a single, unambiguous representation. Duplication = bug multiplier. |
-| **KISS** (Keep It Simple, Stupid) | The simplest solution that works is almost always the best. Complexity accumulates interest. |
-| **YAGNI** (You Aren't Gonna Need It) | Don't build abstraction for hypothetical future needs. Build it when you actually need it, not before. |
+| **DRY**（不要重复自己） | 每片知识都有单一、明确的表示。重复 = 错误倍增器。 |
+| **KISS**（保持简单，傻瓜） | 能工作的最简单方案几乎总是最好的。复杂性会累积利息。 |
+| **YAGNI**（你不会需要它） | 不要为假设的未来需求构建抽象。实际需要时再构建，而非提前。 |
 
-## Clean Code Heuristics
+## 整洁代码启发式
 
-### Functions
-- **20-30 lines max** — if longer, decompose
-- **3-4 parameters max** — if more, use an options object/struct
-- **One level of indentation** per function — nested logic → extract
-- **Verb-noun naming**: `getUserById()`, `calculateTotal()`, `validateInput()`
-- **No side effects in pure functions** — separate query from mutation
+### 函数
+- **最多 20-30 行** —— 超过则分解
+- **最多 3-4 个参数** —— 超过则使用选项对象/结构体
+- **每个函数一级缩进** —— 嵌套逻辑 → 提取
+- **动词-名词命名**：`getUserById()`, `calculateTotal()`, `validateInput()`
+- **纯函数中无副作用** —— 将查询与变更分离
 
-### Naming
+### 命名
 
-| Type | Convention | Examples |
+| 类型 | 约定 | 示例 |
 |------|-----------|---------|
-| Classes/Types | PascalCase | `UserService`, `OrderProcessor`, `HttpClient` |
-| Functions/Methods | camelCase | `getUserById`, `calculateTotal`, `formatDate` |
-| Constants | UPPER_SNAKE_CASE | `MAX_RETRY_COUNT`, `DEFAULT_TIMEOUT_MS` |
-| Variables | camelCase | `userList`, `orderTotal`, `isActive` |
-| Private members | _prefix or language convention | `_internalCache`, `m_connectionPool` |
-| Boolean variables | is/has/can/should prefix | `isValid`, `hasPermission`, `canDelete`, `shouldRetry` |
-| Collections | Plural noun | `users`, `items`, `errorMessages` |
+| 类/类型 | PascalCase | `UserService`, `OrderProcessor`, `HttpClient` |
+| 函数/方法 | camelCase | `getUserById`, `calculateTotal`, `formatDate` |
+| 常量 | UPPER_SNAKE_CASE | `MAX_RETRY_COUNT`, `DEFAULT_TIMEOUT_MS` |
+| 变量 | camelCase | `userList`, `orderTotal`, `isActive` |
+| 私有成员 | _prefix 或语言约定 | `_internalCache`, `m_connectionPool` |
+| 布尔变量 | is/has/can/should 前缀 | `isValid`, `hasPermission`, `canDelete`, `shouldRetry` |
+| 集合 | 复数名词 | `users`, `items`, `errorMessages` |
 
-### Comments
+### 注释
 
 ```plaintext
 // BAD: Explains WHAT (code should be self-explanatory)
@@ -54,51 +54,51 @@ i++;
 if (pageOffset >= totalItems) { ... }
 ```
 
-## Error Handling Philosophy
+## 错误处理哲学
 
 ```
-Errors are NOT exceptional — they are a normal part of program flow.
-Treat them as values, not as control flow disruptions.
+错误并非例外情况——它们是程序流程的正常组成部分。
+将它们视为值，而非控制流的中断。
 
-Golden Rules:
-  1. Handle errors at the boundary (API edge, I/O operations)
-  2. Wrap errors with context as they propagate up the stack
-  3. Never silently swallow errors
-  4. Log at the point of detection, handle at the point of decision
-  5. Distinguish between retryable and non-retryable errors
+黄金法则：
+  1. 在边界处处理错误（API 边缘、I/O 操作）
+  2. 错误向上传播时，用上下文包装
+  3. 绝不默默吞掉错误
+  4. 在检测点记录，在决策点处理
+  5. 区分可重试和不可重试的错误
 ```
 
-## Security Fundamentals (All Languages)
+## 安全基础（所有语言）
 
-| Rule | Detail |
+| 规则 | 详情 |
 |------|--------|
-| **Validate input** | Never trust client data. Validate schema, type, range, encoding at every boundary. |
-| **Sanitize output** | Escape for context (HTML, SQL, shell, JSON). Use parameterized APIs. |
-| **Least privilege** | Run with minimum permissions. No root/admin in production services. |
-| **Secrets management** | Never hardcode credentials. Use env vars, secret managers, vaults. |
-| **Defense in depth** | Multiple layers of security. Auth + rate limiting + input validation + audit logging. |
-| **Fail secure** | Default deny. Error paths should not expose information or grant access. |
-| **Log security events** | Auth failures, permission changes, admin actions — always log, never log secrets. |
+| **验证输入** | 绝不信任客户端数据。在每个边界验证 schema、类型、范围、编码。 |
+| **清理输出** | 根据上下文转义（HTML、SQL、shell、JSON）。使用参数化 API。 |
+| **最小权限** | 以最小权限运行。生产服务中不使用 root/admin。 |
+| **密钥管理** | 绝不硬编码凭证。使用环境变量、密钥管理器、保险库。 |
+| **纵深防御** | 多层安全。认证 + 限流 + 输入验证 + 审计日志。 |
+| **安全失败** | 默认拒绝。错误路径不应暴露信息或授予访问权限。 |
+| **记录安全事件** | 认证失败、权限变更、管理员操作 —— 始终记录，绝不记录密钥。 |
 
-## Testing Philosophy
+## 测试哲学
 
 ```
-The test pyramid:
+测试金字塔：
 
          ╱╲
-        ╱ E2E╲          ← Few, slow, high-confidence (critical paths only)
+        ╱ E2E╲          ← 少量、缓慢、高置信度（仅限关键路径）
        ╱──────╲
-      ╱ Integration ╲   ← Medium number, medium speed (API contracts, DB integration)
+      ╱ 集成测试 ╲       ← 中等数量、中等速度（API 契约、数据库集成）
      ╱──────────────╲
-    ╱    Unit Tests   ╲  ← Many, fast, isolated (business logic, pure functions)
+    ╱   单元测试     ╲   ← 大量、快速、隔离（业务逻辑、纯函数）
    ╱──────────────────╲
 
-Rules:
-  - Unit tests: Test ONE behavior per test. Name should read like a sentence:
+规则：
+  - 单元测试：每个测试测试一个行为。命名应该像句子一样易读：
     "should_return_error_when_user_not_found"
-  - Integration tests: Test contracts between components, not internals
-  - E2E tests: Test user journeys, not implementation details
-  - Tests must be deterministic — no random data, no time-dependent assertions
-  - Tests must be fast — unit suite runs in <30 seconds
-  - Tests must be independent — no shared state between tests
+  - 集成测试：测试组件之间的契约，而非内部实现
+  - E2E 测试：测试用户旅程，而非实现细节
+  - 测试必须是确定性的——不使用随机数据，不依赖时间的断言
+  - 测试必须快速——单元测试套件在 30 秒内运行完毕
+  - 测试必须独立——测试之间不共享状态
 ```

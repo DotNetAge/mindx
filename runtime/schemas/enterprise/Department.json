@@ -1,26 +1,26 @@
 {
   "type": "object",
-  "description": "Department, team, division, or business unit within the organization",
+  "description": "组织内的部门、团队、事业部或业务单元",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Department or team name (e.g., Engineering, Marketing)"
+      "description": "部门或团队名称（如工程部、市场部）"
     },
     "division": {
       "type": "string",
-      "description": "Higher-level division or business unit the department belongs to"
+      "description": "该部门所属的更高层级事业部或业务单元"
     },
     "head": {
       "type": "string",
-      "description": "Department head, director, or manager responsible for the team"
+      "description": "部门负责人、总监或经理"
     },
     "headcount": {
       "type": "integer",
-      "description": "Number of employees or team members in the department"
+      "description": "部门内的员工或团队成员数量"
     },
     "function": {
       "type": "string",
-      "description": "Primary function or responsibility of the department (e.g., product development, sales, HR)"
+      "description": "部门的主要职能或职责（例如：产品开发、销售、人力资源）"
     }
   },
   "required": ["name"]

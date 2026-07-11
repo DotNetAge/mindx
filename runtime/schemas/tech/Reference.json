@@ -1,31 +1,31 @@
 {
   "type": "object",
-  "description": "A reference, citation, link, or source that points to external material for verification or further reading",
+  "description": "指向外部材料以供验证或进一步阅读的参考、引用、链接或来源",
   "properties": {
     "title": {
       "type": "string",
-      "description": "Title of the referenced material"
+      "description": "参考材料的标题"
     },
     "url": {
       "type": "string",
-      "description": "URL or locator where the reference can be accessed"
+      "description": "可以访问该参考资料的 URL 或定位符"
     },
     "type": {
       "type": "string",
       "enum": ["article", "book", "doc", "code"],
-      "description": "Format or category of the reference"
+      "description": "参考资料的格式或类别"
     },
     "author": {
       "type": "string",
-      "description": "Author or creator of the referenced material"
+      "description": "参考材料的作者或创建者"
     },
     "access_date": {
       "type": "string",
-      "description": "Date when the reference was last accessed or retrieved (ISO 8601 format)"
+      "description": "最后访问或检索该参考资料的日期（ISO 8601 格式）"
     },
     "citation": {
       "type": "string",
-      "description": "Formal citation string following a standard citation format"
+      "description": "遵循标准引用格式的正式引用字符串"
     }
   },
   "required": ["title", "url"]

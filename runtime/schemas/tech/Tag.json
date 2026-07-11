@@ -1,24 +1,24 @@
 {
   "type": "object",
-  "description": "A tag, label, or category marker used for organizing and filtering knowledge entities",
+  "description": "用于组织和过滤知识实体的标签、标记或类别标识",
   "properties": {
-    "name": { "type": "string", "description": "Display name of the tag" },
+    "name": { "type": "string", "description": "标签的显示名称" },
     "color": {
       "type": "string",
-      "description": "Hex color code for visual identification (e.g., '#FF5733')"
+      "description": "用于视觉识别的十六进制颜色代码（例如 '#FF5733'）"
     },
     "group": {
       "type": "string",
-      "description": "Logical group or category the tag belongs to (e.g., 'language', 'domain', 'difficulty')"
+      "description": "标签所属的逻辑组或类别（例如 'language'、'domain'、'difficulty'）"
     },
     "description": {
       "type": "string",
-      "description": "Brief explanation of what the tag represents and when it should be used"
+      "description": "对该标签表示什么以及何时应该使用的简要说明"
     },
     "related_tags": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Names of other tags semantically related to this one"
+      "description": "与该标签在语义上相关的其他标签名称"
     }
   },
   "required": ["name"]

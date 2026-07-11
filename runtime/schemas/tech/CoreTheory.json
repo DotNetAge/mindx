@@ -1,23 +1,23 @@
 {
   "type": "object",
-  "description": "Abstract top-level knowledge entity representing a foundational theory, principle, or model that underpins a domain of understanding",
+  "description": "抽象的顶层知识实体，表示支撑某一理解领域的基础理论、原理或模型",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Name of the theory, principle, or model"
+      "description": "理论、原理或模型的名称"
     },
     "description": {
       "type": "string",
-      "description": "Concise explanation of the theory's core idea and significance"
+      "description": "对理论核心思想及其重要性的简明解释"
     },
     "domain": {
       "type": "string",
-      "description": "Subject area or field where the theory applies (e.g., distributed systems, cryptography)"
+      "description": "理论适用的学科领域或领域（例如分布式系统、密码学）"
     },
     "related_principles": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Names of related theories, principles, or models that complement or extend this one"
+      "description": "与本理论互补或扩展的相关理论、原理或模型的名称"
     }
   },
   "required": ["name", "description"]

@@ -1,6 +1,6 @@
 {
   "type": "object",
-  "description": "Healthcare organization: hospital, regulatory body, NGO, or research institution",
+  "description": "医疗机构：医院、监管机构、非政府组织或研究机构",
   "properties": {
     "name": { "type": "string", "description": "Organization name" },
     "org_type": {
@@ -15,11 +15,11 @@
     "specialties": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Medical specialties or areas of focus"
+      "description": "医学专科或重点领域"
     },
     "size": {
       "type": "string",
-      "description": "Approximate size or capacity (e.g., number of beds, employees)"
+      "description": "大致规模或容量（如床位数、员工数）"
     }
   },
   "required": ["name"]

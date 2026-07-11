@@ -21,15 +21,15 @@
     },
     "affiliation": {
       "type": "string",
-      "description": "The organization, party, or group the figure is associated with"
+      "description": "该人物所属的组织、政党或团体"
     },
     "relevance": {
       "type": "string",
-      "description": "Why this figure is relevant to the current news context"
+      "description": "该人物与当前新闻背景的相关性"
     },
     "statements": {
       "type": "array",
-      "description": "Key statements or quotes attributed to this figure in reporting",
+      "description": "报道中归属于该人物的关键声明或引述",
       "items": {
         "type": "string"
       }

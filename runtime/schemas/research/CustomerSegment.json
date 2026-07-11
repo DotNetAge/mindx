@@ -1,23 +1,23 @@
 {
   "type": "object",
-  "description": "Customer group, user persona, or demographic segment",
+  "description": "客户群体、用户画像或人口统计细分",
   "properties": {
-    "name": { "type": "string", "description": "Segment name" },
-    "demographics": { "type": "string", "description": "Demographic profile" },
+    "name": { "type": "string", "description": "细分名称" },
+    "demographics": { "type": "string", "description": "人口统计特征" },
     "needs": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Key customer needs"
+      "description": "核心客户需求"
     },
     "pain_points": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Customer pain points"
+      "description": "客户痛点"
     },
     "behavior_patterns": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Customer behavior patterns"
+      "description": "客户行为模式"
     }
   },
   "required": ["name"]

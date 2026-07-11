@@ -1,8 +1,8 @@
 ---
 name: simplify
 description: >
-  Post-implementation cleanup to ensure code quality and simplicity.
-  Use when the user mentions simplify, cleanup, refactor, or polish.
+  实现后的代码清理，确保代码质量和简洁性。
+  当用户提到简化、清理、重构或优化时使用。
 allowed-tools: file-edit bash read replace
 metadata:
   name_zh: 代码简化
@@ -11,19 +11,19 @@ metadata:
   description_zh-tw: 實作後的程式碼品質檢查與清理，確保程式碼複用性、品質和效率
 ---
 
-# Simplify: Code Review and Cleanup
+# 简化：代码审查与清理
 
-Review all changed files for reuse, quality, and efficiency. Fix any issues found.
+审查所有已更改文件的复用性、质量和效率。修复发现的任何问题。
 
-## Phase 1: Identify Changes
-Run 'git diff' to see what changed, or review the recently modified files.
+## 阶段 1：识别更改
+运行 'git diff' 查看更改内容，或审查最近修改的文件。
 
-## Phase 2: Review (Simulated Parallel)
-Review the changes across three dimensions:
-1. **Code Reuse**: Search for existing utilities and helpers that could replace newly written code. Flag logic that duplicates existing utilities.
-2. **Code Quality**: Look for hacky patterns: redundant state, parameter sprawl, copy-paste variations, stringly-typed code, unnecessary comments.
-3. **Efficiency**: Look for unnecessary work (redundant file reads, N+1 patterns), missed concurrency, memory leaks, and overly broad operations.
+## 阶段 2：审查（模拟并行）
+从三个维度审查更改：
+1. **代码复用**：搜索可替代新编写代码的现有工具函数和辅助函数。标记重复现有工具函数的逻辑。
+2. **代码质量**：寻找糟糕的模式：冗余状态、参数膨胀、复制粘贴变体、字符串类型代码、不必要的注释。
+3. **效率**：寻找不必要的工作（冗余文件读取、N+1 模式）、错过的并发机会、内存泄漏以及过于宽泛的操作。
 
-## Phase 3: Fix Issues
-Aggregate the findings and fix each issue directly using 'replace_in_file' or 'file_edit'.
-Briefly summarize what was fixed.
+## 阶段 3：修复问题
+汇总发现的问题，使用 Edit 直接修复每个问题。
+简要总结修复的内容。
