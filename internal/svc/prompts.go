@@ -10,35 +10,33 @@ import (
 	"github.com/DotNetAge/goharness/skill"
 )
 
-// NewSkillsPrompt returns a builder function that overrides the default
-// buildSkillsCatalog prompt. It keeps the same header and Loading Strategy
-// footer, but lists only skill names instead of full descriptions.
+// NewSkillsPrompt 返回一个覆盖默认 buildSkillsCatalog 提示词的构建函数。
+// 保持相同的头部和加载策略尾部，但只列出技能名称而非完整描述。
 //
-// The Loading Strategy footer includes a tip on using "mindx skill list -f"
-// to view detailed descriptions for specific skills.
+// 加载策略尾部包含使用 "mindx skill list -f" 查看特定技能详细描述的提示。
 func NewSkillsPrompt() func([]*skill.Skill) string {
 	return func(skills []*skill.Skill) string {
 		if len(skills) == 0 {
 			return ""
 		}
 
-		header := "## Capacities (Available Skills)\n" +
-			"When your existing tools cannot fully address the user's request, check whether one of the following specialized skills covers the domain. If a skill matches, use the Skill tool to load its instructions, which will guide you through domain-specific workflows and expose additional tools.\n\n" +
-			"### Side-Effect Rules\n" +
-			"- The Skill() tool's return value represents the complete knowledge of that skill. For any given skill name, you may call Skill() at most ONCE per session. After that, all references to that skill's content MUST rely on what is already in memory — do NOT use any tool (Bash, Read, Grep, Glob, WebFetch, etc.) to re-read its files.\n\n" +
-			"### Pre-Execution Self-Check\n" +
-			"Before calling Bash, Read, or Grep to access file or directory content, you MUST run this check first:\n" +
-			"1. Role Gate (P0): is this task within my remit? If NO → delegate per Behavioral Rules, do NOT proceed.\n" +
-			"2. If within remit: does the Capacities list above contain a Skill that covers this task?\n" +
-			"3. If yes, have I already loaded it via Skill()?\n" +
-			"4. Output your reasoning and decision:\n" +
-			"   - Reasoning: [remit check result + which Skill was considered]\n" +
-			"   - Decision: delegate (if outside remit) | Skill() (if not yet loaded) | proceed with tools (if loaded or no matching Skill)\n"
+		header := "## 能力（可用技能）\n" +
+			"以下专业技能是否能完成用户要求的任务。如果技能匹配，使用 Skill 工具加载其指令，这将指导你完成特定领域的工作流程并提供额外的工具。\n\n" +
+			"### 副作用规则\n" +
+			"- Skill 工具的返回值代表该技能的完整知识。对于任何给定的技能名称，每个会话中最多只能调用 Skill 一次。之后，对该技能内容的所有引用必须依赖内存中已有的内容 — 不要使用任何工具（Bash、Read、Grep、Glob、WebFetch 等）重新读取其文件。\n\n" +
+			"### 执行前自检\n" +
+			"在调用 Bash、Read 或 Grep 访问文件或目录内容之前，必须先执行此检查：\n" +
+			"1. 角色门控 (P0)：此任务是否在我的职责范围内？如果否 → 按行为准则委托，不要继续。\n" +
+			"2. 如果在职责范围内：上述能力列表是否包含覆盖此任务的技能？\n" +
+			"3. 如果是，我是否已通过 Skill 加载？\n" +
+			"4. 输出你的推理和决策：\n" +
+			"   - 推理：[职责检查结果 + 考虑了哪个技能]\n" +
+			"   - 决策：委托（如果超出职责）| Skill（如果尚未加载）| 使用工具继续（如果已加载或无匹配技能）\n"
 
-		footer := "\n### Loading Strategy\n" +
-			"- Load skills LAZILY: only when you are about to perform a task that requires it\n" +
-			"- To inspect a skill's description before loading, run: `mindx skill list -f \"<skill1>,<skill2>,...\"`\n" +
-			"- Each skill persists once loaded — do NOT load the same skill twice\n"
+		footer := "\n### 加载策略\n" +
+			"- 延迟加载技能：仅在即将执行需要它的任务时加载\n" +
+			"- 加载前查看技能描述，运行：`mindx skill list -f \"<skill1>,<skill2>,...\"`\n" +
+			"- 每个技能加载后即持久化 — 不要重复加载同一个技能\n"
 
 		var nameBuilder strings.Builder
 		for _, s := range skills {
@@ -49,64 +47,61 @@ func NewSkillsPrompt() func([]*skill.Skill) string {
 	}
 }
 
-// NewEnvironmentPrompt returns a builder function that overrides the default
-// Environment section in the agent system prompt. It enriches the base info
-// (ProjectDir, SessionDir) with SessionID, local time, user preferences dir,
-// and Python virtual environment path.
+// NewEnvironmentPrompt 返回一个覆盖默认 Environment 段落的构建函数。
+// 在基础信息（ProjectDir、SessionDir）之上补充 SessionID、本地时间、用户配置目录和 Python 虚拟环境路径。
 func NewEnvironmentPrompt(userPrefsDir, venvDir string) func(agents.EnvsParams) string {
 	return func(params agents.EnvsParams) string {
 		var sb strings.Builder
-		sb.WriteString("## Environment\n")
+		sb.WriteString("## 配置环境\n")
 
-		// ProjectDir: the user's working directory (persistent, the source of truth).
+		// ProjectDir：用户的工作目录（持久化，数据源头）。
 		projectDir := params.ProjectDir
 		if projectDir == "" {
 			projectDir, _ = os.Getwd()
 		}
-		sb.WriteString(fmt.Sprintf("- **Project Dir**: %s\n", projectDir))
-		sb.WriteString("  The user's working directory — files here persist permanently across sessions.\n")
-		sb.WriteString("  Modify existing user files and create long-lived outputs here.\n")
+		sb.WriteString(fmt.Sprintf("- **项目目录**: %s\n", projectDir))
+		sb.WriteString(" 用户工作目录 — 文件在此永久保留，跨会话持续存在。\n")
+		sb.WriteString(" 在此修改用户现有文件并创建长期使用的输出。\n")
 
-		// SessionDir: an ephemeral workspace scoped to the current conversation.
+		// SessionDir：限定于当前对话的临时工作区。
 		sessionDir := params.SessionDir
 		if sessionDir == "" {
-			sessionDir = "(not set — scratch files will not persist)"
+			sessionDir = "（未设置 — 临时文件不会保留）"
 		}
-		sb.WriteString(fmt.Sprintf("- **Session Dir**: %s\n", sessionDir))
-		sb.WriteString("  A temporary workspace for the current conversation.\n")
-		sb.WriteString("  Contents are deleted when the conversation ends — do NOT put important work here.\n")
+		sb.WriteString(fmt.Sprintf("- **会话目录**: %s\n", sessionDir))
+		sb.WriteString("  当前对话的临时工作区。\n")
+		sb.WriteString("  对话结束后内容将被删除 — 不要将重要工作放在此处。\n")
 
 		// if userPrefsDir != "" {
-		// 	sb.WriteString(fmt.Sprintf("- **User Prefs**: %s\n", userPrefsDir))
-		// 	sb.WriteString("  Application configuration, skills, and agent definitions.\n")
+		// 	sb.WriteString(fmt.Sprintf("- **用户配置**: %s\n", userPrefsDir))
+		// 	sb.WriteString("  应用配置、技能和 Agent 定义。\n")
 		// }
 		if venvDir != "" {
-			sb.WriteString(fmt.Sprintf("- **Python Venv Dir**: %s\n", venvDir))
-			sb.WriteString("  The Python virtual environment used for python script execution.\n")
+			sb.WriteString(fmt.Sprintf("- **Python 虚拟环境**: %s\n", venvDir))
+			sb.WriteString("  Python 脚本执行使用的虚拟环境。\n")
 		}
 
 		if params.SessionID != "" {
-			sb.WriteString(fmt.Sprintf("- **Session ID**: %s\n", params.SessionID))
+			sb.WriteString(fmt.Sprintf("- **会话ID**: %s\n", params.SessionID))
 		}
-		sb.WriteString(fmt.Sprintf("- **Local Time**: %s\n", time.Now().Format("2006-01-02")))
+		sb.WriteString(fmt.Sprintf("- **本地时间**: %s\n", time.Now().Format("2006-01-02")))
 
 		return sb.String()
 	}
 }
 
-// NewSearchStrategyPrompt returns a builder function that overrides the default
-// Search Strategy section. It tells the LLM to prioritize knowledge base tools
-// (QuickSearch, QuickExplore, FindRelation) over traditional file tools and web search.
+// NewSearchStrategyPrompt 返回一个覆盖默认 Search Strategy 段落的构建函数。
+// 指示 LLM 优先使用知识库工具（QuickSearch、QuickExplore、FindRelation）而非传统文件工具和网络搜索。
 func NewSearchStrategyPrompt() func() string {
 	return func() string {
-		return "## Search Strategy\n\n" +
-			"1. For codebase questions, use QuickSearch FIRST before Grep — " +
-			"it searches by meaning, not just by filename or text pattern.\n" +
-			"2. Also try QuickSearch before WebSearch when the question might be about the user's own project.\n" +
-			"3. Fall back to web search (WebSearch) for external topics or when QuickSearch yields nothing.\n" +
-			"4. For browsing project structure, use QuickExplore FIRST before LS or Glob — " +
-			"it returns the same directory tree with semantic summaries. Fall back to LS/Glob when QuickExplore is unavailable or insufficient.\n" +
-			"5. For dependency or relationship questions, use FindRelation — " +
-			"it traverses the knowledge graph to show how entities are connected."
+		return "## 搜索策略\n\n" +
+			"1. 对于本地搜索，优先使用 QuickSearch 没有数据才回退 Grep — " +
+			"它通过语义搜索，而非仅靠文件名或文本模式匹配。\n" +
+			"2. 当问题可能涉及当前项目时，也先尝试 QuickSearch 而非 WebSearch。\n" +
+			"3. 对于外部话题或 QuickSearch 无结果时，回退到网络搜索（WebSearch）。\n" +
+			"4. 浏览项目结构时，优先使用 QuickExplore 而非 LS 或 Glob — " +
+			"它返回带有语义摘要的目录树。当 QuickExplore 不可用或不够用时，回退到 LS/Glob。\n" +
+			"5. 对于依赖关系或关联性问题，使用 FindRelation — " +
+			"它遍历知识图谱来展示实体之间的连接关系。"
 	}
 }
