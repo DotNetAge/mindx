@@ -19,6 +19,7 @@ import (
 type yamlMessage struct {
 	Role             string         `yaml:"role"`
 	Content          string         `yaml:"content"`
+	Compacted        string         `yaml:"compacted,omitempty"`
 	ReasoningContent string         `yaml:"reasoning_content,omitempty"`
 	Timestamp        int64          `yaml:"timestamp"`
 	ToolCallID       string         `yaml:"tool_call_id,omitempty"`
@@ -86,9 +87,14 @@ func newYamlMessage(msg goharnesssession.Message) yamlMessage {
 			Arguments: tc.Arguments,
 		})
 	}
+	compacted := ""
+	if msg.Compacted != "" {
+		compacted = base64.StdEncoding.EncodeToString([]byte(msg.Compacted))
+	}
 	return yamlMessage{
 		Role:             msg.Role,
 		Content:          base64.StdEncoding.EncodeToString([]byte(msg.Content)),
+		Compacted:        compacted,
 		ReasoningContent: base64.StdEncoding.EncodeToString([]byte(msg.ReasoningContent)),
 		Timestamp:        msg.Timestamp,
 		ToolCallID:       msg.ToolCallID,
@@ -107,6 +113,11 @@ func (ym yamlMessage) toCoreMessage() goharnesssession.Message {
 		log.Printf("[WARN] session: failed to base64-decode reasoning_content for role=%q: %v", ym.Role, reasoningErr)
 		reasoningDecoded = []byte(ym.ReasoningContent)
 	}
+	compactedDecoded, compactedErr := base64.StdEncoding.DecodeString(ym.Compacted)
+	if compactedErr != nil && ym.Compacted != "" {
+		log.Printf("[WARN] session: failed to base64-decode compacted for role=%q: %v", ym.Role, compactedErr)
+		compactedDecoded = []byte(ym.Compacted)
+	}
 	var tcs []goharnesssession.ToolCall
 	for _, ytc := range ym.ToolCalls {
 		tcs = append(tcs, goharnesssession.ToolCall{
@@ -118,6 +129,7 @@ func (ym yamlMessage) toCoreMessage() goharnesssession.Message {
 	return goharnesssession.Message{
 		Role:             ym.Role,
 		Content:          string(decoded),
+		Compacted:        string(compactedDecoded),
 		ReasoningContent: string(reasoningDecoded),
 		Timestamp:        ym.Timestamp,
 		ToolCallID:       ym.ToolCallID,
@@ -882,4 +894,31 @@ func (s *FileSessionStore) Truncate(_ context.Context, sessionID string, keepCou
 
 	msgs = msgs[:keepCount]
 	return writeMessagesToFile(path, msgs)
+}
+
+// UpdateMessages replaces all messages in the session file with the given messages.
+// This writes the complete message list to session.yml, overwriting any existing content.
+// Also persists the compaction cursor position.
+func (s *FileSessionStore) UpdateMessages(_ context.Context, sessionID string, cursor int, msgs []goharnesssession.Message) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return goharnesssession.ErrSessionNotFound
+	}
+
+	path := filepath.Join(dirPath, "session.yml")
+	if err := writeMessagesToFile(path, msgs); err != nil {
+		return err
+	}
+
+	// Persist cursor alongside messages
+	meta, err := LoadSessionMeta(dirPath)
+	if err != nil {
+		meta = &SessionMeta{SessionID: sessionID, Cursor: cursor}
+	} else {
+		meta.Cursor = cursor
+	}
+	return meta.Save(dirPath)
 }
