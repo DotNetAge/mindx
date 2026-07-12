@@ -79,7 +79,7 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharn
 // Markdown builders for event messages
 
 func buildSubtaskSpawnedMarkdown(info goharnessevents.SubtaskInfo) string {
-	md := fmt.Sprintf("### %s: `%s`\n\n**Agent**: %s\n**%s**: %s\n", i18n.T("svc.md.subtask.spawned"), info.TaskID, info.AgentName, i18n.T("svc.md.subtask.description"), info.Description)
+	md := fmt.Sprintf("### %s\n\n**Agent**: %s\n**%s**: %s\n", i18n.T("svc.md.subtask.spawned"), info.AgentName, i18n.T("svc.md.subtask.description"), info.Description)
 	if info.Timeout != "" {
 		md += fmt.Sprintf(i18n.T("svc.md.subtask.timeout"), info.Timeout)
 	}
@@ -89,10 +89,10 @@ func buildSubtaskSpawnedMarkdown(info goharnessevents.SubtaskInfo) string {
 func buildSubtaskCompletedMarkdown(result goharnessevents.SubtaskResult) string {
 	var b strings.Builder
 	if result.Success {
-		b.WriteString(fmt.Sprintf("### %s: `%s`\n\n", i18n.T("svc.md.subtask.completed"), result.TaskID))
+		b.WriteString(fmt.Sprintf("### %s: %s\n\n", i18n.T("svc.md.subtask.completed"), result.SessionID))
 		b.WriteString(fmt.Sprintf("**%s**: %s\n", i18n.T("svc.md.subtask.answer"), truncate(result.Answer, 300)))
 	} else {
-		b.WriteString(fmt.Sprintf("### %s: `%s`\n\n", i18n.T("svc.md.subtask.failed"), result.TaskID))
+		b.WriteString(fmt.Sprintf("### %s: %s\n\n", i18n.T("svc.md.subtask.failed"), result.SessionID))
 		b.WriteString(fmt.Sprintf(i18n.T("svc.md.subtask.error"), result.Error))
 	}
 	return b.String()

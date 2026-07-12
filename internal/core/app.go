@@ -539,8 +539,6 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	} else {
 		a.logger.Info("createRuntime: KVStore ready", "agent", agentName, "dir", cacheDir)
 	}
-	resultStore := store.NewResultStore()
-
 	opts := []agents.RuntimeConfig{
 		agents.WithModel(resolvedModel),
 		agents.WithAgentRegistry(a.agents),
@@ -548,11 +546,17 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		agents.WithRuleRegistry(a.rules),
 		agents.WithLogger(a.logger),
 		agents.WithTokenUsageStore(a.tokenUsageStore),
-		agents.WithResultStore(resultStore),
 	}
 
 	if kvStore != nil {
 		opts = append(opts, agents.WithKVStore(kvStore))
+	}
+
+	// SessionStore 用于 CollectResults 加载子 session 消息
+	// a.sessDB (FileSessionStore) 是全局单例，始终可用
+	if a.sessDB != nil {
+		opts = append(opts, agents.WithSessionStore(a.sessDB))
+		a.logger.Info("createRuntime: SessionStore ready", "agent", agentName)
 	}
 
 	if a.skillReg != nil {

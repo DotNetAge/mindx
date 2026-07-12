@@ -198,7 +198,7 @@ func newClientAskHandlers(
 		},
 		SubtaskSpawned: func(data goharnessevents.SubtaskInfo) {
 			_ = gw.SendResponse(clientID, gateway.RespSubtaskSpawned, i18n.T("svc.event.subtask.spawned"), map[string]any{
-				"task_id":     data.TaskID,
+				"session_id":  data.SessionID,
 				"agent_name":  data.AgentName,
 				"description": data.Description,
 				"timeout":     data.Timeout,
@@ -206,7 +206,7 @@ func newClientAskHandlers(
 		},
 		SubtaskCompleted: func(data goharnessevents.SubtaskResult) {
 			_ = gw.SendResponse(clientID, gateway.RespSubtaskCompleted, i18n.T("svc.event.subtask.completed"), map[string]any{
-				"task_id":     data.TaskID,
+				"session_id":  data.SessionID,
 				"agent_name":  data.AgentName,
 				"success":     data.Success,
 				"answer":      data.Answer,
@@ -329,13 +329,13 @@ func newBroadcastAskHandlers(
 		},
 		SubtaskSpawned: func(data goharnessevents.SubtaskInfo) {
 			d.broadcastScheduleEvent(sessionID, agent, "subtask_spawned", map[string]any{
-				"task_id": data.TaskID, "agent_name": data.AgentName,
+				"session_id": data.SessionID, "agent_name": data.AgentName,
 				"description": data.Description, "timeout": data.Timeout,
 			})
 		},
 		SubtaskCompleted: func(data goharnessevents.SubtaskResult) {
 			d.broadcastScheduleEvent(sessionID, agent, "subtask_completed", map[string]any{
-				"task_id": data.TaskID, "agent_name": data.AgentName,
+				"session_id": data.SessionID, "agent_name": data.AgentName,
 				"success": data.Success, "answer": data.Answer, "error": data.Error,
 				"description": data.Description,
 			})
