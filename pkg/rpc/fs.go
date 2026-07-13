@@ -80,6 +80,21 @@ type FSRevealResult struct {
 	Status string `json:"status"`
 }
 
+// FSStatParams are the params for fs.stat.
+type FSStatParams struct {
+	Path string `json:"path"`
+}
+
+// FSStatResult is the result for fs.stat.
+type FSStatResult struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Size    int64  `json:"size"`
+	IsDir   bool   `json:"is_dir"`
+	Mode    string `json:"mode"`
+	ModTime string `json:"mod_time"`
+}
+
 func (c *Client) FSHome() (json.RawMessage, error) {
 	return c.CallWithTimeout("fs.home", nil)
 }

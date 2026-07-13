@@ -283,6 +283,37 @@ func (d *Daemon) handleFSReveal(_ context.Context, params json.RawMessage) (any,
 	return rpc.FSRevealResult{Status: "ok"}, nil
 }
 
+// ── 新增：stat ──
+
+// handleFSStat returns file metadata (like os.Stat) for the given path.
+// Used by the frontend to verify file existence before opening.
+func (d *Daemon) handleFSStat(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.FSStatParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	cleanPath := filepath.Clean(p.Path)
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	info, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("file not found: %s", cleanPath)
+		}
+		return nil, fmt.Errorf("cannot access path: %w", err)
+	}
+	return rpc.FSStatResult{
+		Name:    info.Name(),
+		Path:    absPath,
+		Size:    info.Size(),
+		IsDir:   info.IsDir(),
+		Mode:    info.Mode().String(),
+		ModTime: info.ModTime().Format(time.RFC3339),
+	}, nil
+}
+
 // ── HTTP download ──
 
 func (d *Daemon) handleFSDownload(w http.ResponseWriter, r *http.Request) {
