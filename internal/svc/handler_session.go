@@ -388,6 +388,36 @@ func (d *Daemon) handleSessionTruncate(ctx context.Context, params json.RawMessa
 	}, nil
 }
 
+func (d *Daemon) handleSessionDeleteRound(ctx context.Context, params json.RawMessage) (any, error) {
+	var p rpc.SessionDeleteRoundParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	sess, err := d.getOrLoadSession(p.SessionID)
+	if err != nil {
+		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
+	}
+
+	if err := sess.DeleteRound(ctx, p.MessageID); err != nil {
+		return nil, fmt.Errorf("delete round failed: %w", err)
+	}
+
+	d.logger.Info("session round deleted",
+		"session_id", p.SessionID,
+		"message_id", p.MessageID,
+	)
+
+	return map[string]any{
+		"session_id": p.SessionID,
+		"message_id": p.MessageID,
+		"deleted":    true,
+	}, nil
+}
+
 func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessage) (any, error) {
 	var p rpc.SessionCompactParams
 	if err := unmarshalParams(params, &p); err != nil {

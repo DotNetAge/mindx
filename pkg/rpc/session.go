@@ -45,6 +45,12 @@ type SessionContextParams struct {
 	SessionID string `json:"session_id"`
 }
 
+// SessionDeleteRoundParams are the params for session.delete_round.
+type SessionDeleteRoundParams struct {
+	SessionID string `json:"session_id"`
+	MessageID int64  `json:"id"`
+}
+
 // SessionCompactParams are the params for session.compact.
 //
 // Mode specifies which compaction mechanism to trigger:
