@@ -97,3 +97,49 @@ type MemoryCountResult struct {
 func (c *Client) MemoryCount() (json.RawMessage, error) {
 	return c.CallWithTimeout("memory.count", nil)
 }
+
+// ── memory.list_by_session ─────────────────────────────────────
+
+// MemoryListBySessionParams are the params for memory.list_by_session.
+type MemoryListBySessionParams struct {
+	SessionID string `json:"session_id"`
+}
+
+// MemoryChunkItem is a single memory chunk returned by list_by_session.
+type MemoryChunkItem struct {
+	ID        string   `json:"id"`
+	Summary   string   `json:"summary"`
+	Content   string   `json:"content"`
+	SessionID string   `json:"session_id,omitempty"`
+	AgentName string   `json:"agent_name,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
+	Timestamp int64    `json:"timestamp"`
+}
+
+// MemoryListBySessionResult is the result for memory.list_by_session.
+type MemoryListBySessionResult struct {
+	Chunks []MemoryChunkItem `json:"chunks"`
+	Count  int               `json:"count"`
+}
+
+func (c *Client) MemoryListBySession(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("memory.list_by_session", MemoryListBySessionParams{
+		SessionID: sessionID,
+	})
+}
+
+// ── memory.update ──────────────────────────────────────────────
+
+// MemoryUpdateParams are the params for memory.update.
+type MemoryUpdateParams struct {
+	ID      string   `json:"id"`
+	Summary string   `json:"summary,omitempty"`
+	Content string   `json:"content,omitempty"`
+	Tags    []string `json:"tags,omitempty"`
+}
+
+func (c *Client) MemoryUpdate(id, summary, content string, tags []string) (json.RawMessage, error) {
+	return c.CallWithTimeout("memory.update", MemoryUpdateParams{
+		ID: id, Summary: summary, Content: content, Tags: tags,
+	})
+}

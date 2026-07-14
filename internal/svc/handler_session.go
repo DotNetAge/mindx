@@ -8,6 +8,7 @@ import (
 
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/pkg/rpc"
+	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
 
 func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (any, error) {
@@ -21,7 +22,7 @@ func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("session store not available")
 	}
 
-	sessions, err := sessDB.ListSessions(context.Background())
+	sessions, err := goharnesssession.ListSessions(context.Background(), sessDB)
 	if err != nil {
 		return nil, fmt.Errorf("list sessions failed: %w", err)
 	}
@@ -48,26 +49,34 @@ func (d *Daemon) handleSessionGet(_ context.Context, params json.RawMessage) (an
 		return nil, fmt.Errorf("session_id is required")
 	}
 
-	sessDB := d.app.SessDB()
-	if sessDB == nil {
-		return nil, fmt.Errorf("session store not available")
-	}
-
-	info, err := sessDB.Get(context.Background(), p.SessionID)
+	// 消息数据：通过 Session 对象获取（Session 是消息的权威来源，必须经过 cursor 过滤）
+	sess, err := d.getOrLoadSession(p.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
 	}
 
-	meta, metaErr := sessDB.GetSessionMeta(p.SessionID)
+	var messages []goharnesssession.Message
+	if !p.IncludeSlid {
+		messages = sess.Current() // 只返回活跃窗口 messages[cursor:]
+	} else {
+		messages = sess.All() // 返回全部消息（用于调试/CLI）
+	}
 
-	result := map[string]any{
+	// 元数据：session 级别的元数据（title, project_working_dir, message_count 等），由
+	// mindx FileSessionStore 管理（meta.json），不在 goharness Session 对象的职责范围内。
+	// 这里直接调用 FileSessionStore 是元数据操作，不是会话数据操作。
+	var meta any
+	if sessDB := d.app.SessDB(); sessDB != nil {
+		if m, err := sessDB.GetSessionMeta(p.SessionID); err == nil {
+			meta = m
+		}
+	}
+
+	return map[string]any{
 		"session_id": p.SessionID,
-		"messages":   info,
-	}
-	if metaErr == nil && meta != nil {
-		result["meta"] = meta
-	}
-	return result, nil
+		"messages":   messages,
+		"meta":       meta,
+	}, nil
 }
 
 func (d *Daemon) handleSessionMeta(_ context.Context, params json.RawMessage) (any, error) {
@@ -109,12 +118,12 @@ func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) 
 	// Capture project dir from session meta before deleting,
 	// so we can clean up the index state.
 	var projectDir string
-	meta, metaErr := sessDB.GetSessionMeta(p.SessionID)
+	meta, metaErr := goharnesssession.GetSessionMeta(context.Background(), sessDB, p.SessionID)
 	if metaErr == nil && meta != nil {
-		projectDir = meta.ProjectWorkingDir
+		projectDir = meta.ProjectDir
 	}
 
-	if err := sessDB.DeleteSession(context.Background(), p.SessionID); err != nil {
+	if err := goharnesssession.DeleteSession(context.Background(), sessDB, p.SessionID); err != nil {
 		return nil, fmt.Errorf("delete session %q failed: %w", p.SessionID, err)
 	}
 
@@ -161,7 +170,7 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 	}
 
 	// Design rule: only one session per (agent, project_dir) pair is allowed.
-	existingSessions, err := sessDB.ListSessions(context.Background())
+	existingSessions, err := goharnesssession.ListSessions(context.Background(), sessDB)
 	if err == nil {
 		for _, s := range existingSessions {
 			if s.AgentName == p.Agent && sameDirectory(s.ProjectDir, p.ProjectDir) {
@@ -180,7 +189,7 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 	opts := []goharnesssession.SessionOption{
 		goharnesssession.WithProjectDirOption(p.ProjectDir),
 	}
-	info, err := sessDB.Create(context.Background(), p.Agent, opts...)
+	info, err := goharnesssession.CreateSession(context.Background(), sessDB, p.Agent, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create session failed: %w", err)
 	}
@@ -227,17 +236,17 @@ func (d *Daemon) getOrLoadSession(sessionID string) (*goharnesssession.Session, 
 	if sessDB != nil {
 		// Try to load existing session from persistent store.
 		var loadErr error
-		sess, loadErr = goharnesssession.Load(sessionID, "", sessDB)
+		sess, loadErr = goharnesssession.Load(sessionID, "", sessDB, goharnesssession.WithLogger(d.logger))
 		if loadErr != nil {
 			// Session not found in store — create empty session as fallback
 			// so ConfirmModify/Rollback return empty lists instead of errors.
-			sess = goharnesssession.NewSession(sessionID, "")
+			sess = goharnesssession.NewSession(sessionID, "", goharnesssession.WithLogger(d.logger))
 			return sess, nil
 		}
 		// Trigger lazy-load to restore messages and modify_files.
 		sess.All()
 	} else {
-		sess = goharnesssession.NewSession(sessionID, "")
+		sess = goharnesssession.NewSession(sessionID, "", goharnesssession.WithLogger(d.logger))
 	}
 
 	return sess, nil
@@ -293,6 +302,49 @@ func (d *Daemon) handleSessionRollbackFiles(_ context.Context, params json.RawMe
 	}, nil
 }
 
+// handleSessionContext returns the current context window usage for a session.
+// The calculation is consistent with GoHarness's MicroCompact method (estimateWindowTokensV2).
+// It uses the session's maxWindowSize (if set) or falls back to the default model's context_length.
+func (d *Daemon) handleSessionContext(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.SessionContextParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	sess, err := d.getOrLoadSession(p.SessionID)
+	if err != nil {
+		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
+	}
+
+	// Get the session's native context usage (uses maxWindowSize if configured)
+	usage := sess.ContextUsage()
+
+	// If the session doesn't have maxWindowSize configured (0), fall back to
+	// the default model's context_length, so the ratio is meaningful.
+	if usage.MaxWindowSize == 0 {
+		modelCfg := d.app.ResolveDefaultModel()
+		if modelCfg != nil && modelCfg.ContextLength > 0 {
+			usage.MaxWindowSize = modelCfg.ContextLength
+			if usage.MaxWindowSize > 0 {
+				usage.UsageRatio = float64(usage.WindowTokens) / float64(usage.MaxWindowSize)
+			}
+		}
+	}
+
+	return map[string]any{
+		"session_id":           p.SessionID,
+		"window_tokens":        usage.WindowTokens,
+		"max_window_size":      usage.MaxWindowSize,
+		"usage_ratio":          usage.UsageRatio,
+		"message_count":        usage.MessageCount,
+		"cursor":               usage.Cursor,
+		"active_message_count": usage.ActiveMessageCount,
+	}, nil
+}
+
 func (d *Daemon) handleSessionTruncate(ctx context.Context, params json.RawMessage) (any, error) {
 	var p rpc.SessionTruncateParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -333,5 +385,173 @@ func (d *Daemon) handleSessionTruncate(ctx context.Context, params json.RawMessa
 		"session_id":    p.SessionID,
 		"messages_kept": lastUserIdx,
 		"truncated":     true,
+	}, nil
+}
+
+func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessage) (any, error) {
+	var p rpc.SessionCompactParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+	if p.Mode == "" {
+		p.Mode = "full"
+	}
+
+	sess, err := d.getOrLoadSession(p.SessionID)
+	if err != nil {
+		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
+	}
+
+	// 确保会话有 maxWindowSize 配置，否则 TryCompact/TryMicroCompact 无法触发
+	if sess.MaxWindowSize() <= 0 {
+		if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil && modelCfg.ContextLength > 0 {
+			sess.SetMaxWindowSize(modelCfg.ContextLength)
+		}
+	}
+
+	// 设置 LLM 摘要器，使 TryCompact 能生成语义摘要
+	if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil && modelCfg.Name != "" {
+		sess.SetSummarizer(goharnesssession.NewLLMSummarizer(*modelCfg))
+	}
+
+	// 绑定 RAG 记忆存储，使压缩摘要持久化到 RAG indexer（浏览器可读）
+	if d.sharedMemory != nil {
+		sess.SetMemory(mindxses.NewRAGMemoryAdapter(d.sharedMemory, sess.AgentName(), sess.ProjectDir()))
+	}
+
+	d.logger.Info("session.compact: triggered",
+		"session_id", p.SessionID,
+		"mode", p.Mode,
+		"max_window_size", sess.MaxWindowSize(),
+		"has_summarizer", d.app.ResolveDefaultModel() != nil,
+	)
+
+	// 绑定事件处理器，TryCompact/TryMicroCompact 会自动调用它们广播事件
+	gw := d.gw
+	sid := p.SessionID
+	var beforeTokens int64
+
+	sess.SetCompactStartHandler(func(windowTokens, maxWindowSize int64) {
+		beforeTokens = windowTokens
+		d.logger.Info("[session] compact start",
+			"session_id", sid,
+			"window_tokens", windowTokens,
+		)
+		if gw != nil {
+			gw.BroadcastNotification("compact_start", map[string]any{
+				"session_id": sid,
+				"data": map[string]any{
+					"window_tokens":   windowTokens,
+					"max_window_size": maxWindowSize,
+				},
+			})
+		}
+	})
+
+	sess.SetCompactDoneHandler(func(messagesSlid int, windowTokens int64) {
+		var ratio float64
+		if beforeTokens > 0 {
+			ratio = float64(windowTokens) / float64(beforeTokens)
+		}
+		d.logger.Info("[session] compact done",
+			"session_id", sid,
+			"messages_slid", messagesSlid,
+			"window_tokens", windowTokens,
+			"ratio", ratio,
+		)
+		if gw != nil {
+			gw.BroadcastNotification("compact_done", map[string]any{
+				"session_id": sid,
+				"data": map[string]any{
+					"messages_slid":   messagesSlid,
+					"window_tokens":   windowTokens,
+					"max_window_size": sess.MaxWindowSize(),
+					"ratio":           ratio,
+				},
+			})
+		}
+	})
+
+	sess.SetMicroCompactStartHandler(func(windowTokens, maxWindowSize int64) {
+		beforeTokens = windowTokens
+		d.logger.Info("[session] micro-compact start",
+			"session_id", sid,
+			"window_tokens", windowTokens,
+		)
+		if gw != nil {
+			gw.BroadcastNotification("micro_compact_start", map[string]any{
+				"session_id": sid,
+				"data": map[string]any{
+					"window_tokens":   windowTokens,
+					"max_window_size": maxWindowSize,
+				},
+			})
+		}
+	})
+
+	sess.SetMicroCompactDoneHandler(func(compressed, deduped int, windowTokens int64) {
+		var ratio float64
+		if beforeTokens > 0 {
+			ratio = float64(windowTokens) / float64(beforeTokens)
+		}
+		d.logger.Info("[session] micro-compact done",
+			"session_id", sid,
+			"compressed", compressed,
+			"deduped", deduped,
+			"window_tokens", windowTokens,
+			"ratio", ratio,
+		)
+		if gw != nil {
+			gw.BroadcastNotification("micro_compact_done", map[string]any{
+				"session_id": sid,
+				"data": map[string]any{
+					"compressed":      compressed,
+					"deduped":         deduped,
+					"window_tokens":   windowTokens,
+					"max_window_size": sess.MaxWindowSize(),
+					"ratio":           ratio,
+				},
+			})
+		}
+	})
+
+	switch p.Mode {
+	case "micro":
+		sessionDir := sess.SessionDir()
+		performed := sess.TryMicroCompact(sessionDir)
+		if !performed {
+			d.logger.Info("session.compact: micro compact skipped (below threshold or nothing to compress)",
+				"session_id", p.SessionID)
+		}
+	default:
+		// ForceCompact 不检查 needsCompaction()，由前端自行判断按钮可用性
+		sess.ForceCompact(ctx)
+	}
+
+	// Note: 不清除 compact handler，因为 Runtime（ask loop）会重新设置自己的 handler。
+	// 如果这里清除，后续 Runtime 自动压缩时将丢失 CompactStart/CompactDone 事件广播。
+
+	// Return updated context usage after compaction
+	usage := sess.ContextUsage()
+
+	d.logger.Info("session.compact: done",
+		"session_id", p.SessionID,
+		"mode", p.Mode,
+		"window_tokens", usage.WindowTokens,
+		"usage_ratio", usage.UsageRatio,
+	)
+
+	return map[string]any{
+		"session_id":           p.SessionID,
+		"mode":                 p.Mode,
+		"window_tokens":        usage.WindowTokens,
+		"max_window_size":      usage.MaxWindowSize,
+		"usage_ratio":          usage.UsageRatio,
+		"message_count":        usage.MessageCount,
+		"cursor":               usage.Cursor,
+		"active_message_count": usage.ActiveMessageCount,
 	}, nil
 }

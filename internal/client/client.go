@@ -233,7 +233,7 @@ func loadRecentSessions(app *appcore.App) ([]input.SessionItem, error) {
 	}
 
 	ctx := context.Background()
-	sessions, err := sessDB.ListSessions(ctx)
+	sessions, err := goharnesssession.ListSessions(ctx, sessDB)
 	if err != nil || len(sessions) == 0 {
 		return []input.SessionItem{
 			{ID: "new", IsSpecial: true, SpecialType: "new"},
@@ -376,11 +376,11 @@ func (m *rootModel) loadSessionHistory() {
 		agentName = m.app.CurrentAgentName()
 	}
 
-	ctx := context.Background()
-	msgs, err := sessDB.Get(ctx, sessionID)
-	if err != nil || len(msgs) == 0 {
+	s, loadErr := goharnesssession.Load(sessionID, agentName, sessDB)
+	if loadErr != nil || s == nil {
 		return
 	}
+	msgs := s.All()
 	convs := messagesToConversations(sessionID, agentName, msgs)
 	m.conversationList.Conversations = append(m.conversationList.Conversations, convs...)
 	m.scrollToBottom = true

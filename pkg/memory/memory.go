@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/DotNetAge/goharness/memory"
@@ -163,12 +164,13 @@ func (m *RAGMemory) storeMemoryChunk(ctx context.Context, chunk memory.MemoryChu
 	copy(tagStrs, chunk.Tags)
 
 	metadata := map[string]any{
-		"agent_name": chunk.AgentName,
-		"session_id": chunk.SessionID,
-		"summary":    chunk.Summary,
-		"tags":       tagStrs,
-		"content":    chunk.Content,
-		"title":      chunk.Summary,
+		"agent_name":  chunk.AgentName,
+		"session_id":  chunk.SessionID,
+		"project_dir": chunk.ProjectDir,
+		"summary":     chunk.Summary,
+		"tags":        tagStrs,
+		"content":     chunk.Content,
+		"title":       chunk.Summary,
 	}
 	if !chunk.Timestamp.IsZero() {
 		metadata["timestamp"] = chunk.Timestamp.UnixMilli()
@@ -235,6 +237,143 @@ func (m *RAGMemory) Retrieve(ctx context.Context, query string, opts ...memory.R
 	}
 
 	return chunks, nil
+}
+
+// RetrieveLatest 按时间倒序取出当前 AgentName+ProjectDir 范围内最新的 N 条记忆。
+// 不依赖向量检索，通过 Indexer.List 分页拉取所有 chunk，按 metadata 过滤后
+// 按 timestamp 倒序取前 limit 条。
+//
+// 用于 memmache.md 中"记忆缓冲区固定取最新10条"的需求：每次 LLM 调用前
+// 取最新记忆拼到系统指令区末尾。
+//
+// 实现 memory.LatestRetriever 可选接口。
+func (m *RAGMemory) RetrieveLatest(ctx context.Context, agentName, projectDir string, limit int) ([]memory.MemoryChunk, error) {
+	if m.semantic == nil {
+		return nil, fmt.Errorf("semantic indexer not initialized")
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// 分页拉取所有 hits，按 metadata 过滤
+	var matched []memory.MemoryChunk
+	const pageSize = 200
+	offset := 0
+	totalHits := 0
+	for {
+		hits, err := m.semantic.List(ctx, offset, pageSize)
+		if err != nil {
+			return nil, fmt.Errorf("memory retrieve latest: %w", err)
+		}
+		if len(hits) == 0 {
+			break
+		}
+		totalHits += len(hits)
+		for _, hit := range hits {
+			chunk := hitToChunk(hit)
+			if chunk == nil {
+				m.logger.Debug("RetrieveLatest: hitToChunk returned nil", "hit_id", hit.ID)
+				continue
+			}
+			m.logger.Debug("RetrieveLatest: chunk metadata",
+				"hit_id", hit.ID, "agent_name", chunk.AgentName,
+				"project_dir", chunk.ProjectDir, "summary", chunk.Summary)
+			// 过滤 agent_name
+			if agentName != "" && chunk.AgentName != agentName {
+				m.logger.Debug("RetrieveLatest: filtered by agent_name",
+					"want", agentName, "got", chunk.AgentName, "hit_id", hit.ID)
+				continue
+			}
+			// 过滤 project_dir
+			if projectDir != "" && chunk.ProjectDir != projectDir {
+				m.logger.Debug("RetrieveLatest: filtered by project_dir",
+					"want", projectDir, "got", chunk.ProjectDir, "hit_id", hit.ID)
+				continue
+			}
+			matched = append(matched, *chunk)
+		}
+		if len(hits) < pageSize {
+			break
+		}
+		offset += pageSize
+	}
+	m.logger.Debug("RetrieveLatest: summary",
+		"total_hits", totalHits, "matched", len(matched),
+		"agent_name", agentName, "project_dir", projectDir)
+
+	// 按 timestamp 倒序排序（最新在前）
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].Timestamp.After(matched[j].Timestamp)
+	})
+
+	// 取前 limit 条
+	if len(matched) > limit {
+		matched = matched[:limit]
+	}
+
+	return matched, nil
+}
+
+// RetrieveBySession 实现 memory.SessionRetriever 可选接口：按 sessionID 取最新记忆。
+// 无视 agentName / projectDir 过滤，作为 RetrieveLatest 的兜底。
+func (m *RAGMemory) RetrieveBySession(ctx context.Context, sessionID string, limit int) ([]memory.MemoryChunk, error) {
+	if m.semantic == nil {
+		return nil, fmt.Errorf("semantic indexer not initialized")
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	var matched []memory.MemoryChunk
+	const pageSize = 200
+	offset := 0
+	totalHits := 0
+	for {
+		hits, err := m.semantic.List(ctx, offset, pageSize)
+		if err != nil {
+			return nil, fmt.Errorf("memory retrieve by session: %w", err)
+		}
+		if len(hits) == 0 {
+			break
+		}
+		totalHits += len(hits)
+		for _, hit := range hits {
+			chunk := hitToChunk(hit)
+			if chunk == nil {
+				continue
+			}
+			// 仅按 session_id 过滤
+			if sessionID != "" && chunk.SessionID != sessionID {
+				continue
+			}
+			matched = append(matched, *chunk)
+		}
+		if len(hits) < pageSize {
+			break
+		}
+		offset += pageSize
+	}
+	m.logger.Debug("RetrieveBySession: summary",
+		"total_hits", totalHits, "matched", len(matched),
+		"session_id", sessionID)
+
+	// 按 timestamp 倒序排序（最新在前）
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].Timestamp.After(matched[j].Timestamp)
+	})
+
+	// 取前 limit 条
+	if len(matched) > limit {
+		matched = matched[:limit]
+	}
+
+	return matched, nil
 }
 
 // Store implements memory.Memory.
@@ -322,6 +461,10 @@ func (m *RAGMemory) buildQueryWithFilter(query string, cfg memory.RetrieveConfig
 		q.AddFilter(memory.FilterKeySessionID, cfg.SessionID)
 	}
 
+	if cfg.ProjectDir != "" {
+		q.AddFilter(memory.FilterKeyProjectDir, cfg.ProjectDir)
+	}
+
 	return q
 }
 
@@ -338,6 +481,9 @@ func hitToChunk(hit goragcore.Hit) *memory.MemoryChunk {
 		}
 		if s, ok := hit.Metadata["session_id"].(string); ok {
 			chunk.SessionID = s
+		}
+		if p, ok := hit.Metadata["project_dir"].(string); ok {
+			chunk.ProjectDir = p
 		}
 		if s, ok := hit.Metadata["summary"].(string); ok && s != "" {
 			chunk.Summary = s

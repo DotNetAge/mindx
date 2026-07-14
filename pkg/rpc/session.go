@@ -10,7 +10,8 @@ type SessionCreateParams struct {
 
 // SessionGetParams are the params for session.get.
 type SessionGetParams struct {
-	SessionID string `json:"session_id"`
+	SessionID   string `json:"session_id"`
+	IncludeSlid bool   `json:"include_slid,omitempty"` // 为 true 时返回全部消息（含已滑出的历史）
 }
 
 // SessionListParams are the params for session.list.
@@ -37,6 +38,32 @@ type SessionFileActionParams struct {
 // SessionTruncateParams are the params for session.truncate.
 type SessionTruncateParams struct {
 	SessionID string `json:"session_id"`
+}
+
+// SessionContextParams are the params for session.context.
+type SessionContextParams struct {
+	SessionID string `json:"session_id"`
+}
+
+// SessionCompactParams are the params for session.compact.
+//
+// Mode specifies which compaction mechanism to trigger:
+//   - "full" (default): LLM summarization-based TryCompact (sliding window)
+//   - "micro": tool message compression via TryMicroCompact
+type SessionCompactParams struct {
+	SessionID string `json:"session_id"`
+	Mode      string `json:"mode,omitempty"` // "full" (default) or "micro"
+}
+
+// ContextWindowUsage is the result of session.context.
+// It mirrors goharness/session.ContextWindowUsage.
+type ContextWindowUsage struct {
+	WindowTokens       int64   `json:"window_tokens"`
+	MaxWindowSize      int64   `json:"max_window_size"`
+	UsageRatio         float64 `json:"usage_ratio"`
+	MessageCount       int     `json:"message_count"`
+	Cursor             int     `json:"cursor"`
+	ActiveMessageCount int     `json:"active_message_count"`
 }
 
 func (c *Client) SessionCreate(agent, projectDir string) (json.RawMessage, error) {
@@ -75,4 +102,8 @@ func (c *Client) SessionRollbackFiles(sessionID string, files []string) (json.Ra
 
 func (c *Client) SessionTruncate(sessionID string) (json.RawMessage, error) {
 	return c.CallWithTimeout("session.truncate", SessionTruncateParams{SessionID: sessionID})
+}
+
+func (c *Client) SessionContext(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("session.context", SessionContextParams{SessionID: sessionID})
 }

@@ -37,12 +37,12 @@ func (s *FileSessionStore) GetCursor(_ context.Context, sessionID string) (int, 
 		return 0, nil // New session, no cursor yet
 	}
 
-	meta, err := LoadSessionMeta(dirPath)
+	info, err := LoadSessionMeta(dirPath)
 	if err != nil {
 		return 0, nil // No meta file yet, return default
 	}
 
-	return meta.Cursor, nil
+	return info.Cursor, nil
 }
 
 // SetCursor persists the compaction cursor position to the session's metadata.
@@ -57,19 +57,19 @@ func (s *FileSessionStore) SetCursor(_ context.Context, sessionID string, cursor
 		return fmt.Errorf("session %q not found", sessionID)
 	}
 
-	meta, err := LoadSessionMeta(dirPath)
+	info, err := LoadSessionMeta(dirPath)
 	if err != nil {
 		// Meta file doesn't exist yet - this can happen if no session meta was created
 		// Create a minimal meta with just the cursor
-		meta = &SessionMeta{
+		info = &goharnesssession.SessionInfo{
 			SessionID: sessionID,
 			Cursor:    cursor,
 		}
 	} else {
-		meta.Cursor = cursor
+		info.Cursor = cursor
 	}
 
-	return meta.Save(dirPath)
+	return SaveSessionMeta(dirPath, info)
 }
 
 type yamlToolCall struct {
@@ -250,7 +250,7 @@ func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentNa
 				title = title[:77] + "..."
 			}
 			existingMeta.Title = title
-			if saveErr := existingMeta.Save(dir); saveErr != nil {
+			if saveErr := SaveSessionMeta(dir, existingMeta); saveErr != nil {
 				log.Printf("[WARN] session: failed to save title meta for session dir %s: %v", dir, saveErr)
 			}
 		}
@@ -502,41 +502,6 @@ func (s *FileSessionStore) GetTokenUsages(_ context.Context, sessionID string) (
 	return usages, nil
 }
 
-func (s *FileSessionStore) GetByRole(ctx context.Context, agent string) (*goharnesssession.SessionInfo, error) {
-	s.ioMu.Lock()
-	defer s.ioMu.Unlock()
-
-	var bestInfo *goharnesssession.SessionInfo
-
-	agentDir := s.agentDir(agent)
-
-	_ = filepath.Walk(agentDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || info.Name() != "meta.json" {
-			return nil
-		}
-
-		sessionID := filepath.Base(filepath.Dir(path))
-		si, statErr := statSessionInfo(agent, sessionID, filepath.Dir(path))
-		if statErr != nil {
-			log.Printf("[WARN] session: failed to stat session info for agent=%q id=%q dir=%s: %v", agent, sessionID, filepath.Dir(path), statErr)
-			return nil
-		}
-
-		if bestInfo == nil || si.LastActivityAt.After(bestInfo.LastActivityAt) {
-			bestInfo = si
-		}
-		return nil
-	})
-
-	if bestInfo == nil {
-		return nil, goharnesssession.ErrSessionNotFound
-	}
-
-	messages, _ := s.Get(ctx, bestInfo.SessionID)
-	bestInfo.Messages = messages
-	return bestInfo, nil
-}
-
 func (s *FileSessionStore) ListSessions(ctx context.Context) ([]goharnesssession.SessionInfo, error) {
 	s.ioMu.Lock()
 	defer s.ioMu.Unlock()
@@ -648,10 +613,13 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goharnessses
 	meta, metaErr := LoadSessionMeta(sessionDirPath)
 	if metaErr == nil {
 		si.Sponsor = meta.Sponsor
-		si.ProjectDir = meta.ProjectWorkingDir
+		si.ProjectDir = meta.ProjectDir
 		si.Title = meta.Title
 		si.CreatedAt = meta.CreatedAt
 		si.LastActivityAt = meta.UpdatedAt
+		si.UpdatedAt = meta.UpdatedAt
+		si.MessageCount = meta.MessageCount
+		si.Cursor = meta.Cursor
 		if si.LastActivityAt.IsZero() {
 			si.LastActivityAt = info.ModTime()
 		}
@@ -660,15 +628,15 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goharnessses
 		if cwdErr == nil {
 			si.ProjectDir = cwd
 		}
-		defaultMeta := &SessionMeta{
-			SessionID:         sessionID,
-			AgentName:         agentName,
-			Sponsor:           si.Sponsor,
-			ProjectWorkingDir: si.ProjectDir,
-			CreatedAt:         info.ModTime(),
-			LastActivityAt:    info.ModTime(),
+		defaultMeta := &goharnesssession.SessionInfo{
+			SessionID:      sessionID,
+			AgentName:      agentName,
+			Sponsor:        si.Sponsor,
+			ProjectDir:     si.ProjectDir,
+			CreatedAt:      info.ModTime(),
+			LastActivityAt: info.ModTime(),
 		}
-		_ = defaultMeta.Save(sessionDirPath)
+		_ = SaveSessionMeta(sessionDirPath, defaultMeta)
 	}
 
 	// 加载已追踪的修改文件列表
@@ -684,7 +652,7 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goharnessses
 
 // GetSessionMeta loads session metadata for the given session ID.
 // It searches all agent directories to find the session.
-func (s *FileSessionStore) GetSessionMeta(sessionID string) (*SessionMeta, error) {
+func (s *FileSessionStore) GetSessionMeta(sessionID string) (*goharnesssession.SessionInfo, error) {
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
 		return nil, goharnesssession.ErrSessionNotFound
@@ -696,23 +664,23 @@ func (s *FileSessionStore) GetSessionMeta(sessionID string) (*SessionMeta, error
 // If meta.json does not exist (first append), it creates one with available session info.
 // This is called after each message append to keep metadata current.
 func (s *FileSessionStore) updateSessionMeta(sessionDir, agentName, sponsor string) {
-	meta, err := LoadSessionMeta(sessionDir)
+	info, err := LoadSessionMeta(sessionDir)
 	if err != nil {
 		// First append — create meta.json with available info
 		sessionID := filepath.Base(sessionDir)
-		meta = &SessionMeta{
-			SessionID:         sessionID,
-			AgentName:         agentName,
-			Sponsor:           sponsor,
-			ProjectWorkingDir: "",
-			CreatedAt:         time.Now(),
-			LastActivityAt:    time.Now(),
+		info = &goharnesssession.SessionInfo{
+			SessionID:      sessionID,
+			AgentName:      agentName,
+			Sponsor:        sponsor,
+			ProjectDir:     "",
+			CreatedAt:      time.Now(),
+			LastActivityAt: time.Now(),
 		}
 	}
-	meta.UpdatedAt = time.Now()
-	meta.LastActivityAt = time.Now()
-	meta.MessageCount++
-	if saveErr := meta.Save(sessionDir); saveErr != nil {
+	info.UpdatedAt = time.Now()
+	info.LastActivityAt = time.Now()
+	info.MessageCount++
+	if saveErr := SaveSessionMeta(sessionDir, info); saveErr != nil {
 		log.Printf("[WARN] session: failed to update session meta for %s: %v", sessionDir, saveErr)
 	}
 }
@@ -757,17 +725,17 @@ func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...g
 
 	sessionInfo.SessionDir = sessionDirPath
 
-	meta := &SessionMeta{
-		SessionID:         sessionID,
-		AgentName:         agentName,
-		Sponsor:           sessionInfo.Sponsor,
-		ProjectWorkingDir: sessionInfo.ProjectDir,
-		CreatedAt:         time.Now(),
-		LastActivityAt:    time.Now(),
-		MessageCount:      0,
+	meta := &goharnesssession.SessionInfo{
+		SessionID:      sessionID,
+		AgentName:      agentName,
+		Sponsor:        sessionInfo.Sponsor,
+		ProjectDir:     sessionInfo.ProjectDir,
+		CreatedAt:      time.Now(),
+		LastActivityAt: time.Now(),
+		MessageCount:   0,
 	}
 
-	if err := meta.Save(sessionDirPath); err != nil {
+	if err := SaveSessionMeta(sessionDirPath, meta); err != nil {
 		return nil, fmt.Errorf("save session meta: %w", err)
 	}
 
@@ -775,27 +743,13 @@ func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...g
 }
 
 // GetMeta returns complete session metadata including directory information.
-// It loads both goharness SessionInfo and extended metadata from disk.
 func (s *FileSessionStore) GetMeta(_ context.Context, sessionID string) (*goharnesssession.SessionInfo, error) {
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
 		return nil, goharnesssession.ErrSessionNotFound
 	}
 
-	meta, err := LoadSessionMeta(dirPath)
-	if err != nil {
-		return nil, fmt.Errorf("load session meta: %w", err)
-	}
-
-	return &goharnesssession.SessionInfo{
-		SessionID:      sessionID,
-		AgentName:      meta.AgentName,
-		Sponsor:        meta.Sponsor,
-		ProjectDir:     meta.ProjectWorkingDir,
-		SessionDir:     dirPath,
-		LastActivityAt: meta.LastActivityAt,
-		CreatedAt:      meta.CreatedAt,
-	}, nil
+	return LoadSessionMeta(dirPath)
 }
 
 // ResolveSessionDir returns the filesystem path for the session's sandbox directory.
@@ -914,11 +868,11 @@ func (s *FileSessionStore) UpdateMessages(_ context.Context, sessionID string, c
 	}
 
 	// Persist cursor alongside messages
-	meta, err := LoadSessionMeta(dirPath)
+	info, err := LoadSessionMeta(dirPath)
 	if err != nil {
-		meta = &SessionMeta{SessionID: sessionID, Cursor: cursor}
+		info = &goharnesssession.SessionInfo{SessionID: sessionID, Cursor: cursor}
 	} else {
-		meta.Cursor = cursor
+		info.Cursor = cursor
 	}
-	return meta.Save(dirPath)
+	return SaveSessionMeta(dirPath, info)
 }

@@ -49,7 +49,7 @@ func newTestDaemon(t *testing.T) (*Daemon, func()) {
 
 func mustCreateSession(t *testing.T, sessDB *mindxses.FileSessionStore, agentName string) string {
 	t.Helper()
-	info, err := sessDB.Create(context.Background(), agentName)
+	info, err := goharnesssession.CreateSession(context.Background(), sessDB, agentName)
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
@@ -58,9 +58,11 @@ func mustCreateSession(t *testing.T, sessDB *mindxses.FileSessionStore, agentNam
 		Content:   "init",
 		Timestamp: time.Now().UnixMilli(),
 	}
-	if err := sessDB.Append(context.Background(), info.SessionID, agentName, msg); err != nil {
-		t.Fatalf("append init msg: %v", err)
+	sess, loadErr := goharnesssession.Load(info.SessionID, agentName, sessDB)
+	if loadErr != nil {
+		t.Fatalf("load session: %v", loadErr)
 	}
+	sess.Append(context.Background(), msg)
 	return info.SessionID
 }
 
@@ -245,9 +247,9 @@ func TestHandleSessionMeta_OK(t *testing.T) {
 		t.Fatalf("handleSessionMeta error = %v", err)
 	}
 
-	meta, ok := result.(*mindxses.SessionMeta)
+	meta, ok := result.(*goharnesssession.SessionInfo)
 	if !ok {
-		t.Fatalf("expected *SessionMeta, got %T", result)
+		t.Fatalf("expected *SessionInfo, got %T", result)
 	}
 	if meta.SessionID != sid {
 		t.Errorf("meta.SessionID = %s, want %s", meta.SessionID, sid)

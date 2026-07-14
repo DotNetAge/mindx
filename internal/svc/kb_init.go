@@ -117,7 +117,7 @@ func (d *Daemon) wireVersionRecorder(pi *indexing.Indexer) {
 		if prevOnDone != nil {
 			prevOnDone(ctx, path)
 		}
-		sessions, listErr := d.app.SessDB().ListSessions(context.Background())
+		sessions, listErr := goharnesssession.ListSessions(context.Background(), d.app.SessDB())
 		if listErr != nil {
 			return
 		}

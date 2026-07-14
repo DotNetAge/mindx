@@ -320,6 +320,70 @@ var sessionRollbackCmd = &cobra.Command{
 	},
 }
 
+// ── session context ───────────────────────────────────────────
+
+var sessionContextCmd = &cobra.Command{
+	Use:   "context",
+	Short: "Show context window usage for a session",
+	Long: `Shows the current context window usage for a session, including
+estimated token count, max window size, and usage ratio.
+
+The calculation is consistent with GoHarness's MicroCompact method:
+  - Uses DeepSeek token estimation formula (ASCII ≈ 0.3 tok/char, CJK ≈ 0.6 tok/char)
+  - Compacted messages count as ~20 tokens (placeholder size)
+  - Ratio = window_tokens / max_window_size
+
+Examples:
+  mindx session context --session-id "01ABCDEFGHJK..."`,
+	Example: `  mindx session context --session-id "01ABCDEFGHJK..."`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, _ := cmd.Flags().GetString("session-id")
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		if id == "" {
+			return fmt.Errorf("--session-id is required")
+		}
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+		result, err := cl.SessionContext(id)
+		if err != nil {
+			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		var resp rpc.ContextWindowUsage
+		if err := json.Unmarshal(result, &resp); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		// Calculate percentage or show N/A
+		var usagePct string
+		if resp.MaxWindowSize > 0 {
+			pct := resp.UsageRatio * 100
+			usagePct = fmt.Sprintf("%.1f%%", pct)
+		} else {
+			usagePct = "N/A (no max window size configured)"
+		}
+
+		table := render.NewTable([]string{"Metric", "Value"}, 80)
+		table.AddRow([]string{"Window Tokens", fmt.Sprintf("%d", resp.WindowTokens)})
+		table.AddRow([]string{"Max Window Size", fmt.Sprintf("%d", resp.MaxWindowSize)})
+		table.AddRow([]string{"Usage Ratio", usagePct})
+		table.AddRow([]string{"Total Messages", fmt.Sprintf("%d", resp.MessageCount)})
+		table.AddRow([]string{"Cursor", fmt.Sprintf("%d", resp.Cursor)})
+		table.AddRow([]string{"Active Messages", fmt.Sprintf("%d", resp.ActiveMessageCount)})
+		fmt.Println(table.Render())
+		return nil
+	},
+}
+
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
@@ -331,6 +395,8 @@ func init() {
 	sessionGetCmd.Flags().Bool("json", false, "Output raw JSON")
 	sessionDeleteCmd.Flags().String("session-id", "", "Session ID (required)")
 	sessionMetaCmd.Flags().String("session-id", "", "Session ID (required)")
+	sessionContextCmd.Flags().String("session-id", "", "Session ID (required)")
+	sessionContextCmd.Flags().Bool("json", false, "Output raw JSON")
 	sessionConfirmCmd.Flags().String("session-id", "", "Session ID (required)")
 	sessionConfirmCmd.Flags().String("files", "", "Comma-separated file paths to confirm")
 	sessionRollbackCmd.Flags().String("session-id", "", "Session ID (required)")
@@ -341,6 +407,7 @@ func init() {
 	sessionCmd.AddCommand(sessionGetCmd)
 	sessionCmd.AddCommand(sessionDeleteCmd)
 	sessionCmd.AddCommand(sessionMetaCmd)
+	sessionCmd.AddCommand(sessionContextCmd)
 	sessionCmd.AddCommand(sessionConfirmCmd)
 	sessionCmd.AddCommand(sessionRollbackCmd)
 }

@@ -271,6 +271,11 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		app.SetGraphIndexer(graphIndexer)
 	}
 
+	// Pass shared memory to App for MemorySearch tool registration.
+	if sharedMemory != nil {
+		app.SetLongTermMemory(sharedMemory)
+	}
+
 	// Wire graphDB to daemon fields (deferred because d is needed)
 	if graphDB != nil {
 		d.graphDB = graphDB
@@ -1054,7 +1059,32 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	d.clientCancels.Store(msg.ClientID, cancel)
 
 	// Load existing session from persistent store (verifies it exists).
-	s, err := goharnesssession.Load(sessionID, resolvedAgentName, d.app.SessDB())
+	//
+	// Budget 动态可调（memmache.md）：只在模型上下文窗口 <= 128K 时启用 TryCompact。
+	//   - <= 128K：设置 maxWindowSize = ContextLength，TryCompact 会在 80% 阈值
+	//     触发全量摘要并清空当前窗口（cursor = len(messages)）。
+	//   - > 128K：不设置 maxWindowSize，TryCompact 直接返回（maxWindowSize == 0），
+	//     靠 KV 缓存命中兜底 —— 超长上下文模型上清空窗口反而损失有效上下文。
+	//   - MicroCompact (Dupdu) 已禁用：它修改上下文中间的 tool 消息内容，破坏 KV
+	//     缓存，重算成本远大于保留"垃圾"的 attention 成本，属于负优化。
+	var sessOpts []goharnesssession.SessionConfig
+	if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil && modelCfg.ContextLength > 0 {
+		sessOpts = append(sessOpts,
+			goharnesssession.WithMaxWindowSize(modelCfg.ContextLength),
+			goharnesssession.WithSummarizer(goharnesssession.NewLLMSummarizer(*modelCfg)),
+		)
+	}
+	// 绑定 RAG 记忆存储，使压缩摘要持久化到 RAG indexer（浏览器可读）
+	if d.sharedMemory != nil {
+		// 获取会话的 project_dir 用于存储元数据
+		projectDir := ""
+		if meta, metaErr := d.app.SessDB().GetMeta(context.Background(), sessionID); metaErr == nil && meta != nil {
+			projectDir = meta.ProjectDir
+		}
+		sessOpts = append(sessOpts, goharnesssession.WithMemory(mindxses.NewRAGMemoryAdapter(d.sharedMemory, resolvedAgentName, projectDir)))
+	}
+	sessOpts = append(sessOpts, goharnesssession.WithLogger(d.logger))
+	s, err := goharnesssession.Load(sessionID, resolvedAgentName, d.app.SessDB(), sessOpts...)
 	if err != nil {
 		d.logger.Error("failed to load session", err, "session_id", sessionID)
 		d.sendEvent(msg.ClientID, sessionID, gateway.RespError, "Session Error", err.Error())
@@ -1099,6 +1129,66 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			WithContext(ctx).
 			OnEvent(func(ev events.ReactEvent) {
 				currentAgentName = ev.AgentName
+			}).
+			OnEvent(func(ev events.ReactEvent) {
+				// Forward Compact / MicroCompact events as JSON-RPC
+				// broadcast notifications so all connected clients get real-time
+				// context window management visibility.
+				switch ev.Type {
+				case events.CompactStart:
+					data, _ := ev.Data.(events.CompactStartData)
+					d.logger.Info("[session] compact start",
+						"session_id", sid,
+						"window_tokens", data.WindowTokens,
+					)
+					if gw != nil {
+						gw.BroadcastNotification("compact_start", map[string]any{
+							"session_id": sid,
+							"data":       data,
+						})
+					}
+				case events.CompactDone:
+					data, _ := ev.Data.(events.CompactDoneData)
+					d.logger.Info("[session] compact done",
+						"session_id", sid,
+						"messages_slid", data.MessagesSlid,
+						"window_tokens", data.WindowTokens,
+						"ratio", data.Ratio,
+					)
+					if gw != nil {
+						gw.BroadcastNotification("compact_done", map[string]any{
+							"session_id": sid,
+							"data":       data,
+						})
+					}
+				case events.MicroCompactStart:
+					data, _ := ev.Data.(events.MicroCompactStartData)
+					d.logger.Info("[session] micro-compact start",
+						"session_id", sid,
+						"window_tokens", data.WindowTokens,
+					)
+					if gw != nil {
+						gw.BroadcastNotification("micro_compact_start", map[string]any{
+							"session_id": sid,
+							"data":       data,
+						})
+					}
+				case events.MicroCompactDone:
+					data, _ := ev.Data.(events.MicroCompactDoneData)
+					d.logger.Info("[session] micro-compact done",
+						"session_id", sid,
+						"compressed", data.Compressed,
+						"deduped", data.Deduped,
+						"window_tokens", data.WindowTokens,
+						"ratio", data.Ratio,
+					)
+					if gw != nil {
+						gw.BroadcastNotification("micro_compact_done", map[string]any{
+							"session_id": sid,
+							"data":       data,
+						})
+					}
+				}
 			})
 		builder = wireAskEvents(builder, emitter)
 
@@ -1115,6 +1205,32 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				"agent", resolvedAgentName,
 			)
 			d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.error"), i18n.T("svc.event.request.failed"))
+		}
+
+		// Broadcast current context window usage after each LLM request.
+		// This allows the UI to update the context usage indicator in real time.
+		if d.gw != nil {
+			usage := s.ContextUsage()
+			// If maxWindowSize is 0 (not configured on session), fall back to model context_length
+			if usage.MaxWindowSize == 0 {
+				if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil && modelCfg.ContextLength > 0 {
+					usage.MaxWindowSize = modelCfg.ContextLength
+					if usage.MaxWindowSize > 0 {
+						usage.UsageRatio = float64(usage.WindowTokens) / float64(usage.MaxWindowSize)
+					}
+				}
+			}
+			d.gw.BroadcastNotification("context_usage", map[string]any{
+				"session_id": sid,
+				"data": map[string]any{
+					"window_tokens":        usage.WindowTokens,
+					"max_window_size":      usage.MaxWindowSize,
+					"usage_ratio":          usage.UsageRatio,
+					"message_count":        usage.MessageCount,
+					"cursor":               usage.Cursor,
+					"active_message_count": usage.ActiveMessageCount,
+				},
+			})
 		}
 
 		d.logger.Info("request done",
@@ -1168,10 +1284,20 @@ func (d *Daemon) resolveSessionID(clientProvided string, commandProvided string)
 	if d.app.SessionDB() != nil {
 		currentAgent := d.app.CurrentAgentName()
 		if currentAgent != "" {
-			sid, err := d.app.SessionDB().GetByRole(context.Background(), currentAgent)
-			if err == nil && sid != nil && sid.SessionID != "" {
-				d.logger.Info("resumed session from store", "agent", currentAgent, "session", sid.SessionID)
-				return sid.SessionID
+			sessions, err := goharnesssession.ListSessions(context.Background(), d.app.SessDB())
+			if err == nil {
+				var best *goharnesssession.SessionInfo
+				for i := range sessions {
+					if sessions[i].AgentName == currentAgent {
+						if best == nil || sessions[i].LastActivityAt.After(best.LastActivityAt) {
+							best = &sessions[i]
+						}
+					}
+				}
+				if best != nil && best.SessionID != "" {
+					d.logger.Info("resumed session from store", "agent", currentAgent, "session", best.SessionID)
+					return best.SessionID
+				}
 			}
 		}
 	}
@@ -1205,14 +1331,14 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 	if targetDir == "" {
 		meta := d.restoreSessionEnvironment(sessionID)
 		if meta != nil {
-			targetDir = meta.ProjectWorkingDir
+			targetDir = meta.ProjectDir
 			d.logger.Info("scheduled task: restored project dir from session meta",
 				"target_dir", targetDir,
 			)
 		}
 	}
 
-	s, err := goharnesssession.Load(sessionID, agent, d.app.SessDB())
+	s, err := goharnesssession.Load(sessionID, agent, d.app.SessDB(), goharnesssession.WithLogger(d.logger))
 	if err != nil {
 		return fmt.Errorf("scheduled task: load session %q: %w", sessionID, err)
 	}
@@ -1259,11 +1385,11 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 	return nil
 }
 
-func (d *Daemon) restoreSessionEnvironment(sessionID string) *mindxses.SessionMeta {
+func (d *Daemon) restoreSessionEnvironment(sessionID string) *goharnesssession.SessionInfo {
 	if d.app == nil || d.app.SessDB() == nil {
 		return nil
 	}
-	meta, err := d.app.SessDB().GetSessionMeta(sessionID)
+	meta, err := goharnesssession.GetSessionMeta(context.Background(), d.app.SessDB(), sessionID)
 	if err != nil {
 		d.logger.Debug("could not load session meta for scheduled task",
 			"session_id", sessionID,

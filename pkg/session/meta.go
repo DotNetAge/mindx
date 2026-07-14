@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -20,52 +21,53 @@ func generateSessionID() string {
 	return ulid.MustNew(ulid.Timestamp(time.Now()), ulidEntropy).String()
 }
 
-// SessionMeta represents session-level metadata persisted to <session_dir>/meta.json.
-// This struct is defined and used by MindX (application layer).
-// goharness (framework layer) does not depend on this type.
-type SessionMeta struct {
-	SessionID string    `json:"session_id"`
-	AgentName string    `json:"agent_name"`
-	Sponsor   string    `json:"sponsor,omitempty"` // Agent that created this session (empty = user-initiated)
-	Title     string    `json:"title"`             // First user message content (truncated), for session list display
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+// LoadSessionMeta loads metadata from meta.json in the given session directory.
+// Returns a SessionInfo with all persisted fields.
+// Handles backward compat: reads both "project_dir" and "project_working_dir" from JSON.
+func LoadSessionMeta(sessionDirPath string) (*goharnesssession.SessionInfo, error) {
+	metaPath := filepath.Join(sessionDirPath, "meta.json")
 
-	// Directory bindings
-	HomeDir           string `json:"home_dir"`            // Layer 1: ~/.mindx
-	ProjectWorkingDir string `json:"project_working_dir"` // Layer 2: captured via os.Getwd()
-
-	// Runtime stats
-	MessageCount   int       `json:"message_count"`
-	LastActivityAt time.Time `json:"last_activity_at"`
-
-	// Compaction state
-	Cursor int `json:"cursor"` // Position of compaction cursor (0 = no compaction)
-}
-
-// NewSessionMeta creates a new session metadata instance with the captured project directory.
-func NewSessionMeta(sessionID, agentName, projectDir string) (*SessionMeta, error) {
-	homeDir, err := os.UserHomeDir()
+	data, err := os.ReadFile(metaPath)
 	if err != nil {
-		homeDir = "."
+		return nil, fmt.Errorf("read session meta: %w", err)
 	}
 
-	now := time.Now()
-	return &SessionMeta{
-		SessionID:         sessionID,
-		AgentName:         agentName,
-		CreatedAt:         now,
-		UpdatedAt:         now,
-		HomeDir:           homeDir,
-		ProjectWorkingDir: projectDir,
-	}, nil
+	// Unmarshal into raw map first for backward compat migration.
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("unmarshal session meta: %w", err)
+	}
+
+	// Migrate project_working_dir → project_dir (backward compat with old meta.json).
+	if _, exists := raw["project_dir"]; !exists {
+		if v, ok := raw["project_working_dir"]; ok {
+			raw["project_dir"] = v
+		}
+	}
+
+	// Remove deprecated fields that no longer exist on SessionInfo.
+	delete(raw, "project_working_dir")
+	delete(raw, "home_dir")
+
+	// Re-marshal cleaned map into SessionInfo.
+	cleaned, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("marshal session meta: %w", err)
+	}
+
+	var info goharnesssession.SessionInfo
+	if err := json.Unmarshal(cleaned, &info); err != nil {
+		return nil, fmt.Errorf("unmarshal session info: %w", err)
+	}
+
+	return &info, nil
 }
 
-// Save persists the metadata to meta.json in the given session directory.
-func (m *SessionMeta) Save(sessionDirPath string) error {
-	m.UpdatedAt = time.Now()
+// SaveSessionMeta persists session metadata to meta.json in the given session directory.
+func SaveSessionMeta(sessionDirPath string, info *goharnesssession.SessionInfo) error {
+	info.UpdatedAt = time.Now()
 
-	data, err := json.MarshalIndent(m, "", "  ")
+	data, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal session meta: %w", err)
 	}
@@ -76,21 +78,4 @@ func (m *SessionMeta) Save(sessionDirPath string) error {
 	}
 
 	return os.WriteFile(metaPath, data, 0600)
-}
-
-// LoadSessionMeta loads metadata from meta.json in the given session directory.
-func LoadSessionMeta(sessionDirPath string) (*SessionMeta, error) {
-	metaPath := filepath.Join(sessionDirPath, "meta.json")
-
-	data, err := os.ReadFile(metaPath)
-	if err != nil {
-		return nil, fmt.Errorf("read session meta: %w", err)
-	}
-
-	var meta SessionMeta
-	if err := json.Unmarshal(data, &meta); err != nil {
-		return nil, fmt.Errorf("unmarshal session meta: %w", err)
-	}
-
-	return &meta, nil
 }

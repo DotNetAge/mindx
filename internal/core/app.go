@@ -14,6 +14,7 @@ import (
 	"github.com/DotNetAge/gochat"
 	"github.com/DotNetAge/goharness/agents"
 	"github.com/DotNetAge/goharness/config"
+	goharnessmemory "github.com/DotNetAge/goharness/memory"
 	"github.com/DotNetAge/goharness/rule"
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/goharness/skill"
@@ -65,6 +66,9 @@ type App struct {
 
 	// Knowledge graph indexer (injected by Daemon after initialization)
 	graphIndexer *goragindexer.GraphIndexer
+
+	// Long-term memory store (injected by Daemon; TUI mode creates locally)
+	longTermMemory goharnessmemory.Memory
 
 	// MCP manager (injected by Daemon after initialization)
 	mcpMgr MCPToolProvider
@@ -239,6 +243,17 @@ func (a *App) Embedder() goragcore.Embedder {
 // SetGraphIndexer injects the knowledge graph indexer for knowledge base tools.
 func (a *App) SetGraphIndexer(gi *goragindexer.GraphIndexer) {
 	a.graphIndexer = gi
+}
+
+// SetLongTermMemory injects the long-term memory store for MemorySearch tool registration.
+// Called by Daemon after shared memory is initialized; TUI mode sets it in createRuntime.
+func (a *App) SetLongTermMemory(mem goharnessmemory.Memory) {
+	a.longTermMemory = mem
+}
+
+// LongTermMemory returns the long-term memory store, or nil if not configured.
+func (a *App) LongTermMemory() goharnessmemory.Memory {
+	return a.longTermMemory
 }
 
 // SetMCPManager injects the MCP manager for MCP tool registration.
@@ -460,7 +475,7 @@ func (a *App) CreateSession(agentName, projectDir string) (*session.SessionInfo,
 		opts = append(opts, session.WithProjectDirOption(projectDir))
 	}
 
-	sessionInfo, err := a.sessDB.Create(context.Background(), agentName, opts...)
+	sessionInfo, err := session.CreateSession(context.Background(), a.sessDB, agentName, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}
@@ -575,7 +590,7 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		opts = append(opts, agents.WithSearchStrategy(a.searchStrategyOverride))
 	}
 
-	agentDiscoveryIntro := "Agent discovery: when you need to find or list available agents, run 'mindx agent list' (or 'mindx agent list --json' for structured output). The list shows agent names, roles, descriptions, and their skills. Use this to find the right agent for delegation via SubAgent."
+	agentDiscoveryIntro := "Agent 发现：当需要查找或列出可用 Agent 时，运行 'mindx agent list'（或 'mindx agent list --json' 获取结构化输出）。列表显示 Agent 名称、角色、描述及其技能。用于查找合适的 Agent 并通过 SubAgent 进行委托。"
 
 	if a.permissionRuleStore != nil {
 		rules, loadErr := a.permissionRuleStore.Load()
@@ -633,8 +648,13 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 			// exclusive file lock (LOCK_EX). Opening the same .db file from the TUI
 			// in read-only mode would block indefinitely trying to acquire a shared
 			// lock (LOCK_SH), preventing messages from ever reaching the LLM.
-			// The TUI delegates all memory operations to the Daemon via RPC instead.
-			a.logger.Info("daemon detected: skipping local LongTerm memory init (delegated to daemon)")
+			// The TUI delegates all local memory creation to the Daemon via RPC instead.
+			// Memory store itself is still needed for MemoryThoughtHook (取出最近记忆
+			// 注入系统提示词)，因此用 daemon 已注入的 longTermMemory。
+			if a.longTermMemory != nil {
+				opts = append(opts, agents.WithMemory(a.longTermMemory))
+				a.logger.Info("createRuntime: using daemon-provided long-term memory for MemoryThoughtHook", "agent", agentName)
+			}
 		} else {
 			a.logger.Info("createRuntime: creating shared memory", "agent", agentName)
 			ltMem, ltErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
@@ -647,6 +667,7 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 				a.logger.Warn("Failed to create long-term memory", "agent", agent.Name, "error", ltErr)
 			} else {
 				opts = append(opts, agents.WithMemory(ltMem))
+				a.SetLongTermMemory(ltMem)
 				a.logger.Info("createRuntime: long-term memory OK", "agent", agentName)
 			}
 		}
@@ -678,28 +699,41 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		}
 	}
 
+	// Register MemorySearch tool whenever long-term memory is available.
+	// This gives the LLM a tool to actively recall past conversation summaries.
+	if mem := a.LongTermMemory(); mem != nil {
+		ms := tools.NewMemorySearch(mem)
+		if ms != nil {
+			if err := rt.RegisterTool(ms); err != nil {
+				a.logger.Warn("createRuntime: 注册 MemorySearch 失败", "agent", agentName, "error", err)
+			} else {
+				a.logger.Info("createRuntime: MemorySearch 注册成功", "agent", agentName)
+			}
+		}
+	}
+
 	// Register knowledge base tools whenever the graph indexer is available.
 	// Each tool resolves projectDir at runtime from the session/cwd.
 	if a.graphIndexer != nil {
 		qs := mindxtools.NewQuickSearch(a.graphIndexer)
 		if err := rt.RegisterTool(qs); err != nil {
-			a.logger.Warn("createRuntime: failed to register QuickSearch", "agent", agentName, "error", err)
+			a.logger.Warn("createRuntime: 注册 QuickSearch 失败", "agent", agentName, "error", err)
 		} else {
-			a.logger.Info("createRuntime: QuickSearch registered", "agent", agentName)
+			a.logger.Info("createRuntime: QuickSearch 注册成功", "agent", agentName)
 		}
 
 		qe := mindxtools.NewQuickExplore(a.graphIndexer)
 		if err := rt.RegisterTool(qe); err != nil {
-			a.logger.Warn("createRuntime: failed to register QuickExplore", "agent", agentName, "error", err)
+			a.logger.Warn("createRuntime: 注册 QuickExplore 失败", "agent", agentName, "error", err)
 		} else {
-			a.logger.Info("createRuntime: QuickExplore registered", "agent", agentName)
+			a.logger.Info("createRuntime: QuickExplore 注册成功", "agent", agentName)
 		}
 
 		fr := mindxtools.NewFindRelation(a.graphIndexer)
 		if err := rt.RegisterTool(fr); err != nil {
-			a.logger.Warn("createRuntime: failed to register FindRelation", "agent", agentName, "error", err)
+			a.logger.Warn("createRuntime: 注册 FindRelation 失败", "agent", agentName, "error", err)
 		} else {
-			a.logger.Info("createRuntime: FindRelation registered", "agent", agentName)
+			a.logger.Info("createRuntime: FindRelation 注册成功", "agent", agentName)
 		}
 	}
 
@@ -708,9 +742,9 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	if a.mcpMgr != nil {
 		for _, tool := range a.mcpMgr.EnabledTools() {
 			if err := rt.RegisterTool(tool); err != nil {
-				a.logger.Warn("createRuntime: failed to register MCP tool", "agent", agentName, "tool", tool.Info().Name, "error", err)
+				a.logger.Warn("createRuntime: 注册 MCP工具 失败", "agent", agentName, "tool", tool.Info().Name, "error", err)
 			} else {
-				a.logger.Info("createRuntime: MCP tool registered", "agent", agentName, "tool", tool.Info().Name)
+				a.logger.Info("createRuntime: MCP工具 注册成功", "agent", agentName, "tool", tool.Info().Name)
 			}
 		}
 	}
@@ -719,9 +753,9 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	if a.schedulerStore != nil {
 		cronTool := mindxtools.NewCron(a.schedulerStore)
 		if err := rt.RegisterTool(cronTool); err != nil {
-			a.logger.Warn("createRuntime: failed to register Cron", "agent", agentName, "error", err)
+			a.logger.Warn("createRuntime: 注册 Cron 失败", "agent", agentName, "error", err)
 		} else {
-			a.logger.Info("createRuntime: Cron registered", "agent", agentName)
+			a.logger.Info("createRuntime: Cron 注册成功", "agent", agentName)
 		}
 	}
 
@@ -729,9 +763,9 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	if runtime.GOOS == "darwin" {
 		msgTool := mindxtools.NewSendMessage()
 		if err := rt.RegisterTool(msgTool); err != nil {
-			a.logger.Warn("createRuntime: failed to register SendMessage", "agent", agentName, "error", err)
+			a.logger.Warn("createRuntime: 注册 SendMessage 失败", "agent", agentName, "error", err)
 		} else {
-			a.logger.Info("createRuntime: SendMessage registered", "agent", agentName)
+			a.logger.Info("createRuntime: SendMessage 注册成功", "agent", agentName)
 		}
 	}
 
@@ -745,7 +779,7 @@ func (a *App) CurrentRuntime() (*agents.Runtime, error) {
 
 	agentName := a.CurrentAgentName()
 	if agentName == "" {
-		return nil, fmt.Errorf("no agent available")
+		return nil, fmt.Errorf("当前没有可用的智能体")
 	}
 
 	return a.ResolveRuntime(agentName)
@@ -779,15 +813,15 @@ func (a *App) ResolveRuntime(name string) (*agents.Runtime, error) {
 // This handles smart session matching (CWD changes) and auto-creates sessions.
 func (a *App) EnsureSession() (string, error) {
 	if a.sessDB == nil {
-		return "", fmt.Errorf("EnsureSession called but sessDB is nil")
+		return "", fmt.Errorf("当前没有可用的会话数据库")
 	}
 	if a.mindxConfig == nil {
-		return "", fmt.Errorf("EnsureSession called but mindxConfig is nil")
+		return "", fmt.Errorf("当前没有可用的配置文件")
 	}
 
 	agentName := a.CurrentAgentName()
 	if agentName == "" {
-		return "", fmt.Errorf("EnsureSession called but no agent available")
+		return "", fmt.Errorf("当前没有可用的智能体")
 	}
 
 	cwd, cwdErr := os.Getwd()
@@ -808,7 +842,7 @@ func (a *App) EnsureSession() (string, error) {
 		)
 
 		if matched := a.findSessionByProjectDir(cwd, agentName); matched != nil {
-			a.logger.Info("found matching session for current directory",
+			a.logger.Info("找到匹配会话",
 				"session_id", matched.SessionID,
 				"project_dir", matched.ProjectDir,
 				"agent", agentName,
@@ -816,18 +850,18 @@ func (a *App) EnsureSession() (string, error) {
 			a.currentSessionMeta = matched
 			a.mindxConfig.LastSessionID = matched.SessionID
 			if saveErr := a.mindxConfig.Save(); saveErr != nil {
-				a.logger.Warn("failed to save config after session match", "error", saveErr)
+				a.logger.Warn("保存配置文件失败（会话匹配后）", "error", saveErr)
 			}
 			return matched.SessionID, nil
 		}
 
-		a.logger.Info("no matching session found, creating new session for current directory",
+		a.logger.Info("未找到匹配会话，创建新会话",
 			"cwd", cwd,
 			"agent", agentName,
 		)
 		newSession, createErr := a.CreateSession(agentName, cwd)
 		if createErr != nil {
-			a.logger.Error("failed to create new session", createErr)
+			a.logger.Error("创建新会话失败", createErr)
 			a.currentSessionMeta = nil
 			a.mindxConfig.LastSessionID = ""
 			return "", createErr
@@ -835,9 +869,9 @@ func (a *App) EnsureSession() (string, error) {
 		a.currentSessionMeta = newSession
 		a.mindxConfig.LastSessionID = newSession.SessionID
 		if saveErr := a.mindxConfig.Save(); saveErr != nil {
-			a.logger.Warn("failed to save config after session create (cwd changed)", "error", saveErr)
+			a.logger.Warn("保存配置文件失败（会话创建后）", "error", saveErr)
 		}
-		a.logger.Info("new session created",
+		a.logger.Info("新会话创建",
 			"session_id", newSession.SessionID,
 			"project_dir", newSession.ProjectDir,
 		)
@@ -845,10 +879,10 @@ func (a *App) EnsureSession() (string, error) {
 	}
 
 	// No current session meta — try to find existing or create new
-	a.logger.Info("no current session, searching for existing", "cwd", cwd)
+	a.logger.Info("当前没有会话元数据，搜索已存在会话", "cwd", cwd)
 
 	if matched := a.findSessionByProjectDir(cwd, agentName); matched != nil {
-		a.logger.Info("found matching session for current directory",
+		a.logger.Info("找到匹配会话",
 			"session_id", matched.SessionID,
 			"project_dir", matched.ProjectDir,
 			"agent", agentName,
@@ -856,12 +890,12 @@ func (a *App) EnsureSession() (string, error) {
 		a.currentSessionMeta = matched
 		a.mindxConfig.LastSessionID = matched.SessionID
 		if saveErr := a.mindxConfig.Save(); saveErr != nil {
-			a.logger.Warn("failed to save config after session match (no current meta)", "error", saveErr)
+			a.logger.Warn("保存配置文件失败（会话匹配后）", "error", saveErr)
 		}
 		return matched.SessionID, nil
 	}
 
-	a.logger.Info("no existing session found, creating new session", "cwd", cwd)
+	a.logger.Info("未找到匹配会话，创建新会话", "cwd", cwd)
 	newSession, createErr := a.CreateSession(agentName, cwd)
 	if createErr != nil {
 		return "", fmt.Errorf("CreateSession failed for agent=%q cwd=%q: %w", agentName, cwd, createErr)
@@ -869,7 +903,7 @@ func (a *App) EnsureSession() (string, error) {
 	a.currentSessionMeta = newSession
 	a.mindxConfig.LastSessionID = newSession.SessionID
 	if saveErr := a.mindxConfig.Save(); saveErr != nil {
-		a.logger.Warn("failed to save config after new session creation", "error", saveErr)
+		a.logger.Warn("保存配置文件失败（会话创建后）", "error", saveErr)
 	}
 	return newSession.SessionID, nil
 }
@@ -909,7 +943,11 @@ func (a *App) NewSessionFromMeta() *session.Session {
 		if ragErr != nil {
 			a.logger.Warn("failed to create session RAG memory, compaction summaries will use in-memory fallback", "error", ragErr)
 		} else {
-			opts = append(opts, session.WithMemory(mindxses.NewRAGMemoryAdapter(sessRAG)))
+			projectDir := ""
+			if a.currentSessionMeta != nil {
+				projectDir = a.currentSessionMeta.ProjectDir
+			}
+			opts = append(opts, session.WithMemory(mindxses.NewRAGMemoryAdapter(sessRAG, agentName, projectDir)))
 
 			agent := a.Agents().Get(agentName)
 			if agent != nil {
@@ -921,6 +959,7 @@ func (a *App) NewSessionFromMeta() *session.Session {
 		}
 	}
 
+	opts = append([]session.SessionConfig{session.WithLogger(a.logger)}, opts...)
 	s, err := session.Load(a.currentSessionMeta.SessionID, agentName, a.sessDB, opts...)
 	if err != nil {
 		a.logger.Error("failed to load session from store", err, "session_id", a.currentSessionMeta.SessionID)
@@ -981,7 +1020,7 @@ Pick one path:
 
 func (a *App) SwitchSession(sessionID string) (*session.SessionInfo, error) {
 	ctx := context.Background()
-	sessions, err := a.SessDB().ListSessions(ctx)
+	sessions, err := session.ListSessions(ctx, a.SessDB())
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
@@ -1023,7 +1062,7 @@ func (a *App) ClearCurrentSession() (*session.SessionInfo, error) {
 			"reason", "user requested /chat clear",
 		)
 
-		if err := a.SessDB().Delete(context.Background(), time.Now().Unix(), currentMeta.SessionID); err != nil {
+		if err := session.DeleteSession(context.Background(), a.SessDB(), currentMeta.SessionID); err != nil {
 			return nil, fmt.Errorf("delete failed: %w", err)
 		}
 	}
@@ -1063,7 +1102,7 @@ func sameDirectory(dir1, dir2 string) bool {
 
 func (a *App) findSessionByProjectDir(projectDir, agentName string) *session.SessionInfo {
 	ctx := context.Background()
-	sessions, err := a.SessDB().ListSessions(ctx)
+	sessions, err := session.ListSessions(ctx, a.SessDB())
 	if err != nil {
 		return nil
 	}

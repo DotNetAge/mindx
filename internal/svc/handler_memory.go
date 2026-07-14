@@ -9,6 +9,7 @@ import (
 	"time"
 
 	goharnessmemory "github.com/DotNetAge/goharness/memory"
+	goragcore "github.com/DotNetAge/gorag/v2/core"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
@@ -269,4 +270,245 @@ func (d *Daemon) handleMemoryCount(_ context.Context, _ json.RawMessage) (any, e
 	d.logger.Info("memory.count called", "count", count)
 
 	return rpc.MemoryCountResult{Count: count}, nil
+}
+
+// ---------------------------------------------------------------------------
+// memory.list_by_session — 按会话 ID 列出所有 MemoryChunk（分页，按时间倒序）
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleMemoryListBySession(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MemoryListBySessionParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	mem := d.sharedMemory
+	if mem == nil {
+		return nil, fmt.Errorf("memory service not available (embedder not configured)")
+	}
+
+	indexer := mem.Semantic()
+	if indexer == nil {
+		return nil, fmt.Errorf("indexer not initialized")
+	}
+
+	// 分页遍历所有 chunk，按 session_id 过滤
+	var matched []rpc.MemoryChunkItem
+	const pageSize = 200
+	offset := 0
+	for {
+		hits, err := indexer.List(context.Background(), offset, pageSize)
+		if err != nil {
+			return nil, fmt.Errorf("list chunks failed: %w", err)
+		}
+		if len(hits) == 0 {
+			break
+		}
+		for _, hit := range hits {
+			sessionID, _ := hit.Metadata["session_id"].(string)
+			if sessionID != p.SessionID {
+				continue
+			}
+			chunk := chunkHitToMemoryItem(hit)
+			if chunk != nil {
+				matched = append(matched, *chunk)
+			}
+		}
+		if len(hits) < pageSize {
+			break
+		}
+		offset += pageSize
+	}
+
+	// 按时间倒序（最新在前）
+	// The indexer may return hits in insertion order;
+	// we sort by timestamp descending.
+	// Since we don't import sort in this file, we'll
+	// do a simple slice sort inline.
+	for i := 0; i < len(matched); i++ {
+		for j := i + 1; j < len(matched); j++ {
+			if matched[i].Timestamp < matched[j].Timestamp {
+				matched[i], matched[j] = matched[j], matched[i]
+			}
+		}
+	}
+
+	d.logger.Info("memory.list_by_session called",
+		"session_id", p.SessionID,
+		"returned", len(matched))
+
+	return rpc.MemoryListBySessionResult{
+		Chunks: matched,
+		Count:  len(matched),
+	}, nil
+}
+
+// chunkHitToMemoryItem converts a gorag Hit to a MemoryChunkItem.
+func chunkHitToMemoryItem(hit goragcore.Hit) *rpc.MemoryChunkItem {
+	item := &rpc.MemoryChunkItem{
+		ID:      hit.ID,
+		Content: hit.Content,
+	}
+
+	if hit.Metadata != nil {
+		if a, ok := hit.Metadata["agent_name"].(string); ok {
+			item.AgentName = a
+		}
+		if s, ok := hit.Metadata["session_id"].(string); ok {
+			item.SessionID = s
+		}
+		if s, ok := hit.Metadata["summary"].(string); ok && s != "" {
+			item.Summary = s
+		} else {
+			item.Summary = hit.Title
+		}
+		if t, ok := hit.Metadata["tags"]; ok {
+			switch v := t.(type) {
+			case []string:
+				item.Tags = v
+			case []any:
+				for _, tag := range v {
+					if s, ok := tag.(string); ok {
+						item.Tags = append(item.Tags, s)
+					}
+				}
+			}
+		}
+		if ts, ok := hit.Metadata["timestamp"]; ok {
+			switch v := ts.(type) {
+			case float64:
+				item.Timestamp = int64(v)
+			case int64:
+				item.Timestamp = v
+			}
+		}
+	}
+
+	if item.Summary == "" {
+		item.Summary = hit.Title
+	}
+
+	return item
+}
+
+// ---------------------------------------------------------------------------
+// memory.update — 更新一条 MemoryChunk
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleMemoryUpdate(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MemoryUpdateParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.ID == "" {
+		return nil, fmt.Errorf("id is required")
+	}
+
+	mem := d.sharedMemory
+	if mem == nil {
+		return nil, fmt.Errorf("memory service not available (embedder not configured)")
+	}
+
+	// 从 indexer 获取当前 chunk，保留未修改的字段
+	indexer := mem.Semantic()
+	if indexer == nil {
+		return nil, fmt.Errorf("indexer not initialized")
+	}
+
+	// We need the existing chunk to preserve fields we aren't updating.
+	// Use a zero-offset list with a generous page size to find the specific chunk.
+	hits, err := indexer.List(context.Background(), 0, 1_000_000)
+	if err != nil {
+		return nil, fmt.Errorf("list chunks failed: %w", err)
+	}
+
+	var existing *goharnessmemory.MemoryChunk
+	for _, hit := range hits {
+		if hit.ID == p.ID {
+			chunk := hitToMemoryChunk(hit)
+			existing = chunk
+			break
+		}
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("memory chunk %q not found", p.ID)
+	}
+
+	// Apply updates
+	if p.Summary != "" {
+		existing.Summary = p.Summary
+	}
+	if p.Content != "" {
+		existing.Content = p.Content
+	}
+	if p.Tags != nil {
+		existing.Tags = p.Tags
+	}
+
+	if err := mem.Update(context.Background(), p.ID, *existing); err != nil {
+		return nil, fmt.Errorf("memory update failed: %w", err)
+	}
+
+	d.logger.Info("memory.update called", "id", p.ID)
+
+	return map[string]string{"status": "ok", "id": p.ID}, nil
+}
+
+// hitToMemoryChunk converts a gorag Hit to a goharness MemoryChunk for update purposes.
+func hitToMemoryChunk(hit goragcore.Hit) *goharnessmemory.MemoryChunk {
+	chunk := &goharnessmemory.MemoryChunk{
+		ID:      hit.ID,
+		Content: hit.Content,
+	}
+
+	if hit.Metadata != nil {
+		if a, ok := hit.Metadata["agent_name"].(string); ok && a != "" {
+			chunk.AgentName = a
+		}
+		if s, ok := hit.Metadata["session_id"].(string); ok {
+			chunk.SessionID = s
+		}
+		if p, ok := hit.Metadata["project_dir"].(string); ok {
+			chunk.ProjectDir = p
+		}
+		if s, ok := hit.Metadata["summary"].(string); ok && s != "" {
+			chunk.Summary = s
+		} else {
+			chunk.Summary = hit.Title
+		}
+		if t, ok := hit.Metadata["tags"]; ok {
+			switch v := t.(type) {
+			case []string:
+				if len(v) > 0 {
+					chunk.Tags = v
+				}
+			case []any:
+				for _, tag := range v {
+					if s, ok := tag.(string); ok {
+						chunk.Tags = append(chunk.Tags, s)
+					}
+				}
+			}
+		}
+		if ts, ok := hit.Metadata["timestamp"]; ok {
+			switch v := ts.(type) {
+			case float64:
+				chunk.Timestamp = time.UnixMilli(int64(v))
+			case int64:
+				chunk.Timestamp = time.UnixMilli(v)
+			}
+		}
+		if c, ok := hit.Metadata["content"].(string); ok && c != "" {
+			chunk.Content = c
+		}
+	}
+
+	if chunk.Summary == "" {
+		chunk.Summary = hit.Title
+	}
+
+	return chunk
 }
