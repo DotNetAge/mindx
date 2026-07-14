@@ -93,11 +93,6 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 		}
 	}
 
-	gq := query.NewGraphQuery(queryStr).(*query.GraphQuery)
-	gq.SetTextQuery("") // Force vector search + entity enrichment, skip LLM text→Cypher path
-	gq.SetLimit(limit)
-	gq.SetDepth(1)
-
 	// Apply projectDir filter — default to current working directory
 	projectDir, _ := params["projectDir"].(string)
 	if projectDir == "" {
@@ -105,11 +100,11 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 			projectDir = cwd
 		}
 	}
-	if projectDir != "" {
-		regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(projectDir))))
-		gq.AddFilter("region_id", regionID)
 
-		// Pre-check: skip search if no indexed data for this region
+	// Pre-check + 预计算 regionID 供 per-token 使用
+	var regionID string
+	if projectDir != "" {
+		regionID = fmt.Sprintf("%x", sha256.Sum256([]byte(filepath.Clean(projectDir))))
 		total, countErr := t.indexer.CountByRegion(ctx, projectDir)
 		if countErr == nil && total == 0 {
 			return map[string]any{
@@ -118,21 +113,54 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 		}
 	}
 
-	hits, err := t.indexer.Search(ctx, gq)
-	if err != nil {
-		return nil, fmt.Errorf("QuickSearch 失败：%w", err)
+	// 将查询按空白符拆分为多个关键词，分别检索后合并去重。
+	// LLM 倾向于输入空格分隔的关键词而非自然语句（如 "redis 迁移 配置"），
+	// 多次查询比单次语义搜索能召回更全面的结果。
+	tokens := splitQueryTokens(queryStr)
+
+	var allHits []core.Hit
+	seen := make(map[string]bool)
+
+	for _, token := range tokens {
+		gq := query.NewGraphQuery(token).(*query.GraphQuery)
+		gq.SetTextQuery("") // Force vector search + entity enrichment, skip LLM text→Cypher path
+		gq.SetLimit(limit)
+		gq.SetDepth(1)
+
+		if regionID != "" {
+			gq.AddFilter("region_id", regionID)
+		}
+
+		hits, err := t.indexer.Search(ctx, gq)
+		if err != nil {
+			// 单个 token 查询失败，跳过
+			continue
+		}
+
+		// Fallback: retry without region_id filter when region-filtered search yields nothing
+		if len(hits) == 0 {
+			gq2 := query.NewGraphQuery(token).(*query.GraphQuery)
+			gq2.SetTextQuery("")
+			gq2.SetLimit(limit)
+			gq2.SetDepth(1)
+			hits2, err2 := t.indexer.Search(ctx, gq2)
+			if err2 == nil && len(hits2) > 0 {
+				hits = hits2
+			}
+		}
+
+		for _, h := range hits {
+			if seen[h.ID] {
+				continue
+			}
+			seen[h.ID] = true
+			allHits = append(allHits, h)
+		}
 	}
 
-	// Fallback: retry without region_id filter when region-filtered search yields nothing
-	if len(hits) == 0 {
-		gq2 := query.NewGraphQuery(queryStr).(*query.GraphQuery)
-		gq2.SetTextQuery("")
-		gq2.SetLimit(limit)
-		gq2.SetDepth(1)
-		hits2, err2 := t.indexer.Search(ctx, gq2)
-		if err2 == nil && len(hits2) > 0 {
-			hits = hits2
-		}
+	hits := allHits
+	if len(hits) > limit {
+		hits = hits[:limit]
 	}
 
 	// Filter by tags if specified (post-filter)
@@ -165,6 +193,29 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 		return "", nil
 	}
 	return formatQuickSearchResults(queryStr, hits), nil
+}
+
+// splitQueryTokens 将查询拆分为多个关键词。
+// 如果查询本身是自然语句（含空格但长度 > 50），视为完整查询不拆分。
+// 否则按空白符拆分为多个关键词，过滤掉过短的词。
+func splitQueryTokens(query string) []string {
+	if len(query) > 50 {
+		return []string{query}
+	}
+	parts := strings.Fields(query)
+	if len(parts) <= 1 {
+		return []string{query}
+	}
+	tokens := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if len(p) >= 2 {
+			tokens = append(tokens, p)
+		}
+	}
+	if len(tokens) == 0 {
+		return []string{query}
+	}
+	return tokens
 }
 
 // ── QuickSearch output formatting ─────────────────────────────────────────────────
