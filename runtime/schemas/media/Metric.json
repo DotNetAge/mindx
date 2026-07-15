@@ -1,29 +1,29 @@
 {
   "type": "object",
-  "description": "A performance metric used to measure content or account success on media platforms, such as views, engagement, or conversion rates",
+  "description": "媒体平台上的绩效指标 — 播放量、点赞数、转化率、粉丝数等",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Name of the metric, e.g. 播放量, 点赞数, 转化率, 粉丝数"
+      "description": "指标名称，例如：播放量、点赞数、转化率、粉丝数"
     },
     "metric_type": {
       "type": "string",
       "enum": [
-        "views",
-        "likes",
-        "shares",
-        "comments",
-        "followers",
-        "conversion",
-        "engagement_rate",
-        "impressions",
-        "revenue"
+        "播放量",
+        "点赞数",
+        "转化率",
+        "粉丝数",
+        "分享数",
+        "评论数",
+        "点击数",
+        "广告收入",
+        "广告成本"
       ],
-      "description": "Category of the metric"
+      "description": "指标类别，例如：播放量、点赞数、转化率、粉丝数"
     },
     "value": {
       "type": "number",
-      "description": "Numeric value of the metric"
+      "description": "指标的数值"
     },
     "unit": {
       "type": "string",
@@ -35,7 +35,7 @@
     },
     "period": {
       "type": "string",
-      "description": "Time period this metric covers, e.g. 2024-Q1, 2024年, 过去30天"
+      "description": "指标覆盖的时间周期，例如：2024-Q1、2024年、过去30天"
     }
   },
   "required": ["name"]

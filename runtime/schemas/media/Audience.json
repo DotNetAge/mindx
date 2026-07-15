@@ -8,16 +8,16 @@
     },
     "demographics": {
       "type": "string",
-      "description": "Demographic description including age range, gender, location, etc."
+      "description": "受众群体的人统计特征描述，例如年龄范围、性别、位置等"
     },
     "size_estimate": {
       "type": "string",
-      "description": "Estimated size of this audience segment, e.g. 500万+, 10K-50K followers"
+      "description": "估计的受众群体大小，例如：500万+、10K-50K粉丝"
     },
     "interests": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "List of key interests or topics this audience engages with"
+      "description": "受众群体的主要兴趣爱好或主题列表"
     },
     "platform": {
       "type": "string",

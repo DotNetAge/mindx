@@ -1,25 +1,25 @@
 {
   "type": "object",
-  "description": "Project, initiative, program, or milestone representing a planned undertaking with defined goals",
+  "description": "项目、计划、目标或里程碑，代表一个有定义目标的计划任务",
   "properties": {
-    "name": { "type": "string", "description": "Project name or code name" },
+    "name": { "type": "string", "description": "项目名称或代码名称" },
     "description": {
       "type": "string",
-      "description": "Brief description of the project scope and objectives"
+      "description": "项目范围和目标的简描述"
     },
     "owner": {
       "type": "string",
-      "description": "Project owner, sponsor, or responsible person"
+      "description": "项目负责人、赞助人或负责人"
     },
     "status": {
       "type": "string",
-      "enum": ["planned", "in_progress", "on_hold", "completed", "cancelled"],
+      "enum": ["已计划", "进行中", "已暂停", "已完成", "已取消"],
       "description": "项目当前的阶段或状态"
     },
     "start_date": {
       "type": "string",
       "format": "date",
-      "description": "Project start date (ISO 8601 format)"
+      "description": "项目开始日期（ISO 8601 格式）"
     },
     "end_date": {
       "type": "string",

@@ -1,6 +1,6 @@
 {
   "type": "object",
-  "description": "A subject, trend, or content idea that drives media conversations, including hot topics, content选题 (topic selections), and emerging trends",
+  "description": "媒体内容的热门主题、内容选题或新兴趋势",
   "properties": {
     "name": {
       "type": "string",
@@ -8,17 +8,17 @@
     },
     "category": {
       "type": "string",
-      "description": "Category of the topic, e.g. 科技, 娱乐, 社会, 商业, 生活方式"
+      "description": "主题的类别，例如：科技、娱乐、社会、商业、生活方式"
     },
     "trend_direction": {
       "type": "string",
-      "enum": ["rising", "stable", "declining"],
-      "description": "Current trend direction of this topic's popularity"
+      "enum": ["上升", "稳定", "下降"],
+      "description": "主题的流行趋势方向，例如：上升、稳定、下降"
     },
     "related_topics": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Related or subtopics associated with this topic"
+      "description": "相关的主题或子主题"
     },
     "platform": {
       "type": "string",

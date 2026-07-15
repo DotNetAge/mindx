@@ -5,7 +5,7 @@
     "name": { "type": "string", "description": "机构名称" },
     "institution_type": {
       "type": "string",
-      "enum": ["bank", "fund", "brokerage", "regulator"],
+      "enum": ["银行", "投资基金", "券商", "监管机构"],
       "description": "金融机构类型"
     },
     "region": {

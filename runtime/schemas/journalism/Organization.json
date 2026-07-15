@@ -9,15 +9,7 @@
     "org_type": {
       "type": "string",
       "description": "组织的类型",
-      "enum": [
-        "government",
-        "NGO",
-        "company",
-        "international",
-        "educational",
-        "media",
-        "military"
-      ]
+      "enum": ["政府机构", "NGO", "公司", "国际", "教育", "媒体", "军事"]
     },
     "sector": {
       "type": "string",

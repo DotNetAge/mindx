@@ -78,11 +78,19 @@ func LoadCostsFromModelsFile(path string) (*CostRegistry, error) {
 	return reg, nil
 }
 
-func CalculateCost(modelCost ModelCost, inputTokens, outputTokens, cachedInputTokens int64) float64 {
+// DefaultModelCost returns a moderate pricing for unknown models.
+func DefaultModelCost() ModelCost {
+	return ModelCost{
+		CostPer1MIn:  3.0,
+		CostPer1MOut: 15.0,
+	}
+}
+
+func CalculateCost(modelCost ModelCost, promptTokens, completionTokens, cachedPromptTokens int64) float64 {
 	cost := 0.0
 
 	// Input tokens: cached portion is excluded (already paid in a prior call)
-	chargeableInput := inputTokens - cachedInputTokens
+	chargeableInput := promptTokens - cachedPromptTokens
 	if chargeableInput < 0 {
 		chargeableInput = 0
 	}
@@ -92,7 +100,7 @@ func CalculateCost(modelCost ModelCost, inputTokens, outputTokens, cachedInputTo
 
 	// Output tokens
 	if modelCost.CostPer1MOut > 0 {
-		cost += modelCost.CostPer1MOut / 1_000_000 * float64(outputTokens)
+		cost += modelCost.CostPer1MOut / 1_000_000 * float64(completionTokens)
 	}
 
 	return cost

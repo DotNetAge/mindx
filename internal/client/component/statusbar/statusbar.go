@@ -7,9 +7,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
+
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	appcore "github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
@@ -18,27 +20,27 @@ var (
 )
 
 type StatusBar struct {
-	Width           int
-	CurrentState    string
-	BlinkOn         bool
-	TokensTotal     int
-	InputTokens     int
-	OutputTokens    int
-	CachedTokens    int
-	SessionStart    time.Time
-	SessionDuration time.Duration
-	SessionName     string
-	AgentName       string
-	ModelName       string
-	Provider        string
-	ModeLabel       string
-	Shortcuts       []data.Shortcut
-	ShowHints       bool
-	DaemonStatus    clientmsg.DaemonConnStatus
+	Width            int
+	CurrentState     string
+	BlinkOn          bool
+	TokensTotal      int
+	PromptTokens     int
+	CompletionTokens int
+	CachedTokens     int
+	SessionStart     time.Time
+	SessionDuration  time.Duration
+	SessionName      string
+	AgentName        string
+	ModelName        string
+	Provider         string
+	ModeLabel        string
+	Shortcuts        []data.Shortcut
+	ShowHints        bool
+	DaemonStatus     clientmsg.DaemonConnStatus
 
 	// CostFn overrides the default pricing lookup for cost calculation.
-	// If nil, data.GetPricing/data.CalculateCost is used as fallback.
-	CostFn func(modelName string, inputTokens, outputTokens, cachedTokens int) float64
+	// If nil, appcore.DefaultModelCost is used as fallback.
+	CostFn func(modelName string, promptTokens, completionTokens, cachedTokens int) float64
 }
 
 func New() *StatusBar {
@@ -55,10 +57,11 @@ func (s *StatusBar) Update(msg any) (*StatusBar, tea.Cmd) {
 		s.AgentName = m.AgentName
 		s.SessionName = m.SessionID
 	case clientmsg.ExecutionSummaryMsg:
-		s.InputTokens += m.TokensUsed.InputTokens
-		s.OutputTokens += m.TokensUsed.OutputTokens
+		s.PromptTokens += m.TokensUsed.PromptTokens
+		s.CompletionTokens += m.TokensUsed.CompletionTokens
 		s.CachedTokens += m.TokensUsed.CachedTokens
-		s.TokensTotal += m.TokensUsed.TotalTokens
+		// 计费口径：prompt + completion - cached，与后端 ActualTokens() 保持一致
+		s.TokensTotal += m.TokensUsed.ActualTokens()
 	case clientmsg.FinalAnswerMsg:
 		if s.SessionStart.IsZero() {
 			s.SessionDuration = 0
@@ -77,9 +80,10 @@ func (s *StatusBar) Tick() {
 
 func (s *StatusBar) Cost() float64 {
 	if s.CostFn != nil {
-		return s.CostFn(s.ModelName, s.InputTokens, s.OutputTokens, s.CachedTokens)
+		return s.CostFn(s.ModelName, s.PromptTokens, s.CompletionTokens, s.CachedTokens)
 	}
-	return data.CalculateCost(data.GetPricing(s.ModelName), s.InputTokens, s.OutputTokens, s.CachedTokens)
+	mc := appcore.DefaultModelCost()
+	return appcore.CalculateCost(mc, int64(s.PromptTokens), int64(s.CompletionTokens), int64(s.CachedTokens))
 }
 
 func formatCost(cost float64) string {

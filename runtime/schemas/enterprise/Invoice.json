@@ -27,7 +27,7 @@
     },
     "status": {
       "type": "string",
-      "enum": ["draft", "sent", "paid", "overdue", "cancelled"],
+      "enum": ["草稿", "已发送", "已支付", "逾期", "已取消"],
       "description": "发票当前的付款状态"
     },
     "line_items": {

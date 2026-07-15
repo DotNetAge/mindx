@@ -371,14 +371,16 @@ func toBool(v any) bool {
 
 func parseTokenUsage(value string, tu *session.TokenUsage) {
 	// format: "1234 (in:100 out:200 cached:50 reasoning:50)"
-	_, _ = fmt.Sscanf(value, "%d", &tu.TotalTokens)
+	// The leading number is the billable/effective total (prompt + completion - cached);
+	// TotalTokens must be the raw API total (prompt + completion).
 	if idx := strings.Index(value, "("); idx >= 0 {
 		inner := value[idx+1 : len(value)-1]
 		var in, out, cached, reasoning int
 		_, _ = fmt.Sscanf(inner, "in:%d out:%d cached:%d reasoning:%d", &in, &out, &cached, &reasoning)
-		tu.InputTokens = in
-		tu.OutputTokens = out
+		tu.PromptTokens = in
+		tu.CompletionTokens = out
 		tu.CachedTokens = cached
 		tu.ReasoningTokens = reasoning
+		tu.TotalTokens = in + out
 	}
 }

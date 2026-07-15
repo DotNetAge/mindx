@@ -69,6 +69,14 @@ func (d *Daemon) handleTranslate(_ context.Context, params json.RawMessage) (any
 
 	// ── 记录 Token 用量 ────────────────────────────────────────
 	if result.Tokens.TotalTokens > 0 {
+		cachedTokens := 0
+		if result.Tokens.PromptTokensDetails != nil {
+			cachedTokens = result.Tokens.PromptTokensDetails.CachedTokens
+		}
+		reasoningTokens := 0
+		if result.Tokens.CompletionTokensDetails != nil {
+			reasoningTokens = result.Tokens.CompletionTokensDetails.ReasoningTokens
+		}
 		record := goharnesssession.TokenUsageRecord{
 			ID:               uuid.New().String(),
 			ModelName:        modelCfg.Name,
@@ -76,6 +84,8 @@ func (d *Daemon) handleTranslate(_ context.Context, params json.RawMessage) (any
 			AgentName:        "translate",
 			PromptTokens:     result.Tokens.PromptTokens,
 			CompletionTokens: result.Tokens.CompletionTokens,
+			CachedTokens:     cachedTokens,
+			ReasoningTokens:  reasoningTokens,
 			TotalTokens:      result.Tokens.TotalTokens,
 			Timestamp:        time.Now(),
 		}

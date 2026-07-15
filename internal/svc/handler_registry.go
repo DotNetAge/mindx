@@ -118,6 +118,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"kb.file_states":             r.daemon.handleKBFileStates,
 		"kb.check_region_health":     r.daemon.handleKBCheckRegionHealth,
 		"kb.repair_region":           r.daemon.handleKBRepairRegion,
+		"kb.reset":                   r.daemon.handleKBReset,
 		"entity_tags.get":            r.daemon.handleEntityTagsGet,
 		"entity_tags.save":           r.daemon.handleEntityTagsSave,
 		"schema.get":                 r.daemon.handleSchemaGet,

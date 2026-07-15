@@ -12,7 +12,7 @@
     },
     "type": {
       "type": "string",
-      "enum": ["article", "book", "doc", "code"],
+      "enum": ["文章", "书籍", "文档", "代码"],
       "description": "参考资料的格式或类别"
     },
     "author": {

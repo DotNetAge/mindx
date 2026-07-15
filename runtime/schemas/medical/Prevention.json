@@ -1,15 +1,15 @@
 {
   "type": "object",
-  "description": "Prevention method, vaccine, or lifestyle measure",
+  "description": "预防方法、疫苗或生活方式措施",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Prevention method or measure name"
+      "description": "预防方法或措施名称"
     },
     "prevention_type": {
       "type": "string",
-      "enum": ["vaccine", "lifestyle", "screening", "education"],
-      "description": "Category of prevention method"
+      "enum": ["疫苗", "生活方式", "筛查", "教育"],
+      "description": "预防方法类别"
     },
     "description": {
       "type": "string",

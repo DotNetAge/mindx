@@ -2,15 +2,15 @@
   "type": "object",
   "description": "医疗机构：医院、监管机构、非政府组织或研究机构",
   "properties": {
-    "name": { "type": "string", "description": "Organization name" },
+    "name": { "type": "string", "description": "医疗机构名称或缩写" },
     "org_type": {
       "type": "string",
-      "enum": ["hospital", "regulator", "NGO", "research"],
-      "description": "Category of healthcare organization"
+      "enum": ["医院", "监管机构", "NGO", "研究机构"],
+      "description": "医疗机构类别"
     },
     "location": {
       "type": "string",
-      "description": "Geographic location or headquarters"
+      "description": "医疗机构的地理位置或总部位置"
     },
     "specialties": {
       "type": "array",

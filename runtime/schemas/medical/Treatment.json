@@ -5,17 +5,17 @@
     "name": { "type": "string", "description": "治疗或疗法名称" },
     "treatment_type": {
       "type": "string",
-      "enum": ["therapy", "medication", "surgery", "lifestyle"],
-      "description": "Category of treatment"
+      "enum": ["疗法", "药物", "手术", "生活方式"],
+      "description": "治疗类别"
     },
     "description": {
       "type": "string",
-      "description": "Detailed description of the treatment"
+      "description": "治疗的详细描述"
     },
     "indications": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Conditions or symptoms the treatment addresses"
+      "description": "治疗针对的条件或症状"
     },
     "side_effects": {
       "type": "array",

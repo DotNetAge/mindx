@@ -221,9 +221,9 @@ func TestHandleSessionGet_NotFound(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected map, got %T", result)
 	}
-	msgs, ok := m["messages"].([]goharnesssession.Message)
+	msgs, ok := m["messages"].([]map[string]interface{})
 	if !ok {
-		t.Fatalf("expected messages to be []Message, got %T", m["messages"])
+		t.Fatalf("expected messages to be []map[string]interface{}, got %T", m["messages"])
 	}
 	if len(msgs) != 0 {
 		t.Errorf("expected 0 messages for nonexistent session, got %d", len(msgs))

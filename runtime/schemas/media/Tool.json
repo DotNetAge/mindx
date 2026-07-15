@@ -4,7 +4,7 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "Name of the tool, e.g. 剪映, Final Cut Pro, Canva, 飞瓜数据"
+      "description": "工具名称，例如：剪辑映、Final Cut Pro、Canva、飞瓜数据"
     },
     "tool_type": {
       "type": "string",
@@ -16,15 +16,15 @@
         "management",
         "production"
       ],
-      "description": "工具类别：editor（视频/图像编辑）、analytics（数据分析）、design（平面设计）、scheduling（内容排期）、management（账号管理）、production（制作软件）"
+      "description": "工具类别，例如：editor（视频/图像编辑）、analytics（数据分析）、design（平面设计）、scheduling（内容排期）、management（账号管理）、production（制作软件）"
     },
     "platform": {
       "type": "string",
-      "description": "Supported operating system or platform, e.g. 网页端, iOS, Android, Windows, macOS"
+      "description": "支持的操作系统或平台，例如：网页端、移动端、桌面端、桌面端"
     },
     "pricing_model": {
       "type": "string",
-      "description": "Pricing model, e.g. 免费, Freemium, 订阅制, 买断制"
+      "description": "定价模型，例如：免费、Freemium、订阅制、买断制"
     },
     "features": {
       "type": "array",

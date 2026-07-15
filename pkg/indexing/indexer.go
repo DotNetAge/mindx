@@ -1015,6 +1015,7 @@ func (ix *Indexer) recordTokenUsage(ctx context.Context) {
 		ModelName:        ix.modelName,
 		PromptTokens:     tu.PromptTokens,
 		CompletionTokens: tu.CompletionTokens,
+		CachedTokens:     tu.CacheTokens,
 		TotalTokens:      tu.TotalTokens,
 		Timestamp:        time.Now(),
 	}

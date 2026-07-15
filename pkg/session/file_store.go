@@ -16,51 +16,63 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type yamlMessage struct {
-	Role             string         `yaml:"role"`
-	Content          string         `yaml:"content"`
-	Compacted        string         `yaml:"compacted,omitempty"`
-	ReasoningContent string         `yaml:"reasoning_content,omitempty"`
-	Timestamp        int64          `yaml:"timestamp"`
-	ToolCallID       string         `yaml:"tool_call_id,omitempty"`
-	ToolCalls        []yamlToolCall `yaml:"tool_calls,omitempty"`
+// encodeMsg base64-encodes content fields for safe YAML storage.
+func encodeMsg(msg goharnesssession.Message) goharnesssession.Message {
+	encoded := msg
+	encoded.Content = base64.StdEncoding.EncodeToString([]byte(msg.Content))
+	encoded.ReasoningContent = base64.StdEncoding.EncodeToString([]byte(msg.ReasoningContent))
+	if msg.Compacted != "" {
+		encoded.Compacted = base64.StdEncoding.EncodeToString([]byte(msg.Compacted))
+	}
+	return encoded
 }
 
+// decodeMsg base64-decodes content fields, falling back to raw string on error.
+func decodeMsg(msg goharnesssession.Message) goharnesssession.Message {
+	decoded := msg
+	if d, err := base64.StdEncoding.DecodeString(msg.Content); err == nil {
+		decoded.Content = string(d)
+	} else {
+		log.Printf("[WARN] session: failed to base64-decode content for role=%q: %v", msg.Role, err)
+	}
+	if d, err := base64.StdEncoding.DecodeString(msg.ReasoningContent); err == nil && msg.ReasoningContent != "" {
+		decoded.ReasoningContent = string(d)
+	} else if msg.ReasoningContent != "" {
+		log.Printf("[WARN] session: failed to base64-decode reasoning_content for role=%q: %v", msg.Role, err)
+	}
+	if msg.Compacted != "" {
+		if d, err := base64.StdEncoding.DecodeString(msg.Compacted); err == nil {
+			decoded.Compacted = string(d)
+		} else {
+			log.Printf("[WARN] session: failed to base64-decode compacted for role=%q: %v", msg.Role, err)
+		}
+	}
+	return decoded
+}
+
+var _ goharnesssession.SessionStore = (*FileSessionStore)(nil)
+
 // GetCursor retrieves the compaction cursor position from the session's metadata.
-// Returns 0 if no cursor has been set (meaning no compaction has occurred).
-//
-// This method is used internally by Session.ensureLoaded() to restore compaction state
-// across Session object lifecycles. External code should never call this directly.
 func (s *FileSessionStore) GetCursor(_ context.Context, sessionID string) (int, error) {
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
-		return 0, nil // New session, no cursor yet
+		return 0, nil
 	}
-
 	info, err := LoadSessionMeta(dirPath)
 	if err != nil {
-		return 0, nil // No meta file yet, return default
+		return 0, nil
 	}
-
 	return info.Cursor, nil
 }
 
 // SetCursor persists the compaction cursor position to the session's metadata.
-// This is called after each compaction event to ensure the cursor survives
-// across Session object lifecycles (critical for lazy-loading).
-//
-// This method is used internally by Session.tryCompact(). External code should
-// never call this directly - use session.Compact() instead.
 func (s *FileSessionStore) SetCursor(_ context.Context, sessionID string, cursor int) error {
 	dirPath := s.findSessionDir(sessionID)
 	if dirPath == "" {
 		return fmt.Errorf("session %q not found", sessionID)
 	}
-
 	info, err := LoadSessionMeta(dirPath)
 	if err != nil {
-		// Meta file doesn't exist yet - this can happen if no session meta was created
-		// Create a minimal meta with just the cursor
 		info = &goharnesssession.SessionInfo{
 			SessionID: sessionID,
 			Cursor:    cursor,
@@ -68,76 +80,8 @@ func (s *FileSessionStore) SetCursor(_ context.Context, sessionID string, cursor
 	} else {
 		info.Cursor = cursor
 	}
-
 	return SaveSessionMeta(dirPath, info)
 }
-
-type yamlToolCall struct {
-	ID        string `yaml:"id"`
-	Name      string `yaml:"name"`
-	Arguments string `yaml:"arguments"`
-}
-
-func newYamlMessage(msg goharnesssession.Message) yamlMessage {
-	var ymlTCs []yamlToolCall
-	for _, tc := range msg.ToolCalls {
-		ymlTCs = append(ymlTCs, yamlToolCall{
-			ID:        tc.ID,
-			Name:      tc.Name,
-			Arguments: tc.Arguments,
-		})
-	}
-	compacted := ""
-	if msg.Compacted != "" {
-		compacted = base64.StdEncoding.EncodeToString([]byte(msg.Compacted))
-	}
-	return yamlMessage{
-		Role:             msg.Role,
-		Content:          base64.StdEncoding.EncodeToString([]byte(msg.Content)),
-		Compacted:        compacted,
-		ReasoningContent: base64.StdEncoding.EncodeToString([]byte(msg.ReasoningContent)),
-		Timestamp:        msg.Timestamp,
-		ToolCallID:       msg.ToolCallID,
-		ToolCalls:        ymlTCs,
-	}
-}
-
-func (ym yamlMessage) toCoreMessage() goharnesssession.Message {
-	decoded, base64Err := base64.StdEncoding.DecodeString(ym.Content)
-	if base64Err != nil {
-		log.Printf("[WARN] session: failed to base64-decode content for role=%q: %v", ym.Role, base64Err)
-		decoded = []byte(ym.Content) // fallback: use raw string
-	}
-	reasoningDecoded, reasoningErr := base64.StdEncoding.DecodeString(ym.ReasoningContent)
-	if reasoningErr != nil && ym.ReasoningContent != "" {
-		log.Printf("[WARN] session: failed to base64-decode reasoning_content for role=%q: %v", ym.Role, reasoningErr)
-		reasoningDecoded = []byte(ym.ReasoningContent)
-	}
-	compactedDecoded, compactedErr := base64.StdEncoding.DecodeString(ym.Compacted)
-	if compactedErr != nil && ym.Compacted != "" {
-		log.Printf("[WARN] session: failed to base64-decode compacted for role=%q: %v", ym.Role, compactedErr)
-		compactedDecoded = []byte(ym.Compacted)
-	}
-	var tcs []goharnesssession.ToolCall
-	for _, ytc := range ym.ToolCalls {
-		tcs = append(tcs, goharnesssession.ToolCall{
-			ID:        ytc.ID,
-			Name:      ytc.Name,
-			Arguments: ytc.Arguments,
-		})
-	}
-	return goharnesssession.Message{
-		Role:             ym.Role,
-		Content:          string(decoded),
-		Compacted:        string(compactedDecoded),
-		ReasoningContent: string(reasoningDecoded),
-		Timestamp:        ym.Timestamp,
-		ToolCallID:       ym.ToolCallID,
-		ToolCalls:        tcs,
-	}
-}
-
-var _ goharnesssession.SessionStore = (*FileSessionStore)(nil)
 
 type FileSessionStore struct {
 	rootDir        string
@@ -221,18 +165,18 @@ func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentNa
 
 	path := s.sessionFilePath(agentName, sessionID)
 
-	var ymlMsgs []yamlMessage
+	var msgs []goharnesssession.Message
 	if data, err := os.ReadFile(path); err == nil {
-		if err := yaml.Unmarshal(data, &ymlMsgs); err != nil {
+		if err := yaml.Unmarshal(data, &msgs); err != nil {
 			return fmt.Errorf("parse existing session file %s: %w", path, err)
 		}
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("read session file %s: %w", path, err)
 	}
 
-	ymlMsgs = append(ymlMsgs, newYamlMessage(msg))
+	msgs = append(msgs, encodeMsg(msg))
 
-	data, err := yaml.Marshal(ymlMsgs)
+	data, err := yaml.Marshal(msgs)
 	if err != nil {
 		return fmt.Errorf("marshal messages: %w", err)
 	}
@@ -421,87 +365,6 @@ func (s *FileSessionStore) Close() error {
 	return nil
 }
 
-type yamlUsage struct {
-	Timestamp    time.Time `yaml:"timestamp"`
-	InputTokens  int       `yaml:"input_tokens"`
-	OutputTokens int       `yaml:"output_tokens"`
-	RemainTokens int       `yaml:"remain_tokens"`
-}
-
-func toYamlUsage(u goharnesssession.TokenUsage) yamlUsage {
-	return yamlUsage{
-		Timestamp:    u.Timestamp,
-		InputTokens:  u.InputTokens,
-		OutputTokens: u.OutputTokens,
-		RemainTokens: u.RemainTokens,
-	}
-}
-
-func fromYamlUsage(yu yamlUsage) goharnesssession.TokenUsage {
-	return goharnesssession.TokenUsage{
-		Timestamp:    yu.Timestamp,
-		InputTokens:  yu.InputTokens,
-		OutputTokens: yu.OutputTokens,
-		RemainTokens: yu.RemainTokens,
-	}
-}
-
-func (s *FileSessionStore) AppendTokenUsage(_ context.Context, sessionID string, usage goharnesssession.TokenUsage) error {
-	s.ioMu.Lock()
-	defer s.ioMu.Unlock()
-
-	dirPath := s.findSessionDir(sessionID)
-	if dirPath == "" {
-		return fmt.Errorf("session %q not found", sessionID)
-	}
-
-	path := filepath.Join(dirPath, "usages.yml")
-
-	var usages []yamlUsage
-	if data, err := os.ReadFile(path); err == nil {
-		if unmarshalErr := yaml.Unmarshal(data, &usages); unmarshalErr != nil {
-			return fmt.Errorf("parse usages file %s: %w", path, unmarshalErr)
-		}
-	}
-
-	usages = append(usages, toYamlUsage(usage))
-
-	data, err := yaml.Marshal(usages)
-	if err != nil {
-		return fmt.Errorf("marshal usages: %w", err)
-	}
-
-	return os.WriteFile(path, data, 0644)
-}
-
-func (s *FileSessionStore) GetTokenUsages(_ context.Context, sessionID string) ([]goharnesssession.TokenUsage, error) {
-	dirPath := s.findSessionDir(sessionID)
-	if dirPath == "" {
-		return nil, nil
-	}
-
-	path := filepath.Join(dirPath, "usages.yml")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	var yamlUsages []yamlUsage
-	if err := yaml.Unmarshal(data, &yamlUsages); err != nil {
-		return nil, fmt.Errorf("parse usages file: %w", err)
-	}
-
-	usages := make([]goharnesssession.TokenUsage, len(yamlUsages))
-	for i, yu := range yamlUsages {
-		usages[i] = fromYamlUsage(yu)
-	}
-
-	return usages, nil
-}
-
 func (s *FileSessionStore) ListSessions(ctx context.Context) ([]goharnesssession.SessionInfo, error) {
 	s.ioMu.Lock()
 	defer s.ioMu.Unlock()
@@ -571,26 +434,25 @@ func parseMessagesFromFile(path string) ([]goharnesssession.Message, error) {
 		return nil, err
 	}
 
-	var ymlMsgs []yamlMessage
-	if err := yaml.Unmarshal(data, &ymlMsgs); err != nil {
+	var msgs []goharnesssession.Message
+	if err := yaml.Unmarshal(data, &msgs); err != nil {
 		return nil, fmt.Errorf("unmarshal yaml: %w", err)
 	}
 
-	msgs := make([]goharnesssession.Message, len(ymlMsgs))
-	for i, ym := range ymlMsgs {
-		msgs[i] = ym.toCoreMessage()
+	for i := range msgs {
+		msgs[i] = decodeMsg(msgs[i])
 	}
 
 	return msgs, nil
 }
 
 func writeMessagesToFile(path string, msgs []goharnesssession.Message) error {
-	ymlMsgs := make([]yamlMessage, len(msgs))
+	encoded := make([]goharnesssession.Message, len(msgs))
 	for i, msg := range msgs {
-		ymlMsgs[i] = newYamlMessage(msg)
+		encoded[i] = encodeMsg(msg)
 	}
 
-	data, err := yaml.Marshal(ymlMsgs)
+	data, err := yaml.Marshal(encoded)
 	if err != nil {
 		return err
 	}

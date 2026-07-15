@@ -36,17 +36,15 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharn
 	}
 	tokensUsed := summary.TokensUsed
 	// Effective token consumption: cached/reused tokens should not be counted as billed usage.
-	effectiveTotal := tokensUsed.InputTokens + tokensUsed.OutputTokens - tokensUsed.CachedTokens
-	if effectiveTotal < 0 {
-		effectiveTotal = 0
-	}
+	effectiveTotal := tokensUsed.ActualTokens()
 	d.logger.Debug("sendExecutionSummary",
 		"effective_total", effectiveTotal,
-		"input", tokensUsed.InputTokens,
-		"output", tokensUsed.OutputTokens,
+		"input", tokensUsed.PromptTokens,
+		"output", tokensUsed.CompletionTokens,
 		"cached", tokensUsed.CachedTokens)
+	rawTotal := tokensUsed.PromptTokens + tokensUsed.CompletionTokens
 	tokenValue := fmt.Sprintf("%d (in:%d out:%d cached:%d reasoning:%d)",
-		effectiveTotal, tokensUsed.InputTokens, tokensUsed.OutputTokens,
+		effectiveTotal, tokensUsed.PromptTokens, tokensUsed.CompletionTokens,
 		tokensUsed.CachedTokens, tokensUsed.ReasoningTokens)
 	tableData := map[string]any{
 		"headers": []string{"Metric", "Value"},
@@ -63,11 +61,12 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharn
 		gateway.WithSessionID(sessionID),
 		gateway.WithResponseMeta(map[string]any{
 			"tokens_used": map[string]any{
-				"total_tokens":     effectiveTotal,
-				"input_tokens":     tokensUsed.InputTokens,
-				"output_tokens":    tokensUsed.OutputTokens,
-				"cached_tokens":    tokensUsed.CachedTokens,
-				"reasoning_tokens": tokensUsed.ReasoningTokens,
+				"total_tokens":      rawTotal,
+				"actual_tokens":     effectiveTotal,
+				"prompt_tokens":     tokensUsed.PromptTokens,
+				"completion_tokens": tokensUsed.CompletionTokens,
+				"cached_tokens":     tokensUsed.CachedTokens,
+				"reasoning_tokens":  tokensUsed.ReasoningTokens,
 			},
 			"iterations": summary.TotalIterations,
 			"tool_calls": summary.ToolCalls,

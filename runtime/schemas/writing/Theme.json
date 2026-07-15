@@ -8,11 +8,11 @@
     },
     "description": {
       "type": "string",
-      "description": "An explanation of what this theme encompasses"
+      "description": "主题的详细解释"
     },
     "related_themes": {
       "type": "array",
-      "description": "Thematically connected or frequently paired concepts",
+      "description": "相关主题",
       "items": {
         "type": "string"
       }

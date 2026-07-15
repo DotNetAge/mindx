@@ -1,19 +1,19 @@
 {
   "type": "object",
-  "description": "The world-building context of a narrative, encompassing time, place, society, and overarching worldview.",
+  "description": "文学作品的背景设置，涵盖时间、地点、社会和整体世界观。",
   "properties": {
     "name": {
       "type": "string",
-      "description": "A label or short identifier for this setting"
+      "description": "设置的标签或简短标识符"
     },
     "setting_type": {
       "type": "string",
-      "description": "The primary domain of the setting",
-      "enum": ["time", "place", "society", "world"]
+      "description": "设置的主要领域",
+      "enum": ["时间", "地点", "社会", "世界观"]
     },
     "description": {
       "type": "string",
-      "description": "A narrative description of the setting's atmosphere and defining features"
+      "description": "设置的详细描述"
     },
     "time_period": {
       "type": "string",
@@ -25,7 +25,7 @@
     },
     "mood": {
       "type": "string",
-      "description": "The emotional tone or atmosphere evoked by this setting"
+      "description": "设置的情感氛围或环境"
     }
   },
   "required": ["name"]

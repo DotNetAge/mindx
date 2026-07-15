@@ -1,10 +1,10 @@
 {
   "type": "object",
-  "description": "A key individual in the media ecosystem, such as a KOL, content creator, influencer, or competitor account",
+  "description": "媒体生态系统中的关键个体，例如 KOL、内容创作者、影响者或竞争对手账号",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Real name or username of the individual, e.g. 李佳琦, 罗翔说刑法"
+      "description": "真实姓名或用户名，例如：李佳琦、罗翔说刑法"
     },
     "role": {
       "type": "string",
@@ -16,11 +16,11 @@
         "celebrity",
         "expert"
       ],
-      "description": "Primary role of the person in the media context"
+      "description": "在媒体上下文中的主要角色，例如 KOL、内容创作者、影响者、竞争对手、名人或专家账号"
     },
     "platform": {
       "type": "string",
-      "description": "Main platform where this person is active"
+      "description": "主要活跃平台，例如：抖音、快手、小红书等"
     },
     "followers_count": {
       "type": "string",
@@ -28,7 +28,7 @@
     },
     "niche": {
       "type": "string",
-      "description": "Content niche or specialty, e.g. 美妆, 科技评测, 知识科普"
+      "description": "内容领域或专业，例如：美妆、科技评测、知识科普"
     },
     "account_handle": {
       "type": "string",

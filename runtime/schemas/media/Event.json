@@ -1,28 +1,28 @@
 {
   "type": "object",
-  "description": "An activity, release, or hot event in the media space, such as campaign launches, content releases, or trending social incidents",
+  "description": "媒体空间中的活动、发布或热门事件，例如广告发布、内容发布或趋势社会事件等",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Name of the event, e.g. 618大促, 春晚直播, 某品牌新品发布会"
+      "description": "事件名称，例如：618大促、春节直播、某品牌新品发布会"
     },
     "event_type": {
       "type": "string",
       "enum": [
-        "release",
-        "launch",
-        "hot_topic",
-        "campaign",
-        "conference",
-        "festival",
-        "controversy"
+        "广告发布",
+        "内容发布",
+        "热门主题",
+        "广告",
+        "会议",
+        "节日",
+        "争议"
       ],
-      "description": "Category of the event"
+      "description": "事件类别"
     },
     "date": {
       "type": "string",
       "format": "date",
-      "description": "Date when the event occurs or occurred, in YYYY-MM-DD format"
+      "description": "事件发生或发生的时间，格式为YYYY-MM-DD"
     },
     "platform": {
       "type": "string",

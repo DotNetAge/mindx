@@ -1,31 +1,24 @@
 {
   "type": "object",
-  "description": "An information source, news outlet, or media agency (e.g., Reuters, Xinhua News Agency)",
+  "description": "新闻来源、新闻机构或媒体机构",
   "properties": {
     "name": {
       "type": "string",
-      "description": "The name of the source, news outlet, or media agency"
+      "description": "来源的名称"
     },
     "source_type": {
       "type": "string",
-      "description": "The category of the source",
-      "enum": [
-        "news_outlet",
-        "agency",
-        "media",
-        "blog",
-        "social_media",
-        "official_statement"
-      ]
+      "description": "来源的类型",
+      "enum": ["新闻机构", "媒体", "博客", "社交媒体", "官方声明"]
     },
     "region": {
       "type": "string",
-      "description": "Geographic region or country the source primarily operates in or reports on"
+      "description": "来源主要运营或报道的地理区域或国家"
     },
     "reliability_rating": {
       "type": "string",
-      "description": "Reliability assessment of the source",
-      "enum": ["high", "moderate", "low", "unverified"]
+      "description": "来源的可靠性评估",
+      "enum": ["高", "中等", "低", "未验证"]
     },
     "url": {
       "type": "string",

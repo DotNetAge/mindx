@@ -10,15 +10,15 @@
       "type": "string",
       "description": "主题的类别",
       "enum": [
-        "diplomacy",
-        "economy",
-        "tech",
-        "science",
-        "society",
-        "politics",
-        "environment",
-        "culture",
-        "sports"
+        "外交",
+        "经济",
+        "科技",
+        "科学",
+        "社会",
+        "政治",
+        "环境",
+        "文化",
+        "体育"
       ]
     },
     "description": {

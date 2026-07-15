@@ -1,14 +1,14 @@
 {
   "type": "object",
-  "description": "在媒体平台上创作并发布的已发布内容，例如视频、文章或帖子"
+  "description": "在媒体平台上创作并发布的已发布内容，例如视频、文章或帖子",
   "properties": {
     "title": {
       "type": "string",
-      "description": "Title of the content piece"
+      "description": "作品的标题"
     },
     "creator": {
       "type": "string",
-      "description": "Name or handle of the creator who published this work"
+      "description": "作品的创作者姓名或句柄"
     },
     "platform": {
       "type": "string",
@@ -17,26 +17,26 @@
     "url": {
       "type": "string",
       "format": "uri",
-      "description": "Link to the published work"
+      "description": "作品的 URL 或链接或视频平台的视频 ID"
     },
     "publish_date": {
       "type": "string",
       "format": "date",
-      "description": "Date when the work was published, in YYYY-MM-DD format"
+      "description": "作品的发布日期，格式为 YYYY-MM-DD"
     },
     "format": {
       "type": "string",
-      "description": "Content format of this work, e.g. 短视频, 图文, 播客"
+      "description": "作品的内容格式，例如：短视频、图文、播客"
     },
     "performance_metrics": {
       "type": "object",
-      "description": "Key performance indicators for this work",
+      "description": "作品的关键绩效指标",
       "properties": {
         "views": { "type": "integer", "description": "观看/播放次数" },
         "likes": { "type": "integer", "description": "点赞数" },
         "shares": {
           "type": "integer",
-          "description": "Number of shares/retweets"
+          "description": "分享数"
         },
         "comments": { "type": "integer", "description": "评论数" }
       },

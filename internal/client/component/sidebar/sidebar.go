@@ -12,6 +12,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/client/style"
+	appcore "github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
@@ -37,19 +38,17 @@ type Sidebar struct {
 	vp      viewport.Model
 	welcome *welcome.WelcomePanel
 
-	InputTokens  int
-	OutputTokens int
-	CachedTokens int
-	TotalTokens  int
-	ModelName    string
+	PromptTokens     int
+	CompletionTokens int
+	CachedTokens     int
+	TotalTokens      int
+	ModelName        string
 
 	FileChanges []data.FileChange
 
-	// CostFn overrides the default pricing lookup for cost calculation.
-	// If nil, data.GetPricing/data.CalculateCost is used as fallback.
-	// CostFunc model-specific cost breakdown. If nil, data.GetPricing/data.CalculateCost is used.
+	// CostFunc model-specific cost breakdown. If nil, appcore.DefaultModelCost is used.
 	// Returns (inputCost, outputCost, cachedCost) separately for detailed display.
-	CostFunc func(modelName string, inputTokens, outputTokens, cachedTokens int) (inputCost, outputCost, cachedCost float64)
+	CostFunc func(modelName string, promptTokens, completionTokens, cachedTokens int) (inputCost, outputCost, cachedCost float64)
 }
 
 func New() *Sidebar {
@@ -99,11 +98,16 @@ func (s *Sidebar) SetWelcomeData(d data.WelcomeData) {
 // AddTokenUsage accumulates token counts from an LLM call into the sidebar's
 // running total. Called on every ExecutionSummaryMsg so the fee detail section
 // reflects the cumulative consumption across the entire session.
-func (s *Sidebar) AddTokenUsage(inputTokens, outputTokens, cachedTokens, totalTokens int, modelName string) {
-	s.InputTokens += inputTokens
-	s.OutputTokens += outputTokens
+func (s *Sidebar) AddTokenUsage(promptTokens, completionTokens, cachedTokens, totalTokens int, modelName string) {
+	s.PromptTokens += promptTokens
+	s.CompletionTokens += completionTokens
 	s.CachedTokens += cachedTokens
-	s.TotalTokens += totalTokens
+	// 计费口径：prompt + completion - cached；totalTokens 参数为原始 API total，仅作参考
+	actualTokens := promptTokens + completionTokens - cachedTokens
+	if actualTokens < 0 {
+		actualTokens = 0
+	}
+	s.TotalTokens += actualTokens
 	if modelName != "" {
 		s.ModelName = modelName
 	}
@@ -164,20 +168,24 @@ func (s *Sidebar) buildContent() string {
 	if s.TotalTokens > 0 {
 		var inputCost, outputCost, cachedCost, totalCost float64
 		if s.CostFunc != nil {
-			inputCost, outputCost, cachedCost = s.CostFunc(s.ModelName, s.InputTokens, s.OutputTokens, s.CachedTokens)
+			inputCost, outputCost, cachedCost = s.CostFunc(s.ModelName, s.PromptTokens, s.CompletionTokens, s.CachedTokens)
 			totalCost = inputCost + outputCost + cachedCost
 		} else {
-			p := data.GetPricing(s.ModelName)
-			inputCost = float64(s.InputTokens) / 1_000_000 * p.InputPrice
-			outputCost = float64(s.OutputTokens) / 1_000_000 * p.OutputPrice
-			cachedCost = float64(s.CachedTokens) / 1_000_000 * p.CachedPrice
-			totalCost = inputCost + outputCost + cachedCost
+			mc := appcore.DefaultModelCost()
+			netInput := s.PromptTokens - s.CachedTokens
+			if netInput < 0 {
+				netInput = 0
+			}
+			inputCost = mc.CostPer1MIn / 1_000_000 * float64(netInput)
+			outputCost = mc.CostPer1MOut / 1_000_000 * float64(s.CompletionTokens)
+			cachedCost = 0
+			totalCost = inputCost + outputCost
 		}
 
 		var costParts []string
 		costParts = append(costParts, boldLabel.Render(i18n.T("client.ui.sidebar.cost.detail")))
-		costParts = append(costParts, fmt.Sprintf(i18n.T("client.ui.sidebar.cost.input"), formatTokens(s.InputTokens), formatCost(inputCost)))
-		costParts = append(costParts, fmt.Sprintf(i18n.T("client.ui.sidebar.cost.output"), formatTokens(s.OutputTokens), formatCost(outputCost)))
+		costParts = append(costParts, fmt.Sprintf(i18n.T("client.ui.sidebar.cost.input"), formatTokens(s.PromptTokens), formatCost(inputCost)))
+		costParts = append(costParts, fmt.Sprintf(i18n.T("client.ui.sidebar.cost.output"), formatTokens(s.CompletionTokens), formatCost(outputCost)))
 		if s.CachedTokens > 0 {
 			costParts = append(costParts, fmt.Sprintf(i18n.T("client.ui.sidebar.cost.cached"), formatTokens(s.CachedTokens), formatCost(cachedCost)))
 		}

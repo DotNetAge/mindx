@@ -203,9 +203,9 @@ func newClientAskHandlers(
 			_ = gw.SendResponse(clientID, gateway.RespTaskSummary, i18n.T("svc.event.task.summary"), md,
 				gateway.WithSessionID(sid),
 				gateway.WithResponseMeta(map[string]any{
-					"input_tokens":  data.TokenUsage.InputTokens,
-					"output_tokens": data.TokenUsage.OutputTokens,
-					"agent_name":    getAgentName(),
+					"prompt_tokens":     data.TokenUsage.PromptTokens,
+					"completion_tokens": data.TokenUsage.CompletionTokens,
+					"agent_name":        getAgentName(),
 				}))
 		},
 		LLMTimeout: func(data goharnessevents.LLMTimeoutData) {
@@ -283,11 +283,11 @@ func newBroadcastAskHandlers(
 				"total_iterations": data.TotalIterations, "tool_calls": data.ToolCalls,
 				"tools_used": data.ToolsUsed, "total_duration": data.TotalDuration.String(),
 				"tokens_used": map[string]any{
-					"total_tokens":     data.TokensUsed.TotalTokens,
-					"input_tokens":     data.TokensUsed.InputTokens,
-					"output_tokens":    data.TokensUsed.OutputTokens,
-					"cached_tokens":    data.TokensUsed.CachedTokens,
-					"reasoning_tokens": data.TokensUsed.ReasoningTokens,
+					"total_tokens":      data.TokensUsed.TotalTokens,
+					"prompt_tokens":     data.TokensUsed.PromptTokens,
+					"completion_tokens": data.TokensUsed.CompletionTokens,
+					"cached_tokens":     data.TokensUsed.CachedTokens,
+					"reasoning_tokens":  data.TokensUsed.ReasoningTokens,
 				},
 				"termination_reason": data.TerminationReason,
 			})
@@ -328,9 +328,9 @@ func newBroadcastAskHandlers(
 			d.broadcastScheduleEvent(sessionID, agent, "task_summary", map[string]any{
 				"summary": data.Summary,
 				"token_usage": map[string]any{
-					"input_tokens":  data.TokenUsage.InputTokens,
-					"output_tokens": data.TokenUsage.OutputTokens,
-					"total_tokens":  data.TokenUsage.TotalTokens,
+					"prompt_tokens":     data.TokenUsage.PromptTokens,
+					"completion_tokens": data.TokenUsage.CompletionTokens,
+					"total_tokens":      data.TokenUsage.TotalTokens,
 				},
 			})
 		},

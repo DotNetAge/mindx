@@ -1,19 +1,19 @@
 {
   "type": "object",
-  "description": "A literary device or technique used to achieve a specific artistic effect in writing.",
+  "description": "文学作品中使用的具体艺术技巧或修辞语言模式。",
   "properties": {
     "name": {
       "type": "string",
-      "description": "The name of the literary technique, e.g. 隐喻, 伏笔, 对话, 倒叙"
+      "description": "写作技巧, 例如：隐喻, 伏笔, 对话, 倒叙"
     },
     "technique_type": {
       "type": "string",
-      "description": "The category of literary device",
-      "enum": ["metaphor", "foreshadowing", "dialogue", "flashback"]
+      "description": "写作技巧的类别",
+      "enum": ["隐喻", "伏笔", "对话", "倒叙"]
     },
     "description": {
       "type": "string",
-      "description": "An explanation of how this technique operates in a text"
+      "description": "写作技巧的详细解释"
     },
     "effect": {
       "type": "string",

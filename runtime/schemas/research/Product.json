@@ -8,7 +8,7 @@
     "description": { "type": "string", "description": "产品描述" },
     "stage": {
       "type": "string",
-      "enum": ["development", "launch", "mature", "decline"],
+      "enum": ["开发", "上市", "成熟", "衰退"],
       "description": "产品生命周期阶段"
     },
     "competitors": {

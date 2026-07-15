@@ -8,12 +8,12 @@
     },
     "genre_type": {
       "type": "string",
-      "description": "The broad category of the genre",
-      "enum": ["fiction", "non-fiction", "poetry", "drama"]
+      "description": "体裁的广义类别",
+      "enum": ["小说", "非小说", "诗", "戏剧"]
     },
     "description": {
       "type": "string",
-      "description": "A concise description of the genre's defining characteristics"
+      "description": "体裁的定义特征的简洁描述"
     },
     "examples": {
       "type": "array",

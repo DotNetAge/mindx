@@ -1210,7 +1210,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		// Broadcast current context window usage after each LLM request.
 		// This allows the UI to update the context usage indicator in real time.
 		if d.gw != nil {
-			usage := s.ContextUsage()
+			usage := s.ContextUsage(d.buildSessionPricing())
 			// If maxWindowSize is 0 (not configured on session), fall back to model context_length
 			if usage.MaxWindowSize == 0 {
 				if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil && modelCfg.ContextLength > 0 {
@@ -1229,6 +1229,8 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 					"message_count":        usage.MessageCount,
 					"cursor":               usage.Cursor,
 					"active_message_count": usage.ActiveMessageCount,
+					"total_actual_tokens":  usage.TotalActualTokens,
+					"total_cost":           usage.TotalCost,
 				},
 			})
 		}

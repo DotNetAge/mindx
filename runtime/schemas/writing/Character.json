@@ -9,7 +9,7 @@
     "role": {
       "type": "string",
       "description": "角色在故事中的叙事功能",
-      "enum": ["protagonist", "antagonist", "supporting"]
+      "enum": ["主角", "反角", "支持角"]
     },
     "archetype": {
       "type": "string",

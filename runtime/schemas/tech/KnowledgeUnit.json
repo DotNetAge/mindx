@@ -5,7 +5,7 @@
     "name": { "type": "string", "description": "知识点的名称" },
     "type": {
       "type": "string",
-      "enum": ["method", "process", "technique", "formula", "framework"],
+      "enum": ["方法", "流程", "技术", "公式", "框架"],
       "description": "知识点的类别"
     },
     "description": {

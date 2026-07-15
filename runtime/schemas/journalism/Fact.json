@@ -9,7 +9,7 @@
     "category": {
       "type": "string",
       "description": "事实信息的类型",
-      "enum": ["data", "statistic", "verified_info", "historical", "legal"]
+      "enum": ["数据", "统计", "已核实信息", "历史", "法律"]
     },
     "source": {
       "type": "string",

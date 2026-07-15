@@ -1,19 +1,19 @@
 {
   "type": "object",
-  "description": "Supplier, vendor, distributor, or subcontractor providing goods or services to the organization",
+  "description": "供应商、供应商、分销商或子承包，为组织提供商品或服务",
   "properties": {
-    "name": { "type": "string", "description": "Supplier or company name" },
+    "name": { "type": "string", "description": "供应商或公司名称" },
     "contact_person": {
       "type": "string",
-      "description": "Primary contact person name or email at the supplier"
+      "description": "供应商的主要联系人姓名或电子邮件"
     },
     "category": {
       "type": "string",
-      "description": "Category of supplied goods or services (e.g., raw materials, IT services, logistics)"
+      "description": "供应商提供的商品或服务的类别（如原材料、IT服务、物流等）"
     },
     "status": {
       "type": "string",
-      "enum": ["active", "inactive", "suspended", "former"],
+      "enum": ["活跃", "不活跃", "暂停", "前供应商"],
       "description": "与供应商的当前合作状态"
     },
     "products_services": {

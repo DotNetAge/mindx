@@ -5,7 +5,7 @@
     "name": { "type": "string", "description": "资产名称" },
     "type": {
       "type": "string",
-      "enum": ["stock", "bond", "real_estate", "commodity", "crypto", "other"],
+      "enum": ["股票", "债券", "房地产", "大宗商品", "加密货币", "其他"],
       "description": "资产类别"
     },
     "ticker": {

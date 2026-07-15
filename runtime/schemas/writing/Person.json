@@ -8,12 +8,12 @@
     },
     "role": {
       "type": "string",
-      "description": "The person's primary professional role in the literary field",
-      "enum": ["author", "critic", "editor"]
+      "description": "人物的主要专业角色，如作者、评论家或编辑",
+      "enum": ["作者", "评论家", "编辑"]
     },
     "notable_works": {
       "type": "array",
-      "description": "Significant works associated with this person",
+      "description": "该人物主要关联的显著作品",
       "items": {
         "type": "string"
       }
@@ -24,7 +24,7 @@
     },
     "nationality": {
       "type": "string",
-      "description": "The person's nationality or cultural background"
+      "description": "人物的国籍或文化背景"
     },
     "period": {
       "type": "string",

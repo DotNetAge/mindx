@@ -438,3 +438,27 @@ func (d *Daemon) handleKBCount(_ context.Context, params json.RawMessage) (any, 
 	}
 	return map[string]any{"total": total}, nil
 }
+
+// ---------------------------------------------------------------------------
+// kb.reset — 重置知识库，清除 GraphIndexer 下的全部索引数据
+// ---------------------------------------------------------------------------
+
+func (d *Daemon) handleKBReset(ctx context.Context, _ json.RawMessage) (any, error) {
+	if d.graphIndexer == nil {
+		reason := "GraphIndexer not initialized"
+		if d.graphIndexerErr != nil {
+			reason = d.graphIndexerErr.Error()
+		}
+		d.logger.Warn("kb.reset rejected: " + reason)
+		return nil, fmt.Errorf("knowledge base not available: %s", reason)
+	}
+
+	d.logger.Info("kb.reset: clearing all index data from GraphIndexer")
+	if err := d.graphIndexer.Clear(ctx); err != nil {
+		d.logger.Error("kb.reset: GraphIndexer.Clear failed", err)
+		return nil, fmt.Errorf("kb reset failed: %w", err)
+	}
+
+	d.logger.Info("kb.reset: completed successfully")
+	return map[string]any{"status": "ok"}, nil
+}

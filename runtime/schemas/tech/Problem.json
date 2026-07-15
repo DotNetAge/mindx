@@ -12,7 +12,7 @@
     },
     "severity": {
       "type": "string",
-      "enum": ["critical", "major", "minor"],
+      "enum": ["严重", "主要", "次要"],
       "description": "问题的影响级别"
     },
     "status": {

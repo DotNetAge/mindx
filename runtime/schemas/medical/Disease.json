@@ -7,17 +7,17 @@
     "symptoms": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Associated symptoms"
+      "description": "关联的症状"
     },
     "risk_factors": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Risk factors contributing to the disease"
+      "description": "疾病 risk factor"
     },
     "common_treatments": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Common treatments or therapies"
+      "description": "常见的治疗或治疗"
     },
     "specialty": { "type": "string", "description": "医学专科" }
   },

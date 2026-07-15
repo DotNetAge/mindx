@@ -5,7 +5,7 @@
     "name": { "type": "string", "description": "事件名称或标题" },
     "event_type": {
       "type": "string",
-      "enum": ["rate_decision", "earnings", "IPO", "merger"],
+      "enum": ["利率决议", "财报发布", "IPO", "并购"],
       "description": "事件类别"
     },
     "date": {
@@ -14,7 +14,7 @@
     },
     "impact_level": {
       "type": "string",
-      "enum": ["low", "medium", "high"],
+      "enum": ["低", "中", "高"],
       "description": "预估的市场影响程度"
     },
     "affected_assets": {

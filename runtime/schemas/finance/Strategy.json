@@ -1,11 +1,11 @@
 {
   "type": "object",
-  "description": "投资或交易策略 — 定期定额投资、对冲、价值投资、动量交易"
+  "description": "投资或交易策略 — 定期定额投资、对冲、价值投资、动量交易",
   "properties": {
     "name": { "type": "string", "description": "策略名称" },
     "strategy_type": {
       "type": "string",
-      "enum": ["investment", "trading", "hedging"],
+      "enum": ["定期定额投资", "交易", "对冲"],
       "description": "策略类别"
     },
     "description": {

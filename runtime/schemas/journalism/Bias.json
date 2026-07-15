@@ -9,14 +9,7 @@
     "bias_type": {
       "type": "string",
       "description": "偏见的类别",
-      "enum": [
-        "political",
-        "cultural",
-        "corporate",
-        "national",
-        "ideological",
-        "sensationalism"
-      ]
+      "enum": ["政治", "文化", "公司", "国家", "意识形态", "情绪化"]
     },
     "direction": {
       "type": "string",

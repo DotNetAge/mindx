@@ -1,11 +1,11 @@
 {
   "type": "object",
-  "description": "金融中的风险因素 — 波动率、信用风险、通胀风险、流动性风险、市场风险"
+  "description": "金融中的风险因素 — 波动率、信用风险、通胀风险、流动性风险、市场风险",
   "properties": {
     "name": { "type": "string", "description": "风险因素名称" },
     "risk_type": {
       "type": "string",
-      "enum": ["market", "credit", "liquidity", "inflation", "volatility"],
+      "enum": ["波动率", "信用风险", "通胀风险", "流动性风险", "市场风险"],
       "description": "风险类别"
     },
     "description": {
@@ -14,7 +14,7 @@
     },
     "severity": {
       "type": "string",
-      "enum": ["low", "medium", "high", "critical"],
+      "enum": ["低", "中", "高", "严重"],
       "description": "风险严重程度"
     },
     "mitigation_methods": {

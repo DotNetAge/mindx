@@ -1,11 +1,11 @@
 {
   "type": "object",
-  "description": "金融市场或交易所 — 证券交易所、债券市场、商品市场、外汇市场、衍生品市场"
+  "description": "金融市场或交易所 — 证券交易所、债券市场、商品市场、外汇市场、衍生品市场",
   "properties": {
     "name": { "type": "string", "description": "市场或交易所名称" },
     "market_type": {
       "type": "string",
-      "enum": ["stock", "bond", "commodity", "derivative", "forex"],
+      "enum": ["证券交易所", "债券市场", "商品市场", "外汇市场", "外汇市场"],
       "description": "金融市场类型"
     },
     "region": {

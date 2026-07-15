@@ -1,37 +1,31 @@
 {
   "type": "object",
-  "description": "A statement, allegation, or assertion made by a figure or entity in news coverage",
+  "description": "新闻中出现的声明、指控或断言",
   "properties": {
     "claim_text": {
       "type": "string",
-      "description": "The full text of the claim or statement"
+      "description": "声明或断言的完整文本"
     },
     "claimant": {
       "type": "string",
-      "description": "The person or entity making the claim"
+      "description": "声明或断言的主体"
     },
     "date": {
       "type": "string",
-      "description": "The date the claim was made (ISO 8601 format preferred)"
+      "description": "声明或断言的日期（ISO 8601 格式优先）"
     },
     "context": {
       "type": "string",
-      "description": "The context in which the claim was made (e.g., press conference, interview, social media post)"
+      "description": "声明或断言的上下文（如新闻会议、面试、社交媒体帖子等）"
     },
     "verification_status": {
       "type": "string",
-      "description": "Current verification status of the claim",
-      "enum": [
-        "verified",
-        "unverified",
-        "false",
-        "partially_true",
-        "misleading"
-      ]
+      "description": "声明或断言的当前验证状态",
+      "enum": ["已验证", "未验证", "错误", "部分真实", "误导性"]
     },
     "evidence": {
       "type": "array",
-      "description": "支持或反驳该声明的证据",
+      "description": "支持或反驳该声明或断言的证据",
       "items": {
         "type": "string"
       }

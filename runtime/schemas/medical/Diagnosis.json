@@ -8,17 +8,17 @@
     },
     "diagnosis_type": {
       "type": "string",
-      "enum": ["criteria", "test", "biomarker", "imaging"],
+      "enum": ["标准", "检测", "生物标志物", "影像"],
       "description": "诊断方法类别"
     },
     "description": {
       "type": "string",
-      "description": "Detailed description of the diagnostic method"
+      "description": "诊断方法的详细描述"
     },
     "conditions_diagnosed": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Conditions this method helps diagnose"
+      "description": "此方法帮助诊断的条件"
     },
     "accuracy": {
       "type": "string",

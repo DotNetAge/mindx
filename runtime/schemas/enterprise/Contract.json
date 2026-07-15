@@ -27,7 +27,7 @@
     },
     "status": {
       "type": "string",
-      "enum": ["draft", "active", "expired", "terminated", "renewed"],
+      "enum": ["草稿", "生效中", "已过期", "已终止", "已续签"],
       "description": "合同当前的生命周期状态"
     },
     "key_terms": {

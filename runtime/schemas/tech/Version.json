@@ -22,7 +22,7 @@
     },
     "status": {
       "type": "string",
-      "description": "发布成熟度（例如 alpha、beta、release-candidate、stable、deprecated）"
+      "description": "发布成熟度（例如 alpha 版本、beta 版本、候选版、稳定、弃用）"
     }
   },
   "required": ["version_number", "status"]

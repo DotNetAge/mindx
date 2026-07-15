@@ -8,7 +8,7 @@
     },
     "anatomy_type": {
       "type": "string",
-      "enum": ["organ", "tissue", "system", "structure"],
+      "enum": ["器官", "组织", "系统", "结构"],
       "description": "解剖实体类别"
     },
     "description": {

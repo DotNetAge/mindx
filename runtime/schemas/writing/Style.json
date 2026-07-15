@@ -1,19 +1,19 @@
 {
   "type": "object",
-  "description": "The narrative voice, writing style, and perspective employed in a literary work.",
+  "description": "文学作品的叙事风格，包括视角、语气、风格特征等。",
   "properties": {
     "name": {
       "type": "string",
-      "description": "A label or identifier for this style or voice"
+      "description": "写作风格的名称"
     },
     "perspective": {
       "type": "string",
       "description": "故事讲述的视角",
-      "enum": ["first_person", "third_person", "omniscient"]
+      "enum": ["第一人称", "第三人称", "全知"]
     },
     "voice_tone": {
       "type": "string",
-      "description": "The prevailing tone or attitude of the narration, e.g. formal, lyrical, colloquial, ironic"
+      "description": "叙事的语气或情感"
     },
     "stylistic_markers": {
       "type": "array",

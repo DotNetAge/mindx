@@ -4,7 +4,7 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "A short identifier or label for this plot element or storyline"
+      "description": "情节要素或故事线的简短标识符或标签"
     },
     "story": {
       "type": "string",
@@ -12,13 +12,8 @@
     },
     "conflict_type": {
       "type": "string",
-      "description": "The fundamental type of conflict driving the narrative",
-      "enum": [
-        "person_vs_person",
-        "person_vs_self",
-        "person_vs_society",
-        "person_vs_nature"
-      ]
+      "description": "冲突的基本类型",
+      "enum": ["人物_vs人物", "人物_vs自己", "人物_vs社会", "人物_vs自然"]
     },
     "structure_beat": {
       "type": "string",

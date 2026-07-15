@@ -70,6 +70,8 @@ type ContextWindowUsage struct {
 	MessageCount       int     `json:"message_count"`
 	Cursor             int     `json:"cursor"`
 	ActiveMessageCount int     `json:"active_message_count"`
+	TotalActualTokens  int64   `json:"total_actual_tokens"`
+	TotalCost          float64 `json:"total_cost"`
 }
 
 func (c *Client) SessionCreate(agent, projectDir string) (json.RawMessage, error) {

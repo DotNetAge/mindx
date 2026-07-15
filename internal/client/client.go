@@ -408,18 +408,23 @@ func (m *rootModel) loadSessionTokenUsage(sessionID, agentName string) {
 		totalInput += r.PromptTokens
 		totalOutput += r.CompletionTokens
 		totalCached += r.CachedTokens
-		totalAll += r.TotalTokens
+		// 计费口径：prompt + completion - cached，与后端 chargeableTokens 保持一致
+		actual := r.PromptTokens + r.CompletionTokens - r.CachedTokens
+		if actual < 0 {
+			actual = 0
+		}
+		totalAll += actual
 	}
 
 	// Reset and seed StatusBar
 	m.statusBar.TokensTotal = totalAll
-	m.statusBar.InputTokens = totalInput
-	m.statusBar.OutputTokens = totalOutput
+	m.statusBar.PromptTokens = totalInput
+	m.statusBar.CompletionTokens = totalOutput
 	m.statusBar.CachedTokens = totalCached
 
 	// Reset and seed Sidebar
-	m.sidebar.InputTokens = totalInput
-	m.sidebar.OutputTokens = totalOutput
+	m.sidebar.PromptTokens = totalInput
+	m.sidebar.CompletionTokens = totalOutput
 	m.sidebar.CachedTokens = totalCached
 	m.sidebar.TotalTokens = totalAll
 	if len(records) > 0 {
@@ -479,42 +484,34 @@ func (m *rootModel) wirePricing() {
 		return
 	}
 
-	// StatusBar: total cost function using CostRegistry or hardcoded fallback
-	m.statusBar.CostFn = func(modelName string, inputTokens, outputTokens, cachedTokens int) float64 {
+	// StatusBar: total cost function using CostRegistry or default fallback
+	m.statusBar.CostFn = func(modelName string, promptTokens, completionTokens, cachedTokens int) float64 {
 		costs := m.app.Costs()
+		mc := appcore.DefaultModelCost()
 		if costs != nil {
-			if mc, ok := costs.Get(modelName); ok {
-				return appcore.CalculateCost(mc, int64(inputTokens), int64(outputTokens), int64(cachedTokens))
+			if c, ok := costs.Get(modelName); ok {
+				mc = c
 			}
 		}
-		return data.CalculateCost(data.GetPricing(modelName), inputTokens, outputTokens, cachedTokens)
+		return appcore.CalculateCost(mc, int64(promptTokens), int64(completionTokens), int64(cachedTokens))
 	}
 
-	// Sidebar: per-component cost breakdown using CostRegistry or hardcoded fallback
-	m.sidebar.CostFunc = func(modelName string, inputTokens, outputTokens, cachedTokens int) (float64, float64, float64) {
+	// Sidebar: per-component cost breakdown using CostRegistry or default fallback
+	m.sidebar.CostFunc = func(modelName string, promptTokens, completionTokens, cachedTokens int) (float64, float64, float64) {
 		costs := m.app.Costs()
+		mc := appcore.DefaultModelCost()
 		if costs != nil {
-			if mc, ok := costs.Get(modelName); ok {
-				inputCost := 0.0
-				if mc.CostPer1MIn > 0 {
-					inputCost = mc.CostPer1MIn / 1_000_000 * float64(inputTokens)
-				}
-				outputCost := 0.0
-				if mc.CostPer1MOut > 0 {
-					outputCost = mc.CostPer1MOut / 1_000_000 * float64(outputTokens)
-				}
-				cachedCost := 0.0
-				if mc.CostPer1MInCached > 0 && cachedTokens > 0 {
-					cachedCost = mc.CostPer1MInCached / 1_000_000 * float64(cachedTokens)
-				}
-				return inputCost, outputCost, cachedCost
+			if c, ok := costs.Get(modelName); ok {
+				mc = c
 			}
 		}
-		p := data.GetPricing(modelName)
-		inputCost := float64(inputTokens) / 1_000_000 * p.InputPrice
-		outputCost := float64(outputTokens) / 1_000_000 * p.OutputPrice
-		cachedCost := float64(cachedTokens) / 1_000_000 * p.CachedPrice
-		return inputCost, outputCost, cachedCost
+		netInput := promptTokens - cachedTokens
+		if netInput < 0 {
+			netInput = 0
+		}
+		inputCost := mc.CostPer1MIn / 1_000_000 * float64(netInput)
+		outputCost := mc.CostPer1MOut / 1_000_000 * float64(completionTokens)
+		return inputCost, outputCost, 0
 	}
 }
 
@@ -933,8 +930,8 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	case clientmsg.ExecutionSummaryMsg:
 		m.statusBar.Update(msg)
 		m.sidebar.AddTokenUsage(
-			msg.TokensUsed.InputTokens,
-			msg.TokensUsed.OutputTokens,
+			msg.TokensUsed.PromptTokens,
+			msg.TokensUsed.CompletionTokens,
 			msg.TokensUsed.CachedTokens,
 			msg.TokensUsed.TotalTokens,
 			m.statusBar.ModelName,
@@ -1259,11 +1256,16 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		})
 		var tokenUsage goharnesssession.TokenUsage
 		ask.OnTokenUsageRecorded(func(d goharnesssession.TokenUsageRecord) {
-			tokenUsage.InputTokens += d.PromptTokens
-			tokenUsage.OutputTokens += d.CompletionTokens
+			tokenUsage.PromptTokens += d.PromptTokens
+			tokenUsage.CompletionTokens += d.CompletionTokens
 			tokenUsage.CachedTokens += d.CachedTokens
 			tokenUsage.ReasoningTokens += d.ReasoningTokens
-			tokenUsage.TotalTokens += d.TotalTokens
+			// 累计计费口径，与后端 chargeableTokens 保持一致
+			actual := d.PromptTokens + d.CompletionTokens - d.CachedTokens
+			if actual < 0 {
+				actual = 0
+			}
+			tokenUsage.TotalTokens += actual
 			tokenUsage.Timestamp = d.Timestamp
 			m.program.Send(clientmsg.ExecutionSummaryMsg{
 				SessionID:  sessionID,

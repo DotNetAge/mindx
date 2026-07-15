@@ -1,15 +1,15 @@
 {
   "type": "object",
-  "description": "A geographic location, region, or country relevant to news coverage",
+  "description": "新闻中出现的地理地点、区域或国家",
   "properties": {
     "name": {
       "type": "string",
-      "description": "The name of the location (country, region, city, or site)"
+      "description": "地点的名称"
     },
     "location_type": {
       "type": "string",
-      "description": "The type of geographic entity",
-      "enum": ["country", "region", "city", "site", "district", "landmark"]
+      "description": "地理实体的类型",
+      "enum": ["国家", "区域", "城市", "地点", "区县", "地标"]
     },
     "coordinates": {
       "type": "object",

@@ -5,7 +5,7 @@
     "name": { "type": "string", "description": "指标名称" },
     "metric_type": {
       "type": "string",
-      "enum": ["return", "ratio", "volatility"],
+      "enum": ["收益率", "夏普比率", "波动率", "ROI", "阿尔法", "贝塔"],
       "description": "指标类别"
     },
     "value": { "type": "number", "description": "指标的数值" },

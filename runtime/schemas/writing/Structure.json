@@ -1,26 +1,26 @@
 {
   "type": "object",
-  "description": "The narrative structure that organizes a story's sequence and pacing.",
+  "description": "文学作品的叙事结构，组织故事的顺序和节奏。",
   "properties": {
     "name": {
       "type": "string",
-      "description": "The name of the structure type, e.g. 三幕式, 起承转合, 非线性"
+      "description": "结构模式的名称"
     },
     "structure_type": {
       "type": "string",
       "description": "结构模式的标准化标签",
-      "enum": ["three_act", "kishotenketsu", "nonlinear"]
+      "enum": ["三幕式", "起承转合", "非线性"]
     },
     "parts": {
       "type": "array",
-      "description": "Ordered sections or phases that make up this structure",
+      "description": "结构模式的组成部分",
       "items": {
         "type": "string"
       }
     },
     "purpose": {
       "type": "string",
-      "description": "The narrative or emotional function this structure serves"
+      "description": "结构模式的功能"
     },
     "example_works": {
       "type": "array",

@@ -5,7 +5,7 @@
     "name": { "type": "string", "description": "客户或账户名称" },
     "type": {
       "type": "string",
-      "enum": ["customer", "client", "partner", "vendor"],
+      "enum": ["客户", "甲方", "合作伙伴", "供应商"],
       "description": "关系类型，界定商业关系的性质"
     },
     "industry": {
@@ -18,7 +18,7 @@
     },
     "status": {
       "type": "string",
-      "enum": ["active", "inactive", "former"],
+      "enum": ["生效中", "已停用", "已停用"],
       "description": "与该客户的当前合作状态"
     }
   },

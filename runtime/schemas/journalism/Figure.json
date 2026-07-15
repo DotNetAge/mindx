@@ -1,23 +1,15 @@
 {
   "type": "object",
-  "description": "A person or entity involved in a news story, such as a politician, celebrity, witness, or expert",
+  "description": "新闻中出现的人物或实体",
   "properties": {
     "name": {
       "type": "string",
-      "description": "The full name of the figure"
+      "description": "人物的全名"
     },
     "role": {
       "type": "string",
-      "description": "The figure's primary role in the context of the news",
-      "enum": [
-        "politician",
-        "celebrity",
-        "witness",
-        "expert",
-        "spokesperson",
-        "activist",
-        "official"
-      ]
+      "description": "人物在新闻中的主要角色或功能",
+      "enum": ["政治人物", "名人", "见证", "专家", "发言人", "活动家", "官方"]
     },
     "affiliation": {
       "type": "string",

@@ -1,11 +1,11 @@
 {
   "type": "object",
-  "description": "Medical procedure, surgery, or examination",
+  "description": "医疗程序、手术或检查",
   "properties": {
-    "name": { "type": "string", "description": "Procedure or surgery name" },
+    "name": { "type": "string", "description": "程序或手术名称" },
     "procedure_type": {
       "type": "string",
-      "enum": ["surgery", "examination", "diagnostic"],
+      "enum": ["手术", "检查", "诊断"],
       "description": "程序类别"
     },
     "description": {
@@ -19,7 +19,7 @@
     "risks": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Associated risks or complications"
+      "description": "程序相关的风险或并发症"
     },
     "recovery_time": {
       "type": "string",

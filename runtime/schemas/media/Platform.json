@@ -1,10 +1,10 @@
 {
   "type": "object",
-  "description": "A distribution channel or platform for media content, such as social media sites, video platforms, or streaming services",
+  "description": "媒体内容的分渠道或平台，例如社交网络、视频分享平台或流媒体服务",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Name of the platform, e.g. 抖音, 公众号, B站, YouTube"
+      "description": "平台名称，例如：抖音、公众号、B站、YouTube"
     },
     "platform_type": {
       "type": "string",
@@ -13,7 +13,7 @@
     },
     "region": {
       "type": "string",
-      "description": "Primary geographic region or language market the platform serves, e.g. China, Global"
+      "description": "主要地理区域或语言市场，例如：中国、全球"
     },
     "user_base_size": {
       "type": "string",

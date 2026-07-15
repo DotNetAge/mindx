@@ -2,10 +2,10 @@
   "type": "object",
   "description": "体征、症状或临床表现",
   "properties": {
-    "name": { "type": "string", "description": "Symptom or sign name" },
+    "name": { "type": "string", "description": "症状或体征名称" },
     "description": {
       "type": "string",
-      "description": "Detailed description of the symptom"
+      "description": "症状的详细描述"
     },
     "associated_diseases": {
       "type": "array",
@@ -14,11 +14,11 @@
     },
     "severity_range": {
       "type": "string",
-      "description": "Typical severity range (e.g., mild to severe)"
+      "description": "典型严重范围（如轻微到严重）"
     },
     "duration": {
       "type": "string",
-      "description": "Typical duration of the symptom"
+      "description": "症状的典型持续时间"
     },
     "body_system": {
       "type": "string",

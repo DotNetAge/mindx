@@ -118,7 +118,8 @@ func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
 		return m, nil
 
 	case msg.ExecutionSummaryMsg:
-		m.TotalTokens = e.TokensUsed.TotalTokens
+		// 计费口径：prompt + completion - cached
+		m.TotalTokens = e.TokensUsed.ActualTokens()
 		m.TotalDuration = e.Duration
 		return m, nil
 

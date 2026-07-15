@@ -74,9 +74,57 @@ func (d *Daemon) handleSessionGet(_ context.Context, params json.RawMessage) (an
 
 	return map[string]any{
 		"session_id": p.SessionID,
-		"messages":   messages,
+		"messages":   d.enrichMessages(messages),
 		"meta":       meta,
 	}, nil
+}
+
+// enrichMessages enriches each message's token_usage with computed fields
+// (actual_tokens, cost) for the frontend, and ensures token_usage is never nil.
+func (d *Daemon) enrichMessages(msgs []goharnesssession.Message) []map[string]any {
+	// Build pricing from the current model's cost config
+	pricing := d.buildSessionPricing()
+
+	// Serialize to JSON then deserialize to maps so we can inject computed fields
+	data, _ := json.Marshal(msgs)
+	rawMsgs := make([]map[string]any, len(msgs))
+	_ = json.Unmarshal(data, &rawMsgs)
+
+	for i, msg := range msgs {
+		if msg.Usage != nil {
+			rawMsgs[i]["actual_tokens"] = msg.Usage.ActualTokens()
+			rawMsgs[i]["cost"] = msg.Usage.Cost(pricing)
+		} else {
+			// Ensure token_usage is never nil/absent to prevent client-side undefined errors
+			rawMsgs[i]["token_usage"] = map[string]any{
+				"prompt_tokens":     0,
+				"completion_tokens": 0,
+				"total_tokens":      0,
+				"cached_tokens":     0,
+				"reasoning_tokens":  0,
+				"actual_tokens":     0,
+				"cost":              0,
+			}
+		}
+	}
+
+	return rawMsgs
+}
+
+// buildSessionPricing builds a PricingUnit from the daemon's current model cost config.
+// Returns a zero-value PricingUnit if the model cost is not available.
+func (d *Daemon) buildSessionPricing() goharnesssession.PricingUnit {
+	if d.modelName == "" {
+		return goharnesssession.PricingUnit{}
+	}
+	mc, ok := d.app.Costs().Get(d.modelName)
+	if !ok {
+		return goharnesssession.PricingUnit{}
+	}
+	return goharnesssession.PricingUnit{
+		InputPricePer1M:  mc.CostPer1MIn,
+		OutputPricePer1M: mc.CostPer1MOut,
+	}
 }
 
 func (d *Daemon) handleSessionMeta(_ context.Context, params json.RawMessage) (any, error) {
@@ -319,8 +367,11 @@ func (d *Daemon) handleSessionContext(_ context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
 	}
 
+	// Build pricing from the current model's cost config
+	pricing := d.buildSessionPricing()
+
 	// Get the session's native context usage (uses maxWindowSize if configured)
-	usage := sess.ContextUsage()
+	usage := sess.ContextUsage(pricing)
 
 	// If the session doesn't have maxWindowSize configured (0), fall back to
 	// the default model's context_length, so the ratio is meaningful.
@@ -342,6 +393,8 @@ func (d *Daemon) handleSessionContext(_ context.Context, params json.RawMessage)
 		"message_count":        usage.MessageCount,
 		"cursor":               usage.Cursor,
 		"active_message_count": usage.ActiveMessageCount,
+		"total_actual_tokens":  usage.TotalActualTokens,
+		"total_cost":           usage.TotalCost,
 	}, nil
 }
 
@@ -565,7 +618,7 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 	// 如果这里清除，后续 Runtime 自动压缩时将丢失 CompactStart/CompactDone 事件广播。
 
 	// Return updated context usage after compaction
-	usage := sess.ContextUsage()
+	usage := sess.ContextUsage(d.buildSessionPricing())
 
 	d.logger.Info("session.compact: done",
 		"session_id", p.SessionID,
@@ -583,5 +636,7 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 		"message_count":        usage.MessageCount,
 		"cursor":               usage.Cursor,
 		"active_message_count": usage.ActiveMessageCount,
+		"total_actual_tokens":  usage.TotalActualTokens,
+		"total_cost":           usage.TotalCost,
 	}, nil
 }

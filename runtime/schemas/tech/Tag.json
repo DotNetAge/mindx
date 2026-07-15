@@ -9,7 +9,7 @@
     },
     "group": {
       "type": "string",
-      "description": "标签所属的逻辑组或类别（例如 'language'、'domain'、'difficulty'）"
+      "description": "标签所属的逻辑组或类别（例如 '语言'、'领域'、'难度'）"
     },
     "description": {
       "type": "string",

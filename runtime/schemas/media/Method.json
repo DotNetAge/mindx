@@ -1,18 +1,18 @@
 {
   "type": "object",
-  "description": "An operation strategy or technique for content creation, publishing, or audience engagement on media platforms",
+  "description": "媒体平台上的运营策略或技术",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Name of the method or strategy, e.g. 蹭热点法, 黄金3秒开头, 评论区互动技巧"
+      "description": "方法或策略名称，例如：抓热点、黄金3秒开头、评论区互动技巧"
     },
     "strategy_type": {
       "type": "string",
-      "description": "Category of strategy: 运营策略 (operation), 排版技巧 (layout), 文案套路 (copywriting)"
+      "description": "方法或策略的类别，例如：运营策略、排版技巧、文案套路"
     },
     "description": {
       "type": "string",
-      "description": "Detailed explanation of the method and how it works"
+      "description": "方法的详细解释和工作原理描述"
     },
     "steps": {
       "type": "array",
@@ -21,7 +21,7 @@
     },
     "platform": {
       "type": "string",
-      "description": "Platform this method is primarily applicable to"
+      "description": "该方法主要适用的平台，例如：抖音、B站、小红书"
     },
     "effectiveness": {
       "type": "string",

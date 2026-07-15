@@ -78,7 +78,9 @@ func (d *Daemon) handleTokenUsageTotal(_ context.Context, _ json.RawMessage) (an
 	convSet := make(map[string]struct{})
 
 	for _, r := range records {
-		totalTokens += r.TotalTokens
+		// Use chargeable tokens (prompt + completion - cached) to match the
+		// billing口径 used by monthly stats and ContextUsage.TotalActualTokens.
+		totalTokens += chargeableTokens(r)
 		if r.ConversationID != "" {
 			key := r.SessionID + ":" + r.ConversationID
 			convSet[key] = struct{}{}
@@ -124,7 +126,9 @@ func (d *Daemon) handleTokenUsageSession(_ context.Context, params json.RawMessa
 	totalTokens := 0
 	totalCost := 0.0
 	for _, r := range records {
-		totalTokens += r.TotalTokens
+		// Use chargeable tokens (prompt + completion - cached) to match the
+		// billing口径 used by monthly stats and ContextUsage.TotalActualTokens.
+		totalTokens += chargeableTokens(r)
 		mc, hasMC := d.app.Costs().Get(r.ModelName)
 		if hasMC {
 			totalCost += calculateRecordCost(mc, r)
@@ -171,7 +175,8 @@ func (d *Daemon) handleTokenUsageSessionDetail(_ context.Context, params json.Ra
 			"input_tokens":  r.PromptTokens,
 			"output_tokens": r.CompletionTokens,
 			"cached_tokens": r.CachedTokens,
-			"total_tokens":  r.TotalTokens,
+			// total_tokens 与会话/月度汇总保持一致：计费口径 prompt + completion - cached
+			"total_tokens":  chargeableTokens(r),
 			"cost":          roundCost(cost),
 			"model_name":    r.ModelName,
 			"provider_name": r.ProviderName,
@@ -232,7 +237,9 @@ func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessa
 	requestCount := len(records)
 
 	for _, r := range records {
-		totalTokens += r.TotalTokens
+		// Use chargeable tokens to keep the by-model endpoint consistent with
+		// monthly stats, total/session endpoints, and ContextUsage.TotalActualTokens.
+		totalTokens += chargeableTokens(r)
 		totalInput += r.PromptTokens
 		totalOutput += r.CompletionTokens
 		totalCached += r.CachedTokens
@@ -449,6 +456,17 @@ func calculateRecordCost(mc core.ModelCost, r goharnesssession.TokenUsageRecord)
 	}
 
 	return cost
+}
+
+// chargeableTokens returns the billable token count for a record:
+// prompt + completion - cached. This matches the canonical billing口径 used by
+// TokenUsage.ActualTokens() and buildMonthlyStats.
+func chargeableTokens(r goharnesssession.TokenUsageRecord) int {
+	n := r.PromptTokens + r.CompletionTokens - r.CachedTokens
+	if n < 0 {
+		return 0
+	}
+	return n
 }
 
 func roundCost(v float64) float64 {

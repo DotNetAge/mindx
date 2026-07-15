@@ -1,10 +1,10 @@
 {
   "type": "object",
-  "description": "A creative work in the literary domain, such as a novel, poem, script, or story.",
+  "description": "文学作品中的创作作品，如小说、诗、剧本或故事。",
   "properties": {
     "title": {
       "type": "string",
-      "description": "The full title of the work"
+      "description": "作品的标题名称"
     },
     "author": {
       "type": "string",
@@ -12,20 +12,20 @@
     },
     "work_type": {
       "type": "string",
-      "description": "The literary form of the work",
-      "enum": ["novel", "poem", "script", "story"]
+      "description": "作品的文学形式",
+      "enum": ["小说", "诗", "剧本", "故事"]
     },
     "genre": {
       "type": "string",
-      "description": "The genre classification of the work"
+      "description": "作品的文学类型"
     },
     "publication_date": {
       "type": "string",
-      "description": "The date or year the work was first published"
+      "description": "作品首次出版的日期或年份"
     },
     "synopsis": {
       "type": "string",
-      "description": "A brief summary of the work's content and themes"
+      "description": "作品的简要概述"
     },
     "characters": {
       "type": "array",

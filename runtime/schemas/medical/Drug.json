@@ -9,16 +9,16 @@
     },
     "drug_class": {
       "type": "string",
-      "description": "Pharmacological or therapeutic class"
+      "description": "药物的药理或治疗学分类"
     },
     "dosage_forms": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Available dosage forms (e.g., tablet, injection, topical)"
+      "description": "可用的剂量形式（如药片、注射、 topical）"
     },
     "administration_route": {
       "type": "string",
-      "description": "Route of administration (e.g., oral, intravenous, topical)"
+      "description": "用药途径（如口服、静脉注射、 topical）"
     },
     "side_effects": {
       "type": "array",
