@@ -49,7 +49,7 @@ RUN set -ex; \
   else \
   ARCH="x64"; \
   fi; \
-  curl -fL -o /tmp/onnxruntime.tgz \
+  curl -fL --retry 5 --retry-delay 5 -o /tmp/onnxruntime.tgz \
   "https://github.com/microsoft/onnxruntime/releases/download/v${ONNX_VERSION}/onnxruntime-linux-${ARCH}-${ONNX_VERSION}.tgz"; \
   tar xzf /tmp/onnxruntime.tgz -C /tmp; \
   cp -P "/tmp/onnxruntime-linux-${ARCH}-${ONNX_VERSION}/lib/libonnxruntime.so"* /usr/local/lib/; \
@@ -68,13 +68,15 @@ ENV MINDX_VERSION=${VERSION}
 # Install runtime dependencies (minimal set)
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
+  bash \
+  wget \
+  tini \
+  libgomp1 \
+  libatomic1 \
   python3 \
   python3-pip \
   nodejs \
   npm \
-  bash \
-  wget \
-  tini \
   && rm -rf /var/lib/apt/lists/*
 
 # Copy ONNX Runtime shared library
