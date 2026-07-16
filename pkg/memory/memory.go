@@ -55,7 +55,7 @@ func NewEmbedderFromConfig(modelPath string) (goragcore.Embedder, error) {
 	}
 	emb, err := embedder.NewChineseClipEmbedder(embedder.WithModelFile(modelPath))
 	if err != nil {
-		return nil, fmt.Errorf("memory: create embedder: %w", err)
+		return nil, fmt.Errorf("memory: 创建 embedder 失败: %w", err)
 	}
 	return emb, nil
 }
@@ -74,21 +74,21 @@ func NewRAGMemory(semanticIdx goragcore.Indexer, opts ...RAGMemoryOption) *RAGMe
 
 func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 	if cfg.Embedder == nil {
-		return nil, fmt.Errorf("memory: embedder is required")
+		return nil, fmt.Errorf("memory: embedder 是必填项")
 	}
 	if cfg.AgentName == "" {
-		return nil, fmt.Errorf("memory: agent name is required")
+		return nil, fmt.Errorf("memory: agent name 是必填项")
 	}
 	if cfg.Logger == nil {
-		return nil, fmt.Errorf("memory: logger is required (pass cfg.Logger to share the application logger)")
+		return nil, fmt.Errorf("memory: logger 是必填项，用于日志记录")
 	}
 	if cfg.MemoryDir == "" {
-		return nil, fmt.Errorf("memory: memory dir is required")
+		return nil, fmt.Errorf("memory: memory dir 是必填项")
 	}
 
 	dataDir := cfg.dataDir()
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return nil, fmt.Errorf("memory: create data directory %s: %w", dataDir, err)
+		return nil, fmt.Errorf("memory: 创建 data目录 %s 失败: %w", dataDir, err)
 	}
 
 	logger := cfg.Logger
@@ -96,7 +96,7 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 	// ── SemanticIndexer（统一记忆存储）───────────────────────
 	semVecDir := filepath.Join(dataDir, "vectors")
 	if mkErr := os.MkdirAll(semVecDir, 0755); mkErr != nil {
-		return nil, fmt.Errorf("memory: create semantic vector directory %s: %w", semVecDir, mkErr)
+		return nil, fmt.Errorf("memory: 创建语义向量目录 %s 失败: %w", semVecDir, mkErr)
 	}
 	semVS, err := govector.NewStore(
 		govector.WithCollection("shared_sem"),
@@ -106,7 +106,7 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 		govector.WithReadOnly(cfg.ReadOnly),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("memory: create semantic vector store: %w", err)
+		return nil, fmt.Errorf("memory: 创建语义向量存储 %s 失败: %w", semVecDir, err)
 	}
 	semIdx := goragindexer.NewSemanticIndexer(semVS, cfg.Embedder,
 		goragindexer.WithSemanticLogger(logger),
@@ -118,7 +118,7 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 		logger:   logger,
 	}
 
-	logger.Info("memory: initialized",
+	logger.Info("memory: 初始化完成",
 		"agent", cfg.AgentName,
 		"vector_dim", cfg.Embedder.Dim(),
 	)
@@ -184,10 +184,8 @@ func (m *RAGMemory) storeMemoryChunk(ctx context.Context, chunk memory.MemoryChu
 		Metadata: metadata,
 	}
 
-	if m.semantic != nil {
-		if err := m.semantic.StoreChunk(ctx, coreChunk); err != nil {
-			return fmt.Errorf("memory store chunk failed: %w", err)
-		}
+	if err := m.semantic.StoreChunk(ctx, coreChunk); err != nil {
+		return fmt.Errorf("memory: 存储 chunk 失败: %w", err)
 	}
 	return nil
 }
@@ -201,7 +199,7 @@ func (m *RAGMemory) Retrieve(ctx context.Context, query string, opts ...memory.R
 
 	idx := m.semantic
 	if idx == nil {
-		return nil, fmt.Errorf("semantic indexer not initialized")
+		return nil, fmt.Errorf("memory: 语义索引器未初始化")
 	}
 
 	q := m.buildQueryWithFilter(query, cfg)
@@ -211,7 +209,7 @@ func (m *RAGMemory) Retrieve(ctx context.Context, query string, opts ...memory.R
 
 	hits, err := idx.Search(ctx, q)
 	if err != nil {
-		return nil, fmt.Errorf("memory retrieve failed: %w", err)
+		return nil, fmt.Errorf("memory: 检索失败: %w", err)
 	}
 
 	if len(hits) == 0 {
@@ -248,8 +246,9 @@ func (m *RAGMemory) Retrieve(ctx context.Context, query string, opts ...memory.R
 //
 // 实现 memory.LatestRetriever 可选接口。
 func (m *RAGMemory) RetrieveLatest(ctx context.Context, agentName, projectDir string, limit int) ([]memory.MemoryChunk, error) {
-	if m.semantic == nil {
-		return nil, fmt.Errorf("semantic indexer not initialized")
+	idx := m.semantic
+	if idx == nil {
+		return nil, fmt.Errorf("memory: 语义索引器未初始化")
 	}
 	if limit <= 0 {
 		limit = 10
@@ -264,9 +263,9 @@ func (m *RAGMemory) RetrieveLatest(ctx context.Context, agentName, projectDir st
 	offset := 0
 	totalHits := 0
 	for {
-		hits, err := m.semantic.List(ctx, offset, pageSize)
+		hits, err := idx.List(ctx, offset, pageSize)
 		if err != nil {
-			return nil, fmt.Errorf("memory retrieve latest: %w", err)
+			return nil, fmt.Errorf("memory: 检索最新记忆失败: %w", err)
 		}
 		if len(hits) == 0 {
 			break
@@ -320,8 +319,9 @@ func (m *RAGMemory) RetrieveLatest(ctx context.Context, agentName, projectDir st
 // RetrieveBySession 实现 memory.SessionRetriever 可选接口：按 sessionID 取最新记忆。
 // 无视 agentName / projectDir 过滤，作为 RetrieveLatest 的兜底。
 func (m *RAGMemory) RetrieveBySession(ctx context.Context, sessionID string, limit int) ([]memory.MemoryChunk, error) {
-	if m.semantic == nil {
-		return nil, fmt.Errorf("semantic indexer not initialized")
+	idx := m.semantic
+	if idx == nil {
+		return nil, fmt.Errorf("memory: 语义索引器未初始化")
 	}
 	if limit <= 0 {
 		limit = 10
@@ -335,9 +335,9 @@ func (m *RAGMemory) RetrieveBySession(ctx context.Context, sessionID string, lim
 	offset := 0
 	totalHits := 0
 	for {
-		hits, err := m.semantic.List(ctx, offset, pageSize)
+		hits, err := idx.List(ctx, offset, pageSize)
 		if err != nil {
-			return nil, fmt.Errorf("memory retrieve by session: %w", err)
+			return nil, fmt.Errorf("memory: 检索会话记忆失败: %w", err)
 		}
 		if len(hits) == 0 {
 			break
@@ -392,7 +392,7 @@ func (m *RAGMemory) Store(ctx context.Context, chunk memory.MemoryChunk) (string
 func (m *RAGMemory) Update(ctx context.Context, id string, chunk memory.MemoryChunk) error {
 	idx := m.semantic
 	if idx == nil {
-		return fmt.Errorf("semantic indexer not initialized")
+		return fmt.Errorf("memory: 语义索引器未初始化")
 	}
 	if id == "" {
 		return memory.ErrMemoryNotFound
@@ -407,7 +407,7 @@ func (m *RAGMemory) Update(ctx context.Context, id string, chunk memory.MemoryCh
 func (m *RAGMemory) Delete(ctx context.Context, id string) error {
 	idx := m.semantic
 	if idx == nil {
-		return fmt.Errorf("semantic indexer not initialized")
+		return fmt.Errorf("memory: 语义索引器未初始化")
 	}
 
 	if id == "" {
@@ -416,7 +416,7 @@ func (m *RAGMemory) Delete(ctx context.Context, id string) error {
 
 	err := idx.Remove(ctx, id)
 	if err != nil {
-		return fmt.Errorf("memory delete failed: %w", err)
+		return fmt.Errorf("memory: 删除记忆失败 %s: %w", id, err)
 	}
 
 	return nil

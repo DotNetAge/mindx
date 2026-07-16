@@ -65,6 +65,17 @@ func (ms *manifestStore) close() error {
 	return ms.db.Close()
 }
 
+// clear deletes all entries from the files bucket, resetting the file index manifest.
+func (ms *manifestStore) clear() error {
+	return ms.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(filesBucket))
+		// Delete all keys
+		return b.ForEach(func(k, _ []byte) error {
+			return b.Delete(k)
+		})
+	})
+}
+
 func (ms *manifestStore) get(path string) (*FileMeta, error) {
 	var meta *FileMeta
 	err := ms.db.View(func(tx *bbolt.Tx) error {

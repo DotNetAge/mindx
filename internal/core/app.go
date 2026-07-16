@@ -305,9 +305,9 @@ func (a *App) ResolveDefaultModel() *config.ModelConfig {
 	if a.mindxConfig == nil {
 		return nil
 	}
-	modelName := a.mindxConfig.DefaultModel
+	modelName := a.mindxConfig.LastModel
 	if modelName == "" {
-		modelName = a.mindxConfig.LastModel
+		modelName = a.mindxConfig.DefaultModel
 	}
 	if modelName == "" {
 		return nil

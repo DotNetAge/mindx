@@ -459,6 +459,16 @@ func (d *Daemon) handleKBReset(ctx context.Context, _ json.RawMessage) (any, err
 		return nil, fmt.Errorf("kb reset failed: %w", err)
 	}
 
+	// Also clear file index manifests across all project indexers,
+	// so file_states and stats do not report stale indexed state.
+	d.indexersMu.RLock()
+	for projectDir, pi := range d.indexers {
+		if err := pi.ResetManifest(); err != nil {
+			d.logger.Error("kb.reset: failed to reset manifest", err, "project_dir", projectDir)
+		}
+	}
+	d.indexersMu.RUnlock()
+
 	d.logger.Info("kb.reset: completed successfully")
 	return map[string]any{"status": "ok"}, nil
 }

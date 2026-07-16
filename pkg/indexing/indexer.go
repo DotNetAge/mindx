@@ -159,6 +159,17 @@ func (ix *Indexer) Close() error {
 	return nil
 }
 
+// ResetManifest clears the file index manifest, removing all tracked file states.
+// Call this when the knowledge base is reset to avoid stale manifest data.
+func (ix *Indexer) ResetManifest() error {
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	if ix.manifest != nil {
+		return ix.manifest.clear()
+	}
+	return nil
+}
+
 // ── Manifest Operations ──
 
 // Add adds files to the manifest. Returns the number of files actually added.
