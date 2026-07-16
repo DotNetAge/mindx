@@ -389,6 +389,7 @@ jobs:
     if: needs.prepare.outputs.is_prerelease == 'false' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
+      actions: read
     steps:
       - name: Checkout source (for formula template)
         uses: actions/checkout@v4
