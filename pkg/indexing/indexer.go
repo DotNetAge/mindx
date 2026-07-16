@@ -864,6 +864,13 @@ func (ix *Indexer) processFile(ctx context.Context, file *FileMeta) bool {
 		}
 	}
 
+	// Remove old chunks first to avoid vector ID conflicts during re-indexing.
+	// This must happen before indexFile() so the HNSW graph does not receive
+	// duplicate node keys (which causes a "node not added" panic).
+	if len(file.ChunkIDs) > 0 {
+		ix.removeChunks(ctx, file.ChunkIDs)
+	}
+
 	chunks, idxErr := ix.indexFile(fileCtx, file.Path)
 	if idxErr != nil {
 		file.State = FileFailed
@@ -895,10 +902,6 @@ func (ix *Indexer) processFile(ctx context.Context, file *FileMeta) bool {
 	}
 
 	if len(chunks) > 0 {
-		// Remove old chunks if re-indexing
-		if len(file.ChunkIDs) > 0 {
-			ix.removeChunks(ctx, file.ChunkIDs)
-		}
 		file.ChunkIDs = chunks
 		file.Chunks = len(chunks)
 	}

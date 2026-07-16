@@ -75,6 +75,21 @@ type FSReadResult struct {
 	Content string `json:"content"`
 }
 
+// FSReadBase64Params are the params for fs.read_base64.
+type FSReadBase64Params struct {
+	Path string `json:"path"`
+}
+
+// FSReadBase64Result is the result for fs.read_base64.
+type FSReadBase64Result struct {
+	Content string `json:"content"` // base64-encoded file content
+	Mime    string `json:"mime"`    // MIME type (e.g. "image/png")
+}
+
+func (c *Client) FSReadBase64(path string) (json.RawMessage, error) {
+	return c.CallWithTimeout("fs.read_base64", FSReadBase64Params{Path: path})
+}
+
 // FSRevealResult is the result for fs.reveal.
 type FSRevealResult struct {
 	Status string `json:"status"`

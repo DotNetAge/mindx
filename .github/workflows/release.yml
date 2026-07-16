@@ -21,6 +21,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Git tag to regenerate Homebrew formula for (e.g. v2.4.8)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -52,7 +58,11 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          TAG=${GITHUB_REF_NAME}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG=${{ inputs.tag_name }}
+          else
+            TAG=${GITHUB_REF_NAME}
+          fi
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
           echo "version_num=${TAG#v}" >> "$GITHUB_OUTPUT"
           if [[ "$TAG" == *-* ]]; then
@@ -367,24 +377,46 @@ jobs:
 
   # ==========================================================================
   # Homebrew — generate formula from Release assets & push to tap
+  #
+  # Supports two trigger modes:
+  #   1. Tag push (v*) — downloads darwin artifacts from build job
+  #   2. workflow_dispatch — downloads darwin assets from existing Release
   # ==========================================================================
   homebrew:
     name: Homebrew Formula
     runs-on: ubuntu-latest
-    needs: [prepare, build, release]
-    if: needs.prepare.outputs.is_prerelease == 'false'
+    needs: [prepare]
+    if: needs.prepare.outputs.is_prerelease == 'false' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
     steps:
       - name: Checkout source (for formula template)
         uses: actions/checkout@v4
 
-      - name: Download darwin build artifacts
+      - name: Download darwin build artifacts (tag push)
+        if: github.event_name != 'workflow_dispatch'
         uses: actions/download-artifact@v4
         with:
           pattern: package-darwin-*
           path: dist
           merge-multiple: true
+
+      - name: Download darwin release assets (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ needs.prepare.outputs.version }}
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+          mkdir -p dist
+
+          echo "Downloading darwin assets from Release ${TAG}..."
+          gh release download "${TAG}" \
+            --pattern "mindx-${VERSION_NUM}-darwin-*.tar.gz" \
+            --dir dist \
+            --repo "${{ env.GITHUB_REPO }}"
+
+          ls -la dist/
 
       - name: Calculate SHA256
         id: sha256
@@ -418,19 +450,35 @@ jobs:
           echo "--- Generated formula ---"
           cat dist/mindx.rb
 
+      - name: Upload formula as release artifact (fallback)
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.prepare.outputs.version }}
+          files: dist/mindx.rb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Push to Homebrew tap
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           TAP_REPO="${{ env.HOMEBREW_TAP }}"
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
-          TAP_DIR="/tmp/homebrew-tap"
+
+          if [ -z "${TAP_TOKEN}" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN secret is not set."
+            echo "::error::Set it in https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "::error::Token needs 'Contents: Write' access on ${TAP_REPO}"
+            exit 1
+          fi
 
           echo "Pushing formula to ${TAP_REPO}..."
 
-          # Clone tap (use token for auth on private repos too)
+          TAP_DIR="/tmp/homebrew-tap"
+          rm -rf "${TAP_DIR}"
+
           git clone \
-            "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" \
+            "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" \
             "${TAP_DIR}" 2>/dev/null || {
             echo "Tap repo not found or empty. Creating..."
             mkdir -p "${TAP_DIR}"
@@ -446,13 +494,11 @@ jobs:
               --description "Homebrew tap for MindX" \
               --source "${{ env.GITHUB_REPO }}" \
               --push 2>/dev/null || true
-            # Re-clone after creation
             git clone \
-              "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" \
+              "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" \
               "${TAP_DIR}"
           }
 
-          # Copy formula
           mkdir -p "${TAP_DIR}/Formula"
           cp dist/mindx.rb "${TAP_DIR}/Formula/mindx.rb"
 
@@ -465,14 +511,7 @@ jobs:
             git config user.name "${{ github.actor }}"
             git config user.email "${{ github.actor }}@users.noreply.github.com"
             git commit -m "mindx ${VERSION_NUM}"
-            git push origin HEAD:main || {
-              # Fallback: try master branch
-              git push origin HEAD:master 2>/dev/null || {
-                echo "WARNING: Could not push to tap repo."
-                echo "Formula saved locally at:"
-                cat Formula/mindx.rb
-              }
-            }
+            git push origin HEAD:main
             echo "Done! https://github.com/${TAP_REPO}"
           fi
 

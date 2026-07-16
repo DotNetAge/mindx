@@ -2,8 +2,10 @@ package svc
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/http"
 	"os"
 	"os/exec"
@@ -123,6 +125,40 @@ func (d *Daemon) handleFSRead(_ context.Context, params json.RawMessage) (any, e
 		return nil, fmt.Errorf("cannot read file: %w", err)
 	}
 	return rpc.FSReadResult{Content: string(data)}, nil
+}
+
+// ── 新增：read_base64 (用于二进制文件如图片) ──
+
+func (d *Daemon) handleFSReadBase64(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.FSReadBase64Params
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	cleanPath := filepath.Clean(p.Path)
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("cannot access file: %w", err)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("is a directory: %s", p.Path)
+	}
+	if info.Size() > 50*1024*1024 {
+		return nil, fmt.Errorf("file too large for base64 read: %s (%.1f MB)", p.Path, float64(info.Size())/(1024*1024))
+	}
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read file: %w", err)
+	}
+	mime := mime.TypeByExtension(filepath.Ext(absPath))
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	encoded := base64.StdEncoding.EncodeToString(data)
+	return rpc.FSReadBase64Result{Content: encoded, Mime: mime}, nil
 }
 
 func (d *Daemon) handleFSWrite(_ context.Context, params json.RawMessage) (any, error) {

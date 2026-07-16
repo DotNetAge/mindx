@@ -58,6 +58,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"message.cancel":             r.daemon.handleMessageCancel,
 		"fs.list":                    r.daemon.handleFSList,
 		"fs.read":                    r.daemon.handleFSRead,
+		"fs.read_base64":             r.daemon.handleFSReadBase64,
 		"fs.write":                   r.daemon.handleFSWrite,
 		"fs.home":                    r.daemon.handleFSHome,
 		"fs.mkdir":                   r.daemon.handleFSMkdir,

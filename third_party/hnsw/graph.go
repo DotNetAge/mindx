@@ -400,8 +400,10 @@ func (g *Graph[K]) Add(nodes ...Node[K]) {
 			}
 		}
 
-		// Invariant check: the node should have been added to the graph.
-		if g.Len() != preLen+1 {
+		// Invariant check: the node should have been added to or replaced in the graph.
+		// preLen+1 means a new node was inserted; preLen means an existing node was
+		// replaced (re-index scenario where the same key was deleted and re-added).
+		if g.Len() != preLen && g.Len() != preLen+1 {
 			panic("node not added")
 		}
 	}
