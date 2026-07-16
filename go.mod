@@ -25,7 +25,7 @@ require (
 require (
 	github.com/DotNetAge/gochat v0.2.7
 	github.com/DotNetAge/gograph v0.2.6
-	github.com/DotNetAge/goharness v0.2.24
+	github.com/DotNetAge/goharness v0.2.25
 	github.com/DotNetAge/gorag/v2 v2.0.11
 	github.com/creack/pty v1.1.24
 	go.etcd.io/bbolt v1.4.3

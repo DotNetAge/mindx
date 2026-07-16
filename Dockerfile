@@ -43,7 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
   && rm -rf /var/lib/apt/lists/*
 
 RUN set -ex; \
-  ONNX_VERSION="1.24.4"; \
+  ONNX_VERSION="1.26.0"; \
   if [ "$TARGETARCH" = "arm64" ]; then \
   ARCH="aarch64"; \
   else \
@@ -71,8 +71,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   bash \
   wget \
   tini \
-  libgomp1 \
-  libatomic1 \
   python3 \
   python3-pip \
   nodejs \
