@@ -137,20 +137,23 @@ func (t *Cron) createEntry(ctx context.Context, params map[string]any) (any, err
 		return nil, fmt.Errorf("Cron：create 需要 cron_expr：%w", err)
 	}
 
-	id, _ := params["id"].(string)
+	idRaw, _ := getParam(params, "id")
+	id, _ := idRaw.(string)
 	if id == "" {
 		id = uuid.NewString()[:8]
 	}
 
 	enabled := true
-	if raw, ok := params["enabled"]; ok {
+	if raw, ok := getParam(params, "enabled"); ok {
 		if v, ok := raw.(bool); ok {
 			enabled = v
 		}
 	}
 
-	sessionID, _ := params["session_id"].(string)
-	projectDir, _ := params["project_dir"].(string)
+	sessionIDRaw, _ := getParam(params, "session_id")
+	sessionID, _ := sessionIDRaw.(string)
+	projectDirRaw, _ := getParam(params, "project_dir")
+	projectDir, _ := projectDirRaw.(string)
 
 	entry := &scheduler.ScheduleEntry{
 		ID:         id,
@@ -185,23 +188,35 @@ func (t *Cron) updateEntry(ctx context.Context, params map[string]any) (any, err
 		return nil, fmt.Errorf("Cron：任务 %q 未找到：%w", id, err)
 	}
 
-	if v, ok := params["agent"].(string); ok && v != "" {
-		existing.Agent = v
+	if v, ok := getParam(params, "agent"); ok {
+		if s, ok := v.(string); ok && s != "" {
+			existing.Agent = s
+		}
 	}
-	if v, ok := params["content"].(string); ok && v != "" {
-		existing.Content = v
+	if v, ok := getParam(params, "content"); ok {
+		if s, ok := v.(string); ok && s != "" {
+			existing.Content = s
+		}
 	}
-	if v, ok := params["cron_expr"].(string); ok && v != "" {
-		existing.CronExpr = v
+	if v, ok := getParam(params, "cron_expr"); ok {
+		if s, ok := v.(string); ok && s != "" {
+			existing.CronExpr = s
+		}
 	}
-	if v, ok := params["enabled"].(bool); ok {
-		existing.Enabled = v
+	if v, ok := getParam(params, "enabled"); ok {
+		if s, ok := v.(bool); ok {
+			existing.Enabled = s
+		}
 	}
-	if v, ok := params["session_id"].(string); ok {
-		existing.SessionID = v
+	if v, ok := getParam(params, "session_id"); ok {
+		if s, ok := v.(string); ok {
+			existing.SessionID = s
+		}
 	}
-	if v, ok := params["project_dir"].(string); ok {
-		existing.ProjectDir = v
+	if v, ok := getParam(params, "project_dir"); ok {
+		if s, ok := v.(string); ok {
+			existing.ProjectDir = s
+		}
 	}
 
 	if err := t.store.Save(ctx, existing); err != nil {

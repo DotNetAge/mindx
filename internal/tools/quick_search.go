@@ -84,7 +84,7 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 	}
 
 	limit := 5
-	if raw, ok := params["limit"]; ok {
+	if raw, ok := getParam(params, "limit"); ok {
 		if v, ok := tools.ToFloat64(raw); ok && v > 0 {
 			limit = int(v)
 			if limit > 20 {
@@ -94,7 +94,8 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 	}
 
 	// Apply projectDir filter — default to current working directory
-	projectDir, _ := params["projectDir"].(string)
+	projectDirRaw, _ := getParam(params, "projectDir")
+	projectDir, _ := projectDirRaw.(string)
 	if projectDir == "" {
 		if cwd, err := os.Getwd(); err == nil {
 			projectDir = cwd
@@ -164,28 +165,32 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 	}
 
 	// Filter by tags if specified (post-filter)
-	if raw, ok := params["tags"].([]any); ok && len(raw) > 0 {
-		var filterTags []string
-		for _, v := range raw {
-			if s, ok := v.(string); ok {
-				filterTags = append(filterTags, s)
+	if raw, ok := getParam(params, "tags"); ok {
+		if arr, ok := raw.([]any); ok && len(arr) > 0 {
+			var filterTags []string
+			for _, v := range arr {
+				if s, ok := v.(string); ok {
+					filterTags = append(filterTags, s)
+				}
 			}
-		}
-		if len(filterTags) > 0 {
-			hits = filterHitsByTags(hits, filterTags)
+			if len(filterTags) > 0 {
+				hits = filterHitsByTags(hits, filterTags)
+			}
 		}
 	}
 
 	// Filter by entity_labels if specified (post-filter on hit.Entities)
-	if raw, ok := params["entity_labels"].([]any); ok && len(raw) > 0 {
-		var filterLabels []string
-		for _, v := range raw {
-			if s, ok := v.(string); ok {
-				filterLabels = append(filterLabels, s)
+	if raw, ok := getParam(params, "entity_labels"); ok {
+		if arr, ok := raw.([]any); ok && len(arr) > 0 {
+			var filterLabels []string
+			for _, v := range arr {
+				if s, ok := v.(string); ok {
+					filterLabels = append(filterLabels, s)
+				}
 			}
-		}
-		if len(filterLabels) > 0 {
-			hits = filterHitsByEntityLabels(hits, filterLabels)
+			if len(filterLabels) > 0 {
+				hits = filterHitsByEntityLabels(hits, filterLabels)
+			}
 		}
 	}
 

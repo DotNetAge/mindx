@@ -127,7 +127,8 @@ func (t *FindRelation) Execute(ctx context.Context, params map[string]any) (any,
 	}
 
 	// Apply projectDir filter — default to current working directory
-	projectDir, _ := params["projectDir"].(string)
+	projectDirRaw, _ := getParam(params, "projectDir")
+	projectDir, _ := projectDirRaw.(string)
 	if projectDir == "" {
 		if cwd, err := os.Getwd(); err == nil {
 			projectDir = cwd
@@ -166,15 +167,17 @@ func (t *FindRelation) Execute(ctx context.Context, params map[string]any) (any,
 	}
 
 	// Filter by entity_labels if specified
-	if raw, ok := params["entity_labels"].([]any); ok && len(raw) > 0 {
-		var filterLabels []string
-		for _, v := range raw {
-			if s, ok := v.(string); ok {
-				filterLabels = append(filterLabels, s)
+	if raw, ok := getParam(params, "entity_labels"); ok {
+		if arr, ok := raw.([]any); ok && len(arr) > 0 {
+			var filterLabels []string
+			for _, v := range arr {
+				if s, ok := v.(string); ok {
+					filterLabels = append(filterLabels, s)
+				}
 			}
-		}
-		if len(filterLabels) > 0 {
-			hits = filterHitsByEntityLabels(hits, filterLabels)
+			if len(filterLabels) > 0 {
+				hits = filterHitsByEntityLabels(hits, filterLabels)
+			}
 		}
 	}
 

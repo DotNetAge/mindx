@@ -56,12 +56,14 @@ func (t *QuickExplore) Execute(ctx context.Context, params map[string]any) (any,
 	}
 
 	var regionPath string
-	if raw, ok := params["projectDir"].(string); ok && raw != "" {
-		regionPath = raw
+	if raw, ok := getParam(params, "projectDir"); ok {
+		if v, ok := raw.(string); ok && v != "" {
+			regionPath = v
+		}
 	}
 
 	depth := 2
-	if raw, ok := params["depth"]; ok {
+	if raw, ok := getParam(params, "depth"); ok {
 		if v, ok := tools.ToFloat64(raw); ok && v > 0 {
 			depth = int(v)
 			if depth > 5 {

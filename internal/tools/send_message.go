@@ -60,7 +60,8 @@ func (t *SendMessage) Execute(ctx context.Context, params map[string]any) (any, 
 		return nil, fmt.Errorf("SendMessage：message 为必填项：%w", err)
 	}
 
-	subtitle, _ := params["subtitle"].(string)
+	subtitleRaw, _ := getParam(params, "subtitle")
+	subtitle, _ := subtitleRaw.(string)
 
 	// Build osascript command
 	var script strings.Builder

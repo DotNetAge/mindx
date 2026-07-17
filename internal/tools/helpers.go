@@ -4,9 +4,78 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/DotNetAge/gorag/v2/core"
 )
+
+// ── Parameter access helpers ───────────────────────────────────────────────────────
+
+// getParam 从 params 中获取参数，支持 camelCase / snake_case 变体容错。
+// 先精确匹配给定 key，若未命中则尝试所有 key 的常见变体。
+func getParam(params map[string]any, keys ...string) (any, bool) {
+	for _, key := range keys {
+		if val, ok := params[key]; ok {
+			return val, true
+		}
+	}
+	for _, key := range keys {
+		for _, variant := range paramKeyVariants(key) {
+			if val, ok := params[variant]; ok {
+				return val, true
+			}
+		}
+	}
+	return nil, false
+}
+
+// paramKeyVariants 生成 key 的 camelCase ↔ snake_case 变体。
+func paramKeyVariants(key string) []string {
+	var variants []string
+
+	// camelCase → snake_case
+	var sb strings.Builder
+	for i, r := range key {
+		if i > 0 && unicode.IsUpper(r) {
+			sb.WriteRune('_')
+			sb.WriteRune(unicode.ToLower(r))
+		} else {
+			sb.WriteRune(unicode.ToLower(r))
+		}
+	}
+	if s := sb.String(); s != key {
+		variants = append(variants, s)
+	}
+
+	// snake_case → camelCase
+	parts := strings.Split(key, "_")
+	if len(parts) > 1 {
+		sb.Reset()
+		for i, p := range parts {
+			if i == 0 {
+				sb.WriteString(p)
+			} else if len(p) > 0 {
+				sb.WriteString(strings.ToUpper(p[:1]) + p[1:])
+			}
+		}
+		if s := sb.String(); s != key {
+			variants = append(variants, s)
+		}
+
+		// 也尝试 PascalCase 变体（首字母大写）
+		sb.Reset()
+		for _, p := range parts {
+			if len(p) > 0 {
+				sb.WriteString(strings.ToUpper(p[:1]) + p[1:])
+			}
+		}
+		if s := sb.String(); s != key {
+			variants = append(variants, s)
+		}
+	}
+
+	return variants
+}
 
 // ── Metadata helpers ──────────────────────────────────────────────────────────────
 
