@@ -205,6 +205,9 @@ func newClientAskHandlers(
 				gateway.WithResponseMeta(map[string]any{
 					"prompt_tokens":     data.TokenUsage.PromptTokens,
 					"completion_tokens": data.TokenUsage.CompletionTokens,
+					"cached_tokens":     data.TokenUsage.CachedTokens,
+					"total_tokens":      data.TokenUsage.TotalTokens,
+					"reasoning_tokens":  data.TokenUsage.ReasoningTokens,
 					"agent_name":        getAgentName(),
 				}))
 		},
@@ -330,7 +333,9 @@ func newBroadcastAskHandlers(
 				"token_usage": map[string]any{
 					"prompt_tokens":     data.TokenUsage.PromptTokens,
 					"completion_tokens": data.TokenUsage.CompletionTokens,
+					"cached_tokens":     data.TokenUsage.CachedTokens,
 					"total_tokens":      data.TokenUsage.TotalTokens,
+					"reasoning_tokens":  data.TokenUsage.ReasoningTokens,
 				},
 			})
 		},
