@@ -376,7 +376,7 @@ func (m *rootModel) loadSessionHistory() {
 		agentName = m.app.CurrentAgentName()
 	}
 
-	s, loadErr := goharnesssession.Load(sessionID, agentName, sessDB)
+	s, loadErr := goharnesssession.Load(context.Background(), sessionID, agentName, sessDB, m.getLogger())
 	if loadErr != nil || s == nil {
 		return
 	}

@@ -42,7 +42,7 @@ func (t *QuickExplore) Info() *tools.ToolInfo {
 			{
 				Name:        "depth",
 				Type:        "integer",
-				Description: "树深度（1-5，默认：2）。",
+				Description: "目录深度（1-5，默认：2）。",
 				Required:    false,
 				Default:     float64(2),
 			},

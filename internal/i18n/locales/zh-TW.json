@@ -271,6 +271,7 @@
   "svc.event.error": "錯誤",
   "svc.event.execution.exception": "執行異常: %v",
   "svc.event.execution.summary": "執行摘要",
+  "svc.event.file_modified": "檔案已修改",
   "svc.event.final.answer": "最終答案",
   "svc.event.llm.timeout": "LLM 逾時 (%s): %s",
   "svc.event.max.turns.reached": "已達最大對話輪次",

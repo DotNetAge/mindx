@@ -13,6 +13,7 @@ import (
 	"time"
 
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
+	"github.com/DotNetAge/goharness/logging"
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/gorag/v2/embedder"
 	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
@@ -137,13 +138,14 @@ func main() {
 	fmt.Printf("Agent: %s (%s)\n", agentCfg.Name, agentCfg.Role)
 	fmt.Println("Sending: '帮我审查下面这个Go代码，检查安全问题和性能瓶颈'")
 
-	s := session.NewSession("test-session", agentCfg.Name,
-		session.WithStore(tmpStore),
-		session.WithProjectDir(projectDir),
-	)
+	s, err := session.New(agentCfg.Name, "", projectDir, tmpStore, logging.NewNopLogger())
+	if err != nil {
+		fmt.Printf("Error creating session: %v\n", err)
+		os.Exit(1)
+	}
 
-	// Persist the session to the store so SessionDir() and ProjectDir()
-	// resolve correctly in buildSystemPrompts (which runs before Current()).
+	// 持久化会话到存储，确保 buildSystemPrompts 中 SessionDir() 和 ProjectDir()
+	// 在 Current() 之前就能正确解析。
 	_ = s.Current()
 
 	done := make(chan struct{})

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	goharnessconfig "github.com/DotNetAge/goharness/config"
+	"github.com/DotNetAge/goharness/logging"
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
@@ -58,7 +59,7 @@ func mustCreateSession(t *testing.T, sessDB *mindxses.FileSessionStore, agentNam
 		Content:   "init",
 		Timestamp: time.Now().UnixMilli(),
 	}
-	sess, loadErr := goharnesssession.Load(info.SessionID, agentName, sessDB)
+	sess, loadErr := goharnesssession.Load(context.Background(), info.SessionID, agentName, sessDB, logging.DefaultLogger())
 	if loadErr != nil {
 		t.Fatalf("load session: %v", loadErr)
 	}

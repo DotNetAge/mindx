@@ -1083,14 +1083,39 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		}
 		sessOpts = append(sessOpts, goharnesssession.WithMemory(mindxses.NewRAGMemoryAdapter(d.sharedMemory, resolvedAgentName, projectDir)))
 	}
-	sessOpts = append(sessOpts, goharnesssession.WithLogger(d.logger))
-	s, err := goharnesssession.Load(sessionID, resolvedAgentName, d.app.SessDB(), sessOpts...)
+	s, err := goharnesssession.Load(context.Background(), sessionID, resolvedAgentName, d.app.SessDB(), d.logger, sessOpts...)
 	if err != nil {
 		d.logger.Error("failed to load session", err, "session_id", sessionID)
 		d.sendEvent(msg.ClientID, sessionID, gateway.RespError, "Session Error", err.Error())
 		return
 	}
 	d.activeSessions.Store(sessionID, s)
+
+	// 注册 FileModifyHandler：将文件追踪事件转发为 JSON-RPC 通知，
+	// 让前端实时显示 DiffView。
+	//
+	// 防止重复触发的三重保险：
+	//  1. session.TrackModify 内部已用 containsModifyFile 去重，
+	//     同一文件被再次追踪时直接 return nil，不调 handler。
+	//  2. 这里只对 Action == "tracked" 发送事件；"confirmed" / "rolled_back"
+	//     是用户后续操作结果，不应在前端再次弹出 DiffView。
+	//  3. 前端 chatStore.handleFileModified 对同路径消息做 upsert，
+	//     即使收到重复事件也只会更新而非追加。
+	s.SetFileModifyHandler(func(ev goharnesssession.FileModifyEvent) {
+		if ev.Action != "tracked" {
+			return
+		}
+		fp := ev.FilePath
+		if fp == "" {
+			return
+		}
+		payload, _ := json.Marshal(map[string]any{
+			"files":  []string{fp},
+			"action": ev.Action,
+		})
+		d.sendEvent(msg.ClientID, sessionID, gateway.RespFileModified,
+			i18n.T("svc.event.file_modified"), string(payload))
+	})
 
 	clientID := msg.ClientID
 	sid := sessionID
@@ -1340,7 +1365,7 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		}
 	}
 
-	s, err := goharnesssession.Load(sessionID, agent, d.app.SessDB(), goharnesssession.WithLogger(d.logger))
+	s, err := goharnesssession.Load(context.Background(), sessionID, agent, d.app.SessDB(), d.logger)
 	if err != nil {
 		return fmt.Errorf("scheduled task: load session %q: %w", sessionID, err)
 	}

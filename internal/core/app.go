@@ -959,8 +959,7 @@ func (a *App) NewSessionFromMeta() *session.Session {
 		}
 	}
 
-	opts = append([]session.SessionConfig{session.WithLogger(a.logger)}, opts...)
-	s, err := session.Load(a.currentSessionMeta.SessionID, agentName, a.sessDB, opts...)
+	s, err := session.Load(context.Background(), a.currentSessionMeta.SessionID, agentName, a.sessDB, a.logger, opts...)
 	if err != nil {
 		a.logger.Error("failed to load session from store", err, "session_id", a.currentSessionMeta.SessionID)
 		return nil

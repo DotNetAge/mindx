@@ -371,7 +371,9 @@ func (ix *Indexer) Summarize(ctx context.Context, dir string) error {
 }
 
 // RemoveFile removes a file or directory entry from the manifest and cleans up its chunks.
-// For directory entries, also removes the .README.md file if it exists.
+//
+// 注意：目录被移除时不再自动删除 README.md。因为 README.md 可能由用户编写，
+// 自动删除会有破坏用户内容的风险。如需清理自动生成的 README.md，由调用方显式处理。
 func (ix *Indexer) RemoveFile(ctx context.Context, path string) error {
 	if ix.manifest == nil {
 		return fmt.Errorf("manifest not available")
@@ -396,15 +398,10 @@ func (ix *Indexer) RemoveFile(ctx context.Context, path string) error {
 		ix.removeChunks(ctx, existing.ChunkIDs)
 	}
 
-	// For directories, clean up the .README.md file
-	if existing.IsDir {
-		regionFilePath := filepath.Join(path, goragindexer.RegionFileName)
-		if _, statErr := os.Stat(regionFilePath); statErr == nil {
-			if rmErr := os.Remove(regionFilePath); rmErr != nil && ix.logger != nil {
-				ix.logger.Error("indexer: failed to remove region file", fmt.Errorf("%w", rmErr), "path", regionFilePath)
-			}
-		}
-	}
+	// 注意：不再删除目录下的 README.md。
+	// 旧的 .README.md 是系统生成的隐藏文件，删除是安全的；
+	// 新的 README.md 可能由用户编写，自动删除会破坏用户内容。
+	// 如需清理，应由上层显式调用（例如根据 readme_preexisting 标记决定）。
 
 	// Delete from manifest
 	removed, err := ix.manifest.delete(path)
@@ -757,7 +754,7 @@ func (ix *Indexer) processDir(ctx context.Context, file *FileMeta) bool {
 		if riErr != nil {
 			summarizeErr = fmt.Errorf("index region: %w", riErr)
 		} else if result != nil && result.RegionFilePath != "" {
-			// Index the generated .README.md
+			// Index the README.md (generated or pre-existing)
 			chunks, idxErr := ix.indexFile(ctx, result.RegionFilePath)
 			if idxErr != nil && ix.logger != nil {
 				ix.logger.Error("indexer: failed to index region file", fmt.Errorf("%w", idxErr), "path", result.RegionFilePath)

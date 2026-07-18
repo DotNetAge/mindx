@@ -101,7 +101,8 @@ func (d *Daemon) handleKBCheckRegionHealth(_ context.Context, params json.RawMes
 
 // handleKBRepairRegion calls RegionIndexer.IndexRegion followed by
 // GraphIndexer.AddFile to fill in missing Region-level chunks and graph nodes
-// for the given projectDir.
+// for the given projectDir. If README.md already exists in the directory, it
+// will be reused as-is instead of being regenerated.
 func (d *Daemon) handleKBRepairRegion(ctx context.Context, params json.RawMessage) (any, error) {
 	var p rpc.KBRepairRegionParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -129,7 +130,7 @@ func (d *Daemon) handleKBRepairRegion(ctx context.Context, params json.RawMessag
 
 	d.logger.Info("kb.repair_region: starting", "project_dir", absDir)
 
-	// 1. Generate .README.md + Region graph nodes/edges
+	// 1. Generate/reuse README.md + Region graph nodes/edges
 	result, riErr := d.regionIndexer.IndexRegion(ctx, absDir)
 	if riErr != nil {
 		d.logger.Error("kb.repair_region: IndexRegion failed", riErr, "project_dir", absDir)
@@ -143,10 +144,10 @@ func (d *Daemon) handleKBRepairRegion(ctx context.Context, params json.RawMessag
 		}, nil
 	}
 
-	d.logger.Info("kb.repair_region: .README.md generated, now indexing it",
+	d.logger.Info("kb.repair_region: README.md ready, now indexing it",
 		"path", result.RegionFilePath)
 
-	// 2. Index the generated .README.md through GraphIndexer
+	// 2. Index the README.md through GraphIndexer
 	regionID := fmt.Sprintf("%x", sha256.Sum256([]byte(absDir)))
 	fileCtx := goragindexer.WithRegionID(ctx, regionID)
 

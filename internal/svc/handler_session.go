@@ -284,17 +284,17 @@ func (d *Daemon) getOrLoadSession(sessionID string) (*goharnesssession.Session, 
 	if sessDB != nil {
 		// Try to load existing session from persistent store.
 		var loadErr error
-		sess, loadErr = goharnesssession.Load(sessionID, "", sessDB, goharnesssession.WithLogger(d.logger))
+		sess, loadErr = goharnesssession.Load(context.Background(), sessionID, "", sessDB, d.logger)
 		if loadErr != nil {
 			// Session not found in store — create empty session as fallback
 			// so ConfirmModify/Rollback return empty lists instead of errors.
-			sess = goharnesssession.NewSession(sessionID, "", goharnesssession.WithLogger(d.logger))
+			sess, _ = goharnesssession.New("", "", "", sessDB, d.logger)
 			return sess, nil
 		}
 		// Trigger lazy-load to restore messages and modify_files.
 		sess.All()
 	} else {
-		sess = goharnesssession.NewSession(sessionID, "", goharnesssession.WithLogger(d.logger))
+		sess, _ = goharnesssession.New("", "", "", nil, d.logger)
 	}
 
 	return sess, nil
@@ -603,8 +603,7 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 
 	switch p.Mode {
 	case "micro":
-		sessionDir := sess.SessionDir()
-		performed := sess.TryMicroCompact(sessionDir)
+		performed := sess.TryMicroCompact()
 		if !performed {
 			d.logger.Info("session.compact: micro compact skipped (below threshold or nothing to compress)",
 				"session_id", p.SessionID)

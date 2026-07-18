@@ -283,6 +283,7 @@
   "svc.event.error": "Error",
   "svc.event.execution.exception": "Execution exception: %v",
   "svc.event.execution.summary": "Execution Summary",
+  "svc.event.file_modified": "File Modified",
   "svc.event.final.answer": "Final Answer",
   "svc.event.llm.timeout": "LLM timed out after %s: %s",
   "svc.event.max.turns.reached": "Max Turns Reached",

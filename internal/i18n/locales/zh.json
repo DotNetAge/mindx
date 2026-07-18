@@ -283,6 +283,7 @@
   "svc.event.error": "错误",
   "svc.event.execution.exception": "执行异常: %v",
   "svc.event.execution.summary": "执行摘要",
+  "svc.event.file_modified": "文件已修改",
   "svc.event.final.answer": "最终答案",
   "svc.event.llm.timeout": "LLM 超时 (%s): %s",
   "svc.event.max.turns.reached": "已达最大对话轮次",
