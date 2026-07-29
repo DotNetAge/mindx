@@ -105,7 +105,6 @@ func SyncRuntimeAssets(embeddedFS fs.FS, workspaceDir, appVersion string, cfg *M
 	// Directories that should be unconditionally overwritten
 	overwriteDirs := map[string]bool{
 		"schemas": true,
-		"web":     true,
 	}
 
 	// Directories that should be protected from overwriting user edits

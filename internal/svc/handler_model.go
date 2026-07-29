@@ -99,16 +99,6 @@ func (d *Daemon) handleModelSwitch(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("failed to save config: %w", err)
 	}
 
-	// If GraphIndexer was not initialized at startup (no model configured),
-	// try to initialize it now that a model is available.
-	if d.graphIndexer == nil {
-		if initErr := d.ensureGraphIndexer(); initErr != nil {
-			d.logger.Warn("failed to initialize GraphIndexer after model switch",
-				"error", initErr,
-			)
-		}
-	}
-
 	return map[string]any{
 		"name":     p.Name,
 		"provider": cfg.Provider,

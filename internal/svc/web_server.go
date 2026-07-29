@@ -3,6 +3,7 @@ package svc
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -16,7 +17,7 @@ import (
 type WebServer struct {
 	server      *http.Server
 	addr        string
-	root        string
+	embedFS     fs.FS
 	faviconPath string
 	logger      logging.Logger
 	// extraHandlers stores additional HTTP handlers registered before Start().
@@ -32,19 +33,19 @@ type handlerRegistration struct {
 
 const DefaultWebPort = ":1313"
 
-func NewWebServer(webDir string, logger logging.Logger) *WebServer {
+func NewWebServer(embedFS fs.FS, logger logging.Logger) *WebServer {
 	if logger == nil {
 		logger = logging.DefaultNoopLogger()
 	}
 	return &WebServer{
-		addr:   DefaultWebPort,
-		root:   webDir,
-		logger: logger,
+		addr:    DefaultWebPort,
+		embedFS: embedFS,
+		logger:  logger,
 	}
 }
 
 // SetFavicon sets an optional external favicon file path.
-// When set, /favicon.ico will serve this file even if not present in webDir.
+// When set, /favicon.ico will serve this file.
 func (ws *WebServer) SetFavicon(path string) {
 	ws.faviconPath = path
 }
@@ -62,12 +63,13 @@ func (ws *WebServer) HandleFunc(pattern string, handler http.HandlerFunc) {
 }
 
 func (ws *WebServer) Start(ctx context.Context) error {
-	if ws.root == "" {
-		return fmt.Errorf("web directory is empty")
+	if ws.embedFS == nil {
+		return fmt.Errorf("embedded web filesystem is nil")
 	}
 
-	if _, err := os.Stat(ws.root); os.IsNotExist(err) {
-		ws.logger.Warn("web directory does not exist, skipping WebUI server", "dir", ws.root)
+	// 验证嵌入式文件系统中存在 index.html
+	if _, err := ws.embedFS.Open("index.html"); err != nil {
+		ws.logger.Warn("embedded web filesystem missing index.html, skipping WebUI server", "error", err)
 		return nil
 	}
 
@@ -80,27 +82,22 @@ func (ws *WebServer) Start(ctx context.Context) error {
 		ws.logger.Info("web server: registered handler", "pattern", h.pattern)
 	}
 
-	fileServer := http.FileServer(http.Dir(ws.root))
+	fileServer := http.FileServer(http.FS(ws.embedFS))
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cleanPath := filepath.Clean(r.URL.Path)
 
-		fullPath := filepath.Join(ws.root, cleanPath)
-
-		info, err := os.Stat(fullPath)
-		if err != nil || info.IsDir() {
-			indexFile := filepath.Join(ws.root, "index.html")
-			if _, statErr := os.Stat(indexFile); statErr == nil {
-				http.ServeFile(w, r, indexFile)
-				return
-			}
-			http.NotFound(w, r)
+		f, err := ws.embedFS.Open(cleanPath)
+		if err != nil {
+			// 文件不存在，回退到 index.html（SPA 模式）
+			ws.serveIndexHTML(w, r)
 			return
 		}
+		f.Close()
 
 		fileServer.ServeHTTP(w, r)
 	}))
 
-	// Favicon: serve from configured icon path or fallback to webDir
+	// Favicon: serve from configured icon path or fallback to embedded FS
 	mux.HandleFunc("/favicon.ico", ws.handleFavicon)
 	mux.HandleFunc("/favicon.png", ws.handleFavicon)
 
@@ -148,8 +145,19 @@ func (ws *WebServer) Start(ctx context.Context) error {
 		ws.logger.Info("WebUI server stopped")
 	}()
 
-	ws.logger.Info("WebUI server started", "addr", fmt.Sprintf("http://localhost%s", ws.addr), "root", ws.root)
+	ws.logger.Info("WebUI server started", "addr", fmt.Sprintf("http://localhost%s", ws.addr))
 	return nil
+}
+
+func (ws *WebServer) serveIndexHTML(w http.ResponseWriter, r *http.Request) {
+	data, err := fs.ReadFile(ws.embedFS, "index.html")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 func (ws *WebServer) Addr() string {
@@ -160,30 +168,28 @@ func (ws *WebServer) URL() string {
 	return fmt.Sprintf("http://localhost%s", ws.addr)
 }
 
-func WebDir(workspaceDir string) string {
-	return filepath.Join(workspaceDir, "web")
-}
-
 // handleFavicon serves the app icon as favicon.
-// Priority: configured iconPath → webDir/favicon.ico → webDir/favicon.png → 404
+// Priority: configured iconPath → embedded favicon.ico → embedded favicon.png → 404
 func (ws *WebServer) handleFavicon(w http.ResponseWriter, r *http.Request) {
 	// Try configured external icon path first
 	if ws.faviconPath != "" {
-		if info, err := os.Stat(ws.faviconPath); err == nil && !info.IsDir() {
-			w.Header().Set("Content-Type", "image/png")
-			w.Header().Set("Cache-Control", "public, max-age=86400")
-			http.ServeFile(w, r, ws.faviconPath)
-			return
-		}
+		http.ServeFile(w, r, ws.faviconPath)
+		return
 	}
 
-	// Fallback: look in webDir
+	// Fallback: look in embedded FS
 	candidates := []string{"favicon.ico", "favicon.png"}
 	for _, name := range candidates {
-		candidate := filepath.Join(ws.root, name)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+		data, err := fs.ReadFile(ws.embedFS, name)
+		if err == nil {
+			contentType := "image/x-icon"
+			if strings.HasSuffix(name, ".png") {
+				contentType = "image/png"
+			}
+			w.Header().Set("Content-Type", contentType)
 			w.Header().Set("Cache-Control", "public, max-age=86400")
-			http.ServeFile(w, r, candidate)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(data)
 			return
 		}
 	}

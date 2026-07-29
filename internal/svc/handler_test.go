@@ -14,6 +14,7 @@ import (
 	"github.com/DotNetAge/goharness/logging"
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
 
@@ -39,7 +40,7 @@ func newTestDaemon(t *testing.T) (*Daemon, func()) {
 
 	_ = app.SetTestDir(tmpDir)
 
-	d := NewDaemon(app, ":0", "/ws", nil)
+	d := NewDaemon(app, ":0", "/ws", nil, nil)
 
 	cleanup := func() {
 		d.stopBackgroundServices()
@@ -936,60 +937,6 @@ func TestHandleLogCount_OK(t *testing.T) {
 }
 
 // ==========================================================================
-// Entity Tags RPC Handlers
-// ==========================================================================
-
-func TestHandleEntityTagsGet_OK(t *testing.T) {
-	d, cleanup := newTestDaemon(t)
-	defer cleanup()
-
-	// When no entity-defs.json exists, returns empty structure
-	result, err := d.handleEntityTagsGet(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("handleEntityTagsGet error = %v", err)
-	}
-	f, ok := result.(*entityTagsFile)
-	if !ok {
-		t.Fatalf("expected *entityTagsFile, got %T", result)
-	}
-	if f.Domain != "user" {
-		t.Errorf("domain = %s, want user", f.Domain)
-	}
-}
-
-func TestHandleEntityTagsSave_OK(t *testing.T) {
-	d, cleanup := newTestDaemon(t)
-	defer cleanup()
-
-	params, _ := json.Marshal(map[string]any{
-		"types": []map[string]any{
-			{"name": "bug", "title": "Bug", "desc": "A software bug"},
-		},
-	})
-	result, err := d.handleEntityTagsSave(context.Background(), params)
-	if err != nil {
-		t.Fatalf("handleEntityTagsSave error = %v", err)
-	}
-	m, ok := result.(map[string]any)
-	if !ok {
-		t.Fatalf("expected map[string]any, got %T", result)
-	}
-	if m["status"] != "ok" {
-		t.Errorf("status = %v, want ok", m["status"])
-	}
-}
-
-func TestHandleEntityTagsSave_InvalidJSON(t *testing.T) {
-	d, cleanup := newTestDaemon(t)
-	defer cleanup()
-
-	_, err := d.handleEntityTagsSave(context.Background(), json.RawMessage("bad"))
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-// ==========================================================================
 // Provider RPC Handlers (defined in handler_model.go)
 // ==========================================================================
 
@@ -1078,4 +1025,267 @@ func TestHandleProviderDelete_InvalidJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
+}
+
+// ==========================================================================
+// Graph RPC Handlers — 图数据库 CRUD 测试
+// ==========================================================================
+
+func TestHandleGraphUpsertAndQueryNodes(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	if d.graphStore == nil {
+		t.Skip("graph store not available")
+	}
+
+	// 1. Upsert 两个节点
+	params, _ := json.Marshal(rpc.GraphUpsertNodesParams{
+		Nodes: []rpc.GraphNodeParam{
+			{ID: "n1", Labels: []string{"Person"}, Properties: map[string]interface{}{"name": "Alice", "age": 30}},
+			{ID: "n2", Labels: []string{"Person"}, Properties: map[string]interface{}{"name": "Bob", "age": 25}},
+		},
+	})
+	result, err := d.handleGraphUpsertNodes(context.Background(), params)
+	if err != nil {
+		t.Fatalf("upsert nodes error = %v", err)
+	}
+	m := result.(map[string]interface{})
+	if m["upserted"] != 2 {
+		t.Errorf("expected 2 upserted, got %v", m["upserted"])
+	}
+
+	// 2. ListNodes 验证
+	result, err = d.handleGraphListNodes(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("list nodes error = %v", err)
+	}
+	nodes := result.([]map[string]interface{})
+	if len(nodes) != 2 {
+		t.Fatalf("expected 2 nodes, got %d", len(nodes))
+	}
+
+	// 3. GetNode 按 ID 查询
+	getParams, _ := json.Marshal(rpc.GraphGetNodeParams{ID: "n1"})
+	result, err = d.handleGraphGetNode(context.Background(), getParams)
+	if err != nil {
+		t.Fatalf("get node error = %v", err)
+	}
+	node := result.(map[string]interface{})
+	if node["id"] != "n1" {
+		t.Errorf("expected id n1, got %v", node["id"])
+	}
+
+	// 4. GraphQuery 用 Cypher 查询
+	queryParams, _ := json.Marshal(rpc.GraphQueryParams{
+		Query:  "MATCH (n:Person) WHERE n.age > $minAge RETURN n.name AS name, n.age AS age",
+		Params: map[string]interface{}{"minAge": 28},
+	})
+	result, err = d.handleGraphQuery(context.Background(), queryParams)
+	if err != nil {
+		t.Fatalf("graph query error = %v", err)
+	}
+	qResult := result.(map[string]interface{})
+	rows := qResult["rows"].([]map[string]interface{})
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (Alice > 28), got %d", len(rows))
+	}
+	if rows[0]["name"] != "Alice" {
+		t.Errorf("expected Alice, got %v", rows[0]["name"])
+	}
+}
+
+func TestHandleGraphUpsertAndQueryEdges(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	if d.graphStore == nil {
+		t.Skip("graph store not available")
+	}
+
+	// 先创建两个节点
+	nodeParams, _ := json.Marshal(rpc.GraphUpsertNodesParams{
+		Nodes: []rpc.GraphNodeParam{
+			{ID: "e1", Labels: []string{"Person"}, Properties: map[string]interface{}{"name": "Alice"}},
+			{ID: "e2", Labels: []string{"Person"}, Properties: map[string]interface{}{"name": "Bob"}},
+		},
+	})
+	_, err := d.handleGraphUpsertNodes(context.Background(), nodeParams)
+	if err != nil {
+		t.Fatalf("setup nodes error = %v", err)
+	}
+
+	// 1. Upsert 一条边
+	edgeParams, _ := json.Marshal(rpc.GraphUpsertEdgesParams{
+		Edges: []rpc.GraphEdgeParam{
+			{FromNodeID: "e1", ToNodeID: "e2", Type: "KNOWS", Properties: map[string]interface{}{"since": 2020}},
+		},
+	})
+	_, err = d.handleGraphUpsertEdges(context.Background(), edgeParams)
+	if err != nil {
+		t.Fatalf("upsert edges error = %v", err)
+	}
+
+	// 2. ListEdges 验证
+	result, err := d.handleGraphListEdges(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("list edges error = %v", err)
+	}
+	edges := result.([]map[string]interface{})
+	if len(edges) != 1 {
+		t.Fatalf("expected 1 edge, got %d", len(edges))
+	}
+	if edges[0]["type"] != "KNOWS" {
+		t.Errorf("expected KNOWS, got %v", edges[0]["type"])
+	}
+
+	// 3. GetNeighbors 验证
+	neighborParams, _ := json.Marshal(rpc.GraphGetNeighborsParams{ID: "e1", Depth: 1, Limit: 10})
+	result, err = d.handleGraphGetNeighbors(context.Background(), neighborParams)
+	if err != nil {
+		t.Fatalf("get neighbors error = %v", err)
+	}
+	neighbors := result.([]map[string]interface{})
+	if len(neighbors) != 1 {
+		t.Fatalf("expected 1 neighbor, got %d", len(neighbors))
+	}
+	node := neighbors[0]["node"].(map[string]interface{})
+	if node["id"] != "e2" {
+		t.Errorf("expected neighbor e2, got %v", node["id"])
+	}
+}
+
+func TestHandleGraphExec_CypherWrite(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	if d.graphDB == nil {
+		t.Skip("graph db not available")
+	}
+
+	// Exec Cypher: 创建节点
+	execParams, _ := json.Marshal(rpc.GraphQueryParams{
+		Query: "CREATE (n:TestNode {name: $name}) RETURN n",
+		Params: map[string]interface{}{"name": "test"},
+	})
+	_, err := d.handleGraphExec(context.Background(), execParams)
+	if err != nil {
+		t.Fatalf("graph exec error = %v", err)
+	}
+
+	// 用 Query 验证节点已被创建
+	queryParams, _ := json.Marshal(rpc.GraphQueryParams{
+		Query: "MATCH (n:TestNode) RETURN n.name AS name",
+	})
+	qr, err := d.handleGraphQuery(context.Background(), queryParams)
+	if err != nil {
+		t.Fatalf("graph query after exec error = %v", err)
+	}
+	qResult := qr.(map[string]interface{})
+	rows := qResult["rows"].([]map[string]interface{})
+	if len(rows) != 1 || rows[0]["name"] != "test" {
+		t.Errorf("expected 1 row with name=test, got %v", rows)
+	}
+}
+
+func TestHandleGraph_NilGuard(t *testing.T) {
+	// graphDB/graphStore 为 nil 时的守卫测试
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	// 模拟 graphDB 为 nil 的场景
+	d.graphDB = nil
+	d.graphStore = nil
+
+	// 所有 graph.* handler 应返回 error
+	handlers := []struct {
+		name string
+		fn   func(ctx context.Context, params json.RawMessage) (any, error)
+		params json.RawMessage
+	}{
+		{"graph.query", d.handleGraphQuery, mustJSON(t, rpc.GraphQueryParams{Query: "MATCH (n) RETURN n"})},
+		{"graph.exec", d.handleGraphExec, mustJSON(t, rpc.GraphQueryParams{Query: "CREATE (n)"})},
+		{"graph.upsert_nodes", d.handleGraphUpsertNodes, mustJSON(t, rpc.GraphUpsertNodesParams{Nodes: []rpc.GraphNodeParam{{ID: "x", Labels: []string{"X"}}}})},
+		{"graph.upsert_edges", d.handleGraphUpsertEdges, mustJSON(t, rpc.GraphUpsertEdgesParams{Edges: []rpc.GraphEdgeParam{{FromNodeID: "a", ToNodeID: "b", Type: "X"}}})},
+		{"graph.get_node", d.handleGraphGetNode, mustJSON(t, rpc.GraphGetNodeParams{ID: "x"})},
+		{"graph.get_neighbors", d.handleGraphGetNeighbors, mustJSON(t, rpc.GraphGetNeighborsParams{ID: "x"})},
+		{"graph.list_nodes", d.handleGraphListNodes, nil},
+		{"graph.list_edges", d.handleGraphListEdges, nil},
+	}
+
+	for _, h := range handlers {
+		t.Run(h.name, func(t *testing.T) {
+			_, err := h.fn(context.Background(), h.params)
+			if err == nil {
+				t.Error("expected error when graphDB is nil, got nil")
+			}
+		})
+	}
+}
+
+func TestHandleGraph_ValidationErrors(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	if d.graphStore == nil {
+		t.Skip("graph store not available")
+	}
+
+	t.Run("missing query", func(t *testing.T) {
+		params, _ := json.Marshal(rpc.GraphQueryParams{Query: ""})
+		_, err := d.handleGraphQuery(context.Background(), params)
+		if err == nil {
+			t.Error("expected error for empty query")
+		}
+	})
+
+	t.Run("missing exec query", func(t *testing.T) {
+		params, _ := json.Marshal(rpc.GraphQueryParams{Query: ""})
+		_, err := d.handleGraphExec(context.Background(), params)
+		if err == nil {
+			t.Error("expected error for empty query")
+		}
+	})
+
+	t.Run("missing node id", func(t *testing.T) {
+		params, _ := json.Marshal(rpc.GraphGetNodeParams{ID: ""})
+		_, err := d.handleGraphGetNode(context.Background(), params)
+		if err == nil {
+			t.Error("expected error for empty id")
+		}
+	})
+
+	t.Run("missing neighbor id", func(t *testing.T) {
+		params, _ := json.Marshal(rpc.GraphGetNeighborsParams{ID: ""})
+		_, err := d.handleGraphGetNeighbors(context.Background(), params)
+		if err == nil {
+			t.Error("expected error for empty id")
+		}
+	})
+
+	t.Run("empty nodes upsert", func(t *testing.T) {
+		params, _ := json.Marshal(rpc.GraphUpsertNodesParams{Nodes: []rpc.GraphNodeParam{}})
+		_, err := d.handleGraphUpsertNodes(context.Background(), params)
+		if err == nil {
+			t.Error("expected error for empty nodes")
+		}
+	})
+
+	t.Run("empty edges upsert", func(t *testing.T) {
+		params, _ := json.Marshal(rpc.GraphUpsertEdgesParams{Edges: []rpc.GraphEdgeParam{}})
+		_, err := d.handleGraphUpsertEdges(context.Background(), params)
+		if err == nil {
+			t.Error("expected error for empty edges")
+		}
+	})
+}
+
+// mustJSON is a test helper that marshals v to json.RawMessage.
+func mustJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("mustJSON: %v", err)
+	}
+	return json.RawMessage(data)
 }

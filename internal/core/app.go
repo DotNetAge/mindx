@@ -21,7 +21,6 @@ import (
 	"github.com/DotNetAge/goharness/store"
 	"github.com/DotNetAge/goharness/tools"
 	goragcore "github.com/DotNetAge/gorag/v2/core"
-	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
 	mindxtools "github.com/DotNetAge/mindx/internal/tools"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
@@ -63,9 +62,6 @@ type App struct {
 
 	// Optional components
 	embedder goragcore.Embedder
-
-	// Knowledge graph indexer (injected by Daemon after initialization)
-	graphIndexer *goragindexer.GraphIndexer
 
 	// Long-term memory store (injected by Daemon; TUI mode creates locally)
 	longTermMemory goharnessmemory.Memory
@@ -238,11 +234,6 @@ func (a *App) Settings() *Settings {
 
 func (a *App) Embedder() goragcore.Embedder {
 	return a.embedder
-}
-
-// SetGraphIndexer injects the knowledge graph indexer for knowledge base tools.
-func (a *App) SetGraphIndexer(gi *goragindexer.GraphIndexer) {
-	a.graphIndexer = gi
 }
 
 // SetLongTermMemory injects the long-term memory store for MemorySearch tool registration.
@@ -586,7 +577,7 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		opts = append(opts, agents.WithEnvs(a.envsOverride))
 	}
 
-	if a.searchStrategyOverride != nil && a.graphIndexer != nil {
+	if a.searchStrategyOverride != nil {
 		opts = append(opts, agents.WithSearchStrategy(a.searchStrategyOverride))
 	}
 
@@ -712,31 +703,6 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		}
 	}
 
-	// Register knowledge base tools whenever the graph indexer is available.
-	// Each tool resolves projectDir at runtime from the session/cwd.
-	if a.graphIndexer != nil {
-		qs := mindxtools.NewQuickSearch(a.graphIndexer)
-		if err := rt.RegisterTool(qs); err != nil {
-			a.logger.Warn("createRuntime: 注册 QuickSearch 失败", "agent", agentName, "error", err)
-		} else {
-			a.logger.Info("createRuntime: QuickSearch 注册成功", "agent", agentName)
-		}
-
-		qe := mindxtools.NewQuickExplore(a.graphIndexer)
-		if err := rt.RegisterTool(qe); err != nil {
-			a.logger.Warn("createRuntime: 注册 QuickExplore 失败", "agent", agentName, "error", err)
-		} else {
-			a.logger.Info("createRuntime: QuickExplore 注册成功", "agent", agentName)
-		}
-
-		fr := mindxtools.NewFindRelation(a.graphIndexer)
-		if err := rt.RegisterTool(fr); err != nil {
-			a.logger.Warn("createRuntime: 注册 FindRelation 失败", "agent", agentName, "error", err)
-		} else {
-			a.logger.Info("createRuntime: FindRelation 注册成功", "agent", agentName)
-		}
-	}
-
 	// Register MCP tools from MCPManager (injected by Daemon).
 	// Each MCP tool is a separate FuncTool instance registered in goharness.
 	if a.mcpMgr != nil {
@@ -767,6 +733,23 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		} else {
 			a.logger.Info("createRuntime: SendMessage 注册成功", "agent", agentName)
 		}
+	}
+
+	// Register QuickExplore tool (知识库目录树浏览).
+	mstoreURL := "http://localhost:1318"
+	exploreTool := mindxtools.NewQuickExplore(mstoreURL)
+	if err := rt.RegisterTool(exploreTool); err != nil {
+		a.logger.Warn("createRuntime: 注册 QuickExplore 失败", "agent", agentName, "error", err)
+	} else {
+		a.logger.Info("createRuntime: QuickExplore 注册成功", "agent", agentName)
+	}
+
+	// Register QuickSearch tool (知识库语义搜索).
+	searchTool := mindxtools.NewQuickSearch(mstoreURL)
+	if err := rt.RegisterTool(searchTool); err != nil {
+		a.logger.Warn("createRuntime: 注册 QuickSearch 失败", "agent", agentName, "error", err)
+	} else {
+		a.logger.Info("createRuntime: QuickSearch 注册成功", "agent", agentName)
 	}
 
 	return rt, nil

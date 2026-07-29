@@ -32,6 +32,7 @@ func needsDoctor(cfg *core.MindxConfig, workspaceDir string) bool {
 
 var RuntimeFS fs.FS
 var AppIconFS fs.FS
+var WebFS fs.FS
 
 var rootCmd = &cobra.Command{
 	Use:          "mindx",

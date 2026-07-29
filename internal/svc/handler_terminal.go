@@ -238,19 +238,8 @@ func (d *Daemon) handleTerminalResize(ctx context.Context, params json.RawMessag
 }
 
 // resolveTerminalCwd tries to find a sensible working directory when none is provided.
-// Priority: first indexed project directory > current working directory.
 func (d *Daemon) resolveTerminalCwd() string {
-	// Try the first indexed project directory
-	d.indexersMu.RLock()
-	for projectDir := range d.indexers {
-		d.indexersMu.RUnlock()
-		if projectDir != "" {
-			return projectDir
-		}
-		return ""
-	}
-	d.indexersMu.RUnlock()
-	// Fallback to current working directory
+	//TODO: 应该从当前Session中获取ProjectDir
 	if cwd, err := os.Getwd(); err == nil {
 		return cwd
 	}

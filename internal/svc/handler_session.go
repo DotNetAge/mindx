@@ -163,29 +163,8 @@ func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("session store not available")
 	}
 
-	// Capture project dir from session meta before deleting,
-	// so we can clean up the index state.
-	var projectDir string
-	meta, metaErr := goharnesssession.GetSessionMeta(context.Background(), sessDB, p.SessionID)
-	if metaErr == nil && meta != nil {
-		projectDir = meta.ProjectDir
-	}
-
 	if err := goharnesssession.DeleteSession(context.Background(), sessDB, p.SessionID); err != nil {
 		return nil, fmt.Errorf("delete session %q failed: %w", p.SessionID, err)
-	}
-
-	// Note: per-session index state cleanup is handled by the Indexer lifecycle.
-	_ = projectDir // kept for future use
-	if absDir, absErr := filepath.Abs(projectDir); absErr == nil {
-		pi, piErr := d.getIndexer(absDir)
-		if piErr == nil && pi != nil {
-			pi.Stop()
-			d.logger.Info("session.delete: stopped indexing for session",
-				"session_id", p.SessionID,
-				"project_dir", projectDir,
-			)
-		}
 	}
 
 	return map[string]any{
@@ -209,7 +188,6 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 	d.logger.Info("session.create: called",
 		"agent", p.Agent,
 		"project_dir", p.ProjectDir,
-		"graph_indexer_available", d.graphIndexer != nil,
 	)
 
 	sessDB := d.app.SessDB()

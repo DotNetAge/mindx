@@ -26,7 +26,7 @@ var _ memory.Memory = (*RAGMemory)(nil)
 // All agents' memories are stored in the same vector store, differentiated by metadata
 // fields (agent_name, session_id) for filter-based retrieval.
 type RAGMemory struct {
-	semantic goragcore.Indexer // SemanticIndexer（统一记忆存储）
+	semantic goragindexer.Indexer // SemanticIndexer（统一记忆存储）
 	embedder goragcore.Embedder
 	logger   logging.Logger
 }
@@ -41,8 +41,6 @@ type MemoryConfig struct {
 	Logger logging.Logger
 
 	Embedder goragcore.Embedder
-
-	ReadOnly bool
 }
 
 func (c MemoryConfig) dataDir() string {
@@ -53,7 +51,10 @@ func NewEmbedderFromConfig(modelPath string) (goragcore.Embedder, error) {
 	if modelPath == "" {
 		return nil, nil
 	}
-	emb, err := embedder.NewChineseClipEmbedder(embedder.WithModelFile(modelPath))
+	emb, err := embedder.NewBGEEmbedder(
+		embedder.WithBGEModelFile(modelPath),
+		embedder.WithBGEDimension(384),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("memory: 创建 embedder 失败: %w", err)
 	}
@@ -62,7 +63,7 @@ func NewEmbedderFromConfig(modelPath string) (goragcore.Embedder, error) {
 
 // NewRAGMemory 创建一个 RAGMemory 实例。
 // semanticIdx 始终非空；graphIdx 可为 nil（仅使用语义检索）。
-func NewRAGMemory(semanticIdx goragcore.Indexer, opts ...RAGMemoryOption) *RAGMemory {
+func NewRAGMemory(semanticIdx goragindexer.Indexer, opts ...RAGMemoryOption) *RAGMemory {
 	m := &RAGMemory{
 		semantic: semanticIdx,
 	}
@@ -103,14 +104,16 @@ func NewRAGMemoryFromConfig(cfg MemoryConfig) (*RAGMemory, error) {
 		govector.WithDimension(cfg.Embedder.Dim()),
 		govector.WithDBPath(filepath.Join(semVecDir, "shared.db")),
 		govector.WithHNSW(true),
-		govector.WithReadOnly(cfg.ReadOnly),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("memory: 创建语义向量存储 %s 失败: %w", semVecDir, err)
 	}
-	semIdx := goragindexer.NewSemanticIndexer(semVS, cfg.Embedder,
+	semIdx, semErr := goragindexer.NewSemanticIndexer(semVS, cfg.Embedder,
 		goragindexer.WithSemanticLogger(logger),
 	)
+	if semErr != nil {
+		return nil, fmt.Errorf("memory: 创建语义索引器失败: %w", semErr)
+	}
 
 	m := &RAGMemory{
 		semantic: semIdx,
@@ -133,7 +136,7 @@ func WithEmbedder(embedder goragcore.Embedder) RAGMemoryOption {
 }
 
 // Semantic 返回 SemanticIndexer，用于统一记忆存储。
-func (m *RAGMemory) Semantic() goragcore.Indexer {
+func (m *RAGMemory) Semantic() goragindexer.Indexer {
 	return m.semantic
 }
 
@@ -184,7 +187,12 @@ func (m *RAGMemory) storeMemoryChunk(ctx context.Context, chunk memory.MemoryChu
 		Metadata: metadata,
 	}
 
-	if err := m.semantic.StoreChunk(ctx, coreChunk); err != nil {
+	store, ok := m.semantic.(goragindexer.IndexerStore)
+	if !ok {
+		return fmt.Errorf("memory: 语义索引器不支持存储操作")
+	}
+	doc := goragcore.NewStructuredDocFromChunks([]goragcore.Chunk{*coreChunk})
+	if err := store.Save(ctx, doc); err != nil {
 		return fmt.Errorf("memory: 存储 chunk 失败: %w", err)
 	}
 	return nil
@@ -207,23 +215,23 @@ func (m *RAGMemory) Retrieve(ctx context.Context, query string, opts ...memory.R
 		return nil, nil
 	}
 
-	hits, err := idx.Search(ctx, q)
+	hitResult, err := idx.Search(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("memory: 检索失败: %w", err)
 	}
 
-	if len(hits) == 0 {
+	if hitResult == nil || len(hitResult.Chunks) == 0 {
 		return nil, nil
 	}
 
 	var chunks []memory.MemoryChunk
-	for _, hit := range hits {
-		chunk := hitToChunk(hit)
+	for _, chunkHit := range hitResult.Chunks {
+		chunk := chunkHitToChunk(chunkHit)
 		if chunk == nil {
 			continue
 		}
 
-		if cfg.MinScore > 0 && float64(hit.Score) < cfg.MinScore {
+		if cfg.MinScore > 0 && float64(chunkHit.Score) < cfg.MinScore {
 			continue
 		}
 
@@ -257,44 +265,49 @@ func (m *RAGMemory) RetrieveLatest(ctx context.Context, agentName, projectDir st
 		ctx = context.Background()
 	}
 
-	// 分页拉取所有 hits，按 metadata 过滤
+	admin, ok := idx.(goragindexer.IndexerAdmin)
+	if !ok {
+		return nil, fmt.Errorf("memory: 语义索引器不支持 List 操作")
+	}
+
+	// 分页拉取所有 chunks，按 metadata 过滤
 	var matched []memory.MemoryChunk
 	const pageSize = 200
 	offset := 0
 	totalHits := 0
 	for {
-		hits, err := idx.List(ctx, offset, pageSize)
+		chunks, total, err := admin.List(ctx, offset, pageSize, nil)
 		if err != nil {
 			return nil, fmt.Errorf("memory: 检索最新记忆失败: %w", err)
 		}
-		if len(hits) == 0 {
+		if len(chunks) == 0 {
 			break
 		}
-		totalHits += len(hits)
-		for _, hit := range hits {
-			chunk := hitToChunk(hit)
+		totalHits = total
+		for _, c := range chunks {
+			chunk := coreChunkToChunk(c)
 			if chunk == nil {
-				m.logger.Debug("RetrieveLatest: hitToChunk returned nil", "hit_id", hit.ID)
+				m.logger.Debug("RetrieveLatest: coreChunkToChunk returned nil", "chunk_id", c.ID)
 				continue
 			}
 			m.logger.Debug("RetrieveLatest: chunk metadata",
-				"hit_id", hit.ID, "agent_name", chunk.AgentName,
+				"chunk_id", c.ID, "agent_name", chunk.AgentName,
 				"project_dir", chunk.ProjectDir, "summary", chunk.Summary)
 			// 过滤 agent_name
 			if agentName != "" && chunk.AgentName != agentName {
 				m.logger.Debug("RetrieveLatest: filtered by agent_name",
-					"want", agentName, "got", chunk.AgentName, "hit_id", hit.ID)
+					"want", agentName, "got", chunk.AgentName, "chunk_id", c.ID)
 				continue
 			}
 			// 过滤 project_dir
 			if projectDir != "" && chunk.ProjectDir != projectDir {
 				m.logger.Debug("RetrieveLatest: filtered by project_dir",
-					"want", projectDir, "got", chunk.ProjectDir, "hit_id", hit.ID)
+					"want", projectDir, "got", chunk.ProjectDir, "chunk_id", c.ID)
 				continue
 			}
 			matched = append(matched, *chunk)
 		}
-		if len(hits) < pageSize {
+		if len(chunks) < pageSize {
 			break
 		}
 		offset += pageSize
@@ -330,21 +343,26 @@ func (m *RAGMemory) RetrieveBySession(ctx context.Context, sessionID string, lim
 		ctx = context.Background()
 	}
 
+	admin, ok := idx.(goragindexer.IndexerAdmin)
+	if !ok {
+		return nil, fmt.Errorf("memory: 语义索引器不支持 List 操作")
+	}
+
 	var matched []memory.MemoryChunk
 	const pageSize = 200
 	offset := 0
 	totalHits := 0
 	for {
-		hits, err := idx.List(ctx, offset, pageSize)
+		chunks, total, err := admin.List(ctx, offset, pageSize, nil)
 		if err != nil {
 			return nil, fmt.Errorf("memory: 检索会话记忆失败: %w", err)
 		}
-		if len(hits) == 0 {
+		if len(chunks) == 0 {
 			break
 		}
-		totalHits += len(hits)
-		for _, hit := range hits {
-			chunk := hitToChunk(hit)
+		totalHits = total
+		for _, c := range chunks {
+			chunk := coreChunkToChunk(c)
 			if chunk == nil {
 				continue
 			}
@@ -354,7 +372,7 @@ func (m *RAGMemory) RetrieveBySession(ctx context.Context, sessionID string, lim
 			}
 			matched = append(matched, *chunk)
 		}
-		if len(hits) < pageSize {
+		if len(chunks) < pageSize {
 			break
 		}
 		offset += pageSize
@@ -394,10 +412,14 @@ func (m *RAGMemory) Update(ctx context.Context, id string, chunk memory.MemoryCh
 	if idx == nil {
 		return fmt.Errorf("memory: 语义索引器未初始化")
 	}
+	admin, ok := idx.(goragindexer.IndexerAdmin)
+	if !ok {
+		return fmt.Errorf("memory: 语义索引器不支持 Remove 操作")
+	}
 	if id == "" {
 		return memory.ErrMemoryNotFound
 	}
-	if err := idx.Remove(ctx, id); err != nil {
+	if err := admin.Remove(ctx, id); err != nil {
 		return fmt.Errorf("memory update failed to remove old record %s: %w", id, err)
 	}
 	chunk.ID = id
@@ -414,7 +436,12 @@ func (m *RAGMemory) Delete(ctx context.Context, id string) error {
 		return memory.ErrMemoryNotFound
 	}
 
-	err := idx.Remove(ctx, id)
+	admin, ok := idx.(goragindexer.IndexerAdmin)
+	if !ok {
+		return fmt.Errorf("memory: 语义索引器不支持 Remove 操作")
+	}
+
+	err := admin.Remove(ctx, id)
 	if err != nil {
 		return fmt.Errorf("memory: 删除记忆失败 %s: %w", id, err)
 	}
@@ -426,8 +453,8 @@ func (m *RAGMemory) Close(ctx context.Context) error {
 	var errs []error
 
 	if m.semantic != nil {
-		if closer, ok := m.semantic.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
+		if closer, ok := m.semantic.(goragindexer.IndexerCloser); ok {
+			if err := closer.Close(ctx); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -468,29 +495,33 @@ func (m *RAGMemory) buildQueryWithFilter(query string, cfg memory.RetrieveConfig
 	return q
 }
 
-func hitToChunk(hit goragcore.Hit) *memory.MemoryChunk {
+// chunkToMemoryChunk 将 gorag core.Chunk 转换为 memory.MemoryChunk。
+func chunkToMemoryChunk(c *goragcore.Chunk) *memory.MemoryChunk {
+	if c == nil {
+		return nil
+	}
 	chunk := &memory.MemoryChunk{
-		ID:      hit.ID,
-		Content: hit.Content,
+		ID:      c.ID,
+		Content: c.Content,
 	}
 
 	// Extract metadata fields from Vector search results
-	if hit.Metadata != nil {
-		if a, ok := hit.Metadata["agent_name"].(string); ok && a != "" {
+	if c.Metadata != nil {
+		if a, ok := c.Metadata["agent_name"].(string); ok && a != "" {
 			chunk.AgentName = a
 		}
-		if s, ok := hit.Metadata["session_id"].(string); ok {
+		if s, ok := c.Metadata["session_id"].(string); ok {
 			chunk.SessionID = s
 		}
-		if p, ok := hit.Metadata["project_dir"].(string); ok {
+		if p, ok := c.Metadata["project_dir"].(string); ok {
 			chunk.ProjectDir = p
 		}
-		if s, ok := hit.Metadata["summary"].(string); ok && s != "" {
+		if s, ok := c.Metadata["summary"].(string); ok && s != "" {
 			chunk.Summary = s
 		} else {
-			chunk.Summary = hit.Title
+			chunk.Summary = c.Title
 		}
-		if t, ok := hit.Metadata["tags"]; ok {
+		if t, ok := c.Metadata["tags"]; ok {
 			switch v := t.(type) {
 			case []string:
 				if len(v) > 0 {
@@ -504,7 +535,7 @@ func hitToChunk(hit goragcore.Hit) *memory.MemoryChunk {
 				}
 			}
 		}
-		if ts, ok := hit.Metadata["timestamp"]; ok {
+		if ts, ok := c.Metadata["timestamp"]; ok {
 			switch v := ts.(type) {
 			case float64:
 				chunk.Timestamp = time.UnixMilli(int64(v))
@@ -512,16 +543,26 @@ func hitToChunk(hit goragcore.Hit) *memory.MemoryChunk {
 				chunk.Timestamp = time.UnixMilli(v)
 			}
 		}
-		if c, ok := hit.Metadata["content"].(string); ok && c != "" {
-			chunk.Content = c
+		if ct, ok := c.Metadata["content"].(string); ok && ct != "" {
+			chunk.Content = ct
 		}
 	}
 
 	if chunk.Summary == "" {
-		chunk.Summary = hit.Title
+		chunk.Summary = c.Title
 	}
 
 	return chunk
+}
+
+// coreChunkToChunk 将 gorag core.Chunk（值类型）转换为 memory.MemoryChunk。
+func coreChunkToChunk(c goragcore.Chunk) *memory.MemoryChunk {
+	return chunkToMemoryChunk(&c)
+}
+
+// chunkHitToChunk 将 gorag core.ChunkHit 转换为 memory.MemoryChunk。
+func chunkHitToChunk(hit goragcore.ChunkHit) *memory.MemoryChunk {
+	return chunkToMemoryChunk(hit.Chunk)
 }
 
 func contentHash(content string) string {

@@ -18,16 +18,13 @@ import (
 	"github.com/DotNetAge/goharness/events"
 	"github.com/DotNetAge/goharness/hooks/action"
 	goharnesssession "github.com/DotNetAge/goharness/session"
-	goragcore "github.com/DotNetAge/gorag/v2/core"
 	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
-	goraggograph "github.com/DotNetAge/gorag/v2/store/graph/gograph"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/appicon"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/internal/mcp"
 	"github.com/DotNetAge/mindx/internal/update"
-	"github.com/DotNetAge/mindx/pkg/indexing"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
@@ -54,14 +51,7 @@ type Daemon struct {
 	schedulerDB  *scheduler.FileSchedulerStore
 	sharedMemory *memory.RAGMemory
 
-	// knowledge-graph indexer (GraphIndexer)
-	graphIndexer    *goragindexer.GraphIndexer
-	graphIndexerErr error // init failure reason, exposed in KB handler errors
-
-	// region indexer for directory summarization
-	regionIndexer *goragindexer.RegionIndexer
-
-	// token usage recording for single-file index (kb.index)
+	// token usage recording
 	usageStore    goharnesssession.TokenUsageStore
 	modelName     string
 	webServer     *WebServer
@@ -109,14 +99,9 @@ type Daemon struct {
 	// hotReload watches agents/ and skills/ directories for file changes
 	// and automatically reloads registries.
 	hotReload *HotReloadWatcher
-
-	// indexers manages Indexer instances per projectDir (lazy-load)
-	indexers      map[string]*indexing.Indexer // key = projectDir
-	indexersMu    sync.RWMutex
-	indexerErrors map[string]error // cached NewIndexer errors, same key
 }
 
-func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
+func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS, webFS fs.FS) *Daemon {
 	// Inject custom skills prompt: list only names, with a tip to use
 	// "mindx skill list -f" for detailed descriptions.
 	app.SetSkillsPromptOverride(NewSkillsPrompt())
@@ -150,80 +135,34 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		logger.Info("scheduler store created", "dir", app.Settings().SchedulesDir())
 	}
 
-	// ── 知识图谱数据库 (gograph) ──────────────────────────────────
-	// 必须在 memory 初始化之前创建，以便共享同一个 GraphDB 实例。
+	// ── 图数据库 (gograph) — 为 graph.* RPC 提供底层存储 ────────
 	var graphDB *graphapi.DB
 	var graphStore *graphapi.GraphStore
 	var graphErr error
-	var coreGS goragcore.GraphStore
-	var llmModelCfg *goragindexer.ModelConfig
 
 	graphDB, graphStore, graphErr = initGraphDB(app.Settings().DataDir())
 	if graphErr != nil {
-		logger.Warn("failed to initialize knowledge-graph database", "error", graphErr)
+		logger.Warn("failed to initialize graph database", "error", graphErr)
 	} else {
-		coreGS = goraggograph.WrapGraphStore(graphDB, graphStore)
-		logger.Info("knowledge-graph database initialized",
+		logger.Info("graph database initialized",
 			"path", filepath.Join(app.Settings().DataDir(), "kb.db"),
 		)
 	}
 
-	// ── GraphIndexer 模型配置 ────────────────────────────────────
+	// ── 模型名称（用于会话定价） ─────────────────────────────────
+	var modelName string
 	if defaultModel := app.ResolveDefaultModel(); defaultModel != nil {
-		lang := resolveIndexerLang(app.Config())
-		llmModelCfg = &goragindexer.ModelConfig{
-			APIKey:        defaultModel.APIKey,
-			BaseURL:       defaultModel.BaseURL,
-			Model:         defaultModel.Name,
-			Language:      lang,
-			MaxTokens:     int(defaultModel.MaxTokens),
-			ContextLength: int(defaultModel.ContextLength),
-		}
-		logger.Info("GraphIndexer model config resolved",
+		modelName = defaultModel.Name
+		logger.Info("default model resolved for session pricing",
 			"model", defaultModel.Name,
 			"provider", defaultModel.Provider,
-			"lang", lang,
 		)
 	}
 
-	// ── GraphIndexer（知识库）─────────────────────────────────────
-	var graphIndexer *goragindexer.GraphIndexer
-	var regionIndexer *goragindexer.RegionIndexer
-	var graphIndexerErr error
+	// ── Shared Memory（对话记忆）─────────────────────────────────
+	// Memory 仅为对话服务，基于 SemanticIndexer，不与知识库耦合
 	var sharedMemory *memory.RAGMemory
-
 	if emb := app.Embedder(); emb != nil {
-		logger.Info("embedder found, initializing knowledge base and memory services")
-
-		// ── KB Stack: GraphIndexer + RegionIndexer ─────────────────
-		if coreGS != nil && llmModelCfg != nil {
-			gi, ri, kbErr := newKBStack(
-				emb, coreGS, llmModelCfg,
-				app.Settings().DataDir(),
-				logger,
-				app.TokenUsageStore(),
-				app,
-			)
-			if kbErr != nil {
-				logger.Warn("knowledge base init failed, KB service disabled", "error", kbErr)
-				graphIndexerErr = kbErr
-			} else {
-				graphIndexer = gi
-				regionIndexer = ri
-			}
-		} else {
-			if coreGS == nil {
-				logger.Warn("graph store unavailable, GraphIndexer disabled")
-				graphIndexerErr = fmt.Errorf("graph store unavailable (no vector/graph DB configured)")
-			}
-			if llmModelCfg == nil {
-				logger.Warn("no LLM model configured, GraphIndexer disabled")
-				graphIndexerErr = fmt.Errorf("no LLM model configured for knowledge base")
-			}
-		}
-
-		// ── Shared Memory（对话记忆）─────────────────────────────
-		// Memory 仅为对话服务，基于 SemanticIndexer
 		sharedMem, memErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
 			AgentName: "_shared",
 			MemoryDir: filepath.Join(app.Settings().UserPreferences(), "memory"),
@@ -237,38 +176,23 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			logger.Info("shared RAG memory initialized for conversation")
 		}
 	} else {
-		logger.Info("no embedder configured, knowledge base and memory disabled")
+		logger.Info("no embedder configured, memory and search disabled")
 	}
 
 	d := &Daemon{
-		app:             app,
-		addr:            addr,
-		wsPath:          wsPath,
-		schedulerDB:     schedulerDB,
-		indexers:        make(map[string]*indexing.Indexer),
-		indexerErrors:   make(map[string]error),
-		dataDir:         app.Settings().DataDir(),
-		sharedMemory:    sharedMemory,
-		graphIndexer:    graphIndexer,
-		graphIndexerErr: graphIndexerErr,
-		regionIndexer:   regionIndexer,
-		usageStore:      app.TokenUsageStore(),
-		modelName: func() string {
-			if llmModelCfg != nil {
-				return llmModelCfg.Model
-			}
-			return ""
-		}(),
+		app:                 app,
+		addr:                addr,
+		wsPath:              wsPath,
+		schedulerDB:         schedulerDB,
+		dataDir:             app.Settings().DataDir(),
+		sharedMemory:        sharedMemory,
+		usageStore:          app.TokenUsageStore(),
+		modelName:           modelName,
 		runtimeFS:           runtimeFS,
-		webServer:           NewWebServer(WebDir(app.Settings().UserPreferences()), logger),
+		webServer:           NewWebServer(webFS, logger),
 		logger:              logger,
 		pendingInteractions: make(map[string]*pendingInteraction),
 		restartCh:           make(chan struct{}, 1),
-	}
-
-	// Pass GraphIndexer to App for use in knowledge base tools
-	if graphIndexer != nil {
-		app.SetGraphIndexer(graphIndexer)
 	}
 
 	// Pass shared memory to App for MemorySearch tool registration.
@@ -281,7 +205,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		d.graphDB = graphDB
 		d.graphStore = graphStore
 	} else {
-		logger.Warn("knowledge-graph database unavailable, graph RPC disabled")
+		logger.Warn("graph database unavailable, graph RPC disabled")
 	}
 
 	// Extract embedded app icon for favicon
@@ -463,71 +387,6 @@ func (d *Daemon) autoUpdateLoop(ctx context.Context) {
 	}
 }
 
-// resolveIndexerLang returns the language string used by GraphIndexer's
-// ModelConfig based on the application language setting.
-func resolveIndexerLang(cfg *core.MindxConfig) string {
-	if cfg == nil {
-		return "Chinese"
-	}
-	switch cfg.Language {
-	case "en", "en-US", "en-GB":
-		return "English"
-	}
-	return "Chinese"
-}
-
-// ensureGraphIndexer initializes GraphIndexer at runtime
-// if it was not created during startup (e.g., because no LLM model was configured).
-// This allows model.switch to dynamically enable indexing.
-func (d *Daemon) ensureGraphIndexer() error {
-	if d.graphIndexer != nil {
-		d.logger.Info("ensureGraphIndexer: graphIndexer already initialized")
-		return nil
-	}
-
-	if d.graphStore == nil || d.graphDB == nil {
-		return fmt.Errorf("graph store not available")
-	}
-	coreGS := goraggograph.WrapGraphStore(d.graphDB, d.graphStore)
-
-	emb := d.app.Embedder()
-	if emb == nil {
-		return fmt.Errorf("embedder not available")
-	}
-
-	defaultModel := d.app.ResolveDefaultModel()
-	if defaultModel == nil {
-		return fmt.Errorf("no LLM model configured")
-	}
-
-	llmModelCfg := &goragindexer.ModelConfig{
-		APIKey:        defaultModel.APIKey,
-		BaseURL:       defaultModel.BaseURL,
-		Model:         defaultModel.Name,
-		Language:      resolveIndexerLang(d.app.Config()),
-		MaxTokens:     int(defaultModel.MaxTokens),
-		ContextLength: int(defaultModel.ContextLength),
-	}
-
-	gi, ri, kbErr := newKBStack(
-		emb, coreGS, llmModelCfg,
-		d.app.Settings().DataDir(),
-		d.logger,
-		d.app.TokenUsageStore(),
-		d.app,
-	)
-	if kbErr != nil {
-		d.graphIndexerErr = kbErr
-		return kbErr
-	}
-
-	d.graphIndexer = gi
-	d.regionIndexer = ri
-	d.app.SetGraphIndexer(gi)
-
-	return nil
-}
-
 func (d *Daemon) Start(ctx context.Context) error {
 	d.startTime = time.Now()
 	d.logger.Info("daemon start called", "addr", d.addr, "wsPath", d.wsPath)
@@ -640,160 +499,6 @@ func (d *Daemon) Restart() {
 	}
 }
 
-// getIndexer lazily creates or returns an Indexer for the given projectDir.
-func (d *Daemon) getIndexer(projectDir string) (*indexing.Indexer, error) {
-	d.indexersMu.RLock()
-	if p, ok := d.indexers[projectDir]; ok {
-		d.indexersMu.RUnlock()
-		if err := d.indexerErrors[projectDir]; err != nil {
-			return nil, err
-		}
-		return p, nil
-	}
-	d.indexersMu.RUnlock()
-
-	d.indexersMu.Lock()
-	defer d.indexersMu.Unlock()
-
-	// double-check
-	if p, ok := d.indexers[projectDir]; ok {
-		if err := d.indexerErrors[projectDir]; err != nil {
-			return nil, err
-		}
-		return p, nil
-	}
-
-	opts := []indexing.IndexerOption{}
-	if d.usageStore != nil && d.modelName != "" {
-		opts = append(opts, indexing.WithTokenUsageStore(d.usageStore, d.modelName))
-	}
-	if d.regionIndexer != nil {
-		opts = append(opts, indexing.WithRegionIndexer(d.regionIndexer))
-	}
-	if d.modelName != "" {
-		if mc, ok := d.app.ModelCost(d.modelName); ok && (mc.CostPer1MIn > 0 || mc.CostPer1MOut > 0) {
-			opts = append(opts, indexing.WithCostRates(mc.CostPer1MIn, mc.CostPer1MOut, mc.CostPer1MInCached))
-		}
-	}
-
-	pi, err := indexing.NewIndexer(projectDir, d.graphIndexer, filepath.Dir(d.dataDir), d.logger, opts...)
-	if err != nil {
-		d.logger.Error("indexer: failed to create Indexer", err, "project_dir", projectDir)
-		d.indexerErrors[projectDir] = err
-		return nil, err
-	}
-
-	// Wire callbacks for WebUI broadcast notifications
-	if d.gw != nil {
-		cb := &indexing.IndexerCallbacks{
-			OnFileAdded: func(ctx interface{}, path string) {
-				d.gw.BroadcastNotification("file_indexing", map[string]any{
-					"type": "file_indexing",
-					"data": map[string]string{
-						"file":      path,
-						"directory": projectDir,
-						"state":     "added",
-					},
-				})
-			},
-			OnFileRemoved: func(ctx interface{}, path string) {
-				d.gw.BroadcastNotification("file_indexing", map[string]any{
-					"type": "file_indexing",
-					"data": map[string]string{
-						"file":      path,
-						"directory": projectDir,
-						"state":     "removed",
-					},
-				})
-			},
-			OnFilesEnqueued: func(ctx interface{}, paths []string) {
-				for _, path := range paths {
-					d.gw.BroadcastNotification("file_indexing", map[string]any{
-						"type": "file_indexing",
-						"data": map[string]string{
-							"file":      path,
-							"directory": projectDir,
-							"state":     "enqueued",
-						},
-					})
-				}
-			},
-			OnFileIndexStart: func(ctx interface{}, path string) {
-				d.gw.BroadcastNotification("file_indexing", map[string]any{
-					"type": "file_indexing",
-					"data": map[string]string{
-						"file":      path,
-						"directory": projectDir,
-						"state":     "indexing",
-					},
-				})
-			},
-			OnFileIndexDone: func(ctx interface{}, path string) {
-				d.gw.BroadcastNotification("file_indexing", map[string]any{
-					"type": "file_indexing",
-					"data": map[string]string{
-						"file":      path,
-						"directory": projectDir,
-						"state":     "indexed",
-					},
-				})
-			},
-			OnFileIndexFail: func(ctx interface{}, path, errMsg string) {
-				d.gw.BroadcastNotification("file_indexing", map[string]any{
-					"type": "file_indexing",
-					"data": map[string]string{
-						"file":      path,
-						"directory": projectDir,
-						"error":     errMsg,
-						"state":     "error",
-					},
-				})
-			},
-			OnQueueEmpty: func(ctx interface{}) {
-				d.gw.BroadcastNotification("file_indexing", map[string]any{
-					"type": "file_indexing",
-					"data": map[string]string{
-						"directory": projectDir,
-						"state":     "queue_empty",
-					},
-				})
-			},
-		}
-		pi.SetCallbacks(cb)
-	}
-
-	// Wire version recorder
-	d.wireVersionRecorder(pi)
-
-	// Load effective entity defs for this project region so indexing uses the
-	// correct local (or global fallback) schemas from the start.
-	if d.graphIndexer != nil {
-		defs := d.effectiveEntityDefs(projectDir)
-		if len(defs) > 0 {
-			regionID := regionIDForProject(projectDir)
-			d.graphIndexer.SetEntityDefsByRegion(regionID, defs)
-			d.logger.Info("indexer: applied project entity defs", "project_dir", projectDir, "regionID", regionID, "count", len(defs))
-		}
-	}
-
-	d.indexers[projectDir] = pi
-	d.logger.Info("created Indexer for project", "project_dir", projectDir)
-	return pi, nil
-}
-
-// calculateIndexCost estimates the USD cost for indexing a single file
-// based on LLM token consumption. Uses GPT-4o-mini pricing as default:
-//
-//	Input:  $0.15  / 1M tokens
-//	Output: $0.60  / 1M tokens
-func calculateIndexCost(inputTokens, outputTokens int) float64 {
-	const inputPricePerM = 0.15
-	const outputPricePerM = 0.60
-	inputCost := float64(inputTokens) / 1_000_000 * inputPricePerM
-	outputCost := float64(outputTokens) / 1_000_000 * outputPricePerM
-	return inputCost + outputCost
-}
-
 // stopService stops a service whose Stop method returns no error.
 func (d *Daemon) stopService(name string, stopper func()) {
 	if stopper == nil {
@@ -903,8 +608,10 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 		idx := d.sharedMemory.Semantic()
 		var totalChunks int
 		if idx != nil {
-			if cnt, err := idx.Count(context.Background()); err == nil {
-				totalChunks = cnt
+			if admin, ok := idx.(goragindexer.IndexerAdmin); ok {
+				if cnt, err := admin.Count(context.Background()); err == nil {
+					totalChunks = cnt
+				}
 			}
 		}
 		services["memory"] = map[string]any{

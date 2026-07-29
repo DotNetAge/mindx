@@ -418,57 +418,6 @@ func TestMemoryMethods(t *testing.T) {
 }
 
 // ============================================================================
-// KB domain
-// ============================================================================
-
-func TestKBMethods(t *testing.T) {
-	m := newMockGateway()
-	c := &Client{gw: m}
-
-	t.Run("Search", func(t *testing.T) {
-		testRPC(t, c, m, "kb.search", KBSearchParams{Query: "q", Limit: 5, MinScore: 0.7}, func() (json.RawMessage, error) {
-			return c.KBSearch("q", 5, 0.7, "")
-		})
-	})
-
-	t.Run("Count", func(t *testing.T) {
-		testRPC(t, c, m, "kb.count", KBCountParams{Region: "/p"}, func() (json.RawMessage, error) {
-			return c.KBCount("/p")
-		})
-	})
-
-	t.Run("CountAll", func(t *testing.T) {
-		testRPC(t, c, m, "kb.count", KBCountParams{}, func() (json.RawMessage, error) {
-			return c.KBCount("")
-		})
-	})
-
-	t.Run("Chunks", func(t *testing.T) {
-		testRPC(t, c, m, "kb.chunks", KBChunksParams{Page: 1, PageSize: 10}, func() (json.RawMessage, error) {
-			return c.KBChunks(1, 10)
-		})
-	})
-
-	t.Run("Stats", func(t *testing.T) {
-		testRPC(t, c, m, "kb.stats", KBStatsParams{ProjectDir: "/p"}, func() (json.RawMessage, error) {
-			return c.KBStats("/p")
-		})
-	})
-
-	t.Run("SyncProject", func(t *testing.T) {
-		testRPC(t, c, m, "kb.sync_project", KBSyncProjectParams{ProjectDir: "/p"}, func() (json.RawMessage, error) {
-			return c.KBSyncProject("/p")
-		})
-	})
-
-	t.Run("FileStates", func(t *testing.T) {
-		testRPC(t, c, m, "kb.file_states", KBFileStatesParams{ProjectDir: "/p"}, func() (json.RawMessage, error) {
-			return c.KBFileStates("/p")
-		})
-	})
-}
-
-// ============================================================================
 // Graph domain
 // ============================================================================
 

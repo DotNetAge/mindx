@@ -390,10 +390,8 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		}
 	}
 
-	webDir := filepath.Join(workspaceDir, "web")
-	if _, err := os.Stat(webDir); err == nil {
-		result.WebUIReady = true
-	}
+	// WebUI 已内嵌至二进制，始终可用
+	result.WebUIReady = true
 
 	return result
 }
@@ -1072,13 +1070,8 @@ func (m *firstRunModel) renderComplete() string {
 		}
 	}
 
-	// WebUI
-	webDir := filepath.Join(m.workspaceDir, "web")
-	if _, err := os.Stat(webDir); err == nil {
-		items = append(items, i18n.T("wizard.complete.item.webui.ready"))
-	} else {
-		items = append(items, i18n.T("wizard.complete.item.webui.missing"))
-	}
+	// WebUI 已内嵌至二进制，始终可用
+	items = append(items, i18n.T("wizard.complete.item.webui.ready"))
 
 	// Build markdown output
 	var cb strings.Builder

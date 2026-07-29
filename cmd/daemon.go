@@ -69,7 +69,7 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 		wsPath = "/ws"
 	}
 
-	server, err := svc.NewServer(daemonPort, wsPath, AppIconFS, RuntimeFS)
+	server, err := svc.NewServer(daemonPort, wsPath, AppIconFS, RuntimeFS, WebFS)
 	if err != nil {
 		return fmt.Errorf("failed to create server: %w", err)
 	}

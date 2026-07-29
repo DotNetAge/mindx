@@ -91,17 +91,11 @@ func NewEnvironmentPrompt(userPrefsDir, venvDir string) func(agents.EnvsParams) 
 }
 
 // NewSearchStrategyPrompt 返回一个覆盖默认 Search Strategy 段落的构建函数。
-// 指示 LLM 优先使用知识库工具（QuickSearch、QuickExplore、FindRelation）而非传统文件工具和网络搜索。
 func NewSearchStrategyPrompt() func() string {
 	return func() string {
 		return "## 搜索策略\n\n" +
-			"1. 对于本地搜索，优先使用 QuickSearch 没有数据才回退 Grep — " +
-			"它通过语义搜索，而非仅靠文件名或文本模式匹配。\n" +
-			"2. 当问题可能涉及当前项目时，也先尝试 QuickSearch 而非 WebSearch。\n" +
-			"3. 对于外部话题或 QuickSearch 无结果时，回退到网络搜索（WebSearch）。\n" +
-			"4. 浏览项目结构时，优先使用 QuickExplore 而非 LS 或 Glob — " +
-			"它返回带有语义摘要的目录树。当 QuickExplore 不可用或不够用时，回退到 LS/Glob。\n" +
-			"5. 对于依赖关系或关联性问题，使用 FindRelation — " +
-			"它遍历知识图谱来展示实体之间的连接关系。"
+			"1. 对于本地搜索，优先使用 Grep（grep/ripgrep）搜索项目文件内容，或使用语义搜索工具（如可用）。\n" +
+			"2. 对于外部话题或本地搜索无结果时，回退到网络搜索（WebSearch）。\n" +
+			"3. 浏览项目结构时，使用内置文件工具（LS、Glob）。"
 	}
 }

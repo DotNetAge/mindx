@@ -10,6 +10,7 @@ import (
 
 	goharnessmemory "github.com/DotNetAge/goharness/memory"
 	goragcore "github.com/DotNetAge/gorag/v2/core"
+	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
@@ -135,45 +136,54 @@ func (d *Daemon) handleMemoryChunks(_ context.Context, params json.RawMessage) (
 		return nil, fmt.Errorf("indexer not initialized")
 	}
 
+	admin, ok := indexer.(goragindexer.IndexerAdmin)
+	if !ok {
+		return nil, fmt.Errorf("indexer does not support admin operations")
+	}
+
 	offset := (p.Page - 1) * p.PageSize
-	hits, err := indexer.List(context.Background(), offset, p.PageSize)
+	chunks, total, err := admin.List(context.Background(), offset, p.PageSize, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list chunks failed: %w", err)
 	}
 
-	chunks := make([]rpc.ChunkItem, 0, len(hits))
-	for _, h := range hits {
-		parentID, _ := h.Metadata["parent_id"].(string)
-		mimeType, _ := h.Metadata["mime_type"].(string)
-		chunks = append(chunks, rpc.ChunkItem{
-			ID:       h.ID,
-			ParentID: parentID,
-			DocID:    h.DocID,
+	items := make([]rpc.ChunkItem, 0, len(chunks))
+	for _, c := range chunks {
+		mimeType, _ := c.Metadata[goragcore.MetaMimeType].(string)
+		headingLevel := 0
+		if hl, ok := c.Metadata[goragcore.MetaHeadingLevel].(float64); ok {
+			headingLevel = int(hl)
+		}
+		var headingPath []string
+		if hp, ok := c.Metadata[goragcore.MetaHeadingPath].([]string); ok {
+			headingPath = hp
+		} else if s, ok := c.Metadata[goragcore.MetaHeadingPath].(string); ok && s != "" {
+			headingPath = []string{s}
+		}
+
+		items = append(items, rpc.ChunkItem{
+			ID:       c.ID,
+			ParentID: c.ParentID,
+			DocID:    c.DocID,
 			MIMEType: mimeType,
-			Content:  h.Content,
-			Metadata: h.Metadata,
+			Content:  c.Content,
+			Metadata: c.Metadata,
 			ChunkMeta: rpc.ChunkMetaItem{
-				Index:        h.ChunkMeta.Index,
-				StartPos:     h.ChunkMeta.StartPos,
-				EndPos:       h.ChunkMeta.EndPos,
-				HeadingLevel: h.ChunkMeta.HeadingLevel,
-				HeadingPath:  h.ChunkMeta.HeadingPath,
+				Index:        c.Index,
+				StartPos:     c.StartPos,
+				EndPos:       c.EndPos,
+				HeadingLevel: headingLevel,
+				HeadingPath:  headingPath,
 			},
 		})
 	}
 
-	hasMore := len(chunks) == p.PageSize
+	hasMore := len(items) == p.PageSize
 
-	// Get the total count for proper pagination
-	total, err := indexer.Count(context.Background())
-	if err != nil {
-		total = offset + len(chunks) // fallback estimate
-	}
-
-	d.logger.Info("memory.chunks called", "page", p.Page, "page_size", p.PageSize, "returned", len(chunks), "total", total, "has_more", hasMore)
+	d.logger.Info("memory.chunks called", "page", p.Page, "page_size", p.PageSize, "returned", len(items), "total", total, "has_more", hasMore)
 
 	return rpc.MemoryChunksResult{
-		Chunks:   chunks,
+		Chunks:   items,
 		Page:     p.Page,
 		PageSize: p.PageSize,
 		Total:    total,
@@ -204,32 +214,51 @@ func (d *Daemon) handleMemoryGetChunks(_ context.Context, params json.RawMessage
 		return nil, fmt.Errorf("indexer not initialized")
 	}
 
-	chunks, err := indexer.GetChunks(context.Background(), p.DocID)
-	if err != nil {
-		return nil, fmt.Errorf("get chunks by doc_id failed: %w", err)
+	admin, ok := indexer.(goragindexer.IndexerAdmin)
+	if !ok {
+		return nil, fmt.Errorf("indexer does not support admin operations")
 	}
 
-	items := make([]rpc.ChunkItem, 0, len(chunks))
-	for _, c := range chunks {
-		meta := map[string]any{}
-		if c.Metadata != nil {
-			for k, v := range c.Metadata {
-				meta[k] = v
-			}
+	// List all chunks and filter by DocID since GetChunks takes chunk IDs, not docID
+	allChunks, _, err := admin.List(context.Background(), 0, 1000000, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list chunks failed: %w", err)
+	}
+
+	var matched []goragcore.Chunk
+	for _, c := range allChunks {
+		if c.DocID == p.DocID {
+			matched = append(matched, c)
 		}
+	}
+
+	items := make([]rpc.ChunkItem, 0, len(matched))
+	for _, c := range matched {
+		mimeType, _ := c.Metadata[goragcore.MetaMimeType].(string)
+		headingLevel := 0
+		if hl, ok := c.Metadata[goragcore.MetaHeadingLevel].(float64); ok {
+			headingLevel = int(hl)
+		}
+		var headingPath []string
+		if hp, ok := c.Metadata[goragcore.MetaHeadingPath].([]string); ok {
+			headingPath = hp
+		} else if s, ok := c.Metadata[goragcore.MetaHeadingPath].(string); ok && s != "" {
+			headingPath = []string{s}
+		}
+
 		items = append(items, rpc.ChunkItem{
 			ID:       c.ID,
 			ParentID: c.ParentID,
 			DocID:    c.DocID,
-			MIMEType: c.MIMEType,
+			MIMEType: mimeType,
 			Content:  c.Content,
-			Metadata: meta,
+			Metadata: c.Metadata,
 			ChunkMeta: rpc.ChunkMetaItem{
-				Index:        c.ChunkMeta.Index,
-				StartPos:     c.ChunkMeta.StartPos,
-				EndPos:       c.ChunkMeta.EndPos,
-				HeadingLevel: c.ChunkMeta.HeadingLevel,
-				HeadingPath:  c.ChunkMeta.HeadingPath,
+				Index:        c.Index,
+				StartPos:     c.StartPos,
+				EndPos:       c.EndPos,
+				HeadingLevel: headingLevel,
+				HeadingPath:  headingPath,
 			},
 		})
 	}
@@ -262,7 +291,12 @@ func (d *Daemon) handleMemoryCount(_ context.Context, _ json.RawMessage) (any, e
 		return nil, fmt.Errorf("indexer not initialized")
 	}
 
-	count, err := indexer.Count(context.Background())
+	admin, ok := indexer.(goragindexer.IndexerAdmin)
+	if !ok {
+		return nil, fmt.Errorf("indexer does not support admin operations")
+	}
+
+	count, err := admin.Count(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("memory count failed: %w", err)
 	}
@@ -295,39 +329,40 @@ func (d *Daemon) handleMemoryListBySession(_ context.Context, params json.RawMes
 		return nil, fmt.Errorf("indexer not initialized")
 	}
 
+	admin, ok := indexer.(goragindexer.IndexerAdmin)
+	if !ok {
+		return nil, fmt.Errorf("indexer does not support admin operations")
+	}
+
 	// 分页遍历所有 chunk，按 session_id 过滤
 	var matched []rpc.MemoryChunkItem
 	const pageSize = 200
 	offset := 0
 	for {
-		hits, err := indexer.List(context.Background(), offset, pageSize)
+		chunks, _, err := admin.List(context.Background(), offset, pageSize, nil)
 		if err != nil {
 			return nil, fmt.Errorf("list chunks failed: %w", err)
 		}
-		if len(hits) == 0 {
+		if len(chunks) == 0 {
 			break
 		}
-		for _, hit := range hits {
-			sessionID, _ := hit.Metadata["session_id"].(string)
+		for _, c := range chunks {
+			sessionID, _ := c.Metadata["session_id"].(string)
 			if sessionID != p.SessionID {
 				continue
 			}
-			chunk := chunkHitToMemoryItem(hit)
+			chunk := chunkHitToMemoryItem(c)
 			if chunk != nil {
 				matched = append(matched, *chunk)
 			}
 		}
-		if len(hits) < pageSize {
+		if len(chunks) < pageSize {
 			break
 		}
 		offset += pageSize
 	}
 
 	// 按时间倒序（最新在前）
-	// The indexer may return hits in insertion order;
-	// we sort by timestamp descending.
-	// Since we don't import sort in this file, we'll
-	// do a simple slice sort inline.
 	for i := 0; i < len(matched); i++ {
 		for j := i + 1; j < len(matched); j++ {
 			if matched[i].Timestamp < matched[j].Timestamp {
@@ -346,26 +381,26 @@ func (d *Daemon) handleMemoryListBySession(_ context.Context, params json.RawMes
 	}, nil
 }
 
-// chunkHitToMemoryItem converts a gorag Hit to a MemoryChunkItem.
-func chunkHitToMemoryItem(hit goragcore.Hit) *rpc.MemoryChunkItem {
+// chunkHitToMemoryItem converts a core.Chunk to a MemoryChunkItem.
+func chunkHitToMemoryItem(c goragcore.Chunk) *rpc.MemoryChunkItem {
 	item := &rpc.MemoryChunkItem{
-		ID:      hit.ID,
-		Content: hit.Content,
+		ID:      c.ID,
+		Content: c.Content,
 	}
 
-	if hit.Metadata != nil {
-		if a, ok := hit.Metadata["agent_name"].(string); ok {
+	if c.Metadata != nil {
+		if a, ok := c.Metadata["agent_name"].(string); ok {
 			item.AgentName = a
 		}
-		if s, ok := hit.Metadata["session_id"].(string); ok {
+		if s, ok := c.Metadata["session_id"].(string); ok {
 			item.SessionID = s
 		}
-		if s, ok := hit.Metadata["summary"].(string); ok && s != "" {
+		if s, ok := c.Metadata["summary"].(string); ok && s != "" {
 			item.Summary = s
 		} else {
-			item.Summary = hit.Title
+			item.Summary = c.Title
 		}
-		if t, ok := hit.Metadata["tags"]; ok {
+		if t, ok := c.Metadata["tags"]; ok {
 			switch v := t.(type) {
 			case []string:
 				item.Tags = v
@@ -377,7 +412,7 @@ func chunkHitToMemoryItem(hit goragcore.Hit) *rpc.MemoryChunkItem {
 				}
 			}
 		}
-		if ts, ok := hit.Metadata["timestamp"]; ok {
+		if ts, ok := c.Metadata["timestamp"]; ok {
 			switch v := ts.(type) {
 			case float64:
 				item.Timestamp = int64(v)
@@ -388,7 +423,7 @@ func chunkHitToMemoryItem(hit goragcore.Hit) *rpc.MemoryChunkItem {
 	}
 
 	if item.Summary == "" {
-		item.Summary = hit.Title
+		item.Summary = c.Title
 	}
 
 	return item
@@ -418,17 +453,21 @@ func (d *Daemon) handleMemoryUpdate(_ context.Context, params json.RawMessage) (
 		return nil, fmt.Errorf("indexer not initialized")
 	}
 
-	// We need the existing chunk to preserve fields we aren't updating.
+	admin, ok := indexer.(goragindexer.IndexerAdmin)
+	if !ok {
+		return nil, fmt.Errorf("indexer does not support admin operations")
+	}
+
 	// Use a zero-offset list with a generous page size to find the specific chunk.
-	hits, err := indexer.List(context.Background(), 0, 1_000_000)
+	chunks, _, err := admin.List(context.Background(), 0, 1_000_000, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list chunks failed: %w", err)
 	}
 
 	var existing *goharnessmemory.MemoryChunk
-	for _, hit := range hits {
-		if hit.ID == p.ID {
-			chunk := hitToMemoryChunk(hit)
+	for _, c := range chunks {
+		if c.ID == p.ID {
+			chunk := hitToMemoryChunk(c)
 			existing = chunk
 			break
 		}
@@ -457,29 +496,29 @@ func (d *Daemon) handleMemoryUpdate(_ context.Context, params json.RawMessage) (
 	return map[string]string{"status": "ok", "id": p.ID}, nil
 }
 
-// hitToMemoryChunk converts a gorag Hit to a goharness MemoryChunk for update purposes.
-func hitToMemoryChunk(hit goragcore.Hit) *goharnessmemory.MemoryChunk {
+// hitToMemoryChunk converts a core.Chunk to a goharness MemoryChunk for update purposes.
+func hitToMemoryChunk(c goragcore.Chunk) *goharnessmemory.MemoryChunk {
 	chunk := &goharnessmemory.MemoryChunk{
-		ID:      hit.ID,
-		Content: hit.Content,
+		ID:      c.ID,
+		Content: c.Content,
 	}
 
-	if hit.Metadata != nil {
-		if a, ok := hit.Metadata["agent_name"].(string); ok && a != "" {
+	if c.Metadata != nil {
+		if a, ok := c.Metadata["agent_name"].(string); ok && a != "" {
 			chunk.AgentName = a
 		}
-		if s, ok := hit.Metadata["session_id"].(string); ok {
+		if s, ok := c.Metadata["session_id"].(string); ok {
 			chunk.SessionID = s
 		}
-		if p, ok := hit.Metadata["project_dir"].(string); ok {
+		if p, ok := c.Metadata["project_dir"].(string); ok {
 			chunk.ProjectDir = p
 		}
-		if s, ok := hit.Metadata["summary"].(string); ok && s != "" {
+		if s, ok := c.Metadata["summary"].(string); ok && s != "" {
 			chunk.Summary = s
 		} else {
-			chunk.Summary = hit.Title
+			chunk.Summary = c.Title
 		}
-		if t, ok := hit.Metadata["tags"]; ok {
+		if t, ok := c.Metadata["tags"]; ok {
 			switch v := t.(type) {
 			case []string:
 				if len(v) > 0 {
@@ -493,7 +532,7 @@ func hitToMemoryChunk(hit goragcore.Hit) *goharnessmemory.MemoryChunk {
 				}
 			}
 		}
-		if ts, ok := hit.Metadata["timestamp"]; ok {
+		if ts, ok := c.Metadata["timestamp"]; ok {
 			switch v := ts.(type) {
 			case float64:
 				chunk.Timestamp = time.UnixMilli(int64(v))
@@ -501,13 +540,13 @@ func hitToMemoryChunk(hit goragcore.Hit) *goharnessmemory.MemoryChunk {
 				chunk.Timestamp = time.UnixMilli(v)
 			}
 		}
-		if c, ok := hit.Metadata["content"].(string); ok && c != "" {
-			chunk.Content = c
+		if ct, ok := c.Metadata["content"].(string); ok && ct != "" {
+			chunk.Content = ct
 		}
 	}
 
 	if chunk.Summary == "" {
-		chunk.Summary = hit.Title
+		chunk.Summary = c.Title
 	}
 
 	return chunk
