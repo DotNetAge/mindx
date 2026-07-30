@@ -376,7 +376,9 @@ func (m *rootModel) loadSessionHistory() {
 		agentName = m.app.CurrentAgentName()
 	}
 
-	s, loadErr := goharnesssession.Load(context.Background(), sessionID, agentName, sessDB, m.getLogger())
+	s, loadErr := goharnesssession.Load(context.Background(), sessionID, agentName, sessDB, m.getLogger(),
+		goharnesssession.WithModelContextResolver(m.app.ModelContextLength),
+	)
 	if loadErr != nil || s == nil {
 		return
 	}
@@ -1109,18 +1111,6 @@ func (m *rootModel) resizeViewport(termWidth, termHeight int) {
 	m.viewport.SetHeight(vpHeight)
 
 	m.sidebar.Update(clientmsg.WindowResizeMsg{Width: m.rightWidth - 2, Height: vpHeight})
-}
-
-// getLastUserMessage returns the content of the last user message in the
-// current conversation list, or empty string if none found.
-func (m *rootModel) getLastUserMessage() string {
-	for i := len(m.conversationList.Conversations) - 1; i >= 0; i-- {
-		q := m.conversationList.Conversations[i].Question
-		if q.Text != "" {
-			return q.Text
-		}
-	}
-	return ""
 }
 
 func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {

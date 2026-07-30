@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/DotNetAge/goharness/tools"
@@ -17,8 +16,6 @@ type Manager struct {
 	credStore CredentialStore
 	rpc       *RPCHandler
 	log       Logger
-
-	mu sync.RWMutex
 }
 
 // NewManager creates a new MCP Manager with the given storage and credential store.

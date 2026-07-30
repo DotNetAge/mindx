@@ -23,7 +23,7 @@ require (
 )
 
 require (
-	github.com/DotNetAge/gochat v0.2.7
+	github.com/DotNetAge/gochat v0.2.8
 	github.com/DotNetAge/gograph v0.4.0
 	github.com/DotNetAge/goharness v0.2.28
 	github.com/DotNetAge/gorag/v2 v2.0.13
@@ -63,7 +63,6 @@ require (
 	github.com/coder/hnsw v0.6.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
 	github.com/extrame/xls v0.0.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
@@ -77,12 +76,10 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -90,7 +87,6 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.68.1 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
-	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.7 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -125,10 +121,7 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	modernc.org/libc v1.74.1 // indirect
-	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.54.0 // indirect
+	mvdan.cc/sh/v3 v3.13.1 // indirect
 )
 
 replace github.com/coder/hnsw => ./third_party/hnsw
@@ -136,3 +129,5 @@ replace github.com/coder/hnsw => ./third_party/hnsw
 replace github.com/DotNetAge/goharness => ../goharness
 
 replace github.com/DotNetAge/gorag/v2 => ../gorag
+
+replace github.com/DotNetAge/gochat => ../gochat

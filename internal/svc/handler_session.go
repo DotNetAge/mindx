@@ -127,6 +127,19 @@ func (d *Daemon) buildSessionPricing() goharnesssession.PricingUnit {
 	}
 }
 
+// resolveSessionModelContextLength 返回当前默认模型的上下文窗口大小（ContextLength）。
+// 作为 modelContextResolver 回调注入到 session，每次需要窗口大小时动态调用，
+// 保证用户切换模型后窗口大小立即更新——窗口大小是模型能力的函数，不是会话的固定属性。
+//
+// 模型未配置或 ContextLength <= 0 时返回 0，禁用自动压缩。
+// 直接委托给 App.ModelContextLength，避免逻辑重复。
+func (d *Daemon) resolveSessionModelContextLength() int64 {
+	if d.app == nil {
+		return 0
+	}
+	return d.app.ModelContextLength()
+}
+
 func (d *Daemon) handleSessionMeta(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.SessionGetParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -259,20 +272,23 @@ func (d *Daemon) getOrLoadSession(sessionID string) (*goharnesssession.Session, 
 
 	var sess *goharnesssession.Session
 	sessDB := d.app.SessDB()
+	// resolver 必须注入到每个 session（包括从持久化加载的），
+	// 否则 ModelContextLength() 返回 0，窗口大小永远是 0。
+	resolverOpt := goharnesssession.WithModelContextResolver(d.resolveSessionModelContextLength)
 	if sessDB != nil {
 		// Try to load existing session from persistent store.
 		var loadErr error
-		sess, loadErr = goharnesssession.Load(context.Background(), sessionID, "", sessDB, d.logger)
+		sess, loadErr = goharnesssession.Load(context.Background(), sessionID, "", sessDB, d.logger, resolverOpt)
 		if loadErr != nil {
 			// Session not found in store — create empty session as fallback
 			// so ConfirmModify/Rollback return empty lists instead of errors.
-			sess, _ = goharnesssession.New("", "", "", sessDB, d.logger)
+			sess, _ = goharnesssession.New("", "", "", sessDB, d.logger, resolverOpt)
 			return sess, nil
 		}
 		// Trigger lazy-load to restore messages and modify_files.
 		sess.All()
 	} else {
-		sess, _ = goharnesssession.New("", "", "", nil, d.logger)
+		sess, _ = goharnesssession.New("", "", "", nil, d.logger, resolverOpt)
 	}
 
 	return sess, nil
@@ -348,20 +364,9 @@ func (d *Daemon) handleSessionContext(_ context.Context, params json.RawMessage)
 	// Build pricing from the current model's cost config
 	pricing := d.buildSessionPricing()
 
-	// Get the session's native context usage (uses maxWindowSize if configured)
+	// ContextUsage 已通过 modelContextResolver 回调动态获取当前模型的 ContextLength，
+	// 无需 fallback —— resolver 在 session 创建时注入，每次调用都读取最新的默认模型配置。
 	usage := sess.ContextUsage(pricing)
-
-	// If the session doesn't have maxWindowSize configured (0), fall back to
-	// the default model's context_length, so the ratio is meaningful.
-	if usage.MaxWindowSize == 0 {
-		modelCfg := d.app.ResolveDefaultModel()
-		if modelCfg != nil && modelCfg.ContextLength > 0 {
-			usage.MaxWindowSize = modelCfg.ContextLength
-			if usage.MaxWindowSize > 0 {
-				usage.UsageRatio = float64(usage.WindowTokens) / float64(usage.MaxWindowSize)
-			}
-		}
-	}
 
 	return map[string]any{
 		"session_id":           p.SessionID,
@@ -466,16 +471,15 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
 	}
 
-	// 确保会话有 maxWindowSize 配置，否则 TryCompact/TryMicroCompact 无法触发
-	if sess.MaxWindowSize() <= 0 {
-		if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil && modelCfg.ContextLength > 0 {
-			sess.SetMaxWindowSize(modelCfg.ContextLength)
-		}
-	}
-
-	// 设置 LLM 摘要器，使 TryCompact 能生成语义摘要
+	// 窗口大小已通过 modelContextResolver 回调动态获取，无需手动 SetMaxWindowSize。
+	// 设置 LLM 摘要器，使 TryCompact 能生成语义摘要。
+	// 注入 WithModelResolver 回调：摘要器每次摘要都读取当前默认模型，
+	// 跟随用户切换模型立即生效，不再使用构造时固化的 model 快照。
 	if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil && modelCfg.Name != "" {
-		sess.SetSummarizer(goharnesssession.NewLLMSummarizer(*modelCfg))
+		sess.SetSummarizer(goharnesssession.NewLLMSummarizer(
+			*modelCfg,
+			goharnesssession.WithModelResolver(d.app.ResolveDefaultModelConfig),
+		))
 	}
 
 	// 绑定 RAG 记忆存储，使压缩摘要持久化到 RAG indexer（浏览器可读）
@@ -486,7 +490,7 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 	d.logger.Info("session.compact: triggered",
 		"session_id", p.SessionID,
 		"mode", p.Mode,
-		"max_window_size", sess.MaxWindowSize(),
+		"max_window_size", sess.ModelContextLength(),
 		"has_summarizer", d.app.ResolveDefaultModel() != nil,
 	)
 
@@ -529,7 +533,7 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 				"data": map[string]any{
 					"messages_slid":   messagesSlid,
 					"window_tokens":   windowTokens,
-					"max_window_size": sess.MaxWindowSize(),
+					"max_window_size": sess.ModelContextLength(),
 					"ratio":           ratio,
 				},
 			})
@@ -572,7 +576,7 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 					"compressed":      compressed,
 					"deduped":         deduped,
 					"window_tokens":   windowTokens,
-					"max_window_size": sess.MaxWindowSize(),
+					"max_window_size": sess.ModelContextLength(),
 					"ratio":           ratio,
 				},
 			})

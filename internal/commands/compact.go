@@ -71,6 +71,6 @@ func handleCompact(ctx *gateway.CommandContext) (any, error) {
 
 	// Micro compact 模式
 	ctx.RespondWithType(gateway.RespText, "压缩完成",
-		fmt.Sprintf("Micro 压缩已完成。"))
+		"Micro 压缩已完成。")
 	return result, nil
 }

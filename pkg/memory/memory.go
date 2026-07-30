@@ -53,7 +53,7 @@ func NewEmbedderFromConfig(modelPath string) (goragcore.Embedder, error) {
 	}
 	emb, err := embedder.NewBGEEmbedder(
 		embedder.WithBGEModelFile(modelPath),
-		embedder.WithBGEDimension(384),
+		embedder.WithBGEDimension(512),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("memory: 创建 embedder 失败: %w", err)

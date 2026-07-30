@@ -767,18 +767,31 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 
 	// Load existing session from persistent store (verifies it exists).
 	//
-	// Budget 动态可调（memmache.md）：只在模型上下文窗口 <= 128K 时启用 TryCompact。
-	//   - <= 128K：设置 maxWindowSize = ContextLength，TryCompact 会在 80% 阈值
-	//     触发全量摘要并清空当前窗口（cursor = len(messages)）。
-	//   - > 128K：不设置 maxWindowSize，TryCompact 直接返回（maxWindowSize == 0），
-	//     靠 KV 缓存命中兜底 —— 超长上下文模型上清空窗口反而损失有效上下文。
+	// Budget 动态可调：窗口大小通过 modelContextResolver 回调动态查询当前模型的
+	// ContextLength，保证用户切换模型后立即生效，不再焊死在 session 上。
+	//   - 模型 ContextLength <= 128K：TryCompact 会在 80% 阈值触发全量摘要并清空窗口
+	//   - 模型 ContextLength > 128K：resolver 返回大值，ratio 不会达到阈值，
+	//     靠 KV 缓存命中兜底——超长上下文模型上清空窗口反而损失有效上下文
 	//   - MicroCompact (Dupdu) 已禁用：它修改上下文中间的 tool 消息内容，破坏 KV
 	//     缓存，重算成本远大于保留"垃圾"的 attention 成本，属于负优化。
 	var sessOpts []goharnesssession.SessionConfig
+	// 注入 modelContextResolver：每次需要窗口大小时动态调用 ResolveDefaultModel()，
+	// 读取最新的全局默认模型配置，保证切换模型后窗口大小立即更新。
+	sessOpts = append(sessOpts,
+		goharnesssession.WithModelContextResolver(d.resolveSessionModelContextLength),
+	)
 	if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil && modelCfg.ContextLength > 0 {
+		// 注入 WithModelResolver：摘要器每次摘要都通过 ResolveDefaultModelConfig
+		// 读取当前默认模型，跟随用户切换模型立即生效，
+		// 不再使用构造时固化的 model 快照。*modelCfg 作为 resolver
+		// 返回空值时的回退兜底。
 		sessOpts = append(sessOpts,
-			goharnesssession.WithMaxWindowSize(modelCfg.ContextLength),
-			goharnesssession.WithSummarizer(goharnesssession.NewLLMSummarizer(*modelCfg)),
+			goharnesssession.WithSummarizer(
+				goharnesssession.NewLLMSummarizer(
+					*modelCfg,
+					goharnesssession.WithModelResolver(d.app.ResolveDefaultModelConfig),
+				),
+			),
 		)
 	}
 	// 绑定 RAG 记忆存储，使压缩摘要持久化到 RAG indexer（浏览器可读）
@@ -936,22 +949,14 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				"session_id", sid,
 				"agent", resolvedAgentName,
 			)
-			d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.error"), i18n.T("svc.event.request.failed"))
 		}
 
 		// Broadcast current context window usage after each LLM request.
 		// This allows the UI to update the context usage indicator in real time.
+		// ContextUsage 通过 modelContextResolver 回调动态获取当前模型的 ContextLength，
+		// 无需 fallback。
 		if d.gw != nil {
 			usage := s.ContextUsage(d.buildSessionPricing())
-			// If maxWindowSize is 0 (not configured on session), fall back to model context_length
-			if usage.MaxWindowSize == 0 {
-				if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil && modelCfg.ContextLength > 0 {
-					usage.MaxWindowSize = modelCfg.ContextLength
-					if usage.MaxWindowSize > 0 {
-						usage.UsageRatio = float64(usage.WindowTokens) / float64(usage.MaxWindowSize)
-					}
-				}
-			}
 			d.gw.BroadcastNotification("context_usage", map[string]any{
 				"session_id": sid,
 				"data": map[string]any{
@@ -1072,7 +1077,9 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		}
 	}
 
-	s, err := goharnesssession.Load(context.Background(), sessionID, agent, d.app.SessDB(), d.logger)
+	s, err := goharnesssession.Load(context.Background(), sessionID, agent, d.app.SessDB(), d.logger,
+		goharnesssession.WithModelContextResolver(d.resolveSessionModelContextLength),
+	)
 	if err != nil {
 		return fmt.Errorf("scheduled task: load session %q: %w", sessionID, err)
 	}

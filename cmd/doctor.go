@@ -201,12 +201,12 @@ func runAllChecks() []Check {
 	}
 
 	// 5. Embedder model
-	modelPath := filepath.Join(workspaceDir, "data", "models", "model_q4.onnx")
+	modelPath := filepath.Join(workspaceDir, "data", "models", "model.onnx")
 	if _, err := os.Stat(modelPath); err == nil {
 		checks = append(checks, Check{
 			Name:    "Embedder Model",
 			Status:  "✅",
-			Message: "model_q4.onnx present — memory search enabled",
+			Message: "model.onnx present — memory search enabled",
 		})
 	} else if cfgErr == nil && cfg.HasEmbedder() {
 		checks = append(checks, Check{

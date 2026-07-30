@@ -24,6 +24,11 @@ providers:
     base_url: https://api.minimaxi.com/v1
     api_key: MINIMAX_API_KEY
     auth_token: ""
+  - name: ollama
+    title: Ollama
+    base_url: http://localhost:11434/v1
+    api_key: "NONE_API_KEY"
+    auth_token: ""
   - name: ark
     title: 火山引擎
     base_url: https://ark.cn-beijing.volces.com/api/v3

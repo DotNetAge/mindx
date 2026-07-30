@@ -4,7 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 
 	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/mindx/internal/core"
@@ -99,6 +104,10 @@ func (d *Daemon) handleModelSwitch(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("failed to save config: %w", err)
 	}
 
+	// 清空 Runtime 缓存：已缓存的 Runtime 持有旧模型的 LLMClient 与配置，
+	// 若不清空，切换后仍会用旧模型发起调用（如从 ollama 切到 deepseek 后仍走 ollama）。
+	d.app.InvalidateRuntimeCache()
+
 	return map[string]any{
 		"name":     p.Name,
 		"provider": cfg.Provider,
@@ -138,6 +147,7 @@ func (d *Daemon) handleProviderCreate(_ context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("failed to save providers: %w", err)
 	}
 
+	d.app.SetProviderConfigs(allProviders)
 	d.app.Models().RegisterProvider(p.Name, newProvider)
 
 	return map[string]any{
@@ -231,10 +241,177 @@ func (d *Daemon) handleProviderDelete(_ context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("failed to save providers: %w", err)
 	}
 
+	d.app.SetProviderConfigs(filtered)
+
 	return map[string]any{
 		"name":    p.Name,
 		"message": fmt.Sprintf("Provider %q deleted", p.Name),
 	}, nil
+}
+
+// ollamaBaseURL 从 OpenAI 兼容地址（如 http://localhost:11434/v1）中提取
+// scheme://host，用于调用 Ollama 原生 API（/api/tags、/api/show）。
+func ollamaBaseURL(rawURL string) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+	u.Path = ""
+	u.RawPath = ""
+	return strings.TrimRight(u.String(), "/"), nil
+}
+
+func (d *Daemon) handleProviderFetchOllamaModels(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.FetchOllamaModelsParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.BaseURL == "" {
+		return nil, fmt.Errorf("base_url is required")
+	}
+
+	base, err := ollamaBaseURL(p.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("无效的 base_url: %w", err)
+	}
+
+	// 调用 Ollama /api/tags 获取已安装的模型列表
+	resp, err := http.Get(base + "/api/tags")
+	if err != nil {
+		return nil, fmt.Errorf("无法连接 Ollama 服务: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取 Ollama 响应失败: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Ollama 返回错误 (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	var ollamaResp struct {
+		Models []rpc.OllamaModelInfo `json:"models"`
+	}
+	if err := json.Unmarshal(body, &ollamaResp); err != nil {
+		return nil, fmt.Errorf("解析 Ollama 响应失败: %w", err)
+	}
+
+	if ollamaResp.Models == nil {
+		ollamaResp.Models = []rpc.OllamaModelInfo{}
+	}
+
+	return map[string]any{
+		"models": ollamaResp.Models,
+		"total":  len(ollamaResp.Models),
+	}, nil
+}
+
+func (d *Daemon) handleProviderFetchOllamaModelDetail(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.FetchOllamaModelDetailParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.BaseURL == "" || p.ModelName == "" {
+		return nil, fmt.Errorf("base_url and model_name are required")
+	}
+
+	base, err := ollamaBaseURL(p.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("无效的 base_url: %w", err)
+	}
+
+	// 调用 Ollama /api/show 获取模型详细信息
+	apiURL := base + "/api/show"
+	reqBody, _ := json.Marshal(map[string]string{"name": p.ModelName})
+	resp, err := http.Post(apiURL, "application/json", strings.NewReader(string(reqBody)))
+	if err != nil {
+		return nil, fmt.Errorf("无法连接 Ollama 服务: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取 Ollama 响应失败: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Ollama 返回错误 (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	var showResp struct {
+		Parameters string         `json:"parameters"`
+		Details    map[string]any `json:"details"`
+		ModelInfo  map[string]any `json:"model_info"`
+	}
+	if err := json.Unmarshal(body, &showResp); err != nil {
+		return nil, fmt.Errorf("解析 Ollama 响应失败: %w", err)
+	}
+
+	detail := rpc.OllamaModelDetail{
+		Name: p.ModelName,
+	}
+
+	// 从 model_info 中提取 context_length：遍历所有 key 寻找以 .context_length 结尾的。
+	// ollama 的 key 形如 "qwen35.context_length" / "qwen3.context_length" / "llama.context_length"，
+	// 前缀随架构变化，用 strings.HasSuffix 匹配后缀最稳妥。
+	// 修复：旧代码用 k[len(k)-16:] 取后16字符比较，但 ".context_length" 只有15字符，
+	// 导致永远匹配失败，所有 ollama 模型的 context_length 都被解析为 0，前端兜底成 4096。
+	var ctxLen float64
+	for k, v := range showResp.ModelInfo {
+		if strings.HasSuffix(k, ".context_length") {
+			if f, ok := v.(float64); ok && f > 0 {
+				ctxLen = f
+				break
+			}
+		}
+	}
+	// fallback: 从 parameters 字段解析 num_ctx
+	if ctxLen == 0 {
+		parseOllamaParam(showResp.Parameters, "num_ctx", &ctxLen)
+	}
+	detail.ContextLength = int64(ctxLen)
+
+	// 提取 details 中的信息
+	if showResp.Details != nil {
+		if f, ok := showResp.Details["family"].(string); ok {
+			detail.ModelFamily = f
+		}
+		if p, ok := showResp.Details["parameter_size"].(string); ok {
+			detail.ParameterSize = p
+		}
+		if q, ok := showResp.Details["quantization_level"].(string); ok {
+			detail.Quantization = q
+		}
+	}
+
+	// 从 model_info 提取 parameter_count
+	if v, ok := showResp.ModelInfo["general.parameter_count"]; ok {
+		if f, ok := v.(float64); ok {
+			detail.ParameterCount = int64(f)
+		}
+	}
+
+	return detail, nil
+}
+
+// parseOllamaParam 从 Ollama parameters 字符串中解析指定 key 的数值。
+func parseOllamaParam(params, key string, out any) {
+	for _, line := range strings.Split(params, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, key+" ") || strings.HasPrefix(line, key+"\t") {
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				switch v := out.(type) {
+				case *float64:
+					if f, err := strconv.ParseFloat(parts[1], 64); err == nil {
+						*v = f
+					}
+				}
+			}
+			return
+		}
+	}
 }
 
 // --- Model CRUD ---

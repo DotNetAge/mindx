@@ -75,46 +75,7 @@ func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharn
 		}))
 }
 
-// Markdown builders for event messages
-
-func buildSubtaskSpawnedMarkdown(info goharnessevents.SubtaskInfo) string {
-	md := fmt.Sprintf("### %s\n\n**Agent**: %s\n**%s**: %s\n", i18n.T("svc.md.subtask.spawned"), info.AgentName, i18n.T("svc.md.subtask.description"), info.Description)
-	if info.Timeout != "" {
-		md += fmt.Sprintf(i18n.T("svc.md.subtask.timeout"), info.Timeout)
-	}
-	return md
-}
-
-func buildSubtaskCompletedMarkdown(result goharnessevents.SubtaskResult) string {
-	var b strings.Builder
-	if result.Success {
-		b.WriteString(fmt.Sprintf("### %s: %s\n\n", i18n.T("svc.md.subtask.completed"), result.SessionID))
-		b.WriteString(fmt.Sprintf("**%s**: %s\n", i18n.T("svc.md.subtask.answer"), truncate(result.Answer, 300)))
-	} else {
-		b.WriteString(fmt.Sprintf("### %s: %s\n\n", i18n.T("svc.md.subtask.failed"), result.SessionID))
-		b.WriteString(fmt.Sprintf(i18n.T("svc.md.subtask.error"), result.Error))
-	}
-	return b.String()
-}
-
 func buildTaskSummaryMarkdown(ts goharnessevents.TaskSummaryData) string {
 	return fmt.Sprintf("### %s\n\n%s\n",
 		i18n.T("svc.md.task.summary"), ts.Summary)
-}
-
-// formatTokenCount converts a large number to a human-readable K/M format.
-//
-//	25858 → "25.9K"
-//	271   → "271"
-//	1500000 → "1.5M"
-func formatTokenCount(n int) string {
-	if n >= 1_000_000 {
-		m := float64(n) / 1_000_000
-		return fmt.Sprintf("%.1fM", m)
-	}
-	if n >= 1_000 {
-		k := float64(n) / 1_000
-		return fmt.Sprintf("%.1fK", k)
-	}
-	return fmt.Sprintf("%d", n)
 }

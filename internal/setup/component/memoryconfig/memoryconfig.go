@@ -47,7 +47,7 @@ func New(workspaceDir string, alreadyDownloaded bool) *Model {
 
 	if alreadyDownloaded {
 		m.state = 2
-		m.embedderModel = "model_q4.onnx"
+		m.embedderModel = "model.onnx"
 	}
 
 	return m
@@ -121,7 +121,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 					m.state = 1
 					m.downloadCh = make(chan setupmsg.DownloadProgressMsg, 100)
 					cacheDir := filepath.Join(m.workspaceDir, "data", "models")
-					m.embedderModel = "model_q4.onnx"
+					m.embedderModel = "model.onnx"
 					go runModelDownload(cacheDir, m.downloadCh)
 					return m, m.listenDownloadCmd()
 				}
@@ -212,8 +212,8 @@ func (o *downloadObserver) OnEvent(event goragutils.DownloadEvent) {
 func runModelDownload(cacheDir string, ch chan<- setupmsg.DownloadProgressMsg) {
 	defer close(ch)
 
-	modelID := "Xenova/chinese-clip-vit-base-patch16"
-	modelFile := "onnx/model_q4.onnx"
+	modelID := "Xenova/bge-small-zh-v1.5"
+	modelFile := "onnx/model.onnx"
 	dstPath := filepath.Join(cacheDir, filepath.Base(modelFile))
 
 	if _, err := os.Stat(dstPath); err == nil {

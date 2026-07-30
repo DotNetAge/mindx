@@ -144,12 +144,12 @@ jobs:
 
       - name: Download embedder model
         run: |
-          MODEL_PATH="runtime/data/models/model_q4.onnx"
+          MODEL_PATH="runtime/data/models/model.onnx"
           mkdir -p "$(dirname "$MODEL_PATH")"
           rm -f "$MODEL_PATH"
           echo "Downloading embedder model from HuggingFace..."
           curl -fL -o "$MODEL_PATH" \
-            "https://huggingface.co/Xenova/chinese-clip-vit-base-patch16/resolve/main/onnx/model_q4.onnx" || \
+            "https://huggingface.co/Xenova/bge-small-zh-v1.5/resolve/main/onnx/model.onnx" || \
           { echo "ERROR: Failed to download embedder model"; exit 1; }
           echo "Model file size: $(wc -c < "$MODEL_PATH") bytes"
 
@@ -234,12 +234,12 @@ jobs:
         run: |
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
           # Copy embedder model into dist/ for packaging
-          cp runtime/data/models/model_q4.onnx dist/
+          cp runtime/data/models/model.onnx dist/
           cd dist
           tar czf "../${{ env.BINARY_NAME }}-${VERSION_NUM}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
             "${{ env.BINARY_NAME }}" \
             libonnxruntime.* \
-            model_q4.onnx
+            model.onnx
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
@@ -311,12 +311,12 @@ jobs:
 
       - name: Download embedder model
         run: |
-          MODEL_PATH="runtime/data/models/model_q4.onnx"
+          MODEL_PATH="runtime/data/models/model.onnx"
           mkdir -p "$(dirname "$MODEL_PATH")"
           rm -f "$MODEL_PATH"
           echo "Downloading embedder model from HuggingFace..."
           curl -fL -o "$MODEL_PATH" \
-            "https://huggingface.co/Xenova/chinese-clip-vit-base-patch16/resolve/main/onnx/model_q4.onnx" || \
+            "https://huggingface.co/Xenova/bge-small-zh-v1.5/resolve/main/onnx/model.onnx" || \
           { echo "ERROR: Failed to download embedder model"; exit 1; }
           echo "Model file size: $(wc -c < "$MODEL_PATH") bytes"
 
@@ -324,7 +324,7 @@ jobs:
         run: |
           # Model file was downloaded above
           echo "Model file:"
-          ls -lh runtime/data/models/model_q4.onnx 2>/dev/null || echo "  NOT FOUND"
+          ls -lh runtime/data/models/model.onnx 2>/dev/null || echo "  NOT FOUND"
 
           # Verify runtime structure
           echo "Runtime layout:"

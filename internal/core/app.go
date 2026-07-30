@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -309,7 +310,11 @@ func (a *App) ResolveDefaultModel() *config.ModelConfig {
 	}
 	resolved := modelCfg.ResolveProvider(a.providerReg)
 	if resolved.Provider != "" {
-		if key, err := a.credStore.Get(resolved.Provider); err == nil && key != "" {
+		// Ollama 为本地模型，不需要真实 API Key，直接填充占位值以避免 gochat 校验失败
+		if strings.EqualFold(resolved.Provider, "ollama") {
+			resolved.APIKey = "NONEKey"
+			resolved.AuthToken = ""
+		} else if key, err := a.credStore.Get(resolved.Provider); err == nil && key != "" {
 			resolved.APIKey = key
 		}
 	}
@@ -317,6 +322,37 @@ func (a *App) ResolveDefaultModel() *config.ModelConfig {
 		resolved.APIKey = ResolveAPIKey(a.credStore, resolved.APIKey)
 	}
 	return resolved
+}
+
+// ModelContextLength 返回当前默认模型的上下文窗口大小，
+// 作为 modelContextResolver 回调注入到 session，保证窗口大小动态查询当前模型。
+//
+// 每次调用都通过 ResolveDefaultModel() 读取最新的全局默认模型配置，
+// 保证用户切换模型后窗口大小立即更新——窗口大小是模型能力的函数，
+// 不是会话的固定属性。
+func (a *App) ModelContextLength() int64 {
+	m := a.ResolveDefaultModel()
+	if m == nil {
+		return 0
+	}
+	return m.ContextLength
+}
+
+// ResolveDefaultModelConfig 返回当前默认模型的值类型副本。
+//
+// 作为 llmSummarizer 的动态模型回调（WithModelResolver）注入，
+// 保证会话切换模型后摘要器在每次摘要时都读取最新的模型配置
+// （APIKey/BaseURL/Name/MaxTokens），修复「Summarizer 不随模型切换更新」
+// 的设计缺陷。
+//
+// 模型未配置时返回零值 ModelConfig（Name 为空），
+// llmSummarizer.resolveModel 会回退到构造时传入的固定 model。
+func (a *App) ResolveDefaultModelConfig() config.ModelConfig {
+	m := a.ResolveDefaultModel()
+	if m == nil {
+		return config.ModelConfig{}
+	}
+	return *m
 }
 
 func (a *App) CurrentAgentName() string {
@@ -394,6 +430,17 @@ func (a *App) ReloadAgents() error {
 	return nil
 }
 
+// InvalidateRuntimeCache 清空已缓存的 Runtime 实例。
+// 切换模型、修改 provider 凭证等会影响 Runtime 构建结果的场景必须调用，
+// 否则后续请求会复用旧 Runtime（持有过期的模型配置与 LLMClient），
+// 出现"切换后仍用旧模型调用"的问题。
+func (a *App) InvalidateRuntimeCache() {
+	a.runtimeMu.Lock()
+	a.runtimeCache = make(map[string]*agents.Runtime)
+	a.runtimeMu.Unlock()
+	a.logger.Info("runtime cache invalidated")
+}
+
 // ReloadSkills re-scans the skills directory and atomically swaps the in-memory registry.
 func (a *App) ReloadSkills() error {
 	newReg, err := skill.NewSkillRegistryFromDirectory(a.settings.SkillsDir())
@@ -459,6 +506,10 @@ func (a *App) ProviderConfigs() []*config.ProviderConfig {
 	return a.providerConfigs
 }
 
+func (a *App) SetProviderConfigs(providers []*config.ProviderConfig) {
+	a.providerConfigs = providers
+}
+
 // CreateSession creates a new session with metadata including the captured project directory (os.Getwd() at invocation time).
 func (a *App) CreateSession(agentName, projectDir string) (*session.SessionInfo, error) {
 	var opts []session.SessionOption
@@ -521,7 +572,11 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	// 规则5: 优先以 model.provider 为键从 CredentialStore 中读取 APIKey。
 	// 这是 APIKey 的主要来源（TUI/Daemon/WebUI 均以此键存储）。
 	if resolvedModel.Provider != "" {
-		if key, err := a.credStore.Get(resolvedModel.Provider); err == nil && key != "" {
+		// Ollama 为本地模型，不需要真实 API Key，直接填充占位值以避免 gochat 校验失败
+		if strings.EqualFold(resolvedModel.Provider, "ollama") {
+			resolvedModel.APIKey = "NONEKey"
+			resolvedModel.AuthToken = ""
+		} else if key, err := a.credStore.Get(resolvedModel.Provider); err == nil && key != "" {
 			resolvedModel.APIKey = key
 		} else {
 			resolvedModel.APIKey = a.resolveAPIKey(resolvedModel.APIKey)
@@ -916,6 +971,9 @@ func (a *App) NewSessionFromMeta() *session.Session {
 	agentName := a.CurrentAgentName()
 	var opts []session.SessionConfig
 
+	// 注入 modelContextResolver，保证窗口大小动态查询当前模型
+	opts = append(opts, session.WithModelContextResolver(a.ModelContextLength))
+
 	if a.embedder != nil {
 		sessRAG, ragErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
 			AgentName: agentName,
@@ -936,7 +994,13 @@ func (a *App) NewSessionFromMeta() *session.Session {
 			if agent != nil {
 				model := a.Models().Get(agent.Model)
 				if model != nil && model.Enabled {
-					opts = append(opts, session.WithSummarizer(session.NewLLMSummarizer(*model)))
+					// 注入动态模型回调：摘要器每次摘要都通过 ResolveDefaultModelConfig
+					// 读取当前默认模型，跟随用户切换模型立即生效，
+					// 不再使用构造时固化的 model 快照。*model 作为 resolver
+					// 返回空值时的回退兜底。
+					opts = append(opts, session.WithSummarizer(
+						session.NewLLMSummarizer(*model, session.WithModelResolver(a.ResolveDefaultModelConfig)),
+					))
 				}
 			}
 		}
@@ -976,9 +1040,15 @@ func (a *App) IsModelAvailable(name ...string) bool {
 		return false
 	}
 
+	apiKey := m.APIKey
+	if strings.EqualFold(m.Provider, "ollama") {
+		apiKey = "NONEKey"
+	} else {
+		apiKey = a.resolveAPIKey(apiKey)
+	}
 	client := gochat.Client().Config(
 		gochat.WithBaseURL(m.BaseURL),
-		gochat.WithAPIKey(a.resolveAPIKey(m.APIKey)),
+		gochat.WithAPIKey(apiKey),
 		gochat.WithModel(m.Name),
 		gochat.WithAuthToken(m.AuthToken),
 		gochat.WithTimeout(10*time.Second),

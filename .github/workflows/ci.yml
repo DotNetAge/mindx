@@ -35,7 +35,7 @@ env:
   CGO_ENABLED: 1
   GOLANGCI_LINT_VERSION: v2.9
   MINDX_WORKSPACE: ${{ github.workspace }}/.test
-  MODEL_PATH: runtime/data/models/model_q4.onnx
+  MODEL_PATH: runtime/data/models/model.onnx
 
 jobs:
   # ==========================================================================
@@ -182,7 +182,7 @@ jobs:
           rm -f "${{ env.MODEL_PATH }}"
           echo "Downloading embedder model from HuggingFace..."
           curl -fL -o "${{ env.MODEL_PATH }}" \
-            "https://huggingface.co/Xenova/chinese-clip-vit-base-patch16/resolve/main/onnx/model_q4.onnx" || \
+            "https://huggingface.co/Xenova/bge-small-zh-v1.5/resolve/main/onnx/model.onnx" || \
           { echo "ERROR: Failed to download embedder model"; exit 1; }
 
       - name: Prepare test workspace
@@ -280,7 +280,7 @@ jobs:
           rm -f "${{ env.MODEL_PATH }}"
           echo "Downloading embedder model from HuggingFace..."
           curl -fL -o "${{ env.MODEL_PATH }}" \
-            "https://huggingface.co/Xenova/chinese-clip-vit-base-patch16/resolve/main/onnx/model_q4.onnx" || \
+            "https://huggingface.co/Xenova/bge-small-zh-v1.5/resolve/main/onnx/model.onnx" || \
           { echo "ERROR: Failed to download embedder model"; exit 1; }
 
       - name: Install musl cross-compiler

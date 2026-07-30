@@ -64,7 +64,7 @@ func mustCreateSession(t *testing.T, sessDB *mindxses.FileSessionStore, agentNam
 	if loadErr != nil {
 		t.Fatalf("load session: %v", loadErr)
 	}
-	sess.Append(context.Background(), msg)
+	_ = sess.Append(context.Background(), msg)
 	return info.SessionID
 }
 
@@ -1165,7 +1165,7 @@ func TestHandleGraphExec_CypherWrite(t *testing.T) {
 
 	// Exec Cypher: 创建节点
 	execParams, _ := json.Marshal(rpc.GraphQueryParams{
-		Query: "CREATE (n:TestNode {name: $name}) RETURN n",
+		Query:  "CREATE (n:TestNode {name: $name}) RETURN n",
 		Params: map[string]interface{}{"name": "test"},
 	})
 	_, err := d.handleGraphExec(context.Background(), execParams)
@@ -1199,8 +1199,8 @@ func TestHandleGraph_NilGuard(t *testing.T) {
 
 	// 所有 graph.* handler 应返回 error
 	handlers := []struct {
-		name string
-		fn   func(ctx context.Context, params json.RawMessage) (any, error)
+		name   string
+		fn     func(ctx context.Context, params json.RawMessage) (any, error)
 		params json.RawMessage
 	}{
 		{"graph.query", d.handleGraphQuery, mustJSON(t, rpc.GraphQueryParams{Query: "MATCH (n) RETURN n"})},

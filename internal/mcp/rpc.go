@@ -25,13 +25,6 @@ type rpcResponse struct {
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
-// rpcNotification is a JSON-RPC 2.0 notification (no id).
-type rpcNotification struct {
-	JSONRPC string `json:"jsonrpc"`
-	Method  string `json:"method"`
-	Params  any    `json:"params,omitempty"`
-}
-
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`

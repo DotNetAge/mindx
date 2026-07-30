@@ -104,9 +104,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Embedder model file check
-	modelPath := filepath.Join(workspaceDir, "data", "models", "model_q4.onnx")
+	modelPath := filepath.Join(workspaceDir, "data", "models", "model.onnx")
 	if _, err := os.Stat(modelPath); err == nil {
-		fmt.Printf("🧠 Embedder: ✅ model_q4.onnx present\n")
+		fmt.Printf("🧠 Embedder: ✅ model.onnx present\n")
 	} else if cfg != nil && cfg.HasEmbedder() {
 		fmt.Printf("🧠 Embedder: ⚠️  configured but file missing (%s)\n", modelPath)
 	} else {

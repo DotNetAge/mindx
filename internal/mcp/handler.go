@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // ── RPC Request/Response types ──────────────────────────────────────────────
@@ -190,11 +189,7 @@ func (h *RPCHandler) handleServerDiscover(ctx context.Context, raw json.RawMessa
 
 	result := make([]DiscoveredTool, 0, len(tools))
 	for _, t := range tools {
-		result = append(result, DiscoveredTool{
-			Name:        t.Name,
-			Description: t.Description,
-			InputSchema: t.InputSchema,
-		})
+		result = append(result, DiscoveredTool(t))
 	}
 	return result, nil
 }
@@ -224,17 +219,4 @@ func (h *RPCHandler) handleManifestGet(ctx context.Context) (any, error) {
 		return nil, err
 	}
 	return manifest, nil
-}
-
-// toConfig converts ServerAddParams to ServerConfig.
-func (p ServerAddParams) toConfig() ServerConfig {
-	return ServerConfig{
-		Name:        p.Name,
-		Type:        ServerType(strings.ToLower(string(p.Type))),
-		Command:     p.Command,
-		Args:        p.Args,
-		URL:         p.URL,
-		Env:         p.Env,
-		IdleTTLSecs: p.IdleTTLSecs,
-	}
 }

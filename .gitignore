@@ -13,7 +13,7 @@
 
 # ONNX models (except bundled embedder model)
 *.onnx
-!runtime/data/models/model_q4.onnx
+!runtime/data/models/model.onnx
 
 # Dependency directories
 node_modules/

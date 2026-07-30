@@ -8,7 +8,7 @@
 ~/.mindx/
 ├── data/
 │   ├── models/           # Embedder ONNX 模型 (~169 MB)
-│   │   └── model_q4.onnx
+│   │   └── model.onnx
 │   ├── graph/            # GraphRAG bbolt 图数据库
 │   │   └── *.db
 │   └── rules.yml         # 规则配置
@@ -124,7 +124,7 @@ find ~/.mindx/sessions/ -type d -empty -delete 2>/dev/null
 
 ---
 
-### 4. Embedder 模型 (`data/models/model_q4.onnx`)
+### 4. Embedder 模型 (`data/models/model.onnx`)
 
 **健康指标：**
 

@@ -74,7 +74,7 @@ func (m *mockEmbedder) CalcImage(data []byte) (*goragcore.Vector, error) {
 	}, nil
 }
 
-func (m *mockEmbedder) Dim() int         { return m.dim }
+func (m *mockEmbedder) Dim() int          { return m.dim }
 func (m *mockEmbedder) Multimoding() bool { return false }
 
 // ---------------------------------------------------------------------------

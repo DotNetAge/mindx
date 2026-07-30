@@ -102,7 +102,7 @@
   "wizard.python.ready.format": "🐍 Python 环境\n\n✅ **Python %s · 虚拟环境已就绪**\n\n虚拟环境用于隔离 Python 依赖，技能系统可正常使用。\n\n**Enter** 继续  **S** 跳过",
   "wizard.python.detected.no.venv.format": "🐍 Python 环境\n\n🟢 **Python %s** 已检测\n🔴 **虚拟环境未创建**\n\n虚拟环境用于隔离技能所需的 Python 依赖。\n创建后将自动安装 skills/ 下所有 requirements.txt。\n不创建则 Python 技能不可用，但核心对话功能正常。\n\n是否创建虚拟环境?\n\n%s\n\n← → 切换  **Enter** 确认  **Esc** 退出",
   "wizard.python.notinstalled.desc": "🐍 Python 环境\n\n🔴 **Python 未安装**\n\nPython 是必需组件，技能系统依赖 Python 运行。\n\n配置完成后将自动尝试安装 Python 3.12。\n\n你也可以手动安装：\n\n  1. 访问 python.org 下载 Python 3.10+\n  2. 安装时勾选 \"Add Python to PATH\"\n  3. 完成后重新运行配置向导\n\n**Enter** 继续  **Esc** 跳过  **q** 退出",
-  "wizard.memory.embedder.ready.detail": "💾 记忆体配置\n\n✅ **Embedder 模型已内嵌**\n\nChinese-CLIP (model_q4.onnx) 已打包在程序内部，\n启动时自动释放到工作目录，无需单独下载。\n\n记忆体功能默认启用，支持语义搜索和 RAG 跨会话检索。\n\n**Enter** 继续  **S** 跳过",
+  "wizard.memory.embedder.ready.detail": "💾 记忆体配置\n\n✅ **Embedder 模型已内嵌**\n\nBGE Small ZH (model.onnx) 已打包在程序内部，\n启动时自动释放到工作目录，无需单独下载。\n\n记忆体功能默认启用，支持语义搜索和 RAG 跨会话检索。\n\n**Enter** 继续  **S** 跳过",
   "wizard.path.already.in.format": "📌 系统 PATH 配置\n\n✅ **mindx 已在系统 PATH 中**\n\n当前安装路径: `%s`\n\n**Enter** 继续  **S** 跳过",
   "wizard.path.add.desc.format": "📌 系统 PATH 配置\n\n安装路径: %s\n\n将 mindx 所在目录添加到系统 PATH 环境变量后，你可以在任意终端窗口中直接运行 mindx 命令。（修改用户级 PATH，无需管理员权限）\n\n是否添加到 PATH?\n\n%s\n\n← → 切换  **Enter** 确认  **Esc** 退出",
   "wizard.complete.item.provider": "✅ 提供商 · **%s**",

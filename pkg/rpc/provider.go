@@ -27,6 +27,35 @@ type ProviderDeleteParams struct {
 	Name string `json:"name"`
 }
 
+// FetchOllamaModelsParams are the params for provider.fetch_ollama_models.
+type FetchOllamaModelsParams struct {
+	BaseURL string `json:"base_url"`
+}
+
+// OllamaModelInfo represents a single model from Ollama's /api/tags.
+type OllamaModelInfo struct {
+	Name      string `json:"name"`
+	Size      int64  `json:"size"`
+	Digest    string `json:"digest"`
+	CreatedAt string `json:"created_at"`
+}
+
+// FetchOllamaModelDetailParams are the params for provider.fetch_ollama_model_detail.
+type FetchOllamaModelDetailParams struct {
+	BaseURL   string `json:"base_url"`
+	ModelName string `json:"model_name"`
+}
+
+// OllamaModelDetail represents model detail from Ollama's /api/show.
+type OllamaModelDetail struct {
+	Name           string `json:"name"`
+	ContextLength  int64  `json:"context_length"`
+	ParameterSize  string `json:"parameter_size"`
+	Quantization   string `json:"quantization"`
+	ModelFamily    string `json:"model_family"`
+	ParameterCount int64  `json:"parameter_count"`
+}
+
 func (c *Client) ProviderList() (json.RawMessage, error) {
 	return c.CallWithTimeout("provider.list", nil)
 }

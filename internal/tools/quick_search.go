@@ -52,7 +52,7 @@ func (t *QuickSearch) Info() *tools.ToolInfo {
 			{
 				Name:        "targetDir",
 				Type:        "string",
-				Description: "目标目录，将搜索限制在特定子目录。省略则使用当前会话的项目目录。",
+				Description: "目标目录，可将搜索限制在项目目录可以缩小搜索范围。",
 				Required:    false,
 			},
 			{
@@ -144,11 +144,11 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 			filterPath = v
 		}
 	}
-	if filterPath == "" {
-		if tc := tools.GetToolContext(ctx); tc != nil && tc.Session != nil {
-			filterPath = tc.Session.ProjectDir()
-		}
-	}
+	// if filterPath == "" {
+	// 	if tc := tools.GetToolContext(ctx); tc != nil && tc.Session != nil {
+	// 		filterPath = tc.Session.ProjectDir()
+	// 	}
+	// }
 
 	// 解析显示选项
 	showScore := true
@@ -222,13 +222,16 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 		return nil, fmt.Errorf("搜索失败: %s", apiResp.Error)
 	}
 
+	emptyResultPrompt := "没有找到相关的内容，请尝试更换其它的关键词或目录后重试"
 	// 提取 formatted result
 	if apiResp.Data == nil {
-		return "", nil
+		return emptyResultPrompt, nil
 	}
+
 	result, _ := apiResp.Data["result"].(string)
+
 	if result == "" {
-		return "", nil
+		return emptyResultPrompt, nil
 	}
 
 	markSearchCached(queryStr, targetDir, limit, showScore, showDocID, contentMax)

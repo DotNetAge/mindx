@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
-	"strings"
 	"time"
 
 	goharnessmemory "github.com/DotNetAge/goharness/memory"
@@ -13,20 +11,6 @@ import (
 	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 )
-
-// sanitizeDirName converts a filesystem path to a safe directory name (same logic as memory package).
-func sanitizeDirName(absPath string) string {
-	replacer := strings.NewReplacer(
-		string(filepath.Separator), "_",
-		":", "_",
-		"~", "_",
-	)
-	name := replacer.Replace(absPath)
-	if len(name) > 200 {
-		name = name[len(name)-200:]
-	}
-	return name
-}
 
 func (d *Daemon) handleMemoryQuery(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MemoryQueryParams

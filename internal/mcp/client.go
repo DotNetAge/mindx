@@ -122,12 +122,12 @@ func (c *stdioClient) Connect(ctx context.Context) error {
 	c.running.Add(1)
 	go func() {
 		defer c.running.Done()
-		io.Copy(io.Discard, stderr)
+		_, _ = io.Copy(io.Discard, stderr)
 	}()
 
 	// initialize handshake
 	if err := c.handshake(ctx); err != nil {
-		c.closeUnlocked()
+		_ = c.closeUnlocked()
 		return fmt.Errorf("initialize handshake: %w", err)
 	}
 
@@ -227,7 +227,7 @@ func (c *stdioClient) closeUnlocked() error {
 		c.stdin.Close()
 	}
 	if c.cmd.Process != nil {
-		c.cmd.Process.Kill()
+		_ = c.cmd.Process.Kill()
 	}
 	c.running.Wait()
 	return nil

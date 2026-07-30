@@ -813,15 +813,15 @@ func (m *firstRunModel) runEmbedderDownload(taskIdx int) {
 	defer close(m.downloadCh)
 
 	cacheDir := filepath.Join(m.workspaceDir, "data", "models")
-	modelID := "Xenova/chinese-clip-vit-base-patch16"
-	modelFile := "onnx/model_q4.onnx"
+	modelID := "Xenova/bge-small-zh-v1.5"
+	modelFile := "onnx/model.onnx"
 	dstPath := filepath.Join(cacheDir, filepath.Base(modelFile))
 
 	m.markTaskDone(taskIdx, taskRunning, nil, "")
 
 	if _, err := os.Stat(dstPath); err == nil {
 		m.downloadCh <- downloadProgressMsg{Done: true}
-		m.markTaskDone(taskIdx, taskSkipped, nil, "model_q4.onnx")
+		m.markTaskDone(taskIdx, taskSkipped, nil, "model.onnx")
 		return
 	}
 
@@ -873,7 +873,7 @@ func (m *firstRunModel) runEmbedderDownload(taskIdx int) {
 		Done:   true,
 		Status: i18n.T("setup.memory.model.download.complete"),
 	}
-	m.markTaskDone(taskIdx, taskDone, nil, "model_q4.onnx")
+	m.markTaskDone(taskIdx, taskDone, nil, "model.onnx")
 }
 
 func (m *firstRunModel) updateAutoSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -893,7 +893,7 @@ func (m *firstRunModel) updateAutoSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if msg.Done {
 				m.autoTasks[2].Status = taskDone
 				if m.autoTasks[2].Detail == "" || m.autoTasks[2].Status == taskRunning {
-					m.autoTasks[2].Detail = "model_q4.onnx"
+					m.autoTasks[2].Detail = "model.onnx"
 				}
 			}
 			if msg.Status != "" {
@@ -1051,7 +1051,7 @@ func (m *firstRunModel) renderComplete() string {
 
 	// Embedder
 	if len(m.autoTasks) > 2 {
-		modelPath := filepath.Join(m.workspaceDir, "data", "models", "model_q4.onnx")
+		modelPath := filepath.Join(m.workspaceDir, "data", "models", "model.onnx")
 		if _, err := os.Stat(modelPath); err == nil {
 			items = append(items, i18n.T("wizard.complete.item.embedder.ready"))
 		} else {
