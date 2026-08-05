@@ -54,9 +54,6 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"skill.list":                         r.daemon.handleSkillList,
 		"skill.get":                          r.daemon.handleSkillGet,
 		"skill.reload":                       r.daemon.handleSkillReload,
-		"ask_user.reply":                     r.daemon.handleAskUserReply,
-		"permission.reply":                   r.daemon.handlePermissionReply,
-		"execution.resume":                   r.daemon.handleExecutionResume,
 		"message.cancel":                     r.daemon.handleMessageCancel,
 		"fs.list":                            r.daemon.handleFSList,
 		"fs.read":                            r.daemon.handleFSRead,
@@ -81,6 +78,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"token.usage.session.detail":         r.daemon.handleTokenUsageSessionDetail,
 		"schedule.list":                      r.daemon.handleScheduleList,
 		"schedule.add":                       r.daemon.handleScheduleAdd,
+		"schedule.create":                    r.daemon.handleScheduleAdd, // 前端 ScheduleView 使用的别名
 		"schedule.del":                       r.daemon.handleScheduleDelete,
 		"log.read":                           r.daemon.handleLogRead,
 		"log.clear":                          r.daemon.handleLogClear,

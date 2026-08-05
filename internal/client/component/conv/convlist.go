@@ -52,7 +52,7 @@ func (l ConversationList) Update(e tea.Msg) (ConversationList, tea.Cmd) {
 	case msg.ThinkingDeltaMsg, msg.ThinkingDoneMsg,
 		msg.ToolExecStartMsg, msg.ToolExecEndMsg,
 		msg.FinalAnswerMsg, msg.AgentErrorMsg,
-		msg.LLMTimeoutMsg,
+		msg.LLMTimeoutMsg, msg.LLMCancelledMsg,
 		msg.SessionDoneMsg, msg.ExecutionSummaryMsg,
 		msg.CollapseToggleMsg, msg.ThinkCollapseMsg:
 
@@ -123,6 +123,10 @@ func getSessionID(e tea.Msg) string {
 	case msg.FinalAnswerMsg:
 		return e.SessionID
 	case msg.AgentErrorMsg:
+		return e.SessionID
+	case msg.LLMTimeoutMsg:
+		return e.SessionID
+	case msg.LLMCancelledMsg:
 		return e.SessionID
 	case msg.SessionDoneMsg:
 		return e.SessionID

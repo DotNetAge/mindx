@@ -75,7 +75,6 @@ var modelListCmd = &cobra.Command{
 			{Title: "Name", Width: 28},
 			{Title: "Provider", Width: 16},
 			{Title: "Context", Width: 10},
-			{Title: "Max Tokens", Width: 12},
 			{Title: "Func", Width: 6},
 			{Title: "Enabled", Width: 8},
 		}
@@ -99,8 +98,7 @@ var modelListCmd = &cobra.Command{
 				provTitle = prov.Title
 			}
 			ctx := formatInt(m.ContextLength)
-			maxTok := formatInt(m.MaxTokens)
-			rows = append(rows, table.Row{name, provTitle, ctx, maxTok, fc, en})
+			rows = append(rows, table.Row{name, provTitle, ctx, fc, en})
 		}
 
 		tbl := table.New(
@@ -172,7 +170,6 @@ var modelAddFlags struct {
 	title             string
 	provider          string
 	contextLength     int64
-	maxTokens         int64
 	enabled           bool
 	funcCalling       bool
 	webSearching      bool
@@ -189,7 +186,7 @@ var modelAddCmd = &cobra.Command{
 The model must reference an existing provider (see 'mindx provider list').
 
 Examples:
-  mindx model add --name gpt-4 --title "GPT-4" --provider openai --context-length 8192 --max-tokens 4096
+  mindx model add --name gpt-4 --title "GPT-4" --provider openai --context-length 8192
   mindx model add --name my-model --provider ollama --context-length 4096 --func-calling`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if modelAddFlags.name == "" {
@@ -212,7 +209,6 @@ Examples:
 			Title:             modelAddFlags.title,
 			Provider:          modelAddFlags.provider,
 			ContextLength:     modelAddFlags.contextLength,
-			MaxTokens:         modelAddFlags.maxTokens,
 			Enabled:           modelAddFlags.enabled,
 			FuncCalling:       modelAddFlags.funcCalling,
 			WebSearching:      modelAddFlags.webSearching,
@@ -227,9 +223,6 @@ Examples:
 			}
 			if model.ContextLength == 0 {
 				model.ContextLength = existing.ContextLength
-			}
-			if model.MaxTokens == 0 {
-				model.MaxTokens = existing.MaxTokens
 			}
 		}
 
@@ -252,7 +245,6 @@ func init() {
 	modelAddCmd.Flags().StringVar(&modelAddFlags.title, "title", "", "Display title")
 	modelAddCmd.Flags().StringVar(&modelAddFlags.provider, "provider", "", "Provider name (required)")
 	modelAddCmd.Flags().Int64Var(&modelAddFlags.contextLength, "context-length", 0, "Maximum context length")
-	modelAddCmd.Flags().Int64Var(&modelAddFlags.maxTokens, "max-tokens", 0, "Maximum output tokens")
 	modelAddCmd.Flags().BoolVar(&modelAddFlags.enabled, "enabled", true, "Enable this model")
 	modelAddCmd.Flags().BoolVar(&modelAddFlags.funcCalling, "func-calling", false, "Supports function calling")
 	modelAddCmd.Flags().BoolVar(&modelAddFlags.webSearching, "web-searching", false, "Supports web search")

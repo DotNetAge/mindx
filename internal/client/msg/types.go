@@ -79,6 +79,14 @@ type LLMTimeoutMsg struct {
 	Error     string
 }
 
+// LLMCancelledMsg signals that the LLM call was cancelled by the user.
+// Unlike LLMTimeoutMsg (actual timeout), this is a user-initiated interruption.
+// The UI should display this as an informational notice, not an error.
+type LLMCancelledMsg struct {
+	SessionID string
+	Elapsed   time.Duration
+}
+
 // MaxTurnsReachedMsg signals that the Think-Act loop reached MaxTurns
 // without producing a final answer.
 // This is NOT an error - it's a normal boundary condition.
@@ -171,10 +179,14 @@ type AskUserEventMsg struct{}
 
 // PermissionRequestMsg carries a permission request from the reactor to the TUI.
 // The TUI should display the question/options and let the user respond.
+// SessionID 携带发起授权请求的会话 ID：子智能体授权冒泡时为主会话 ID 之外的
+// 子会话 ID，用户决策后 TUI 据此发送带目标魔法词精确路由；主会话自身的授权
+// 请求为空（无目标，走先到先服务）。
 type PermissionRequestMsg struct {
 	ToolName      string
 	Reason        string
 	SecurityLevel int
+	SessionID     string
 }
 
 type DaemonConnStatus int

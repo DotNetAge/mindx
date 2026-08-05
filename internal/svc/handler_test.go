@@ -1289,3 +1289,70 @@ func mustJSON(t *testing.T, v any) json.RawMessage {
 	}
 	return json.RawMessage(data)
 }
+
+// ==========================================================================
+// Session Pricing — buildSessionPricing
+// ==========================================================================
+
+func TestBuildSessionPricing_DefaultFallback(t *testing.T) {
+	// newTestDaemon 使用空 models.yml：无任何模型配置，
+	// 定价必须回退到默认价格，而不是零值（否则费用恒为 0）。
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	pricing := d.buildSessionPricing()
+	if pricing.InputPricePer1M != core.DefaultInputCost {
+		t.Errorf("InputPricePer1M = %v, want %v", pricing.InputPricePer1M, core.DefaultInputCost)
+	}
+	if pricing.OutputPricePer1M != core.DefaultOutputCost {
+		t.Errorf("OutputPricePer1M = %v, want %v", pricing.OutputPricePer1M, core.DefaultOutputCost)
+	}
+}
+
+func TestBuildSessionPricing_ModelCost(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	// 注册带价格的模型并设为当前默认模型
+	d.app.Models().Register("test-model", &goharnessconfig.ModelConfig{
+		Name:         "test-model",
+		Provider:     "test-provider",
+		CostPer1MIn:  8.5,
+		CostPer1MOut: 20.0,
+	})
+	d.app.Config().DefaultModel = "test-model"
+	d.app.Config().LastModel = "test-model"
+
+	pricing := d.buildSessionPricing()
+	if pricing.InputPricePer1M != 8.5 {
+		t.Errorf("InputPricePer1M = %v, want 8.5", pricing.InputPricePer1M)
+	}
+	if pricing.OutputPricePer1M != 20.0 {
+		t.Errorf("OutputPricePer1M = %v, want 20.0", pricing.OutputPricePer1M)
+	}
+}
+
+func TestBuildSessionPricing_SwitchesWithModel(t *testing.T) {
+	// 切换默认模型后，定价必须立即跟随新模型，
+	// 而不是沿用启动时固化的模型（旧实现通过 d.modelName 固化导致价格过期）。
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	d.app.Models().Register("model-a", &goharnessconfig.ModelConfig{
+		Name: "model-a", Provider: "test-provider", CostPer1MIn: 1.0, CostPer1MOut: 2.0,
+	})
+	d.app.Models().Register("model-b", &goharnessconfig.ModelConfig{
+		Name: "model-b", Provider: "test-provider", CostPer1MIn: 5.0, CostPer1MOut: 10.0,
+	})
+	d.app.Config().DefaultModel = "model-a"
+	d.app.Config().LastModel = "model-a"
+	if p := d.buildSessionPricing(); p.InputPricePer1M != 1.0 {
+		t.Fatalf("pricing for model-a InputPricePer1M = %v, want 1.0", p.InputPricePer1M)
+	}
+
+	d.app.Config().DefaultModel = "model-b"
+	d.app.Config().LastModel = "model-b"
+	if p := d.buildSessionPricing(); p.InputPricePer1M != 5.0 {
+		t.Fatalf("pricing after switch InputPricePer1M = %v, want 5.0", p.InputPricePer1M)
+	}
+}

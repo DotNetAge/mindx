@@ -17,6 +17,7 @@ import (
 	"github.com/DotNetAge/goharness/config"
 	goharnessmemory "github.com/DotNetAge/goharness/memory"
 	"github.com/DotNetAge/goharness/rule"
+	"github.com/DotNetAge/goharness/sandbox"
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/goharness/skill"
 	"github.com/DotNetAge/goharness/store"
@@ -47,7 +48,6 @@ type App struct {
 	agents      *config.AgentRegistry
 	models      *config.ModelRegistry
 	providerReg config.ProviderRegistry
-	costs       *CostRegistry
 	versions    *FileVersionStore
 	rules       rule.RuleRegistry
 	sessDB      *mindxses.FileSessionStore
@@ -146,13 +146,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		logger.Info("Registered provider", "name", p.Name)
 	}
 
-	logger.Info("Loading model costs", "dir", settings.ModelsFile())
-	costs, err := LoadCostsFromModelsFile(settings.ModelsFile())
-
 	versions := NewFileVersionStore()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load model costs: %w", err)
-	}
 
 	logger.Info("Loading rules", "file", settings.DataRulesFile())
 	rulesReg, err := rules.NewFileRuleRegistry(settings.DataRulesFile())
@@ -196,7 +190,6 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		agents:              agentsReg,
 		models:              models,
 		providerReg:         models.ProviderRegistry(),
-		costs:               costs,
 		versions:            versions,
 		rules:               rulesReg,
 		skillReg:            skillReg,
@@ -338,23 +331,6 @@ func (a *App) ModelContextLength() int64 {
 	return m.ContextLength
 }
 
-// ResolveDefaultModelConfig 返回当前默认模型的值类型副本。
-//
-// 作为 llmSummarizer 的动态模型回调（WithModelResolver）注入，
-// 保证会话切换模型后摘要器在每次摘要时都读取最新的模型配置
-// （APIKey/BaseURL/Name/MaxTokens），修复「Summarizer 不随模型切换更新」
-// 的设计缺陷。
-//
-// 模型未配置时返回零值 ModelConfig（Name 为空），
-// llmSummarizer.resolveModel 会回退到构造时传入的固定 model。
-func (a *App) ResolveDefaultModelConfig() config.ModelConfig {
-	m := a.ResolveDefaultModel()
-	if m == nil {
-		return config.ModelConfig{}
-	}
-	return *m
-}
-
 func (a *App) CurrentAgentName() string {
 	return resolveCurrentAgentName(a.mindxConfig, a.agents, a.logger)
 }
@@ -460,14 +436,6 @@ func (a *App) ReloadSkills() error {
 
 func (a *App) Models() *config.ModelRegistry {
 	return a.models
-}
-
-func (a *App) Costs() *CostRegistry {
-	return a.costs
-}
-
-func (a *App) ModelCost(name string) (ModelCost, bool) {
-	return a.costs.Get(name)
 }
 
 func (a *App) FileVersions() *FileVersionStore {
@@ -719,21 +687,31 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		}
 	}
 
+	// 构造会话级逻辑沙箱：统一文件、命令、URL 安全决策。
+	// AllowedDirs 仅包含用户主目录（~/.mindx），projectDir 在运行时由 CheckFile/EnforceFile 传入，
+	// isOutsideWorkspace 已修复为始终将 projectDir 视为允许目录。
+	homeDir := a.settings.UserPreferences()
+	sandboxPolicy := sandbox.SandboxPolicy{
+		AllowedDirs:           []string{homeDir},
+		DeniedFileGlobs:       sandbox.DefaultDeniedFileGlobs(),
+		DeniedDirGlobs:        sandbox.DefaultDeniedDirGlobs(),
+		DeniedDevicePaths:     sandbox.DefaultDeniedDevicePaths(),
+		NetworkDenySubnets:    sandbox.DefaultDeniedSubnets(),
+		AllowedCommands:       sandbox.DefaultAllowedCommands(),
+		DeniedCommandPatterns: sandbox.DefaultDeniedCommandPatterns(),
+		NetworkCommands:       sandbox.DefaultNetworkCommands(),
+	}
+	sb, sbErr := sandbox.NewSandbox(&sandboxPolicy, a.logger)
+	if sbErr != nil {
+		a.logger.Warn("createRuntime: 沙箱创建失败，回退到旧安全逻辑", "agent", agentName, "error", sbErr)
+	} else {
+		opts = append(opts, agents.WithSandbox(sb))
+		a.logger.Info("createRuntime: 沙箱已启用", "agent", agentName, "home_dir", homeDir)
+	}
+
 	a.logger.Info("createRuntime: calling agents.NewRuntime", "agent", agentName)
 	rt := agents.NewRuntime(opts...)
 	a.logger.Info("createRuntime: done", "agent", agentName)
-
-	// Configure Read tool whitelist: allow reading files under the user
-	// preferences directory (e.g. ~/.mindx) even when outside the project
-	// workspace. This is needed for reading config, logs, and other data
-	// that lives outside the user's project directory.
-	if t, ok := rt.ToolRegistry().Get("Read"); ok {
-		if r, ok := t.(*tools.Read); ok {
-			r.AddWhiteList(a.settings.UserPreferences())
-			a.logger.Info("createRuntime: Read whitelist configured",
-				"agent", agentName, "dir", a.settings.UserPreferences())
-		}
-	}
 
 	// Configure RunScript tool: use the mindx-managed Python venv instead
 	// of auto-creating per-skill virtual environments.
@@ -790,13 +768,41 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		}
 	}
 
-	// Register QuickExplore tool (知识库目录树浏览).
+	// 替换默认 Ls 工具为增强版 LSPro（知识库优先 + 原生回退）.
 	mstoreURL := "http://localhost:1318"
-	exploreTool := mindxtools.NewQuickExplore(mstoreURL)
-	if err := rt.RegisterTool(exploreTool); err != nil {
-		a.logger.Warn("createRuntime: 注册 QuickExplore 失败", "agent", agentName, "error", err)
+	_ = rt.ToolRegistry().Remove("Ls") // 先删除 goharness 默认的 Ls
+	lsPro := mindxtools.NewLSPro(mstoreURL)
+	if err := rt.RegisterTool(lsPro); err != nil {
+		a.logger.Warn("createRuntime: 注册 LSPro 失败", "agent", agentName, "error", err)
 	} else {
-		a.logger.Info("createRuntime: QuickExplore 注册成功", "agent", agentName)
+		a.logger.Info("createRuntime: LSPro 注册成功（替代默认 Ls）", "agent", agentName)
+		// 配置目录列表白名单：允许列出用户偏好目录（如 ~/.mindx），与 ReadPro 保持一致。
+		// 注意必须在注册后配置到 LSPro（原 Ls 已被移除，若配置在替换前会在 Remove 时丢失）。
+		if lp, ok := lsPro.(*mindxtools.LSPro); ok {
+			lp.AddWhiteList(a.settings.UserPreferences())
+		}
+	}
+
+	// 替换默认 Read 工具为增强版 ReadPro（大文件自动知识库分块树预览 + 原生回退）.
+	_ = rt.ToolRegistry().Remove("Read") // 先删除 goharness 默认的 Read
+	readPro := mindxtools.NewReadPro(mstoreURL)
+	if err := rt.RegisterTool(readPro); err != nil {
+		a.logger.Warn("createRuntime: 注册 ReadPro 失败", "agent", agentName, "error", err)
+	} else {
+		a.logger.Info("createRuntime: ReadPro 注册成功（替代默认 Read）", "agent", agentName)
+		// 配置读取白名单：允许读取用户偏好目录（如 ~/.mindx）下的配置、日志等
+		// 项目外文件。注意必须在注册后配置到 ReadPro（原 Read 已被移除，
+		// 若配置在替换前会在 Remove 时丢失）。
+		if rp, ok := readPro.(*mindxtools.ReadPro); ok {
+			rp.AddWhiteList(a.settings.UserPreferences())
+			// 图片读取开关按模型视觉能力（Visioning）配置在内嵌的 goharness Read 上。
+			// ReadPro 自身不参与图片链路：图片读取的消费（转换为 image_url 消息）
+			// 由 goharness 层的 ImageHook 完成，此处只控制 Read 是否返回图片数据。
+			rp.Read.SetImageReading(resolvedModel.Visioning)
+			a.logger.Info("createRuntime: ReadPro whitelist configured",
+				"agent", agentName, "dir", a.settings.UserPreferences(),
+				"image_reading", resolvedModel.Visioning)
+		}
 	}
 
 	// Register QuickSearch tool (知识库语义搜索).
@@ -971,6 +977,11 @@ func (a *App) NewSessionFromMeta() *session.Session {
 	agentName := a.CurrentAgentName()
 	var opts []session.SessionConfig
 
+	// 通用能力（Compactor 压缩引擎 + Sandbox 沙箱）由 Runtime 统一注入，
+	// 与主会话/子会话走同一条装配路径（agents.Runtime.SessionConfigs）。
+	if rt, rtErr := a.ResolveRuntime(agentName); rtErr == nil && rt != nil {
+		opts = append(opts, rt.SessionConfigs()...)
+	}
 	// 注入 modelContextResolver，保证窗口大小动态查询当前模型
 	opts = append(opts, session.WithModelContextResolver(a.ModelContextLength))
 
@@ -990,19 +1001,6 @@ func (a *App) NewSessionFromMeta() *session.Session {
 			}
 			opts = append(opts, session.WithMemory(mindxses.NewRAGMemoryAdapter(sessRAG, agentName, projectDir)))
 
-			agent := a.Agents().Get(agentName)
-			if agent != nil {
-				model := a.Models().Get(agent.Model)
-				if model != nil && model.Enabled {
-					// 注入动态模型回调：摘要器每次摘要都通过 ResolveDefaultModelConfig
-					// 读取当前默认模型，跟随用户切换模型立即生效，
-					// 不再使用构造时固化的 model 快照。*model 作为 resolver
-					// 返回空值时的回退兜底。
-					opts = append(opts, session.WithSummarizer(
-						session.NewLLMSummarizer(*model, session.WithModelResolver(a.ResolveDefaultModelConfig)),
-					))
-				}
-			}
 		}
 	}
 

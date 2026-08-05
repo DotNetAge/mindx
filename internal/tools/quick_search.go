@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"sync"
 
@@ -30,7 +32,6 @@ func (t *QuickSearch) Info() *tools.ToolInfo {
 		Name:        "QuickSearch",
 		Description: "高效语义搜索 — 按含义查找本项目内的代码和文档，速度远超 Grep 和 WebSearch。",
 		Prompt: `按含义搜索知识库。将其视为"按语义的 grep" — 即使不知道精确关键词也能找到相关代码和文档。
-
 知识库可能已有答案，检索速度与精度远优于 Grep 与 WebSearch，在找不到相关结果才考虑回退 Grep 或 WebSearch 使用。
 
 要求知识库服务（mrag serve）已运行。`,
@@ -119,13 +120,23 @@ func markSearchCached(query, targetDir string, limit int, showScore, showDocID b
 	searchCache.Store(searchCacheKey(query, targetDir, limit, showScore, showDocID, contentMax), true)
 }
 
+// ansiPattern 匹配 ANSI CSI 转义序列（颜色/样式码，如 \x1b[1m、\x1b[33m、\x1b[0m）。
+// MindStore terminal formatter 输出带这些码，面向人类终端；对 LLM 是纯噪音，
+// 会污染上下文且浪费 token，返回前需剥离。
+var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// stripANSI 移除字符串中的 ANSI 转义序列，返回纯文本。
+func stripANSI(s string) string {
+	return ansiPattern.ReplaceAllString(s, "")
+}
+
 func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, error) {
-	queryStr, err := tools.ValidateRequiredString(params, "query")
+	queryStr, err := tools.ValidateRequiredString("QuickSearch", params, "query")
 	if err != nil {
 		return nil, err
 	}
 	if len(queryStr) < 2 {
-		return nil, fmt.Errorf("查询必须至少 2 个字符")
+		return nil, fmt.Errorf("%s", tools.GuideInvalidValue("QuickSearch", "query", queryStr, "提供至少 2 个字符的具体关键词（可使用组合词或英文关键词）后重试"))
 	}
 
 	limit := 5
@@ -189,40 +200,70 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("序列化请求失败: %w", err)
+		return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
+			"序列化快速搜索请求时失败",
+			tools.WithErrDetail("搜索请求参数无法序列化为 JSON（可能包含异常数据）", err),
+			"先自查：我传入的 query、limit、targetDir 等参数是否取值合法？确认后重新调用",
+		), err)
 	}
 
 	// 调用 MindStore WebAPI /api/query
 	url := t.serverURL + "/api/query"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("构建请求失败: %w", err)
+		return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
+			"构造发送给知识库服务的 HTTP 请求时失败",
+			tools.WithErrDetail("无法构造 HTTP 请求（可能是 URL 格式非法或请求参数异常）", err),
+			"先自查：知识库服务地址（serverURL）与查询参数配置是否正确？确认后重新调用",
+		), err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return map[string]any{
-			"message": "知识库服务（mrag serve）未启动或无法连接，请先启动知识库服务。",
-		}, nil
+		return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
+			fmt.Sprintf("调用 QuickSearch 搜索 %q，但无法连接知识库服务", queryStr),
+			tools.WithErrDetail("无法连接知识库服务（服务可能未启动或网络不可达）", err),
+			"先启动 mrag serve 服务并确认端口与地址配置正确后重试；若服务持续不可用，应告知用户",
+		), err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("读取响应失败: %w", err)
+		return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
+			fmt.Sprintf("调用 QuickSearch 搜索 %q 后读取响应失败", queryStr),
+			tools.WithErrDetail("无法读取知识库服务返回的响应内容（连接可能在读取过程中中断）", err),
+			"确认知识库服务已启动且网络连接稳定后重试；若仍失败应告知用户",
+		), err)
 	}
 
 	var apiResp apiQueryResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
+		return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
+			fmt.Sprintf("调用 QuickSearch 搜索 %q 并解析响应时失败", queryStr),
+			tools.WithErrDetail("知识库服务返回的响应不是合法的 JSON 格式", err),
+			"确认知识库服务（mrag serve）版本与接口兼容、返回格式正确后重试；若仍失败应告知用户",
+		), err)
 	}
 
 	if !apiResp.Success {
-		return nil, fmt.Errorf("搜索失败: %s", apiResp.Error)
+		cause := fmt.Sprintf("知识库服务返回错误（HTTP 状态码 %d）", resp.StatusCode)
+		if apiResp.Error != "" {
+			cause = tools.WithErrDetail(cause, errors.New(apiResp.Error))
+		}
+		return nil, fmt.Errorf("%s", tools.BuildGuide(
+			fmt.Sprintf("调用 QuickSearch 搜索 %q，但知识库服务返回错误", queryStr),
+			cause,
+			"先自查：知识库服务是否已启动、查询参数是否正确？确认服务端正常后重试；若错误持续，应告知用户",
+		))
 	}
 
-	emptyResultPrompt := "没有找到相关的内容，请尝试更换其它的关键词或目录后重试"
+	emptyResultPrompt := tools.BuildGuide(
+		"尝试搜索本地知识库，但没有找到相关的内容",
+		"本地知识库中暂时没有任何与查询匹配的数据",
+		"更换关键词或调整 targetDir 目录后重试；若仍无结果，可改用 Grep 或 WebSearch 搜索",
+	)
 	// 提取 formatted result
 	if apiResp.Data == nil {
 		return emptyResultPrompt, nil
@@ -234,6 +275,9 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 		return emptyResultPrompt, nil
 	}
 
+	// 剥离 terminal formatter 的 ANSI 颜色码——这些码面向人类终端，对 LLM 是纯噪音，
+	// 会污染上下文且浪费 token。
+	result = stripANSI(result)
 	markSearchCached(queryStr, targetDir, limit, showScore, showDocID, contentMax)
 	return result, nil
 }

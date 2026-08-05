@@ -156,10 +156,14 @@ func TestRAGMemory_StoreAndRetrieve(t *testing.T) {
 	if len(results) == 0 {
 		t.Fatal("expected at least 1 result")
 	}
-	// storeMemoryChunk 拼接了 Summary + "\n" + Content
-	expected := "天气\n今天天气很好"
+	// 三段式设计：summary 是独立字段，content 不再拼接 summary
+	expected := "今天天气很好"
 	if results[0].Content != expected {
 		t.Errorf("expected content %q, got %q", expected, results[0].Content)
+	}
+	// summary 应能正确读出（不依赖 content 拼接）
+	if results[0].Summary != "天气" {
+		t.Errorf("expected summary %q, got %q", "天气", results[0].Summary)
 	}
 }
 
@@ -393,5 +397,98 @@ func TestRAGMemory_EmptyChunks(t *testing.T) {
 	}
 	if err := mem.StoreMemoryChunks(context.Background(), []goharnessmemory.MemoryChunk{}); err != nil {
 		t.Errorf("empty chunks should not error, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TestRAGMemory_DumpRealSharedDB — 诊断测试：独立构建 Memory 实例，
+// 无条件读取真实 shared.db 中的全部数据，逐条打印每个字段，
+// 用于排查「记忆读不出 / summary/tags 为空」的问题。
+// 该测试不依赖运行中的 daemon，直接复制库文件副本读取，避免抢占 bbolt 锁。
+// ---------------------------------------------------------------------------
+
+func TestRAGMemory_DumpRealSharedDB(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("获取用户主目录失败: %v", err)
+	}
+	// 真实库路径：daemon 的 shared memory 向量库
+	srcDB := filepath.Join(home, ".mindx", "memory", "shared", "vectors", "shared.db")
+	srcInfo, err := os.Stat(srcDB)
+	if err != nil {
+		t.Skipf("真实共享记忆库不存在 %s: %v", srcDB, err)
+	}
+	if srcInfo.Size() == 0 {
+		t.Skipf("真实共享记忆库为空（0 字节）: %s", srcDB)
+	}
+
+	// 复制到临时目录，避免与运行中的 daemon 抢占 bbolt 文件锁
+	tmpDir := t.TempDir()
+	dstDB := filepath.Join(tmpDir, "shared.db")
+	raw, err := os.ReadFile(srcDB)
+	if err != nil {
+		t.Fatalf("读取真实库失败: %v", err)
+	}
+	if err := os.WriteFile(dstDB, raw, 0600); err != nil {
+		t.Fatalf("复制库到临时目录失败: %v", err)
+	}
+
+	// 独立构建 Memory 实例（dimension 必须与真实库一致，日志显示 vector_dim=512）
+	emb := &mockEmbedder{dim: 512}
+	vs, err := govector.NewStore(
+		govector.WithCollection("shared_sem"),
+		govector.WithDimension(emb.Dim()),
+		govector.WithDBPath(dstDB),
+		govector.WithHNSW(true),
+	)
+	if err != nil {
+		t.Fatalf("govector.NewStore 打开副本失败: %v", err)
+	}
+	semIdx, err := goragindexer.NewSemanticIndexer(vs, emb,
+		goragindexer.WithSemanticLogger(logging.DefaultNoopLogger()),
+	)
+	if err != nil {
+		t.Fatalf("NewSemanticIndexer: %v", err)
+	}
+	mem := NewRAGMemory(semIdx, WithEmbedder(emb))
+	mem.logger = logging.DefaultNoopLogger()
+
+	ctx := context.Background()
+
+	admin, ok := mem.Semantic().(goragindexer.IndexerAdmin)
+	if !ok {
+		t.Fatal("semantic indexer does not implement IndexerAdmin")
+	}
+
+	count, err := admin.Count(ctx)
+	if err != nil {
+		t.Fatalf("Count 失败: %v", err)
+	}
+	t.Logf("=== 真实库主向量总数: %d ===", count)
+
+	// 无条件读取全部（无 session_id 过滤、无查询条件）
+	chunks, total, err := admin.List(ctx, 0, 10000, nil)
+	if err != nil {
+		t.Fatalf("List 失败: %v", err)
+	}
+	t.Logf("=== List 返回: %d / total: %d ===", len(chunks), total)
+
+	for i, c := range chunks {
+		sessionID, _ := c.Metadata["session_id"].(string)
+		agentName, _ := c.Metadata["agent_name"].(string)
+		ts := c.Metadata["timestamp"]
+		t.Logf("--- chunk[%d] ---", i)
+		t.Logf("  ID:           %s", c.ID)
+		t.Logf("  Title:        %q", c.Title)
+		t.Logf("  Summary:      %q", c.Summary)
+		t.Logf("  Content:      %q", c.Content)
+		t.Logf("  Tags:         %v", c.Tags)
+		t.Logf("  SessionID:    %q (meta type %T)", sessionID, c.Metadata["session_id"])
+		t.Logf("  AgentName:    %q", agentName)
+		t.Logf("  Timestamp:    %v (type %T)", ts, ts)
+	}
+
+	if total == 0 {
+		t.Log("!!! 库中无任何主向量，数据确实为空/丢失")
 	}
 }

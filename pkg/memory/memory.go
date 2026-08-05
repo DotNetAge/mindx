@@ -153,15 +153,22 @@ func (m *RAGMemory) StoreMemoryChunks(ctx context.Context, chunks []memory.Memor
 			return err
 		}
 	}
+	// 关键数据写入后立即落盘：底层向量存储为攒批缓冲写入，若不显式 Flush，
+	// 数据滞留在内存缓冲，进程异常退出（如 os.Exit 重启）会导致数据丢失。
+	if f, ok := m.semantic.(goragindexer.IndexerFlusher); ok {
+		if err := f.Flush(ctx); err != nil {
+			return fmt.Errorf("memory: 刷入持久化存储失败: %w", err)
+		}
+	}
 	return nil
 }
 
 // storeMemoryChunk stores a single MemoryChunk with full Vector metadata.
 func (m *RAGMemory) storeMemoryChunk(ctx context.Context, chunk memory.MemoryChunk) error {
-	content := chunk.Summary
-	if chunk.Content != "" {
-		content = chunk.Summary + "\n" + chunk.Content
-	}
+	// content := chunk.Summary
+	// if chunk.Content != "" {
+	// 	content = chunk.Summary + "\n" + chunk.Content
+	// }
 
 	tagStrs := make([]string, len(chunk.Tags))
 	copy(tagStrs, chunk.Tags)
@@ -170,19 +177,21 @@ func (m *RAGMemory) storeMemoryChunk(ctx context.Context, chunk memory.MemoryChu
 		"agent_name":  chunk.AgentName,
 		"session_id":  chunk.SessionID,
 		"project_dir": chunk.ProjectDir,
+		"title":       chunk.Title,
 		"summary":     chunk.Summary,
-		"tags":        tagStrs,
 		"content":     chunk.Content,
-		"title":       chunk.Summary,
+		"tags":        tagStrs,
 	}
+
 	if !chunk.Timestamp.IsZero() {
 		metadata["timestamp"] = chunk.Timestamp.UnixMilli()
 	}
 
 	coreChunk := &goragcore.Chunk{
 		ID:       chunk.ID,
-		Content:  content,
-		Title:    chunk.Summary,
+		Content:  chunk.Content,
+		Summary:  chunk.Summary,
+		Title:    chunk.Title,
 		DocID:    chunk.AgentName,
 		Metadata: metadata,
 	}
@@ -516,12 +525,24 @@ func chunkToMemoryChunk(c *goragcore.Chunk) *memory.MemoryChunk {
 		if p, ok := c.Metadata["project_dir"].(string); ok {
 			chunk.ProjectDir = p
 		}
+		// title：优先 metadata["title"]，回退 c.Title（三段式导航标题）
+		if t, ok := c.Metadata["title"].(string); ok && t != "" {
+			chunk.Title = t
+		} else if c.Title != "" {
+			chunk.Title = c.Title
+		}
+		// summary：优先 metadata["summary"]，回退 c.Summary。
+		// vectorToChunk 已把 VecMetaSummary 映射到顶层字段 c.Summary，
+		// 若只读 Metadata 会导致 summary 永远为空（title 能显示正是因为有 c.Title 回退）。
 		if s, ok := c.Metadata["summary"].(string); ok && s != "" {
 			chunk.Summary = s
-		} else {
-			chunk.Summary = c.Title
+		} else if c.Summary != "" {
+			chunk.Summary = c.Summary
 		}
-		if t, ok := c.Metadata["tags"]; ok {
+		// tags：优先顶层 c.Tags，回退 metadata["tags"]（兼容旧存储格式）
+		if len(c.Tags) > 0 {
+			chunk.Tags = c.Tags
+		} else if t, ok := c.Metadata["tags"]; ok {
 			switch v := t.(type) {
 			case []string:
 				if len(v) > 0 {
@@ -546,10 +567,6 @@ func chunkToMemoryChunk(c *goragcore.Chunk) *memory.MemoryChunk {
 		if ct, ok := c.Metadata["content"].(string); ok && ct != "" {
 			chunk.Content = ct
 		}
-	}
-
-	if chunk.Summary == "" {
-		chunk.Summary = c.Title
 	}
 
 	return chunk

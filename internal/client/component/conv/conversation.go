@@ -147,7 +147,7 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 		m.currentRound().Action = newAction
 		return m, cmd
 
-	case msg.FinalAnswerMsg, msg.AgentErrorMsg, msg.LLMTimeoutMsg, msg.MaxTurnsReachedMsg:
+	case msg.FinalAnswerMsg, msg.AgentErrorMsg, msg.LLMTimeoutMsg, msg.LLMCancelledMsg, msg.MaxTurnsReachedMsg:
 		if m.Status == StatusDone {
 			return m, nil
 		}
@@ -160,6 +160,11 @@ func UpdateConversation(m Conversation, e tea.Msg) (Conversation, tea.Cmd) {
 			newOutput, cmd := UpdateOutput(m.Output, e)
 			m.Output = newOutput
 			m.Status = StatusError
+			return m, cmd
+		case msg.LLMCancelledMsg:
+			newOutput, cmd := UpdateOutput(m.Output, e)
+			m.Output = newOutput
+			m.Status = StatusDone // 用户主动取消，正常结束（非错误）
 			return m, cmd
 		case msg.MaxTurnsReachedMsg:
 			m.MaxTurnsNotice = e.Suggestion

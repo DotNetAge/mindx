@@ -276,10 +276,14 @@ func (m *rootModel) registerNotificationHandlers() {
 		toolName, _ := data["tool_name"].(string)
 		reason, _ := data["reason"].(string)
 		secLevel, _ := data["security_level"].(float64)
+		// 子智能体授权冒泡：透传发起请求的会话 ID，用户决策后据此发送
+		// 带目标魔法词精确路由，避免多子会话并发挂起时决策错位。
+		sessionID, _ := data["session_id"].(string)
 		m.program.Send(clientmsg.PermissionRequestMsg{
 			ToolName:      toolName,
 			Reason:        reason,
 			SecurityLevel: int(secLevel),
+			SessionID:     sessionID,
 		})
 	})
 
@@ -343,6 +347,16 @@ func (m *rootModel) rpcSendMessage(text string) {
 	m.statusBar.CurrentState = i18n.T("client.status.thinking")
 	m.statusBar.SessionStart = time.Now()
 	m.statusBar.SessionDuration = 0
+}
+
+// rpcSendMagicWord 将授权魔法词送达会话：RPC 模式经 user.message 通知，
+// 本地模式经 UserSendMsg 进入内嵌 runtime。用于授权允许/允许会话/拒绝决策。
+func (m *rootModel) rpcSendMagicWord(magicWord string) {
+	if m.rpcConnected {
+		m.rpcSendMessage(magicWord)
+		return
+	}
+	m.program.Send(clientmsg.UserSendMsg{Text: magicWord})
 }
 
 // rpcReplyAskUser is removed — the non-blocking AskUser flow sends answers

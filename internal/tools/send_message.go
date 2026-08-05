@@ -50,14 +50,14 @@ func (t *SendMessage) Info() *tools.ToolInfo {
 }
 
 func (t *SendMessage) Execute(ctx context.Context, params map[string]any) (any, error) {
-	title, err := tools.ValidateRequiredString(params, "title")
+	title, err := tools.ValidateRequiredString("SendMessage", params, "title")
 	if err != nil {
-		return nil, fmt.Errorf("SendMessage：title 为必填项：%w", err)
+		return nil, err
 	}
 
-	message, err := tools.ValidateRequiredString(params, "message")
+	message, err := tools.ValidateRequiredString("SendMessage", params, "message")
 	if err != nil {
-		return nil, fmt.Errorf("SendMessage：message 为必填项：%w", err)
+		return nil, err
 	}
 
 	subtitleRaw, _ := getParam(params, "subtitle")
@@ -76,7 +76,11 @@ func (t *SendMessage) Execute(ctx context.Context, params map[string]any) (any, 
 
 	cmd := exec.CommandContext(ctx, "osascript", "-e", script.String())
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("SendMessage：发送通知失败：%w", err)
+		return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
+			fmt.Sprintf("通过 osascript 发送通知失败（title=%q）", title),
+			tools.WithErrDetail("系统可能不支持脚本调用，或未授予发送通知的权限", err),
+			"确认当前系统支持 osascript 且已在系统设置中授予发送通知的权限后重试；若无法解决，应告知用户改用其它提醒方式",
+		), err)
 	}
 
 	return map[string]any{

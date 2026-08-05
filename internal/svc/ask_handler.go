@@ -30,9 +30,11 @@ type askEventHandlers struct {
 	SubtaskCompleted   func(data goharnessevents.SubtaskResult)
 	TaskSummary        func(data goharnessevents.TaskSummaryData)
 	LLMTimeout         func(data goharnessevents.LLMTimeoutData)
+	LLMCancelled       func(data goharnessevents.LLMCancelledData)
 	TokenUsageRecorded func(record goharnesssession.TokenUsageRecord)
 	AskUserPending     func(data goharnessevents.AskUserPendingData)
 	PermissionPending  func(data goharnessevents.PermissionPendingData)
+	UserMessageSaved   func(timestamp int64)
 }
 
 // wireAskEvents attaches the common set of event handlers onto an AskBuilder.
@@ -88,6 +90,9 @@ func wireAskEvents(b *agents.AskBuilder, h askEventHandlers) *agents.AskBuilder 
 	if h.LLMTimeout != nil {
 		b = b.OnLLMTimeout(h.LLMTimeout)
 	}
+	if h.LLMCancelled != nil {
+		b = b.OnLLMCancelled(h.LLMCancelled)
+	}
 	if h.TokenUsageRecorded != nil {
 		b = b.OnTokenUsageRecorded(h.TokenUsageRecorded)
 	}
@@ -97,15 +102,34 @@ func wireAskEvents(b *agents.AskBuilder, h askEventHandlers) *agents.AskBuilder 
 	if h.PermissionPending != nil {
 		b = b.OnPermissionPending(h.PermissionPending)
 	}
+	if h.UserMessageSaved != nil {
+		b = b.OnUserMessageSaved(func(d goharnessevents.UserMessageSavedData) {
+			h.UserMessageSaved(d.Timestamp)
+		})
+	}
 	return b
 }
 
 // ── Factory: per-client event handlers (used by defaultHandler) ──────────
 
+// effectiveEventSession 返回当前事件应归属的会话 ID：
+// 子会话转发事件（getSubSessionID 返回子会话 ID）时用子会话 ID，
+// 使前端能精确反查到对应的子任务卡片；主会话事件保持父会话 ID。
+func effectiveEventSession(sid string, getSubSessionID func() string) string {
+	if getSubSessionID != nil {
+		if sub := getSubSessionID(); sub != "" && sub != sid {
+			return sub
+		}
+	}
+	return sid
+}
+
 // newClientAskHandlers creates event handlers that route AskBuilder events to
 // a specific WebSocket client via gw.SendResponse / d.sendEvent.
 // getAgentName is called lazily so that it reflects the live agent name
 // (updated by OnEvent during execution).
+// getSubSessionID is called lazily to fetch the current event's originating
+// session ID (sub-session ID for forwarded sub-agent events, empty otherwise).
 func newClientAskHandlers(
 	d *Daemon,
 	gw *gateway.Server,
@@ -113,33 +137,34 @@ func newClientAskHandlers(
 	withAgent func() gateway.ResponseOption,
 	s *goharnesssession.Session,
 	getAgentName func() string,
+	getSubSessionID func() string,
 ) askEventHandlers {
 	return askEventHandlers{
 		Thinking: func(chunk string) {
-			_ = gw.SendResponse(clientID, gateway.RespThinkingDelta, i18n.T("svc.event.thinking"), chunk, gateway.WithSessionID(sid), withAgent())
+			_ = gw.SendResponse(clientID, gateway.RespThinkingDelta, i18n.T("svc.event.thinking"), chunk, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 		},
 		Content: func(chunk string) {
-			d.sendEvent(clientID, sid, gateway.RespMarkdown, i18n.T("svc.event.outputting"), chunk, withAgent())
+			d.sendEvent(clientID, effectiveEventSession(sid, getSubSessionID), gateway.RespMarkdown, i18n.T("svc.event.outputting"), chunk, withAgent())
 		},
 		ToolUseDelta: func(data goharnessevents.ToolUseDeltaData) {
 			_ = gw.SendResponse(clientID, gateway.RespToolUseDelta, i18n.T("svc.event.tool.use.delta"), map[string]any{
 				"index": data.Index, "id": data.ID, "name": data.Name, "arguments": data.Arguments,
-			}, gateway.WithSessionID(sid), withAgent())
+			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 		},
 		ThinkingDone: func() {
-			d.sendEvent(clientID, sid, gateway.RespThinkingDone, i18n.T("svc.event.thinking.done"), i18n.T("svc.event.thinking.done.detail"), withAgent())
+			d.sendEvent(clientID, effectiveEventSession(sid, getSubSessionID), gateway.RespThinkingDone, i18n.T("svc.event.thinking.done"), i18n.T("svc.event.thinking.done.detail"), withAgent())
 		},
 		ToolStart: func(data goharnessevents.ToolExecStartData) {
 			_ = gw.SendResponse(clientID, gateway.RespToolExecStart, i18n.T("svc.event.tool.start"), map[string]any{
 				"tool_name": data.ToolName, "params": data.Params, "predicted_tokens": data.PredictedTokens,
-			}, gateway.WithSessionID(sid), withAgent())
+			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 		},
 		ToolEnd: func(data goharnessevents.ToolExecEndData) {
 			_ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.end"), map[string]any{
 				"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
 				"success": data.Success, "result": data.Result, "error": data.Error,
 				"duration_ms": int(data.Duration.Milliseconds()),
-			}, gateway.WithSessionID(sid), withAgent())
+			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 			// 广播本轮所有变更的文件的 diff。
 			// 前端 chatStore.handleFileModified 已按文件路径去重，
 			// 同一路径多次修改只在消息列表中保留一个 DiffView（更新而非追加），
@@ -157,7 +182,7 @@ func newClientAskHandlers(
 			}
 		},
 		Answer: func(answer string) {
-			d.sendEvent(clientID, sid, gateway.RespFinalAnswer, i18n.T("svc.event.final.answer"), answer, withAgent())
+			d.sendEvent(clientID, effectiveEventSession(sid, getSubSessionID), gateway.RespFinalAnswer, i18n.T("svc.event.final.answer"), answer, withAgent())
 		},
 		ExecutionSummary: func(data goharnessevents.ExecutionSummaryData) {
 			d.sendExecutionSummary(clientID, sid, data, getAgentName())
@@ -215,6 +240,11 @@ func newClientAskHandlers(
 			msg := fmt.Sprintf(i18n.T("svc.event.llm.timeout"), data.Elapsed, data.Error)
 			d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.timeout"), msg, withAgent())
 		},
+		LLMCancelled: func(data goharnessevents.LLMCancelledData) {
+			_ = gw.SendResponse(clientID, gateway.RespLLMCancelled, i18n.T("svc.event.llm.cancelled"), map[string]any{
+				"elapsed_ns": data.Elapsed.Nanoseconds(),
+			}, gateway.WithSessionID(sid), withAgent())
+		},
 		TokenUsageRecorded: func(record goharnesssession.TokenUsageRecord) {
 			_ = gw.SendResponse(clientID, gateway.RespTokenUsageRecorded, i18n.T("svc.event.token.usage"), map[string]any{
 				"id": record.ID, "session_id": record.SessionID,
@@ -238,6 +268,16 @@ func newClientAskHandlers(
 				"reason":         data.Reason,
 				"security_level": data.SecurityLevel,
 				"params":         data.Params,
+				// 子智能体授权冒泡：透传发起授权请求的会话 ID（子会话），
+				// 前端据此发送带目标魔法词精确路由授权决策。
+				"session_id": data.SessionID,
+			}, gateway.WithSessionID(sid), withAgent())
+		},
+		UserMessageSaved: func(timestamp int64) {
+			// 回传后端 user 消息 Timestamp，前端回填 metadata.backendTimestamp，
+			// 使实时对话的"回收本轮"按钮在刷新前即可用。
+			_ = gw.SendResponse(clientID, gateway.RespUserMessageSaved, "用户消息已保存", map[string]any{
+				"timestamp": timestamp,
 			}, gateway.WithSessionID(sid), withAgent())
 		},
 	}
@@ -344,6 +384,11 @@ func newBroadcastAskHandlers(
 				"elapsed": data.Elapsed, "error": data.Error,
 			})
 		},
+		LLMCancelled: func(data goharnessevents.LLMCancelledData) {
+			d.broadcastScheduleEvent(sessionID, agent, "llm_cancelled", map[string]any{
+				"elapsed": data.Elapsed,
+			})
+		},
 		TokenUsageRecorded: func(record goharnesssession.TokenUsageRecord) {
 			d.broadcastScheduleEvent(sessionID, agent, "token_usage_recorded", map[string]any{
 				"id": record.ID, "session_id": record.SessionID,
@@ -365,6 +410,7 @@ func newBroadcastAskHandlers(
 				"reason":         data.Reason,
 				"security_level": data.SecurityLevel,
 				"params":         data.Params,
+				"session_id":     data.SessionID,
 			})
 		},
 	}

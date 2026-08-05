@@ -15,6 +15,7 @@ import (
 	"time"
 
 	graphapi "github.com/DotNetAge/gograph/pkg/api"
+	"github.com/DotNetAge/goharness/agents"
 	"github.com/DotNetAge/goharness/events"
 	"github.com/DotNetAge/goharness/hooks/action"
 	goharnesssession "github.com/DotNetAge/goharness/session"
@@ -37,13 +38,6 @@ var (
 	ulidRegex    = regexp.MustCompile(`^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$`)
 )
 
-type pendingInteraction struct {
-	replyFn   func(answers map[string]string)
-	grantFn   func(params map[string]any)
-	denyFn    func(reason string)
-	createdAt time.Time
-}
-
 type Daemon struct {
 	app          *core.App
 	gw           *gateway.Server
@@ -53,7 +47,6 @@ type Daemon struct {
 
 	// token usage recording
 	usageStore    goharnesssession.TokenUsageStore
-	modelName     string
 	webServer     *WebServer
 	addr          string
 	wsPath        string
@@ -61,12 +54,13 @@ type Daemon struct {
 	execMu        sync.Mutex
 	clientCancels sync.Map
 
+	// sessionQueues 按 sessionID 维护同一会话内串行执行的 FIFO 队列，
+	// 取代「新消息取消旧执行」的粗粒度取消机制（详见 session_queue.go）。
+	sessionQueues sync.Map
+
 	// activeSessions tracks live sessions by sessionID for FileModifyHook
 	// to look up the session's TrackModify function.
 	activeSessions sync.Map
-
-	pendingInteractions map[string]*pendingInteraction
-	interactMu          sync.Mutex
 
 	// knowledge-graph database (gograph)
 	graphDB    *graphapi.DB
@@ -92,9 +86,6 @@ type Daemon struct {
 
 	// restartCh 接收重启信号；Start() 主循环通过 select 监听。
 	restartCh chan struct{}
-
-	// cleanupCancel cancels the stale interaction cleanup loop on shutdown.
-	cleanupCancel context.CancelFunc
 
 	// hotReload watches agents/ and skills/ directories for file changes
 	// and automatically reloads registries.
@@ -149,16 +140,6 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS, webFS fs.FS)
 		)
 	}
 
-	// ── 模型名称（用于会话定价） ─────────────────────────────────
-	var modelName string
-	if defaultModel := app.ResolveDefaultModel(); defaultModel != nil {
-		modelName = defaultModel.Name
-		logger.Info("default model resolved for session pricing",
-			"model", defaultModel.Name,
-			"provider", defaultModel.Provider,
-		)
-	}
-
 	// ── Shared Memory（对话记忆）─────────────────────────────────
 	// Memory 仅为对话服务，基于 SemanticIndexer，不与知识库耦合
 	var sharedMemory *memory.RAGMemory
@@ -187,11 +168,9 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS, webFS fs.FS)
 		dataDir:             app.Settings().DataDir(),
 		sharedMemory:        sharedMemory,
 		usageStore:          app.TokenUsageStore(),
-		modelName:           modelName,
 		runtimeFS:           runtimeFS,
 		webServer:           NewWebServer(webFS, logger),
 		logger:              logger,
-		pendingInteractions: make(map[string]*pendingInteraction),
 		restartCh:           make(chan struct{}, 1),
 	}
 
@@ -240,7 +219,15 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS, webFS fs.FS)
 			default:
 				method = "schedule.job_" + info.Status
 			}
-			d.gw.BroadcastNotification(method, info)
+			// 统一广播结构：method 为 schedule.job_*，payload 携带
+			// session_id/agent/type/data，meta.agent_name 供前端取智能体名。
+			d.gw.BroadcastNotification(method, map[string]any{
+				"session_id": info.SessionID,
+				"agent":      info.Agent,
+				"type":       info.Status,
+				"data":       info,
+				"meta":       map[string]any{"agent_name": info.Agent},
+			})
 		})
 	}
 
@@ -288,49 +275,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS, webFS fs.FS)
 		"has_kvstore", d.kvStore != nil,
 	)
 
-	// 定期清理超时的 pending interactions，防止客户端断线后内存泄漏
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		d.cleanupCancel = cancel
-		go d.cleanupStaleInteractionsLoop(ctx, 30*time.Minute, 5*time.Minute)
-	}
-
 	return d
-}
-
-// cleanupStaleInteractionsLoop 定期清理超时的 pending interactions，
-// 防止客户端断线或超时未回复导致内存泄漏。
-func (d *Daemon) cleanupStaleInteractionsLoop(ctx context.Context, timeout, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			d.cleanupStaleInteractions(timeout)
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-// cleanupStaleInteractions 清理所有超过 timeout 时间的 pending interactions。
-func (d *Daemon) cleanupStaleInteractions(timeout time.Duration) {
-	d.interactMu.Lock()
-	defer d.interactMu.Unlock()
-
-	now := time.Now()
-	var staleKeys []string
-	for key, pi := range d.pendingInteractions {
-		if now.Sub(pi.createdAt) > timeout {
-			staleKeys = append(staleKeys, key)
-		}
-	}
-	for _, key := range staleKeys {
-		delete(d.pendingInteractions, key)
-	}
-	if len(staleKeys) > 0 {
-		d.logger.Info("cleaned up stale pending interactions", "count", len(staleKeys))
-	}
 }
 
 // autoUpdateLoop 在启动时进行一次检查，之后每 24 小时检查一次。
@@ -524,12 +469,6 @@ func (d *Daemon) stopCloseable(name string, closer func() error) {
 
 func (d *Daemon) stopBackgroundServices() {
 	d.logger.Info("stopping background services...")
-
-	// Cancel stale interaction cleanup loop first (no I/O, no blocking).
-	if d.cleanupCancel != nil {
-		d.cleanupCancel()
-		d.cleanupCancel = nil
-	}
 
 	d.stopService("hot-reload watcher", func() {
 		if d.hotReload != nil {
@@ -758,89 +697,44 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		"input_preview", truncate(content, 100),
 	)
 
-	// Cancel any existing execution for this client
-	d.cancelClientExecution(msg.ClientID)
-
-	// Create cancellable context for interrupt/cancel support
+	// 取消机制调整：不再「新消息取消旧执行」。
+	// 同一会话的并发 Ask 通过 sessionQueue 串行排队执行（见 session_queue.go）：
+	// 新消息不会打断正在进行的执行（例如 CollectResults 轮询），而是等上一轮
+	// 完全结束后自动继续；只有断开连接 / message.cancel 停止按钮才批量取消执行。
 	ctx, cancel := context.WithCancel(context.Background())
-	d.clientCancels.Store(msg.ClientID, cancel)
-
-	// Load existing session from persistent store (verifies it exists).
-	//
-	// Budget 动态可调：窗口大小通过 modelContextResolver 回调动态查询当前模型的
-	// ContextLength，保证用户切换模型后立即生效，不再焊死在 session 上。
-	//   - 模型 ContextLength <= 128K：TryCompact 会在 80% 阈值触发全量摘要并清空窗口
-	//   - 模型 ContextLength > 128K：resolver 返回大值，ratio 不会达到阈值，
-	//     靠 KV 缓存命中兜底——超长上下文模型上清空窗口反而损失有效上下文
-	//   - MicroCompact (Dupdu) 已禁用：它修改上下文中间的 tool 消息内容，破坏 KV
-	//     缓存，重算成本远大于保留"垃圾"的 attention 成本，属于负优化。
-	var sessOpts []goharnesssession.SessionConfig
-	// 注入 modelContextResolver：每次需要窗口大小时动态调用 ResolveDefaultModel()，
-	// 读取最新的全局默认模型配置，保证切换模型后窗口大小立即更新。
-	sessOpts = append(sessOpts,
-		goharnesssession.WithModelContextResolver(d.resolveSessionModelContextLength),
-	)
-	if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil && modelCfg.ContextLength > 0 {
-		// 注入 WithModelResolver：摘要器每次摘要都通过 ResolveDefaultModelConfig
-		// 读取当前默认模型，跟随用户切换模型立即生效，
-		// 不再使用构造时固化的 model 快照。*modelCfg 作为 resolver
-		// 返回空值时的回退兜底。
-		sessOpts = append(sessOpts,
-			goharnesssession.WithSummarizer(
-				goharnesssession.NewLLMSummarizer(
-					*modelCfg,
-					goharnesssession.WithModelResolver(d.app.ResolveDefaultModelConfig),
-				),
-			),
-		)
-	}
-	// 绑定 RAG 记忆存储，使压缩摘要持久化到 RAG indexer（浏览器可读）
-	if d.sharedMemory != nil {
-		// 获取会话的 project_dir 用于存储元数据
-		projectDir := ""
-		if meta, metaErr := d.app.SessDB().GetMeta(context.Background(), sessionID); metaErr == nil && meta != nil {
-			projectDir = meta.ProjectDir
-		}
-		sessOpts = append(sessOpts, goharnesssession.WithMemory(mindxses.NewRAGMemoryAdapter(d.sharedMemory, resolvedAgentName, projectDir)))
-	}
-	s, err := goharnesssession.Load(context.Background(), sessionID, resolvedAgentName, d.app.SessDB(), d.logger, sessOpts...)
-	if err != nil {
-		d.logger.Error("failed to load session", err, "session_id", sessionID)
-		d.sendEvent(msg.ClientID, sessionID, gateway.RespError, "Session Error", err.Error())
-		return
-	}
-	d.activeSessions.Store(sessionID, s)
-
-	// 注册 FileModifyHandler：将文件追踪事件转发为 JSON-RPC 通知，
-	// 让前端实时显示 DiffView。
-	//
-	// 防止重复触发的三重保险：
-	//  1. session.TrackModify 内部已用 containsModifyFile 去重，
-	//     同一文件被再次追踪时直接 return nil，不调 handler。
-	//  2. 这里只对 Action == "tracked" 发送事件；"confirmed" / "rolled_back"
-	//     是用户后续操作结果，不应在前端再次弹出 DiffView。
-	//  3. 前端 chatStore.handleFileModified 对同路径消息做 upsert，
-	//     即使收到重复事件也只会更新而非追加。
-	s.SetFileModifyHandler(func(ev goharnesssession.FileModifyEvent) {
-		if ev.Action != "tracked" {
-			return
-		}
-		fp := ev.FilePath
-		if fp == "" {
-			return
-		}
-		payload, _ := json.Marshal(map[string]any{
-			"files":  []string{fp},
-			"action": ev.Action,
-		})
-		d.sendEvent(msg.ClientID, sessionID, gateway.RespFileModified,
-			i18n.T("svc.event.file_modified"), string(payload))
-	})
+	cancelSet := d.clientCancelSetFor(msg.ClientID)
+	cancelEntry := cancelSet.Add(cancel)
 
 	clientID := msg.ClientID
 	sid := sessionID
 	gw := d.gw
 	currentAgentName := resolvedAgentName
+
+	// 子智能体授权冒泡旁路：子会话（spawn 的子 Agent 执行循环）触发授权请求时，
+	// 不依赖父 exec EventBus 的存活（父 exec 结束/被取消后订阅销毁，原 parentEmit
+	// 转发链路会静默丢事件），而是经此发送器将授权请求直接广播到所有客户端。
+	// 授权请求的 envelope 结构（session_id / meta.agent_name / title / data / type）
+	// 与 wireAskEvents 中 emitter.PermissionPending 发送的一致，前端解析无差异；
+	// data.session_id 为发起授权的子会话 ID，前端据此精确反查并渲染到对应子任务卡片。
+	// 主会话自身的授权请求不走旁路（b.permissionCh == nil），仍经原 EventBus 转发链路。
+	ctx = agents.WithPermissionSink(ctx, func(data events.PermissionPendingData) {
+		if d.gw == nil {
+			return
+		}
+		d.gw.BroadcastNotification(string(gateway.RespPermissionRequest), map[string]any{
+			"session_id": sid,
+			"meta":       map[string]any{"agent_name": currentAgentName},
+			"title":      i18n.T("svc.event.permission.request"),
+			"data": map[string]any{
+				"tool_name":      data.ToolName,
+				"reason":         data.Reason,
+				"security_level": data.SecurityLevel,
+				"params":         data.Params,
+				"session_id":     data.SessionID,
+			},
+			"type": gateway.RespPermissionRequest,
+		})
+	})
 
 	// withAgent returns a ResponseOption that includes the current agent_name in meta.
 	// Updated by OnEvent handler when sub-agent events are forwarded to the parent.
@@ -848,12 +742,20 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		return gateway.WithResponseMeta(map[string]any{"agent_name": currentAgentName})
 	}
 
-	d.logger.Debug("request: starting async execution via AskBuilder",
+	d.logger.Debug("request: enqueuing async execution via AskBuilder",
 		"session_id", sessionID,
 		"agent", resolvedAgentName,
 	)
 
-	go func() {
+	// 同一会话的 Ask 排队串行执行。若上一轮执行尚未结束，返回 true 表示本次
+	// 消息进入队列等待；此时通知前端显示「排队中」，避免用户误以为消息丢失。
+	// queued 先声明再赋值：任务闭包按引用捕获它，任务真正执行时才能读到结果。
+	var queued bool
+	queued = d.sessionQueueFor(sessionID).Enqueue(func() {
+		defer func() {
+			cancelSet.Remove(cancelEntry)
+			cancel()
+		}()
 		defer func() {
 			d.activeSessions.Delete(sid)
 			if r := recover(); r != nil {
@@ -862,18 +764,99 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.error"), fmt.Sprintf(i18n.T("svc.event.execution.exception"), r))
 			}
 		}()
-		defer func() {
-			cancel()
-			d.clientCancels.Delete(clientID)
-		}()
+
+		// 排队等待期间客户端已断开连接或收到停止指令：跳过本次执行。
+		if ctx.Err() != nil {
+			d.logger.Info("request skipped: cancelled while queued",
+				"client_id", clientID, "session_id", sid)
+			return
+		}
+
+		// 排队中的消息正式开始执行：通知前端从「排队中」切换为「处理中」。
+		if queued && gw != nil {
+			_ = gw.SendResponse(clientID, gateway.RespMessageProcessing,
+				i18n.T("svc.event.message.processing"), map[string]any{
+					"timestamp": time.Now().Unix(),
+				}, gateway.WithSessionID(sessionID), withAgent())
+		}
+
+		// Load existing session from persistent store (verifies it exists).
+		//
+		// 必须在队列内执行：Session 懒加载后 Append 只更新各自实例的内存，
+		// 若在上一轮执行结束前加载会拿到过期快照，丢失对方后续写入的消息。
+		//
+		// Budget 动态可调：窗口大小通过 modelContextResolver 回调动态查询当前模型的
+		// ContextLength，保证用户切换模型后立即生效，不再焊死在 session 上。
+		//   - 模型 ContextLength <= 128K：TryCompact 会在 80% 阈值触发全量摘要并清空窗口
+		//   - 模型 ContextLength > 128K：resolver 返回大值，ratio 不会达到阈值，
+		//     靠 KV 缓存命中兜底——超长上下文模型上清空窗口反而损失有效上下文
+		//   - MicroCompact (Dupdu) 已禁用：它修改上下文中间的 tool 消息内容，破坏 KV
+		//     缓存，重算成本远大于保留"垃圾"的 attention 成本，属于负优化。
+		var sessOpts []goharnesssession.SessionConfig
+		// 通用能力（Compactor 压缩引擎 + Sandbox 沙箱）由 Runtime 统一注入，
+		// 与子 Agent 会话走同一条装配路径（agents.Runtime.SessionConfigs）。
+		sessOpts = append(sessOpts, rt.SessionConfigs()...)
+		// 会话特有配置：modelContextResolver 动态查询当前模型窗口大小
+		sessOpts = append(sessOpts,
+			goharnesssession.WithModelContextResolver(d.resolveSessionModelContextLength),
+		)
+		// 绑定 RAG 记忆存储，使压缩摘要持久化到 RAG indexer（浏览器可读）
+		if d.sharedMemory != nil {
+			// 获取会话的 project_dir 用于存储元数据
+			projectDir := ""
+			if meta, metaErr := d.app.SessDB().GetMeta(context.Background(), sessionID); metaErr == nil && meta != nil {
+				projectDir = meta.ProjectDir
+			}
+			sessOpts = append(sessOpts, goharnesssession.WithMemory(mindxses.NewRAGMemoryAdapter(d.sharedMemory, resolvedAgentName, projectDir)))
+		}
+		s, err := goharnesssession.Load(context.Background(), sessionID, resolvedAgentName, d.app.SessDB(), d.logger, sessOpts...)
+		if err != nil {
+			d.logger.Error("failed to load session", err, "session_id", sessionID)
+			d.sendEvent(clientID, sessionID, gateway.RespError, "Session Error", err.Error())
+			return
+		}
+		d.activeSessions.Store(sessionID, s)
+
+		// 注册 FileModifyHandler：将文件追踪事件转发为 JSON-RPC 通知，
+		// 让前端实时显示 DiffView。
+		//
+		// 防止重复触发的三重保险：
+		//  1. session.TrackModify 内部已用 containsModifyFile 去重，
+		//     同一文件被再次追踪时直接 return nil，不调 handler。
+		//  2. 这里只对 Action == "tracked" 发送事件；"confirmed" / "rolled_back"
+		//     是用户后续操作结果，不应在前端再次弹出 DiffView。
+		//  3. 前端 chatStore.handleFileModified 对同路径消息做 upsert，
+		//     即使收到重复事件也只会更新而非追加。
+		s.SetFileModifyHandler(func(ev goharnesssession.FileModifyEvent) {
+			if ev.Action != "tracked" {
+				return
+			}
+			fp := ev.FilePath
+			if fp == "" {
+				return
+			}
+			payload, _ := json.Marshal(map[string]any{
+				"files":  []string{fp},
+				"action": ev.Action,
+			})
+			d.sendEvent(clientID, sessionID, gateway.RespFileModified,
+				i18n.T("svc.event.file_modified"), string(payload))
+		})
 
 		// ── Build common event handlers via factory ──
-		emitter := newClientAskHandlers(d, gw, clientID, sid, withAgent, s, func() string { return currentAgentName })
+		// eventSubSessionID 记录「当前事件」所属会话 ID：子会话经 parentEmit
+		// 转发到父 EventBus 的事件携带子会话 ID，主会话事件为 sid。
+		// 由于 EventBus 同步分发，OnEvent 先于类型 handler 执行，handler 读取
+		// 该字段即可拿到本事件的会话归属，从而把子会话流式事件精确路由到
+		// 前端对应的子任务卡片（见 effectiveEventSession）。
+		var eventSubSessionID string
+		emitter := newClientAskHandlers(d, gw, clientID, sid, withAgent, s, func() string { return currentAgentName }, func() string { return eventSubSessionID })
 
 		builder := rt.Ask(resolvedAgentName, content, s).
 			WithContext(ctx).
 			OnEvent(func(ev events.ReactEvent) {
 				currentAgentName = ev.AgentName
+				eventSubSessionID = ev.SessionID
 			}).
 			OnEvent(func(ev events.ReactEvent) {
 				// Forward Compact / MicroCompact events as JSON-RPC
@@ -937,7 +920,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			})
 		builder = wireAskEvents(builder, emitter)
 
-		_, err := builder.
+		_, err = builder.
 			OnPermissionDenied(func(reason string) {
 				d.sendEvent(clientID, sid, gateway.RespPermissionDenied, i18n.T("svc.event.permission.denied"), reason, withAgent())
 			}).
@@ -977,13 +960,24 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			"session_id", sid,
 			"agent", resolvedAgentName,
 		)
-	}()
+	})
+
+	// 通知前端：消息已进入该会话的串行队列，正在等待上一轮执行完成。
+	if queued && gw != nil {
+		d.logger.Info("request queued behind running execution",
+			"client_id", clientID, "session_id", sessionID)
+		_ = gw.SendResponse(clientID, gateway.RespMessageQueued,
+			i18n.T("svc.event.message.queued"), map[string]any{
+				"timestamp": time.Now().Unix(),
+			}, gateway.WithSessionID(sessionID), withAgent())
+	}
 }
 
-// cancelClientExecution cancels any running execution for the given client.
+// cancelClientExecution 批量取消指定客户端的全部执行（运行中与排队中）。
+// 仅由客户端断开连接时触发；新消息不再取消旧执行，而是进入会话队列排队。
 func (d *Daemon) cancelClientExecution(clientID string) {
 	if v, ok := d.clientCancels.Load(clientID); ok {
-		v.(context.CancelFunc)()
+		v.(*clientCancelSet).CancelAll()
 		d.clientCancels.Delete(clientID)
 	}
 }
@@ -1023,20 +1017,9 @@ func (d *Daemon) resolveSessionID(clientProvided string, commandProvided string)
 	if d.app.SessionDB() != nil {
 		currentAgent := d.app.CurrentAgentName()
 		if currentAgent != "" {
-			sessions, err := goharnesssession.ListSessions(context.Background(), d.app.SessDB())
-			if err == nil {
-				var best *goharnesssession.SessionInfo
-				for i := range sessions {
-					if sessions[i].AgentName == currentAgent {
-						if best == nil || sessions[i].LastActivityAt.After(best.LastActivityAt) {
-							best = &sessions[i]
-						}
-					}
-				}
-				if best != nil && best.SessionID != "" {
-					d.logger.Info("resumed session from store", "agent", currentAgent, "session", best.SessionID)
-					return best.SessionID
-				}
+			if sid := d.resolveLatestSessionForAgent(currentAgent); sid != "" {
+				d.logger.Info("resumed session from store", "agent", currentAgent, "session", sid)
+				return sid
 			}
 		}
 	}
@@ -1044,6 +1027,31 @@ func (d *Daemon) resolveSessionID(clientProvided string, commandProvided string)
 	sid := generateSessionID()
 	d.logger.Info("created new session", "session", sid)
 	return sid
+}
+
+// resolveLatestSessionForAgent 返回指定智能体最近活动的会话 ID。
+// 供 resolveSessionID（无会话上下文时回退）与调度任务（entry.SessionID 为空时回退）
+// 共用。找不到任何会话时返回空字符串。
+func (d *Daemon) resolveLatestSessionForAgent(agent string) string {
+	if agent == "" || d.app == nil || d.app.SessDB() == nil {
+		return ""
+	}
+	sessions, err := goharnesssession.ListSessions(context.Background(), d.app.SessDB())
+	if err != nil {
+		return ""
+	}
+	var best *goharnesssession.SessionInfo
+	for i := range sessions {
+		if sessions[i].AgentName == agent {
+			if best == nil || sessions[i].LastActivityAt.After(best.LastActivityAt) {
+				best = &sessions[i]
+			}
+		}
+	}
+	if best != nil && best.SessionID != "" {
+		return best.SessionID
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------------------
@@ -1058,12 +1066,78 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		"content_preview", truncate(content, 100),
 	)
 
+	// 与用户消息共用同一会话串行队列：避免 cron 任务与用户在同一个会话上
+	// 并发写 Session（懒加载快照过期、消息交错）。排队期间若调度任务的
+	// 5 分钟超时已耗尽，runScheduleCommand 会在启动前跳过执行并返回超时错误。
+	resultCh := make(chan error, 1)
+	d.sessionQueueFor(sessionID).Enqueue(func() {
+		resultCh <- d.runScheduleCommand(ctx, agent, sessionID, content, projectDir)
+	})
+	return <-resultCh
+}
+
+// runScheduleCommand 在会话队列内执行调度任务（executeScheduleCommand 的主体）。
+func (d *Daemon) runScheduleCommand(ctx context.Context, agent string, sessionID string, content string, projectDir string) error {
+	// 排队等待期间调度上下文已过期（5 分钟超时）：跳过执行，避免用失效上下文
+	// 发起无意义的 LLM 调用。
+	if err := ctx.Err(); err != nil {
+		d.logger.Warn("scheduled task: skipped, context cancelled while queued",
+			"agent", agent, "session_id", sessionID, "error", err)
+		return fmt.Errorf("scheduled task: context expired while queued: %w", err)
+	}
+
 	rt, err := d.app.ResolveRuntime(agent)
 	if err != nil {
 		d.logger.Error("scheduled task: failed to resolve runtime", err,
 			"agent", agent,
 		)
 		return fmt.Errorf("resolve runtime for %q: %w", agent, err)
+	}
+
+	// 与 defaultHandler 一致：注册 FileModifyHook，使 Write/FileEdit 等工具
+	// 在执行前能通过 activeSessions 找到会话的 TrackModify 做文件备份。
+	rt.WithFileModifyTracker(func(sessionID string) (action.TrackFunc, bool) {
+		val, ok := d.activeSessions.Load(sessionID)
+		if !ok {
+			return nil, false
+		}
+		sess := val.(*goharnesssession.Session)
+		return sess.TrackModify, true
+	})
+
+	// 子会话授权冒泡旁路：调度任务主会话 spawn 的子会话在父 exec 结束后
+	// 仍在运行时，授权请求不经父 EventBus 转发（订阅已销毁），必须经此
+	// 旁路广播到所有客户端，保证授权弹窗不会丢失。
+	ctx = agents.WithPermissionSink(ctx, func(data events.PermissionPendingData) {
+		if d.gw == nil {
+			return
+		}
+		d.gw.BroadcastNotification(string(gateway.RespPermissionRequest), map[string]any{
+			"session_id": sessionID,
+			"meta":       map[string]any{"agent_name": agent},
+			"title":      i18n.T("svc.event.permission.request"),
+			"data": map[string]any{
+				"tool_name":      data.ToolName,
+				"reason":         data.Reason,
+				"security_level": data.SecurityLevel,
+				"params":         data.Params,
+				"session_id":     data.SessionID,
+			},
+			"type": gateway.RespPermissionRequest,
+		})
+	})
+
+	// 调度条目未绑定会话（如 Web UI 创建时未传 session_id）时，
+	// 回退到该智能体最近活动的会话，保证任务能正常写入上下文。
+	if sessionID == "" {
+		sessionID = d.resolveLatestSessionForAgent(agent)
+		if sessionID == "" {
+			d.logger.Warn("scheduled task: no session available for agent, skip",
+				"agent", agent)
+			return fmt.Errorf("scheduled task: 智能体 %q 尚无可用的会话，请先与该智能体对话一次再创建定时任务", agent)
+		}
+		d.logger.Info("scheduled task: fallback to latest session",
+			"agent", agent, "session_id", sessionID)
 	}
 
 	targetDir := projectDir
@@ -1077,16 +1151,87 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 		}
 	}
 
-	s, err := goharnesssession.Load(context.Background(), sessionID, agent, d.app.SessDB(), d.logger,
+	// 与 defaultHandler 走同一条会话装配路径：Runtime 注入的通用能力
+	//（Compactor 压缩引擎 + Sandbox 沙箱）由 rt.SessionConfigs() 提供，
+	// 会话特有配置为动态 modelContextResolver，另绑定 RAG 记忆存储。
+	var sessOpts []goharnesssession.SessionConfig
+	sessOpts = append(sessOpts, rt.SessionConfigs()...)
+	sessOpts = append(sessOpts,
 		goharnesssession.WithModelContextResolver(d.resolveSessionModelContextLength),
 	)
+	if d.sharedMemory != nil {
+		projectDir := ""
+		if meta, metaErr := d.app.SessDB().GetMeta(context.Background(), sessionID); metaErr == nil && meta != nil {
+			projectDir = meta.ProjectDir
+		}
+		sessOpts = append(sessOpts, goharnesssession.WithMemory(mindxses.NewRAGMemoryAdapter(d.sharedMemory, agent, projectDir)))
+	}
+
+	// 在队列内加载会话：等上一轮执行结束后再加载，避免拿到过期快照。
+	s, err := goharnesssession.Load(context.Background(), sessionID, agent, d.app.SessDB(), d.logger, sessOpts...)
 	if err != nil {
 		return fmt.Errorf("scheduled task: load session %q: %w", sessionID, err)
 	}
+	d.activeSessions.Store(sessionID, s)
+	defer d.activeSessions.Delete(sessionID)
+
+	// 注册 FileModifyHandler：将文件追踪事件广播为 JSON-RPC 通知，
+	// 使前端 DiffView 能实时展示调度任务修改的文件（与 defaultHandler 语义一致）。
+	s.SetFileModifyHandler(func(ev goharnesssession.FileModifyEvent) {
+		if ev.Action != "tracked" {
+			return
+		}
+		fp := ev.FilePath
+		if fp == "" {
+			return
+		}
+		d.broadcastScheduleEvent(sessionID, agent, "file_modified", map[string]any{
+			"files":  []string{fp},
+			"action": ev.Action,
+		})
+	})
 
 	// Build AskBuilder with common event handlers (via factory).
 	emitter := newBroadcastAskHandlers(d, sessionID, agent)
-	ask := wireAskEvents(rt.Ask(agent, content, s).WithContext(ctx), emitter)
+	builder := wireAskEvents(rt.Ask(agent, content, s).WithContext(ctx), emitter)
+
+	// 广播 Compact / MicroCompact 事件，使前端上下文窗口管理指示器实时可见。
+	builder = builder.OnEvent(func(ev events.ReactEvent) {
+		switch ev.Type {
+		case events.CompactStart:
+			data, _ := ev.Data.(events.CompactStartData)
+			if d.gw != nil {
+				d.gw.BroadcastNotification("compact_start", map[string]any{
+					"session_id": sessionID,
+					"data":       data,
+				})
+			}
+		case events.CompactDone:
+			data, _ := ev.Data.(events.CompactDoneData)
+			if d.gw != nil {
+				d.gw.BroadcastNotification("compact_done", map[string]any{
+					"session_id": sessionID,
+					"data":       data,
+				})
+			}
+		case events.MicroCompactStart:
+			data, _ := ev.Data.(events.MicroCompactStartData)
+			if d.gw != nil {
+				d.gw.BroadcastNotification("micro_compact_start", map[string]any{
+					"session_id": sessionID,
+					"data":       data,
+				})
+			}
+		case events.MicroCompactDone:
+			data, _ := ev.Data.(events.MicroCompactDoneData)
+			if d.gw != nil {
+				d.gw.BroadcastNotification("micro_compact_done", map[string]any{
+					"session_id": sessionID,
+					"data":       data,
+				})
+			}
+		}
+	})
 
 	// ── Optional chdir for project directory ──
 	if targetDir != "" {
@@ -1113,12 +1258,35 @@ func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessi
 
 	d.logger.Info("scheduled task: calling Runtime.Ask()",
 		"session_id", sessionID, "agent", agent)
-	_, err = ask.Run()
+	_, err = builder.
+		OnPermissionDenied(func(reason string) {
+			d.broadcastScheduleEvent(sessionID, agent, "permission_denied", reason)
+		}).
+		Run()
 	d.logger.Info("scheduled task: Runtime.Ask() returned",
 		"session_id", sessionID, "error", err)
 
 	if err != nil {
 		return fmt.Errorf("execute scheduled message for @%s (session: %s): %w", agent, sessionID, err)
+	}
+
+	// 与 defaultHandler 一致：执行结束后广播当前上下文窗口用量，
+	// 使前端上下文指示器实时更新。
+	if d.gw != nil {
+		usage := s.ContextUsage(d.buildSessionPricing())
+		d.gw.BroadcastNotification("context_usage", map[string]any{
+			"session_id": sessionID,
+			"data": map[string]any{
+				"window_tokens":        usage.WindowTokens,
+				"max_window_size":      usage.MaxWindowSize,
+				"usage_ratio":          usage.UsageRatio,
+				"message_count":        usage.MessageCount,
+				"cursor":               usage.Cursor,
+				"active_message_count": usage.ActiveMessageCount,
+				"total_actual_tokens":  usage.TotalActualTokens,
+				"total_cost":           usage.TotalCost,
+			},
+		})
 	}
 
 	d.logger.Info("scheduled task: execution completed successfully",

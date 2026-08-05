@@ -85,10 +85,8 @@ func (d *Daemon) handleTokenUsageTotal(_ context.Context, _ json.RawMessage) (an
 			key := r.SessionID + ":" + r.ConversationID
 			convSet[key] = struct{}{}
 		}
-		mc, hasMC := d.app.Costs().Get(r.ModelName)
-		if hasMC {
-			totalCost += calculateRecordCost(mc, r)
-		}
+		mcIn, mcOut := d.modelCost(r.ModelName)
+		totalCost += core.CalculateCost(mcIn, mcOut, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
 	}
 
 	return map[string]any{
@@ -129,10 +127,8 @@ func (d *Daemon) handleTokenUsageSession(_ context.Context, params json.RawMessa
 		// Use chargeable tokens (prompt + completion - cached) to match the
 		// billing口径 used by monthly stats and ContextUsage.TotalActualTokens.
 		totalTokens += chargeableTokens(r)
-		mc, hasMC := d.app.Costs().Get(r.ModelName)
-		if hasMC {
-			totalCost += calculateRecordCost(mc, r)
-		}
+		mcIn, mcOut := d.modelCost(r.ModelName)
+		totalCost += core.CalculateCost(mcIn, mcOut, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
 	}
 
 	return map[string]any{
@@ -165,11 +161,8 @@ func (d *Daemon) handleTokenUsageSessionDetail(_ context.Context, params json.Ra
 
 	details := make([]any, 0, len(records))
 	for _, r := range records {
-		mc, hasMC := d.app.Costs().Get(r.ModelName)
-		cost := 0.0
-		if hasMC {
-			cost = calculateRecordCost(mc, r)
-		}
+		mcIn, mcOut := d.modelCost(r.ModelName)
+		cost := core.CalculateCost(mcIn, mcOut, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
 		details = append(details, map[string]any{
 			"timestamp":     r.Timestamp,
 			"input_tokens":  r.PromptTokens,
@@ -227,7 +220,7 @@ func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessa
 		return nil, fmt.Errorf("query token usage: %w", err)
 	}
 
-	modelCost, hasCost := d.app.Costs().Get(p.Model)
+	mcIn, mcOut := d.modelCost(p.Model)
 
 	totalTokens := 0
 	totalInput := 0
@@ -243,9 +236,7 @@ func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessa
 		totalInput += r.PromptTokens
 		totalOutput += r.CompletionTokens
 		totalCached += r.CachedTokens
-		if hasCost {
-			totalCost += calculateRecordCost(modelCost, r)
-		}
+		totalCost += core.CalculateCost(mcIn, mcOut, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
 	}
 
 	avgPerRequest := 0
@@ -327,13 +318,11 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 		mData.cachedTokens += r.CachedTokens
 		mData.requestCount++
 
-		mc, hasMC := d.app.Costs().Get(r.ModelName)
-		if hasMC {
-			cost := calculateRecordCost(mc, r)
-			dayData.cost += cost
-			mData.totalCost += cost
-			totalCost += cost
-		}
+		mcIn, mcOut := d.modelCost(r.ModelName)
+		cost := core.CalculateCost(mcIn, mcOut, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
+		dayData.cost += cost
+		mData.totalCost += cost
+		totalCost += cost
 	}
 
 	// 总词元 = 输入 + 输出 - 缓存（chargeable tokens）
@@ -398,13 +387,26 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 }
 
 func (d *Daemon) listAvailableModels() []string {
-	costs := d.app.Costs()
-	list := costs.List()
-	result := make([]string, 0, len(list))
-	for _, nc := range list {
-		result = append(result, nc.Name)
+	result := make([]string, 0)
+	models := d.app.Models()
+	if models == nil {
+		return result
+	}
+	for _, m := range models.List() {
+		if m != nil {
+			result = append(result, m.Name)
+		}
 	}
 	return result
+}
+
+// modelCost 根据模型名称获取输入/输出价格，未找到时返回默认值。
+func (d *Daemon) modelCost(modelName string) (per1MIn, per1MOut float64) {
+	model := d.app.Models().Get(modelName)
+	if model == nil {
+		return core.DefaultInputCost, core.DefaultOutputCost
+	}
+	return model.CostPer1MIn, model.CostPer1MOut
 }
 
 type dayAgg struct {
@@ -436,26 +438,6 @@ func emptyMonthlyResult(year, month int) map[string]any {
 		"daily_usage":     []any{},
 		"model_breakdown": []any{},
 	}
-}
-
-func calculateRecordCost(mc core.ModelCost, r goharnesssession.TokenUsageRecord) float64 {
-	cost := 0.0
-
-	// Input tokens: cached portion is excluded (already paid in a prior call)
-	chargeableInput := r.PromptTokens - r.CachedTokens
-	if chargeableInput < 0 {
-		chargeableInput = 0
-	}
-	if mc.CostPer1MIn > 0 {
-		cost += mc.CostPer1MIn / 1_000_000 * float64(chargeableInput)
-	}
-
-	// Output tokens
-	if mc.CostPer1MOut > 0 {
-		cost += mc.CostPer1MOut / 1_000_000 * float64(r.CompletionTokens)
-	}
-
-	return cost
 }
 
 // chargeableTokens returns the billable token count for a record:

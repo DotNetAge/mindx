@@ -8,7 +8,6 @@ models:
     provider: dashscope
     cost_per_1m_in: 12
     cost_per_1m_out: 36
-    max_tokens: 65536
     context_length: 1000000
     is_local: false
     func_calling: true
@@ -31,7 +30,6 @@ models:
     provider: dashscope
     cost_per_1m_in: 2
     cost_per_1m_out: 8
-    max_tokens: 131072
     context_length: 262144
     func_calling: true
     structuring: true
@@ -42,7 +40,6 @@ models:
     provider: dashscope
     cost_per_1m_in: 0.8
     cost_per_1m_out: 2
-    max_tokens: 65536
     context_length: 1000000
     is_local: false
     func_calling: true
@@ -65,7 +62,6 @@ models:
     provider: dashscope
     cost_per_1m_in: 0.1
     cost_per_1m_out: 0.4
-    max_tokens: 65536
     context_length: 1000000
     is_local: false
     func_calling: true
@@ -88,7 +84,6 @@ models:
     provider: deepseek
     cost_per_1m_in: 3
     cost_per_1m_out: 6
-    max_tokens: 384000
     context_length: 1000000
     is_local: false
     func_calling: true
@@ -108,7 +103,6 @@ models:
     provider: deepseek
     cost_per_1m_in: 1
     cost_per_1m_out: 2
-    max_tokens: 384000
     context_length: 1000000
     is_local: false
     func_calling: true
@@ -129,7 +123,6 @@ models:
     provider: dashscope
     cost_per_1m_in: 0.5
     cost_per_1m_out: 2
-    max_tokens: 65536
     context_length: 131072
     is_local: false
     func_calling: true
@@ -149,7 +142,6 @@ models:
     provider: dashscope
     cost_per_1m_in: 1
     cost_per_1m_out: 4
-    max_tokens: 128000
     context_length: 262144
     is_local: false
     func_calling: true
@@ -172,7 +164,6 @@ models:
     provider: dashscope
     cost_per_1m_in: 1
     cost_per_1m_out: 4
-    max_tokens: 128000
     context_length: 200000
     is_local: false
     func_calling: true
@@ -192,7 +183,6 @@ models:
     provider: dashscope
     cost_per_1m_in: 1
     cost_per_1m_out: 4
-    max_tokens: 32768
     context_length: 204800
     is_local: false
     func_calling: true
@@ -207,10 +197,6 @@ models:
     enabled: true
     max_turns: 0
 
-  # ============================================================
-  # 以下为 BundledProviders.swift 同步补充的供应商原生模型
-  # ============================================================
-
   # --- 智谱 AI (zhipu) ---
   - name: GLM-5.1-zhipu
     title: GLM-5.1 (智谱官方)
@@ -220,7 +206,6 @@ models:
     provider: zhipu
     cost_per_1m_in: 6
     cost_per_1m_out: 24
-    max_tokens: 128000
     context_length: 200000
     is_local: false
     func_calling: true
@@ -242,7 +227,6 @@ models:
     provider: moonshot
     cost_per_1m_in: 7
     cost_per_1m_out: 28
-    max_tokens: 98000
     context_length: 262144
     is_local: false
     func_calling: true
@@ -264,7 +248,6 @@ models:
     provider: minimax
     cost_per_1m_in: 2
     cost_per_1m_out: 8
-    max_tokens: 196000
     context_length: 197000
     is_local: false
     func_calling: true
@@ -286,7 +269,6 @@ models:
     provider: ark
     cost_per_1m_in: 4
     cost_per_1m_out: 18
-    max_tokens: 131072
     context_length: 256000
     is_local: false
     func_calling: true
@@ -300,129 +282,48 @@ models:
     repetition_penalty: 0
     enabled: true
     max_turns: 0
-
-  # --- OpenAI ---
-  - name: gpt-4.1
-    title: GPT-4.1
-    description: OpenAI GPT-4.1模型，支持百万级上下文窗口，在推理、编码、创意写作等任务上表现卓越。
-    provider: openai
-    cost_per_1m_in: 2
-    cost_per_1m_out: 8
-    max_tokens: 32768
-    context_length: 1000000
+  - name: THUDM/GLM-Z1-9B-0414
+    title: GLM Z1 9B
+    description: GLM-Z1-9B-0414 是 GLM 系列的小型模型，仅有 90 亿参数，但保持了开源传统的同时展现出惊人的能力。尽管规模较小，该模型在数学推理和通用任务上仍表现出色，其总体性能在同等规模的开源模型中已处于领先水平。研究团队采用了与大模型相同的一系列技术进行训练，使其在资源受限的场景中能够实现效率与效果的绝佳平衡，为寻求轻量级部署的用户提供强大选择。特别是在资源受限的场景下，该模型可以很好地在效率与效果之间取得平衡，为需要轻量化部署的用户提供强有力的选择
+    provider: siliconflow
+    base_url: ''
+    api_key: ''
+    auth_token: ''
+    context_length: 131072
     is_local: false
     func_calling: true
     structuring: true
     web_searching: false
+    visioning: false
     prefix_con: false
     context_cache: true
     top_p: 0
     top_k: 0
     temperature: 0.7
     repetition_penalty: 0
+    frequency_penalty: 0
     enabled: true
     max_turns: 0
-  - name: gpt-5.5
-    title: GPT-5.5
-    description: OpenAI 最新GPT-5.5旗舰模型，综合能力最强，在复杂推理和多步骤任务上表现出色。
-    provider: openai
-    cost_per_1m_in: 5
-    cost_per_1m_out: 30
-    max_tokens: 32768
-    context_length: 1000000
+  - name: Qwen/Qwen3-8B
+    title: Qwen3-8B
+    description: 'Qwen3-8B 是通义千问系列的最新大语言模型，拥有 8.2B 参数量。该模型独特地支持在思考模式（适用于复杂逻辑推理、数学和编程）和非思考模式（适用于高效的通用对话）之间无缝切换，显著增强了推理能力。模型在数学、代码生成和常识逻辑推理上表现优异，并在创意写作、角色扮演和多轮对话等方面展现出卓越的人类偏好对齐能力。此外，该模型支持
+      100 多种语言和方言，具备出色的多语言指令遵循和翻译能力对'
+    provider: siliconflow
+    base_url: ''
+    api_key: ''
+    auth_token: ''
+    context_length: 131072
     is_local: false
     func_calling: true
     structuring: true
     web_searching: false
+    visioning: false
     prefix_con: false
     context_cache: true
     top_p: 0
     top_k: 0
     temperature: 0.7
     repetition_penalty: 0
-    enabled: true
-    max_turns: 0
-
-  # --- Anthropic ---
-  - name: claude-sonnet-4
-    title: Claude Sonnet 4.6
-    description: Anthropic Claude Sonnet 4.6，平衡性能与成本的中端模型，适合大多数生产场景。支持百万级上下文和强大的工具调用能力。
-    provider: anthropic
-    cost_per_1m_in: 3
-    cost_per_1m_out: 15
-    max_tokens: 128000
-    context_length: 1000000
-    is_local: false
-    func_calling: true
-    structuring: true
-    web_searching: false
-    prefix_con: false
-    context_cache: true
-    top_p: 0
-    top_k: 0
-    temperature: 0.7
-    repetition_penalty: 0
-    enabled: true
-    max_turns: 0
-  - name: claude-opus-4
-    title: Claude Opus 4.6
-    description: Anthropic Claude Opus 4.6，最强推理能力的旗舰模型，适合高难度科研、复杂办公、深度智能代理等场景。
-    provider: anthropic
-    cost_per_1m_in: 5
-    cost_per_1m_out: 25
-    max_tokens: 128000
-    context_length: 1000000
-    is_local: false
-    func_calling: true
-    structuring: true
-    web_searching: false
-    prefix_con: false
-    context_cache: true
-    top_p: 0
-    top_k: 0
-    temperature: 0.7
-    repetition_penalty: 0
-    enabled: true
-    max_turns: 0
-
-  # --- Google Gemini ---
-  - name: gemini-3.5-flash
-    title: Gemini 3.5 Flash
-    description: Google Gemini 3.5 Flash，轻量高效的多模态模型，速度快成本低，适合高频使用场景。
-    provider: google
-    cost_per_1m_in: 1.5
-    cost_per_1m_out: 9
-    max_tokens: 65536
-    context_length: 1000000
-    is_local: false
-    func_calling: true
-    structuring: true
-    web_searching: true
-    prefix_con: false
-    context_cache: true
-    top_p: 0
-    top_k: 0
-    temperature: 0.7
-    repetition_penalty: 0
-    enabled: true
-    max_turns: 0
-  - name: gemini-3.1-pro
-    title: Gemini 3.1 Pro
-    description: Google Gemini 3.1 Pro，中高端多模态模型，在推理、编码和长文档理解方面表现优异。
-    provider: google
-    cost_per_1m_in: 2
-    cost_per_1m_out: 12
-    max_tokens: 65536
-    context_length: 1000000
-    is_local: false
-    func_calling: true
-    structuring: true
-    web_searching: true
-    prefix_con: false
-    context_cache: true
-    top_p: 0
-    top_k: 0
-    temperature: 0.7
-    repetition_penalty: 0
+    frequency_penalty: 0
     enabled: true
     max_turns: 0

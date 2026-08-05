@@ -53,6 +53,12 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("cron_expr is required")
 	}
 
+	// 前端创建调度任务时通常不传 session_id：回退到该智能体最近活动的会话，
+	// 否则任务触发时无会话可用（load session 会因空 ID 失败）。
+	if p.SessionID == "" {
+		p.SessionID = d.resolveLatestSessionForAgent(p.Agent)
+	}
+
 	entry := &scheduler.ScheduleEntry{
 		ID:         uuid.NewString()[:8],
 		Agent:      p.Agent,

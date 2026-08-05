@@ -25,7 +25,11 @@ func (t *Cron) Info() *tools.ToolInfo {
 	return &tools.ToolInfo{
 		Name:        "Cron",
 		Description: "管理定时任务。创建、列出、更新和删除按计划运行的定时任务。",
-		Prompt: `管理定时任务。每个任务按计划向代理发送提示词。
+		Prompt: `管理定时任务。创建、列出、更新和删除按计划运行的定时任务。
+
+典型用途：
+- **定时委派**：让指定名称的 Agent 在特定时间自动执行任务（如每天定时生成报告、定期巡检）。
+- **自我唤醒**：当需要等待较长时间或外部条件后才能继续时，可创建定时任务在稍后时间唤醒自己继续未完成的工作，避免长期阻塞式等待。
 
 操作：
 - **list**：列出所有定时任务及其状态和下次运行信息。
@@ -90,10 +94,10 @@ func (t *Cron) Info() *tools.ToolInfo {
 
 func (t *Cron) Execute(ctx context.Context, params map[string]any) (any, error) {
 	if t.store == nil {
-		return nil, fmt.Errorf("Cron：调度器存储不可用")
+		return nil, fmt.Errorf("%s", tools.GuideMissingContext("Cron", "调度器存储"))
 	}
 
-	action, err := tools.ValidateRequiredString(params, "action")
+	action, err := tools.ValidateRequiredString("Cron", params, "action")
 	if err != nil {
 		return nil, err
 	}
@@ -108,14 +112,18 @@ func (t *Cron) Execute(ctx context.Context, params map[string]any) (any, error) 
 	case "delete":
 		return t.deleteEntry(ctx, params)
 	default:
-		return nil, fmt.Errorf("Cron：未知操作 %q", action)
+		return nil, fmt.Errorf("%s", tools.GuideInvalidValue("Cron", "action", action, "先自查：action 只支持 list / create / update / delete 四者之一，对照工具参数定义确认拼写后重新调用"))
 	}
 }
 
 func (t *Cron) listEntries(ctx context.Context) (any, error) {
 	entries, err := t.store.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("Cron：列出任务失败：%w", err)
+		return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
+			"获取定时任务列表时失败",
+			tools.WithErrDetail("无法从调度器存储读取定时任务列表", err),
+			"先自查：调度器存储目录/文件是否存在且可读写？确认存储可用后重试；若仍失败应告知用户",
+		), err)
 	}
 	if entries == nil {
 		entries = []scheduler.ScheduleEntry{}
@@ -124,17 +132,17 @@ func (t *Cron) listEntries(ctx context.Context) (any, error) {
 }
 
 func (t *Cron) createEntry(ctx context.Context, params map[string]any) (any, error) {
-	agent, err := tools.ValidateRequiredString(params, "agent")
+	agent, err := tools.ValidateRequiredString("Cron", params, "agent")
 	if err != nil {
-		return nil, fmt.Errorf("Cron：create 需要 agent：%w", err)
+		return nil, err
 	}
-	content, err := tools.ValidateRequiredString(params, "content")
+	content, err := tools.ValidateRequiredString("Cron", params, "content")
 	if err != nil {
-		return nil, fmt.Errorf("Cron：create 需要 content：%w", err)
+		return nil, err
 	}
-	cronExpr, err := tools.ValidateRequiredString(params, "cron_expr")
+	cronExpr, err := tools.ValidateRequiredString("Cron", params, "cron_expr")
 	if err != nil {
-		return nil, fmt.Errorf("Cron：create 需要 cron_expr：%w", err)
+		return nil, err
 	}
 
 	idRaw, _ := getParam(params, "id")
@@ -167,7 +175,11 @@ func (t *Cron) createEntry(ctx context.Context, params map[string]any) (any, err
 	}
 
 	if err := t.store.Save(ctx, entry); err != nil {
-		return nil, fmt.Errorf("Cron：保存任务失败：%w", err)
+		return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
+			fmt.Sprintf("保存定时任务 %q 时失败", id),
+			tools.WithErrDetail("无法将定时任务写入调度器存储", err),
+			"先自查：调度器存储目录/文件是否存在且可读写？cron_expr 是否为合法的 6 字段 cron 表达式？确认后重试；若仍失败应告知用户",
+		), err)
 	}
 
 	return map[string]any{
@@ -178,14 +190,14 @@ func (t *Cron) createEntry(ctx context.Context, params map[string]any) (any, err
 }
 
 func (t *Cron) updateEntry(ctx context.Context, params map[string]any) (any, error) {
-	id, err := tools.ValidateRequiredString(params, "id")
+	id, err := tools.ValidateRequiredString("Cron", params, "id")
 	if err != nil {
-		return nil, fmt.Errorf("Cron：update 需要 id：%w", err)
+		return nil, err
 	}
 
 	existing, err := t.store.Load(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("Cron：任务 %q 未找到：%w", id, err)
+		return nil, fmt.Errorf("%s", tools.GuideNotFound("定时任务", id, "检查任务 ID 是否正确（可使用 list 查看现有任务 ID），确认后重新调用"))
 	}
 
 	if v, ok := getParam(params, "agent"); ok {
@@ -220,7 +232,11 @@ func (t *Cron) updateEntry(ctx context.Context, params map[string]any) (any, err
 	}
 
 	if err := t.store.Save(ctx, existing); err != nil {
-		return nil, fmt.Errorf("Cron：更新任务失败：%w", err)
+		return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
+			fmt.Sprintf("更新定时任务 %q 时失败", id),
+			tools.WithErrDetail("无法将更新后的定时任务写入调度器存储", err),
+			"先自查：调度器存储目录/文件是否存在且可读写？确认存储可用后重新提交更新；若仍失败应告知用户",
+		), err)
 	}
 
 	return map[string]any{
@@ -231,13 +247,17 @@ func (t *Cron) updateEntry(ctx context.Context, params map[string]any) (any, err
 }
 
 func (t *Cron) deleteEntry(ctx context.Context, params map[string]any) (any, error) {
-	id, err := tools.ValidateRequiredString(params, "id")
+	id, err := tools.ValidateRequiredString("Cron", params, "id")
 	if err != nil {
-		return nil, fmt.Errorf("Cron：delete 需要 id：%w", err)
+		return nil, err
 	}
 
 	if err := t.store.Delete(ctx, id); err != nil {
-		return nil, fmt.Errorf("Cron：删除任务失败：%w", err)
+		return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
+			fmt.Sprintf("删除定时任务 %q 时失败", id),
+			tools.WithErrDetail("无法从调度器存储删除定时任务", err),
+			"先自查：任务 ID 是否正确（可使用 list 查看现有任务 ID）？调度器存储目录/文件是否可访问？确认后重试；若仍失败应告知用户",
+		), err)
 	}
 
 	return map[string]any{

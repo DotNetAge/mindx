@@ -431,36 +431,30 @@ func (d *Daemon) handleModelCreate(_ context.Context, params json.RawMessage) (a
 	}
 
 	newCfg := &goharnessconfig.ModelConfig{
-		Name:              p.Name,
-		Title:             p.Title,
-		Description:       p.Description,
-		Provider:          p.Provider,
-		BaseURL:           p.BaseURL,
-		APIKey:            p.APIKey,
-		AuthToken:         p.AuthToken,
-		MaxTokens:         p.MaxTokens,
-		ContextLength:     p.ContextLength,
-		IsLocal:           p.IsLocal,
-		FuncCalling:       p.FuncCalling,
-		Structuring:       p.Structuring,
-		WebSearching:      p.WebSearching,
-		PrefixCon:         p.PrefixCon,
-		ContextCache:      p.ContextCache,
-		TopP:              p.TopP,
-		TopK:              p.TopK,
-		Temperature:       p.Temperature,
-		RepetitionPenalty: p.RepetitionPenalty,
-		FrequencyPenalty:  p.FrequencyPenalty,
-		Enabled:           p.Enabled,
-		MaxTurns:          p.MaxTurns,
+		Name:          p.Name,
+		Title:         p.Title,
+		Description:   p.Description,
+		Provider:      p.Provider,
+		BaseURL:       p.BaseURL,
+		APIKey:        p.APIKey,
+		AuthToken:     p.AuthToken,
+		ContextLength: p.ContextLength,
+		IsLocal:       p.IsLocal,
+		FuncCalling:   p.FuncCalling,
+		Structuring:   p.Structuring,
+		WebSearching:  p.WebSearching,
+		Visioning:     p.Visioning,
+		PrefixCon:     p.PrefixCon,
+		ContextCache:  p.ContextCache,
+		Temperature:   p.Temperature,
+		Enabled:       p.Enabled,
+		MaxTurns:      p.MaxTurns,
+		CostPer1MIn:   p.CostPer1MIn,
+		CostPer1MOut:  p.CostPer1MOut,
 	}
 
 	if err := models.Save(newCfg); err != nil {
 		return nil, fmt.Errorf("failed to save model: %w", err)
-	}
-
-	if p.CostPer1MIn > 0 || p.CostPer1MOut > 0 {
-		d.app.Costs().Set(p.Name, core.ModelCost{CostPer1MIn: p.CostPer1MIn, CostPer1MOut: p.CostPer1MOut})
 	}
 
 	return map[string]any{
@@ -512,9 +506,6 @@ func (d *Daemon) handleModelUpdate(_ context.Context, params json.RawMessage) (a
 	if paramsContainsKey(params, "auth_token") {
 		updated.AuthToken = p.AuthToken
 	}
-	if p.MaxTokens != nil {
-		updated.MaxTokens = *p.MaxTokens
-	}
 	if p.ContextLength != nil {
 		updated.ContextLength = *p.ContextLength
 	}
@@ -530,26 +521,17 @@ func (d *Daemon) handleModelUpdate(_ context.Context, params json.RawMessage) (a
 	if p.WebSearching != nil {
 		updated.WebSearching = *p.WebSearching
 	}
+	if p.Visioning != nil {
+		updated.Visioning = *p.Visioning
+	}
 	if p.PrefixCon != nil {
 		updated.PrefixCon = *p.PrefixCon
 	}
 	if p.ContextCache != nil {
 		updated.ContextCache = *p.ContextCache
 	}
-	if p.TopP != nil {
-		updated.TopP = *p.TopP
-	}
-	if p.TopK != nil {
-		updated.TopK = *p.TopK
-	}
 	if p.Temperature != nil {
 		updated.Temperature = *p.Temperature
-	}
-	if p.RepetitionPenalty != nil {
-		updated.RepetitionPenalty = *p.RepetitionPenalty
-	}
-	if p.FrequencyPenalty != nil {
-		updated.FrequencyPenalty = *p.FrequencyPenalty
 	}
 	if p.Enabled != nil {
 		updated.Enabled = *p.Enabled
@@ -557,20 +539,15 @@ func (d *Daemon) handleModelUpdate(_ context.Context, params json.RawMessage) (a
 	if p.MaxTurns != nil {
 		updated.MaxTurns = *p.MaxTurns
 	}
+	if p.CostPer1MIn != nil {
+		updated.CostPer1MIn = *p.CostPer1MIn
+	}
+	if p.CostPer1MOut != nil {
+		updated.CostPer1MOut = *p.CostPer1MOut
+	}
 
 	if err := models.Save(&updated); err != nil {
 		return nil, fmt.Errorf("failed to save model: %w", err)
-	}
-
-	if p.CostPer1MIn != nil || p.CostPer1MOut != nil {
-		mc := core.ModelCost{}
-		if p.CostPer1MIn != nil {
-			mc.CostPer1MIn = *p.CostPer1MIn
-		}
-		if p.CostPer1MOut != nil {
-			mc.CostPer1MOut = *p.CostPer1MOut
-		}
-		d.app.Costs().Set(p.Name, mc)
 	}
 
 	return map[string]any{

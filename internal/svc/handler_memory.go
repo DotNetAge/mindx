@@ -379,12 +379,24 @@ func chunkHitToMemoryItem(c goragcore.Chunk) *rpc.MemoryChunkItem {
 		if s, ok := c.Metadata["session_id"].(string); ok {
 			item.SessionID = s
 		}
+		// title：优先 metadata["title"]，回退 c.Title（三段式导航标题）
+		if t, ok := c.Metadata["title"].(string); ok && t != "" {
+			item.Title = t
+		} else if c.Title != "" {
+			item.Title = c.Title
+		}
+		// summary：优先 metadata["summary"]，回退 c.Summary。
+		// vectorToChunk 已把 VecMetaSummary 映射到顶层字段 c.Summary，
+		// 若只读 Metadata 会导致 summary 永远为空（title 能显示正是因为有 c.Title 回退）。
 		if s, ok := c.Metadata["summary"].(string); ok && s != "" {
 			item.Summary = s
-		} else {
-			item.Summary = c.Title
+		} else if c.Summary != "" {
+			item.Summary = c.Summary
 		}
-		if t, ok := c.Metadata["tags"]; ok {
+		// tags：优先顶层 c.Tags，回退 metadata["tags"]（兼容旧存储格式）
+		if len(c.Tags) > 0 {
+			item.Tags = c.Tags
+		} else if t, ok := c.Metadata["tags"]; ok {
 			switch v := t.(type) {
 			case []string:
 				item.Tags = v
@@ -404,10 +416,6 @@ func chunkHitToMemoryItem(c goragcore.Chunk) *rpc.MemoryChunkItem {
 				item.Timestamp = v
 			}
 		}
-	}
-
-	if item.Summary == "" {
-		item.Summary = c.Title
 	}
 
 	return item
@@ -461,6 +469,9 @@ func (d *Daemon) handleMemoryUpdate(_ context.Context, params json.RawMessage) (
 	}
 
 	// Apply updates
+	if p.Title != "" {
+		existing.Title = p.Title
+	}
 	if p.Summary != "" {
 		existing.Summary = p.Summary
 	}
@@ -497,12 +508,24 @@ func hitToMemoryChunk(c goragcore.Chunk) *goharnessmemory.MemoryChunk {
 		if p, ok := c.Metadata["project_dir"].(string); ok {
 			chunk.ProjectDir = p
 		}
+		// title：优先 metadata["title"]，回退 c.Title（三段式导航标题）
+		if t, ok := c.Metadata["title"].(string); ok && t != "" {
+			chunk.Title = t
+		} else if c.Title != "" {
+			chunk.Title = c.Title
+		}
+		// summary：优先 metadata["summary"]，回退 c.Summary。
+		// vectorToChunk 已把 VecMetaSummary 映射到顶层字段 c.Summary，
+		// 若只读 Metadata 会导致 summary 永远为空（title 能显示正是因为有 c.Title 回退）。
 		if s, ok := c.Metadata["summary"].(string); ok && s != "" {
 			chunk.Summary = s
-		} else {
-			chunk.Summary = c.Title
+		} else if c.Summary != "" {
+			chunk.Summary = c.Summary
 		}
-		if t, ok := c.Metadata["tags"]; ok {
+		// tags：优先顶层 c.Tags，回退 metadata["tags"]（兼容旧存储格式）
+		if len(c.Tags) > 0 {
+			chunk.Tags = c.Tags
+		} else if t, ok := c.Metadata["tags"]; ok {
 			switch v := t.(type) {
 			case []string:
 				if len(v) > 0 {
@@ -527,10 +550,6 @@ func hitToMemoryChunk(c goragcore.Chunk) *goharnessmemory.MemoryChunk {
 		if ct, ok := c.Metadata["content"].(string); ok && ct != "" {
 			chunk.Content = ct
 		}
-	}
-
-	if chunk.Summary == "" {
-		chunk.Summary = c.Title
 	}
 
 	return chunk

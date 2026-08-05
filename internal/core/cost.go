@@ -1,92 +1,14 @@
 package core
 
-import (
-	"fmt"
-	"os"
+// DefaultInputCost 是未知模型默认的每百万输入 token 费用（¥）。
+const DefaultInputCost = 3.0
 
-	"gopkg.in/yaml.v3"
-)
+// DefaultOutputCost 是未知模型默认的每百万输出 token 费用（¥）。
+const DefaultOutputCost = 15.0
 
-type ModelCost struct {
-	CostPer1MIn        float64 `yaml:"cost_per_1m_in"`
-	CostPer1MOut       float64 `yaml:"cost_per_1m_out"`
-	CostPer1MInCached  float64 `yaml:"cost_per_1m_in_cached"`
-	CostPer1MOutCached float64 `yaml:"cost_per_1m_out_cached"`
-}
-
-type CostRegistry struct {
-	costs map[string]ModelCost
-}
-
-func NewCostRegistry() *CostRegistry {
-	return &CostRegistry{
-		costs: make(map[string]ModelCost),
-	}
-}
-
-func (r *CostRegistry) Set(modelName string, cost ModelCost) {
-	r.costs[modelName] = cost
-}
-
-func (r *CostRegistry) Get(modelName string) (ModelCost, bool) {
-	c, ok := r.costs[modelName]
-	return c, ok
-}
-
-type NamedCost struct {
-	Name string
-	ModelCost
-}
-
-func (r *CostRegistry) List() []NamedCost {
-	result := make([]NamedCost, 0, len(r.costs))
-	for k, v := range r.costs {
-		result = append(result, NamedCost{Name: k, ModelCost: v})
-	}
-	return result
-}
-
-type costModelEntry struct {
-	Name      string `yaml:"name"`
-	ModelCost `yaml:",inline"`
-}
-
-type costFile struct {
-	Models []costModelEntry `yaml:"models"`
-}
-
-func LoadCostsFromModelsFile(path string) (*CostRegistry, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return NewCostRegistry(), nil
-		}
-		return nil, fmt.Errorf("failed to read models file for costs: %w", err)
-	}
-
-	var parsed costFile
-	if err := yaml.Unmarshal(data, &parsed); err != nil {
-		return nil, fmt.Errorf("failed to parse models costs: %w", err)
-	}
-
-	reg := NewCostRegistry()
-	for _, m := range parsed.Models {
-		if m.CostPer1MIn != 0 || m.CostPer1MOut != 0 || m.CostPer1MInCached != 0 || m.CostPer1MOutCached != 0 {
-			reg.Set(m.Name, m.ModelCost)
-		}
-	}
-	return reg, nil
-}
-
-// DefaultModelCost returns a moderate pricing for unknown models.
-func DefaultModelCost() ModelCost {
-	return ModelCost{
-		CostPer1MIn:  3.0,
-		CostPer1MOut: 15.0,
-	}
-}
-
-func CalculateCost(modelCost ModelCost, promptTokens, completionTokens, cachedPromptTokens int64) float64 {
+// CalculateCost 根据输入/输出 token 数和价格计算总费用。
+// costPer1MIn 为每百万输入 token 的费用，costPer1MOut 为每百万输出 token 的费用。
+func CalculateCost(costPer1MIn, costPer1MOut float64, promptTokens, completionTokens, cachedPromptTokens int64) float64 {
 	cost := 0.0
 
 	// Input tokens: cached portion is excluded (already paid in a prior call)
@@ -94,13 +16,13 @@ func CalculateCost(modelCost ModelCost, promptTokens, completionTokens, cachedPr
 	if chargeableInput < 0 {
 		chargeableInput = 0
 	}
-	if modelCost.CostPer1MIn > 0 {
-		cost += modelCost.CostPer1MIn / 1_000_000 * float64(chargeableInput)
+	if costPer1MIn > 0 {
+		cost += costPer1MIn / 1_000_000 * float64(chargeableInput)
 	}
 
 	// Output tokens
-	if modelCost.CostPer1MOut > 0 {
-		cost += modelCost.CostPer1MOut / 1_000_000 * float64(completionTokens)
+	if costPer1MOut > 0 {
+		cost += costPer1MOut / 1_000_000 * float64(completionTokens)
 	}
 
 	return cost

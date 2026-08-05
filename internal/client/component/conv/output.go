@@ -72,6 +72,11 @@ func UpdateOutput(m Output, e tea.Msg) (Output, tea.Cmd) {
 		}
 		m.Entries = append(m.Entries, OutputEntry{Role: "timeout", Content: timeoutMsg})
 		return m, nil
+
+	case msg.LLMCancelledMsg:
+		cancelledMsg := fmt.Sprintf(i18n.T("output.cancelled"), e.Elapsed.Round(time.Second))
+		m.Entries = append(m.Entries, OutputEntry{Role: "cancelled", Content: cancelledMsg})
+		return m, nil
 	}
 
 	return m, nil
@@ -104,6 +109,10 @@ func viewOutputEntry(entry OutputEntry, width int) string {
 
 	if entry.Role == "timeout" {
 		return sep + "\n" + style.YellowStyle.Render(entry.Content) + "\n" + sep
+	}
+
+	if entry.Role == "cancelled" {
+		return sep + "\n" + style.DimStyle.Render(entry.Content) + "\n" + sep
 	}
 
 	content := render.MarkdownWithWidth(entry.Content, width-4)

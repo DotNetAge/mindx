@@ -27,6 +27,7 @@ func (d *Daemon) broadcastScheduleEvent(sessionID, agent, eventType string, data
 		"agent":      agent,
 		"type":       eventType,
 		"data":       data,
+		"meta":       map[string]any{"agent_name": agent},
 	})
 }
 

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	goharnesssession "github.com/DotNetAge/goharness/session"
+	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
@@ -53,6 +54,9 @@ func (d *Daemon) handleSessionGet(_ context.Context, params json.RawMessage) (an
 	sess, err := d.getOrLoadSession(p.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
+	}
+	if sess == nil {
+		return nil, fmt.Errorf("get session %q failed: session is nil", p.SessionID)
 	}
 
 	var messages []goharnesssession.Message
@@ -111,19 +115,20 @@ func (d *Daemon) enrichMessages(msgs []goharnesssession.Message) []map[string]an
 	return rawMsgs
 }
 
-// buildSessionPricing builds a PricingUnit from the daemon's current model cost config.
-// Returns a zero-value PricingUnit if the model cost is not available.
+// buildSessionPricing 构建当前模型的定价信息。
+// 与 resolveSessionModelContextLength 一致：动态解析当前默认模型，
+// 用户切换模型后立即生效，避免使用启动时固化的模型名导致价格过期或为空。
+// 模型不可用或未配置价格时，回退到默认价格（DefaultInputCost/DefaultOutputCost）。
 func (d *Daemon) buildSessionPricing() goharnesssession.PricingUnit {
-	if d.modelName == "" {
-		return goharnesssession.PricingUnit{}
-	}
-	mc, ok := d.app.Costs().Get(d.modelName)
-	if !ok {
-		return goharnesssession.PricingUnit{}
+	per1MIn, per1MOut := core.DefaultInputCost, core.DefaultOutputCost
+	if d.app != nil {
+		if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil {
+			per1MIn, per1MOut = modelCfg.CostPer1MIn, modelCfg.CostPer1MOut
+		}
 	}
 	return goharnesssession.PricingUnit{
-		InputPricePer1M:  mc.CostPer1MIn,
-		OutputPricePer1M: mc.CostPer1MOut,
+		InputPricePer1M:  per1MIn,
+		OutputPricePer1M: per1MOut,
 	}
 }
 
@@ -280,15 +285,24 @@ func (d *Daemon) getOrLoadSession(sessionID string) (*goharnesssession.Session, 
 		var loadErr error
 		sess, loadErr = goharnesssession.Load(context.Background(), sessionID, "", sessDB, d.logger, resolverOpt)
 		if loadErr != nil {
-			// Session not found in store — create empty session as fallback
-			// so ConfirmModify/Rollback return empty lists instead of errors.
-			sess, _ = goharnesssession.New("", "", "", sessDB, d.logger, resolverOpt)
+			// 会话在存储中不存在：回退创建空会话，
+			// 让 ConfirmModify/Rollback 等返回空列表而非错误。
+			// New 要求 agentName/projectDir 非空且 store 非 nil，不能传空参数。
+			sess, loadErr = goharnesssession.New(
+				"fallback:"+sessionID, // agentName 必须非空
+				"",
+				"fallback:"+sessionID, // projectDir 必须非空
+				sessDB, d.logger, resolverOpt,
+			)
+			if loadErr != nil {
+				return nil, fmt.Errorf("创建空会话 %q 失败: %w", sessionID, loadErr)
+			}
 			return sess, nil
 		}
 		// Trigger lazy-load to restore messages and modify_files.
 		sess.All()
 	} else {
-		sess, _ = goharnesssession.New("", "", "", nil, d.logger, resolverOpt)
+		return nil, fmt.Errorf("无法创建会话 %q: SessionStore 未配置", sessionID)
 	}
 
 	return sess, nil
@@ -472,16 +486,6 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 	}
 
 	// 窗口大小已通过 modelContextResolver 回调动态获取，无需手动 SetMaxWindowSize。
-	// 设置 LLM 摘要器，使 TryCompact 能生成语义摘要。
-	// 注入 WithModelResolver 回调：摘要器每次摘要都读取当前默认模型，
-	// 跟随用户切换模型立即生效，不再使用构造时固化的 model 快照。
-	if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil && modelCfg.Name != "" {
-		sess.SetSummarizer(goharnesssession.NewLLMSummarizer(
-			*modelCfg,
-			goharnesssession.WithModelResolver(d.app.ResolveDefaultModelConfig),
-		))
-	}
-
 	// 绑定 RAG 记忆存储，使压缩摘要持久化到 RAG indexer（浏览器可读）
 	if d.sharedMemory != nil {
 		sess.SetMemory(mindxses.NewRAGMemoryAdapter(d.sharedMemory, sess.AgentName(), sess.ProjectDir()))
@@ -491,7 +495,7 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 		"session_id", p.SessionID,
 		"mode", p.Mode,
 		"max_window_size", sess.ModelContextLength(),
-		"has_summarizer", d.app.ResolveDefaultModel() != nil,
+		"has_model", d.app.ResolveDefaultModel() != nil,
 	)
 
 	// 绑定事件处理器，TryCompact/TryMicroCompact 会自动调用它们广播事件

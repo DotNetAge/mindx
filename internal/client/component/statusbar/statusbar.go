@@ -39,7 +39,7 @@ type StatusBar struct {
 	DaemonStatus     clientmsg.DaemonConnStatus
 
 	// CostFn overrides the default pricing lookup for cost calculation.
-	// If nil, appcore.DefaultModelCost is used as fallback.
+	// If nil, DefaultInputCost/DefaultOutputCost are used as fallback.
 	CostFn func(modelName string, promptTokens, completionTokens, cachedTokens int) float64
 }
 
@@ -82,8 +82,7 @@ func (s *StatusBar) Cost() float64 {
 	if s.CostFn != nil {
 		return s.CostFn(s.ModelName, s.PromptTokens, s.CompletionTokens, s.CachedTokens)
 	}
-	mc := appcore.DefaultModelCost()
-	return appcore.CalculateCost(mc, int64(s.PromptTokens), int64(s.CompletionTokens), int64(s.CachedTokens))
+	return appcore.CalculateCost(appcore.DefaultInputCost, appcore.DefaultOutputCost, int64(s.PromptTokens), int64(s.CompletionTokens), int64(s.CachedTokens))
 }
 
 func formatCost(cost float64) string {

@@ -108,6 +108,7 @@ type MemoryListBySessionParams struct {
 // MemoryChunkItem is a single memory chunk returned by list_by_session.
 type MemoryChunkItem struct {
 	ID        string   `json:"id"`
+	Title     string   `json:"title,omitempty"`
 	Summary   string   `json:"summary"`
 	Content   string   `json:"content"`
 	SessionID string   `json:"session_id,omitempty"`
@@ -133,13 +134,14 @@ func (c *Client) MemoryListBySession(sessionID string) (json.RawMessage, error) 
 // MemoryUpdateParams are the params for memory.update.
 type MemoryUpdateParams struct {
 	ID      string   `json:"id"`
+	Title   string   `json:"title,omitempty"`
 	Summary string   `json:"summary,omitempty"`
 	Content string   `json:"content,omitempty"`
 	Tags    []string `json:"tags,omitempty"`
 }
 
-func (c *Client) MemoryUpdate(id, summary, content string, tags []string) (json.RawMessage, error) {
+func (c *Client) MemoryUpdate(id, title, summary, content string, tags []string) (json.RawMessage, error) {
 	return c.CallWithTimeout("memory.update", MemoryUpdateParams{
-		ID: id, Summary: summary, Content: content, Tags: tags,
+		ID: id, Title: title, Summary: summary, Content: content, Tags: tags,
 	})
 }

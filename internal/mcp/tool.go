@@ -22,7 +22,7 @@ type mcpTool struct {
 var _ tools.FuncTool = (*mcpTool)(nil)
 
 // Info returns the tool metadata, exposed to the LLM via Tool Catalog and
-// Tool Definitions (when activated via ToolSelector).
+// Tool Definitions.
 func (t *mcpTool) Info() *tools.ToolInfo {
 	return &tools.ToolInfo{
 		Name:        t.name,

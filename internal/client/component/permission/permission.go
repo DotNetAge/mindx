@@ -14,16 +14,20 @@ type PermissionBar struct {
 	ToolName      string
 	Reason        string
 	SecurityLevel int
+	// SessionID 为发起授权请求的会话 ID：子智能体授权冒泡时非空（子会话 ID），
+	// 用户决策后 TUI 据此发送带目标魔法词精确路由；主会话自身请求为空。
+	SessionID     string
 	SelectedIndex int
 	Visible       bool
 	Remember      bool
 }
 
-func NewPermissionBar(toolName, reason string, securityLevel int) PermissionBar {
+func NewPermissionBar(toolName, reason string, securityLevel int, sessionID string) PermissionBar {
 	return PermissionBar{
 		ToolName:      toolName,
 		Reason:        reason,
 		SecurityLevel: securityLevel,
+		SessionID:     sessionID,
 		SelectedIndex: 0,
 		Visible:       true,
 		Remember:      false,
@@ -79,7 +83,7 @@ func UpdatePermissionBar(m PermissionBar, e tea.Msg) (PermissionBar, tea.Cmd) {
 			}
 		}
 	case msg.PermissionRequestMsg:
-		m = NewPermissionBar(e.ToolName, e.Reason, e.SecurityLevel)
+		m = NewPermissionBar(e.ToolName, e.Reason, e.SecurityLevel, e.SessionID)
 		return m, nil
 	}
 	return m, nil

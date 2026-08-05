@@ -83,8 +83,7 @@ func (b *llmCaller) Call(messages ...string) (LLMResult, error) {
 		).
 		WithContext(ctx).
 		Messages(chatMsgs...).
-		Model(b.config.Name).
-		MaxTokens(int(b.config.MaxTokens))
+		Model(b.config.Name)
 
 	if b.config.Temperature > 0 {
 		builder = builder.Temperature(b.config.Temperature)

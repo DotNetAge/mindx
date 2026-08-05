@@ -46,7 +46,8 @@ type Sidebar struct {
 
 	FileChanges []data.FileChange
 
-	// CostFunc model-specific cost breakdown. If nil, appcore.DefaultModelCost is used.
+	// CostFunc model-specific cost breakdown. If nil, DefaultInputCost/DefaultOutputCost
+	// are used as fallback for unknown models.
 	// Returns (inputCost, outputCost, cachedCost) separately for detailed display.
 	CostFunc func(modelName string, promptTokens, completionTokens, cachedTokens int) (inputCost, outputCost, cachedCost float64)
 }
@@ -171,13 +172,12 @@ func (s *Sidebar) buildContent() string {
 			inputCost, outputCost, cachedCost = s.CostFunc(s.ModelName, s.PromptTokens, s.CompletionTokens, s.CachedTokens)
 			totalCost = inputCost + outputCost + cachedCost
 		} else {
-			mc := appcore.DefaultModelCost()
 			netInput := s.PromptTokens - s.CachedTokens
 			if netInput < 0 {
 				netInput = 0
 			}
-			inputCost = mc.CostPer1MIn / 1_000_000 * float64(netInput)
-			outputCost = mc.CostPer1MOut / 1_000_000 * float64(s.CompletionTokens)
+			inputCost = appcore.DefaultInputCost / 1_000_000 * float64(netInput)
+			outputCost = appcore.DefaultOutputCost / 1_000_000 * float64(s.CompletionTokens)
 			cachedCost = 0
 			totalCost = inputCost + outputCost
 		}

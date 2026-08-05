@@ -34,18 +34,9 @@ providers:
     base_url: https://ark.cn-beijing.volces.com/api/v3
     api_key: ARK_API_KEY
     auth_token: ""
-  - name: openai
-    title: OpenAI
-    base_url: https://api.openai.com/v1
-    api_key: OPENAI_API_KEY
-    auth_token: ""
-  - name: anthropic
-    title: Anthropic
-    base_url: https://api.anthropic.com/v1
-    api_key: ANTHROPIC_API_KEY
-    auth_token: ""
-  - name: google
-    title: Google
-    base_url: https://generativelanguage.googleapis.com/v1beta/openai
-    api_key: GEMINI_API_KEY
-    auth_token: ""
+  - name: siliconflow
+      title: 硅基流动
+      base_url: https://api.siliconflow.cn
+      api_key: siliconflow
+      auth_token: ""
+      is_local: false

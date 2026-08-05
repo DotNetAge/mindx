@@ -149,7 +149,7 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 		}
 		m.populateWelcome()
 
-		// Wire CostRegistry pricing into TUI components
+		// Wire ModelConfig pricing into TUI components
 		m.wirePricing()
 	}
 
@@ -486,33 +486,27 @@ func (m *rootModel) wirePricing() {
 		return
 	}
 
-	// StatusBar: total cost function using CostRegistry or default fallback
+	// StatusBar: total cost function using ModelConfig or default fallback
 	m.statusBar.CostFn = func(modelName string, promptTokens, completionTokens, cachedTokens int) float64 {
-		costs := m.app.Costs()
-		mc := appcore.DefaultModelCost()
-		if costs != nil {
-			if c, ok := costs.Get(modelName); ok {
-				mc = c
-			}
+		per1MIn, per1MOut := appcore.DefaultInputCost, appcore.DefaultOutputCost
+		if model := m.app.Models().Get(modelName); model != nil {
+			per1MIn, per1MOut = model.CostPer1MIn, model.CostPer1MOut
 		}
-		return appcore.CalculateCost(mc, int64(promptTokens), int64(completionTokens), int64(cachedTokens))
+		return appcore.CalculateCost(per1MIn, per1MOut, int64(promptTokens), int64(completionTokens), int64(cachedTokens))
 	}
 
-	// Sidebar: per-component cost breakdown using CostRegistry or default fallback
+	// Sidebar: per-component cost breakdown using ModelConfig or default fallback
 	m.sidebar.CostFunc = func(modelName string, promptTokens, completionTokens, cachedTokens int) (float64, float64, float64) {
-		costs := m.app.Costs()
-		mc := appcore.DefaultModelCost()
-		if costs != nil {
-			if c, ok := costs.Get(modelName); ok {
-				mc = c
-			}
+		per1MIn, per1MOut := appcore.DefaultInputCost, appcore.DefaultOutputCost
+		if model := m.app.Models().Get(modelName); model != nil {
+			per1MIn, per1MOut = model.CostPer1MIn, model.CostPer1MOut
 		}
 		netInput := promptTokens - cachedTokens
 		if netInput < 0 {
 			netInput = 0
 		}
-		inputCost := mc.CostPer1MIn / 1_000_000 * float64(netInput)
-		outputCost := mc.CostPer1MOut / 1_000_000 * float64(completionTokens)
+		inputCost := per1MIn / 1_000_000 * float64(netInput)
+		outputCost := per1MOut / 1_000_000 * float64(completionTokens)
 		return inputCost, outputCost, 0
 	}
 }
@@ -1019,6 +1013,8 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clientmsg.ChoiceSelectedMsg:
 		m.statusBar.CurrentState = i18n.T("client.status.idle")
+		// 记录授权请求来源会话 ID，用于构造带目标魔法词；随后清空 permBar。
+		pendingSessionID := m.permBar.SessionID
 		m.permBar = permission.PermissionBar{}
 
 		if msg.Index < 0 {
@@ -1031,17 +1027,22 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Index == permission.PermissionAllowSession {
 				magicWord = "PermissionAllowSession"
 			}
-
-			if m.rpcConnected {
-				// RPC path: send the permission magic word directly.
-				m.rpcSendMessage(magicWord)
-			} else {
-				// Local path: send the magic word so the runtime
-				// resolves the pending permission.
-				m.program.Send(clientmsg.UserSendMsg{Text: magicWord})
+			// 子智能体授权冒泡：携带目标子会话 ID 精确路由，避免多个子会话
+			// 并发挂起时按先到先服务错位；主会话自身授权请求 SessionID 为空，
+			// 保持无目标旧行为。
+			if pendingSessionID != "" {
+				magicWord += ": " + pendingSessionID
 			}
+			m.rpcSendMagicWord(magicWord)
+		} else if msg.Index == permission.PermissionDeny {
+			// 拒绝同样需要送达：主会话自身授权 → 合成拒绝结果并继续循环；
+			// 子会话授权冒泡 → 路由拒绝让子会话换路执行，而非挂到 10 分钟超时。
+			magicWord := "PermissionDeny"
+			if pendingSessionID != "" {
+				magicWord += ": " + pendingSessionID
+			}
+			m.rpcSendMagicWord(magicWord)
 		}
-		// msg.Index == PermissionDeny: nothing to do (LLM loop already paused)
 		return m, nil
 
 	// --- Notifications ---
@@ -1285,6 +1286,11 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		ask.OnLLMTimeout(func(d events.LLMTimeoutData) {
 			m.program.Send(clientmsg.LLMTimeoutMsg{
 				SessionID: sessionID, Timeout: d.Timeout, Elapsed: d.Elapsed, Error: d.Error,
+			})
+		})
+		ask.OnLLMCancelled(func(d events.LLMCancelledData) {
+			m.program.Send(clientmsg.LLMCancelledMsg{
+				SessionID: sessionID, Elapsed: d.Elapsed,
 			})
 		})
 		ask.OnMaxTurnsReached(func(d events.MaxTurnsReachedData) {
