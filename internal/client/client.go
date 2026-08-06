@@ -1212,7 +1212,7 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 				m.fileTracker.ToolExecStart(d.Params)
 			}
 			m.program.Send(clientmsg.ToolExecStartMsg{
-				SessionID: sessionID, ToolName: d.ToolName, Params: d.Params, EstimatedTok: d.PredictedTokens,
+				SessionID: sessionID, ToolName: d.ToolName, Params: d.Params,
 			})
 		})
 		ask.OnToolEnd(func(d events.ToolExecEndData) {

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DotNetAge/goharness/agents"
 	goharnessmemory "github.com/DotNetAge/goharness/memory"
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	goraglogging "github.com/DotNetAge/gorag/v2/logging"
@@ -113,11 +114,15 @@ func TestE2E_CompactionMemoryPersistRecall(t *testing.T) {
 	active := sess.Current()
 	t.Logf("会话窗口: tokens=%d, 活跃消息=%d, 模型上限=%d", tokens, len(active), app.ModelContextLength())
 
-	// ── 5. 注入记忆存储（对齐 handler_session.go）──
+	// ── 5. 注入记忆存储 + 装配 Compactor（对齐 handler_session.go）──
 	// 压缩链路由 Compactor（agents.NewCompactor）驱动，Summarizer 概念已移除。
-	// mindx 主代码当前未装配 Compactor，此 e2e 测试的压缩摘要部分需待主代码装配后完整验证。
+	// 与生产 handleSessionCompact 一致：非活跃会话从持久化加载后需补装配
+	// Compactor，否则 ForceCompact 只移动 cursor 而不生成记忆分块（假成功零落盘）。
 	sess.SetMemory(mindxses.NewRAGMemoryAdapter(rag, sess.AgentName(), sess.ProjectDir()))
-	t.Logf("已注入 RAG 记忆存储（模型 %s）", modelCfg.Name)
+	if rt, rtErr := app.ResolveRuntime(sess.AgentName()); rtErr == nil && rt != nil {
+		sess.SetCompactor(agents.NewCompactor(rt))
+	}
+	t.Logf("已注入 RAG 记忆存储并装配 Compactor（模型 %s）", modelCfg.Name)
 
 	// ── 6. 压缩前基线 ──────────────────────────────────────────
 	before := sess.ContextUsage()

@@ -86,7 +86,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	}
 	queryLogger := logging.DefaultZapLogger(&logging.ZapConfig{
 		Filename:   filepath.Join(logDir, "mindx.log"),
-		MaxSize:    100,
+		MaxSize:    20,
 		MaxBackups: 7,
 		MaxAge:     30,
 		Compress:   true,

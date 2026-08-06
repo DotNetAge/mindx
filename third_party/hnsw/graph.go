@@ -305,8 +305,13 @@ func (g *Graph[K]) assertDims(n Vector) {
 	if len(g.layers) == 0 {
 		return
 	}
-	hasDims := g.Dims()
-	if hasDims != len(n) {
+	// 图可能因 Remove 删空而存在但无节点：此时无可参考的维度基准，
+	// 跳过检查——即将插入的节点会重新建立维度基准。
+	entry := g.layers[0].entry()
+	if entry == nil {
+		return
+	}
+	if hasDims := len(entry.Value); hasDims != len(n) {
 		panic(fmt.Sprint("embedding dimension mismatch: ", hasDims, " != ", len(n)))
 	}
 }
@@ -369,7 +374,13 @@ func (g *Graph[K]) Add(nodes ...Node[K]) {
 			// On subsequent layers, we use the elevator node to enter the graph
 			// at the best point.
 			if elevator != nil {
-				searchPoint = layer.nodes[*elevator]
+				if ep, ok := layer.nodes[*elevator]; ok {
+					searchPoint = ep
+				} else {
+					// Replace 场景（高层 g.Delete 已删除旧节点、新节点尚未在本层
+					// 重插）下 elevator 会悬空，回退到本层入口节点。
+					searchPoint = layer.entry()
+				}
 			}
 
 			if g.Distance == nil {

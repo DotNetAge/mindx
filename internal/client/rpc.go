@@ -100,7 +100,6 @@ func (m *rootModel) registerNotificationHandlers() {
 		}
 		toolName, _ := data["tool_name"].(string)
 		params, _ := data["params"].(map[string]any)
-		predicted, _ := data["predicted_tokens"].(float64)
 		if m.fileTracker != nil {
 			m.fileTracker.ToolExecStart(params)
 		}
@@ -108,7 +107,7 @@ func (m *rootModel) registerNotificationHandlers() {
 			SessionID:    env.SessionID,
 			ToolName:     toolName,
 			Params:       params,
-			EstimatedTok: int(predicted),
+			EstimatedTok: 0,
 		})
 	})
 

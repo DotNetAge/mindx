@@ -86,7 +86,7 @@ func newZapLogger(cfg *ZapConfig) Logger {
 		cfg.Filename = "logs/mindx.log"
 	}
 	if cfg.MaxSize == 0 {
-		cfg.MaxSize = 100
+		cfg.MaxSize = 20
 	}
 	if cfg.MaxAge == 0 {
 		cfg.MaxAge = 30
@@ -272,10 +272,49 @@ func cleanOldRotatedFiles(logDir, baseName string) {
 	}
 }
 
-// createSafeFileWriter creates a zapcore.WriteSyncer that handles macOS permission issues.
-// It tries lumberjack first; if rotate fails (macOS sandbox/TCC), falls back to simple append.
+// createSafeFileWriter 创建日志写入器：
+//  1. 优先使用 lumberjack（按大小滚动）；通过同目录临时文件探测旋转能力，
+//     避免在真实日志上做「写入+旋转」测试污染日志内容。
+//  2. 目录不支持重命名（macOS 沙箱/TCC 等）时降级为追加写入（不滚动）。
+//  3. 两种路径都会检测日志文件被外部删除并自动重建，避免日志写入已删除的 inode
+//     造成「文件不重建 + 日志黑洞」。
 func createSafeFileWriter(cfg *ZapConfig) zapcore.WriteSyncer {
-	lj := &lumberjack.Logger{
+	if !rotationCapable(filepath.Dir(cfg.Filename)) {
+		fmt.Fprintf(os.Stderr, "WARNING: 日志目录不支持重命名，%s 将使用追加写入（不滚动）\n", cfg.Filename)
+		return newSimpleFileWriter(cfg.Filename)
+	}
+	return zapcore.AddSync(newReopenOnMissingWriter(cfg))
+}
+
+// rotationCapable 探测目录是否支持重命名（滚动依赖 os.Rename）。
+// 用同目录下的临时文件做验证，成功即认为 lumberjack 可正常滚动。
+func rotationCapable(dir string) bool {
+	if dir == "" {
+		dir = "."
+	}
+	probe, err := os.CreateTemp(dir, ".rotate-probe-*")
+	if err != nil {
+		return false
+	}
+	probePath := probe.Name()
+	defer os.Remove(probePath)
+
+	if _, err := probe.WriteString("probe"); err != nil {
+		_ = probe.Close()
+		return false
+	}
+	if err := probe.Close(); err != nil {
+		return false
+	}
+
+	renamed := probePath + ".renamed"
+	defer os.Remove(renamed)
+	return os.Rename(probePath, renamed) == nil
+}
+
+// newLumberjack 以给定配置创建 lumberjack.Logger。
+func newLumberjack(cfg *ZapConfig) *lumberjack.Logger {
+	return &lumberjack.Logger{
 		Filename:   cfg.Filename,
 		MaxSize:    cfg.MaxSize,
 		MaxBackups: cfg.MaxBackups,
@@ -283,23 +322,39 @@ func createSafeFileWriter(cfg *ZapConfig) zapcore.WriteSyncer {
 		Compress:   cfg.Compress,
 		LocalTime:  true,
 	}
-
-	testData := []byte("log rotation test\n")
-	if _, err := lj.Write(testData); err != nil {
-		fmt.Fprintf(os.Stderr, "WARNING: lumberjack write failed (%v), using simple file writer for %s\n", err, cfg.Filename)
-		_ = lj.Close()
-		return newSimpleFileWriter(cfg.Filename)
-	}
-
-	if err := lj.Rotate(); err != nil {
-		fmt.Fprintf(os.Stderr, "WARNING: lumberjack rotate failed (%v), using simple file writer for %s\n", err, cfg.Filename)
-		_ = lj.Close()
-		return newSimpleFileWriter(cfg.Filename)
-	}
-
-	return zapcore.AddSync(lj)
 }
 
+// reopenOnMissingWriter 包装 lumberjack.Logger，在日志文件被外部删除时自动重建：
+// lumberjack 一旦打开文件就持有句柄，外部删除后写入会落到已删除的 inode 上，
+// 文件不会重建、日志直接丢失；此处每次写入前检查路径是否存在，缺失即重建。
+type reopenOnMissingWriter struct {
+	mu    sync.Mutex
+	cfg   *ZapConfig
+	inner *lumberjack.Logger
+}
+
+func newReopenOnMissingWriter(cfg *ZapConfig) *reopenOnMissingWriter {
+	return &reopenOnMissingWriter{cfg: cfg, inner: newLumberjack(cfg)}
+}
+
+func (w *reopenOnMissingWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if _, err := os.Lstat(w.cfg.Filename); os.IsNotExist(err) {
+		// 日志文件被外部删除：重建文件并重新打开，避免写入已删除的 inode
+		_ = w.inner.Close()
+		w.inner = newLumberjack(w.cfg)
+	}
+	return w.inner.Write(p)
+}
+
+func (w *reopenOnMissingWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.inner.Close()
+}
+
+// simpleFileWriter 是旋转不可用（目录禁止重命名）时的追加写入兜底实现。
 type simpleFileWriter struct {
 	mu     sync.Mutex
 	file   *os.File
@@ -319,7 +374,23 @@ func newSimpleFileWriter(path string) *simpleFileWriter {
 func (w *simpleFileWriter) Write(p []byte) (n int, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.closed || w.file == nil {
+	if w.closed {
+		return len(p), nil
+	}
+	if _, statErr := os.Lstat(w.path); os.IsNotExist(statErr) {
+		// 日志文件被外部删除：重新打开并重建文件
+		if w.file != nil {
+			_ = w.file.Close()
+		}
+		f, openErr := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if openErr != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: 重建日志文件失败 %s: %v\n", w.path, openErr)
+			w.file = nil
+			return len(p), nil
+		}
+		w.file = f
+	}
+	if w.file == nil {
 		return len(p), nil
 	}
 	return w.file.Write(p)

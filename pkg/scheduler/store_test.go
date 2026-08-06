@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestFileSchedulerStore_SaveLoad(t *testing.T) {
@@ -184,6 +185,137 @@ func TestFileSchedulerStore_UpdateLastRun(t *testing.T) {
 	}
 	if loaded.FailureCnt != 1 {
 		t.Errorf("FailureCnt = %d, want 1", loaded.FailureCnt)
+	}
+}
+
+func TestFileSchedulerStore_MarkStartedMissed(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+
+	store, err := NewFileSchedulerStore(tmpDir)
+	if err != nil {
+		t.Fatalf("NewFileSchedulerStore failed: %v", err)
+	}
+
+	entry := &ScheduleEntry{ID: "job-status", Agent: "a", Content: "c", CronExpr: "* * * * * *"}
+	if err := store.Save(ctx, entry); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	if err := store.MarkStarted("job-status", "run-1"); err != nil {
+		t.Fatalf("MarkStarted failed: %v", err)
+	}
+	loaded, _ := store.Load(ctx, "job-status")
+	if loaded.LastStatus != "started" {
+		t.Errorf("LastStatus after MarkStarted = %q, want started", loaded.LastStatus)
+	}
+	if loaded.LastRunID != "run-1" {
+		t.Errorf("LastRunID after MarkStarted = %q, want run-1", loaded.LastRunID)
+	}
+
+	if err := store.MarkMissed("job-status"); err != nil {
+		t.Fatalf("MarkMissed failed: %v", err)
+	}
+	loaded, _ = store.Load(ctx, "job-status")
+	if loaded.LastStatus != "missed" {
+		t.Errorf("LastStatus after MarkMissed = %q, want missed", loaded.LastStatus)
+	}
+	if loaded.FailureCnt != 1 {
+		t.Errorf("FailureCnt after MarkMissed = %d, want 1", loaded.FailureCnt)
+	}
+}
+
+func TestFileSchedulerStore_CancelRun(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+
+	store, err := NewFileSchedulerStore(tmpDir)
+	if err != nil {
+		t.Fatalf("NewFileSchedulerStore failed: %v", err)
+	}
+
+	entry := &ScheduleEntry{ID: "job-cancel", Agent: "a", Content: "c", CronExpr: "* * * * * *"}
+	if err := store.Save(ctx, entry); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	// started 状态的运行可被取消
+	if err := store.MarkStarted("job-cancel", "run-1"); err != nil {
+		t.Fatalf("MarkStarted failed: %v", err)
+	}
+	if err := store.CancelRun("job-cancel", "run-1"); err != nil {
+		t.Fatalf("CancelRun failed: %v", err)
+	}
+	loaded, _ := store.Load(ctx, "job-cancel")
+	if loaded.LastStatus != "missed" {
+		t.Errorf("LastStatus after CancelRun = %q, want missed", loaded.LastStatus)
+	}
+
+	// 不匹配的 run_id 不生效
+	if err := store.MarkStarted("job-cancel", "run-2"); err != nil {
+		t.Fatalf("MarkStarted failed: %v", err)
+	}
+	if err := store.CancelRun("job-cancel", "run-other"); err != nil {
+		t.Fatalf("CancelRun with wrong run id failed: %v", err)
+	}
+	loaded, _ = store.Load(ctx, "job-cancel")
+	if loaded.LastStatus != "started" {
+		t.Errorf("LastStatus after wrong-id CancelRun = %q, want started", loaded.LastStatus)
+	}
+
+	// 已完成/已失败的运行不可被取消
+	if err := store.UpdateLastRun("job-cancel", "run-3", nil); err != nil {
+		t.Fatalf("UpdateLastRun failed: %v", err)
+	}
+	if err := store.CancelRun("job-cancel", "run-3"); err != nil {
+		t.Fatalf("CancelRun on completed run failed: %v", err)
+	}
+	loaded, _ = store.Load(ctx, "job-cancel")
+	if loaded.LastStatus != "success" {
+		t.Errorf("LastStatus after CancelRun on completed = %q, want success", loaded.LastStatus)
+	}
+}
+
+func TestFileSchedulerStore_Disable(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	tmpDir := t.TempDir()
+
+	store, err := NewFileSchedulerStore(tmpDir)
+	if err != nil {
+		t.Fatalf("NewFileSchedulerStore failed: %v", err)
+	}
+
+	entry := &ScheduleEntry{ID: "job-oneshot", Agent: "a", Content: "c", CronExpr: "* * * * * *", OneShot: true}
+	if err := store.Save(ctx, entry); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	// 一次性任务可被禁用
+	if err := store.Disable("job-oneshot"); err != nil {
+		t.Fatalf("Disable failed: %v", err)
+	}
+	loaded, _ := store.Load(ctx, "job-oneshot")
+	if loaded.Enabled {
+		t.Errorf("Enabled after Disable = true, want false")
+	}
+
+	// 已禁用的条目 Disable 幂等（不报错）
+	if err := store.Disable("job-oneshot"); err != nil {
+		t.Errorf("second Disable failed: %v", err)
+	}
+
+	// 普通任务禁用后 Enabled 同样为 false
+	entry2 := &ScheduleEntry{ID: "job-normal", Agent: "a", Content: "c", CronExpr: "* * * * * *"}
+	if err := store.Save(ctx, entry2); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+	if err := store.Disable("job-normal"); err != nil {
+		t.Fatalf("Disable normal job failed: %v", err)
+	}
+	loaded2, _ := store.Load(ctx, "job-normal")
+	if loaded2.Enabled {
+		t.Errorf("Enabled after Disable = true, want false")
 	}
 }
 

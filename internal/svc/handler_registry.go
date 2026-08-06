@@ -80,6 +80,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"schedule.add":                       r.daemon.handleScheduleAdd,
 		"schedule.create":                    r.daemon.handleScheduleAdd, // 前端 ScheduleView 使用的别名
 		"schedule.del":                       r.daemon.handleScheduleDelete,
+		"schedule.job_cancel":                r.daemon.handleScheduleJobCancel,
 		"log.read":                           r.daemon.handleLogRead,
 		"log.clear":                          r.daemon.handleLogClear,
 		"log.count":                          r.daemon.handleLogCount,

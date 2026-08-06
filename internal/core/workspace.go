@@ -121,7 +121,7 @@ func SyncRuntimeAssets(embeddedFS fs.FS, workspaceDir, appVersion string, cfg *M
 	synced := false
 	logger := logging.DefaultZapLogger(&logging.ZapConfig{
 		Filename:   filepath.Join(workspaceDir, "logs", "mindx.log"),
-		MaxSize:    100,
+		MaxSize:    20,
 		MaxBackups: 7,
 		MaxAge:     30,
 		Compress:   true,

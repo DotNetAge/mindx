@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/DotNetAge/goharness/agents"
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/rpc"
@@ -175,6 +176,8 @@ func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) 
 	if p.SessionID == "" {
 		return nil, fmt.Errorf("session_id is required")
 	}
+
+	d.logger.Info("session.delete: called", "session_id", p.SessionID)
 
 	sessDB := d.app.SessDB()
 	if sessDB == nil {
@@ -489,6 +492,14 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 	// 绑定 RAG 记忆存储，使压缩摘要持久化到 RAG indexer（浏览器可读）
 	if d.sharedMemory != nil {
 		sess.SetMemory(mindxses.NewRAGMemoryAdapter(d.sharedMemory, sess.AgentName(), sess.ProjectDir()))
+	}
+
+	// 补充装配 Compactor：活跃会话由 rt.SessionConfigs() 自动装配（daemon.go 主流程），
+	// 但非活跃会话经 getOrLoadSession 持久化加载时只有 resolver 注入，compactor 为 nil。
+	// 缺失时 ForceCompact 走「未配置压缩器」分支，会静默移动 cursor 而不生成任何记忆
+	// 分块——曾致压缩完成后零记忆落盘（假成功）。此处与 SetMemory 一样补齐装配。
+	if rt, rtErr := d.app.ResolveRuntime(sess.AgentName()); rtErr == nil && rt != nil {
+		sess.SetCompactor(agents.NewCompactor(rt))
 	}
 
 	d.logger.Info("session.compact: triggered",

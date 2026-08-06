@@ -111,7 +111,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	logFile := filepath.Join(logDir, "mindx.log")
 	logger := logging.DefaultZapLogger(&logging.ZapConfig{
 		Filename:   logFile,
-		MaxSize:    100,
+		MaxSize:    20,
 		MaxBackups: 7,
 		MaxAge:     30,
 		Compress:   true,

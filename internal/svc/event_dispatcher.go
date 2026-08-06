@@ -7,6 +7,7 @@ import (
 	goharnessevents "github.com/DotNetAge/goharness/events"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/i18n"
+	"github.com/DotNetAge/mindx/pkg/scheduler"
 )
 
 func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.ResponseType, title string, data string, opts ...gateway.ResponseOption) {
@@ -17,17 +18,19 @@ func (d *Daemon) sendEvent(clientID, sessionID string, respType gateway.Response
 	_ = d.gw.SendResponse(clientID, respType, title, data, allOpts...)
 }
 
-// broadcastScheduleEvent sends a schedule.job_event notification to all connected clients.
-func (d *Daemon) broadcastScheduleEvent(sessionID, agent, eventType string, data any) {
+// broadcastJobLifecycle 统一广播调度任务生命周期事件（job_started/completed/failed/missed）。
+// payload 携带 entry_id/run_id/agent/session_id/content 等完整信息，
+// meta.agent_name 供前端取智能体名。
+func (d *Daemon) broadcastJobLifecycle(method string, info scheduler.JobLifecycleInfo) {
 	if d.gw == nil {
 		return
 	}
-	d.gw.BroadcastNotification("schedule.job_event", map[string]any{
-		"session_id": sessionID,
-		"agent":      agent,
-		"type":       eventType,
-		"data":       data,
-		"meta":       map[string]any{"agent_name": agent},
+	d.gw.BroadcastNotification(method, map[string]any{
+		"session_id": info.SessionID,
+		"agent":      info.Agent,
+		"type":       info.Status,
+		"data":       info,
+		"meta":       map[string]any{"agent_name": info.Agent},
 	})
 }
 

@@ -49,8 +49,24 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 	if p.Content == "" {
 		return nil, fmt.Errorf("content is required")
 	}
-	if p.CronExpr == "" {
-		return nil, fmt.Errorf("cron_expr is required")
+	if p.CronExpr == "" && p.ScheduledAt == "" {
+		return nil, fmt.Errorf("cron_expr or scheduled_at is required")
+	}
+
+	// 一次性任务：scheduled_at → 一次性 cron（秒 分 时 日 月 *），到点执行后自动禁用。
+	oneShot := false
+	if p.ScheduledAt != "" {
+		oneShotTime, parseErr := parseOneShotTime(p.ScheduledAt)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid scheduled_at %q: %w", p.ScheduledAt, parseErr)
+		}
+		if oneShotTime.Before(time.Now()) {
+			return nil, fmt.Errorf("scheduled_at 时间已过，请重新选择")
+		}
+		p.CronExpr = fmt.Sprintf("%d %d %d %d %d *",
+			oneShotTime.Second(), oneShotTime.Minute(), oneShotTime.Hour(),
+			oneShotTime.Day(), int(oneShotTime.Month()))
+		oneShot = true
 	}
 
 	// 前端创建调度任务时通常不传 session_id：回退到该智能体最近活动的会话，
@@ -67,6 +83,7 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 		Content:    p.Content,
 		CronExpr:   p.CronExpr,
 		Enabled:    true,
+		OneShot:    oneShot,
 		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),
 	}
@@ -97,4 +114,55 @@ func (d *Daemon) handleScheduleDelete(_ context.Context, params json.RawMessage)
 	}
 
 	return map[string]string{"status": "deleted", "id": p.ID}, nil
+}
+
+// handleScheduleJobCancel 取消一次已触发但尚未执行的任务运行（前端通知框「取消」操作）。
+// 仅当该运行仍处于 started 状态时生效并广播 missed，避免误标已完成/已失败的运行。
+func (d *Daemon) handleScheduleJobCancel(_ context.Context, params json.RawMessage) (any, error) {
+	if d.schedulerDB == nil {
+		return nil, fmt.Errorf("scheduler not available")
+	}
+
+	var p rpc.ScheduleJobCancelParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.EntryID == "" || p.RunID == "" {
+		return nil, fmt.Errorf("entry_id and run_id are required")
+	}
+
+	entry, err := d.schedulerDB.Load(context.Background(), p.EntryID)
+	if err != nil {
+		return nil, fmt.Errorf("load schedule entry failed: %w", err)
+	}
+	if entry.LastRunID != p.RunID || entry.LastStatus != "started" {
+		// 该运行已结束或不存在：无需取消，幂等返回。
+		return map[string]string{"status": "already_finished"}, nil
+	}
+
+	if err := d.schedulerDB.CancelRun(p.EntryID, p.RunID); err != nil {
+		return nil, fmt.Errorf("cancel job run failed: %w", err)
+	}
+
+	// 广播 missed，使前端出队对应待执行任务并刷新生命周期记录。
+	info := scheduler.JobLifecycleInfo{
+		EntryID:   p.EntryID,
+		RunID:     p.RunID,
+		Agent:     entry.Agent,
+		SessionID: entry.SessionID,
+		Status:    "missed",
+		Error:     "用户取消",
+	}
+	d.broadcastJobLifecycle("schedule.job_missed", info)
+
+	return map[string]string{"status": "cancelled"}, nil
+}
+
+// parseOneShotTime 解析前端单次任务时间：优先本地时区格式
+// "YYYY-MM-DDTHH:mm:ss"，其次 RFC3339；均失败则返回错误。
+func parseOneShotTime(s string) (time.Time, error) {
+	if t, err := time.ParseInLocation("2006-01-02T15:04:05", s, time.Local); err == nil {
+		return t, nil
+	}
+	return time.Parse(time.RFC3339, s)
 }

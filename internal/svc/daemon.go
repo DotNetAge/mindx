@@ -51,7 +51,6 @@ type Daemon struct {
 	addr          string
 	wsPath        string
 	logger        logging.Logger
-	execMu        sync.Mutex
 	clientCancels sync.Map
 
 	// sessionQueues 按 sessionID 维护同一会话内串行执行的 FIFO 队列，
@@ -108,7 +107,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS, webFS fs.FS)
 	logDir := logging.ResolveLogDir()
 	logger := logging.DefaultZapLogger(&logging.ZapConfig{
 		Filename:   filepath.Join(logDir, "mindx.log"),
-		MaxSize:    100,
+		MaxSize:    20,
 		MaxBackups: 7,
 		MaxAge:     30,
 		Compress:   true,
@@ -161,17 +160,17 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS, webFS fs.FS)
 	}
 
 	d := &Daemon{
-		app:                 app,
-		addr:                addr,
-		wsPath:              wsPath,
-		schedulerDB:         schedulerDB,
-		dataDir:             app.Settings().DataDir(),
-		sharedMemory:        sharedMemory,
-		usageStore:          app.TokenUsageStore(),
-		runtimeFS:           runtimeFS,
-		webServer:           NewWebServer(webFS, logger),
-		logger:              logger,
-		restartCh:           make(chan struct{}, 1),
+		app:          app,
+		addr:         addr,
+		wsPath:       wsPath,
+		schedulerDB:  schedulerDB,
+		dataDir:      app.Settings().DataDir(),
+		sharedMemory: sharedMemory,
+		usageStore:   app.TokenUsageStore(),
+		runtimeFS:    runtimeFS,
+		webServer:    NewWebServer(webFS, logger),
+		logger:       logger,
+		restartCh:    make(chan struct{}, 1),
 	}
 
 	// Pass shared memory to App for MemorySearch tool registration.
@@ -197,37 +196,40 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS, webFS fs.FS)
 	}
 
 	if schedulerDB != nil {
-		d.scheduler = scheduler.NewScheduler(schedulerDB, d.executeScheduleCommand, logger)
+		d.scheduler = scheduler.NewScheduler(schedulerDB, logger)
 		logger.Info("scheduler instance created")
 
 		// Inject scheduler store into App for Cron tool registration.
 		app.SetSchedulerStore(schedulerDB)
 
-		// Wire lifecycle callback to broadcast job events to all connected clients.
+		// 生命周期回调：started 由 Scheduler 到点触发，Daemon 据此决定
+		// 离线跳过（标记 missed）或广播 OnJobStart 交前端前台执行；
+		// completed / failed 由对话结束后的 ReportResult 触发并广播。
 		d.scheduler.OnLifecycle(func(info scheduler.JobLifecycleInfo) {
 			if d.gw == nil {
 				return
 			}
-			var method string
 			switch info.Status {
 			case "started":
-				method = "schedule.job_started"
-			case "completed":
-				method = "schedule.job_completed"
-			case "failed":
-				method = "schedule.job_failed"
+				if d.gw.ClientCount() == 0 {
+					// 离线到点：无客户端可接收，跳过并标记 missed。
+					if d.schedulerDB != nil {
+						if err := d.schedulerDB.MarkMissed(info.EntryID); err != nil {
+							d.logger.Warn("failed to mark job missed", "id", info.EntryID, "error", err)
+						}
+					}
+					d.broadcastJobLifecycle("schedule.job_missed", info)
+					return
+				}
+				if d.schedulerDB != nil {
+					if err := d.schedulerDB.MarkStarted(info.EntryID, info.RunID); err != nil {
+						d.logger.Warn("failed to mark job started", "id", info.EntryID, "error", err)
+					}
+				}
+				d.broadcastJobLifecycle("schedule.job_started", info)
 			default:
-				method = "schedule.job_" + info.Status
+				d.broadcastJobLifecycle("schedule.job_"+info.Status, info)
 			}
-			// 统一广播结构：method 为 schedule.job_*，payload 携带
-			// session_id/agent/type/data，meta.agent_name 供前端取智能体名。
-			d.gw.BroadcastNotification(method, map[string]any{
-				"session_id": info.SessionID,
-				"agent":      info.Agent,
-				"type":       info.Status,
-				"data":       info,
-				"meta":       map[string]any{"agent_name": info.Agent},
-			})
 		})
 	}
 
@@ -610,11 +612,44 @@ func (d *Daemon) initGateway() {
 		gateway.WithPath(d.wsPath),
 		gateway.WithHandler(d.defaultHandler),
 		gateway.WithDisconnectHandler(func(clientID string) {
-			d.logger.Debug("client disconnected, cancelling running execution",
+			// 断连不再取消执行：对话循环在服务端继续运行，消息持续持久化，
+			// 客户端重连后通过会话重载接上（断连恢复机制）。
+			d.logger.Debug("client disconnected, execution continues",
 				"client_id", clientID,
 			)
-			d.cancelClientExecution(clientID)
+			// 释放该客户端的取消集合（停止按钮只在连接期间有效）；
+			// 在途执行不会因此被取消。
+			d.clientCancels.Delete(clientID)
 			termMgr.cleanupClient(clientID)
+		}),
+		gateway.WithConnectHandler(func(clientID string) {
+			// 断连恢复补发：客户端重连后，把在途会话中挂起的授权请求重新
+			// 发给该客户端，避免断连期间到达的权限请求丢失导致对话停滞。
+			if d.gw == nil {
+				return
+			}
+			d.activeSessions.Range(func(k, v any) bool {
+				sess, ok := v.(*goharnesssession.Session)
+				if !ok {
+					return true
+				}
+				p := sess.PendingPermission()
+				if p == nil {
+					return true
+				}
+				sid := k.(string)
+				// 主会话授权约定：data.session_id 为空（子会话授权才携带子会话 ID），
+				// 前端据此将弹窗渲染到主会话卡片。
+				_ = d.gw.SendResponse(clientID, gateway.RespPermissionRequest,
+					i18n.T("svc.event.permission.request"), map[string]any{
+						"tool_name":      p.ToolName,
+						"reason":         p.Reason,
+						"security_level": p.SecurityLevel,
+						"params":         p.Arguments,
+						"session_id":     "",
+					}, gateway.WithSessionID(sid))
+				return true
+			})
 		}),
 	)
 	d.logger.Info("gateway instance created")
@@ -636,8 +671,10 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	)
 
 	var payload struct {
-		Text      string `json:"text"`
-		SessionID string `json:"session_id,omitempty"`
+		Text       string `json:"text"`
+		SessionID  string `json:"session_id,omitempty"`
+		JobEntryID string `json:"job_entry_id,omitempty"`
+		JobRunID   string `json:"job_run_id,omitempty"`
 	}
 	if err := json.Unmarshal(msg.Data, &payload); err != nil || payload.Text == "" {
 		d.logger.Warn("defaultHandler: missing or invalid text field",
@@ -648,6 +685,11 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		msg.SessionID = payload.SessionID
 	}
 	text := payload.Text
+
+	// 调度任务前台执行：客户端把 OnJobStart 携带的 entry_id/run_id 随消息透传，
+	// 本轮对话结束后据此标记任务成功/失败（scheduler.ReportResult）。
+	jobEntryID := payload.JobEntryID
+	jobRunID := payload.JobRunID
 
 	d.logger.Info("defaultHandler: parsing agent target",
 		"client_id", msg.ClientID,
@@ -769,6 +811,11 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		if ctx.Err() != nil {
 			d.logger.Info("request skipped: cancelled while queued",
 				"client_id", clientID, "session_id", sid)
+			// 调度任务收尾：跳过执行同样要标记失败，避免任务永久停留在 started
+			// （前端待执行队列已出队，后端必须给出终态才能收到 completed/failed 事件）。
+			if jobEntryID != "" && jobRunID != "" && d.scheduler != nil {
+				d.scheduler.ReportResult(jobEntryID, jobRunID, ctx.Err())
+			}
 			return
 		}
 
@@ -862,49 +909,67 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				// Forward Compact / MicroCompact events as JSON-RPC
 				// broadcast notifications so all connected clients get real-time
 				// context window management visibility.
+				// 会话归属用 ev.SessionID：主会话事件经 emit 补齐为 sid，
+				// 子会话事件经 parentEmit 转发时即子会话 ID，据此区分广播对象。
 				switch ev.Type {
 				case events.CompactStart:
 					data, _ := ev.Data.(events.CompactStartData)
+					sessID := ev.SessionID
+					if sessID == "" {
+						sessID = sid
+					}
 					d.logger.Info("[session] compact start",
-						"session_id", sid,
+						"session_id", sessID,
 						"window_tokens", data.WindowTokens,
 					)
 					if gw != nil {
 						gw.BroadcastNotification("compact_start", map[string]any{
-							"session_id": sid,
+							"session_id": sessID,
 							"data":       data,
 						})
 					}
 				case events.CompactDone:
 					data, _ := ev.Data.(events.CompactDoneData)
+					sessID := ev.SessionID
+					if sessID == "" {
+						sessID = sid
+					}
 					d.logger.Info("[session] compact done",
-						"session_id", sid,
+						"session_id", sessID,
 						"messages_slid", data.MessagesSlid,
 						"window_tokens", data.WindowTokens,
 						"ratio", data.Ratio,
 					)
 					if gw != nil {
 						gw.BroadcastNotification("compact_done", map[string]any{
-							"session_id": sid,
+							"session_id": sessID,
 							"data":       data,
 						})
 					}
 				case events.MicroCompactStart:
 					data, _ := ev.Data.(events.MicroCompactStartData)
+					sessID := ev.SessionID
+					if sessID == "" {
+						sessID = sid
+					}
 					d.logger.Info("[session] micro-compact start",
-						"session_id", sid,
+						"session_id", sessID,
 						"window_tokens", data.WindowTokens,
 					)
 					if gw != nil {
 						gw.BroadcastNotification("micro_compact_start", map[string]any{
-							"session_id": sid,
+							"session_id": sessID,
 							"data":       data,
 						})
 					}
 				case events.MicroCompactDone:
 					data, _ := ev.Data.(events.MicroCompactDoneData)
+					sessID := ev.SessionID
+					if sessID == "" {
+						sessID = sid
+					}
 					d.logger.Info("[session] micro-compact done",
-						"session_id", sid,
+						"session_id", sessID,
 						"compressed", data.Compressed,
 						"deduped", data.Deduped,
 						"window_tokens", data.WindowTokens,
@@ -912,7 +977,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 					)
 					if gw != nil {
 						gw.BroadcastNotification("micro_compact_done", map[string]any{
-							"session_id": sid,
+							"session_id": sessID,
 							"data":       data,
 						})
 					}
@@ -932,6 +997,13 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				"session_id", sid,
 				"agent", resolvedAgentName,
 			)
+		}
+
+		// 调度任务收尾：本消息带有任务标识（OnJobStart 前台执行链路），
+		// 对话结束后把结果写回调度存储并广播 completed / failed。
+		// 每个入队闭包各自捕获自己的 job 标识，与会话队列的 FIFO 顺序天然一致。
+		if jobEntryID != "" && jobRunID != "" && d.scheduler != nil {
+			d.scheduler.ReportResult(jobEntryID, jobRunID, err)
 		}
 
 		// Broadcast current context window usage after each LLM request.
@@ -1052,261 +1124,6 @@ func (d *Daemon) resolveLatestSessionForAgent(agent string) string {
 		return best.SessionID
 	}
 	return ""
-}
-
-// ---------------------------------------------------------------------------
-// Scheduler Command Execution
-// ---------------------------------------------------------------------------
-
-func (d *Daemon) executeScheduleCommand(ctx context.Context, agent string, sessionID string, content string, projectDir string) error {
-	d.logger.Info("scheduled task: execution started",
-		"agent", agent,
-		"session_id", sessionID,
-		"project_dir", projectDir,
-		"content_preview", truncate(content, 100),
-	)
-
-	// 与用户消息共用同一会话串行队列：避免 cron 任务与用户在同一个会话上
-	// 并发写 Session（懒加载快照过期、消息交错）。排队期间若调度任务的
-	// 5 分钟超时已耗尽，runScheduleCommand 会在启动前跳过执行并返回超时错误。
-	resultCh := make(chan error, 1)
-	d.sessionQueueFor(sessionID).Enqueue(func() {
-		resultCh <- d.runScheduleCommand(ctx, agent, sessionID, content, projectDir)
-	})
-	return <-resultCh
-}
-
-// runScheduleCommand 在会话队列内执行调度任务（executeScheduleCommand 的主体）。
-func (d *Daemon) runScheduleCommand(ctx context.Context, agent string, sessionID string, content string, projectDir string) error {
-	// 排队等待期间调度上下文已过期（5 分钟超时）：跳过执行，避免用失效上下文
-	// 发起无意义的 LLM 调用。
-	if err := ctx.Err(); err != nil {
-		d.logger.Warn("scheduled task: skipped, context cancelled while queued",
-			"agent", agent, "session_id", sessionID, "error", err)
-		return fmt.Errorf("scheduled task: context expired while queued: %w", err)
-	}
-
-	rt, err := d.app.ResolveRuntime(agent)
-	if err != nil {
-		d.logger.Error("scheduled task: failed to resolve runtime", err,
-			"agent", agent,
-		)
-		return fmt.Errorf("resolve runtime for %q: %w", agent, err)
-	}
-
-	// 与 defaultHandler 一致：注册 FileModifyHook，使 Write/FileEdit 等工具
-	// 在执行前能通过 activeSessions 找到会话的 TrackModify 做文件备份。
-	rt.WithFileModifyTracker(func(sessionID string) (action.TrackFunc, bool) {
-		val, ok := d.activeSessions.Load(sessionID)
-		if !ok {
-			return nil, false
-		}
-		sess := val.(*goharnesssession.Session)
-		return sess.TrackModify, true
-	})
-
-	// 子会话授权冒泡旁路：调度任务主会话 spawn 的子会话在父 exec 结束后
-	// 仍在运行时，授权请求不经父 EventBus 转发（订阅已销毁），必须经此
-	// 旁路广播到所有客户端，保证授权弹窗不会丢失。
-	ctx = agents.WithPermissionSink(ctx, func(data events.PermissionPendingData) {
-		if d.gw == nil {
-			return
-		}
-		d.gw.BroadcastNotification(string(gateway.RespPermissionRequest), map[string]any{
-			"session_id": sessionID,
-			"meta":       map[string]any{"agent_name": agent},
-			"title":      i18n.T("svc.event.permission.request"),
-			"data": map[string]any{
-				"tool_name":      data.ToolName,
-				"reason":         data.Reason,
-				"security_level": data.SecurityLevel,
-				"params":         data.Params,
-				"session_id":     data.SessionID,
-			},
-			"type": gateway.RespPermissionRequest,
-		})
-	})
-
-	// 调度条目未绑定会话（如 Web UI 创建时未传 session_id）时，
-	// 回退到该智能体最近活动的会话，保证任务能正常写入上下文。
-	if sessionID == "" {
-		sessionID = d.resolveLatestSessionForAgent(agent)
-		if sessionID == "" {
-			d.logger.Warn("scheduled task: no session available for agent, skip",
-				"agent", agent)
-			return fmt.Errorf("scheduled task: 智能体 %q 尚无可用的会话，请先与该智能体对话一次再创建定时任务", agent)
-		}
-		d.logger.Info("scheduled task: fallback to latest session",
-			"agent", agent, "session_id", sessionID)
-	}
-
-	targetDir := projectDir
-	if targetDir == "" {
-		meta := d.restoreSessionEnvironment(sessionID)
-		if meta != nil {
-			targetDir = meta.ProjectDir
-			d.logger.Info("scheduled task: restored project dir from session meta",
-				"target_dir", targetDir,
-			)
-		}
-	}
-
-	// 与 defaultHandler 走同一条会话装配路径：Runtime 注入的通用能力
-	//（Compactor 压缩引擎 + Sandbox 沙箱）由 rt.SessionConfigs() 提供，
-	// 会话特有配置为动态 modelContextResolver，另绑定 RAG 记忆存储。
-	var sessOpts []goharnesssession.SessionConfig
-	sessOpts = append(sessOpts, rt.SessionConfigs()...)
-	sessOpts = append(sessOpts,
-		goharnesssession.WithModelContextResolver(d.resolveSessionModelContextLength),
-	)
-	if d.sharedMemory != nil {
-		projectDir := ""
-		if meta, metaErr := d.app.SessDB().GetMeta(context.Background(), sessionID); metaErr == nil && meta != nil {
-			projectDir = meta.ProjectDir
-		}
-		sessOpts = append(sessOpts, goharnesssession.WithMemory(mindxses.NewRAGMemoryAdapter(d.sharedMemory, agent, projectDir)))
-	}
-
-	// 在队列内加载会话：等上一轮执行结束后再加载，避免拿到过期快照。
-	s, err := goharnesssession.Load(context.Background(), sessionID, agent, d.app.SessDB(), d.logger, sessOpts...)
-	if err != nil {
-		return fmt.Errorf("scheduled task: load session %q: %w", sessionID, err)
-	}
-	d.activeSessions.Store(sessionID, s)
-	defer d.activeSessions.Delete(sessionID)
-
-	// 注册 FileModifyHandler：将文件追踪事件广播为 JSON-RPC 通知，
-	// 使前端 DiffView 能实时展示调度任务修改的文件（与 defaultHandler 语义一致）。
-	s.SetFileModifyHandler(func(ev goharnesssession.FileModifyEvent) {
-		if ev.Action != "tracked" {
-			return
-		}
-		fp := ev.FilePath
-		if fp == "" {
-			return
-		}
-		d.broadcastScheduleEvent(sessionID, agent, "file_modified", map[string]any{
-			"files":  []string{fp},
-			"action": ev.Action,
-		})
-	})
-
-	// Build AskBuilder with common event handlers (via factory).
-	emitter := newBroadcastAskHandlers(d, sessionID, agent)
-	builder := wireAskEvents(rt.Ask(agent, content, s).WithContext(ctx), emitter)
-
-	// 广播 Compact / MicroCompact 事件，使前端上下文窗口管理指示器实时可见。
-	builder = builder.OnEvent(func(ev events.ReactEvent) {
-		switch ev.Type {
-		case events.CompactStart:
-			data, _ := ev.Data.(events.CompactStartData)
-			if d.gw != nil {
-				d.gw.BroadcastNotification("compact_start", map[string]any{
-					"session_id": sessionID,
-					"data":       data,
-				})
-			}
-		case events.CompactDone:
-			data, _ := ev.Data.(events.CompactDoneData)
-			if d.gw != nil {
-				d.gw.BroadcastNotification("compact_done", map[string]any{
-					"session_id": sessionID,
-					"data":       data,
-				})
-			}
-		case events.MicroCompactStart:
-			data, _ := ev.Data.(events.MicroCompactStartData)
-			if d.gw != nil {
-				d.gw.BroadcastNotification("micro_compact_start", map[string]any{
-					"session_id": sessionID,
-					"data":       data,
-				})
-			}
-		case events.MicroCompactDone:
-			data, _ := ev.Data.(events.MicroCompactDoneData)
-			if d.gw != nil {
-				d.gw.BroadcastNotification("micro_compact_done", map[string]any{
-					"session_id": sessionID,
-					"data":       data,
-				})
-			}
-		}
-	})
-
-	// ── Optional chdir for project directory ──
-	if targetDir != "" {
-		d.execMu.Lock()
-		originalCWD, _ := os.Getwd()
-
-		if err := os.Chdir(targetDir); err != nil {
-			d.execMu.Unlock()
-			d.logger.Warn("scheduled task: failed to chdir to project dir, using current dir",
-				"project_dir", targetDir, "error", err)
-		} else {
-			_ = os.Setenv("MINDX_PROJECT_DIR", targetDir)
-			_ = os.Setenv("MINDX_SESSION_ID", sessionID)
-			defer func() {
-				if restoreErr := os.Chdir(originalCWD); restoreErr != nil {
-					d.logger.Warn("scheduled task: failed to restore cwd", "original", originalCWD, "error", restoreErr)
-				}
-				_ = os.Unsetenv("MINDX_PROJECT_DIR")
-				_ = os.Unsetenv("MINDX_SESSION_ID")
-				d.execMu.Unlock()
-			}()
-		}
-	}
-
-	d.logger.Info("scheduled task: calling Runtime.Ask()",
-		"session_id", sessionID, "agent", agent)
-	_, err = builder.
-		OnPermissionDenied(func(reason string) {
-			d.broadcastScheduleEvent(sessionID, agent, "permission_denied", reason)
-		}).
-		Run()
-	d.logger.Info("scheduled task: Runtime.Ask() returned",
-		"session_id", sessionID, "error", err)
-
-	if err != nil {
-		return fmt.Errorf("execute scheduled message for @%s (session: %s): %w", agent, sessionID, err)
-	}
-
-	// 与 defaultHandler 一致：执行结束后广播当前上下文窗口用量，
-	// 使前端上下文指示器实时更新。
-	if d.gw != nil {
-		usage := s.ContextUsage(d.buildSessionPricing())
-		d.gw.BroadcastNotification("context_usage", map[string]any{
-			"session_id": sessionID,
-			"data": map[string]any{
-				"window_tokens":        usage.WindowTokens,
-				"max_window_size":      usage.MaxWindowSize,
-				"usage_ratio":          usage.UsageRatio,
-				"message_count":        usage.MessageCount,
-				"cursor":               usage.Cursor,
-				"active_message_count": usage.ActiveMessageCount,
-				"total_actual_tokens":  usage.TotalActualTokens,
-				"total_cost":           usage.TotalCost,
-			},
-		})
-	}
-
-	d.logger.Info("scheduled task: execution completed successfully",
-		"session_id", sessionID, "agent", agent)
-	return nil
-}
-
-func (d *Daemon) restoreSessionEnvironment(sessionID string) *goharnesssession.SessionInfo {
-	if d.app == nil || d.app.SessDB() == nil {
-		return nil
-	}
-	meta, err := goharnesssession.GetSessionMeta(context.Background(), d.app.SessDB(), sessionID)
-	if err != nil {
-		d.logger.Debug("could not load session meta for scheduled task",
-			"session_id", sessionID,
-			"error", err,
-		)
-		return nil
-	}
-	return meta
 }
 
 // ---------------------------------------------------------------------------

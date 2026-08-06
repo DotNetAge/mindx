@@ -19,6 +19,7 @@ type ScheduleEntry struct {
 	Content    string    `json:"content"`
 	CronExpr   string    `json:"cron_expr"`
 	Enabled    bool      `json:"enabled"`
+	OneShot    bool      `json:"one_shot,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 	LastRunAt  time.Time `json:"last_run_at,omitempty"`
@@ -138,13 +139,81 @@ func (s *FileSchedulerStore) List(ctx context.Context) ([]ScheduleEntry, error) 
 }
 
 func (s *FileSchedulerStore) UpdateLastRun(id string, runID string, err error) error {
+	return s.updateRunStatus(id, func(entry *ScheduleEntry) bool {
+		entry.LastRunAt = time.Now()
+		entry.LastRunID = runID
+		if err != nil {
+			entry.LastStatus = "failed"
+			entry.LastError = err.Error()
+			entry.FailureCnt++
+		} else {
+			entry.LastStatus = "success"
+			entry.LastError = ""
+			entry.SuccessCnt++
+		}
+		return true
+	})
+}
+
+// MarkStarted 记录任务已触发：写入本次运行时间与 run_id，状态置为 started。
+// 由 Daemon 在到点广播 OnJobStart 前调用，供任务管理与生命周期记录展示。
+func (s *FileSchedulerStore) MarkStarted(id string, runID string) error {
+	return s.updateRunStatus(id, func(entry *ScheduleEntry) bool {
+		entry.LastRunAt = time.Now()
+		entry.LastRunID = runID
+		entry.LastStatus = "started"
+		entry.LastError = ""
+		return true
+	})
+}
+
+// MarkMissed 标记任务因客户端离线等原因未能执行。
+func (s *FileSchedulerStore) MarkMissed(id string) error {
+	return s.updateRunStatus(id, func(entry *ScheduleEntry) bool {
+		entry.LastRunAt = time.Now()
+		entry.LastStatus = "missed"
+		entry.LastError = "客户端离线，任务被跳过"
+		entry.FailureCnt++
+		return true
+	})
+}
+
+// CancelRun 标记一次已触发但被用户取消的运行（前端通知框「取消」操作）。
+// 仅当该运行仍处于 started 状态时生效，避免误标已完成/已失败的运行。
+func (s *FileSchedulerStore) CancelRun(id string, runID string) error {
+	return s.updateRunStatus(id, func(entry *ScheduleEntry) bool {
+		if entry.LastRunID != runID || entry.LastStatus != "started" {
+			return false
+		}
+		entry.LastStatus = "missed"
+		entry.LastError = "用户取消"
+		entry.FailureCnt++
+		return true
+	})
+}
+
+// Disable 禁用调度条目。一次性任务（OneShot）到点执行后调用，
+// 避免 cron 到点后再次触发；已禁用时幂等返回。
+func (s *FileSchedulerStore) Disable(id string) error {
+	return s.updateRunStatus(id, func(entry *ScheduleEntry) bool {
+		if !entry.Enabled {
+			return false
+		}
+		entry.Enabled = false
+		return true
+	})
+}
+
+// updateRunStatus 读取调度条目，应用 mutate 变更后原子写回。
+// mutate 返回 false 表示无需写入（如 CancelRun 条件不满足）。
+func (s *FileSchedulerStore) updateRunStatus(id string, mutate func(*ScheduleEntry) bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	path := s.filePath(id)
 	data, readErr := os.ReadFile(path)
 	if readErr != nil {
-		return fmt.Errorf("failed to read entry for last run update: %w", readErr)
+		return fmt.Errorf("failed to read entry for status update: %w", readErr)
 	}
 
 	var entry ScheduleEntry
@@ -152,17 +221,8 @@ func (s *FileSchedulerStore) UpdateLastRun(id string, runID string, err error) e
 		return fmt.Errorf("failed to unmarshal entry: %w", err)
 	}
 
-	entry.LastRunAt = time.Now()
-	entry.LastRunID = runID
-
-	if err != nil {
-		entry.LastStatus = "failed"
-		entry.LastError = err.Error()
-		entry.FailureCnt++
-	} else {
-		entry.LastStatus = "success"
-		entry.LastError = ""
-		entry.SuccessCnt++
+	if !mutate(&entry) {
+		return nil
 	}
 	entry.UpdatedAt = time.Now()
 
