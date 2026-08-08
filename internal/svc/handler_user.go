@@ -46,6 +46,11 @@ var userConfigFieldSetters = map[string]func(cfg *core.MindxConfig, val any){
 			cfg.AutoIndexing = b
 		}
 	},
+	"kb_addr": func(cfg *core.MindxConfig, v any) {
+		if s, ok := v.(string); ok {
+			cfg.KBAddr = s
+		}
+	},
 }
 
 func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (any, error) {
@@ -56,6 +61,7 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 		var updates map[string]any
 		if err := json.Unmarshal(params, &updates); err == nil {
 			changed := false
+			kbChanged := false
 			for key, val := range updates {
 				if setter, ok := userConfigFieldSetters[key]; ok {
 					old := getConfigField(cfg, key)
@@ -64,6 +70,9 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 					if fmt.Sprintf("%v", old) != fmt.Sprintf("%v", new) {
 						d.logger.Info("user.config: field changed", "key", key, "from", old, "to", new)
 						changed = true
+						if key == "kb_addr" {
+							kbChanged = true
+						}
 					}
 				}
 			}
@@ -73,6 +82,11 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 				} else {
 					d.logger.Info("user.config: config saved successfully")
 				}
+			}
+			// 知识库地址变更后清空运行时缓存，使下一次 ResolveRuntime
+			// 按新地址重新装配知识库工具（未配置时则不再装配）。
+			if kbChanged {
+				d.app.InvalidateRuntimes()
 			}
 		}
 	}
@@ -86,6 +100,7 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 		"default_provider": cfg.DefaultProvider,
 		"last_model":       cfg.LastModel,
 		"embedder_model":   cfg.EmbedderModel,
+		"kb_addr":          cfg.KBAddr,
 	}
 	if cfg.PermissionRules != nil {
 		result["permission_rules"] = cfg.PermissionRules
@@ -119,6 +134,8 @@ func getConfigField(cfg *core.MindxConfig, key string) any {
 		return cfg.Language
 	case "auto_indexing":
 		return cfg.AutoIndexing
+	case "kb_addr":
+		return cfg.KBAddr
 	}
 	return nil
 }

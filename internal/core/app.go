@@ -284,6 +284,40 @@ func (a *App) Config() *MindxConfig {
 	return a.mindxConfig
 }
 
+// KBAddr 返回配置的知识库（mrag/mindstore）服务地址。
+// 返回空字符串表示未配置知识库，此时不装配知识库相关工具。
+// 统一规范化：去掉尾部斜杠，缺少协议前缀时补 http://，保证工具拼接 /api/... 路径正确。
+func (a *App) KBAddr() string {
+	if a.mindxConfig == nil {
+		return ""
+	}
+	return normalizeKBAddr(a.mindxConfig.KBAddr)
+}
+
+// normalizeKBAddr 规范化知识库服务地址：
+//   - 去除首尾空白与尾部斜杠（避免拼接 /api/query 时出现 // 双斜杠）
+//   - 缺少 http(s):// 协议前缀时补 http://
+func normalizeKBAddr(addr string) string {
+	addr = strings.TrimSpace(addr)
+	addr = strings.TrimRight(addr, "/")
+	if addr == "" {
+		return ""
+	}
+	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {
+		addr = "http://" + addr
+	}
+	return addr
+}
+
+// InvalidateRuntimes 清空运行时缓存。
+// 知识库地址等工具装配参数变化后调用，使下一次 ResolveRuntime 按新配置重新装配工具。
+func (a *App) InvalidateRuntimes() {
+	a.runtimeMu.Lock()
+	a.runtimeCache = make(map[string]*agents.Runtime)
+	a.runtimeMu.Unlock()
+	a.logger.Info("runtime cache invalidated（工具装配配置已变更）")
+}
+
 // ResolveDefaultModel 返回解析后的默认模型配置，包含从 Provider 继承的参数
 // 和从 CredentialStore 解析的 API 密钥。优先使用 DefaultModel，为空时 fallback 到 LastModel。
 func (a *App) ResolveDefaultModel() *config.ModelConfig {
@@ -768,49 +802,62 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		}
 	}
 
-	// 替换默认 Ls 工具为增强版 LSPro（知识库优先 + 原生回退）.
-	mstoreURL := "http://localhost:1318"
-	_ = rt.ToolRegistry().Remove("Ls") // 先删除 goharness 默认的 Ls
-	lsPro := mindxtools.NewLSPro(mstoreURL)
-	if err := rt.RegisterTool(lsPro); err != nil {
-		a.logger.Warn("createRuntime: 注册 LSPro 失败", "agent", agentName, "error", err)
-	} else {
-		a.logger.Info("createRuntime: LSPro 注册成功（替代默认 Ls）", "agent", agentName)
-		// 配置目录列表白名单：允许列出用户偏好目录（如 ~/.mindx），与 ReadPro 保持一致。
-		// 注意必须在注册后配置到 LSPro（原 Ls 已被移除，若配置在替换前会在 Remove 时丢失）。
-		if lp, ok := lsPro.(*mindxtools.LSPro); ok {
-			lp.AddWhiteList(a.settings.UserPreferences())
+	// 知识库工具装配：地址来自配置（kb_addr），未配置时不装配知识库相关工具
+	//（LSPro/ReadPro/QuickSearch），保留 goharness 默认的 Ls/Read。
+	kbAddr := a.KBAddr()
+	if kbAddr == "" {
+		a.logger.Info("createRuntime: 未配置知识库地址，跳过知识库相关工具装配", "agent", agentName)
+		// 图片读取能力与知识库无关，仍需按模型视觉能力（Visioning）配置到默认 Read 上，
+		// 避免未配置知识库时视觉模型无法读取图片。
+		if t, ok := rt.ToolRegistry().Get("Read"); ok {
+			if r, ok := t.(*tools.Read); ok {
+				r.SetImageReading(resolvedModel.Visioning)
+			}
 		}
-	}
-
-	// 替换默认 Read 工具为增强版 ReadPro（大文件自动知识库分块树预览 + 原生回退）.
-	_ = rt.ToolRegistry().Remove("Read") // 先删除 goharness 默认的 Read
-	readPro := mindxtools.NewReadPro(mstoreURL)
-	if err := rt.RegisterTool(readPro); err != nil {
-		a.logger.Warn("createRuntime: 注册 ReadPro 失败", "agent", agentName, "error", err)
 	} else {
-		a.logger.Info("createRuntime: ReadPro 注册成功（替代默认 Read）", "agent", agentName)
-		// 配置读取白名单：允许读取用户偏好目录（如 ~/.mindx）下的配置、日志等
-		// 项目外文件。注意必须在注册后配置到 ReadPro（原 Read 已被移除，
-		// 若配置在替换前会在 Remove 时丢失）。
-		if rp, ok := readPro.(*mindxtools.ReadPro); ok {
-			rp.AddWhiteList(a.settings.UserPreferences())
-			// 图片读取开关按模型视觉能力（Visioning）配置在内嵌的 goharness Read 上。
-			// ReadPro 自身不参与图片链路：图片读取的消费（转换为 image_url 消息）
-			// 由 goharness 层的 ImageHook 完成，此处只控制 Read 是否返回图片数据。
-			rp.Read.SetImageReading(resolvedModel.Visioning)
-			a.logger.Info("createRuntime: ReadPro whitelist configured",
-				"agent", agentName, "dir", a.settings.UserPreferences(),
-				"image_reading", resolvedModel.Visioning)
+		// 替换默认 Ls 工具为增强版 LSPro（知识库优先 + 原生回退）.
+		_ = rt.ToolRegistry().Remove("Ls") // 先删除 goharness 默认的 Ls
+		lsPro := mindxtools.NewLSPro(kbAddr)
+		if err := rt.RegisterTool(lsPro); err != nil {
+			a.logger.Warn("createRuntime: 注册 LSPro 失败", "agent", agentName, "error", err)
+		} else {
+			a.logger.Info("createRuntime: LSPro 注册成功（替代默认 Ls）", "agent", agentName)
+			// 配置目录列表白名单：允许列出用户偏好目录（如 ~/.mindx），与 ReadPro 保持一致。
+			// 注意必须在注册后配置到 LSPro（原 Ls 已被移除，若配置在替换前会在 Remove 时丢失）。
+			if lp, ok := lsPro.(*mindxtools.LSPro); ok {
+				lp.AddWhiteList(a.settings.UserPreferences())
+			}
 		}
-	}
 
-	// Register QuickSearch tool (知识库语义搜索).
-	searchTool := mindxtools.NewQuickSearch(mstoreURL)
-	if err := rt.RegisterTool(searchTool); err != nil {
-		a.logger.Warn("createRuntime: 注册 QuickSearch 失败", "agent", agentName, "error", err)
-	} else {
-		a.logger.Info("createRuntime: QuickSearch 注册成功", "agent", agentName)
+		// 替换默认 Read 工具为增强版 ReadPro（大文件自动知识库分块树预览 + 原生回退）.
+		_ = rt.ToolRegistry().Remove("Read") // 先删除 goharness 默认的 Read
+		readPro := mindxtools.NewReadPro(kbAddr)
+		if err := rt.RegisterTool(readPro); err != nil {
+			a.logger.Warn("createRuntime: 注册 ReadPro 失败", "agent", agentName, "error", err)
+		} else {
+			a.logger.Info("createRuntime: ReadPro 注册成功（替代默认 Read）", "agent", agentName)
+			// 配置读取白名单：允许读取用户偏好目录（如 ~/.mindx）下的配置、日志等
+			// 项目外文件。注意必须在注册后配置到 ReadPro（原 Read 已被移除，
+			// 若配置在替换前会在 Remove 时丢失）。
+			if rp, ok := readPro.(*mindxtools.ReadPro); ok {
+				rp.AddWhiteList(a.settings.UserPreferences())
+				// 图片读取开关按模型视觉能力（Visioning）配置在内嵌的 goharness Read 上。
+				// ReadPro 自身不参与图片链路：图片读取的消费（转换为 image_url 消息）
+				// 由 goharness 层的 ImageHook 完成，此处只控制 Read 是否返回图片数据。
+				rp.Read.SetImageReading(resolvedModel.Visioning)
+				a.logger.Info("createRuntime: ReadPro whitelist configured",
+					"agent", agentName, "dir", a.settings.UserPreferences(),
+					"image_reading", resolvedModel.Visioning)
+			}
+		}
+
+		// Register QuickSearch tool (知识库语义搜索).
+		searchTool := mindxtools.NewQuickSearch(kbAddr)
+		if err := rt.RegisterTool(searchTool); err != nil {
+			a.logger.Warn("createRuntime: 注册 QuickSearch 失败", "agent", agentName, "error", err)
+		} else {
+			a.logger.Info("createRuntime: QuickSearch 注册成功", "agent", agentName)
+		}
 	}
 
 	return rt, nil

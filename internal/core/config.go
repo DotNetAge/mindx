@@ -59,6 +59,10 @@ type MindxConfig struct {
 	// by the user. Persisted so that daemon restart restores the running state.
 	AutoIndexing bool `json:"auto_indexing,omitempty"`
 
+	// KBAddr 是知识库（mrag/mindstore）服务地址，如 http://localhost:1318。
+	// 为空表示未配置知识库，daemon 不装配知识库相关工具（LSPro/ReadPro/QuickSearch）。
+	KBAddr string `json:"kb_addr,omitempty"`
+
 	// AgentSkillChecksums stores SHA256 checksums of deployed agent and skill
 	// files, keyed by relative path from workspaceDir. Used by SyncRuntimeAssets
 	// to detect user modifications — if a file's on-disk hash differs from the

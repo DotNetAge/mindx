@@ -21,10 +21,8 @@ func NewSkillsPrompt() func([]*skill.Skill) string {
 		}
 
 		header := "## 能力（可用技能）\n" +
-			"以下专业技能是否能完成用户要求的任务。如果技能匹配，使用 Skill 工具加载其指令，这将指导你完成特定领域的工作流程并提供额外的工具。\n\n" +
-			"### 副作用规则\n" +
-			"- Skill 工具的返回值代表该技能的完整知识。对于任何给定的技能名称，每个会话中最多只能调用 Skill 一次。之后，对该技能内容的所有引用必须依赖内存中已有的内容 — 不要使用任何工具（Bash、Read、Grep、Glob、WebFetch 等）重新读取其文件。\n\n" +
-			"### 执行前自检\n" +
+			"以下专业技能是否能完成用户要求的任务。如果技能匹配，使用 Skill 工具加载其指令，这将指导你完成特定领域的工作流程并提供额外的工具。\n\n"
+		footer := "### 执行前自检\n" +
 			"在调用 Bash、Read 或 Grep 访问文件或目录内容之前，必须先执行此检查：\n" +
 			"1. 角色门控 (P0)：此任务是否在我的职责范围内？如果否 → 按行为准则委托，不要继续。\n" +
 			"2. 如果在职责范围内：上述能力列表是否包含覆盖此任务的技能？\n" +
@@ -33,14 +31,10 @@ func NewSkillsPrompt() func([]*skill.Skill) string {
 			"   - 推理：[职责检查结果 + 考虑了哪个技能]\n" +
 			"   - 决策：委托（如果超出职责）| Skill（如果尚未加载）| 使用工具继续（如果已加载或无匹配技能）\n"
 
-		footer := "\n### 加载策略\n" +
-			"- 延迟加载技能：仅在即将执行需要它的任务时加载\n" +
-			"- 加载前查看技能描述，运行：`mindx skill list -f \"<skill1>,<skill2>,...\"`\n" +
-			"- 每个技能加载后即持久化 — 不要重复加载同一个技能\n"
-
 		var nameBuilder strings.Builder
+
 		for _, s := range skills {
-			nameBuilder.WriteString(fmt.Sprintf("- %s\n", s.Name))
+			nameBuilder.WriteString(fmt.Sprintf("- %s - %s\n", s.Name, s.Description))
 		}
 
 		return header + nameBuilder.String() + footer
