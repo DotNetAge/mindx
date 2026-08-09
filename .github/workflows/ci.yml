@@ -173,7 +173,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.MODEL_PATH }}
-          key: model-q4-onnx-v1
+          key: model-bge-onnx-v1
 
       - name: Download embedder model (cache miss)
         if: steps.model-cache.outputs.cache-hit != 'true'
@@ -271,7 +271,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.MODEL_PATH }}
-          key: model-q4-onnx-v1
+          key: model-bge-onnx-v1
 
       - name: Download embedder model (cache miss)
         if: steps.model-cache.outputs.cache-hit != 'true'
