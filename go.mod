@@ -26,7 +26,7 @@ require (
 	github.com/DotNetAge/gochat v0.2.9
 	github.com/DotNetAge/gograph v0.4.0
 	github.com/DotNetAge/goharness v0.2.30
-	github.com/DotNetAge/gorag/v2 v2.0.15
+	github.com/DotNetAge/gorag/v2 v2.0.16
 	github.com/creack/pty v1.1.24
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/text v0.38.0
@@ -34,7 +34,7 @@ require (
 
 require (
 	github.com/DataDog/zstd v1.5.7 // indirect
-	github.com/DotNetAge/govector v0.1.8 // indirect
+	github.com/DotNetAge/govector v0.1.9 // indirect
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0 // indirect
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
