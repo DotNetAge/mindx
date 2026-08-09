@@ -7,7 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.6
 	charm.land/glamour/v2 v2.0.0
 	charm.land/lipgloss/v2 v2.0.3
-	github.com/DotNetAge/gort v0.1.4
+	github.com/DotNetAge/gort v0.1.5
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/uuid v1.6.0
@@ -23,10 +23,10 @@ require (
 )
 
 require (
-	github.com/DotNetAge/gochat v0.2.8
+	github.com/DotNetAge/gochat v0.2.9
 	github.com/DotNetAge/gograph v0.4.0
-	github.com/DotNetAge/goharness v0.2.28
-	github.com/DotNetAge/gorag/v2 v2.0.13
+	github.com/DotNetAge/goharness v0.2.30
+	github.com/DotNetAge/gorag/v2 v2.0.15
 	github.com/creack/pty v1.1.24
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/text v0.38.0
@@ -38,10 +38,18 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0 // indirect
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
+	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/andybalholm/cascadia v1.3.4 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
+	github.com/bdandy/go-errors v1.2.2 // indirect
+	github.com/bdandy/go-socks4 v1.2.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/bogdanfinn/fhttp v0.6.8 // indirect
+	github.com/bogdanfinn/quic-go-utls v1.0.9-utls // indirect
+	github.com/bogdanfinn/tls-client v1.15.1 // indirect
+	github.com/bogdanfinn/utls v1.7.7-barnius // indirect
+	github.com/bogdanfinn/websocket v1.5.5-barnius // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
@@ -87,6 +95,7 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.68.1 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
+	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/richardlehane/mscfb v1.0.7 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -96,6 +105,7 @@ require (
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/tam7t/hpkp v0.0.0-20160821193359-2b70b4024ed5 // indirect
 	github.com/tealeg/xlsx v1.0.5 // indirect
 	github.com/unidoc/freetype v0.2.5 // indirect
 	github.com/unidoc/pkcs7 v0.3.0 // indirect
@@ -126,8 +136,8 @@ require (
 
 replace github.com/coder/hnsw => ./third_party/hnsw
 
-replace github.com/DotNetAge/goharness => ../goharness
+// replace github.com/DotNetAge/goharness => ../goharness
 
-replace github.com/DotNetAge/gorag/v2 => ../gorag
+// replace github.com/DotNetAge/gorag/v2 => ../gorag
 
-replace github.com/DotNetAge/gochat => ../gochat
+// replace github.com/DotNetAge/gochat => ../gochat
