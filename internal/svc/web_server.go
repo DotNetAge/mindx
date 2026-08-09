@@ -84,7 +84,12 @@ func (ws *WebServer) Start(ctx context.Context) error {
 
 	fileServer := http.FileServer(http.FS(ws.embedFS))
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cleanPath := filepath.Clean(r.URL.Path)
+		// embed.FS 要求路径不带前导斜杠，且根路径需特判
+		cleanPath := strings.TrimPrefix(filepath.Clean(r.URL.Path), "/")
+		if cleanPath == "" || cleanPath == "." {
+			ws.serveIndexHTML(w, r)
+			return
+		}
 
 		f, err := ws.embedFS.Open(cleanPath)
 		if err != nil {

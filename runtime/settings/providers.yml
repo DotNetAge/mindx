@@ -35,8 +35,8 @@ providers:
     api_key: ARK_API_KEY
     auth_token: ""
   - name: siliconflow
-      title: 硅基流动
-      base_url: https://api.siliconflow.cn
-      api_key: siliconflow
-      auth_token: ""
-      is_local: false
+    title: 硅基流动
+    base_url: https://api.siliconflow.cn
+    api_key: siliconflow
+    auth_token: ""
+    is_local: false

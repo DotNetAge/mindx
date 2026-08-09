@@ -202,7 +202,6 @@ func startDaemonDirect(workspaceDir string) error {
 	_ = os.MkdirAll(logDir, 0755)
 
 	cmd := exec.Command(exePath, "daemon")
-	cmd.Env = append(os.Environ(), "MINDX_WORKSPACE="+workspaceDir)
 	cmd.Dir = workspaceDir
 	setDetachAttrs(cmd)
 
