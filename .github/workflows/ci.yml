@@ -316,6 +316,8 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           # Set musl cross-compiler for Linux (Alpine Docker image uses musl)
+          # Note: cgo deps with C++ (e.g. go-tree-sitter) make Go link with CXX,
+          # so both CC and CXX must point at the cross toolchain for arm64.
           if [ "$GOOS" = "linux" ]; then
             if [ "$GOARCH" = "amd64" ]; then
               export CC=x86_64-linux-musl-gcc
@@ -323,8 +325,10 @@ jobs:
               # Use native musl-gcc if available, otherwise fall back to zig
               if command -v aarch64-linux-musl-gcc &>/dev/null; then
                 export CC=aarch64-linux-musl-gcc
+                export CXX=aarch64-linux-musl-g++
               else
                 export CC="zig cc -target aarch64-linux-musl"
+                export CXX="zig c++ -target aarch64-linux-musl"
               fi
             fi
           fi
