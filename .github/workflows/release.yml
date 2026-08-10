@@ -766,6 +766,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # embed.go embeds runtime/data, so the model file must be present in the
+      # clean checkout before `go build` (same step as the build job).
+      - name: Download embedder model
+        run: |
+          MODEL_PATH="runtime/data/models/model.onnx"
+          mkdir -p "$(dirname "$MODEL_PATH")"
+          rm -f "$MODEL_PATH"
+          echo "Downloading embedder model from HuggingFace..."
+          curl -fL -o "$MODEL_PATH" \
+            "https://huggingface.co/Xenova/bge-small-zh-v1.5/resolve/main/onnx/model.onnx" || \
+          { echo "ERROR: Failed to download embedder model"; exit 1; }
+          echo "Model file size: $(wc -c < "$MODEL_PATH") bytes"
+
       - name: Generate snapcraft.yaml from template
         run: |
           sed -e "s|__VERSION__|${{ needs.prepare.outputs.version_num }}|g" \
