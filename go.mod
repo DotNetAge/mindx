@@ -26,7 +26,7 @@ require (
 	github.com/DotNetAge/gochat v0.2.9
 	github.com/DotNetAge/gograph v0.4.0
 	github.com/DotNetAge/goharness v0.2.30
-	github.com/DotNetAge/gorag/v2 v2.0.16
+	github.com/DotNetAge/gorag/v2 v2.0.17
 	github.com/creack/pty v1.1.24
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/text v0.38.0
@@ -34,7 +34,7 @@ require (
 
 require (
 	github.com/DataDog/zstd v1.5.7 // indirect
-	github.com/DotNetAge/govector v0.1.9 // indirect
+	github.com/DotNetAge/govector v0.1.10 // indirect
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0 // indirect
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
@@ -68,7 +68,6 @@ require (
 	github.com/cockroachdb/pebble v1.1.5 // indirect
 	github.com/cockroachdb/redact v1.1.8 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb // indirect
-	github.com/coder/hnsw v0.6.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/extrame/ole2 v0.0.0-20160812065207-d69429661ad7 // indirect
@@ -133,8 +132,6 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	mvdan.cc/sh/v3 v3.13.1 // indirect
 )
-
-replace github.com/coder/hnsw => ./third_party/hnsw
 
 // replace github.com/DotNetAge/goharness => ../goharness
 
