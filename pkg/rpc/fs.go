@@ -37,6 +37,12 @@ type FSWriteParams struct {
 	Content string `json:"content"`
 }
 
+// GitCloneParams are the params for git.clone.
+type GitCloneParams struct {
+	URL string `json:"url"`
+	Dir string `json:"dir"`
+}
+
 func (c *Client) FSList(path string) (json.RawMessage, error) {
 	return c.CallWithTimeout("fs.list", FSListParams{Path: path})
 }

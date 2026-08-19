@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 
 	"github.com/DotNetAge/goharness/agents"
 	goharnesssession "github.com/DotNetAge/goharness/session"
@@ -216,21 +215,8 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("session store not available")
 	}
 
-	// Design rule: only one session per (agent, project_dir) pair is allowed.
-	existingSessions, err := goharnesssession.ListSessions(context.Background(), sessDB)
-	if err == nil {
-		for _, s := range existingSessions {
-			if s.AgentName == p.Agent && sameDirectory(s.ProjectDir, p.ProjectDir) {
-				d.logger.Warn("session.create: duplicate session rejected",
-					"agent", p.Agent,
-					"project_dir", p.ProjectDir,
-					"existing_session_id", s.SessionID,
-				)
-				return nil, fmt.Errorf("duplicate session: agent %q already has a session for directory %q",
-					p.Agent, p.ProjectDir)
-			}
-		}
-	}
+	// 允许同一 (agent, project_dir) 存在多个会话（1:N）：
+	// 前端切换智能体时按「当前目录下最新会话」复用，无则新建。
 
 	// Pass project_dir as a session option so it gets persisted to session meta.
 	opts := []goharnesssession.SessionOption{
@@ -256,16 +242,6 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		"created_at":  info.CreatedAt,
 		"project_dir": info.ProjectDir,
 	}, nil
-}
-
-// sameDirectory compares two directory paths after normalization.
-func sameDirectory(dir1, dir2 string) bool {
-	abs1, err1 := filepath.Abs(dir1)
-	abs2, err2 := filepath.Abs(dir2)
-	if err1 != nil || err2 != nil {
-		return dir1 == dir2
-	}
-	return abs1 == abs2
 }
 
 // getOrLoadSession 尝试从 activeSessions 获取 session，
