@@ -43,10 +43,10 @@ type Daemon struct {
 	sharedMemory *memory.RAGMemory
 
 	// token usage recording
-	usageStore goharnesssession.TokenUsageStore
-	addr       string
-	wsPath     string
-	logger     logging.Logger
+	usageStore    goharnesssession.TokenUsageStore
+	addr          string
+	wsPath        string
+	logger        logging.Logger
 	clientCancels sync.Map
 
 	// sessionQueues 按 sessionID 维护同一会话内串行执行的 FIFO 队列，
@@ -355,7 +355,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 			d.logger.Warn("hot-reload watcher exited with error", "error", err)
 		}
 	}()
-	
+
 	addr := fmt.Sprintf("ws://localhost%s%s", d.addr, d.wsPath)
 	d.logger.Info("MindX daemon starting", "addr", addr)
 	d.logger.Info("gateway starting, waiting for connections...")
