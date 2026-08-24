@@ -41,6 +41,46 @@ func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (a
 	return sessions, nil
 }
 
+// handleSessionLatestByDir 按工作目录过滤所有会话，返回该目录下最近活跃的 0-1 个会话。
+// 用于「打开工作目录」流程：客户端据此跨 Agent 定位该目录最近使用的会话，
+// 并切换到该会话对应的 Agent。
+func (d *Daemon) handleSessionLatestByDir(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.SessionLatestByDirParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.ProjectDir == "" {
+		return nil, fmt.Errorf("project_dir is required")
+	}
+
+	sessDB := d.app.SessDB()
+	if sessDB == nil {
+		return nil, fmt.Errorf("session store not available")
+	}
+
+	sessions, err := goharnesssession.ListSessions(context.Background(), sessDB)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions failed: %w", err)
+	}
+
+	dir := TrimLastSlash(p.ProjectDir)
+	var latest *goharnesssession.SessionInfo
+	for i := range sessions {
+		if TrimLastSlash(sessions[i].ProjectDir) != dir {
+			continue
+		}
+		if latest == nil || sessions[i].LastActivityAt.After(latest.LastActivityAt) {
+			latest = &sessions[i]
+		}
+	}
+
+	// 目录下无会话：返回 null，客户端据此只清空对话流、不自动新建
+	if latest == nil {
+		return nil, nil
+	}
+	return latest, nil
+}
+
 func (d *Daemon) handleSessionGet(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.SessionGetParams
 	if err := unmarshalParams(params, &p); err != nil {

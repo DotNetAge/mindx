@@ -19,6 +19,11 @@ type SessionListParams struct {
 	Agent string `json:"agent,omitempty"`
 }
 
+// SessionLatestByDirParams are the params for session.latest_by_dir.
+type SessionLatestByDirParams struct {
+	ProjectDir string `json:"project_dir"`
+}
+
 // SessionDeleteParams are the params for session.delete.
 type SessionDeleteParams struct {
 	SessionID string `json:"session_id"`
@@ -82,6 +87,10 @@ func (c *Client) SessionCreate(agent, projectDir string) (json.RawMessage, error
 
 func (c *Client) SessionList(agent string) (json.RawMessage, error) {
 	return c.CallWithTimeout("session.list", SessionListParams{Agent: agent})
+}
+
+func (c *Client) SessionLatestByDir(projectDir string) (json.RawMessage, error) {
+	return c.CallWithTimeout("session.latest_by_dir", SessionLatestByDirParams{ProjectDir: projectDir})
 }
 
 func (c *Client) SessionGet(sessionID string) (json.RawMessage, error) {

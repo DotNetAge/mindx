@@ -4,6 +4,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -42,4 +43,9 @@ func unmarshalParams(params json.RawMessage, target any) error {
 		return fmt.Errorf("invalid params: %w", err)
 	}
 	return nil
+}
+
+// TrimLastSlash 去除字符串末尾的路径分隔符，用于工作目录路径的规范化比较。
+func TrimLastSlash(s string) string {
+	return strings.TrimRight(s, "/")
 }
