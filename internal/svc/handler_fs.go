@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"mime"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -348,111 +347,4 @@ func (d *Daemon) handleFSStat(_ context.Context, params json.RawMessage) (any, e
 		Mode:    info.Mode().String(),
 		ModTime: info.ModTime().Format(time.RFC3339),
 	}, nil
-}
-
-// ── HTTP download ──
-
-func (d *Daemon) handleFSDownload(w http.ResponseWriter, r *http.Request) {
-	filePath := r.URL.Query().Get("path")
-	if filePath == "" {
-		http.Error(w, "missing path parameter", http.StatusBadRequest)
-		return
-	}
-	cleanPath := filepath.Clean(filePath)
-	absPath, err := filepath.Abs(cleanPath)
-	if err != nil {
-		http.Error(w, "invalid path", http.StatusBadRequest)
-		return
-	}
-	info, err := os.Stat(absPath)
-	if err != nil {
-		http.Error(w, "file not found", http.StatusNotFound)
-		return
-	}
-	if info.IsDir() {
-		http.Error(w, "is a directory", http.StatusBadRequest)
-		return
-	}
-	if info.Size() > 200*1024*1024 {
-		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
-		return
-	}
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, info.Name()))
-	w.Header().Set("Content-Type", detectContentType(info.Name()))
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
-	http.ServeFile(w, r, absPath)
-}
-
-func detectContentType(name string) string {
-	ext := strings.ToLower(filepath.Ext(name))
-	switch ext {
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".png":
-		return "image/png"
-	case ".gif":
-		return "image/gif"
-	case ".webp":
-		return "image/webp"
-	case ".svg":
-		return "image/svg+xml"
-	case ".bmp":
-		return "image/bmp"
-	case ".ico":
-		return "image/x-icon"
-	case ".tiff", ".tif":
-		return "image/tiff"
-	case ".mp4":
-		return "video/mp4"
-	case ".avi":
-		return "video/x-msvideo"
-	case ".mkv":
-		return "video/x-matroska"
-	case ".mov":
-		return "video/quicktime"
-	case ".webm":
-		return "video/webm"
-	case ".mp3":
-		return "audio/mpeg"
-	case ".wav":
-		return "audio/wav"
-	case ".ogg", ".oga":
-		return "audio/ogg"
-	case ".aac":
-		return "audio/aac"
-	case ".flac":
-		return "audio/flac"
-	case ".pdf":
-		return "application/pdf"
-	case ".zip":
-		return "application/zip"
-	case ".tar":
-		return "application/x-tar"
-	case ".gz":
-		return "application/gzip"
-	case ".rar":
-		return "application/vnd.rar"
-	case ".7z":
-		return "application/x-7z-compressed"
-	case ".doc":
-		return "application/msword"
-	case ".docx":
-		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-	case ".xls":
-		return "application/vnd.ms-excel"
-	case ".xlsx":
-		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-	case ".ppt":
-		return "application/vnd.ms-powerpoint"
-	case ".pptx":
-		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-	case ".json":
-		return "application/json"
-	case ".xml":
-		return "application/xml"
-	case ".yaml", ".yml":
-		return "text/yaml"
-	default:
-		return "application/octet-stream"
-	}
 }

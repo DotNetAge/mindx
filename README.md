@@ -39,7 +39,7 @@ MindX introduces a dual-core architecture. The **Agent Harness** enables statefu
 | Pre-built Skills   | **45+** (design/writing/coding/browser...)          | ❌ None            | ❌ None              | ❌ None                  | ❌ None          |
 | Native Tools       | **24+**                                             | ✅ Yes             | ✅ Yes               | Limited                 | Limited         |
 | Offline Deployment | **Single binary, zero deps**                        | ❌ Python env      | ❌ Python env        | ❌ Python env            | Docker required |
-| Interaction        | **WebUI + TUI + CLI + JSON-RPC**                    | CLI only          | CLI only            | CLI only                | Web only        |
+| Interaction        | **TUI + CLI + JSON-RPC**                            | CLI only          | CLI only            | CLI only                | Web only        |
 | Self-developed MW  | **6 full-stack**                                    | 0 (all assembled) | 0                   | 0                       | 0               |
 | Install Experience | **`docker pull` → run / `npx skills` → add skills** | pip install       | pip install         | pip install             | docker compose  |
 
@@ -182,15 +182,11 @@ ___
 
 ## Full-Stack Interaction
 
-- **WebUI**: Integrated workspace with dialogue terminal, file browser, knowledge graph visualization, and agent calendar
-
 - **TUI**: Lightweight high-performance terminal interface
 
 - **CLI**: Full-capability command-line tool for automation and batch operations
 
 - **JSON-RPC**: Standard interface for third-party integration and secondary development
-
-![WebUI](./assets/images/webui.png)
 
 ![TUI](./assets/images/tui.png)
 
@@ -238,7 +234,6 @@ docker pull dotnetage/mindx:latest
 
 # Start the service
 docker run -d --name mindx \
-  -p 1313:1313 `# WebUI & API port` \
   -p 1314:1314 `# WebSocket real-time port` \
   -v ./workspaces:/home/mindx/workspaces `# Persist workspace data` \
   dotnetage/mindx:latest
@@ -250,8 +245,6 @@ docker logs -f mindx
 docker exec -it mindx mindx skill list
 docker exec -it mindx mindx agent list
 ```
-
-Open **http://127.0.0.1:1313** in your browser to access the WebUI.
 
 > The Docker image is based on debian:bookworm-slim with ONNX Runtime included. Supports multi-architecture (linux/amd64, linux/arm64).
 
@@ -267,9 +260,6 @@ brew install DotNetAge/homebrew-mindx/mindx
 
 # Start the background service
 mindx start
-
-# Open WebUI in browser
-mindx web
 
 # Or launch the TUI directly
 mindx

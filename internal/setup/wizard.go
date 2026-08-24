@@ -190,7 +190,6 @@ type firstRunResult struct {
 	EmbedderModel string
 	PathOK        bool
 	PathErr       error
-	WebUIReady    bool
 }
 
 // ── Constructor & helpers ─────────────────────────────────────────────────
@@ -389,9 +388,6 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 			result.PathOK = true // 非 Windows 不需要 PATH 设置
 		}
 	}
-
-	// WebUI 已内嵌至二进制，始终可用
-	result.WebUIReady = true
 
 	return result
 }
@@ -1070,9 +1066,6 @@ func (m *firstRunModel) renderComplete() string {
 		}
 	}
 
-	// WebUI 已内嵌至二进制，始终可用
-	items = append(items, i18n.T("wizard.complete.item.webui.ready"))
-
 	// Build markdown output
 	var cb strings.Builder
 	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.title")))
@@ -1083,7 +1076,6 @@ func (m *firstRunModel) renderComplete() string {
 	cb.WriteString("---\n\n")
 	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.header")))
 	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.tui.detail")))
-	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.webui.detail")))
 	if runtime.GOOS == "windows" {
 		cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.windows.restart")))
 	}

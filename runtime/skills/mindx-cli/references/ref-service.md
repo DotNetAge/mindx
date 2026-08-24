@@ -23,8 +23,6 @@
 | 升级到最新版 | `mindx upgrade` | 从 GitHub 下载并安装 |
 | 健康诊断 | `mindx doctor` | 检查配置、路径、权限、连通性 |
 | 自动修复问题 | `mindx doctor -f` | 尝试修复检测到的问题 |
-| 打开 WebUI | `mindx web` | 在默认端口 :1313 打开浏览器；需要守护进程提供 UI 服务 |
-| 自定义端口打开 WebUI | `mindx web -p :8080` | 覆盖默认端口 |
 
 ## macOS 应用包
 
@@ -100,7 +98,6 @@
 mindx install
 mindx doctor
 mindx status
-mindx web
 ```
 
 ### 升级后

@@ -16,9 +16,6 @@ ARG BUILD_TIME=unknown
 
 WORKDIR /src
 COPY go.mod go.sum ./
-# third_party/ must be copied before go mod download because go.mod has
-# a replace directive pointing to ./third_party/hnsw
-COPY third_party/ ./third_party/
 RUN go mod download
 
 COPY . .
@@ -102,13 +99,8 @@ RUN sed -i 's|/Users/ray/.mindx/.venv|/home/mindx/.mindx/.venv|g' \
   /home/mindx/.mindx/mindx.json 2>/dev/null || true
 
 # Ports
-# 1313: Web UI (HTTP)
 # 1314: WebSocket Gateway
-EXPOSE 1313 1314
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:1313/ || exit 1
+EXPOSE 1314
 
 ENTRYPOINT ["/usr/bin/tini", "--", "mindx"]
 CMD ["daemon"]

@@ -261,22 +261,7 @@ caller:   svc/daemon_rpc_translate.go:94
 
 ## 三、资源类
 
-### 3.1 WebUI 目录缺失
-
-```
-触发日志: "web directory does not exist, skipping WebUI server"
-caller:   svc/web_server.go:70
-严重度:    ℹ️ Info（WebUI 不可用，但 CLI/gRPC 不受影响）
-```
-
-**修复：**
-```bash
-mindx install --no-daemon  # 重新安装前端资源
-```
-
----
-
-### 3.2 FileWatch 服务异常
+### 3.1 FileWatch 服务异常
 
 ```
 触发日志: "filewatch.start: service exited with error"
@@ -364,6 +349,5 @@ Daemon 在跑但响应慢？
 功能缺失？
 ├── GraphRAG 不工作              → 见 1.3 Knowledge Graph
 ├── 定时任务不执行                → 见 1.2 Scheduler
-├── Token 统计为空               → 见 1.4 KVStore + 2.4
-└── WebUI 打不开                 → 见 3.1 WebUI 目录
+└── Token 统计为空               → 见 1.4 KVStore + 2.4
 ```

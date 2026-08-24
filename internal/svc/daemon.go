@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,9 +18,7 @@ import (
 	"github.com/DotNetAge/goharness/events"
 	"github.com/DotNetAge/goharness/hooks/action"
 	goharnesssession "github.com/DotNetAge/goharness/session"
-	goragindexer "github.com/DotNetAge/gorag/v2/indexer"
 	"github.com/DotNetAge/gort/pkg/gateway"
-	"github.com/DotNetAge/mindx/internal/appicon"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/internal/mcp"
@@ -46,11 +43,10 @@ type Daemon struct {
 	sharedMemory *memory.RAGMemory
 
 	// token usage recording
-	usageStore    goharnesssession.TokenUsageStore
-	webServer     *WebServer
-	addr          string
-	wsPath        string
-	logger        logging.Logger
+	usageStore goharnesssession.TokenUsageStore
+	addr       string
+	wsPath     string
+	logger     logging.Logger
 	clientCancels sync.Map
 
 	// sessionQueues 按 sessionID 维护同一会话内串行执行的 FIFO 队列，
@@ -91,7 +87,7 @@ type Daemon struct {
 	hotReload *HotReloadWatcher
 }
 
-func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS, webFS fs.FS) *Daemon {
+func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	// Inject custom skills prompt: list only names, with a tip to use
 	// "mindx skill list -f" for detailed descriptions.
 	app.SetSkillsPromptOverride(NewSkillsPrompt())
@@ -168,7 +164,6 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS, webFS fs.FS)
 		sharedMemory: sharedMemory,
 		usageStore:   app.TokenUsageStore(),
 		runtimeFS:    runtimeFS,
-		webServer:    NewWebServer(webFS, logger),
 		logger:       logger,
 		restartCh:    make(chan struct{}, 1),
 	}
@@ -184,15 +179,6 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS, webFS fs.FS)
 		d.graphStore = graphStore
 	} else {
 		logger.Warn("graph database unavailable, graph RPC disabled")
-	}
-
-	// Extract embedded app icon for favicon
-	if iconFS := app.IconFS(); iconFS != nil {
-		iconDest := filepath.Join(app.Settings().DataDir(), "mindx.png")
-		if err := appicon.Write(iconFS, iconDest); err == nil {
-			d.webServer.SetFavicon(iconDest)
-			logger.Info("app icon extracted", "path", iconDest)
-		}
 	}
 
 	if schedulerDB != nil {
@@ -369,16 +355,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 			d.logger.Warn("hot-reload watcher exited with error", "error", err)
 		}
 	}()
-
-	// Register system health / diagnostics endpoint.
-	d.webServer.HandleFunc("/api/health", d.handleHealth)
-	// Register file download handler for binary file access.
-	d.webServer.HandleFunc("/api/fs/download", d.handleFSDownload)
-
-	if err := d.webServer.Start(ctx); err != nil {
-		d.logger.Warn("WebUI server failed to start", "error", err)
-	}
-
+	
 	addr := fmt.Sprintf("ws://localhost%s%s", d.addr, d.wsPath)
 	d.logger.Info("MindX daemon starting", "addr", addr)
 	d.logger.Info("gateway starting, waiting for connections...")
@@ -511,96 +488,6 @@ func (d *Daemon) stopBackgroundServices() {
 // ---------------------------------------------------------------------------
 // Health / Diagnostics — GET /api/health
 // ---------------------------------------------------------------------------
-
-// healthResponse is the JSON payload returned by /api/health.
-type healthResponse struct {
-	Status   string         `json:"status"`
-	Version  string         `json:"version"`
-	Commit   string         `json:"commit"`
-	Build    string         `json:"build"`
-	Dirty    string         `json:"dirty"`
-	Uptime   string         `json:"uptime"`
-	Services map[string]any `json:"services"`
-}
-
-func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
-	uptime := time.Since(d.startTime).Truncate(time.Second).String()
-	if d.startTime.IsZero() {
-		uptime = "starting…"
-	}
-
-	services := map[string]any{}
-	degraded := false
-
-	// WebSocket gateway
-	if d.gw != nil {
-		services["websocket"] = map[string]any{
-			"status": "running",
-			"addr":   d.addr,
-			"path":   d.wsPath,
-		}
-	} else {
-		services["websocket"] = map[string]any{"status": "not initialized"}
-		degraded = true
-	}
-
-	// Memory / RAG
-	if d.sharedMemory != nil {
-		idx := d.sharedMemory.Semantic()
-		var totalChunks int
-		if idx != nil {
-			if admin, ok := idx.(goragindexer.IndexerAdmin); ok {
-				if cnt, err := admin.Count(context.Background()); err == nil {
-					totalChunks = cnt
-				}
-			}
-		}
-		services["memory"] = map[string]any{
-			"status":       "running",
-			"total_chunks": totalChunks,
-			"agent":        "_shared",
-		}
-	} else {
-		services["memory"] = map[string]any{"status": "not configured"}
-	}
-
-	// FileWatch
-	services["filewatch"] = map[string]any{"status": "disabled"}
-
-	// Scheduler
-	if d.scheduler != nil {
-		services["scheduler"] = map[string]any{"status": "running"}
-	} else {
-		services["scheduler"] = map[string]any{"status": "disabled"}
-	}
-
-	// Knowledge graph
-	if d.graphDB != nil {
-		services["knowledge_graph"] = map[string]any{"status": "running"}
-	} else {
-		services["knowledge_graph"] = map[string]any{"status": "disabled"}
-	}
-
-	overall := "ok"
-	if degraded {
-		overall = "degraded"
-	}
-
-	resp := healthResponse{
-		Status:   overall,
-		Version:  core.Version,
-		Commit:   core.Commit,
-		Build:    core.BuildTime,
-		Dirty:    core.Dirty,
-		Uptime:   uptime,
-		Services: services,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
-}
 
 func (d *Daemon) initGateway() {
 	d.logger.Info("initializing WebSocket gateway",

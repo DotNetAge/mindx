@@ -7,7 +7,6 @@
     - Daemon registered as Windows Service via NSSM (auto-start on boot)
     - Runtime files extracted to %LOCALAPPDATA%\Mindx\
     - Python venv auto-created if Python detected
-    - Desktop/Start Menu shortcut opens browser to http://localhost:1313
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
      xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
@@ -48,13 +47,10 @@
     <Property Id="APIKEY_INPUT" Hidden="yes" Secure="yes" />
     <Property Id="ENV_VAR_NAME" Value="OPENAI_API_KEY" Secure="yes" />
     <Property Id="DAEMON_AUTOSTART" Value="1" Secure="yes" />
-    <Property Id="CREATE_SHORTCUT" Value="1" Secure="yes" />
     <Property Id="SETUP_VENV" Value="1" Secure="yes" />
     <Property Id="MINDX_WORKSPACE" Value="Mindx\" />
     <SetProperty Id="MINDX_WORKSPACE" Value="[LocalAppDataFolder]Mindx\" Before="AppSearch" Sequence="execute" />
     <Property Id="DAEMON_PORT" Value="1314" Secure="yes" />
-    <Property Id="WEBUI_URL" Value="http://localhost:1313" Secure="yes" />
-    <Property Id="LAUNCH_BROWSER" Value="0" Secure="yes" />
 
     <!-- Detect Python on system via registry -->
     <Property Id="PYTHON_DETECTED">
@@ -72,9 +68,6 @@
       <Publish Dialog="MindXConfigDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2">SELECTED_PROVIDER &lt;&gt; "" AND APIKEY_INPUT &lt;&gt; ""</Publish>
       <Publish Dialog="MindXConfigDlg" Control="Next" Event="SpawnDialog" Value="ErrorDlg"><![CDATA[ SELECTED_PROVIDER = "" OR APIKEY_INPUT = "" ]]></Publish>
       <Publish Dialog="MindXConfigDlg" Control="Cancel" Event="EndDialog" Value="Exit">1</Publish>
-
-      <!-- Launch browser after install completes -->
-      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchBrowser" Order="1">LAUNCH_BROWSER = "1" AND NOT Installed</Publish>
 
       <ProgressText Action="SetAPIKeyEnvVar">Setting up API key environment variable...</ProgressText>
       <ProgressText Action="RegisterDaemonService">Registering MindX Windows Service...</ProgressText>
@@ -145,7 +138,7 @@
       <Directory Id="DesktopFolder" Name="Desktop" />
     </Directory>
 
-    <Feature Id="Complete" Title="$(var.ProductName)" Level="1" Description="Full installation including daemon service and WebUI access">
+    <Feature Id="Complete" Title="$(var.ProductName)" Level="1" Description="Full installation including the daemon service and runtime files">
       <ComponentRef Id="MainExecutable" />
       <ComponentRef Id="NssmBinary" />
       <ComponentRef Id="RuntimeSettings" />
@@ -165,16 +158,13 @@
     <CustomAction Id="ConfigureDaemonDescription" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; set MindXDaemon Description &quot;MindX AI-native background service&quot;' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
     <CustomAction Id="StartDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; start MindXDaemon' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
     <CustomAction Id="CreatePythonVenv" ExeCommand='cmd /c python -m venv &quot;[MINDX_WORKSPACE].venv&quot;' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
-    <CustomAction Id="LaunchBrowser" ExeCommand='cmd /c start "" "[WEBUI_URL]"' Execute="immediate" Return="ignore" Directory="INSTALLDIR" />
 
     <!-- Custom Actions: Uninstall -->
     <CustomAction Id="RemoveDaemonService" ExeCommand='&quot;[INSTALLDIR]nssm.exe&quot; stop MindXDaemon &amp;&amp; &quot;[INSTALLDIR]nssm.exe&quot; remove MindXDaemon confirm' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
     <CustomAction Id="RemoveAPIKeyEnvVar" ExeCommand='cmd /c setx [ENV_VAR_NAME] ""' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
-    <CustomAction Id="RemoveShortcuts" ExeCommand='cmd /c del /Q &quot;[DesktopFolder]Mindx WebUI.url&quot; 2&gt;nul &amp;&amp; del /Q &quot;[AppMenuDir]\Mindx WebUI.url&quot; 2&gt;nul' Execute="deferred" Return="ignore" Impersonate="no" Directory="INSTALLDIR" />
 
     <InstallExecuteSequence>
       <Custom Action="RemoveDaemonService" Before="RemoveFiles">Installed AND NOT UPGRADINGPRODUCTCODE AND DAEMON_AUTOSTART = "1"</Custom>
-      <Custom Action="RemoveShortcuts" Before="RemoveFiles">Installed AND NOT UPGRADINGPRODUCTCODE</Custom>
       <Custom Action="RemoveAPIKeyEnvVar" Before="RemoveFiles">Installed AND NOT UPGRADINGPRODUCTCODE</Custom>
       <Custom Action="SetAPIKeyEnvVar" After="InstallFiles">NOT Installed</Custom>
       <Custom Action="RegisterDaemonService" After="SetAPIKeyEnvVar">NOT Installed AND DAEMON_AUTOSTART = "1"</Custom>
@@ -222,7 +212,6 @@
       <Control Id="DaemonAutoStartCheck" Type="CheckBox" X="30" Y="188" Width="410" Height="16" Property="DAEMON_AUTOSTART" CheckBoxValue="1"><Text>Register as Windows Service (starts automatically on boot)</Text></Control>
       <Control Id="DaemonPortLabel" Type="Text" X="46" Y="208" Width="120" Height="12" NoPrefix="yes"><Text>Daemon port:</Text></Control>
       <Control Id="DaemonPortEdit" Type="Edit" X="170" Y="206" Width="60" Height="16" Property="DAEMON_PORT"><Text>1314</Text></Control>
-      <Control Id="ShortcutCheck" Type="CheckBox" X="30" Y="232" Width="410" Height="16" Property="CREATE_SHORTCUT" CheckBoxValue="1"><Text>Create desktop &amp; Start Menu shortcuts (opens [WEBUI_URL])</Text></Control>
       <Control Id="VenvCheck" Type="CheckBox" X="30" Y="254" Width="410" Height="16" Property="SETUP_VENV" CheckBoxValue="1"><Text>Create Python virtual environment (for skill scripts)</Text></Control>
       <Control Id="PythonStatusNone" Type="Text" X="46" Y="274" Width="300" Height="12" Disabled="yes" NoPrefix="yes">
         <Text>Python not found — venv setup will be skipped</Text>

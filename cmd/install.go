@@ -30,7 +30,8 @@ Examples:
   mindx install                  # Smart install (auto-detects source)
   mindx install --force-copy     # Force copy even from managed location
   mindx install --no-daemon      # Skip daemon registration
-  mindx install --dir /opt/mindx # Custom install directory`,
+  mindx install --dir /opt/mindx # Custom install directory
+  mindx install -s               # Silent: skip the interactive setup wizard (no model config), for use by other Clients`,
 	RunE: runInstall,
 }
 
@@ -40,6 +41,7 @@ var (
 	installNoPath     bool
 	installNoShortcut bool
 	installForceCopy  bool
+	installSilent     bool
 )
 
 func init() {
@@ -49,16 +51,22 @@ func init() {
 	installCmd.Flags().BoolVar(&installNoPath, "no-path", false, "Skip PATH configuration")
 	installCmd.Flags().BoolVar(&installNoShortcut, "no-shortcut", false, "Skip desktop shortcut creation")
 	installCmd.Flags().BoolVar(&installForceCopy, "force-copy", false, "Force copy binary even from managed location")
+	installCmd.Flags().BoolVarP(&installSilent, "silent", "s", false, "Skip the interactive setup wizard (provider/model); install without configuring a model")
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {
 	fmt.Println(setupstyle.GradientTitle(""))
 	fmt.Println()
 
-	// ── 检查是否已初始化，未初始化则弹出安装向导 ──
+	// ── 检查是否需要弹出安装向导：未初始化，或已初始化但未配置模型 ──
+	// 静默模式（-s/--silent）跳过交互向导，不配置模型，供其它 Client 子进程调用
 	workspaceDir := core.DefaultUserPrefsDir()
 	cfg, cfgErr := core.LoadMindxConfig(workspaceDir)
-	if cfgErr == nil && !cfg.Initialized {
+	needsWizard := cfgErr == nil && !cfg.Initialized && !installSilent
+	if !installSilent && cfgErr == nil && cfg.Initialized && cfg.DefaultModel == "" {
+		needsWizard = true // 已初始化但无模型，仍需补配
+	}
+	if needsWizard {
 		fmt.Println("⚙️  Configuration not complete — launching setup wizard...")
 		fmt.Println()
 
@@ -88,6 +96,13 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	result, err := setup.Install(opts)
 	if err != nil {
 		return fmt.Errorf("installation failed: %w", err)
+	}
+
+	// 静默模式安装成功后标记为已初始化，否则 daemon 会因未初始化而拒绝启动
+	if installSilent && cfgErr == nil && !cfg.Initialized {
+		if err := cfg.MarkInitialized(); err != nil {
+			return fmt.Errorf("mark initialized after silent install: %w", err)
+		}
 	}
 
 	fmt.Println()

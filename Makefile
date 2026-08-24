@@ -654,7 +654,6 @@ docker:
 	echo "" && \
 	echo "$(GREEN)🎉 MindX daemon is running!$(NC)" && \
 	echo "   Image:    $(CYAN)mindx:$$_TAG$(NC)" && \
-	echo "   Web UI:   $(CYAN)http://localhost:1313$(NC)" && \
 	echo "   WebSocket: $(CYAN)ws://localhost:1314/ws$(NC)" && \
 	echo "$(YELLOW)   Logs: 'docker compose logs -f'$(NC)" && \
 	echo "$(YELLOW)   Stop: 'docker compose down'$(NC)"
@@ -697,7 +696,6 @@ docker-run-daemon:
 	@echo "$(YELLOW)🐳 Running Docker container (Daemon mode)...$(NC)"
 	docker run -d \
 		--name $(BINARY_NAME)-daemon \
-		-p 1313:1313 \
 		-p 1314:1314 \
 		-v ~/.mindx:/home/mindx/.mindx \
 		--restart unless-stopped \
@@ -897,7 +895,7 @@ help:
 	@echo "  $(GREEN)docker-build$(NC)     Build Docker image (custom VERSION=)"
 	@echo "  $(GREEN)docker-release$(NC)   Local build + push to Docker Hub (version = git tag)"
 	@echo "  $(GREEN)docker-run$(NC)       Run container (TUI mode)"
-	@echo "  $(GREEN)docker-run-daemon$(NC) Run container (daemon mode, 1313+1314)"
+	@echo "  $(GREEN)docker-run-daemon$(NC) Run container (daemon mode, 1314)"
 	@echo "  $(GREEN)docker-push$(NC)      Push image to registry"
 	@echo "  $(GREEN)docker-clean$(NC)     Clean up Docker resources"
 	@echo ""

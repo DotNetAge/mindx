@@ -30,15 +30,8 @@ services:
     image: mindx:${MINDX_VERSION:-dev}
     container_name: ${COMPOSE_PROJECT_NAME:-mindx}-daemon
     ports:
-      - "${MINDX_WEB_PORT:-1313}:1313" # Web UI (HTTP)
       - "${MINDX_WS_PORT:-1314}:1314" # WebSocket Gateway
     volumes:
       # Workspace shared with host
       - ./workspaces:/home/mindx/workspaces
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:1313/"]
-      interval: 30s
-      timeout: 5s
-      start_period: 10s
-      retries: 3

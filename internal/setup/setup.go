@@ -91,15 +91,6 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 		return fmt.Errorf(i18n.T("config.error.serialize.failed"), err)
 	}
 
-	// WebUI 提示
-	if result.WebUIReady {
-		fmt.Print("\n" + i18n.T("setup.webui.ready") + "\n\n")
-		fmt.Println("   " + i18n.T("setup.webui.access"))
-		fmt.Println("   " + i18n.T("setup.webui.cmd.hint") + "\n")
-	} else {
-		fmt.Print("\n" + i18n.T("setup.webui.hint") + "\n\n")
-	}
-
 	return nil
 }
 

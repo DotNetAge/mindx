@@ -80,7 +80,7 @@ func verifyDaemonStarted() error {
 		fmt.Println()
 		fmt.Println("  To fix:")
 		fmt.Println("    1. Stop the process using the port:")
-		fmt.Println("       lsof -i :1313 -i :1314")
+		fmt.Println("       lsof -i :1314")
 		fmt.Println("    2. Kill it: kill <PID>")
 		fmt.Println("    3. Then retry: mindx start")
 	} else {
@@ -95,13 +95,13 @@ func verifyDaemonStarted() error {
 	return fmt.Errorf("daemon started but is not running (status=%s)", status)
 }
 
-// detectPortConflict checks if ports 1313/1314 are already in use
+// detectPortConflict checks if port 1314 is already in use
 // and returns a human-readable description of the conflict.
 // Uses platform-appropriate tools: lsof (macOS/Linux), netstat (Windows).
 func detectPortConflict() string {
 	var conflicts []string
 
-	for _, port := range []string{":1313", ":1314"} {
+	for _, port := range []string{":1314"} {
 		out, err := runPortCheck(port)
 		if err != nil || len(out) == 0 {
 			continue
@@ -213,7 +213,7 @@ func verifyDaemonStopped() error {
 		fmt.Println("  Port still in use:")
 		fmt.Printf("    %s\n", portConflict)
 		fmt.Println("  The process holding the port may not be managed by launchd.")
-		fmt.Println("  Try: lsof -i :1313 -i :1314  then  kill <PID>")
+		fmt.Println("  Try: lsof -i :1314  then  kill <PID>")
 	} else {
 		fmt.Println("  Check: mindx status")
 	}

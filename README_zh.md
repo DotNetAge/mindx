@@ -39,7 +39,7 @@ MindX 采用双内核架构，通过 **Agent Harness**实现有状态、可反�
 | 预置 Skill     | **45+**（设计/写作/分析/编程/浏览器...）           | ❌ 无          | ❌ 无                | ❌ 无          | ❌ 无           |
 | 原生内置工具   | **24+ 项**                                         | ✅ 有          | ✅ 有                | 有限          | 有限           |
 | 离线私有部署   | **单二进制，零外部依赖**                           | ❌ Python 环境 | ❌ Python 环境       | ❌ Python 环境 | Docker 必须    |
-| 交互端点       | **WebUI + TUI + CLI + JSON-RPC**                   | CLI 仅        | CLI 仅              | CLI 仅        | Web 仅         |
+| 交互端点       | **TUI + CLI + JSON-RPC**                          | CLI 仅        | CLI 仅              | CLI 仅        | Web 仅         |
 | 自研中间件数   | **6 个全栈自研**                                   | 0（全组装）   | 0                   | 0             | 0              |
 | 安装体验       | **`docker pull` → 运行 / `npx skills` → 装 Skill** | pip install   | pip install         | pip install   | docker compose |
 
@@ -183,15 +183,11 @@ ___
 
 提供四端一体完整交互能力，覆盖日常使用、开发运维、自动化脚本、第三方集成全场景：
 
-- **WebUI**：集成对话工作台、在线终端、文件管理、知识图谱可视化、智能体日历管理一体化界面
-
 - **TUI**：轻量化高性能终端交互，适配极简操作与服务器环境
 
 - **CLI**：全覆盖系统能力的命令行工具，支持批量运维与自动化脚本串联
 
 - **JSON-RPC**：标准化开放接口，支持第三方系统对接与深度二次开发
-
-![WebUI](./assets/images/webui.png)
 
 ![TUI](./assets/images/tui.png)
 
@@ -239,7 +235,6 @@ docker pull dotnetage/mindx:latest
 
 # 启动服务
 docker run -d --name mindx \
-  -p 1313:1313 `# WebUI 与 API 端口` \
   -p 1314:1314 `# WebSocket 实时通信端口` \
   -v ./workspaces:/home/mindx/workspaces `# 持久化工作区` \
   dotnetage/mindx:latest
@@ -251,8 +246,6 @@ docker logs -f mindx
 docker exec -it mindx mindx skill list
 docker exec -it mindx mindx agent list
 ```
-
-启动后访问 **http://127.0.0.1:1313** 打开 WebUI 界面。
 
 > Docker 镜像基于 debian:bookworm-slim，内置 ONNX Runtime，多架构支持（linux/amd64, linux/arm64）。
 
