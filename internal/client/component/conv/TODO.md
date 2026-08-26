@@ -1,0 +1,7 @@
+- [x] 有一个比较严重的问题是，对话界面在第二次或者第三次执行会话时，会突然间被冲入的日志信息将整界面冲得乱78糟。
+  - 已修复：`StreamList.Update` 的"安全网"在事件找不到对应会话流时回发 `AgentErrorMsg`，而该消息携带同一 SessionID 再次进入路由且永远匹配不到流，形成无限错误消息循环。daemon 会广播所有会话的事件（定时任务、其他客户端流量），未命中属正常情况，已改为静默丢弃。回归测试：`stream_route_test.go`。
+- [x] 对话流显示的宽度应该没有减去右则的Sidebar的宽度，导致输出的内容会超出界面的宽度，而被 Sidebar 所遮挡。
+  - 已修复：`dispatchToAll` 曾把全屏宽度发给 streamList，而 viewport 实际按 leftWidth（3/4 屏）显示。现改为仅由 `resizeViewport` 用校正后的 leftWidth 下发，markdown 渲染宽度与 viewport 一致。
+- [x] 所有工具输出函数如果没有额外处理的还是要有兜底处理，可以保持其原始的JSON字符串输出。
+  - 已修复：九个 ResultFormatter 解析失败时一律返回空串导致结果被静默吞掉。现于 `viewStepResult` 单一收口点兜底：formatter 未注册或输出为空时渲染原始结果文本（含原始 JSON），20 行封顶防冲屏。回归测试：`action_fallback_test.go`。
+- [x] 当模型开始规划TaskList后现在TUI并没有支持如何显示Tasks的列表，我们是不是可以利用SidePanel来显示Task并同步更新每个Tasks的完成情况这不就完全闭环起来了吗？

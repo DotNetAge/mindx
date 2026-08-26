@@ -20,6 +20,7 @@ type ThinkingDoneMsg struct {
 type ToolExecStartMsg struct {
 	SessionID    string
 	ToolName     string
+	ToolCallID   string // 精确关联 tool_use_delta 占位与 tool_exec_end 结果
 	Params       map[string]any
 	EstimatedTok int
 }
@@ -36,6 +37,12 @@ type ToolExecEndMsg struct {
 	DiffAdds   int    // lines added
 	DiffDels   int    // lines removed
 	DiffFile   string // file path changed
+
+	// 工具所在轮次 LLM 调用的实际 token 消耗（随 tool_exec_end 下发）。
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+	CachedTokens     int
 }
 
 type ExecutionSummaryMsg struct {
@@ -124,6 +131,12 @@ type ThinkCollapseMsg struct {
 	SessionID string
 }
 
+// ToggleToolsFoldMsg 切换当前会话流的工具调用折叠摘要（ctrl+o 触发，
+// SessionID 由 client 层补齐后转发给 conv 组件）。
+type ToggleToolsFoldMsg struct {
+	SessionID string
+}
+
 type ClearScreenMsg struct{}
 
 type ExitMsg struct{}
@@ -165,8 +178,10 @@ type MouseScrollMsg struct {
 
 // IterationMsg is sent at the end of each T-A-O cycle.
 type IterationMsg struct {
-	SessionID string
-	Iteration int
+	SessionID         string
+	Iteration         int
+	TerminationReason string
+	Duration          time.Duration
 }
 
 // ExecutionCancelMsg is sent when the user presses ESC during T-A-O execution.
@@ -200,4 +215,135 @@ const (
 // DaemonStatusMsg reports WebSocket connectivity to the daemon.
 type DaemonStatusMsg struct {
 	Status DaemonConnStatus
+}
+
+// ── svc 服务端事件对齐（daemon → client 推送，见 rpc.go 事件注册）──────────
+
+// CompactionMsg signals the session context window was compacted (compaction).
+type CompactionMsg struct {
+	SessionID      string
+	MessagesSlid   int
+	RemainingAfter int
+	WindowSize     int
+}
+
+// SubtaskSpawnedMsg signals a sub-agent task was spawned (subtask_spawned).
+// SessionID 为父会话 ID；SubSessionID 为发起执行的子会话 ID。
+type SubtaskSpawnedMsg struct {
+	SessionID    string
+	SubSessionID string
+	AgentName    string
+	Description  string
+	TimeoutSec   int
+}
+
+// SubtaskCompletedMsg signals a sub-agent task has finished (subtask_completed).
+type SubtaskCompletedMsg struct {
+	SessionID    string
+	SubSessionID string
+	AgentName    string
+	Success      bool
+	Answer       string
+	Error        string
+	Description  string
+}
+
+// TaskSummaryMsg carries the natural-language task summary markdown (task_summary)。
+// TokenUsage 取自 envelope meta（prompt/completion/cached/reasoning/total）。
+type TaskSummaryMsg struct {
+	SessionID  string
+	Content    string
+	TokenUsage session.TokenUsage
+}
+
+// TokenUsageRecordedMsg reports one recorded LLM token usage record
+// (token_usage_recorded)，字段与 session.TokenUsageRecord 一致。
+type TokenUsageRecordedMsg struct {
+	Record session.TokenUsageRecord
+}
+
+// UserMessageSavedMsg 回传后端持久化用户消息的 Timestamp（user_message_saved），
+// 用于刷新前即可用「回收本轮」（session.delete_round）。
+type UserMessageSavedMsg struct {
+	SessionID string
+	Timestamp int64
+}
+
+// MessageQueuedMsg signals the user message entered the per-session serial queue
+// and waits for the previous execution to finish (message_queued).
+type MessageQueuedMsg struct {
+	SessionID string
+	Timestamp int64
+}
+
+// MessageProcessingMsg signals a queued user message started executing
+// (message_processing)。
+type MessageProcessingMsg struct {
+	SessionID string
+	Timestamp int64
+}
+
+// PermissionDeniedMsg signals a tool execution was denied (permission_denied)。
+// Reason 为拒绝原因文本。
+type PermissionDeniedMsg struct {
+	SessionID string
+	Reason    string
+}
+
+// ScheduleJobMsg 广播调度任务生命周期事件
+// （schedule.job_started / job_completed / job_failed / job_missed）。
+type ScheduleJobMsg struct {
+	EntryID    string
+	RunID      string
+	Agent      string
+	SessionID  string
+	Status     string // "started" | "completed" | "failed" | "missed"
+	Content    string
+	ProjectDir string
+	Error      string
+}
+
+// DaemonUpdateMsg 自动升级广播（update_started / update_installed）。
+type DaemonUpdateMsg struct {
+	Phase   string // "started" 或 "installed"
+	Version string
+}
+
+// ContextCompactionMsg 上下文压缩广播
+// （compact_start / compact_done / micro_compact_start / micro_compact_done）。
+type ContextCompactionMsg struct {
+	SessionID    string
+	Micro        bool
+	Phase        string // "start" 或 "done"
+	WindowTokens int
+	MessagesSlid int
+	Compressed   int // micro_compact_done：压缩消息数
+	Deduped      int // micro_compact_done：去重消息数
+	Ratio        float64
+}
+
+// ContextUsageMsg 每轮 LLM 请求后的上下文窗口占用广播（context_usage）。
+type ContextUsageMsg struct {
+	SessionID          string
+	WindowTokens       float64
+	MaxWindowSize      float64
+	UsageRatio         float64
+	MessageCount       int
+	Cursor             int
+	ActiveMessageCount int
+	TotalActualTokens  float64
+	TotalCost          float64
+}
+
+// TerminalOutputMsg 推送终端会话的输出片段（terminal.output）。
+// SessionID 为 terminal.start 返回的终端会话 ID。
+type TerminalOutputMsg struct {
+	SessionID string
+	Data      string
+}
+
+// TerminalExitMsg 推送终端进程退出（terminal.exit），ExitCode 为退出码。
+type TerminalExitMsg struct {
+	SessionID string
+	ExitCode  int
 }

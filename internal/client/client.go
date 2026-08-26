@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -20,6 +19,7 @@ import (
 	goharnesslogging "github.com/DotNetAge/goharness/logging"
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/client/component/changes"
+	"github.com/DotNetAge/mindx/internal/client/component/choices"
 	"github.com/DotNetAge/mindx/internal/client/component/conv"
 	"github.com/DotNetAge/mindx/internal/client/component/dialog"
 	"github.com/DotNetAge/mindx/internal/client/component/input"
@@ -36,26 +36,32 @@ import (
 
 const (
 	overlayNone = iota
-	overlaySelect
-	overlayOptions
 	overlayConnectProvider
 	overlayConnectAPIKey
 	overlayConnectModel
+	// overlayModelSelect 是 /model 无参数回车触发的模型选择浮层，
+	// 与 connect 流程的 overlayConnectModel 互不干扰（后者绑定 connectModels）。
+	overlayModelSelect
+	// overlayAgentSelect 是 /agent 无参数回车触发的 Agent 选择浮层。
+	overlayAgentSelect
 )
 
 type rootModel struct {
 	program              *tea.Program
-	conversationList     conv.ConversationList
+	streamList           conv.StreamList
 	welcome              *welcome.WelcomePanel
 	statusBar            *statusbar.StatusBar
 	sidebar              *sidebar.Sidebar
 	input                *input.InputArea
 	notifBar             *notify.NotificationBar
-	selectDlg            *dialog.SelectDialog
-	optionsDlg           *dialog.OptionsDialog
+	askChoices           *choices.ChoicesPanel // AskUser 内联选项面板（替代浮层对话框）
+	askChoicesActive     bool                  // 区分 ChoiceSelectedMsg 来自 AskUser 面板还是授权栏
 	providerDlg          *dialog.ListDialog
 	apiKeyDlg            *dialog.InputDialog
-	modelDlg             *dialog.ListDialog
+	modelDlg             *dialog.ListDialog // connect 流程的模型选择
+	modelSelectDlg       *dialog.ListDialog // /model 命令的模型选择浮层
+	agentSelectDlg       *dialog.ListDialog // /agent 命令的 Agent 选择浮层
+	agentSelectNames     []string           // 浮层列表项与 Agents().List() 的名称映射
 	connectProvider      string
 	connectProviderNames []string
 	connectAPIKey        string
@@ -97,6 +103,9 @@ type rootModel struct {
 
 	// currentSessionID tracks the active session ID used in RPC messages.
 	currentSessionID string
+
+	// taskTracker 从 TaskCreate/TaskUpdate 工具结果中提取任务进度并同步到侧栏。
+	taskTracker *taskTracker
 }
 
 func (m *rootModel) getLogger() goharnesslogging.Logger {
@@ -110,20 +119,22 @@ var pendingPostExitCmd string
 
 func NewProgram(cfg *appcore.MindxConfig) error {
 	m := &rootModel{
-		conversationList: conv.NewConversationList(),
-		welcome:          welcome.New(),
-		statusBar:        statusbar.New(),
-		sidebar:          sidebar.New(),
-		input:            input.New(),
-		notifBar:         notify.New(),
-		selectDlg:        dialog.NewSelectDialog(""),
-		optionsDlg:       dialog.NewOptionsDialog(""),
-		providerDlg:      dialog.NewListDialog(i18n.T("client.ui.dialog.provider.select")),
-		apiKeyDlg:        dialog.NewInputDialog("API key", "API key"),
-		modelDlg:         dialog.NewListDialog(i18n.T("client.ui.dialog.model.select")),
-		viewport:         viewport.New(),
-		daemonAddr:       ":1314",
+		streamList:     conv.NewStreamList(),
+		welcome:        welcome.New(),
+		statusBar:      statusbar.New(),
+		sidebar:        sidebar.New(),
+		input:          input.New(),
+		notifBar:       notify.New(),
+		askChoices:     choices.New(),
+		providerDlg:    dialog.NewListDialog(i18n.T("client.ui.dialog.provider.select")),
+		apiKeyDlg:      dialog.NewInputDialog("API key", "API key"),
+		modelDlg:       dialog.NewListDialog(i18n.T("client.ui.dialog.model.select")),
+		modelSelectDlg: dialog.NewListDialog(i18n.T("client.ui.dialog.model.select")),
+		agentSelectDlg: dialog.NewListDialog(i18n.T("client.ui.dialog.agent.select")),
+		viewport:       viewport.New(),
+		daemonAddr:     ":1314",
 	}
+	m.taskTracker = newTaskTracker()
 
 	var err error
 	m.app, err = appcore.DefaultApp(cfg)
@@ -138,6 +149,9 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 				m.postExitCmd = "doctor"
 			},
 			OnConnect: func() { m.startConnectFlow() },
+			OnAgentSwitch: func(name string) {
+				m.program.Send(clientmsg.AgentSwitchMsg{AgentName: name})
+			},
 		})
 		m.loadCommands()
 
@@ -268,91 +282,6 @@ func loadRecentSessions(app *appcore.App) ([]input.SessionItem, error) {
 	return items, nil
 }
 
-func messagesToConversations(sessionID, agentName string, msgs []goharnesssession.Message) []conv.Conversation {
-	var convs []conv.Conversation
-	var current *conv.Conversation
-
-	// 按 tool_call_id 索引待匹配的工具调用（与 Web 前端逻辑对齐）
-	type pendingToolCall struct {
-		name string
-		args map[string]any
-	}
-	pendingToolCalls := map[string]pendingToolCall{}
-
-	for _, msg := range msgs {
-		switch msg.Role {
-		case "user":
-			c := conv.NewConversation(sessionID, agentName, msg.Content)
-			c.Status = conv.StatusDone
-			convs = append(convs, c)
-			current = &convs[len(convs)-1]
-
-		case "assistant":
-			if current == nil {
-				continue
-			}
-			// 1) 还原思想流（reasoning_content 是 assistant 消息内嵌字段）
-			if msg.ReasoningContent != "" {
-				current.EnsureCurrentRound()
-				if rnd := current.CurrentRound(); rnd != nil {
-					rnd.ThoughtContent = msg.ReasoningContent
-				}
-			}
-			// 2) 收集所有 tool_calls 到 Map（goharness 扁平格式 {id, name, arguments}）
-			for _, tc := range msg.ToolCalls {
-				var argsMap map[string]any
-				if tc.Arguments != "" {
-					_ = json.Unmarshal([]byte(tc.Arguments), &argsMap)
-				}
-				pendingToolCalls[tc.ID] = pendingToolCall{
-					name: tc.Name,
-					args: argsMap,
-				}
-			}
-			// 3) 正文内容 → Output
-			if msg.Content != "" {
-				current.Output.Entries = append(current.Output.Entries, conv.OutputEntry{Role: "assistant", Content: msg.Content})
-			}
-
-		case "tool":
-			if current == nil {
-				continue
-			}
-			// 通过 tool_call_id 精确匹配工具调用结果
-			match, ok := pendingToolCalls[msg.ToolCallID]
-			if !ok {
-				match = pendingToolCall{name: "工具"}
-			}
-
-			current.EnsureCurrentRound()
-			if rnd := current.CurrentRound(); rnd != nil {
-				success := true
-				resultText := msg.Content
-				if strings.HasPrefix(resultText, "[") && strings.Contains(resultText, "] error:") {
-					success = false
-				}
-				rnd.Action.Steps = append(rnd.Action.Steps, conv.ActionStep{
-					ToolName:   match.name,
-					Status:     map[bool]conv.ActionStepStatus{true: conv.ActionStepDone, false: conv.ActionStepFailed}[success],
-					Params:     match.args,
-					ResultText: resultText,
-					Collapsed:  false,
-				})
-			}
-			delete(pendingToolCalls, msg.ToolCallID)
-		}
-	}
-
-	// 标记所有还原的 Action 为已完成
-	for i := range convs {
-		convs[i].Status = conv.StatusDone
-		for j := range convs[i].Rounds {
-			convs[i].Rounds[j].Action.Completed = true
-		}
-	}
-	return convs
-}
-
 func (m *rootModel) loadSessionHistory() {
 	if m.app == nil {
 		return
@@ -383,8 +312,8 @@ func (m *rootModel) loadSessionHistory() {
 		return
 	}
 	msgs := s.All()
-	convs := messagesToConversations(sessionID, agentName, msgs)
-	m.conversationList.Conversations = append(m.conversationList.Conversations, convs...)
+	m.streamList.Streams = append(m.streamList.Streams,
+		conv.StreamsFromMessages(sessionID, agentName, msgs)...)
 	m.scrollToBottom = true
 }
 
@@ -541,14 +470,6 @@ func (m *rootModel) updateModelDisplay(model *config.ModelConfig) {
 
 func (m *rootModel) updateActiveDialog(msg any) (tea.Model, tea.Cmd) {
 	switch m.activeOverlay {
-	case overlaySelect:
-		newDlg, cmd := m.selectDlg.Update(msg)
-		m.selectDlg = newDlg
-		return m, cmd
-	case overlayOptions:
-		newDlg, cmd := m.optionsDlg.Update(msg)
-		m.optionsDlg = newDlg
-		return m, cmd
 	case overlayConnectProvider:
 		newDlg, cmd := m.providerDlg.Update(msg)
 		m.providerDlg = newDlg
@@ -560,6 +481,14 @@ func (m *rootModel) updateActiveDialog(msg any) (tea.Model, tea.Cmd) {
 	case overlayConnectModel:
 		newDlg, cmd := m.modelDlg.Update(msg)
 		m.modelDlg = newDlg
+		return m, cmd
+	case overlayModelSelect:
+		newDlg, cmd := m.modelSelectDlg.Update(msg)
+		m.modelSelectDlg = newDlg
+		return m, cmd
+	case overlayAgentSelect:
+		newDlg, cmd := m.agentSelectDlg.Update(msg)
+		m.agentSelectDlg = newDlg
 		return m, cmd
 	}
 	return m, nil
@@ -581,8 +510,8 @@ func (m *rootModel) updateConversation(msg tea.Msg, scrollToBottom bool) (tea.Mo
 	if scrollToBottom {
 		m.scrollToBottom = true
 	}
-	newList, cmd := m.conversationList.Update(msg)
-	m.conversationList = newList
+	newList, cmd := m.streamList.Update(msg)
+	m.streamList = newList
 	return m, cmd
 }
 
@@ -598,40 +527,40 @@ func (m *rootModel) handleOverlayPaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 	return m.updateActiveDialog(msg)
 }
 
-// activateAskUserOverlay sets up the appropriate dialog from pendingAskUserData state.
-func (m *rootModel) activateAskUserOverlay() {
+// activateInlineAskUser 把 AskUser 问题内联渲染进对话流，并激活选项面板。
+// 面板活动期间输入栏隐藏（见 View），用户提交答案后自动恢复。
+func (m *rootModel) activateInlineAskUser() {
 	var question string
 	var options []string
 	var multiSelect bool
 
 	if m.pendingAskUserData != nil && len(m.pendingAskUserData.Questions) > 0 {
 		q := m.pendingAskUserData.Questions[0]
-		question = q.Question
-		options = q.Options
-		multiSelect = q.MultiSelect
+		question, options, multiSelect = q.Question, q.Options, q.MultiSelect
 	} else if len(m.rpcAskUserQuestions) > 0 {
 		q := m.rpcAskUserQuestions[0]
-		question = q.Question
-		options = q.Options
-		multiSelect = q.MultiSelect
+		question, options, multiSelect = q.Question, q.Options, q.MultiSelect
 	} else {
 		return
 	}
 
-	title := question
-	if len([]rune(title)) > 20 {
-		title = string([]rune(title)[:20]) + "…"
+	sessionID := m.currentSessionID
+	if sessionID == "" && m.app != nil {
+		if meta := m.app.CurrentSessionMeta(); meta != nil {
+			sessionID = meta.SessionID
+		}
+	}
+	if sessionID != "" {
+		m.streamList.AppendQuestion(sessionID, question)
 	}
 
-	if multiSelect {
-		m.optionsDlg.Title = title
-		m.optionsDlg.SetOptions(question, options)
-		m.activeOverlay = overlayOptions
-	} else {
-		m.selectDlg.Title = title
-		m.selectDlg.SetOptions(question, options)
-		m.activeOverlay = overlaySelect
-	}
+	newPanel, _ := m.askChoices.Update(clientmsg.ShowChoicesMsg{
+		Prompt:         question,
+		Options:        options,
+		MultiSelect:    multiSelect,
+		AllowTextInput: true,
+	})
+	m.askChoices = newPanel
 }
 
 // mapAskUserReply builds the answer from the dialog result and sends it as a user message.
@@ -830,7 +759,7 @@ func probeDaemon(addr string) clientmsg.DaemonConnStatus {
 
 func (m *rootModel) Init() tea.Cmd {
 	return tea.Batch(
-		m.conversationList.Init(),
+		m.streamList.Init(),
 		checkDaemonCmd(m.daemonAddr),
 	)
 }
@@ -841,11 +770,11 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		w := clientmsg.WindowResizeMsg{Width: msg.Width, Height: msg.Height}
 		m.dispatchToAll(w)
 		m.resizeViewport(msg.Width, msg.Height)
-		m.selectDlg.Update(msg)
-		m.optionsDlg.Update(msg)
 		m.providerDlg.Update(msg)
 		m.apiKeyDlg.Update(msg)
 		m.modelDlg.Update(msg)
+		m.modelSelectDlg.Update(msg)
+		m.agentSelectDlg.Update(msg)
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -854,12 +783,19 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		// Priority 1: dialog overlay (AskUser)
+		// Priority 1: dialog overlay (connect flow)
 		if m.activeOverlay != overlayNone {
 			return m.handleOverlayKey(msg)
 		}
 
-		// Priority 2: permission bar (tool security)
+		// Priority 2: inline AskUser choices（输入栏此时隐藏）
+		if m.askChoices.Visible {
+			newPanel, cmd := m.askChoices.Update(msg)
+			m.askChoices = newPanel
+			return m, cmd
+		}
+
+		// Priority 3: permission bar (tool security)
 		if m.permBar.Visible {
 			newBar, cmd := permission.UpdatePermissionBar(m.permBar, msg)
 			m.permBar = newBar
@@ -920,7 +856,17 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	case clientmsg.ThinkingDeltaMsg, clientmsg.ThinkingDoneMsg:
 		return m.updateWithState(msg, i18n.T("client.status.thinking"), true)
 
-	case clientmsg.ToolExecStartMsg, clientmsg.ToolExecEndMsg:
+	case clientmsg.ContentDeltaMsg:
+		return m.updateWithState(msg, i18n.T("client.status.thinking"), true)
+
+	case clientmsg.ToolExecEndMsg:
+		// 任务工具的结果驱动侧栏任务面板实时刷新（非任务工具无副作用）。
+		if m.taskTracker.applyToolResult(msg.ToolName, msg.Result) {
+			m.sidebar.SetTasks(m.taskTracker.snapshot())
+		}
+		return m.updateWithState(msg, i18n.T("client.status.executing"), true)
+
+	case clientmsg.ToolUseDeltaMsg, clientmsg.ToolExecStartMsg:
 		return m.updateWithState(msg, i18n.T("client.status.executing"), true)
 
 	case clientmsg.ExecutionSummaryMsg:
@@ -942,26 +888,31 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 	case clientmsg.CollapseToggleMsg, clientmsg.ThinkCollapseMsg:
 		return m.updateConversation(msg, false)
 
+	case clientmsg.ToggleToolsFoldMsg:
+		// 输入栏发出时不携带会话归属，此处补齐后转发给对话流。
+		if msg.SessionID == "" {
+			msg.SessionID = m.currentSessionID
+		}
+		return m.updateConversation(msg, false)
+
 	case clientmsg.ClearScreenMsg:
 		return m.updateWithState(msg, i18n.T("client.status.idle"), false)
 
-	// --- Dialog overlay: AskUser questions from the LLM ---
+	case clientmsg.MaxTurnsReachedMsg:
+		// 正常边界（非错误）：结束执行态并给出建议提示。
+		m.executing = false
+		m.statusBar.CurrentState = i18n.T("client.status.complete")
+		return m.updateConversation(msg, true)
+
+	case clientmsg.TaskSummaryMsg, clientmsg.SubtaskSpawnedMsg, clientmsg.SubtaskCompletedMsg:
+		return m.updateConversation(msg, true)
+
+	// --- Inline AskUser: 问题入对话流 + 内联 Choices ---
 
 	case clientmsg.AskUserEventMsg:
 		m.statusBar.CurrentState = i18n.T("client.status.waiting.answer")
-		m.activateAskUserOverlay()
-		return m, nil
-
-	case dialog.SelectDialogResult:
-		m.activeOverlay = overlayNone
-		m.statusBar.CurrentState = i18n.T("client.status.idle")
-		m.mapAskUserReply(false, msg.Index, nil, msg.CustomText, msg.Cancelled)
-		return m, nil
-
-	case dialog.OptionsDialogResult:
-		m.activeOverlay = overlayNone
-		m.statusBar.CurrentState = i18n.T("client.status.idle")
-		m.mapAskUserReply(true, 0, msg.Indices, msg.CustomText, msg.Cancelled)
+		m.activateInlineAskUser()
+		m.askChoicesActive = m.askChoices.Visible
 		return m, nil
 
 	// --- Connect flow: Provider → API Key → Model ---
@@ -981,6 +932,19 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			m.activeOverlay = overlayNone
 			if !msg.Cancelled && msg.Index >= 0 && msg.Index < len(m.connectModelNames) {
 				m.saveConnectResult(m.connectModelNames[msg.Index])
+			}
+		case overlayModelSelect:
+			m.activeOverlay = overlayNone
+			if !msg.Cancelled && msg.Index >= 0 {
+				models := m.app.Models().List()
+				if msg.Index < len(models) {
+					return m.handleSlashCommand(clientmsg.SlashCommandMsg{Name: "model", Args: []string{models[msg.Index].Name}})
+				}
+			}
+		case overlayAgentSelect:
+			m.activeOverlay = overlayNone
+			if !msg.Cancelled && msg.Index >= 0 && msg.Index < len(m.agentSelectNames) {
+				return m.handleSlashCommand(clientmsg.SlashCommandMsg{Name: "agent", Args: []string{m.agentSelectNames[msg.Index]}})
 			}
 		}
 		return m, nil
@@ -1012,6 +976,16 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case clientmsg.ChoiceSelectedMsg:
+		// 来源分流：内联 AskUser 面板 → 组装答案作为用户消息重入对话循环；
+		// 授权栏 → 发送对应魔术词。
+		if m.askChoicesActive {
+			m.askChoicesActive = false
+			m.statusBar.CurrentState = i18n.T("client.status.idle")
+			cancelled := msg.Index < 0 && len(msg.Indices) == 0
+			m.mapAskUserReply(len(msg.Indices) > 0, msg.Index, msg.Indices, msg.CustomText, cancelled)
+			return m, nil
+		}
+
 		m.statusBar.CurrentState = i18n.T("client.status.idle")
 		// 记录授权请求来源会话 ID，用于构造带目标魔法词；随后清空 permBar。
 		pendingSessionID := m.permBar.SessionID
@@ -1042,6 +1016,62 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 				magicWord += ": " + pendingSessionID
 			}
 			m.rpcSendMagicWord(magicWord)
+		}
+		return m, nil
+
+	// --- svc 事件对齐：会话队列 / 压缩 / 中断 / 用量 / 调度与升级广播 ---
+
+	case clientmsg.MessageQueuedMsg:
+		return m.updateWithState(msg, i18n.T("client.status.queued"), false)
+
+	case clientmsg.MessageProcessingMsg:
+		return m.updateWithState(msg, i18n.T("client.status.executing"), false)
+
+	case clientmsg.LLMCancelledMsg:
+		m.executing = false
+		m.statusBar.CurrentState = i18n.T("client.status.cancelled")
+		return m.updateConversation(msg, false)
+
+	case clientmsg.LLMTimeoutMsg:
+		return m.updateConversation(msg, false)
+
+	case clientmsg.CompactionMsg, clientmsg.ContextCompactionMsg:
+		m.notifBar.Add(data.Notification{
+			Message: i18n.T("client.notify.context.compacted"),
+			Level:   data.NotifInfo,
+		})
+		return m, nil
+
+	case clientmsg.PermissionDeniedMsg:
+		m.notifBar.Add(data.Notification{
+			Message: fmt.Sprintf(i18n.T("client.notify.permission.denied"), msg.Reason),
+			Level:   data.NotifWarning,
+		})
+		return m, nil
+
+	case clientmsg.TokenUsageRecordedMsg:
+		rec := msg.Record
+		m.sidebar.AddTokenUsage(rec.PromptTokens, rec.CompletionTokens, rec.CachedTokens, rec.TotalTokens, rec.ModelName)
+		return m, nil
+
+	case clientmsg.ScheduleJobMsg:
+		m.notifBar.Add(data.Notification{
+			Message: fmt.Sprintf(i18n.T("client.notify.schedule.job"), msg.Status, msg.Content),
+			Level:   data.NotifInfo,
+		})
+		return m, nil
+
+	case clientmsg.DaemonUpdateMsg:
+		if msg.Phase == "installed" {
+			m.notifBar.Add(data.Notification{
+				Message: fmt.Sprintf(i18n.T("client.notify.update.installed"), msg.Version),
+				Level:   data.NotifWarning,
+			})
+		} else {
+			m.notifBar.Add(data.Notification{
+				Message: fmt.Sprintf(i18n.T("client.notify.update.available"), msg.Version),
+				Level:   data.NotifInfo,
+			})
 		}
 		return m, nil
 
@@ -1082,11 +1112,24 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *rootModel) dispatchToAll(w clientmsg.WindowResizeMsg) {
 	m.welcome.Update(w)
-	m.conversationList, _ = m.conversationList.Update(w)
 	m.statusBar.Update(w)
 	m.input.Update(w)
 	m.notifBar.Update(w)
+	newPanel, _ := m.askChoices.Update(w)
+	m.askChoices = newPanel
+	// streamList 不在此分发：它必须使用 viewport 实际宽度（leftWidth），
+	// 全屏宽度会导致 markdown 按整屏渲染、右侧被 Sidebar 遮挡（见 resizeViewport）。
 }
+
+const (
+	// resizeViewport 在首帧前无法得知各区域实际行数，只能用保守估计初始化；
+	// 首帧起由 View() 的逐行统计经 updateViewportHeights 接管，消除双轨制抖动。
+	resizeHeaderEstimate = 8
+	resizeFooterEstimate = 5
+	layoutSeparators     = 2
+	resizeMinViewport    = 5
+	viewMinViewport      = 3
+)
 
 func (m *rootModel) resizeViewport(termWidth, termHeight int) {
 	m.termWidth = termWidth
@@ -1101,17 +1144,24 @@ func (m *rootModel) resizeViewport(termWidth, termHeight int) {
 		m.rightWidth = 20
 	}
 
-	headerEstimate := 8
-	footerEstimate := 5
-	separators := 2
-	vpHeight := termHeight - headerEstimate - footerEstimate - separators
-	if vpHeight < 5 {
-		vpHeight = 5
+	vpHeight := termHeight - resizeHeaderEstimate - resizeFooterEstimate - layoutSeparators
+	if vpHeight < resizeMinViewport {
+		vpHeight = resizeMinViewport
 	}
-	m.viewport.SetWidth(m.leftWidth)
-	m.viewport.SetHeight(vpHeight)
+	m.updateViewportHeights(vpHeight)
+
+	// 对话流宽度 = viewport 实际宽度。全屏宽度会让内容渲染到 Sidebar 底下。
+	m.streamList.Update(clientmsg.WindowResizeMsg{Width: m.leftWidth, Height: vpHeight})
 
 	m.sidebar.Update(clientmsg.WindowResizeMsg{Width: m.rightWidth - 2, Height: vpHeight})
+}
+
+// updateViewportHeights 是视口高度写入的唯一入口：viewport 与侧边栏必须同帧一致，
+// 分散写入正是原先 resizeViewport 固定值与 View 动态值互相打架的根源。
+func (m *rootModel) updateViewportHeights(vpHeight int) {
+	m.viewport.SetWidth(m.leftWidth)
+	m.viewport.SetHeight(vpHeight)
+	m.sidebar.SyncHeight(vpHeight)
 }
 
 func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
@@ -1131,9 +1181,7 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		preview = string([]rune(preview)[:80]) + "..."
 	}
 
-	newConv := conv.NewConversation(sessionID, agentName, e.Text)
-	m.conversationList.Conversations = append(m.conversationList.Conversations, newConv)
-	m.conversationList.MarkDirty()
+	m.streamList.AppendUserMessage(sessionID, agentName, e.Text)
 
 	// Use RPC path when connected to daemon
 	if m.rpcConnected {
@@ -1312,6 +1360,39 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// resolveSessionForAgent 落实"Agent 切换即 Session 切换"的强规则：
+// 从服务端读取当前 ProjectDir 下的全部会话，过滤出新 Agent 所属的会话并取
+// 最新一条；不存在则在该 Agent + ProjectDir 下创建新会话。
+func (m *rootModel) resolveSessionForAgent(agentName string) (*goharnesssession.SessionInfo, error) {
+	projectDir := ""
+	if meta := m.app.CurrentSessionMeta(); meta != nil && meta.ProjectDir != "" {
+		projectDir = meta.ProjectDir
+	} else if wd, err := os.Getwd(); err == nil {
+		projectDir = wd
+	}
+
+	ctx := context.Background()
+	sessions, err := goharnesssession.ListSessions(ctx, m.app.SessDB())
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+
+	var latest *goharnesssession.SessionInfo
+	for i := range sessions {
+		s := &sessions[i]
+		if s.AgentName != agentName || s.ProjectDir != projectDir {
+			continue
+		}
+		if latest == nil || s.LastActivityAt.After(latest.LastActivityAt) {
+			latest = s
+		}
+	}
+	if latest != nil {
+		return m.app.SwitchSession(latest.SessionID)
+	}
+	return m.app.CreateSession(agentName, projectDir)
+}
+
 func (m *rootModel) handleAgentSwitch(e clientmsg.AgentSwitchMsg) (tea.Model, tea.Cmd) {
 	if m.executing {
 		m.executing = false
@@ -1324,6 +1405,17 @@ func (m *rootModel) handleAgentSwitch(e clientmsg.AgentSwitchMsg) (tea.Model, te
 		_ = cfg.Save()
 	}
 
+	// 强规则：Agent 变更必须联动 Session 切换（复用最新或创建新的），
+	// 失败不阻断切换本身——保留旧会话上下文并提示用户。
+	newMeta, sessErr := m.resolveSessionForAgent(e.AgentName)
+	var sessNotifCmd tea.Cmd
+	if sessErr != nil {
+		sessNotifCmd = m.notifBar.Add(data.Notification{
+			Message: fmt.Sprintf(i18n.T("client.notify.session.resolve.failed"), e.AgentName, sessErr),
+			Level:   data.NotifWarning,
+		})
+	}
+
 	m.statusBar.AgentName = e.AgentName
 
 	// Update model display from the new agent's configured model
@@ -1334,10 +1426,31 @@ func (m *rootModel) handleAgentSwitch(e clientmsg.AgentSwitchMsg) (tea.Model, te
 		}
 	}
 
-	return m, m.notifBar.Add(data.Notification{
+	// Session 相关数据全部刷新：对话流按新会话历史重建，
+	// 输入框会话列表、侧栏欢迎信息、任务面板随新会话归零。
+	m.streamList.Clear()
+	m.loadSessionHistory()
+	if newSessions, err := loadRecentSessions(m.app); err == nil {
+		m.input.Sessions = newSessions
+	}
+	m.taskTracker.reset()
+	m.sidebar.SetTasks(nil)
+	if newMeta != nil {
+		m.currentSessionID = newMeta.SessionID
+		m.statusBar.Update(clientmsg.SessionLoadedMsg{
+			AgentName: newMeta.AgentName,
+			SessionID: newMeta.SessionID,
+		})
+		m.welcome.Data.SessionID = newMeta.SessionID
+	}
+	m.sidebar.SetWelcomeData(m.welcome.Data)
+	m.scrollToBottom = true
+
+	switchedCmd := m.notifBar.Add(data.Notification{
 		Message: fmt.Sprintf(i18n.T("client.notify.agent.switched"), e.AgentName),
 		Level:   data.NotifInfo,
 	})
+	return m, tea.Batch(sessNotifCmd, switchedCmd)
 }
 
 func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, tea.Cmd) {
@@ -1363,7 +1476,11 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 		}
 		return m, clearCmd
 	case "model":
-		if len(e.Args) > 0 && result.Success {
+		// 无参数：升级为居中浮层选择器（替代原先塞进通知栏的多行文本列表）。
+		if len(e.Args) == 0 {
+			return m.openModelSelectDialog()
+		}
+		if result.Success {
 			modelName := e.Args[0]
 			if modelCfg := m.app.Models().Get(modelName); modelCfg != nil {
 				m.welcome.Data.ModelName = displayName(modelCfg.Title, modelCfg.Name)
@@ -1373,8 +1490,14 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 					_ = cfg.Save()
 				}
 			}
+			result.Message = fmt.Sprintf(i18n.T("client.notify.model.switched"), modelName)
 		}
 		m.input.Models, _ = reloadModels(m.app)
+	case "agent":
+		// 无参数：打开 Agent 浮层选择器（Role (name) - Description 格式）。
+		if len(e.Args) == 0 {
+			return m.openAgentSelectDialog()
+		}
 	case "doctor":
 		m.handlePostExit()
 		return m, tea.Quit
@@ -1412,14 +1535,69 @@ func (m *rootModel) refreshAfterChatOp(result CommandResult) tea.Cmd {
 		}
 	}
 
-	m.conversationList.Clear()
+	m.streamList.Clear()
 	m.loadSessionHistory()
 	newSessions, _ := loadRecentSessions(m.app)
 	m.input.Sessions = newSessions
 
+	// 会话切换后任务快照随之失效：清空追踪并同步侧栏。
+	// 历史会话的任务状态在 KVStore 中持久存在，但 TUI 不回放（与对话流同策略）。
+	m.taskTracker.reset()
+	m.sidebar.SetTasks(nil)
+
 	return func() tea.Msg {
 		return clientmsg.ClearScreenMsg{}
 	}
+}
+
+// openModelSelectDialog 激活 /model 的居中浮层选择器。
+// 列表项与 m.app.Models().List() 同序，ListDialogResult.Index 直接映射回模型。
+func (m *rootModel) openModelSelectDialog() (tea.Model, tea.Cmd) {
+	if m.app == nil || m.app.Models() == nil {
+		return m, m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.system.uninitialized"), Level: data.NotifWarning})
+	}
+	models := m.app.Models().List()
+	if len(models) == 0 {
+		return m, m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.no.provider"), Level: data.NotifWarning})
+	}
+	names := make([]string, len(models))
+	for i, ml := range models {
+		names[i] = displayName(ml.Title, ml.Name)
+	}
+	m.modelSelectDlg = dialog.NewListDialog(i18n.T("client.ui.dialog.model.select"))
+	m.modelSelectDlg.SetItems(names)
+	m.modelSelectDlg.Update(m.windowSizeMsg())
+	m.activeOverlay = overlayModelSelect
+	return m, nil
+}
+
+// openAgentSelectDialog 激活 /agent 的居中浮层选择器。
+// 列表项格式为 "Role (name) - Description"，agentSelectNames 保持与
+// Agents().List() 同序，ListDialogResult.Index 映射回 Agent 名称后
+// 走既有 handleAgentSwitch 链路（状态栏/配置持久化零改动）。
+func (m *rootModel) openAgentSelectDialog() (tea.Model, tea.Cmd) {
+	if m.app == nil || m.app.Agents() == nil {
+		return m, m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.system.uninitialized"), Level: data.NotifWarning})
+	}
+	agents := m.app.Agents().List()
+	if len(agents) == 0 {
+		return m, m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.no.provider"), Level: data.NotifWarning})
+	}
+	items := make([]string, len(agents))
+	m.agentSelectNames = make([]string, len(agents))
+	for i, a := range agents {
+		m.agentSelectNames[i] = a.Name
+		if a.Role != "" {
+			items[i] = fmt.Sprintf("%s (%s) - %s", a.Role, a.Name, a.Description)
+		} else {
+			items[i] = displayName(a.Name, a.Name) + " - " + a.Description
+		}
+	}
+	m.agentSelectDlg = dialog.NewListDialog(i18n.T("client.ui.dialog.agent.select"))
+	m.agentSelectDlg.SetItems(items)
+	m.agentSelectDlg.Update(m.windowSizeMsg())
+	m.activeOverlay = overlayAgentSelect
+	return m, nil
 }
 
 func reloadModels(app *appcore.App) ([]input.ModelItem, error) {
@@ -1442,29 +1620,31 @@ func (m *rootModel) View() tea.View {
 	statusView := m.statusBar.View()
 	inputView := m.input.View()
 	permView := permission.ViewPermissionBar(m.permBar, m.termWidth)
+	choicesView := m.askChoices.View()
 
 	headerStr := notifView
 
-	m.input.Hidden = m.permBar.Visible
+	m.input.Hidden = m.permBar.Visible || m.askChoices.Visible
 	bottomArea := inputView
 
-	// When the permission bar is visible, replace the input area with it.
-	if m.permBar.Visible {
+	// 底部区域互斥：授权栏 > 内联 AskUser 选项 > 输入栏。
+	switch {
+	case m.permBar.Visible:
 		bottomArea = permView
+	case m.askChoices.Visible:
+		bottomArea = choicesView
 	}
 
 	headerLines := strings.Count(headerStr, "\n") + 1
 	statusLines := strings.Count(statusView, "\n") + 1
 	bottomLines := strings.Count(bottomArea, "\n") + 1
-	separators := 2
-	vpHeight := m.termHeight - headerLines - statusLines - bottomLines - separators
-	if vpHeight < 3 {
-		vpHeight = 3
+	vpHeight := m.termHeight - headerLines - statusLines - bottomLines - layoutSeparators
+	if vpHeight < viewMinViewport {
+		vpHeight = viewMinViewport
 	}
-	m.viewport.SetWidth(m.leftWidth)
-	m.viewport.SetHeight(vpHeight)
+	m.updateViewportHeights(vpHeight)
 
-	m.viewport.SetContent(m.conversationList.View())
+	m.viewport.SetContent(m.streamList.View())
 
 	if m.scrollToBottom {
 		m.viewport.GotoBottom()
@@ -1473,7 +1653,6 @@ func (m *rootModel) View() tea.View {
 
 	mainArea := m.viewport.View()
 
-	m.sidebar.SyncHeight(vpHeight)
 	sideArea := m.sidebar.View()
 
 	layout := lipgloss.JoinHorizontal(lipgloss.Top, mainArea, sideArea)
@@ -1485,20 +1664,20 @@ func (m *rootModel) View() tea.View {
 		bottomArea,
 	)
 
-	// Dialog overlay: render full-screen centered if active (AskUser).
+	// Dialog overlay: render full-screen centered if active (connect flow).
 	if m.activeOverlay != overlayNone {
 		var modal string
 		switch m.activeOverlay {
-		case overlaySelect:
-			modal = m.selectDlg.View()
-		case overlayOptions:
-			modal = m.optionsDlg.View()
 		case overlayConnectProvider:
 			modal = m.providerDlg.View()
 		case overlayConnectAPIKey:
 			modal = m.apiKeyDlg.View()
 		case overlayConnectModel:
 			modal = m.modelDlg.View()
+		case overlayModelSelect:
+			modal = m.modelSelectDlg.View()
+		case overlayAgentSelect:
+			modal = m.agentSelectDlg.View()
 		}
 		if modal != "" {
 			full = lipgloss.Place(m.termWidth, m.termHeight, lipgloss.Center, lipgloss.Center, modal)

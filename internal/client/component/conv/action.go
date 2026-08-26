@@ -6,235 +6,200 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
-	"github.com/DotNetAge/mindx/internal/client/msg"
+	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/mindx/internal/client/style"
 	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
+// ActionStep 是对话流中一次工具调用的展示单元，由 JSON-RPC 工具事件驱动：
+//
+//   - tool_use_delta：流式拼接参数预览；
+//   - tool_exec_start：显示「⏺ 工具名(参数…) | 计时」，计时随 Tick 实时跳动；
+//   - tool_exec_end：补齐「耗时 | Token」（Token 为服务器计算的真实消耗 =
+//     输入 + 输出 - 缓存），并在下方渲染输出结果；执行失败时结果区切换为
+//     错误组件（红框）呈现。
 type ActionStep struct {
+	ToolCallID    string
+	ArgIndex      int // tool_use_delta 流式序号（与服务端 index 对应）
 	ToolName      string
 	Status        ActionStepStatus
-	EstimatedTok  int
-	Duration      time.Duration
 	Params        map[string]any
-	ProgressText  string
-	ResultText    string
-	StreamingArgs string
-	Collapsed     bool
-	DiffText      string
-	DiffAdds      int
-	DiffDels      int
-	DiffFile      string
+	StreamingArgs string // 参数流式预览（start 后被 Params 取代）
+
+	StartTime time.Time // 执行开始时刻（计时来源）
+	Duration  time.Duration
+	Tokens    int // 真实 token 消耗（in + out - cached）
+
+	Result    string // 成功为输出结果；失败为错误信息
+	DiffText  string
+	DiffAdds  int
+	DiffDels  int
+	DiffFile  string
+	Collapsed bool
 }
 
-type Action struct {
-	Steps         []ActionStep
-	Completed     bool
-	SuccessCount  int
-	FailedCount   int
-	TotalTokens   int
-	TotalDuration time.Duration
-	Elapsed       time.Duration
-	StartTime     time.Time
-	BlinkOn       bool
+// ResultFormatter 按工具名定制结果区的渲染。
+// 不同工具返回的内容格式各异（JSON / diff / 表格 / 长文本…），
+// 通过 RegisterResultFormatter 注册即可替换默认渲染，无需改动组件本身。
+type ResultFormatter func(step ActionStep, result string, width int) string
+
+var resultFormatters = map[string]ResultFormatter{}
+
+// RegisterResultFormatter 注册某工具的结果渲染器（建议在包 init 中调用）。
+func RegisterResultFormatter(toolName string, f ResultFormatter) {
+	resultFormatters[toolName] = f
 }
 
-func UpdateAction(m Action, e tea.Msg) (Action, tea.Cmd) {
-	switch e := e.(type) {
-	case msg.ToolExecStartMsg:
-		if m.Completed {
-			return m, nil
-		}
-		step := ActionStep{
-			ToolName:     e.ToolName,
-			Status:       ActionStepExecuting,
-			EstimatedTok: e.EstimatedTok,
-			Params:       e.Params,
-			Collapsed:    true,
-		}
-		m.Steps = append(m.Steps, step)
-		if m.StartTime.IsZero() {
-			m.StartTime = time.Now()
-		}
-		return m, nil
-
-	case msg.ToolUseDeltaMsg:
-		if m.Completed {
-			return m, nil
-		}
-		idx := e.Index
-		if idx < 0 {
-			idx = len(m.Steps)
-		}
-		for idx < len(m.Steps) {
-			step := &m.Steps[idx]
-			if step.ToolName == "" || step.ToolName == e.Name {
-				step.ToolName = e.Name
-				step.StreamingArgs += e.Arguments
-				if step.Status != ActionStepExecuting {
-					step.Status = ActionStepExecuting
-				}
-				break
-			}
-			idx++
-		}
-		if idx >= len(m.Steps) {
-			m.Steps = append(m.Steps, ActionStep{
-				ToolName:      e.Name,
-				Status:        ActionStepExecuting,
-				StreamingArgs: e.Arguments,
-				Collapsed:     true,
-			})
-		}
-		return m, nil
-
-	case msg.ToolExecEndMsg:
-		if m.Completed || len(m.Steps) == 0 {
-			return m, nil
-		}
-		for i := len(m.Steps) - 1; i >= 0; i-- {
-			step := &m.Steps[i]
-			if step.ToolName == e.ToolName && step.Status == ActionStepExecuting {
-				if e.Success {
-					step.Status = ActionStepDone
-					step.ResultText = e.Result
-					step.Duration = e.Duration
-				} else {
-					step.Status = ActionStepFailed
-					step.ResultText = e.Error
-					step.Duration = e.Duration
-				}
-				step.Collapsed = false
-				if e.DiffText != "" {
-					step.DiffText = e.DiffText
-					step.DiffAdds = e.DiffAdds
-					step.DiffDels = e.DiffDels
-					step.DiffFile = e.DiffFile
-				}
-				break
-			}
-		}
-		return m, nil
-
-	case msg.ExecutionSummaryMsg:
-		// 计费口径：prompt + completion - cached
-		m.TotalTokens = e.TokensUsed.ActualTokens()
-		m.TotalDuration = e.Duration
-		return m, nil
-
-	case msg.CollapseToggleMsg:
-		if e.ActionIndex < 0 {
-			for i := range m.Steps {
-				m.Steps[i].Collapsed = !m.Steps[i].Collapsed
-			}
-		} else if e.ActionIndex < len(m.Steps) {
-			m.Steps[e.ActionIndex].Collapsed = !m.Steps[e.ActionIndex].Collapsed
-		}
-		return m, nil
-
-	case msg.TickMsg:
-		m.BlinkOn = !m.BlinkOn
-		if !m.Completed && !m.StartTime.IsZero() {
-			m.Elapsed = time.Since(m.StartTime).Truncate(100 * time.Millisecond)
-		}
-		return m, nil
+// stepElapsed 返回步骤当前耗时：执行中按实时计算，结束后取固定值。
+func stepElapsed(step ActionStep) time.Duration {
+	if step.Status == ActionStepExecuting && !step.StartTime.IsZero() {
+		return time.Since(step.StartTime).Truncate(100 * time.Millisecond)
 	}
-
-	return m, nil
+	return step.Duration
 }
 
-func ViewAction(m Action, width int) string {
-	if len(m.Steps) == 0 {
+// ViewActionStep 渲染单个工具调用条目。s 提供闪烁相位等流级状态。
+func ViewActionStep(s Stream, step ActionStep, width int) string {
+	if step.ToolName == "" && step.StreamingArgs == "" {
 		return ""
 	}
 
 	var b strings.Builder
-	blinkOn := m.BlinkOn && !m.Completed
+	blink := s.BlinkOn && s.Status != StatusDone && s.Status != StatusError
 
-	for i, step := range m.Steps {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString(ViewActionStep(step, blinkOn, width))
-	}
-
-	return b.String()
-}
-
-func ViewActionStep(step ActionStep, blinkOn bool, width int) string {
-	var b strings.Builder
 	var icon string
 	switch step.Status {
 	case ActionStepExecuting:
-		icon = ViewBlink(Blink{Symbol: "⏺", BlinkOn: blinkOn}, style.GreenStyle)
+		icon = ViewBlink(Blink{Symbol: "⏺", BlinkOn: blink}, style.GreenStyle)
 	case ActionStepDone:
 		icon = style.WhiteStyle.Render("⏺")
 	case ActionStepFailed:
-		icon = ViewBlink(Blink{Symbol: "⏺", BlinkOn: blinkOn}, style.RedStyle)
+		icon = style.RedStyle.Render("⏺")
 	}
-
 	b.WriteString(icon)
-	b.WriteString(" ")
+	b.WriteByte(' ')
 
+	nameStyle := style.BoldWhite
 	if step.Status == ActionStepFailed {
-		b.WriteString(style.RedStyle.Bold(true).Render(step.ToolName))
-	} else {
-		b.WriteString(style.BoldWhite.Render(step.ToolName))
+		nameStyle = style.RedStyle.Bold(true)
+	}
+	b.WriteString(nameStyle.Render(step.ToolName))
+
+	// (参数…)
+	if paramStr := formatParams(step.Params); paramStr != "" {
+		b.WriteString(fmt.Sprintf("(%s)", paramStr))
+	} else if preview := previewStreamingArgs(step); preview != "" {
+		b.WriteString(style.DimStyle.Render("(" + preview + "▌)"))
 	}
 
-	paramStr := formatParams(step.Params)
-	if paramStr != "" {
-		b.WriteString(fmt.Sprintf("(%s)", paramStr))
+	// | 计时 | Token
+	var meta []string
+	if d := stepElapsed(step); d > 0 {
+		meta = append(meta, formatDuration(d))
 	}
-	if step.StreamingArgs != "" && step.Status == ActionStepExecuting {
-		argsPreview := step.StreamingArgs
-		if len(argsPreview) > 80 {
-			argsPreview = argsPreview[:77] + "..."
-		}
-		b.WriteString(fmt.Sprintf(" | %s", style.DimStyle.Render(argsPreview+style.DimStyle.Render("▌"))))
-	} else if step.ProgressText != "" {
-		b.WriteString(fmt.Sprintf(" | %s", style.GrayStyle.Render(step.ProgressText)))
+	if step.Status != ActionStepExecuting && step.Tokens > 0 {
+		meta = append(meta, fmt.Sprintf(i18n.T("action.step.tokens"), formatNumber(step.Tokens)))
+	}
+	if len(meta) > 0 {
+		b.WriteString(style.GrayStyle.Render(" | " + strings.Join(meta, " | ")))
 	}
 	b.WriteByte('\n')
 
-	if step.ResultText != "" {
-		lines := strings.Split(step.ResultText, "\n")
-
-		if !step.Collapsed && len(step.ResultText) > 10 {
-			lineStyle := style.DimStyle
-			if step.Status == ActionStepFailed {
-				lineStyle = style.RedStyle
-			}
-			for i, line := range lines {
-				if i >= 3 {
-					b.WriteString(fmt.Sprintf("  ⎿ … +%d lines (ctrl+o toggle)\n", len(lines)-i))
-					break
-				}
-				b.WriteString(fmt.Sprintf("  ⎿ %s\n", lineStyle.Render(line)))
-			}
+	// 结果区：失败 → 错误组件；成功 → 结果渲染（支持格式化扩展）。
+	if step.Status == ActionStepFailed {
+		if step.Result != "" {
+			b.WriteString(viewStepError(step.Result, width))
 		}
-
-		summary := fmt.Sprintf(i18n.T("action.step.complete"), len(lines))
-		if step.EstimatedTok > 0 || step.Duration > 0 {
-			var parts []string
-			if step.EstimatedTok > 0 {
-				parts = append(parts, fmt.Sprintf(i18n.T("action.step.tokens"), formatNumber(step.EstimatedTok)))
-			}
-			if step.Duration > 0 {
-				parts = append(parts, fmt.Sprintf(i18n.T("action.step.duration"), formatDuration(step.Duration)))
-			}
-			summary += " • " + strings.Join(parts, " • ")
-		}
-		b.WriteString(fmt.Sprintf("  ⎿ %s\n", style.GrayStyle.Render(summary)))
+	} else if step.Result != "" {
+		b.WriteString(viewStepResult(step, width))
 	}
 
 	if step.DiffText != "" && !step.Collapsed {
-		diffWidth := width - 4
-		b.WriteString(fmt.Sprintf("  ⎿ %s\n", ViewDiffWithFile(step.DiffText, step.DiffFile, step.DiffAdds, step.DiffDels, diffWidth)))
+		diffWidth := width - 6
+		if diffWidth < 20 {
+			diffWidth = 20
+		}
+		b.WriteString("  ⎿ ")
+		b.WriteString(ViewDiffWithFile(step.DiffText, step.DiffFile, step.DiffAdds, step.DiffDels, diffWidth))
+		b.WriteByte('\n')
 	}
 
-	return b.String()
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// viewStepResult 渲染成功结果：优先使用注册的 ResultFormatter。
+// formatter 未注册或返回空（解析失败、格式不识别）时兜底渲染原始文本——
+// 结果内容不允许被静默吞掉，保持原始 JSON 可见是排查问题的最后手段。
+func viewStepResult(step ActionStep, width int) string {
+	var rendered string
+	if f, ok := resultFormatters[step.ToolName]; ok {
+		rendered = f(step, step.Result, width)
+	}
+	if rendered == "" {
+		rendered = fallbackResultPreview(step.Result)
+	}
+	return prefixLines(rendered, "  ⎿ ", true)
+}
+
+// fallbackResultPreview 原样预览未经格式化的结果，超长截断。
+func fallbackResultPreview(result string) string {
+	lines := strings.Split(strings.TrimRight(result, "\n"), "\n")
+	const maxLines = 20
+	shown := lines
+	if len(shown) > maxLines {
+		shown = shown[:maxLines]
+	}
+	var b strings.Builder
+	for _, line := range shown {
+		b.WriteString(style.DimStyle.Render(line))
+		b.WriteByte('\n')
+	}
+	if len(lines) > maxLines {
+		fmt.Fprintf(&b, "… +%d lines", len(lines)-maxLines)
+		return strings.TrimSuffix(b.String(), "\n")
+	}
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// viewStepError 以错误组件（红框）渲染失败的执行结果。
+func viewStepError(errMsg string, width int) string {
+	boxWidth := width - 8
+	if boxWidth < 20 {
+		boxWidth = 20
+	}
+	border := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(style.ThemeRed).
+		Padding(0, 1).
+		Width(boxWidth)
+
+	indented := prefixLines(errMsg, "  ", false)
+	return "  ⎿ " + border.Render(style.RedStyle.Render(indented)) + "\n"
+}
+
+// prefixLines 为多行文本添加前缀；keepEmpty 控制是否保留空行。
+func prefixLines(text, prefix string, keepEmpty bool) string {
+	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	for i, line := range lines {
+		if line == "" && !keepEmpty {
+			continue
+		}
+		lines[i] = prefix + line
+	}
+	return strings.Join(lines, "\n")
+}
+
+// previewStreamingArgs 截断显示流式参数片段。
+func previewStreamingArgs(step ActionStep) string {
+	args := step.StreamingArgs
+	if args == "" || step.Status != ActionStepExecuting {
+		return ""
+	}
+	args = strings.TrimSpace(args)
+	if len(args) > 60 {
+		args = args[:57] + "..."
+	}
+	return args
 }
 
 func formatParams(params map[string]any) string {
@@ -273,7 +238,7 @@ func formatNumber(n int) string {
 
 func formatDuration(d time.Duration) string {
 	if d < time.Second {
-		return fmt.Sprintf("%.0fms", float64(d.Milliseconds()))
+		return fmt.Sprintf("%.1fs", d.Seconds())
 	}
 	if d < time.Minute {
 		return fmt.Sprintf("%.1fs", d.Seconds())

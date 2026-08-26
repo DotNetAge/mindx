@@ -212,6 +212,9 @@ func (i *InputArea) handleKey(k tea.KeyPressMsg) (*InputArea, tea.Cmd) {
 		i.deleteWordBeforeCursor()
 		return i, nil
 
+	case i.isToolsFoldShortcut(key):
+		return i, func() tea.Msg { return clientmsg.ToggleToolsFoldMsg{} }
+
 	default:
 		if i.isPrintableKey(key) {
 			if key.ShiftedCode != 0 {
@@ -290,6 +293,12 @@ func (i *InputArea) isDeleteWord(k tea.Key) bool {
 		return k.Mod.Contains(tea.ModAlt) && (k.Code == tea.KeyBackspace || k.Code == 'W' || k.Code == 'w')
 	}
 	return k.Mod.Contains(tea.ModCtrl) && (k.Code == 'w' || k.Code == 'W')
+}
+
+// isToolsFoldShortcut 切换工具调用折叠摘要；全平台统一 ctrl+o，
+// 不走 isDarwin 的 Cmd 分流（Cmd+O 与系统"打开文件"语义冲突）。
+func (i *InputArea) isToolsFoldShortcut(k tea.Key) bool {
+	return k.Mod.Contains(tea.ModCtrl) && (k.Code == 'o' || k.Code == 'O')
 }
 
 func (i *InputArea) insertAtCursor(ch rune) {
@@ -485,37 +494,52 @@ func (i *InputArea) executeSuggestion() tea.Cmd {
 	return nil
 }
 
+const (
+	modelCommand = "/model"
+	chatCommand  = "/chat"
+)
+
 func (i *InputArea) updateSuggestion() {
 	text := i.TextBuffer.String()
-	if strings.HasPrefix(text, "/model") {
-		filter := ""
-		if len(text) > 6 {
-			filter = strings.TrimPrefix(text, "/model ")
-		}
+	switch {
+	// 必须精确匹配 "/model " 前缀才激活内联模型补全：
+	// 裸 "/model" 留给命令面板分支（回车后由 client 层打开居中选择浮层），
+	// 同时防止 /modelfoo 这类输入误触发模型面板。
+	case strings.HasPrefix(text, modelCommand+" "):
+		filter := strings.TrimPrefix(text, modelCommand+" ")
 		i.modelSuggest = ModelSuggestion{Suggestion: Suggestion[ModelItem]{Items: i.Models, Filter: filter, SelIdx: 0}}
-		i.cmdSuggest = CommandSuggestion{}
-		i.agentSuggest = AgentSuggestion{}
-		i.sessionSuggest = SessionSuggestion{}
-	} else if strings.HasPrefix(text, "/chat ") {
-		filter := strings.TrimPrefix(text, "/chat ")
+		i.resetOtherSuggestions(&i.modelSuggest)
+	case strings.HasPrefix(text, chatCommand+" "):
+		filter := strings.TrimPrefix(text, chatCommand+" ")
 		i.sessionSuggest = SessionSuggestion{Suggestion: Suggestion[SessionItem]{Items: i.Sessions, Filter: filter, SelIdx: 0}}
-		i.cmdSuggest = CommandSuggestion{}
-		i.agentSuggest = AgentSuggestion{}
-		i.modelSuggest = ModelSuggestion{}
-	} else if strings.HasPrefix(text, "/") {
+		i.resetOtherSuggestions(&i.sessionSuggest)
+	case strings.HasPrefix(text, "/"):
 		filter := strings.TrimPrefix(text, "/")
 		i.cmdSuggest = CommandSuggestion{Suggestion: Suggestion[SlashCommand]{Items: i.Commands, Filter: filter, SelIdx: 0}}
-		i.agentSuggest = AgentSuggestion{}
-		i.modelSuggest = ModelSuggestion{}
-		i.sessionSuggest = SessionSuggestion{}
-	} else if strings.HasPrefix(text, "@") {
+		i.resetOtherSuggestions(&i.cmdSuggest)
+	case strings.HasPrefix(text, "@"):
 		filter := strings.TrimPrefix(text, "@")
 		i.agentSuggest = AgentSuggestion{Suggestion: Suggestion[data.AgentInfo]{Items: i.Agents, Filter: filter, SelIdx: 0}}
-		i.cmdSuggest = CommandSuggestion{}
-		i.modelSuggest = ModelSuggestion{}
-		i.sessionSuggest = SessionSuggestion{}
-	} else {
+		i.resetOtherSuggestions(&i.agentSuggest)
+	default:
 		i.resetSuggestions()
+	}
+}
+
+// resetOtherSuggestions 清空除 active 指向的面板外的全部补全状态，
+// 消除原先四段 if-else 中每段手写三次零值复制的重复。
+func (i *InputArea) resetOtherSuggestions(active any) {
+	if active != &i.modelSuggest {
+		i.modelSuggest = ModelSuggestion{}
+	}
+	if active != &i.sessionSuggest {
+		i.sessionSuggest = SessionSuggestion{}
+	}
+	if active != &i.cmdSuggest {
+		i.cmdSuggest = CommandSuggestion{}
+	}
+	if active != &i.agentSuggest {
+		i.agentSuggest = AgentSuggestion{}
 	}
 }
 

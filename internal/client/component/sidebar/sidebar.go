@@ -46,6 +46,10 @@ type Sidebar struct {
 
 	FileChanges []data.FileChange
 
+	// Tasks 当前会话的任务列表（由 TaskCreate/TaskUpdate 工具结果驱动，
+	// 见 client 层 SyncTasks），按创建顺序展示，实时同步完成情况。
+	Tasks []Task
+
 	// CostFunc model-specific cost breakdown. If nil, DefaultInputCost/DefaultOutputCost
 	// are used as fallback for unknown models.
 	// Returns (inputCost, outputCost, cachedCost) separately for detailed display.
@@ -123,6 +127,25 @@ func (s *Sidebar) SetFileChanges(changes []data.FileChange) {
 	if s.width > 0 {
 		s.vp.SetContent(s.buildContent())
 	}
+}
+
+// SetTasks replaces the task list and refreshes the panel.
+func (s *Sidebar) SetTasks(tasks []Task) {
+	s.Tasks = tasks
+	if s.width > 0 {
+		s.vp.SetContent(s.buildContent())
+	}
+}
+
+// taskProgress 统计任务完成度。
+func taskProgress(tasks []Task) (done, total int) {
+	total = len(tasks)
+	for _, t := range tasks {
+		if t.Status == TaskCompleted {
+			done++
+		}
+	}
+	return done, total
 }
 
 func formatCost(cost float64) string {
@@ -222,6 +245,15 @@ func (s *Sidebar) buildContent() string {
 
 		padding := lipgloss.NewStyle().Padding(0, 1).Width(s.width)
 		parts = append(parts, padding.Render(strings.Join(fcParts, "\n")))
+	}
+
+	// Tasks section：模型规划 TaskList 后实时同步各任务完成情况。
+	if len(s.Tasks) > 0 {
+		done, total := taskProgress(s.Tasks)
+		cw := s.contentWidth()
+		taskView := renderTasks(s.Tasks, done, total, cw)
+		padding := lipgloss.NewStyle().Padding(0, 1).Width(s.width)
+		parts = append(parts, "", padding.Render(taskView))
 	}
 
 	return strings.Join(parts, "\n")

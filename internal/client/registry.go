@@ -5,6 +5,7 @@ import (
 	"os"
 
 	appcore "github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
 type CommandResult struct {
@@ -51,6 +52,8 @@ type CommandDeps struct {
 	OnExit    func()
 	OnDoctor  func()
 	OnConnect func()
+	// OnAgentSwitch 由 client 层注入：切换当前会话 Agent 并刷新状态栏。
+	OnAgentSwitch func(name string)
 }
 
 func BuiltinCommands(deps CommandDeps) *SlashCommandRegistry {
@@ -200,6 +203,31 @@ func BuiltinCommands(deps CommandDeps) *SlashCommandRegistry {
 		Description: "列出所有可用 Agent",
 		Run: func(args []string) CommandResult {
 			return CommandResult{Message: "使用 @agent_name 切换 Agent", Success: true}
+		},
+	})
+
+	r.Register(CommandDef{
+		Name:        "agent",
+		Description: "切换 Agent（浮层选择）",
+		Run: func(args []string) CommandResult {
+			if deps.App == nil {
+				return CommandResult{Message: "❌ 系统未初始化", Success: false}
+			}
+			if len(args) == 0 {
+				// 无参数：由 handleSlashCommand 的 agent 分支打开浮层选择器。
+				return CommandResult{Success: true}
+			}
+			name := args[0]
+			if deps.App.Agents().Get(name) == nil {
+				return CommandResult{Message: fmt.Sprintf("❌ Agent %q 不存在", name), Success: false}
+			}
+			if deps.OnAgentSwitch != nil {
+				deps.OnAgentSwitch(name)
+			}
+			return CommandResult{
+				Message: fmt.Sprintf(i18n.T("client.notify.agent.switched"), name),
+				Success: true,
+			}
 		},
 	})
 
