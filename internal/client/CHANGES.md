@@ -37,4 +37,4 @@
 
 - [x] 已核查：是流式显示。链路为 rpc.go（每条 thinking_delta → ThinkingDeltaMsg）→ client.go Update → streamList.Update 按 SessionID 路由 → UpdateStream 对活跃 ThinkingBlock 执行 `Text += delta` 增量追加，随后 bubbletea 重渲染对话视口。每个事件都更新组件内容，无需修改。
 
-- [ ] 输入框内的键入 "/model" 指令后，显示的模型列表信息完全错位了，是否应该根据EML体系进行重新设计，将其做成 Alt ? 又或者是按其原有的设计方式将其位置进行重新调整显示于输入框下方？ 你以此如何看，因为这个模式模式同时影响了 "/agent" 的切换指令，它们都应该是同构的；
+- [x] 输入框内的键入 "/model" 指令后，显示的模型列表信息完全错位了，是否应该根据EML体系进行重新设计，将其做成 Alt ? 又或者是按其原有的设计方式将其位置进行重新调整显示于输入框下方？ 你以此如何看，因为这个模式模式同时影响了 "/agent" 的切换指令，它们都应该是同构的；

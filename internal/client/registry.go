@@ -208,7 +208,7 @@ func BuiltinCommands(deps CommandDeps) *SlashCommandRegistry {
 
 	r.Register(CommandDef{
 		Name:        "agent",
-		Description: "切换 Agent（浮层选择）",
+		Description: "切换 Agent",
 		Run: func(args []string) CommandResult {
 			if deps.App == nil {
 				return CommandResult{Message: "❌ 系统未初始化", Success: false}
