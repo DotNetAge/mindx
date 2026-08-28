@@ -430,26 +430,27 @@ func (d *Daemon) handleModelCreate(_ context.Context, params json.RawMessage) (a
 	}
 
 	newCfg := &goharnessconfig.ModelConfig{
-		Name:          p.Name,
-		Title:         p.Title,
-		Description:   p.Description,
-		Provider:      p.Provider,
-		BaseURL:       p.BaseURL,
-		APIKey:        p.APIKey,
-		AuthToken:     p.AuthToken,
-		ContextLength: p.ContextLength,
-		IsLocal:       p.IsLocal,
-		FuncCalling:   p.FuncCalling,
-		Structuring:   p.Structuring,
-		WebSearching:  p.WebSearching,
-		Visioning:     p.Visioning,
-		PrefixCon:     p.PrefixCon,
-		ContextCache:  p.ContextCache,
-		Temperature:   p.Temperature,
-		Enabled:       p.Enabled,
-		MaxTurns:      p.MaxTurns,
-		CostPer1MIn:   p.CostPer1MIn,
-		CostPer1MOut:  p.CostPer1MOut,
+		Name:           p.Name,
+		Title:          p.Title,
+		Description:    p.Description,
+		Provider:       p.Provider,
+		BaseURL:        p.BaseURL,
+		APIKey:         p.APIKey,
+		AuthToken:      p.AuthToken,
+		ContextLength:  p.ContextLength,
+		IsLocal:        p.IsLocal,
+		FuncCalling:    p.FuncCalling,
+		Structuring:    p.Structuring,
+		WebSearching:   p.WebSearching,
+		Visioning:      p.Visioning,
+		PrefixCon:      p.PrefixCon,
+		ContextCache:   p.ContextCache,
+		Temperature:    p.Temperature,
+		Enabled:        p.Enabled,
+		MaxTurns:       p.MaxTurns,
+		RequestTimeout: p.RequestTimeout,
+		CostPer1MIn:    p.CostPer1MIn,
+		CostPer1MOut:   p.CostPer1MOut,
 	}
 
 	if err := models.Save(newCfg); err != nil {
@@ -537,6 +538,9 @@ func (d *Daemon) handleModelUpdate(_ context.Context, params json.RawMessage) (a
 	}
 	if p.MaxTurns != nil {
 		updated.MaxTurns = *p.MaxTurns
+	}
+	if p.RequestTimeout != nil {
+		updated.RequestTimeout = *p.RequestTimeout
 	}
 	if p.CostPer1MIn != nil {
 		updated.CostPer1MIn = *p.CostPer1MIn

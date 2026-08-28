@@ -35,6 +35,8 @@ type ModelCreateParams struct {
 	MaxTurns      int     `json:"max_turns,omitempty"`
 	CostPer1MIn   float64 `json:"cost_per_1m_in,omitempty"`
 	CostPer1MOut  float64 `json:"cost_per_1m_out,omitempty"`
+	// RequestTimeout 单次 LLM 调用最大等待时长（秒），0 表示未配置。
+	RequestTimeout int64 `json:"request_timeout,omitempty"`
 }
 
 // ModelUpdateParams are the params for model.update.
@@ -59,6 +61,8 @@ type ModelUpdateParams struct {
 	MaxTurns      *int     `json:"max_turns,omitempty"`
 	CostPer1MIn   *float64 `json:"cost_per_1m_in,omitempty"`
 	CostPer1MOut  *float64 `json:"cost_per_1m_out,omitempty"`
+	// RequestTimeout 单次 LLM 调用最大等待时长（秒），nil 表示不修改。
+	RequestTimeout *int64 `json:"request_timeout,omitempty"`
 }
 
 // ModelDeleteParams are the params for model.delete.

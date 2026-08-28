@@ -22,9 +22,9 @@ require (
 )
 
 require (
-	github.com/DotNetAge/gochat v0.2.9
+	github.com/DotNetAge/gochat v0.2.10
 	github.com/DotNetAge/gograph v0.4.0
-	github.com/DotNetAge/goharness v0.2.31
+	github.com/DotNetAge/goharness v0.2.33
 	github.com/DotNetAge/gorag/v2 v2.0.17
 	github.com/DotNetAge/gort v0.1.6
 	github.com/creack/pty v1.1.24
