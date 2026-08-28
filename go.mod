@@ -7,7 +7,6 @@ require (
 	charm.land/bubbletea/v2 v2.0.6
 	charm.land/glamour/v2 v2.0.0
 	charm.land/lipgloss/v2 v2.0.3
-	github.com/DotNetAge/gort v0.1.5
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/uuid v1.6.0
@@ -25,8 +24,9 @@ require (
 require (
 	github.com/DotNetAge/gochat v0.2.9
 	github.com/DotNetAge/gograph v0.4.0
-	github.com/DotNetAge/goharness v0.2.30
+	github.com/DotNetAge/goharness v0.2.31
 	github.com/DotNetAge/gorag/v2 v2.0.17
+	github.com/DotNetAge/gort v0.1.6
 	github.com/creack/pty v1.1.24
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/text v0.38.0

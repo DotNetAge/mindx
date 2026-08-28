@@ -67,6 +67,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"fs.reveal":                          r.daemon.handleFSReveal,
 		"fs.stat":                            r.daemon.handleFSStat,
 		"git.clone":                          r.daemon.handleGitClone,
+		"git.commit_message":                 r.daemon.handleCommitMessage,
 		"user.config":                        r.daemon.handleUserConfig,
 		"server.version":                     r.daemon.handleServerVersion,
 		"server.check_update":                r.daemon.handleServerCheckUpdate,

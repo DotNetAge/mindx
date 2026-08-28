@@ -51,6 +51,11 @@ type Item struct {
 	Text      string
 	Streaming bool // output：流式接收中
 
+	// itemOutput：是否为本轮「最终答案」段（区别于过程 content / 推理区）。
+	// 由 loop_end(termination_reason=completed) 或 final_answer / task_summary 标记；
+	// 终态折叠时仅非最终段参与折叠（推理区语义，与 Web ProcessView 对齐）。
+	IsFinal bool
+
 	// itemThinking：思想流正文存于 Text。
 	ThinkingActive bool
 	ThinkingStart  time.Time
@@ -77,6 +82,10 @@ type Stream struct {
 
 	BlinkOn     bool // Tick 驱动的闪烁相位（thinking / executing 共用）
 	ToolsFolded bool // 结论达成后把工具步骤折叠为单行摘要（ctrl+o 手动切换）
+
+	// TerminationReason 记录本轮 loop_end 的终止原因（completed / max_tokens / cancelled …），
+	// 用于精确判定「本轮是否已产出最终答案」（等价于 OpenAI finish_reason=stop）。
+	TerminationReason string
 }
 
 // NewStream 创建以用户提问开头的会话流。
@@ -168,9 +177,9 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		if !it.ThinkingStart.IsZero() {
 			it.ThinkingDur = time.Since(it.ThinkingStart).Round(10 * time.Millisecond)
 		}
-		if e.Content != "" && it.Text == "" {
-			it.Text = e.Content
-		}
+		// 思考正文只能来自 thinking_delta 增量累积（it.Text 已在 ThinkingDeltaMsg 追加）。
+		// 严禁用 ThinkingDone 事件的 Content 回退 —— daemon 曾把「模型已完成思考链」提示
+		// 文本放进 data，导致思考区出现荒谬固定文字（见 ISSUE）。
 		return s, nil
 
 	case msg.ToolUseDeltaMsg:
@@ -253,13 +262,30 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		if done {
 			return s, nil
 		}
-		i := s.last(func(it Item) bool { return it.Kind == itemOutput })
-		if i >= 0 && s.Items[i].Streaming {
-			s.Items[i].Text += e.Content
+		// 拆段对齐 Web ProcessView：仅当「最后一条 item 就是流式 output」时续写；
+		// 中间隔了工具 / 思考等 item 则新建独立段落（每段对应一次 LLM 迭代的 content，
+		// 后续可凭 IsFinal 区分过程段（推理区）与最终答案段）。
+		n := len(s.Items)
+		if n > 0 && s.Items[n-1].Kind == itemOutput && s.Items[n-1].Streaming {
+			s.Items[n-1].Text += e.Content
 		} else {
 			s.append(Item{Kind: itemOutput, Text: e.Content, Streaming: true})
 		}
 		s.Status = StatusResponding
+		return s, nil
+
+	case msg.IterationMsg:
+		// 本轮 loop 结束的权威信号：termination_reason=completed 表示本轮已产出最终答案
+		// （等价于 OpenAI finish_reason=stop），把最后一段 content 标记为最终答案段。
+		s.TerminationReason = e.TerminationReason
+		if e.TerminationReason == "completed" {
+			if i := s.last(func(it Item) bool { return it.Kind == itemOutput }); i >= 0 {
+				s.Items[i].IsFinal = true
+			}
+			if s.Status != StatusError {
+				s.Status = StatusResponding
+			}
+		}
 		return s, nil
 
 	case msg.FinalAnswerMsg:
@@ -267,8 +293,11 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		if i >= 0 && s.Items[i].Streaming {
 			s.Items[i].Text = e.Content
 			s.Items[i].Streaming = false
+			s.Items[i].IsFinal = true
 		} else if i < 0 || s.Items[i].Text != e.Content {
-			s.append(Item{Kind: itemOutput, Text: e.Content})
+			s.append(Item{Kind: itemOutput, Text: e.Content, IsFinal: true})
+		} else {
+			s.Items[i].IsFinal = true
 		}
 		s.Status = StatusResponding
 		// 结论已到达：折叠本轮工具步骤为单行摘要（显示门控见 foldActive，
@@ -278,7 +307,8 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 
 	case msg.TaskSummaryMsg:
 		if e.Content != "" {
-			s.append(Item{Kind: itemOutput, Text: e.Content})
+			// task_summary 是本轮最终总结：标记为最终答案段。
+			s.append(Item{Kind: itemOutput, Text: e.Content, IsFinal: true})
 		}
 		return s, nil
 
@@ -353,6 +383,11 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 	case msg.SessionDoneMsg:
 		s.Status = StatusDone
 		s.ToolsFolded = true
+		// 中断/取消现场：若尚无最终答案段，把最后一段 content 补标为最终，
+		// 保证终态折叠时该段（中断现场）完整可见而非被折叠。
+		if i := s.last(func(it Item) bool { return it.Kind == itemOutput }); i >= 0 {
+			s.Items[i].IsFinal = true
+		}
 		for i := range s.Items {
 			it := &s.Items[i]
 			if it.Kind == itemThinking && it.ThinkingActive {
@@ -386,7 +421,8 @@ func ViewStream(s *Stream, width int) string {
 	windowStart := s.lastQuestionIndex() + 1
 
 	var b strings.Builder
-	summaryDone := false
+	summaryDone := false        // 工具折叠摘要（一次）
+	contentSummaryDone := false // 推理区（非最终 content 段）折叠摘要（一次）
 	for i := range s.Items {
 		it := s.Items[i]
 		var v string
@@ -396,6 +432,12 @@ func ViewStream(s *Stream, width int) string {
 			if !summaryDone {
 				v = viewFoldedTools(s, windowStart, width)
 				summaryDone = true
+			}
+		case fold && it.Kind == itemOutput && !it.IsFinal && i >= windowStart:
+			// 推理区折叠：窗口内非最终 content 段收为单行摘要（等效 Web 推理区收尾）。
+			if !contentSummaryDone {
+				v = viewFoldedContent(s, windowStart, width)
+				contentSummaryDone = true
 			}
 		case it.Kind == itemOutput:
 			v = s.cachedOutputView(i, width)
@@ -448,6 +490,24 @@ func viewFoldedTools(s *Stream, windowStart, width int) string {
 		meta += " · " + formatDuration(elapsed)
 	}
 	line := style.GrayStyle.Render("⏺ ") + style.DimStyle.Render(meta+" (ctrl+o)")
+	return lipgloss.NewStyle().Width(width).Render(line)
+}
+
+// viewFoldedContent 把折叠窗口内（最后一个用户提问之后）的非最终 content 段
+// （推理区，即每次 LLM 迭代的过程正文）压缩为单行摘要，只保留最终答案完整显示。
+func viewFoldedContent(s *Stream, windowStart, width int) string {
+	count := 0
+	for i := windowStart; i < len(s.Items); i++ {
+		it := s.Items[i]
+		if it.Kind == itemOutput && !it.IsFinal {
+			count++
+		}
+	}
+	if count == 0 {
+		return ""
+	}
+	meta := fmt.Sprintf(i18n.T("conv.reasoning.folded"), count)
+	line := style.GrayStyle.Render("💬 ") + style.DimStyle.Render(meta+" (ctrl+o)")
 	return lipgloss.NewStyle().Width(width).Render(line)
 }
 
@@ -732,9 +792,16 @@ func StreamsFromMessages(sessionID, agentName string, msgs []session.Message) []
 				}
 				pending[tc.ID] = pendingToolCall{name: tc.Name, args: args}
 			}
-			// 3) 正文 → Output
+			// 3) 正文 → Output。
+			// finish_reason=stop 的 assistant 是本轮最终答案；其余（tool_calls / length 等）
+			// 为过程 content（推理区，终态折叠为摘要）。
+			// 旧数据（未持久化 finish_reason）回退：无 tool_calls 的 assistant 视为最终答案。
 			if m.Content != "" {
-				s.append(Item{Kind: itemOutput, Text: m.Content})
+				isFinal := m.FinishReason == "stop"
+				if m.FinishReason == "" {
+					isFinal = len(m.ToolCalls) == 0
+				}
+				s.append(Item{Kind: itemOutput, Text: m.Content, IsFinal: isFinal})
 			}
 
 		case "tool":

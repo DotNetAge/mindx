@@ -256,7 +256,7 @@ func (m *rootModel) registerNotificationHandlers() {
 		m.program.Send(clientmsg.SessionDoneMsg{SessionID: env.SessionID})
 	})
 
-	c.OnResponse(gateway.RespCycleEnd, func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
+	c.OnResponse(gateway.RespLoopEnd, func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
 		iter := 1
 		var reason string
 		var dur time.Duration

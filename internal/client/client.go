@@ -1290,8 +1290,14 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 				SessionID: sessionID, Duration: d.TotalDuration, TokensUsed: d.TokensUsed, ToolCalls: d.ToolCalls,
 			})
 		})
-		ask.OnCycleEnd(func(d events.CycleInfo) {
-			m.program.Send(clientmsg.IterationMsg{SessionID: sessionID, Iteration: d.Iteration})
+		ask.OnLoopEnd(func(d events.CycleInfo) {
+			// TerminationReason 是判定「本轮是否产出最终答案」的权威信号
+			// （completed 等价于 OpenAI finish_reason=stop），必须透传给对话流，
+			// 供其精确区分过程 content 与最终答案（推理区语义）。
+			m.program.Send(clientmsg.IterationMsg{
+				SessionID: sessionID, Iteration: d.Iteration,
+				TerminationReason: d.TerminationReason, Duration: d.Duration,
+			})
 		})
 		var tokenUsage goharnesssession.TokenUsage
 		ask.OnTokenUsageRecorded(func(d goharnesssession.TokenUsageRecord) {

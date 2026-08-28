@@ -353,5 +353,6 @@
   "conv.tool.success": "Success",
   "conv.tool.failed": "Failure",
   "conv.tool.websearch.found": "Found %d matching results",
-  "conv.tools.folded": "Called %d tools · %s tokens"
+  "conv.tools.folded": "Called %d tools · %s tokens",
+  "conv.reasoning.folded": "Reasoned over %d passages",
 }

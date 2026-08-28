@@ -22,7 +22,7 @@ type askEventHandlers struct {
 	ToolEnd            func(data goharnessevents.ToolExecEndData)
 	Answer             func(answer string)
 	ExecutionSummary   func(data goharnessevents.ExecutionSummaryData)
-	CycleEnd           func(data goharnessevents.CycleInfo)
+	LoopEnd            func(data goharnessevents.CycleInfo)
 	Compaction         func(data goharnessevents.CompactionData)
 	MaxTurnsReached    func(data goharnessevents.MaxTurnsReachedData)
 	Error              func(errMsg string)
@@ -66,8 +66,8 @@ func wireAskEvents(b *agents.AskBuilder, h askEventHandlers) *agents.AskBuilder 
 	if h.ExecutionSummary != nil {
 		b = b.OnExecutionSummary(h.ExecutionSummary)
 	}
-	if h.CycleEnd != nil {
-		b = b.OnCycleEnd(h.CycleEnd)
+	if h.LoopEnd != nil {
+		b = b.OnLoopEnd(h.LoopEnd)
 	}
 	if h.Compaction != nil {
 		b = b.OnCompaction(h.Compaction)
@@ -152,7 +152,10 @@ func newClientAskHandlers(
 			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 		},
 		ThinkingDone: func() {
-			d.sendEvent(clientID, effectiveEventSession(sid, getSubSessionID), gateway.RespThinkingDone, i18n.T("svc.event.thinking.done"), i18n.T("svc.event.thinking.done.detail"), withAgent())
+			// data 必须为空：思考正文已由 thinking_delta 流承载，客户端据此累积。
+			// 严禁把「模型已完成思考链」这类提示文本放进 data —— 它会被前端/TUI
+			// 当作思考正文显示（思考区出现荒谬固定文字，见 ISSUE）。标题 title 已表达「思考完成」。
+			d.sendEvent(clientID, effectiveEventSession(sid, getSubSessionID), gateway.RespThinkingDone, i18n.T("svc.event.thinking.done"), "", withAgent())
 		},
 		ToolStart: func(data goharnessevents.ToolExecStartData) {
 			_ = gw.SendResponse(clientID, gateway.RespToolExecStart, i18n.T("svc.event.tool.start"), map[string]any{
@@ -203,8 +206,8 @@ func newClientAskHandlers(
 			// 前端把执行摘要写入子会话自己的消息流，主会话 Tab 不被污染。
 			d.sendExecutionSummary(clientID, effectiveEventSession(sid, getSubSessionID), data, getAgentName())
 		},
-		CycleEnd: func(data goharnessevents.CycleInfo) {
-			_ = gw.SendResponse(clientID, gateway.RespCycleEnd, i18n.T("svc.event.cycle.end"), map[string]any{
+		LoopEnd: func(data goharnessevents.CycleInfo) {
+			_ = gw.SendResponse(clientID, gateway.RespLoopEnd, i18n.T("svc.event.cycle.end"), map[string]any{
 				"iteration": data.Iteration, "termination_reason": data.TerminationReason, "duration": data.Duration.String(),
 			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 		},

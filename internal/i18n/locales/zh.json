@@ -353,5 +353,6 @@
   "conv.tool.success": "成功",
   "conv.tool.failed": "失败",
   "conv.tool.websearch.found": "共找到 %d 条符合条件的结果",
-  "conv.tools.folded": "已调用 %d 个工具 · 消耗 %s tokens"
+  "conv.tools.folded": "已调用 %d 个工具 · 消耗 %s tokens",
+  "conv.reasoning.folded": "已说明 %d 段推理内容",
 }

@@ -33,7 +33,7 @@ func main() {
 		gateway.RespToolExecEnd,
 		gateway.RespExecutionSummary,
 		gateway.RespFinalAnswer,
-		gateway.RespCycleEnd,
+		gateway.RespLoopEnd,
 		gateway.RespForm,
 		gateway.RespPermissionRequest,
 		gateway.RespError,

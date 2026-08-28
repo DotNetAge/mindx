@@ -14,7 +14,6 @@ import (
 	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/rpc"
-	"gopkg.in/yaml.v3"
 )
 
 func (d *Daemon) handleModelList(_ context.Context, _ json.RawMessage) (any, error) {
@@ -571,7 +570,11 @@ func (d *Daemon) handleModelDelete(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("model %q not found", p.Name)
 	}
 
-	if err := deleteModelFromFile(models, d.app.Settings().ModelsFile(), p.Name); err != nil {
+	// 必须先从内存注册表删除再持久化，否则 model.list 仍会返回该模型，
+	// 前端下一次刷新立刻"复活"，看似删除按钮无反应。
+	// ModelRegistry.Delete 内部已经做了：1) 内存 map 删除 2) 全量回写 YAML。
+	// 旧实现的 deleteModelFromFile 只动文件不动内存，正是该 bug 的根因。
+	if err := models.Delete(p.Name); err != nil {
 		return nil, fmt.Errorf("failed to delete model: %w", err)
 	}
 
@@ -582,46 +585,6 @@ func (d *Daemon) handleModelDelete(_ context.Context, params json.RawMessage) (a
 }
 
 // --- Helpers ---
-
-func deleteModelFromFile(models interface {
-	GetRaw(string) *goharnessconfig.ModelConfig
-}, settingPath string, name string) error {
-	data, err := os.ReadFile(settingPath)
-	if err != nil {
-		return fmt.Errorf("read file: %w", err)
-	}
-
-	var wrapper struct {
-		Models    []goharnessconfig.ModelConfig    `yaml:"models"`
-		Providers []goharnessconfig.ProviderConfig `yaml:"providers,omitempty"`
-	}
-	if err := yaml.Unmarshal(data, &wrapper); err != nil {
-		return fmt.Errorf("parse yaml: %w", err)
-	}
-
-	filtered := make([]goharnessconfig.ModelConfig, 0, len(wrapper.Models))
-	for _, m := range wrapper.Models {
-		if m.Name != name {
-			filtered = append(filtered, m)
-		}
-	}
-	if len(filtered) == len(wrapper.Models) {
-		return fmt.Errorf("model %q not found in file", name)
-	}
-
-	wrapper.Models = filtered
-
-	outData, err := yaml.Marshal(wrapper)
-	if err != nil {
-		return fmt.Errorf("marshal: %w", err)
-	}
-
-	if err := os.WriteFile(settingPath, outData, 0644); err != nil {
-		return fmt.Errorf("write file: %w", err)
-	}
-
-	return nil
-}
 
 func paramsContainsKey(raw json.RawMessage, key string) bool {
 	var m map[string]json.RawMessage
