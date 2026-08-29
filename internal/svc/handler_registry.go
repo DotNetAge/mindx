@@ -54,6 +54,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"provider.fetch_ollama_model_detail": r.daemon.handleProviderFetchOllamaModelDetail,
 		"skill.list":                         r.daemon.handleSkillList,
 		"skill.get":                          r.daemon.handleSkillGet,
+		"skill.delete":                       r.daemon.handleSkillDelete,
 		"skill.reload":                       r.daemon.handleSkillReload,
 		"message.cancel":                     r.daemon.handleMessageCancel,
 		"fs.list":                            r.daemon.handleFSList,
