@@ -116,10 +116,24 @@ func (d *Daemon) handleSessionGet(_ context.Context, params json.RawMessage) (an
 		}
 	}
 
+	// 待确认修改文件：读取会话追踪的修改文件列表（重载后仍持久化，见 goharness
+	// Session.SaveModifyFiles），结合 backup 计算 diff 供前端 FileReviewBar 恢复显示。
+	modFiles := sess.GetModifyFiles()
+	fileInfos := make([]fileDiffInfo, 0, len(modFiles))
+	for _, fp := range modFiles {
+		info := computeFileDiff(sess, fp)
+		// 仅返回可用的文件：diff 非空（有真实修改）或确为新文件；
+		// 当前文件已被删除时 computeFileDiff 返回空 diff 且非新文件，跳过。
+		if info.Diff != "" || info.IsNew {
+			fileInfos = append(fileInfos, info)
+		}
+	}
+
 	return map[string]any{
-		"session_id": p.SessionID,
-		"messages":   d.enrichMessages(messages),
-		"meta":       meta,
+		"session_id":   p.SessionID,
+		"messages":     d.enrichMessages(messages),
+		"meta":         meta,
+		"modify_files": fileInfos,
 	}, nil
 }
 
