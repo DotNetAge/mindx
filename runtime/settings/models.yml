@@ -197,3 +197,88 @@ models:
     frequency_penalty: 0
     enabled: true
     max_turns: 0
+  # --- Zhipu (智谱) ---
+  - name: glm-5.3
+    title: GLM-5.3
+    description: >
+      智谱最新旗舰文本模型（新品），1M 超长上下文，支持工具调用、结构化输出与联网搜索，
+      适合复杂推理、长文本处理与智能体场景。
+    provider: bigmodel
+    cost_per_1m_in: 8
+    cost_per_1m_out: 28
+    context_length: 1000000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: true
+    prefix_con: true
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+  - name: glm-5.3-flash
+    title: GLM-5.3-Flash
+    description: >
+      智谱轻量多模态模型（限时 5 折），支持图片、视频、文件与文本输入，1M 超长上下文，
+      兼具工具调用、结构化输出与联网搜索能力，性价比高。
+    provider: bigmodel
+    cost_per_1m_in: 0.4
+    cost_per_1m_out: 0.8
+    context_length: 1000000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: true
+    visioning: true
+    prefix_con: true
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+  - name: glm-5.2
+    title: GLM-5.2
+    description: >
+      智谱经典旗舰文本模型，1M 超长上下文，支持工具调用、结构化输出与联网搜索。
+    provider: bigmodel
+    cost_per_1m_in: 8
+    cost_per_1m_out: 28
+    context_length: 1000000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: true
+    prefix_con: true
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+  - name: glm-4.7-flash
+    title: GLM-4.7-Flash
+    description: >
+      智谱免费文本模型，200K 上下文，输入/输出/缓存均免费，
+      支持工具调用、结构化输出与联网搜索，适合高频轻量场景。
+    provider: bigmodel
+    cost_per_1m_in: 0
+    cost_per_1m_out: 0
+    context_length: 204800
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: true
+    prefix_con: true
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0

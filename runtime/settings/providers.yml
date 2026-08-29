@@ -29,7 +29,7 @@ providers:
     base_url: http://localhost:11434/v1
     api_key: "NONE_API_KEY"
     auth_token: ""
-  - name: ark
+  - name: volcengine
     title: 火山引擎
     base_url: https://ark.cn-beijing.volces.com/api/v3
     api_key: ARK_API_KEY
