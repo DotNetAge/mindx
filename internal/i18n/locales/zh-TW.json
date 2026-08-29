@@ -341,5 +341,5 @@
   "conv.tool.failed": "失敗",
   "conv.tool.websearch.found": "共找到 %d 條符合條件的結果",
   "conv.tools.folded": "已調用 %d 個工具 · 消耗 %s tokens",
-  "conv.reasoning.folded": "已說明 %d 段推理內容",
+  "conv.reasoning.folded": "已說明 %d 段推理內容"
 }
