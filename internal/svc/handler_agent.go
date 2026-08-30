@@ -93,8 +93,12 @@ func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("body is required")
 	}
 
-	if d.app.Models() == nil || d.app.Models().Get(p.Model) == nil {
-		return nil, fmt.Errorf("model %q not found", p.Model)
+	if d.app.Models() == nil {
+		return nil, fmt.Errorf("model registry not available")
+	}
+	modelRef, err := d.normalizeModelRef(p.Model)
+	if err != nil {
+		return nil, err
 	}
 
 	agents := d.app.Agents()
@@ -112,7 +116,7 @@ func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (a
 		Role:         p.Role,
 		Description:  p.Description,
 		Introduction: p.Introduction,
-		Model:        p.Model,
+		Model:        modelRef,
 		Skills:       p.Skills,
 		Meta:         p.Meta,
 	}
@@ -159,7 +163,11 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 		updated.Description = p.Description
 	}
 	if p.Model != "" {
-		updated.Model = p.Model
+		modelRef, err := d.normalizeModelRef(p.Model)
+		if err != nil {
+			return nil, err
+		}
+		updated.Model = modelRef
 	}
 	if p.Skills != nil {
 		updated.Skills = p.Skills
@@ -291,4 +299,21 @@ func (d *Daemon) handleAgentReload(_ context.Context, params json.RawMessage) (a
 		"status":  "ok",
 		"message": "agents reloaded successfully",
 	}, nil
+}
+
+// normalizeModelRef 将 agent.Model 归一化为组合串（Provider/Name），作为 agent 的模型参照，
+// 用于跨供应商同名模型时消歧。接受裸 name（唯一匹配）或已组合的 Provider/Name 两种输入，
+// 无法唯一解析（裸名存在冲突而调用方未指定供应商）时返回错误，提示调用方用组合串精确指定。
+func (d *Daemon) normalizeModelRef(ref string) (string, error) {
+	if ref == "" {
+		return "", nil
+	}
+	if d.app.Models() == nil {
+		return "", fmt.Errorf("model registry not available")
+	}
+	cfg := d.app.Models().Get(ref)
+	if cfg == nil {
+		return "", fmt.Errorf("model %q not found", ref)
+	}
+	return modelLookupKey(cfg.Provider, cfg.Name), nil
 }

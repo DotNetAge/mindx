@@ -294,8 +294,13 @@ Example:
 			return fmt.Errorf("cannot load config: %w", err)
 		}
 
-		cfg.DefaultModel = modelName
-		cfg.LastModel = modelName
+		// 参照字段存组合串（Provider/Name），跨供应商同名可消歧。
+		ref := modelName
+		if mc := registry.GetRaw(modelName); mc != nil && mc.Provider != "" {
+			ref = mc.Provider + "/" + modelName
+		}
+		cfg.DefaultModel = ref
+		cfg.LastModel = ref
 
 		if err := cfg.Save(); err != nil {
 			return fmt.Errorf("cannot save config: %w", err)

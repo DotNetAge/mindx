@@ -5,6 +5,8 @@ import "encoding/json"
 // ModelGetParams are the params for model.get.
 type ModelGetParams struct {
 	Name string `json:"name"`
+	// Provider 可选：跨供应商存在同名模型时用于按组合键（Provider/Name）精确寻址。
+	Provider string `json:"provider,omitempty"`
 }
 
 // ModelSwitchParams are the params for model.switch.
@@ -68,6 +70,8 @@ type ModelUpdateParams struct {
 // ModelDeleteParams are the params for model.delete.
 type ModelDeleteParams struct {
 	Name string `json:"name"`
+	// Provider 可选：跨供应商存在同名模型时用于按组合键（Provider/Name）精确寻址。
+	Provider string `json:"provider,omitempty"`
 }
 
 func (c *Client) ModelList() (json.RawMessage, error) {

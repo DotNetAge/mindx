@@ -45,11 +45,16 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 
 	// Update agent models and config
 	if result.SelectedModel != "" {
-		if err := updateAllAgentsModel(agentsDir, result.SelectedModel); err != nil {
+		if err := updateAllAgentsModel(agentsDir, result.SelectedModel, result.SelectedProvider); err != nil {
 			return fmt.Errorf(i18n.T("setup.update.agent.model.failed"), err)
 		}
-		cfg.DefaultModel = result.SelectedModel
-		cfg.LastModel = result.SelectedModel
+		// 参照字段存组合串（Provider/Name），跨供应商同名可消歧。
+		ref := result.SelectedModel
+		if result.SelectedProvider != "" {
+			ref = result.SelectedProvider + "/" + result.SelectedModel
+		}
+		cfg.DefaultModel = ref
+		cfg.LastModel = ref
 	}
 
 	if result.SelectedProvider != "" {
@@ -94,14 +99,19 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 	return nil
 }
 
-func updateAllAgentsModel(agentsDir, modelName string) error {
+func updateAllAgentsModel(agentsDir, modelName, provider string) error {
 	registry, err := config.LoadAgentsFrom(agentsDir)
 	if err != nil {
 		return err
 	}
 
+	// agent.Model 存组合串（Provider/Name），跨供应商同名可消歧。
+	ref := modelName
+	if provider != "" {
+		ref = provider + "/" + modelName
+	}
 	for _, agent := range registry.List() {
-		agent.Model = modelName
+		agent.Model = ref
 		if err := registry.SaveTo(agent); err != nil {
 			return fmt.Errorf(i18n.T("setup.save.agent.model.failed"), agent.Name, err)
 		}

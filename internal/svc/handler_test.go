@@ -542,6 +542,9 @@ func TestHandleAgentUpdate_OK(t *testing.T) {
 		d.app.SetAgentsRegistry(reloaded)
 	}
 
+	// agent.Model 归一化要求目标模型真实存在（无 provider，组合串退化为裸名"new-model"）。
+	d.app.Models().Register("new-model", &goharnessconfig.ModelConfig{Name: "new-model"})
+
 	params, _ := json.Marshal(map[string]interface{}{
 		"name":        "test-updater",
 		"role":        "Updated Role",

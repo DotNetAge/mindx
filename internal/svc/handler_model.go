@@ -67,7 +67,7 @@ func (d *Daemon) handleModelGet(_ context.Context, params json.RawMessage) (any,
 		return nil, fmt.Errorf("model registry not available")
 	}
 
-	cfg := models.Get(p.Name)
+	cfg := models.Get(modelLookupKey(p.Name, p.Provider))
 	if cfg == nil {
 		return nil, fmt.Errorf("model %q not found", p.Name)
 	}
@@ -89,13 +89,16 @@ func (d *Daemon) handleModelSwitch(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("model registry not available")
 	}
 
-	cfg := models.Get(p.Name)
+	key := modelLookupKey(p.Name, p.Provider)
+
+	cfg := models.Get(key)
 	if cfg == nil {
 		return nil, fmt.Errorf("model %q not found", p.Name)
 	}
 
-	d.app.Config().DefaultModel = p.Name
-	d.app.Config().LastModel = p.Name
+	// 参照字段改存组合串（Provider/Name），保证跨供应商同名模型也能被精确记忆与解析。
+	d.app.Config().DefaultModel = key
+	d.app.Config().LastModel = key
 	if p.Provider != "" {
 		d.app.Config().DefaultProvider = p.Provider
 	}
@@ -425,7 +428,7 @@ func (d *Daemon) handleModelCreate(_ context.Context, params json.RawMessage) (a
 	}
 
 	models := d.app.Models()
-	if models.GetRaw(p.Name) != nil {
+	if models.GetRaw(modelLookupKey(p.Name, p.Provider)) != nil {
 		return nil, fmt.Errorf("model %q already exists", p.Name)
 	}
 
@@ -474,20 +477,20 @@ func (d *Daemon) handleModelUpdate(_ context.Context, params json.RawMessage) (a
 	}
 
 	models := d.app.Models()
-	raw := models.GetRaw(p.Name)
+	raw := models.GetRaw(modelLookupKey(p.Name, p.Provider))
 	if raw == nil {
 		return nil, fmt.Errorf("model %q not found", p.Name)
 	}
 
+	// Provider 属于模型的身份标识（组合键 Provider/Name 的组成部分），不可在 update 中变更。
+	// 上面按该 provider 寻址：若调用方传入的 provider 与模型当前 provider 不一致，组合键查询
+	// 必然 miss 返回 not found，因此 provider 天然不可变；要迁移模型请 delete 后重建。
 	updated := *raw
 	if p.Title != "" {
 		updated.Title = p.Title
 	}
 	if p.Description != "" {
 		updated.Description = p.Description
-	}
-	if p.Provider != "" {
-		updated.Provider = p.Provider
 	}
 	if p.BaseURL != "" {
 		updated.BaseURL = p.BaseURL
@@ -552,6 +555,7 @@ func (d *Daemon) handleModelUpdate(_ context.Context, params json.RawMessage) (a
 	if err := models.Save(&updated); err != nil {
 		return nil, fmt.Errorf("failed to save model: %w", err)
 	}
+	// Provider 不可变，组合键不变，无需清理旧键。
 
 	return map[string]any{
 		"name":    updated.Name,
@@ -570,7 +574,8 @@ func (d *Daemon) handleModelDelete(_ context.Context, params json.RawMessage) (a
 	}
 
 	models := d.app.Models()
-	if models.GetRaw(p.Name) == nil {
+	key := modelLookupKey(p.Name, p.Provider)
+	if models.GetRaw(key) == nil {
 		return nil, fmt.Errorf("model %q not found", p.Name)
 	}
 
@@ -578,7 +583,7 @@ func (d *Daemon) handleModelDelete(_ context.Context, params json.RawMessage) (a
 	// 前端下一次刷新立刻"复活"，看似删除按钮无反应。
 	// ModelRegistry.Delete 内部已经做了：1) 内存 map 删除 2) 全量回写 YAML。
 	// 旧实现的 deleteModelFromFile 只动文件不动内存，正是该 bug 的根因。
-	if err := models.Delete(p.Name); err != nil {
+	if err := models.Delete(key); err != nil {
 		return nil, fmt.Errorf("failed to delete model: %w", err)
 	}
 
@@ -589,6 +594,16 @@ func (d *Daemon) handleModelDelete(_ context.Context, params json.RawMessage) (a
 }
 
 // --- Helpers ---
+
+// modelLookupKey 构造模型在注册表中的组合寻址键：Provider + "/" + Name；
+// Provider 为空时退化为仅 Name。与 goharness config 中 modelKey 的格式保持一致，
+// 用于在跨供应商存在同名模型时精确寻址。
+func modelLookupKey(name, provider string) string {
+	if provider == "" {
+		return name
+	}
+	return provider + "/" + name
+}
 
 func paramsContainsKey(raw json.RawMessage, key string) bool {
 	var m map[string]json.RawMessage

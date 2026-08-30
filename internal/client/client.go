@@ -447,6 +447,15 @@ func displayName(title, name string) string {
 	return name
 }
 
+// modelKeyOf 构造模型参照组合串：Provider + "/" + Name；Provider 为空时退化为仅 Name。
+// 与 goharness config 的 modelKey 格式保持一致，参照字段（LastModel/DefaultModel）用它消除同名歧义。
+func modelKeyOf(provider, name string) string {
+	if provider == "" {
+		return name
+	}
+	return provider + "/" + name
+}
+
 func (m *rootModel) providerDisplayName(providerName string) string {
 	if m.app == nil || providerName == "" {
 		return providerName
@@ -687,7 +696,7 @@ func (m *rootModel) saveConnectResult(modelName string) {
 	if cfg != nil {
 		cfg.DefaultProvider = m.connectProvider
 		if modelName != "" {
-			cfg.LastModel = modelName
+			cfg.LastModel = modelKeyOf(m.connectProvider, modelName)
 		}
 		_ = cfg.Save()
 	}
@@ -697,7 +706,7 @@ func (m *rootModel) saveConnectResult(modelName string) {
 			m.welcome.Data.ModelName = displayName(modelCfg.Title, modelCfg.Name)
 			m.updateModelDisplay(modelCfg)
 			if cfg := m.app.Config(); cfg != nil {
-				cfg.LastModel = modelName
+				cfg.LastModel = modelKeyOf(modelCfg.Provider, modelName)
 				_ = cfg.Save()
 			}
 			_ = reg.Save(modelCfg)
@@ -1492,7 +1501,7 @@ func (m *rootModel) handleSlashCommand(e clientmsg.SlashCommandMsg) (tea.Model, 
 				m.welcome.Data.ModelName = displayName(modelCfg.Title, modelCfg.Name)
 				m.updateModelDisplay(modelCfg)
 				if cfg := m.app.Config(); cfg != nil {
-					cfg.LastModel = modelName
+					cfg.LastModel = modelKeyOf(modelCfg.Provider, modelName)
 					_ = cfg.Save()
 				}
 			}
