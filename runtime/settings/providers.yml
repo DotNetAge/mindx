@@ -1,6 +1,6 @@
 providers:
   - name: dashscope
-    title: Alibaba
+    title: 阿里云
     base_url: https://dashscope.aliyuncs.com/compatible-mode
     api_key: DASHSCOPE_API_KEY
     auth_token: ""
@@ -24,10 +24,10 @@ providers:
     base_url: https://api.minimaxi.com
     api_key: MINIMAX_API_KEY
     auth_token: ""
-  - name: ollama
-    title: Ollama
-    base_url: http://localhost:11434/v1
-    api_key: "NONE_API_KEY"
+  - name: tencent
+    title: 腾讯云
+    base_url: https://tokenhub.tencentmaas.com
+    api_key: TENCENT_API_KEY
     auth_token: ""
   - name: volcengine
     title: 火山引擎
@@ -46,3 +46,8 @@ providers:
     api_key: OPENROUTER_API_KEY
     auth_token: ""
     is_local: false
+  - name: ollama
+    title: Ollama
+    base_url: http://localhost:11434/v1
+    api_key: "NONE_API_KEY"
+    auth_token: ""

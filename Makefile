@@ -208,42 +208,30 @@ run-daemon: build
 	@echo ""
 	./$(BUILD_DIR)/$(BINARY_NAME) daemon
 
-## restart: 编译并重启 daemon（生成与运行的始终是同一份 binary）
+## restart: 编译并强制重启 daemon（先编译部署，再经 launchd 强制重启，确保运行的是最新二进制）
 restart: fmt lint pre-build
-	@# ── Step 1: 停掉当前运行的任意 mindx daemon ──
-	@echo "$(YELLOW)🛑 Stopping running mindx daemon...$(NC)"
-	@if pids=$$(pgrep -f "$(BINARY_NAME) daemon" 2>/dev/null); then \
-		echo "  Found PIDs: $$pids"; \
-		kill $$pids 2>/dev/null; sleep 1; \
-		if pids=$$(pgrep -f "$(BINARY_NAME) daemon" 2>/dev/null); then \
-			kill -9 $$pids 2>/dev/null || true; \
-		fi; \
-		echo "$(GREEN)  ✅ Daemon stopped.$(NC)"; \
-	else \
-		echo "$(YELLOW)  ⚠ No running daemon found.$(NC)"; \
-	fi
-	@# ── Step 2: 编译生成到 ~/.mindx/bin（和运行时是同一份文件）──
+	@# ── Step 1: 编译生成到 ~/.mindx/bin（和运行时是同一份文件；必须先编译）──
 	@echo "$(GREEN)➡ Building $(BINARY_NAME) for $(shell go env GOOS)/$(shell go env GOARCH)...$(NC)"
 	@mkdir -p ~/.mindx/bin
 	@CGO_ENABLED=1 $(GO) build $(GOFLAGS) -o "$$HOME/.mindx/bin/$(BINARY_NAME)" .
 	@echo "$(GREEN)✅ Build complete! (~/.mindx/bin/$(BINARY_NAME))$(NC)"
 	@ls -lh "$$HOME/.mindx/bin/$(BINARY_NAME)"
-	@echo "$(CYAN)➡ Deploying frontend → ~/.mindx/web/...$(NC)"
-	@if [ -d "../mindx-chat/dist" ]; then \
-		rm -rf $$HOME/.mindx/web 2>/dev/null; \
-		cp -r ../mindx-chat/dist $$HOME/.mindx/web && \
-			echo "$(GREEN)  ✅ Frontend deployed.$(NC)" || \
-			echo "$(YELLOW)  ⚠ Frontend not found at ../mindx-chat/dist (skip).$(NC)"; \
+	@# ── Step 2: 强制重启 launchd 托管的 daemon ──
+	@# 必须先编译再 kill：KeepAlive=true 会在进程被杀后立刻用 ProgramArguments 路径的二进制复活。
+	@# 若在编译前 kill，会用旧二进制复活；编译后才 kill，则复活的正是新二进制。
+	@# 用 launchctl kickstart -k 由 launchd 执行「杀掉并重启」，绕开 `mindx start` 的"已运行"空转。
+	@echo "$(YELLOW)🛑 Force-restarting daemon (launchd com.mindx.daemon)...$(NC)"
+	@if launchctl list 2>/dev/null | grep -q "com.mindx.daemon"; then \
+		launchctl kickstart -k "gui/$$(id -u)/com.mindx.daemon"; \
+		echo "$(GREEN)  ✅ launchd service force-restarted with new binary.$(NC)"; \
+	elif pids=$$(pgrep -f "$(BINARY_NAME) daemon"); then \
+		echo "  Found non-launchd PIDs: $$pids"; \
+		kill -9 $$pids 2>/dev/null || true; sleep 1; \
+		"$$HOME/.mindx/bin/$(BINARY_NAME)" start; \
 	else \
-		echo "$(YELLOW)  ⚠ ../mindx-chat/dist not found, skipping frontend deploy.$(NC)"; \
+		"$$HOME/.mindx/bin/$(BINARY_NAME)" start; \
 	fi
-	@# ── Step 3: 启动 daemon ──
-	@echo "$(GREEN)➡ Starting daemon...$(NC)"
-	@"$$HOME/.mindx/bin/$(BINARY_NAME)" start || { \
-		echo "$(RED)❌ 'mindx start' failed.$(NC)"; \
-		echo "$(YELLOW)  Try manually: $$HOME/.mindx/bin/$(BINARY_NAME) start$(NC)"; \
-	}
-	@echo "$(GREEN)✅ Daemon restarted.$(NC)"
+	@echo "$(GREEN)✅ Daemon restarted with the latest build.$(NC)"
 
 ## stop: 停止 mindx daemon（委托给 mindx stop）
 stop:

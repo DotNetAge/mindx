@@ -174,15 +174,16 @@ func (d *Daemon) enrichMessages(msgs []goharnesssession.Message) []map[string]an
 // 用户切换模型后立即生效，避免使用启动时固化的模型名导致价格过期或为空。
 // 模型不可用或未配置价格时，回退到默认价格（DefaultInputCost/DefaultOutputCost）。
 func (d *Daemon) buildSessionPricing() goharnesssession.PricingUnit {
-	per1MIn, per1MOut := core.DefaultInputCost, core.DefaultOutputCost
+	per1MIn, per1MOut, per1MInCache := core.DefaultInputCost, core.DefaultOutputCost, 0.0
 	if d.app != nil {
 		if modelCfg := d.app.ResolveDefaultModel(); modelCfg != nil {
-			per1MIn, per1MOut = modelCfg.CostPer1MIn, modelCfg.CostPer1MOut
+			per1MIn, per1MOut, per1MInCache = modelCfg.CostPer1MIn, modelCfg.CostPer1MOut, modelCfg.CostPer1MInCache
 		}
 	}
 	return goharnesssession.PricingUnit{
 		InputPricePer1M:  per1MIn,
 		OutputPricePer1M: per1MOut,
+		CachePricePer1M:  per1MInCache,
 	}
 }
 

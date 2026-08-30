@@ -85,8 +85,8 @@ func (d *Daemon) handleTokenUsageTotal(_ context.Context, _ json.RawMessage) (an
 			key := r.SessionID + ":" + r.ConversationID
 			convSet[key] = struct{}{}
 		}
-		mcIn, mcOut := d.modelCost(r.ModelName, r.ProviderName)
-		totalCost += core.CalculateCost(mcIn, mcOut, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
+		mcIn, mcOut, mcCache := d.modelCost(r.ModelName, r.ProviderName)
+		totalCost += core.CalculateCost(mcIn, mcOut, mcCache, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
 	}
 
 	return map[string]any{
@@ -127,8 +127,8 @@ func (d *Daemon) handleTokenUsageSession(_ context.Context, params json.RawMessa
 		// Use chargeable tokens (prompt + completion - cached) to match the
 		// billing口径 used by monthly stats and ContextUsage.TotalActualTokens.
 		totalTokens += chargeableTokens(r)
-		mcIn, mcOut := d.modelCost(r.ModelName, r.ProviderName)
-		totalCost += core.CalculateCost(mcIn, mcOut, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
+		mcIn, mcOut, mcCache := d.modelCost(r.ModelName, r.ProviderName)
+		totalCost += core.CalculateCost(mcIn, mcOut, mcCache, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
 	}
 
 	return map[string]any{
@@ -161,8 +161,8 @@ func (d *Daemon) handleTokenUsageSessionDetail(_ context.Context, params json.Ra
 
 	details := make([]any, 0, len(records))
 	for _, r := range records {
-		mcIn, mcOut := d.modelCost(r.ModelName, r.ProviderName)
-		cost := core.CalculateCost(mcIn, mcOut, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
+		mcIn, mcOut, mcCache := d.modelCost(r.ModelName, r.ProviderName)
+		cost := core.CalculateCost(mcIn, mcOut, mcCache, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
 		details = append(details, map[string]any{
 			"timestamp":     r.Timestamp,
 			"input_tokens":  r.PromptTokens,
@@ -220,7 +220,7 @@ func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessa
 		return nil, fmt.Errorf("query token usage: %w", err)
 	}
 
-	mcIn, mcOut := d.modelCost(p.Model, "")
+	mcIn, mcOut, mcCache := d.modelCost(p.Model, "")
 
 	totalTokens := 0
 	totalInput := 0
@@ -236,7 +236,7 @@ func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessa
 		totalInput += r.PromptTokens
 		totalOutput += r.CompletionTokens
 		totalCached += r.CachedTokens
-		totalCost += core.CalculateCost(mcIn, mcOut, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
+		totalCost += core.CalculateCost(mcIn, mcOut, mcCache, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
 	}
 
 	avgPerRequest := 0
@@ -318,8 +318,8 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 		mData.cachedTokens += r.CachedTokens
 		mData.requestCount++
 
-		mcIn, mcOut := d.modelCost(r.ModelName, r.ProviderName)
-		cost := core.CalculateCost(mcIn, mcOut, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
+		mcIn, mcOut, mcCache := d.modelCost(r.ModelName, r.ProviderName)
+		cost := core.CalculateCost(mcIn, mcOut, mcCache, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
 		dayData.cost += cost
 		mData.totalCost += cost
 		totalCost += cost
@@ -402,12 +402,12 @@ func (d *Daemon) listAvailableModels() []string {
 
 // modelCost 根据模型名称与供应商获取输入/输出价格，未找到时返回默认值。
 // 传入 provider 走组合键寻址，跨供应商同名模型也能取到对应价格；provider 为空时退化为裸名匹配。
-func (d *Daemon) modelCost(modelName, provider string) (per1MIn, per1MOut float64) {
+func (d *Daemon) modelCost(modelName, provider string) (per1MIn, per1MOut, per1MInCache float64) {
 	model := d.app.Models().Get(modelLookupKey(modelName, provider))
 	if model == nil {
-		return core.DefaultInputCost, core.DefaultOutputCost
+		return core.DefaultInputCost, core.DefaultOutputCost, 0
 	}
-	return model.CostPer1MIn, model.CostPer1MOut
+	return model.CostPer1MIn, model.CostPer1MOut, model.CostPer1MInCache
 }
 
 type dayAgg struct {

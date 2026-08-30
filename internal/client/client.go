@@ -417,18 +417,18 @@ func (m *rootModel) wirePricing() {
 
 	// StatusBar: total cost function using ModelConfig or default fallback
 	m.statusBar.CostFn = func(modelName string, promptTokens, completionTokens, cachedTokens int) float64 {
-		per1MIn, per1MOut := appcore.DefaultInputCost, appcore.DefaultOutputCost
+		per1MIn, per1MOut, per1MInCache := appcore.DefaultInputCost, appcore.DefaultOutputCost, 0.0
 		if model := m.app.Models().Get(modelName); model != nil {
-			per1MIn, per1MOut = model.CostPer1MIn, model.CostPer1MOut
+			per1MIn, per1MOut, per1MInCache = model.CostPer1MIn, model.CostPer1MOut, model.CostPer1MInCache
 		}
-		return appcore.CalculateCost(per1MIn, per1MOut, int64(promptTokens), int64(completionTokens), int64(cachedTokens))
+		return appcore.CalculateCost(per1MIn, per1MOut, per1MInCache, int64(promptTokens), int64(completionTokens), int64(cachedTokens))
 	}
 
 	// Sidebar: per-component cost breakdown using ModelConfig or default fallback
 	m.sidebar.CostFunc = func(modelName string, promptTokens, completionTokens, cachedTokens int) (float64, float64, float64) {
-		per1MIn, per1MOut := appcore.DefaultInputCost, appcore.DefaultOutputCost
+		per1MIn, per1MOut, per1MInCache := appcore.DefaultInputCost, appcore.DefaultOutputCost, 0.0
 		if model := m.app.Models().Get(modelName); model != nil {
-			per1MIn, per1MOut = model.CostPer1MIn, model.CostPer1MOut
+			per1MIn, per1MOut, per1MInCache = model.CostPer1MIn, model.CostPer1MOut, model.CostPer1MInCache
 		}
 		netInput := promptTokens - cachedTokens
 		if netInput < 0 {
@@ -436,7 +436,8 @@ func (m *rootModel) wirePricing() {
 		}
 		inputCost := per1MIn / 1_000_000 * float64(netInput)
 		outputCost := per1MOut / 1_000_000 * float64(completionTokens)
-		return inputCost, outputCost, 0
+		cachedCost := per1MInCache / 1_000_000 * float64(cachedTokens)
+		return inputCost, outputCost, cachedCost
 	}
 }
 

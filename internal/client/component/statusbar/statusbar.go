@@ -82,7 +82,7 @@ func (s *StatusBar) Cost() float64 {
 	if s.CostFn != nil {
 		return s.CostFn(s.ModelName, s.PromptTokens, s.CompletionTokens, s.CachedTokens)
 	}
-	return appcore.CalculateCost(appcore.DefaultInputCost, appcore.DefaultOutputCost, int64(s.PromptTokens), int64(s.CompletionTokens), int64(s.CachedTokens))
+	return appcore.CalculateCost(appcore.DefaultInputCost, appcore.DefaultOutputCost, 0, int64(s.PromptTokens), int64(s.CompletionTokens), int64(s.CachedTokens))
 }
 
 func formatCost(cost float64) string {
