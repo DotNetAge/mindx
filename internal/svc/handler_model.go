@@ -152,6 +152,10 @@ func (d *Daemon) handleProviderCreate(_ context.Context, params json.RawMessage)
 	d.app.SetProviderConfigs(allProviders)
 	d.app.Models().RegisterProvider(p.Name, newProvider)
 
+	// 模型在 Runtime 构建时按 provider 继承连接参数，新增 provider 后
+	// 必须失效缓存，确保后续 Runtime 解析到最新的 provider 配置。
+	d.app.InvalidateRuntimeCache()
+
 	return map[string]any{
 		"name":     newProvider.Name,
 		"title":    newProvider.Title,
@@ -210,6 +214,11 @@ func (d *Daemon) handleProviderUpdate(_ context.Context, params json.RawMessage)
 		d.app.Models().RegisterProvider(p.Name, existing[idx])
 	}
 
+	// 已缓存的 Runtime 持有创建时按旧 provider 配置（含凭证引用解析结果）
+	// 生成的快照，凭证/BaseURL 变更后必须失效缓存，否则后续请求仍用旧
+	// 快照发起调用，表现为「保存了正确的 Key 却一直 401 API Key not exists」。
+	d.app.InvalidateRuntimeCache()
+
 	return map[string]any{
 		"name":     p.Name,
 		"title":    existing[idx].Title,
@@ -244,6 +253,9 @@ func (d *Daemon) handleProviderDelete(_ context.Context, params json.RawMessage)
 	}
 
 	d.app.SetProviderConfigs(filtered)
+
+	// 已缓存的 Runtime 可能引用被删 provider 的连接参数，失效缓存避免悬空引用。
+	d.app.InvalidateRuntimeCache()
 
 	return map[string]any{
 		"name":    p.Name,
@@ -461,6 +473,10 @@ func (d *Daemon) handleModelCreate(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("failed to save model: %w", err)
 	}
 
+	// 新模型可能成为当前模型的继承来源（同 provider 继承连接参数），
+	// 失效缓存确保后续 Runtime 构建能拿到最新注册表。
+	d.app.InvalidateRuntimeCache()
+
 	return map[string]any{
 		"name":    newCfg.Name,
 		"title":   newCfg.Title,
@@ -561,6 +577,11 @@ func (d *Daemon) handleModelUpdate(_ context.Context, params json.RawMessage) (a
 	}
 	// Provider 不可变，组合键不变，无需清理旧键。
 
+	// 已缓存的 Runtime 持有创建时解析的模型配置快照（含 APIKey/BaseURL），
+	// 凭证或连接参数变更后必须失效缓存，否则后续请求仍用旧快照发起调用，
+	// 表现为「保存了正确的 Key 却一直 401 API Key not exists」。
+	d.app.InvalidateRuntimeCache()
+
 	return map[string]any{
 		"name":    updated.Name,
 		"title":   updated.Title,
@@ -590,6 +611,9 @@ func (d *Daemon) handleModelDelete(_ context.Context, params json.RawMessage) (a
 	if err := models.Delete(key); err != nil {
 		return nil, fmt.Errorf("failed to delete model: %w", err)
 	}
+
+	// 已缓存的 Runtime 可能正持有被删模型的配置快照，失效缓存避免悬空引用。
+	d.app.InvalidateRuntimeCache()
 
 	return map[string]any{
 		"name":    p.Name,

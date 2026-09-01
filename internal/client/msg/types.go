@@ -94,6 +94,34 @@ type LLMCancelledMsg struct {
 	Elapsed   time.Duration
 }
 
+// LLMRetryMsg 表示 LLM 建流请求失败后进入退避重试（服务商限流 429 / 5xx 等
+// 可预知错误）。这是可预知的等待，必须冒泡给用户而非静默处理——否则 TUI
+// 会一直停留在「思考中」，用户无从得知服务端正在重试、还要等多久。
+//
+// Phase 为 "retry"（即将退避等待后重试，显示/原地更新等待提示）
+// 或 "recovered"（重试后成功建流，UI 应自动移除等待提示）。
+// 重试耗尽仍失败时走 AgentErrorMsg 收尾。
+type LLMRetryMsg struct {
+	SessionID   string
+	Provider    string
+	Model       string
+	StatusCode  int
+	Attempt     int
+	MaxAttempts int
+	RetryAfter  time.Duration
+	Error       string
+	Phase       string
+}
+
+// LLM 重试事件的阶段取值，与 events.LLMRetryPhase* 对应。
+const (
+	// LLMRetryPhaseRetry 表示即将退避等待后重试。
+	LLMRetryPhaseRetry = "retry"
+
+	// LLMRetryPhaseRecovered 表示重试后已成功建流，等待提示应移除。
+	LLMRetryPhaseRecovered = "recovered"
+)
+
 // MaxTurnsReachedMsg signals that the Think-Act loop reached MaxTurns
 // without producing a final answer.
 // This is NOT an error - it's a normal boundary condition.

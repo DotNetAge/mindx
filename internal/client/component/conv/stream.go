@@ -29,7 +29,7 @@ const tickInterval = 250 * time.Millisecond
 //   tool_exec_end   → 填充结果 / 错误与真实 token 消耗（in+out-cached）
 //   markdown(content_delta/final_answer/task_summary) → OutputBlock
 //   form(AskUser)   → QuestionItem + 内联 Choices（输入栏隐藏）
-//   error / max_turns_reached / llm_cancelled / llm_timeout → Error/Notice
+//   error / max_turns_reached / llm_cancelled / llm_timeout / llm_retry → Error/Notice
 // ─────────────────────────────────────────────────────────────
 
 type itemKind int
@@ -60,6 +60,10 @@ type Item struct {
 	ThinkingActive bool
 	ThinkingStart  time.Time
 	ThinkingDur    time.Duration
+
+	// itemNotice：是否为 LLM 建流重试等待提示（llm_retry）。
+	// 用于同轮多次重试原地更新、recovered 时整条移除。
+	IsRetry bool
 
 	// itemAction
 	Action ActionStep
@@ -339,6 +343,33 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		text := fmt.Sprintf(i18n.T("output.timeout.llm"), e.Timeout.Round(time.Second), e.Elapsed.Round(time.Second))
 		s.append(Item{Kind: itemNotice, Text: text})
 		s.Status = StatusError
+		return s, nil
+
+	case msg.LLMRetryMsg:
+		// 建流重试（限流 429 / 5xx）：可预知的等待必须可见。
+		// retry → 追加/原地更新等待提示（会话状态保持处理中，不改 Status）；
+		// recovered → 重试成功建流，整条移除提示。
+		i := s.last(func(it Item) bool { return it.Kind == itemNotice && it.IsRetry })
+		if e.Phase == msg.LLMRetryPhaseRecovered {
+			if i >= 0 {
+				s.Items = append(s.Items[:i], s.Items[i+1:]...)
+			}
+			return s, nil
+		}
+		provider := e.Provider
+		if provider == "" {
+			provider = i18n.T("output.llm_retry.current_provider")
+		}
+		text := fmt.Sprintf(i18n.T("output.llm_retry"),
+			provider, int(e.RetryAfter.Seconds()), e.Attempt, e.MaxAttempts)
+		if e.StatusCode > 0 {
+			text += fmt.Sprintf(" · HTTP %d", e.StatusCode)
+		}
+		if i >= 0 {
+			s.Items[i].Text = text
+		} else {
+			s.append(Item{Kind: itemNotice, Text: text, IsRetry: true})
+		}
 		return s, nil
 
 	case msg.SubtaskSpawnedMsg:
@@ -718,6 +749,8 @@ func getSessionID(e tea.Msg) string {
 	case msg.LLMTimeoutMsg:
 		return e.SessionID
 	case msg.LLMCancelledMsg:
+		return e.SessionID
+	case msg.LLMRetryMsg:
 		return e.SessionID
 	case msg.MaxTurnsReachedMsg:
 		return e.SessionID

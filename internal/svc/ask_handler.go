@@ -31,6 +31,7 @@ type askEventHandlers struct {
 	TaskSummary        func(data goharnessevents.TaskSummaryData)
 	LLMTimeout         func(data goharnessevents.LLMTimeoutData)
 	LLMCancelled       func(data goharnessevents.LLMCancelledData)
+	LLMRetry           func(data goharnessevents.LLMRetryData)
 	TokenUsageRecorded func(record goharnesssession.TokenUsageRecord)
 	AskUserPending     func(data goharnessevents.AskUserPendingData)
 	PermissionPending  func(data goharnessevents.PermissionPendingData)
@@ -92,6 +93,9 @@ func wireAskEvents(b *agents.AskBuilder, h askEventHandlers) *agents.AskBuilder 
 	}
 	if h.LLMCancelled != nil {
 		b = b.OnLLMCancelled(h.LLMCancelled)
+	}
+	if h.LLMRetry != nil {
+		b = b.OnLLMRetry(h.LLMRetry)
 	}
 	if h.TokenUsageRecorded != nil {
 		b = b.OnTokenUsageRecorded(h.TokenUsageRecorded)
@@ -265,6 +269,21 @@ func newClientAskHandlers(
 		LLMCancelled: func(data goharnessevents.LLMCancelledData) {
 			_ = gw.SendResponse(clientID, gateway.RespLLMCancelled, i18n.T("svc.event.llm.cancelled"), map[string]any{
 				"elapsed_ns": data.Elapsed.Nanoseconds(),
+			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
+		},
+		LLMRetry: func(data goharnessevents.LLMRetryData) {
+			// 建流重试冒泡（限流 429 / 5xx 等可预知错误）：1:1 透传给前端，
+			// phase=retry 显示「将于 N 秒后重试」警告，phase=recovered 让前端消除警告。
+			_ = gw.SendResponse(clientID, gateway.ResponseType("llm_retry"), i18n.T("svc.event.llm.retry"), map[string]any{
+				"session_id":     data.SessionID,
+				"provider":       data.Provider,
+				"model":          data.Model,
+				"status_code":    data.StatusCode,
+				"attempt":        data.Attempt,
+				"max_attempts":   data.MaxAttempts,
+				"retry_after_ns": data.RetryAfter.Nanoseconds(),
+				"error":          data.Error,
+				"phase":          data.Phase,
 			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 		},
 		TokenUsageRecorded: func(record goharnesssession.TokenUsageRecord) {

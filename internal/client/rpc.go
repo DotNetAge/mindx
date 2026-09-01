@@ -365,6 +365,30 @@ func (m *rootModel) registerNotificationHandlers() {
 		})
 	})
 
+	c.OnResponse(gateway.ResponseType("llm_retry"), func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
+		// 建流重试冒泡（限流 429 / 5xx）：phase=retry 显示/更新等待提示，
+		// phase=recovered 移除提示（已成功建流）。
+		data, ok := env.Data.(map[string]any)
+		if !ok {
+			return
+		}
+		retryAfterNS, _ := data["retry_after_ns"].(float64)
+		statusCode, _ := data["status_code"].(float64)
+		attempt, _ := data["attempt"].(float64)
+		maxAttempts, _ := data["max_attempts"].(float64)
+		m.program.Send(clientmsg.LLMRetryMsg{
+			SessionID:   env.SessionID,
+			Provider:    stringFromAny(data["provider"]),
+			Model:       stringFromAny(data["model"]),
+			StatusCode:  int(statusCode),
+			Attempt:     int(attempt),
+			MaxAttempts: int(maxAttempts),
+			RetryAfter:  time.Duration(retryAfterNS),
+			Error:       stringFromAny(data["error"]),
+			Phase:       stringFromAny(data["phase"]),
+		})
+	})
+
 	c.OnResponse(gateway.RespTokenUsageRecorded, func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
 		raw, err := json.Marshal(env.Data)
 		if err != nil {

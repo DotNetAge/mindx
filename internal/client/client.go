@@ -1357,6 +1357,13 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 				SessionID: sessionID, Elapsed: d.Elapsed,
 			})
 		})
+		ask.OnLLMRetry(func(d events.LLMRetryData) {
+			m.program.Send(clientmsg.LLMRetryMsg{
+				SessionID: sessionID, Provider: d.Provider, Model: d.Model,
+				StatusCode: d.StatusCode, Attempt: d.Attempt, MaxAttempts: d.MaxAttempts,
+				RetryAfter: d.RetryAfter, Error: d.Error, Phase: d.Phase,
+			})
+		})
 		ask.OnMaxTurnsReached(func(d events.MaxTurnsReachedData) {
 			m.program.Send(clientmsg.MaxTurnsReachedMsg{
 				SessionID: sessionID, TurnsCompleted: d.TurnsCompleted, MaxTurns: d.MaxTurns, Suggestion: d.Suggestion,
