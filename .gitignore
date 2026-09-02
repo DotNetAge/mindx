@@ -66,3 +66,5 @@ mindx-daemon
 intercept
 main
 mindx
+_probe/
+.qoder/
