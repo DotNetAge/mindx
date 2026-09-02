@@ -562,8 +562,25 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		SessionID  string `json:"session_id,omitempty"`
 		JobEntryID string `json:"job_entry_id,omitempty"`
 		JobRunID   string `json:"job_run_id,omitempty"`
+		Images     []struct {
+			Path      string `json:"path"`
+			MediaType string `json:"media_type"`
+		} `json:"images,omitempty"`
 	}
-	if err := json.Unmarshal(msg.Data, &payload); err != nil || payload.Text == "" {
+	// 附加图片：前端把粘贴/上传的图片落盘到会话临时目录后，
+	// 以 {path, media_type} 引用随 user.message 一起送达。
+	// 此处仅做路径引用收集（读文件转 base64 延迟到组装 LLM 消息时）。
+	userImages := make([]goharnesssession.ImageBlock, 0, len(payload.Images))
+	for _, img := range payload.Images {
+		if img.Path == "" {
+			continue
+		}
+		userImages = append(userImages, goharnesssession.ImageBlock{
+			Path:      img.Path,
+			MediaType: img.MediaType,
+		})
+	}
+	if err := json.Unmarshal(msg.Data, &payload); err != nil || (payload.Text == "" && len(userImages) == 0) {
 		d.logger.Warn("defaultHandler: missing or invalid text field",
 			"data", string(msg.Data), "error", err)
 		return
@@ -787,6 +804,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		emitter := newClientAskHandlers(d, gw, clientID, sid, withAgent, s, func() string { return currentAgentName }, func() string { return eventSubSessionID })
 
 		builder := rt.Ask(resolvedAgentName, content, s).
+			WithImages(userImages).
 			WithContext(ctx).
 			OnEvent(func(ev events.ReactEvent) {
 				currentAgentName = ev.AgentName

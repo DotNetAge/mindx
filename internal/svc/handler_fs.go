@@ -180,6 +180,43 @@ func (d *Daemon) handleFSWrite(_ context.Context, params json.RawMessage) (any, 
 	return map[string]string{"status": "ok"}, nil
 }
 
+// ── write_base64（二进制文件写入，如粘贴/上传的图片落盘到会话临时目录）──
+
+func (d *Daemon) handleFSWriteBase64(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.FSWriteBase64Params
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Path == "" || p.Content == "" {
+		return nil, fmt.Errorf("path and content are required")
+	}
+	cleanPath := filepath.Clean(p.Path)
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	// base64 内容上限：解码前先校验（base64 体积约为原始数据的 4/3），
+	// 防止超大 payload 拖垮 daemon。20MB base64 ≈ 15MB 原始图片，远超正常使用。
+	if len(p.Content) > 20*1024*1024 {
+		return nil, fmt.Errorf("content too large for base64 write: %.1f MB", float64(len(p.Content))/(1024*1024))
+	}
+	raw, err := base64.StdEncoding.DecodeString(p.Content)
+	if err != nil {
+		return nil, fmt.Errorf("invalid base64 content: %w", err)
+	}
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("empty content")
+	}
+	parentDir := filepath.Dir(absPath)
+	if err := os.MkdirAll(parentDir, 0755); err != nil {
+		return nil, fmt.Errorf("cannot create parent directory: %w", err)
+	}
+	if err := os.WriteFile(absPath, raw, 0644); err != nil {
+		return nil, fmt.Errorf("cannot write file: %w", err)
+	}
+	return rpc.FSWriteBase64Result{Status: "ok"}, nil
+}
+
 // ── 新增：mkdir ──
 
 func (d *Daemon) handleFSMkdir(_ context.Context, params json.RawMessage) (any, error) {

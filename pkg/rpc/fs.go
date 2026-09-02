@@ -96,6 +96,21 @@ func (c *Client) FSReadBase64(path string) (json.RawMessage, error) {
 	return c.CallWithTimeout("fs.read_base64", FSReadBase64Params{Path: path})
 }
 
+// FSWriteBase64Params are the params for fs.write_base64.
+type FSWriteBase64Params struct {
+	Path    string `json:"path"`    // 目标文件绝对路径
+	Content string `json:"content"` // base64 编码的文件内容
+}
+
+// FSWriteBase64Result is the result for fs.write_base64.
+type FSWriteBase64Result struct {
+	Status string `json:"status"`
+}
+
+func (c *Client) FSWriteBase64(path, content string) (json.RawMessage, error) {
+	return c.CallWithTimeout("fs.write_base64", FSWriteBase64Params{Path: path, Content: content})
+}
+
 // FSRevealResult is the result for fs.reveal.
 type FSRevealResult struct {
 	Status string `json:"status"`

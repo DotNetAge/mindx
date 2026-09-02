@@ -24,7 +24,7 @@ require (
 require (
 	github.com/DotNetAge/gochat v0.2.11
 	github.com/DotNetAge/gograph v0.4.0
-	github.com/DotNetAge/goharness v0.2.38
+	github.com/DotNetAge/goharness v0.2.39
 	github.com/DotNetAge/gorag/v2 v2.0.17
 	github.com/DotNetAge/gort v0.1.6
 	github.com/creack/pty v1.1.24
@@ -133,7 +133,7 @@ require (
 	mvdan.cc/sh/v3 v3.13.1 // indirect
 )
 
-replace github.com/DotNetAge/goharness => ../goharness
+// replace github.com/DotNetAge/goharness => ../goharness
 
 // replace github.com/DotNetAge/gorag/v2 => ../gorag
 
