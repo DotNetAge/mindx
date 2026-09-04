@@ -3,9 +3,12 @@ package tools
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -364,7 +367,8 @@ func TestReadPro_LargeFile_OutsideProject(t *testing.T) {
 	if granted {
 		t.Fatal("项目外文件应触发授权流程（granted=false）")
 	}
-	if !strings.Contains(reason, "工作区之外") {
+	// 沙箱拒绝文案格式："该路径位于工作区 %q 之外"
+	if !strings.Contains(reason, "位于工作区") || !strings.Contains(reason, "之外") {
 		t.Errorf("授权原因应说明越界，实际=%q", reason)
 	}
 
@@ -494,9 +498,39 @@ func buildChunksJSON(start, count, total int) string {
 	return sb.String()
 }
 
+// kbIndexed 探测真实知识库中该文件是否已有分块数据。
+// 兼容两种服务响应：正常态 data.items（page/size/total/items）与
+// 服务未初始化态 data.chunks（svc==nil 时空数组）。两者都无分块时视为未索引。
+func kbIndexed(t *testing.T, target string) bool {
+	t.Helper()
+	// 带超时的客户端：服务异常挂起时快速失败（按未索引处理 → 跳过测试），避免阻塞整个测试进程
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://localhost:1318/api/chunks?filter=%s&page=1&size=1", url.PathEscape(target)))
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return false
+	}
+	var probe struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Total  int               `json:"total"`
+			Items  []json.RawMessage `json:"items"`
+			Chunks []json.RawMessage `json:"chunks"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(body, &probe) != nil || !probe.Success {
+		return false
+	}
+	return probe.Data.Total > 0 || len(probe.Data.Items) > 0 || len(probe.Data.Chunks) > 0
+}
+
 // TestReadPro_Execute_WithRealKnowledgeBase 集成验证：使用真实知识库服务（localhost:1318），
 // 以 preview=true 读取真实文件，验证返回分块树预览，并输出体积对比。
-// 文件不存在或知识库未运行时跳过（不阻塞 CI）。
+// 文件不存在、知识库未运行或目标文件未被索引时跳过（不阻塞 CI）。
 func TestReadPro_Execute_WithRealKnowledgeBase(t *testing.T) {
 	targets := []string{
 		"/Users/ray/workspaces/bega-labs/docs/todo.md",
@@ -504,8 +538,9 @@ func TestReadPro_Execute_WithRealKnowledgeBase(t *testing.T) {
 		"/Users/ray/workspaces/bega-labs/docs/server-side/architecture.md",
 	}
 
-	// 探测知识库服务是否可用
-	probe, err := http.Get("http://localhost:1318/api/tree?dir=/Users/ray/workspaces/bega-labs")
+	// 探测知识库服务是否可用（带 2 秒超时，服务异常挂起时快速跳过而非阻塞）
+	probeClient := &http.Client{Timeout: 2 * time.Second}
+	probe, err := probeClient.Get("http://localhost:1318/api/tree?dir=/Users/ray/workspaces/bega-labs")
 	if err != nil {
 		t.Skip("知识库服务未运行，跳过集成验证")
 	}
@@ -522,6 +557,11 @@ func TestReadPro_Execute_WithRealKnowledgeBase(t *testing.T) {
 		if err != nil || fi.IsDir() {
 			t.Logf("跳过（文件不存在）: %s", target)
 			continue
+		}
+		// 服务在线但文件未被索引（或服务未初始化）→ preview 按设计回退原 Read，
+		// 无法验证分块树渲染，跳过而非误报失败。
+		if !kbIndexed(t, target) {
+			t.Skipf("文件未被知识库索引，跳过集成验证: %s", target)
 		}
 
 		result, err := readPro.Execute(ctx, map[string]any{"filePath": target, "preview": true})

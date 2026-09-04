@@ -2,7 +2,7 @@
 name: docker-expert
 description: >
   当用户要求"创建 Dockerfile"、"优化 Docker 镜像"、"多阶段构建"、"容器安全"、"Docker Compose"、"docker-compose.yml"、"减小镜像体积"、"Docker 最佳实践"、"容器化这个应用"、"Docker 健康检查"、"dockerignore"、"Docker 网络"、"Docker 卷"、"Docker 密钥"、"容器编排"、"Docker 构建优化"、"非 root 容器"、"Docker 层缓存"，或涉及 Docker 容器化、镜像构建、容器安全加固、Docker Compose 服务编排的任何请求时使用此技能。也适用于审查 Docker 配置、诊断构建失败、排查容器网络问题或搭建带热重载的开发容器。提供全面的 Docker 专业能力，包括多阶段构建优化、安全加固、镜像瘦身和生产级模式。
-allowed-tools: bash read_file write_file
+allowed-tools: bash read write
 metadata:
   name_zh: Docker 专家
   name_zh-tw: Docker 專家

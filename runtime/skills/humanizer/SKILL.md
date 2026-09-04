@@ -8,13 +8,7 @@ metadata:
   description_zh-tw: 去除文字中的 AI 寫作痕跡，使文字更自然更人性化，偵測並修復夸大重要性、宣傳語氣、模糊歸因、AI 高頻詞等多種模式
 description_en: "Remove AI writing patterns from text"
 version: 2.2.0
-allowed-tools:
-  - Read
-  - Write
-  - Edit
-  - Grep
-  - Glob
-  - AskUser
+allowed-tools: Read Write Edit Grep Glob AskUser
 ---
 
 # 人性化润色：去除 AI 写作痕迹

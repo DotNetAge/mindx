@@ -114,7 +114,7 @@ func (p *ReadPro) Execute(ctx context.Context, params map[string]any) (any, erro
 		if countLinesAtLeast(resolvedPath, 30) <= 30 {
 			return p.Read.Execute(ctx, params)
 		}
-		if err := p.Read.CheckSafety(resolvedPath); err != nil {
+		if err := p.Read.CheckSafety(ctx, resolvedPath); err != nil {
 			return nil, err
 		}
 		if result, ok := p.tryChunkTree(ctx, resolvedPath, info.Size()); ok {
@@ -127,7 +127,7 @@ func (p *ReadPro) Execute(ctx context.Context, params map[string]any) (any, erro
 	// 大文件（超过原 Read 全量上限）+ 显式 offset/limit → 按行范围精读
 	//（绕过全量限制，由显式范围参数触发，非静默切换）
 	if hasOffsetOrLimit(params) && info.Size() > p.Read.Limits().MaxSizeBytes {
-		if err := p.Read.CheckSafety(resolvedPath); err != nil {
+		if err := p.Read.CheckSafety(ctx, resolvedPath); err != nil {
 			return nil, err
 		}
 		// 图片文件按行精读会把二进制内容当文本输出（乱码），

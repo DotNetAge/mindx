@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/DotNetAge/goharness/events"
+	"github.com/DotNetAge/goharness/sandbox"
 	"github.com/DotNetAge/goharness/tools"
 )
 
@@ -41,9 +42,14 @@ func (t *LSPro) AddWhiteList(dirs ...string) *LSPro {
 
 // Grant implements tools.PermissionRequired。
 //
-// 与 Read / Edit / Bash 保持一致的授权语义：目标目录超出项目边界
-// （ValidateFileSafety 失败）时，先放行工具白名单（AddWhiteList）与会话级
-// 白名单（PermissionAllowSession 记忆）内的路径，其余越界目录触发授权流程。
+// 安全决策（工作区边界、敏感文件拦截）统一由沙箱 CheckFile 负责，与内置 LS 工具保持一致：
+//   - Allow → 放行
+//   - Deny → 拒绝（敏感文件等硬性禁止，授权不可覆盖）
+//   - AskUser（越界）→ 先放行工具白名单（AddWhiteList）与会话级白名单
+//     （PermissionAllowSession 记忆）内的路径，其余越界目录触发授权流程
+//     （返回 granted=false，运行时挂起思考循环等待用户回应）。
+//
+// 会话未注入沙箱时直接放行，由 Execute 阶段拒绝执行（配置错误，授权无意义）。
 func (t *LSPro) Grant(ctx context.Context, params map[string]any) (bool, string) {
 	raw, _ := tools.GetParam(params, "path")
 	dirPath, _ := raw.(string)
@@ -61,22 +67,41 @@ func (t *LSPro) Grant(ctx context.Context, params map[string]any) (bool, string)
 		return true, ""
 	}
 
-	if err := tools.ValidateFileSafety(resolved, tc.Session.ProjectDir()); err != nil {
+	sb := tc.Session.Sandbox()
+	if sb == nil {
+		return true, ""
+	}
+	dec := sb.CheckFile(resolved, tc.Session.ProjectDir())
+	switch dec.Decision {
+	case sandbox.DecisionAllow:
+		return true, ""
+	case sandbox.DecisionDeny:
+		return false, dec.Reason
+	default: // DecisionAskUser：先查工具白名单与会话白名单，未命中则触发授权
 		for _, dir := range t.whitelist {
-			if strings.HasPrefix(resolved, dir) {
+			if pathWithinScope(dir, resolved) {
 				return true, ""
 			}
 		}
 		if tc.SessionWhitelist != nil {
 			for _, allowed := range tc.SessionWhitelist.Ls {
-				if strings.HasPrefix(resolved, allowed) {
+				if pathWithinScope(allowed, resolved) {
 					return true, ""
 				}
 			}
 		}
-		return false, tools.GuideLsOutsideWorkspace(dirPath, resolved, err)
+		return false, dec.Reason
 	}
-	return true, ""
+}
+
+// pathWithinScope 判断 child 是否位于 parent 目录范围内（含 parent 本身）。
+// 与 goharness/tools 的 pathWithinScope 语义一致：前缀匹配必须紧跟路径分隔符，
+// 避免 /a/b 误匹配 /a/bc 的前缀歧义。mindx 侧无法直接复用未导出函数，故本地实现。
+func pathWithinScope(parent, child string) bool {
+	if parent == child {
+		return true
+	}
+	return strings.HasPrefix(child, parent+string(filepath.Separator))
 }
 
 func (t *LSPro) Info() *tools.ToolInfo {
@@ -222,16 +247,22 @@ func (t *LSPro) executeNativeLS(ctx context.Context, params map[string]any, dirP
 	// 统一路径解析：绝对路径化 + ~ 展开 + 相对项目目录解析。
 	// 修复前 "~/workspaces" 直接传给 os.Stat 会被当作字面量目录，导致"目录不存在"。
 	var projectDir, sessionDir string
-	if tc := tools.GetToolContext(ctx); tc != nil && tc.Session != nil {
+	tc := tools.GetToolContext(ctx)
+	if tc != nil && tc.Session != nil {
 		projectDir = tc.Session.ProjectDir()
 		sessionDir = tc.Session.SessionDir()
 	}
 	resolvedPath, _ := tools.ResolveTargetPath(dirPath, projectDir, sessionDir)
 
-	// 安全校验：敏感文件硬性拦截。
-	// 项目边界检查已由 Grant()（PermissionRequired）完成；授权（Allow / AllowSession）
-	// 或白名单路径在此不再重复校验边界，否则授权后执行会被再次拦截。
-	if err := tools.CheckSensitiveFiles(resolvedPath); err != nil {
+	// 安全校验：工作区边界、敏感文件等策略统一由沙箱强制检查（含符号链接解析，防 TOCTOU）。
+	// 透传工具白名单（AddWhiteList）+ 会话白名单：Grant 阶段白名单放行的路径
+	// 在 Execute 阶段同样豁免目录边界；设备/敏感文件等硬性禁止不豁免。
+	extra := make([]string, 0, len(t.whitelist)+2)
+	extra = append(extra, t.whitelist...)
+	if tc != nil && tc.SessionWhitelist != nil {
+		extra = append(extra, tc.SessionWhitelist.Ls...)
+	}
+	if err := tools.EnforceSandboxFileWithWhitelist(ctx, resolvedPath, extra); err != nil {
 		return nil, err
 	}
 

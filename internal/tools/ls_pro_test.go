@@ -12,6 +12,7 @@ import (
 
 	"github.com/DotNetAge/goharness/events"
 	"github.com/DotNetAge/goharness/logging"
+	"github.com/DotNetAge/goharness/sandbox"
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/goharness/tools"
 )
@@ -113,17 +114,30 @@ func (m *mockSessionStore) Truncate(ctx context.Context, sessionID string, keepC
 	return nil
 }
 
-// testCtxWithDir 创建带指定项目目录的测试上下文
+// testCtxWithDir 创建带指定项目目录的测试上下文。
+// 遵守 goharness 工具契约：ToolContext.Logger 必然非空（生产由 Runtime 注入）；
+// 会话必须注入沙箱（安全决策统一收口到沙箱，未注入时工具拒绝执行）。
 func testCtxWithDir(t *testing.T, projectDir string) context.Context {
 	t.Helper()
 	sessionStore := newMockSessionStore()
-	sess, err := session.New("test-agent", "", projectDir, sessionStore, logging.NewNopLogger())
+	sb, err := sandbox.NewSandbox(&sandbox.SandboxPolicy{
+		AllowedDirs:       []string{projectDir},
+		DeniedFileGlobs:   sandbox.DefaultDeniedFileGlobs(),
+		DeniedDirGlobs:    sandbox.DefaultDeniedDirGlobs(),
+		DeniedDevicePaths: sandbox.DefaultDeniedDevicePaths(),
+	}, logging.NewNopLogger())
+	if err != nil {
+		t.Fatalf("创建沙箱失败: %v", err)
+	}
+	sess, err := session.New("test-agent", "", projectDir, sessionStore, logging.NewNopLogger(), session.WithSandbox(sb))
 	if err != nil {
 		t.Fatalf("创建会话失败: %v", err)
 	}
 	return tools.WithToolContext(context.Background(), &tools.ToolContext{
-		Session:   sess,
-		EmitEvent: func(e events.ReactEvent) {},
+		Session:          sess,
+		SessionWhitelist: sess.Whitelist(),
+		Logger:           logging.NewNopLogger(),
+		EmitEvent:        func(e events.ReactEvent) {},
 	})
 }
 

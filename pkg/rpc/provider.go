@@ -56,6 +56,46 @@ type OllamaModelDetail struct {
 	ParameterCount int64  `json:"parameter_count"`
 }
 
+// FetchSiliconFlowModelsParams are the params for provider.fetch_siliconflow_models.
+type FetchSiliconFlowModelsParams struct {
+	Provider string `json:"provider"`
+}
+
+// FetchOpenRouterModelsParams are the params for provider.fetch_openrouter_models.
+type FetchOpenRouterModelsParams struct {
+	Provider string `json:"provider"`
+}
+
+// FetchDashScopeModelsParams are the params for provider.fetch_dashscope_models.
+type FetchDashScopeModelsParams struct {
+	Provider string `json:"provider"`
+}
+
+// FetchBigModelModelsParams are the params for provider.fetch_bigmodel_models.
+type FetchBigModelModelsParams struct {
+	Provider string `json:"provider"`
+}
+
+// FetchTencentModelsParams are the params for provider.fetch_tencent_models.
+type FetchTencentModelsParams struct {
+	Provider string `json:"provider"`
+}
+
+// OnlineModelInfo 是在线模型库的规范化模型信息，
+// 供硅基流动 / OpenRouter / 阿里百炼 / 智谱 / 腾讯云 TokenHub 五个浏览对话框共用同一套渲染结构。
+type OnlineModelInfo struct {
+	ID            string  `json:"id"`
+	Title         string  `json:"title,omitempty"`           // OpenRouter 展示名
+	Description   string  `json:"description,omitempty"`     // OpenRouter 模型简介
+	ContextLength int64   `json:"context_length,omitempty"`  // 上下文窗口（token）
+	Free          bool    `json:"free"`                      // 是否免费（硅基流动 API 无价格信息，恒为 false）
+	CostPer1MIn   float64 `json:"cost_per_1m_in,omitempty"`  // 输入成本 ¥/M tokens（付费模型已按实时汇率换算）
+	CostPer1MOut  float64 `json:"cost_per_1m_out,omitempty"` // 输出成本 ¥/M tokens
+	FuncCalling   bool    `json:"func_calling,omitempty"`    // 支持工具调用
+	Visioning     bool    `json:"visioning,omitempty"`       // 支持视觉输入
+	OwnedBy       string  `json:"owned_by,omitempty"`        // 模型归属方（如 deepseek-ai）
+}
+
 func (c *Client) ProviderList() (json.RawMessage, error) {
 	return c.CallWithTimeout("provider.list", nil)
 }
