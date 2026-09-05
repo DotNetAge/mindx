@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 	"github.com/google/uuid"
@@ -51,6 +52,17 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 	}
 	if p.CronExpr == "" && p.ScheduledAt == "" {
 		return nil, fmt.Errorf("cron_expr or scheduled_at is required")
+	}
+
+	// 雇佣校验：定时任务绑定的智能体必须已雇佣，防止未雇佣 Agent 被 cron 拉起执行
+	if agents := d.app.Agents(); agents != nil {
+		cfg := agents.Get(p.Agent)
+		if cfg == nil {
+			return nil, fmt.Errorf("未找到智能体 %q，请确认名称是否正确", p.Agent)
+		}
+		if !core.AgentIsHired(cfg) {
+			return nil, fmt.Errorf("智能体 %q 尚未雇佣，无法绑定定时任务（可执行 mindx agent hire %s 启用）", p.Agent, p.Agent)
+		}
 	}
 
 	// 一次性任务：scheduled_at → 一次性 cron（秒 分 时 日 月 *），到点执行后自动禁用。

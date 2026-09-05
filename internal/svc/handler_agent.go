@@ -10,6 +10,7 @@ import (
 	"go.etcd.io/bbolt"
 
 	goharnessconfig "github.com/DotNetAge/goharness/config"
+	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
@@ -298,6 +299,50 @@ func (d *Daemon) handleAgentReload(_ context.Context, params json.RawMessage) (a
 	return map[string]string{
 		"status":  "ok",
 		"message": "agents reloaded successfully",
+	}, nil
+}
+
+// handleAgentHire 雇佣 Agent（meta.hired=true），雇佣后对会话可用。
+func (d *Daemon) handleAgentHire(_ context.Context, params json.RawMessage) (any, error) {
+	return d.setAgentHired(params, true)
+}
+
+// handleAgentFire 解雇 Agent（meta.hired=false），解雇后对会话不可用。
+func (d *Daemon) handleAgentFire(_ context.Context, params json.RawMessage) (any, error) {
+	return d.setAgentHired(params, false)
+}
+
+// setAgentHired 是 agent.hire / agent.fire 的公共实现：
+// 以文本级方式修改 Agent 文件的 meta.hired 标记（避开 SaveTo 全量重写
+// 丢失 exclude_tools 的问题），并同步内存注册表，无需 reload 即刻生效。
+func (d *Daemon) setAgentHired(params json.RawMessage, hired bool) (any, error) {
+	var p rpc.AgentHireParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	agents := d.app.Agents()
+	if agents == nil {
+		return nil, fmt.Errorf("agent registry not available")
+	}
+
+	dir := d.app.Settings().AgentsDir()
+	if err := core.SetAgentHired(dir, p.Name, agents, hired); err != nil {
+		return nil, err
+	}
+
+	message := fmt.Sprintf("智能体 %q 已雇佣，可用于会话", p.Name)
+	if !hired {
+		message = fmt.Sprintf("智能体 %q 已解雇，不再用于会话", p.Name)
+	}
+	return map[string]any{
+		"status":     "ok",
+		"agent_name": p.Name,
+		"hired":      hired,
+		"message":    message,
 	}, nil
 }
 

@@ -208,16 +208,22 @@ func resolveCurrentAgentName(cfg *MindxConfig, agents *config.AgentRegistry, log
 	}
 
 	if cfg != nil && cfg.LastAgent != "" {
-		if agents.Get(cfg.LastAgent) != nil {
-			return cfg.LastAgent
+		if last := agents.Get(cfg.LastAgent); last != nil {
+			if AgentIsHired(last) {
+				return cfg.LastAgent
+			}
+			logger.Warn("last_agent 未雇佣，回退到雇佣视图中的首个 Agent", "agent", cfg.LastAgent)
+		} else {
+			logger.Warn("last_agent not found in registry, will use fallback", "agent", cfg.LastAgent)
 		}
-		logger.Warn("last_agent not found in registry, will use fallback", "agent", cfg.LastAgent)
 	}
 
-	if list := agents.List(); len(list) > 0 {
-		logger.Info("using first agent as current", "name", list[0].Name)
-		return list[0].Name
+	// 回退基于雇佣视图：默认 Agent 必须是会话可用的已雇佣 Agent
+	for _, hired := range HiredAgentsOf(agents) {
+		logger.Info("using first hired agent as current", "name", hired.Name)
+		return hired.Name
 	}
+	logger.Warn("雇佣视图中没有任何 Agent，将使用空默认值")
 
 	return ""
 }

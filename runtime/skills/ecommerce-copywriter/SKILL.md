@@ -1,6 +1,9 @@
 ---
 name: ecommerce-copywriter
 description: 电商图片文案创作技能，支持多品类产品的吸引性文案生成，适用于电商平台的商品营销推广
+metadata:
+  name_zh: 电商文案创作
+  name_zh-tw: 电商文案創作
 ---
 
 # 电商文案创作技能

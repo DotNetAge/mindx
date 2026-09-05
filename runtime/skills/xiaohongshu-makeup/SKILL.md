@@ -1,6 +1,9 @@
 ---
 name: xiaohongshu-makeup
 description: 小红书美妆内容创作技能，支持笔记生成、笔记优化、文生图描述创作；适用于美妆护肤产品的内容创作、测评和营销推广
+metadata:
+  name_zh: 小红书美妆内容创作
+  name_zh-tw: 小红书美妆內容創作
 ---
 
 # 小红书美妆内容创作技能

@@ -260,6 +260,17 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("project_dir is required")
 	}
 
+	// 雇佣校验：会话可用入口统一走雇佣视图，只有已雇佣的 Agent 才能创建会话
+	if agents := d.app.Agents(); agents != nil {
+		cfg := agents.Get(p.Agent)
+		if cfg == nil {
+			return nil, fmt.Errorf("未找到智能体 %q，请确认名称是否正确", p.Agent)
+		}
+		if !core.AgentIsHired(cfg) {
+			return nil, fmt.Errorf("智能体 %q 尚未雇佣，无法创建会话（可执行 mindx agent hire %s 启用）", p.Agent, p.Agent)
+		}
+	}
+
 	d.logger.Info("session.create: called",
 		"agent", p.Agent,
 		"project_dir", p.ProjectDir,

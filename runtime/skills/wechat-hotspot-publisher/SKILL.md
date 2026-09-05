@@ -1,6 +1,9 @@
 ---
 name: wechat-hotspot-publisher
 description: 智能采集热点话题，10分制筛选优质选题，AI生成爆款内容（标题/封面/标签/图片/HTML排版），支持素材上传和草稿箱发布，一键发布到微信公众号、小红书、B站等多平台
+metadata:
+  name_zh: 多平台热点发布
+  name_zh-tw: 多平台熱點發布
 ---
 
 # 多平台AI热点发布助手

@@ -1,6 +1,9 @@
 ---
 name: stock-analysis
 description: 股票个股分析，实时获取价格涨跌幅，计算技术指标和支撑位，识别缺口并判断支撑压力，智能预测未来3天走势并给出操作建议
+metadata:
+  name_zh: 个股分析
+  name_zh-tw: 个股分析
 dependency:
   python:
     - requests>=2.28.0

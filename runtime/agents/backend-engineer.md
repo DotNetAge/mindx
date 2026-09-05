@@ -13,6 +13,9 @@ exclude_tools:
   - TeamList
   - TeamGetTasks
   - PowerShell
+meta:
+  domains:
+    - 产品研发
 ---
 
 ## 核心准则

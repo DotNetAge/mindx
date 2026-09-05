@@ -39,6 +39,8 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"agent.create":                       r.daemon.handleAgentCreate,
 		"agent.update":                       r.daemon.handleAgentUpdate,
 		"agent.score":                        r.daemon.handleAgentScore,
+		"agent.hire":                         r.daemon.handleAgentHire,
+		"agent.fire":                         r.daemon.handleAgentFire,
 		"agent.reload":                       r.daemon.handleAgentReload,
 		"model.list":                         r.daemon.handleModelList,
 		"model.get":                          r.daemon.handleModelGet,

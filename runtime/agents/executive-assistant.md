@@ -12,6 +12,10 @@ skills:
 exclude_tools:
   - Sleep
   - PowerShell
+meta:
+  hired: true 
+  domains:
+    - 办公提效
 ---
 
 ## 专业领域

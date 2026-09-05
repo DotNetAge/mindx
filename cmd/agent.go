@@ -20,16 +20,19 @@ import (
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Manage AI agents",
-	Long: `List, inspect, add, remove or score AI agents.
+	Long: `List, inspect, add, remove, hire or score AI agents.
 
-By default reads agents from local config files.
+By default reads agents from local config files (hired only, use --all for all).
 Use --json to query the daemon and output JSON (for LLM consumption).
 
 Examples:
   mindx agent list
+  mindx agent list --all
   mindx agent list --json
   mindx agent get writer
   mindx agent add writer --role "Writer"
+  mindx agent hire writer
+  mindx agent fire writer
   mindx agent rm writer`,
 }
 
@@ -37,9 +40,10 @@ Examples:
 
 var agentListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List all configured agents",
+	Short: "List hired agents (use --all to include all)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		useJSON, _ := cmd.Flags().GetBool("json")
+		showAll, _ := cmd.Flags().GetBool("all")
 
 		if useJSON {
 			cl, err := rpc.Dial(daemonAddr)
@@ -52,14 +56,24 @@ var agentListCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			// Pretty-print the JSON for LLM readability
-			var pretty interface{}
-			if err := json.Unmarshal(result, &pretty); err == nil {
-				formatted, _ := json.MarshalIndent(pretty, "", "  ")
-				fmt.Println(string(formatted))
+
+			// daemon agent.list 恒为全量返回；hired 过滤在客户端展示层完成
+			var list []map[string]any
+			if err := json.Unmarshal(result, &list); err != nil {
+				// 兜底：无法解析为列表时原样输出
+				fmt.Println(string(result))
 				return nil
 			}
-			fmt.Println(string(result))
+			filtered := make([]map[string]any, 0, len(list))
+			for _, m := range list {
+				meta, _ := m["meta"].(map[string]any)
+				if !showAll && !core.AgentMetaIsHired(meta) {
+					continue
+				}
+				filtered = append(filtered, m)
+			}
+			formatted, _ := json.MarshalIndent(filtered, "", "  ")
+			fmt.Println(string(formatted))
 			return nil
 		}
 
@@ -70,8 +84,23 @@ var agentListCmd = &cobra.Command{
 		}
 
 		agents := registry.List()
+		if !showAll {
+			// 默认只显示已雇佣的 Agent（雇佣视图）
+			hired := agents[:0]
+			for _, a := range agents {
+				if core.AgentIsHired(a) {
+					hired = append(hired, a)
+				}
+			}
+			agents = hired
+		}
 		if len(agents) == 0 {
-			fmt.Printf("No agents found in %s.\n", dir)
+			if showAll {
+				fmt.Printf("No agents found in %s.\n", dir)
+			} else {
+				fmt.Printf("暂无已雇佣的 Agent（目录：%s）。\n", dir)
+				fmt.Println("提示：使用 `mindx agent hire <name>` 雇佣，或 `mindx agent list --all` 查看全部。")
+			}
 			return nil
 		}
 
@@ -92,7 +121,11 @@ var agentListCmd = &cobra.Command{
 			table.AddRow([]string{a.Name, role, desc, skills})
 		}
 		fmt.Println(table.Render())
-		fmt.Printf("\n%d agent(s) configured.\n", len(agents))
+		if showAll {
+			fmt.Printf("\n%d agent(s) configured.\n", len(agents))
+		} else {
+			fmt.Printf("\n%d hired agent(s). Use --all to see all.\n", len(agents))
+		}
 		return nil
 	},
 }
@@ -262,6 +295,72 @@ Examples:
 	},
 }
 
+// ── agent hire / agent fire ────────────────────────────────────
+
+// runAgentHire 是 hire/fire 的公共实现：走 daemon 专用 RPC，
+// 文本级修改 Agent 文件的 meta.hired 并同步 daemon 内存注册表。
+func runAgentHire(name string, hired bool) error {
+	cl, err := rpc.Dial(daemonAddr)
+	if err != nil {
+		return fmt.Errorf("cannot connect to daemon: %w", err)
+	}
+	defer func() { _ = cl.Close() }()
+
+	var result json.RawMessage
+	if hired {
+		result, err = cl.AgentHire(name)
+	} else {
+		result, err = cl.AgentFire(name)
+	}
+	if err != nil {
+		return err
+	}
+
+	// RPC 成功即生效；返回体中的 message 由 handler 提供中文说明
+	var pretty map[string]any
+	if err := json.Unmarshal(result, &pretty); err == nil {
+		if msg, ok := pretty["message"].(string); ok && msg != "" {
+			fmt.Println(msg)
+			return nil
+		}
+	}
+	if hired {
+		fmt.Printf("Agent %q 已雇佣。\n", name)
+	} else {
+		fmt.Printf("Agent %q 已解雇。\n", name)
+	}
+	return nil
+}
+
+var agentHireCmd = &cobra.Command{
+	Use:   "hire <name>",
+	Short: "Hire an agent (enable session usage)",
+	Long: `Mark an agent as hired (meta.hired=true) so it becomes available
+for sessions, /agent switching and scheduled tasks.
+
+Example:
+  mindx agent hire writer`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runAgentHire(args[0], true)
+	},
+}
+
+var agentFireCmd = &cobra.Command{
+	Use:   "fire <name>",
+	Short: "Fire an agent (disable session usage)",
+	Long: `Mark an agent as fired (meta.hired=false) so it is no longer
+available for sessions, /agent switching or scheduled tasks.
+The agent remains visible for browsing via ` + "`mindx agent list --all`" + `.
+
+Example:
+  mindx agent fire writer`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runAgentHire(args[0], false)
+	},
+}
+
 // ── agent rm ───────────────────────────────────────────────────
 
 var agentRmCmd = &cobra.Command{
@@ -342,6 +441,8 @@ Examples:
 			fmt.Printf("Agent %q updated.\n", name)
 		} else {
 			fmt.Printf("Agent %q created (%s).\n", name, filepath.Join(dir, strings.ToLower(name)+".md"))
+			// 新建 Agent 默认未雇佣（meta.hired 缺省 false），提示雇佣入口
+			fmt.Println("提示：新智能体默认未雇佣，执行 `mindx agent hire " + name + "` 后即可用于会话。")
 		}
 		return nil
 	},
@@ -351,6 +452,7 @@ Examples:
 
 func init() {
 	agentListCmd.Flags().Bool("json", false, "Output JSON via daemon (requires mindx start)")
+	agentListCmd.Flags().Bool("all", false, "Include all agents (default shows hired only)")
 	agentScoreCmd.Flags().StringVar(&agentScoreFlags.agentName, "agent-name", "", "Agent name (required)")
 	agentScoreCmd.Flags().StringVar(&agentScoreFlags.task, "task", "", "Task description (required)")
 	agentScoreCmd.Flags().IntVar(&agentScoreFlags.score, "score", 0, "Score 1-10 (required)")
@@ -371,6 +473,8 @@ func init() {
 	agentCmd.AddCommand(agentGetCmd)
 	agentCmd.AddCommand(agentScoreCmd)
 	agentCmd.AddCommand(agentUpdateCmd)
+	agentCmd.AddCommand(agentHireCmd)
+	agentCmd.AddCommand(agentFireCmd)
 	agentCmd.AddCommand(agentRmCmd)
 	agentCmd.AddCommand(agentAddCmd)
 	rootCmd.AddCommand(agentCmd)

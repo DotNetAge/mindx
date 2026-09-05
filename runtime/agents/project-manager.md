@@ -8,6 +8,9 @@ skills:
 exclude_tools:
   - Sleep
   - PowerShell
+meta:
+  domains:
+    - 产品研发
 ---
 
 ## 专业领域

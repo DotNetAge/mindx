@@ -6,14 +6,9 @@ description: >
 skills:
   - dev-guidelines
   - agent-browser
-  - web-dev
   - frontend-design
-  - canvas-design
   - theme-factory
-  - web-design-guidelines
-  - web-artifacts-builder
   - webapp-testing
-  - browser-automation
 exclude_tools:
   - SubAgent
   - CollectResults
@@ -22,6 +17,9 @@ exclude_tools:
   - TeamList
   - TeamGetTasks
   - PowerShell
+meta:
+  domains:
+    - 产品研发
 ---
 
 

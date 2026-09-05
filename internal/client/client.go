@@ -61,7 +61,7 @@ type rootModel struct {
 	modelDlg             *dialog.ListDialog // connect 流程的模型选择
 	modelSelectDlg       *dialog.ListDialog // /model 命令的模型选择浮层
 	agentSelectDlg       *dialog.ListDialog // /agent 命令的 Agent 选择浮层
-	agentSelectNames     []string           // 浮层列表项与 Agents().List() 的名称映射
+	agentSelectNames     []string           // 浮层列表项与 HiredAgents() 雇佣视图的名称映射
 	connectProvider      string
 	connectProviderNames []string
 	connectAPIKey        string
@@ -217,8 +217,8 @@ func (m *rootModel) loadCommands() {
 		})
 	}
 
-	agents := m.app.Agents().List()
-	for _, a := range agents {
+	// @ 补全只提供雇佣视图中的 Agent：未雇佣 Agent 不允许作为会话对象
+	for _, a := range m.app.HiredAgents() {
 		m.input.Agents = append(m.input.Agents, data.AgentInfo{
 			Name:        a.Name,
 			Description: a.Description,
@@ -1596,15 +1596,19 @@ func (m *rootModel) openModelSelectDialog() (tea.Model, tea.Cmd) {
 
 // openAgentSelectDialog 激活 /agent 的居中浮层选择器。
 // 列表项格式为 "Role (name) - Description"，agentSelectNames 保持与
-// Agents().List() 同序，ListDialogResult.Index 映射回 Agent 名称后
+// HiredAgents() 雇佣视图同序，ListDialogResult.Index 映射回 Agent 名称后
 // 走既有 handleAgentSwitch 链路（状态栏/配置持久化零改动）。
 func (m *rootModel) openAgentSelectDialog() (tea.Model, tea.Cmd) {
 	if m.app == nil || m.app.Agents() == nil {
 		return m, m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.system.uninitialized"), Level: data.NotifWarning})
 	}
-	agents := m.app.Agents().List()
+	// 选择器只列已雇佣 Agent：未雇佣 Agent 不允许切入会话
+	agents := m.app.HiredAgents()
 	if len(agents) == 0 {
-		return m, m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.no.provider"), Level: data.NotifWarning})
+		return m, m.notifBar.Add(data.Notification{
+			Message: "暂无已雇佣的 Agent：可执行 mindx agent hire <name> 或在 AgentBrowser 中雇佣",
+			Level:   data.NotifWarning,
+		})
 	}
 	items := make([]string, len(agents))
 	m.agentSelectNames = make([]string, len(agents))

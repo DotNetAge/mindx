@@ -17,6 +17,9 @@ exclude_tools:
   - TeamGetTasks
   - Sleep
   - PowerShell
+meta:
+  domains:
+    - 市场营销
 ---
 
 ## 专业领域

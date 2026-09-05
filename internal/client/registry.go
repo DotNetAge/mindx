@@ -218,8 +218,16 @@ func BuiltinCommands(deps CommandDeps) *SlashCommandRegistry {
 				return CommandResult{Success: true}
 			}
 			name := args[0]
-			if deps.App.Agents().Get(name) == nil {
+			cfg := deps.App.Agents().Get(name)
+			if cfg == nil {
 				return CommandResult{Message: fmt.Sprintf("❌ Agent %q 不存在", name), Success: false}
+			}
+			// 雇佣校验：未雇佣 Agent 不允许切入会话
+			if !appcore.AgentIsHired(cfg) {
+				return CommandResult{
+					Message: fmt.Sprintf("❌ Agent %q 尚未雇佣，可执行 `mindx agent hire %s` 启用", name, name),
+					Success: false,
+				}
 			}
 			if deps.OnAgentSwitch != nil {
 				deps.OnAgentSwitch(name)

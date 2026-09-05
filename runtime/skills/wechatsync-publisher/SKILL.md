@@ -1,9 +1,12 @@
 ---
 name: wechatsync-publisher
 description: 多平台内容发布助手，支持智能选题筛选、AI生成优质内容、一键发布到微信公众号等平台；支持内容格式自动适配（HTML/Markdown/纯文本）
+metadata:
+  name_zh: 多平台内容发布
+  name_zh-tw: 多平台內容發布
 ---
 
-# 多平台内容发布助手
+# 多平台内容发布
 
 ## 任务目标
 - 本Skill用于：高效实现多平台内容发布，从选题、创作到一键推送的全流程自动化

@@ -27,6 +27,11 @@ type AgentScoreParams struct {
 	Notes     string `json:"notes,omitempty"`
 }
 
+// AgentHireParams are the params for agent.hire / agent.fire.
+type AgentHireParams struct {
+	Name string `json:"name"`
+}
+
 // AgentUpdateParams are the params for agent.update.
 type AgentUpdateParams struct {
 	Name         string         `json:"name"`
@@ -53,6 +58,16 @@ func (c *Client) AgentCreate(params AgentCreateParams) (json.RawMessage, error) 
 
 func (c *Client) AgentScore(params AgentScoreParams) (json.RawMessage, error) {
 	return c.CallWithTimeout("agent.score", params)
+}
+
+// AgentHire 雇佣 Agent（写入 meta.hired=true，雇佣后对会话可用）。
+func (c *Client) AgentHire(name string) (json.RawMessage, error) {
+	return c.CallWithTimeout("agent.hire", AgentHireParams{Name: name})
+}
+
+// AgentFire 解雇 Agent（写入 meta.hired=false，解雇后对会话不可用）。
+func (c *Client) AgentFire(name string) (json.RawMessage, error) {
+	return c.CallWithTimeout("agent.fire", AgentHireParams{Name: name})
 }
 
 func (c *Client) AgentUpdate(params AgentUpdateParams) (json.RawMessage, error) {

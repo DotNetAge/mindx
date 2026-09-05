@@ -18,6 +18,9 @@ exclude_tools:
   - TeamGetTasks
   - Sleep
   - PowerShell
+meta:
+  domains:
+    - 内容创作
 ---
 
 ## 专业领域

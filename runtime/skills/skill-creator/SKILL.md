@@ -3,8 +3,8 @@ name: skill-creator
 description: >
   创建和改进 MindX 技能。当用户需要新的可复用能力、现有技能需要改进，或者需要将领域知识结构化为可挂载到智能体的技能时使用。
 metadata:
-  name_zh: 技能创建者
-  name_zh-tw: 技能建立者
+  name_zh: 创建技能
+  name_zh-tw: 创建技能
   description_zh: 创建和改进 MindX 技能，将领域知识封装为可挂载到智能体的复用能力
   description_zh-tw: 建立和改進 MindX 技能，將領域知識封裝為可掛載到智慧體的複用能力
 ---
