@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"io/fs"
 
-	"github.com/DotNetAge/goharness/config"
-
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
 )
@@ -43,11 +41,8 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 		}
 	}
 
-	// Update agent models and config
+	// 模型选择是用户级语义：全局默认/最近模型写入配置即可，Agent 不持有模型属性。
 	if result.SelectedModel != "" {
-		if err := updateAllAgentsModel(agentsDir, result.SelectedModel, result.SelectedProvider); err != nil {
-			return fmt.Errorf(i18n.T("setup.update.agent.model.failed"), err)
-		}
 		// 参照字段存组合串（Provider/Name），跨供应商同名可消歧。
 		ref := result.SelectedModel
 		if result.SelectedProvider != "" {
@@ -94,27 +89,6 @@ func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *c
 
 	if err := cfg.Save(); err != nil {
 		return fmt.Errorf(i18n.T("config.error.serialize.failed"), err)
-	}
-
-	return nil
-}
-
-func updateAllAgentsModel(agentsDir, modelName, provider string) error {
-	registry, err := config.LoadAgentsFrom(agentsDir)
-	if err != nil {
-		return err
-	}
-
-	// agent.Model 存组合串（Provider/Name），跨供应商同名可消歧。
-	ref := modelName
-	if provider != "" {
-		ref = provider + "/" + modelName
-	}
-	for _, agent := range registry.List() {
-		agent.Model = ref
-		if err := registry.SaveTo(agent); err != nil {
-			return fmt.Errorf(i18n.T("setup.save.agent.model.failed"), agent.Name, err)
-		}
 	}
 
 	return nil

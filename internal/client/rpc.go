@@ -920,12 +920,9 @@ func (r *daemonRPCClient) SessionDeleteRound(sessionID string, timestamp int64) 
 	return r.callInto("session.delete_round", map[string]any{"session_id": sessionID, "id": timestamp}, nil)
 }
 
-// SessionCompact 手动触发上下文压缩；mode 为空或 "full"，或 "micro"。
-func (r *daemonRPCClient) SessionCompact(sessionID, mode string) (*SessionContextStats, error) {
+// SessionCompact 手动触发上下文压缩（LLM 摘要式滑动窗口；MicroCompact 已拆除）。
+func (r *daemonRPCClient) SessionCompact(sessionID string) (*SessionContextStats, error) {
 	params := map[string]any{"session_id": sessionID}
-	if mode != "" {
-		params["mode"] = mode
-	}
 	var out *SessionContextStats
 	err := r.callInto("session.compact", params, &out)
 	return out, err

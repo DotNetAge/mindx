@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/DotNetAge/goharness/rule"
 	"github.com/DotNetAge/mindx/internal/i18n"
+	"github.com/DotNetAge/mindx/pkg/rules"
 )
 
 type DaemonConfig struct {
@@ -42,7 +42,7 @@ type MindxConfig struct {
 	Python          PythonConfig `json:"python"`
 
 	// PermissionRules stores user-defined allow/deny/ask rules.
-	PermissionRules *rule.PermissionRules `json:"permission_rules,omitempty"`
+	PermissionRules *rules.PermissionRules `json:"permission_rules,omitempty"`
 
 	// Language is the UI language (e.g. "zh", "en"). Defaults to system locale.
 	Language string `json:"language,omitempty"`

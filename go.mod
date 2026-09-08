@@ -133,7 +133,7 @@ require (
 	mvdan.cc/sh/v3 v3.13.1 // indirect
 )
 
-// replace github.com/DotNetAge/goharness => ../goharness
+replace github.com/DotNetAge/goharness => ../goharness
 
 // replace github.com/DotNetAge/gorag/v2 => ../gorag
 

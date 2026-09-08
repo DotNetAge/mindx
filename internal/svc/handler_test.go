@@ -510,21 +510,22 @@ func TestHandleAgentUpdate_InvalidJSON(t *testing.T) {
 
 func mustCreateAgentFile(t *testing.T, agentsDir string, name string) {
 	t.Helper()
-	_ = os.MkdirAll(agentsDir, 0755)
+	// 目录格式 Agent（IDENTITY.md + SOUL.md），与 agentstore 存储格式一致
+	agentDir := filepath.Join(agentsDir, name)
+	if err := os.MkdirAll(agentDir, 0755); err != nil {
+		t.Fatalf("create agent dir: %v", err)
+	}
 	content := fmt.Sprintf(`---
 name: %s
 role: Test Role
 description: Original description
-model: test-model
 skills:
   - skill-a
 ---
 
-## Body Content
-
-This is the original body.
+Original body
 `, name)
-	filePath := filepath.Join(agentsDir, name+".md")
+	filePath := filepath.Join(agentDir, "IDENTITY.md")
 	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 		t.Fatalf("write agent file: %v", err)
 	}
@@ -537,19 +538,15 @@ func TestHandleAgentUpdate_OK(t *testing.T) {
 	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
 	mustCreateAgentFile(t, agentsDir, "test-updater")
 
-	reloaded, _ := goharnessconfig.LoadAgentsFrom(agentsDir)
-	if reloaded != nil {
-		d.app.SetAgentsRegistry(reloaded)
+	// 重新扫描 agents 目录，使新写入的 Agent 进入内存注册表
+	if err := d.app.ReloadAgents(); err != nil {
+		t.Fatalf("ReloadAgents() error = %v", err)
 	}
-
-	// agent.Model 归一化要求目标模型真实存在（无 provider，组合串退化为裸名"new-model"）。
-	d.app.Models().Register("new-model", &goharnessconfig.ModelConfig{Name: "new-model"})
 
 	params, _ := json.Marshal(map[string]interface{}{
 		"name":        "test-updater",
 		"role":        "Updated Role",
 		"description": "Updated description",
-		"model":       "new-model",
 		"skills":      []string{"skill-b", "skill-c"},
 	})
 
@@ -569,7 +566,7 @@ func TestHandleAgentUpdate_OK(t *testing.T) {
 		t.Errorf("agent_name = %s, want test-updater", m["agent_name"])
 	}
 
-	filePath := filepath.Join(agentsDir, "test-updater.md")
+	filePath := filepath.Join(agentsDir, "test-updater", "IDENTITY.md")
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("read updated file: %v", err)
@@ -577,9 +574,6 @@ func TestHandleAgentUpdate_OK(t *testing.T) {
 	content := string(data)
 	if !strings.Contains(content, "Updated description") {
 		t.Error("file should contain updated description")
-	}
-	if !strings.Contains(content, "new-model") {
-		t.Error("file should contain updated model")
 	}
 	if strings.Contains(content, "Original description") {
 		t.Error("file should NOT contain original description")
@@ -593,9 +587,9 @@ func TestHandleAgentUpdate_PartialFieldsOnly(t *testing.T) {
 	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
 	mustCreateAgentFile(t, agentsDir, "partial-agent")
 
-	reloaded, _ := goharnessconfig.LoadAgentsFrom(agentsDir)
-	if reloaded != nil {
-		d.app.SetAgentsRegistry(reloaded)
+	// 重新扫描 agents 目录，使新写入的 Agent 进入内存注册表
+	if err := d.app.ReloadAgents(); err != nil {
+		t.Fatalf("ReloadAgents() error = %v", err)
 	}
 
 	params, _ := json.Marshal(map[string]interface{}{
@@ -613,14 +607,11 @@ func TestHandleAgentUpdate_PartialFieldsOnly(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("agent should still exist after partial update")
 	}
-	if cfg.Description != "Only description changed" {
-		t.Errorf("description = %s, want 'Only description changed'", cfg.Description)
+	if cfg.Meta.Description != "Only description changed" {
+		t.Errorf("description = %s, want 'Only description changed'", cfg.Meta.Description)
 	}
-	if cfg.Role != "Test Role" {
-		t.Errorf("role should remain unchanged, got %s", cfg.Role)
-	}
-	if cfg.Model != "test-model" {
-		t.Errorf("model should remain unchanged, got %s", cfg.Model)
+	if cfg.Meta.Role != "Test Role" {
+		t.Errorf("role should remain unchanged, got %s", cfg.Meta.Role)
 	}
 }
 

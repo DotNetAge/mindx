@@ -9,44 +9,21 @@ import (
 
 	"go.etcd.io/bbolt"
 
-	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/core/agentstore"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
 func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any, error) {
 	agents := d.app.Agents()
 	if agents == nil {
-		return []goharnessconfig.AgentConfig{}, nil
+		return []agentstore.AgentMeta{}, nil
 	}
 	list := agents.List()
-	if list == nil {
-		return []goharnessconfig.AgentConfig{}, nil
-	}
 
-	type agentEntry struct {
-		Name         string         `json:"name"`
-		Role         string         `json:"role,omitempty"`
-		Description  string         `json:"description"`
-		Introduction string         `json:"introduction,omitempty"`
-		Model        string         `json:"model"`
-		Skills       []string       `json:"skills,omitempty"`
-		ExcludeTools []string       `json:"exclude_tools,omitempty"`
-		Meta         map[string]any `json:"meta,omitempty"`
-	}
-
-	result := make([]agentEntry, len(list))
-	for i, a := range list {
-		result[i] = agentEntry{
-			Name:         a.Name,
-			Role:         a.Role,
-			Description:  a.Description,
-			Introduction: a.Introduction,
-			Model:        a.Model,
-			Skills:       a.Skills,
-			ExcludeTools: a.ExcludeTools,
-			Meta:         a.Meta,
-		}
+	result := make([]agentstore.AgentMeta, 0, len(list))
+	for _, a := range list {
+		result = append(result, a.Meta)
 	}
 	return result, nil
 }
@@ -65,12 +42,11 @@ func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any,
 		return nil, fmt.Errorf("agent registry not available")
 	}
 
-	cfg := agents.Get(p.Name)
-	if cfg == nil {
+	agent := agents.Get(p.Name)
+	if agent == nil {
 		return nil, fmt.Errorf("agent %q not found", p.Name)
 	}
-
-	return cfg, nil
+	return agent.Meta, nil
 }
 
 func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (any, error) {
@@ -87,19 +63,8 @@ func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (a
 	if p.Description == "" {
 		return nil, fmt.Errorf("description is required")
 	}
-	if p.Model == "" {
-		return nil, fmt.Errorf("model is required")
-	}
 	if p.Body == "" {
 		return nil, fmt.Errorf("body is required")
-	}
-
-	if d.app.Models() == nil {
-		return nil, fmt.Errorf("model registry not available")
-	}
-	modelRef, err := d.normalizeModelRef(p.Model)
-	if err != nil {
-		return nil, err
 	}
 
 	agents := d.app.Agents()
@@ -107,31 +72,33 @@ func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("agent registry not available")
 	}
 
-	existing := agents.Get(p.Name)
-	if existing != nil {
+	if agents.Get(p.Name) != nil {
 		return nil, fmt.Errorf("agent %q already exists", p.Name)
 	}
 
-	newAgent := goharnessconfig.AgentConfig{
-		Name:         p.Name,
-		Role:         p.Role,
-		Description:  p.Description,
-		Introduction: p.Introduction,
-		Model:        modelRef,
-		Skills:       p.Skills,
-		Meta:         p.Meta,
-	}
-	if p.Body != "" && newAgent.Introduction == "" {
-		newAgent.Introduction = p.Body
+	introduction := p.Introduction
+	if introduction == "" {
+		introduction = p.Body
 	}
 
-	if err := agents.SaveTo(&newAgent); err != nil {
+	newAgent := &agentstore.Agent{
+		Meta: agentstore.AgentMeta{
+			Name:         p.Name,
+			Role:         p.Role,
+			Description:  p.Description,
+			Introduction: introduction,
+			Skills:       p.Skills,
+			Meta:         p.Meta,
+		},
+	}
+
+	if err := agents.Save(newAgent); err != nil {
 		return nil, fmt.Errorf("failed to create agent config: %w", err)
 	}
 
 	return map[string]string{
 		"status":     "ok",
-		"agent_name": newAgent.Name,
+		"agent_name": newAgent.Meta.Name,
 		"message":    "agent created successfully",
 	}, nil
 }
@@ -158,39 +125,31 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 	updated := *existing
 
 	if p.Role != "" {
-		updated.Role = p.Role
+		updated.Meta.Role = p.Role
 	}
 	if p.Description != "" {
-		updated.Description = p.Description
-	}
-	if p.Model != "" {
-		modelRef, err := d.normalizeModelRef(p.Model)
-		if err != nil {
-			return nil, err
-		}
-		updated.Model = modelRef
+		updated.Meta.Description = p.Description
 	}
 	if p.Skills != nil {
-		updated.Skills = p.Skills
+		updated.Meta.Skills = p.Skills
 	}
 	if p.ExcludeTools != nil {
-		updated.ExcludeTools = p.ExcludeTools
+		updated.Meta.ExcludeTools = p.ExcludeTools
 	}
 	if p.Introduction != "" {
-		updated.Introduction = p.Introduction
+		updated.Meta.Introduction = p.Introduction
 	}
-
 	if p.Meta != nil {
-		updated.Meta = p.Meta
+		updated.Meta.Meta = p.Meta
 	}
 
-	if err := agents.SaveTo(&updated); err != nil {
+	if err := agents.Save(&updated); err != nil {
 		return nil, fmt.Errorf("failed to save agent config: %w", err)
 	}
 
 	return map[string]string{
 		"status":     "ok",
-		"agent_name": updated.Name,
+		"agent_name": updated.Meta.Name,
 		"message":    "agent config updated",
 	}, nil
 }
@@ -302,19 +261,19 @@ func (d *Daemon) handleAgentReload(_ context.Context, params json.RawMessage) (a
 	}, nil
 }
 
-// handleAgentHire 雇佣 Agent（meta.hired=true），雇佣后对会话可用。
+// handleAgentHire 雇佣 Agent（hired=true），雇佣后对会话可用。
 func (d *Daemon) handleAgentHire(_ context.Context, params json.RawMessage) (any, error) {
 	return d.setAgentHired(params, true)
 }
 
-// handleAgentFire 解雇 Agent（meta.hired=false），解雇后对会话不可用。
+// handleAgentFire 解雇 Agent（hired=false），解雇后对会话不可用。
 func (d *Daemon) handleAgentFire(_ context.Context, params json.RawMessage) (any, error) {
 	return d.setAgentHired(params, false)
 }
 
 // setAgentHired 是 agent.hire / agent.fire 的公共实现：
-// 以文本级方式修改 Agent 文件的 meta.hired 标记（避开 SaveTo 全量重写
-// 丢失 exclude_tools 的问题），并同步内存注册表，无需 reload 即刻生效。
+// hired 为 IDENTITY.md frontmatter 一级字段，经 agentstore 强类型全量
+// 序列化写入并同步内存缓存，无需 reload 即刻生效。
 func (d *Daemon) setAgentHired(params json.RawMessage, hired bool) (any, error) {
 	var p rpc.AgentHireParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -329,8 +288,7 @@ func (d *Daemon) setAgentHired(params json.RawMessage, hired bool) (any, error) 
 		return nil, fmt.Errorf("agent registry not available")
 	}
 
-	dir := d.app.Settings().AgentsDir()
-	if err := core.SetAgentHired(dir, p.Name, agents, hired); err != nil {
+	if err := core.SetAgentHired(agents, p.Name, hired); err != nil {
 		return nil, err
 	}
 
@@ -344,21 +302,4 @@ func (d *Daemon) setAgentHired(params json.RawMessage, hired bool) (any, error) 
 		"hired":      hired,
 		"message":    message,
 	}, nil
-}
-
-// normalizeModelRef 将 agent.Model 归一化为组合串（Provider/Name），作为 agent 的模型参照，
-// 用于跨供应商同名模型时消歧。接受裸 name（唯一匹配）或已组合的 Provider/Name 两种输入，
-// 无法唯一解析（裸名存在冲突而调用方未指定供应商）时返回错误，提示调用方用组合串精确指定。
-func (d *Daemon) normalizeModelRef(ref string) (string, error) {
-	if ref == "" {
-		return "", nil
-	}
-	if d.app.Models() == nil {
-		return "", fmt.Errorf("model registry not available")
-	}
-	cfg := d.app.Models().Get(ref)
-	if cfg == nil {
-		return "", fmt.Errorf("model %q not found", ref)
-	}
-	return modelLookupKey(cfg.Provider, cfg.Name), nil
 }

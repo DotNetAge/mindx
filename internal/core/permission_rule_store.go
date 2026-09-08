@@ -1,44 +1,44 @@
 package core
 
 import (
-	"github.com/DotNetAge/goharness/rule"
+	"github.com/DotNetAge/mindx/pkg/rules"
 )
 
-// MindxPermissionRuleStore implements rule.PermissionRuleStore
-// by reading/writing permission rules from MindxConfig (persisted in mindx.json).
+// MindxPermissionRuleStore 实现 rules.PermissionRuleStore，
+// 权限规则随 MindxConfig 持久化在 ~/.mindx/mindx.json 中。
 //
-// This is the "秘籍" integration: rules are stored alongside other user preferences
-// in ~/.mindx/mindx.json. Most users never touch this — Skill AllowedTools handles
-// the common case of pre-approving tools for specific skills.
+// 这是「秘籍」集成路径：权限规则与其它用户偏好存放在一起。
+// 大多数用户不会触碰它——Skill 的 AllowedTools 已覆盖为特定技能
+// 预授权工具的常见场景。
 //
-// The store delegates to MindxConfig.Save() for persistence, so rules survive restarts.
+// 持久化委托给 MindxConfig.Save()，规则因此跨重启保留。
 type MindxPermissionRuleStore struct {
 	config *MindxConfig
 }
 
-// NewMindxPermissionRuleStore creates a store backed by the given config.
-// The config must already be loaded (via LoadMindxConfig).
+// NewMindxPermissionRuleStore 创建以给定配置为后端的权限规则存储。
+// 配置必须已加载（经 LoadMindxConfig）。
 func NewMindxPermissionRuleStore(config *MindxConfig) *MindxPermissionRuleStore {
 	return &MindxPermissionRuleStore{config: config}
 }
 
-// Load implements rule.PermissionRuleStore.
-func (s *MindxPermissionRuleStore) Load() (*rule.PermissionRules, error) {
+// Load 获取当前的权限规则集合（实现 rules.PermissionRuleStore）。
+func (s *MindxPermissionRuleStore) Load() (*rules.PermissionRules, error) {
 	if s.config == nil {
-		return &rule.PermissionRules{}, nil
+		return &rules.PermissionRules{}, nil
 	}
-	rules := s.config.PermissionRules
-	if rules == nil {
-		return &rule.PermissionRules{}, nil
+	pr := s.config.PermissionRules
+	if pr == nil {
+		return &rules.PermissionRules{}, nil
 	}
-	return rules, nil
+	return pr, nil
 }
 
-// Save implements rule.PermissionRuleStore.
-func (s *MindxPermissionRuleStore) Save(rules *rule.PermissionRules) error {
+// Save 持久化给定的权限规则（实现 rules.PermissionRuleStore）。
+func (s *MindxPermissionRuleStore) Save(pr *rules.PermissionRules) error {
 	if s.config == nil {
 		return nil
 	}
-	s.config.PermissionRules = rules
+	s.config.PermissionRules = pr
 	return s.config.Save()
 }

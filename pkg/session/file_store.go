@@ -21,9 +21,6 @@ func encodeMsg(msg goharnesssession.Message) goharnesssession.Message {
 	encoded := msg
 	encoded.Content = base64.StdEncoding.EncodeToString([]byte(msg.Content))
 	encoded.ReasoningContent = base64.StdEncoding.EncodeToString([]byte(msg.ReasoningContent))
-	if msg.Compacted != "" {
-		encoded.Compacted = base64.StdEncoding.EncodeToString([]byte(msg.Compacted))
-	}
 	return encoded
 }
 
@@ -39,13 +36,6 @@ func decodeMsg(msg goharnesssession.Message) goharnesssession.Message {
 		decoded.ReasoningContent = string(d)
 	} else if msg.ReasoningContent != "" {
 		log.Printf("[WARN] session: failed to base64-decode reasoning_content for role=%q: %v", msg.Role, err)
-	}
-	if msg.Compacted != "" {
-		if d, err := base64.StdEncoding.DecodeString(msg.Compacted); err == nil {
-			decoded.Compacted = string(d)
-		} else {
-			log.Printf("[WARN] session: failed to base64-decode compacted for role=%q: %v", msg.Role, err)
-		}
 	}
 	return decoded
 }

@@ -3,9 +3,11 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DotNetAge/mindx/pkg/logging"
+	"github.com/DotNetAge/mindx/pkg/rules"
 )
 
 func TestSettings_Directories(t *testing.T) {
@@ -98,44 +100,78 @@ func TestApp_Accessors(t *testing.T) {
 	}
 }
 
-func TestResolveModelName_FromAgentModel(t *testing.T) {
-	// 构造一个包含模型的 ModelRegistry
-	reg := NewTestModelRegistry("gpt-4", "claude-3")
-	app := &App{
-		models:      reg,
-		mindxConfig: &MindxConfig{},
-		logger:      logging.DefaultConsoleLogger(),
-	}
+// TestBuildRulesSection_MergesPermissionAndUserRules 回归测试：权限规则与用户规则
+// 必须同时出现在扩展规则段中。原实现经 goharness 的 WithRuleRegistry 注入，
+// 两次调用共用一个 ruleReg 槽位互相覆盖（后注册者胜出），导致另一类规则丢失。
+func TestBuildRulesSection_MergesPermissionAndUserRules(t *testing.T) {
+	app := &App{}
 
-	name, cfg, err := app.resolveModelName("gpt-4")
-	if err != nil {
-		t.Fatalf("resolveModelName(gpt-4) error: %v", err)
+	// 权限规则（mindx.json 持久化存储）
+	cfg := &MindxConfig{
+		PermissionRules: &rules.PermissionRules{
+			AlwaysAllow: []rules.PermissionRule{{Behavior: rules.RuleAllow, ToolName: "Bash", Description: "运行 go build"}},
+			AlwaysDeny:  []rules.PermissionRule{{Behavior: rules.RuleDeny, ToolName: "Bash", Description: "执行 rm -rf"}},
+			AlwaysAsk:   []rules.PermissionRule{{Behavior: rules.RuleAsk, ToolName: "WebFetch", Description: "访问外部网址"}},
+		},
 	}
-	if name != "gpt-4" {
-		t.Errorf("name = %q, want %q", name, "gpt-4")
+	app.permissionRuleStore = NewMindxPermissionRuleStore(cfg)
+
+	// 用户规则（rules.yml 注册表）
+	userRules := rules.NewMemRuleRegistry()
+	if err := userRules.Register(rules.Rule{ID: "no-force-push", Intro: "禁止强推主分支", Scope: rules.ScopeGlobal, Enabled: true}); err != nil {
+		t.Fatalf("注册用户规则失败: %v", err)
 	}
-	if cfg == nil {
-		t.Fatal("cfg is nil")
-	}
-	if cfg.Name != "gpt-4" {
-		t.Errorf("cfg.Name = %q, want %q", cfg.Name, "gpt-4")
+	app.rules = userRules
+
+	got := app.BuildRulesSection()
+
+	// 四类内容必须同时出现
+	for _, want := range []string{
+		"Always allow 运行 go build",
+		"Always deny 执行 rm -rf",
+		"Ask before 访问外部网址",
+		agentDiscoveryIntro,
+		"禁止强推主分支",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("BuildRulesSection() 缺少 %q\n实际输出:\n%s", want, got)
+		}
 	}
 }
 
-func TestResolveModelName_LastModelOverride(t *testing.T) {
+// TestBuildRulesSection_DisabledUserRuleSkipped 已禁用的用户规则不得进入提示词。
+func TestBuildRulesSection_DisabledUserRuleSkipped(t *testing.T) {
+	app := &App{}
+	userRules := rules.NewMemRuleRegistry()
+	if err := userRules.Register(rules.Rule{ID: "off", Intro: "已禁用规则", Scope: rules.ScopeGlobal, Enabled: false}); err != nil {
+		t.Fatalf("注册用户规则失败: %v", err)
+	}
+	app.rules = userRules
+
+	got := app.BuildRulesSection()
+	if strings.Contains(got, "已禁用规则") {
+		t.Errorf("已禁用规则不应渲染进提示词\n实际输出:\n%s", got)
+	}
+}
+
+func TestResolveModelName_LastModelPriority(t *testing.T) {
+	// 模型选择为用户级语义：LastModel 优先于 DefaultModel（Agent 不持有模型属性）
 	reg := NewTestModelRegistry("gpt-4", "claude-3")
 	app := &App{
 		models:      reg,
-		mindxConfig: &MindxConfig{LastModel: "claude-3"},
+		mindxConfig: &MindxConfig{LastModel: "claude-3", DefaultModel: "gpt-4"},
 		logger:      logging.DefaultConsoleLogger(),
 	}
 
-	name, _, err := app.resolveModelName("gpt-4")
+	name, cfg, err := app.resolveModelName()
 	if err != nil {
 		t.Fatalf("resolveModelName error: %v", err)
 	}
 	if name != "claude-3" {
-		t.Errorf("name = %q, want %q (LastModel should override)", name, "claude-3")
+		t.Errorf("name = %q, want %q (LastModel 优先)", name, "claude-3")
+	}
+	if cfg == nil || cfg.Name != "claude-3" {
+		t.Fatalf("cfg.Name = %v, want %q", cfg, "claude-3")
 	}
 }
 
@@ -147,9 +183,9 @@ func TestResolveModelName_DefaultModelFallback(t *testing.T) {
 		logger:      logging.DefaultConsoleLogger(),
 	}
 
-	name, _, err := app.resolveModelName("")
+	name, _, err := app.resolveModelName()
 	if err != nil {
-		t.Fatalf("resolveModelName('') error: %v", err)
+		t.Fatalf("resolveModelName error: %v", err)
 	}
 	if name != "gpt-4" {
 		t.Errorf("name = %q, want %q", name, "gpt-4")
@@ -160,13 +196,13 @@ func TestResolveModelName_NotFound(t *testing.T) {
 	reg := NewTestModelRegistry("gpt-4")
 	app := &App{
 		models:      reg,
-		mindxConfig: &MindxConfig{},
+		mindxConfig: &MindxConfig{LastModel: "nonexistent"},
 		logger:      logging.DefaultConsoleLogger(),
 	}
 
-	_, _, err := app.resolveModelName("nonexistent")
+	_, _, err := app.resolveModelName()
 	if err == nil {
-		t.Fatal("resolveModelName(nonexistent) should return error")
+		t.Fatal("resolveModelName 对未注册模型应返回错误")
 	}
 }
 
@@ -177,9 +213,9 @@ func TestResolveModelName_Empty(t *testing.T) {
 		logger:      logging.DefaultConsoleLogger(),
 	}
 
-	_, _, err := app.resolveModelName("")
+	_, _, err := app.resolveModelName()
 	if err == nil {
-		t.Fatal("resolveModelName('') with no models should return error")
+		t.Fatal("未配置任何模型时应返回错误")
 	}
 }
 
@@ -189,7 +225,7 @@ func TestCreateSession(t *testing.T) {
 		settings:    &Settings{Test: true, testDir: tmpDir},
 		mindxConfig: DefaultMindxConfig(tmpDir),
 		logger:      logging.DefaultConsoleLogger(),
-		agents:      NewTestAgentRegistry(t, "test-agent"),
+		agents:      NewTestAgentStore(t, "test-agent"),
 	}
 
 	// 先初始化 sessDB
@@ -215,31 +251,6 @@ func TestCreateSession(t *testing.T) {
 	// 验证 currentSessionMeta 被设置
 	if app.CurrentSessionMeta() == nil {
 		t.Error("currentSessionMeta should be set after CreateSession")
-	}
-}
-
-func TestIsModelAvailable_NilAgent(t *testing.T) {
-	// 无 agents 注册时
-	app := &App{
-		models: NewTestModelRegistry("gpt-4"),
-		agents: NewTestAgentRegistry(t),
-		logger: logging.DefaultConsoleLogger(),
-	}
-	if app.IsModelAvailable() {
-		t.Error("IsModelAvailable() should return false when no agent configured")
-	}
-}
-
-func TestIsModelAvailable_SpecificName(t *testing.T) {
-	app := &App{
-		models:      NewTestModelRegistry("gpt-4"),
-		mindxConfig: &MindxConfig{},
-		logger:      logging.DefaultConsoleLogger(),
-	}
-	// 无实际网络请求，测试的是模型存在性检查前的逻辑
-	// 这里验证的是 IsModelAvailable("nonexistent") 路径能正常返回 false
-	if app.IsModelAvailable("nonexistent") {
-		t.Error("IsModelAvailable(nonexistent) should return false")
 	}
 }
 

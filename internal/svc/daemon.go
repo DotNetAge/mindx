@@ -85,21 +85,15 @@ type Daemon struct {
 	// hotReload watches agents/ and skills/ directories for file changes
 	// and automatically reloads registries.
 	hotReload *HotReloadWatcher
+
+	// projectSkills 记录已确认载入项目级技能的会话（sessionID → 覆盖注册表）。
+	// 项目技能为"发现式"经验，经用户批量确认后一次性挂载到会话（PR-PROMPTS 第三节）：
+	// daemon 在每轮 Ask 重建会话实例时重新应用覆盖；daemon 重启后丢失，
+	// 由前端在会话打开时重新发现并确认，符合"仅在该项目内可见"的语义。
+	projectSkills sync.Map
 }
 
 func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
-	// Inject custom skills prompt: list only names, with a tip to use
-	// "mindx skill list -f" for detailed descriptions.
-	app.SetSkillsPromptOverride(NewSkillsPrompt())
-
-	// Inject custom environment prompt: enrich with SessionID, local time,
-	// user prefs, and venv path.
-	app.SetEnvsOverride(NewEnvironmentPrompt(
-		app.Settings().UserPreferences(),
-		app.Settings().VenvDir(),
-	))
-	app.SetSearchStrategyOverride(NewSearchStrategyPrompt())
-
 	logDir := logging.ResolveLogDir()
 	logger := logging.DefaultZapLogger(&logging.ZapConfig{
 		Filename:   filepath.Join(logDir, "mindx.log"),
@@ -766,6 +760,14 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			d.sendEvent(clientID, sessionID, gateway.RespError, "Session Error", err.Error())
 			return
 		}
+
+		// 应用项目级技能覆盖（用户批量确认后一次性载入）。
+		// 会话实例按轮次从存储重建，覆盖须在每轮载入时重新挂载；
+		// 未确认载入的会话不受影响（nil 跳过）。
+		if overlay := d.projectOverlayFor(sessionID); overlay != nil {
+			s.SetSkillOverlay(overlay)
+		}
+
 		d.activeSessions.Store(sessionID, s)
 
 		// 注册 FileModifyHandler：将文件追踪事件转发为 JSON-RPC 通知，
@@ -811,11 +813,12 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				eventSubSessionID = ev.SessionID
 			}).
 			OnEvent(func(ev events.ReactEvent) {
-				// Forward Compact / MicroCompact events as JSON-RPC
-				// broadcast notifications so all connected clients get real-time
-				// context window management visibility.
+				// Forward Compact events as JSON-RPC broadcast notifications
+				// so all connected clients get real-time context window
+				// management visibility.
 				// 会话归属用 ev.SessionID：主会话事件经 emit 补齐为 sid，
 				// 子会话事件经 parentEmit 转发时即子会话 ID，据此区分广播对象。
+				// 注：MicroCompact 已拆除（负优化，破坏 KV 缓存），仅保留全量压缩事件。
 				switch ev.Type {
 				case events.CompactStart:
 					data, _ := ev.Data.(events.CompactStartData)
@@ -847,41 +850,6 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 					)
 					if gw != nil {
 						gw.BroadcastNotification("compact_done", map[string]any{
-							"session_id": sessID,
-							"data":       data,
-						})
-					}
-				case events.MicroCompactStart:
-					data, _ := ev.Data.(events.MicroCompactStartData)
-					sessID := ev.SessionID
-					if sessID == "" {
-						sessID = sid
-					}
-					d.logger.Info("[session] micro-compact start",
-						"session_id", sessID,
-						"window_tokens", data.WindowTokens,
-					)
-					if gw != nil {
-						gw.BroadcastNotification("micro_compact_start", map[string]any{
-							"session_id": sessID,
-							"data":       data,
-						})
-					}
-				case events.MicroCompactDone:
-					data, _ := ev.Data.(events.MicroCompactDoneData)
-					sessID := ev.SessionID
-					if sessID == "" {
-						sessID = sid
-					}
-					d.logger.Info("[session] micro-compact done",
-						"session_id", sessID,
-						"compressed", data.Compressed,
-						"deduped", data.Deduped,
-						"window_tokens", data.WindowTokens,
-						"ratio", data.Ratio,
-					)
-					if gw != nil {
-						gw.BroadcastNotification("micro_compact_done", map[string]any{
 							"session_id": sessID,
 							"data":       data,
 						})

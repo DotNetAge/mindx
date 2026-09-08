@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DotNetAge/goharness/skill"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/core/skillstore"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
 )
@@ -169,7 +169,7 @@ func listSkills(cmd *cobra.Command, filter []string) error {
 		if !e.IsDir() {
 			continue
 		}
-		sk, err := skill.LoadSkillFromDir(filepath.Join(dir, e.Name()), "filesystem")
+		sk, err := skillstore.LoadSkillFromDir(filepath.Join(dir, e.Name()), "filesystem")
 		if err != nil {
 			continue
 		}
@@ -242,7 +242,7 @@ func listSkills(cmd *cobra.Command, filter []string) error {
 
 func showSkillDetail(cmd *cobra.Command, name string) error {
 	dir := filepath.Join(skillsDir(), name)
-	sk, err := skill.LoadSkillFromDir(dir, "filesystem")
+	sk, err := skillstore.LoadSkillDetailFromDir(dir, "filesystem")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("skill %q not found", name)
@@ -304,7 +304,7 @@ func addSkill(srcPath string) error {
 		return fmt.Errorf("source path must be a skill directory or a SKILL.md file: %s", srcPath)
 	}
 
-	sk, err := skill.LoadSkillFromDir(skillDir, "filesystem")
+	sk, err := skillstore.LoadSkillFromDir(skillDir, "filesystem")
 	if err != nil {
 		return fmt.Errorf("skill validation failed: %w", err)
 	}
@@ -342,7 +342,7 @@ func addSkill(srcPath string) error {
 
 func validateSkill(name string) error {
 	dir := filepath.Join(skillsDir(), name)
-	sk, err := skill.LoadSkillFromDir(dir, "filesystem")
+	sk, err := skillstore.LoadSkillFromDir(dir, "filesystem")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("skill %q not found", name)

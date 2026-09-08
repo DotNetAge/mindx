@@ -57,13 +57,10 @@ type SessionDeleteRoundParams struct {
 }
 
 // SessionCompactParams are the params for session.compact.
-//
-// Mode specifies which compaction mechanism to trigger:
-//   - "full" (default): LLM summarization-based TryCompact (sliding window)
-//   - "micro": tool message compression via TryMicroCompact
+// 压缩统一走 LLM 摘要式滑动窗口（TryCompact）；MicroCompact 已整体拆除
+// （改写中间消息会破坏 KV 缓存，属于负优化）。
 type SessionCompactParams struct {
 	SessionID string `json:"session_id"`
-	Mode      string `json:"mode,omitempty"` // "full" (default) or "micro"
 }
 
 // ContextWindowUsage is the result of session.context.

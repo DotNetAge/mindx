@@ -1,48 +1,49 @@
-// Package rules provides a file-based RuleRegistry implementation
-// that persists rules to ~/.mindx/data/rules.yml.
+// Package rules 是 mindx 的规则域包（PR-PROMPTS P4 评审定案）：
+// 行为规则类型与 RuleRegistry 接口、权限规则类型，以及两种实现——
+// FileRuleRegistry（YAML 文件持久化，~/.mindx/data/rules.yml）
+// 与 MemRuleRegistry（内存聚合，不做持久化）。
+// 规则数据的所有权与实现归 mindx，goharness 不再持有任何规则代码。
 package rules
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
-	"github.com/DotNetAge/goharness/rule"
 	"gopkg.in/yaml.v3"
 )
 
-// ruleFileYAML is the top-level YAML structure for the rules file.
+// ruleFileYAML 是规则 YAML 文件的顶层结构。
 type ruleFileYAML struct {
-	Rules []rule.Rule `yaml:"rules"`
+	Rules []Rule `yaml:"rules"`
 }
 
-// FileRuleRegistry implements rule.RuleRegistry with automatic
-// persistence to a YAML file on every mutation.
-//
-// The file path is typically ~/.mindx/data/rules.yml.
-// Thread-safe: all reads use RLock, all mutations use Lock + save.
+// FileRuleRegistry 基于 YAML 文件持久化的 RuleRegistry 实现，
+// 每次变更立即写盘。所有读操作走 RLock，变更走 Lock + save，保证线程安全。
 type FileRuleRegistry struct {
 	mu    sync.RWMutex
 	path  string
-	rules []rule.Rule
+	rules []Rule
 }
 
-// NewFileRuleRegistry creates a FileRuleRegistry backed by the given YAML file path.
-// If the file does not exist it returns an empty registry (the file will be created on first write).
+// NewFileRuleRegistry 创建以给定 YAML 文件为后端的 FileRuleRegistry。
+// 文件不存在时返回空注册表（首次写盘时创建文件）。
 func NewFileRuleRegistry(path string) (*FileRuleRegistry, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return nil, fmt.Errorf("resolve path: %w", err)
+		return nil, fmt.Errorf("解析路径: %w", err)
 	}
 	reg := &FileRuleRegistry{path: absPath}
 	if err := reg.load(); err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("load rules from %s: %w", absPath, err)
+		return nil, fmt.Errorf("从 %s 加载规则: %w", absPath, err)
 	}
 	return reg, nil
 }
 
-// load reads and parses rules from the YAML file.
+// load 从 YAML 文件读取并解析规则。
+// 校验所有规则的 ID 和 Intro 字段均非空。
 func (r *FileRuleRegistry) load() error {
 	data, err := os.ReadFile(r.path)
 	if err != nil {
@@ -51,15 +52,15 @@ func (r *FileRuleRegistry) load() error {
 
 	var ry ruleFileYAML
 	if err := yaml.Unmarshal(data, &ry); err != nil {
-		return fmt.Errorf("unmarshal yaml: %w", err)
+		return fmt.Errorf("解析规则配置文件: %w", err)
 	}
 
 	for i := range ry.Rules {
 		if ry.Rules[i].ID == "" {
-			return fmt.Errorf("rule at index %d has empty ID", i)
+			return fmt.Errorf("第 %d 条规则缺少 ID", i)
 		}
 		if ry.Rules[i].Intro == "" {
-			return fmt.Errorf("rule %q has empty intro", ry.Rules[i].ID)
+			return fmt.Errorf("规则 %q 缺少介绍文本", ry.Rules[i].ID)
 		}
 	}
 
@@ -67,23 +68,24 @@ func (r *FileRuleRegistry) load() error {
 	return nil
 }
 
-// save writes the current rules to the YAML file.
+// save 将当前规则写入 YAML 文件。
 func (r *FileRuleRegistry) save() error {
 	dir := filepath.Dir(r.path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("create dir: %w", err)
+		return fmt.Errorf("创建目录: %w", err)
 	}
 
 	data, err := yaml.Marshal(ruleFileYAML{Rules: r.rules})
 	if err != nil {
-		return fmt.Errorf("marshal yaml: %w", err)
+		return fmt.Errorf("序列化规则: %w", err)
 	}
 
 	return os.WriteFile(r.path, data, 0644)
 }
 
-// Register adds or updates a rule and immediately persists to disk.
-func (r *FileRuleRegistry) Register(rule rule.Rule) error {
+// Register 添加或更新一条规则并立即持久化。
+// 相同 ID 的规则会被覆盖。
+func (r *FileRuleRegistry) Register(rule Rule) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -97,7 +99,8 @@ func (r *FileRuleRegistry) Register(rule rule.Rule) error {
 	return r.save()
 }
 
-// Unregister removes a rule by ID and immediately persists to disk.
+// Unregister 按 ID 移除一条规则并立即持久化。
+// 规则不存在时为空操作。
 func (r *FileRuleRegistry) Unregister(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -111,8 +114,8 @@ func (r *FileRuleRegistry) Unregister(id string) {
 	}
 }
 
-// Get retrieves a rule by ID.
-func (r *FileRuleRegistry) Get(id string) (*rule.Rule, bool) {
+// Get 按 ID 检索一条规则。找到时返回该规则和 true，否则返回 nil 和 false。
+func (r *FileRuleRegistry) Get(id string) (*Rule, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -124,22 +127,22 @@ func (r *FileRuleRegistry) Get(id string) (*rule.Rule, bool) {
 	return nil, false
 }
 
-// All returns a copy of all rules.
-func (r *FileRuleRegistry) All() []rule.Rule {
+// All 返回注册表中所有规则的副本。
+func (r *FileRuleRegistry) All() []Rule {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	out := make([]rule.Rule, len(r.rules))
+	out := make([]Rule, len(r.rules))
 	copy(out, r.rules)
 	return out
 }
 
-// GetByScope returns all rules matching the given scope.
-func (r *FileRuleRegistry) GetByScope(scope rule.RuleScope) []rule.Rule {
+// GetByScope 返回匹配给定范围的所有规则。
+func (r *FileRuleRegistry) GetByScope(scope RuleScope) []Rule {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var filtered []rule.Rule
+	var filtered []Rule
 	for _, rl := range r.rules {
 		if rl.Scope == scope {
 			filtered = append(filtered, rl)
@@ -148,7 +151,8 @@ func (r *FileRuleRegistry) GetByScope(scope rule.RuleScope) []rule.Rule {
 	return filtered
 }
 
-// FormatPromptSection formats enabled rules as a Markdown list for system prompts.
+// FormatPromptSection 将已启用的规则格式化为 Markdown 列表，用于嵌入 System Prompt。
+// 未定义规则或全部禁用时返回空字符串。
 func (r *FileRuleRegistry) FormatPromptSection() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -156,11 +160,13 @@ func (r *FileRuleRegistry) FormatPromptSection() string {
 	if len(r.rules) == 0 {
 		return ""
 	}
-	var result string
+	var sb strings.Builder
 	for _, rl := range r.rules {
 		if rl.Enabled {
-			result += "- " + rl.Intro + "\n"
+			sb.WriteString("- ")
+			sb.WriteString(rl.Intro)
+			sb.WriteString("\n")
 		}
 	}
-	return result
+	return sb.String()
 }

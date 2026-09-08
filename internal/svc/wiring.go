@@ -85,12 +85,11 @@ func listAgents(app *core.App) []map[string]string {
 	var result []map[string]string
 	for _, agent := range agents {
 		entry := map[string]string{
-			"name":        agent.Name,
-			"role":        agent.Role,
-			"description": agent.Description,
-			"model":       agent.Model,
+			"name":        agent.Meta.Name,
+			"role":        agent.Meta.Role,
+			"description": agent.Meta.Description,
 		}
-		if agent.Name == activeName {
+		if agent.Meta.Name == activeName {
 			entry["active"] = "true"
 		}
 		result = append(result, entry)
@@ -99,7 +98,7 @@ func listAgents(app *core.App) []map[string]string {
 }
 
 func listSkills(app *core.App) []map[string]string {
-	skills := app.SkillRegistry().ListSkills()
+	skills := app.Skills().Global().List()
 
 	var result []map[string]string
 	for _, skill := range skills {

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/DotNetAge/goharness/config"
+	"github.com/DotNetAge/mindx/internal/core/agentstore"
 )
 
 // NewTestModelRegistry 创建一个包含指定模型名称的 ModelRegistry（测试辅助函数）。
@@ -20,25 +21,27 @@ func NewTestModelRegistry(modelNames ...string) *config.ModelRegistry {
 	return reg
 }
 
-// NewTestAgentRegistry 创建一个包含指定 Agent 名称的 AgentRegistry（测试辅助函数）。
-func NewTestAgentRegistry(t *testing.T, names ...string) *config.AgentRegistry {
+// NewTestAgentStore 创建一个包含指定 Agent 名称的 AgentStore（测试辅助函数）。
+func NewTestAgentStore(t *testing.T, names ...string) *agentstore.AgentStore {
 	t.Helper()
 	tmpDir := t.TempDir()
-	reg, err := config.LoadAgentsFrom(tmpDir)
+	store, _, err := agentstore.Load(tmpDir)
 	if err != nil {
-		t.Fatalf("LoadAgentsFrom failed: %v", err)
+		t.Fatalf("agentstore.Load failed: %v", err)
 	}
 	for _, name := range names {
-		if saveErr := reg.SaveTo(&config.AgentConfig{
-			Name:        name,
-			Role:        "assistant",
-			Description: "test agent " + name,
-			Model:       "gpt-4",
-		}); saveErr != nil {
-			t.Fatalf("SaveTo(%q) failed: %v", name, saveErr)
+		agent := &agentstore.Agent{
+			Meta: agentstore.AgentMeta{
+				Name:        name,
+				Role:        "assistant",
+				Description: "test agent " + name,
+			},
+		}
+		if saveErr := store.Save(agent); saveErr != nil {
+			t.Fatalf("Save(%q) failed: %v", name, saveErr)
 		}
 	}
-	return reg
+	return store
 }
 
 // contains 检查字符串 s 是否包含 substr。

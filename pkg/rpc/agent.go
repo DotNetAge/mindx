@@ -8,7 +8,6 @@ type AgentCreateParams struct {
 	Role         string         `json:"role"`
 	Description  string         `json:"description"`
 	Introduction string         `json:"introduction,omitempty"`
-	Model        string         `json:"model"`
 	Skills       []string       `json:"skills,omitempty"`
 	Body         string         `json:"body,omitempty"`
 	Meta         map[string]any `json:"meta,omitempty"`

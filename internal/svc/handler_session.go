@@ -521,9 +521,6 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 	if p.SessionID == "" {
 		return nil, fmt.Errorf("session_id is required")
 	}
-	if p.Mode == "" {
-		p.Mode = "full"
-	}
 
 	sess, err := d.getOrLoadSession(p.SessionID)
 	if err != nil {
@@ -546,12 +543,11 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 
 	d.logger.Info("session.compact: triggered",
 		"session_id", p.SessionID,
-		"mode", p.Mode,
 		"max_window_size", sess.ModelContextLength(),
 		"has_model", d.app.ResolveDefaultModel() != nil,
 	)
 
-	// 绑定事件处理器，TryCompact/TryMicroCompact 会自动调用它们广播事件
+	// 绑定事件处理器，TryCompact 会自动调用它们广播事件
 	gw := d.gw
 	sid := p.SessionID
 	var beforeTokens int64
@@ -597,60 +593,8 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 		}
 	})
 
-	sess.SetMicroCompactStartHandler(func(windowTokens, maxWindowSize int64) {
-		beforeTokens = windowTokens
-		d.logger.Info("[session] micro-compact start",
-			"session_id", sid,
-			"window_tokens", windowTokens,
-		)
-		if gw != nil {
-			gw.BroadcastNotification("micro_compact_start", map[string]any{
-				"session_id": sid,
-				"data": map[string]any{
-					"window_tokens":   windowTokens,
-					"max_window_size": maxWindowSize,
-				},
-			})
-		}
-	})
-
-	sess.SetMicroCompactDoneHandler(func(compressed, deduped int, windowTokens int64) {
-		var ratio float64
-		if beforeTokens > 0 {
-			ratio = float64(windowTokens) / float64(beforeTokens)
-		}
-		d.logger.Info("[session] micro-compact done",
-			"session_id", sid,
-			"compressed", compressed,
-			"deduped", deduped,
-			"window_tokens", windowTokens,
-			"ratio", ratio,
-		)
-		if gw != nil {
-			gw.BroadcastNotification("micro_compact_done", map[string]any{
-				"session_id": sid,
-				"data": map[string]any{
-					"compressed":      compressed,
-					"deduped":         deduped,
-					"window_tokens":   windowTokens,
-					"max_window_size": sess.ModelContextLength(),
-					"ratio":           ratio,
-				},
-			})
-		}
-	})
-
-	switch p.Mode {
-	case "micro":
-		performed := sess.TryMicroCompact()
-		if !performed {
-			d.logger.Info("session.compact: micro compact skipped (below threshold or nothing to compress)",
-				"session_id", p.SessionID)
-		}
-	default:
-		// ForceCompact 不检查 needsCompaction()，由前端自行判断按钮可用性
-		sess.ForceCompact(ctx)
-	}
+	// ForceCompact 不检查 needsCompaction()，由前端自行判断按钮可用性
+	sess.ForceCompact(ctx)
 
 	// Note: 不清除 compact handler，因为 Runtime（ask loop）会重新设置自己的 handler。
 	// 如果这里清除，后续 Runtime 自动压缩时将丢失 CompactStart/CompactDone 事件广播。
@@ -660,14 +604,12 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 
 	d.logger.Info("session.compact: done",
 		"session_id", p.SessionID,
-		"mode", p.Mode,
 		"window_tokens", usage.WindowTokens,
 		"usage_ratio", usage.UsageRatio,
 	)
 
 	return map[string]any{
 		"session_id":           p.SessionID,
-		"mode":                 p.Mode,
 		"window_tokens":        usage.WindowTokens,
 		"max_window_size":      usage.MaxWindowSize,
 		"usage_ratio":          usage.UsageRatio,

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/DotNetAge/goharness/rule"
 	"github.com/DotNetAge/mindx/pkg/rpc"
+	"github.com/DotNetAge/mindx/pkg/rules"
 )
 
 // ---------------------------------------------------------------------------
@@ -64,15 +64,15 @@ func (d *Daemon) handleRuleCreate(_ context.Context, params json.RawMessage) (an
 		return nil, fmt.Errorf("rule registry not initialized")
 	}
 
-	newRule := rule.Rule{
+	newRule := rules.Rule{
 		ID:       p.ID,
 		Intro:    p.Intro,
-		Scope:    rule.RuleScope(p.Scope),
+		Scope:    rules.RuleScope(p.Scope),
 		Priority: p.Priority,
 		Enabled:  p.Enabled,
 	}
 	if newRule.Scope == "" {
-		newRule.Scope = rule.ScopeGlobal
+		newRule.Scope = rules.ScopeGlobal
 	}
 
 	if err := reg.Register(newRule); err != nil {
@@ -107,7 +107,7 @@ func (d *Daemon) handleRuleUpdate(_ context.Context, params json.RawMessage) (an
 		updated.Intro = *p.Intro
 	}
 	if p.Scope != nil {
-		updated.Scope = rule.RuleScope(*p.Scope)
+		updated.Scope = rules.RuleScope(*p.Scope)
 	}
 	if p.Priority != nil {
 		updated.Priority = *p.Priority

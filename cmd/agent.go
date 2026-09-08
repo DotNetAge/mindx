@@ -7,10 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	goharnessconfig "github.com/DotNetAge/goharness/config"
-	"github.com/DotNetAge/goharness/logging"
 	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/core/agentstore"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
 )
@@ -57,7 +56,7 @@ var agentListCmd = &cobra.Command{
 				return err
 			}
 
-			// daemon agent.list 恒为全量返回；hired 过滤在客户端展示层完成
+			// daemon agent.list 恒为全量返回（AgentMeta 平铺数组）；hired 过滤在客户端展示层完成
 			var list []map[string]any
 			if err := json.Unmarshal(result, &list); err != nil {
 				// 兜底：无法解析为列表时原样输出
@@ -66,8 +65,7 @@ var agentListCmd = &cobra.Command{
 			}
 			filtered := make([]map[string]any, 0, len(list))
 			for _, m := range list {
-				meta, _ := m["meta"].(map[string]any)
-				if !showAll && !core.AgentMetaIsHired(meta) {
+				if !showAll && m["hired"] != true {
 					continue
 				}
 				filtered = append(filtered, m)
@@ -78,21 +76,17 @@ var agentListCmd = &cobra.Command{
 		}
 
 		dir := agentDir()
-		registry, err := goharnessconfig.LoadAgentsFrom(dir)
+		store, _, err := agentstore.Load(dir)
 		if err != nil {
 			return fmt.Errorf("cannot load agents: %w", err)
 		}
 
-		agents := registry.List()
-		if !showAll {
+		var agents []*agentstore.Agent
+		if showAll {
+			agents = store.List()
+		} else {
 			// 默认只显示已雇佣的 Agent（雇佣视图）
-			hired := agents[:0]
-			for _, a := range agents {
-				if core.AgentIsHired(a) {
-					hired = append(hired, a)
-				}
-			}
-			agents = hired
+			agents = store.Hired()
 		}
 		if len(agents) == 0 {
 			if showAll {
@@ -106,19 +100,19 @@ var agentListCmd = &cobra.Command{
 
 		table := render.NewTable([]string{"Name", "Role", "Description", "Skills"}, 100)
 		for _, a := range agents {
-			role := a.Role
+			role := a.Meta.Role
 			if role == "" {
 				role = "—"
 			}
-			desc := a.Description
+			desc := a.Meta.Description
 			if desc == "" {
 				desc = "—"
 			}
 			skills := ""
-			if len(a.Skills) > 0 {
-				skills = strings.Join(a.Skills, ", ")
+			if len(a.Meta.Skills) > 0 {
+				skills = strings.Join(a.Meta.Skills, ", ")
 			}
-			table.AddRow([]string{a.Name, role, desc, skills})
+			table.AddRow([]string{a.Meta.Name, role, desc, skills})
 		}
 		fmt.Println(table.Render())
 		if showAll {
@@ -371,12 +365,12 @@ var agentRmCmd = &cobra.Command{
 		name := args[0]
 		dir := agentDir()
 
-		registry, err := goharnessconfig.LoadAgentsFrom(dir, goharnessconfig.WithRegistryLogger(logging.DefaultLogger()))
+		store, _, err := agentstore.Load(dir)
 		if err != nil {
 			return fmt.Errorf("cannot load agents: %w", err)
 		}
 
-		if err := registry.Remove(name); err != nil {
+		if err := store.Remove(name); err != nil {
 			return err
 		}
 
@@ -399,8 +393,8 @@ var agentAddCmd = &cobra.Command{
 	Short: "Add a new agent",
 	Long: `Create a new agent with the given name and configuration.
 
-The agent is stored as a Markdown file with YAML frontmatter
-in the agents directory (~/.mindx/agents/{name}.md).
+The agent is stored in directory format (IDENTITY.md + SOUL.md)
+under the agents directory (~/.mindx/agents/<name>/).
 
 Examples:
   mindx agent add my-agent --role "Assistant" --description "My custom agent"
@@ -414,34 +408,31 @@ Examples:
 			return fmt.Errorf("cannot create agents directory: %w", err)
 		}
 
-		registry, err := goharnessconfig.LoadAgentsFrom(dir, goharnessconfig.WithRegistryLogger(logging.DefaultLogger()))
+		store, _, err := agentstore.Load(dir)
 		if err != nil {
 			return fmt.Errorf("cannot load agents: %w", err)
 		}
 
-		existing := registry.Get(name)
+		existing := store.Get(name)
 
-		agent := &goharnessconfig.AgentConfig{
+		meta := agentstore.AgentMeta{
 			Name:        name,
 			Role:        agentAddFlags.role,
 			Description: agentAddFlags.description,
 		}
 		if agentAddFlags.skills != "" {
-			agent.Skills = strings.Split(agentAddFlags.skills, ",")
-			for i := range agent.Skills {
-				agent.Skills[i] = strings.TrimSpace(agent.Skills[i])
-			}
+			meta.Skills = splitComma(agentAddFlags.skills)
 		}
 
-		if err := registry.SaveTo(agent); err != nil {
+		if err := store.Save(&agentstore.Agent{Meta: meta}); err != nil {
 			return fmt.Errorf("cannot save agent: %w", err)
 		}
 
 		if existing != nil {
 			fmt.Printf("Agent %q updated.\n", name)
 		} else {
-			fmt.Printf("Agent %q created (%s).\n", name, filepath.Join(dir, strings.ToLower(name)+".md"))
-			// 新建 Agent 默认未雇佣（meta.hired 缺省 false），提示雇佣入口
+			fmt.Printf("Agent %q created (%s).\n", name, filepath.Join(dir, strings.ToLower(name)))
+			// 新建 Agent 默认未雇佣（frontmatter hired 缺省 false），提示雇佣入口
 			fmt.Println("提示：新智能体默认未雇佣，执行 `mindx agent hire " + name + "` 后即可用于会话。")
 		}
 		return nil

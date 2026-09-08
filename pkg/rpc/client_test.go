@@ -260,7 +260,7 @@ func TestAgentMethods(t *testing.T) {
 	t.Run("Create", func(t *testing.T) {
 		params := AgentCreateParams{
 			Name: "new-agent", Role: "helper", Description: "desc",
-			Model: "gpt-4", Skills: []string{"code"},
+			Skills: []string{"code"},
 		}
 		testRPC(t, c, m, "agent.create", params, func() (json.RawMessage, error) {
 			return c.AgentCreate(params)
@@ -832,8 +832,8 @@ func TestSkillMethods(t *testing.T) {
 	})
 
 	t.Run("Get", func(t *testing.T) {
-		testRPC(t, c, m, "skill.get", SkillGetParams{Name: "s1", AgentName: "a"}, func() (json.RawMessage, error) {
-			return c.SkillGet("s1", "a")
+		testRPC(t, c, m, "skill.get", SkillGetParams{Name: "s1"}, func() (json.RawMessage, error) {
+			return c.SkillGet("s1")
 		})
 	})
 

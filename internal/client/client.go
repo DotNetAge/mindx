@@ -220,8 +220,8 @@ func (m *rootModel) loadCommands() {
 	// @ 补全只提供雇佣视图中的 Agent：未雇佣 Agent 不允许作为会话对象
 	for _, a := range m.app.HiredAgents() {
 		m.input.Agents = append(m.input.Agents, data.AgentInfo{
-			Name:        a.Name,
-			Description: a.Description,
+			Name:        a.Meta.Name,
+			Description: a.Meta.Description,
 		})
 	}
 
@@ -1441,14 +1441,6 @@ func (m *rootModel) handleAgentSwitch(e clientmsg.AgentSwitchMsg) (tea.Model, te
 
 	m.statusBar.AgentName = e.AgentName
 
-	// Update model display from the new agent's configured model
-	agent := m.app.Agents().Get(e.AgentName)
-	if agent != nil && agent.Model != "" {
-		if modelCfg := m.app.Models().Get(agent.Model); modelCfg != nil {
-			m.updateModelDisplay(modelCfg)
-		}
-	}
-
 	// Session 相关数据全部刷新：对话流按新会话历史重建，
 	// 输入框会话列表、侧栏欢迎信息、任务面板随新会话归零。
 	m.streamList.Clear()
@@ -1613,11 +1605,11 @@ func (m *rootModel) openAgentSelectDialog() (tea.Model, tea.Cmd) {
 	items := make([]string, len(agents))
 	m.agentSelectNames = make([]string, len(agents))
 	for i, a := range agents {
-		m.agentSelectNames[i] = a.Name
-		if a.Role != "" {
-			items[i] = fmt.Sprintf("%s (%s) - %s", a.Role, a.Name, a.Description)
+		m.agentSelectNames[i] = a.Meta.Name
+		if a.Meta.Role != "" {
+			items[i] = fmt.Sprintf("%s (%s) - %s", a.Meta.Role, a.Meta.Name, a.Meta.Description)
 		} else {
-			items[i] = displayName(a.Name, a.Name) + " - " + a.Description
+			items[i] = displayName(a.Meta.Name, a.Meta.Name) + " - " + a.Meta.Description
 		}
 	}
 	m.agentSelectDlg = dialog.NewListDialog(i18n.T("client.ui.dialog.agent.select"))

@@ -12,17 +12,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DotNetAge/gochat"
 	"github.com/DotNetAge/goharness/agents"
 	"github.com/DotNetAge/goharness/config"
 	goharnessmemory "github.com/DotNetAge/goharness/memory"
-	"github.com/DotNetAge/goharness/rule"
 	"github.com/DotNetAge/goharness/sandbox"
 	"github.com/DotNetAge/goharness/session"
-	"github.com/DotNetAge/goharness/skill"
 	"github.com/DotNetAge/goharness/store"
 	"github.com/DotNetAge/goharness/tools"
 	goragcore "github.com/DotNetAge/gorag/v2/core"
+	"github.com/DotNetAge/mindx/internal/core/agentstore"
+	"github.com/DotNetAge/mindx/internal/core/bundle"
+	"github.com/DotNetAge/mindx/internal/core/skillstore"
 	mindxtools "github.com/DotNetAge/mindx/internal/tools"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
@@ -45,18 +45,23 @@ type App struct {
 	logger      logging.Logger
 
 	// Registries (shared across all agents)
-	agents      *config.AgentRegistry
+	agents      *agentstore.AgentStore
 	models      *config.ModelRegistry
 	providerReg config.ProviderRegistry
 	versions    *FileVersionStore
-	rules       rule.RuleRegistry
+	rules       rules.RuleRegistry
 	sessDB      *mindxses.FileSessionStore
 
 	// Loaded provider configs (for RPC queries)
 	providerConfigs []*config.ProviderConfig
 
-	// Skill registry (loaded from skills directory)
-	skillReg skill.SkillRegistry
+	// skills 是技能三级库装载器（全局库 + Agent 级覆盖，见 skillstore 包）
+	skills *skillstore.Store
+
+	// promptBuilder 缓存 mindx 侧基础系统提示词组装器（首次调用 PromptBuilder 时创建；
+	// ReloadAgents 换入新 AgentStore 后置空重建，保证提示词引用最新注册表）
+	promptBuilder   *PromptBuilder
+	promptBuilderMu sync.Mutex
 
 	// Permission rules
 	permissionRuleStore *MindxPermissionRuleStore
@@ -88,17 +93,9 @@ type App struct {
 	// TokenUsageStore for persistent LLM token usage records
 	tokenUsageStore *mindxses.FileTokenUsageStore
 
-	// skillsPromptOverride, if set, overrides the default skills catalog prompt
-	// section in the agent system prompt. Set via SetSkillsPromptOverride().
-	skillsPromptOverride func(skills []*skill.Skill) string
-
-	// envsOverride, if set, overrides the default Environment section in system
-	// prompts. Set via SetEnvsOverride().
-	envsOverride func(params agents.EnvsParams) string
-
-	// searchStrategyOverride, if set, overrides the default Search Strategy
-	// section in system prompts. Set via SetSearchStrategyOverride().
-	searchStrategyOverride func() string
+	// market 是 COS 静态市场客户端（懒创建，见 Market()）
+	market     *bundle.MarketClient
+	marketOnce sync.Once
 }
 
 func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
@@ -125,9 +122,12 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	}
 
 	logger.Info("loading agents", "dir", settings.AgentsDir())
-	agentsReg, err := config.LoadAgentsFrom(settings.AgentsDir())
+	agentsReg, agentLoadErrs, err := agentstore.Load(settings.AgentsDir())
 	if err != nil {
 		return nil, fmt.Errorf("failed to load agents: %w", err)
+	}
+	for name, loadErr := range agentLoadErrs {
+		logger.Warn("agent 迁移/加载警告", "file", name, "error", loadErr)
 	}
 
 	logger.Info("Loading models", "dir", settings.ModelsFile())
@@ -155,12 +155,12 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	}
 
 	logger.Info("Loading skills", "dir", settings.SkillsDir())
-	skillReg, err := skill.NewSkillRegistryFromDirectory(settings.SkillsDir())
-	if err != nil {
-		logger.Warn("Failed to load skills", "dir", settings.SkillsDir(), "error", err)
+	skillStore, skillErr := skillstore.NewStore(settings.SkillsDir(), settings.AgentsDir())
+	if skillErr != nil {
+		logger.Warn("Failed to load skills", "dir", settings.SkillsDir(), "error", skillErr)
 	}
 
-	logger.Info("Loading sessions", "dir", settings.SessionsDir())
+	logger.Info("正在加载会话", "dir", settings.SessionsDir())
 	sessDB, err := mindxses.NewFileSessionStore(settings.SessionsDir())
 	if err != nil {
 		logger.Warn("Failed to init session store", "error", err)
@@ -192,7 +192,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		providerReg:         models.ProviderRegistry(),
 		versions:            versions,
 		rules:               rulesReg,
-		skillReg:            skillReg,
+		skills:              skillStore,
 		sessDB:              sessDB,
 		runtimeCache:        make(map[string]*agents.Runtime),
 		embedder:            emb,
@@ -202,7 +202,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	}, nil
 }
 
-func resolveCurrentAgentName(cfg *MindxConfig, agents *config.AgentRegistry, logger logging.Logger) string {
+func resolveCurrentAgentName(cfg *MindxConfig, agents *agentstore.AgentStore, logger logging.Logger) string {
 	if agents == nil {
 		return ""
 	}
@@ -219,9 +219,9 @@ func resolveCurrentAgentName(cfg *MindxConfig, agents *config.AgentRegistry, log
 	}
 
 	// 回退基于雇佣视图：默认 Agent 必须是会话可用的已雇佣 Agent
-	for _, hired := range HiredAgentsOf(agents) {
-		logger.Info("using first hired agent as current", "name", hired.Name)
-		return hired.Name
+	for _, hired := range agents.Hired() {
+		logger.Info("using first hired agent as current", "name", hired.Meta.Name)
+		return hired.Meta.Name
 	}
 	logger.Warn("雇佣视图中没有任何 Agent，将使用空默认值")
 
@@ -375,7 +375,7 @@ func (a *App) CurrentAgentName() string {
 	return resolveCurrentAgentName(a.mindxConfig, a.agents, a.logger)
 }
 
-func (a *App) RuleRegistry() rule.RuleRegistry {
+func (a *App) RuleRegistry() rules.RuleRegistry {
 	return a.rules
 }
 
@@ -383,8 +383,82 @@ func (a *App) SessionDB() *mindxses.FileSessionStore {
 	return a.sessDB
 }
 
-func (a *App) SkillRegistry() skill.SkillRegistry {
-	return a.skillReg
+// Skills 返回技能三级库装载器（全局库视图供管理 RPC 消费，
+// 运行时注册表按 Agent 组装，见 createRuntime）。
+func (a *App) Skills() *skillstore.Store {
+	return a.skills
+}
+
+// Market 返回 COS 静态市场客户端（懒创建；缓存目录位于数据目录 market-cache）。
+func (a *App) Market() *bundle.MarketClient {
+	a.marketOnce.Do(func() {
+		a.market = bundle.NewMarketClient(bundle.DefaultMarketManifestURL,
+			filepath.Join(a.settings.DataDir(), "market-cache"))
+	})
+	return a.market
+}
+
+// PromptBuilder 返回 mindx 侧基础系统提示词组装器（懒创建，App 生命周期内缓存；
+// ReloadAgents 会置空重建，避免引用被换出的旧 AgentStore）。
+func (a *App) PromptBuilder() *PromptBuilder {
+	a.promptBuilderMu.Lock()
+	defer a.promptBuilderMu.Unlock()
+	if a.promptBuilder == nil {
+		a.promptBuilder = NewPromptBuilder(a.agents, a.skills,
+			a.settings.UserPreferences(), a.settings.VenvDir(), a.BuildRulesSection)
+	}
+	return a.promptBuilder
+}
+
+// BuildRulesSection 渲染 System Prompt 的「扩展规则」段（P4 定案：应用语义规则的
+// 拼接收口到 mindx，goharness 不再持有 ruleReg）。内容三部分：
+//  1. 权限规则（mindx.json 的 always_allow/deny/ask，启动时确定）；
+//  2. Agent 发现引导（原 createRuntime 注册进规则注册表的固定文案，改为直接渲染，
+//     不再写入用户规则文件）；
+//  3. 用户规则（rules.yml，经 agent.rule RPC 管理，实时渲染使增删改即时生效）。
+//
+// 原实现经 goharness ruleReg 注入且权限规则与用户规则共用一个槽位互相覆盖
+// （app.go 两次 WithRuleRegistry 的缺陷），本方法合并渲染后缺陷自然消解。
+// Agent 发现引导为固定常驻条目（与原实现一致），因此本方法永不返回空串。
+func (a *App) BuildRulesSection() string {
+	var lines []string
+
+	// 1. 权限规则（文案与原 permReg 注册时的 Intro 保持一致）
+	if a.permissionRuleStore != nil {
+		if permRules, err := a.permissionRuleStore.Load(); err == nil && permRules != nil {
+			for _, pr := range permRules.AlwaysAllow {
+				lines = append(lines, "Always allow "+pr.Description)
+			}
+			for _, pr := range permRules.AlwaysDeny {
+				lines = append(lines, "Always deny "+pr.Description)
+			}
+			for _, pr := range permRules.AlwaysAsk {
+				lines = append(lines, "Ask before "+pr.Description)
+			}
+		}
+	}
+
+	// 2. Agent 发现引导（固定文案，随应用版本发布）
+	lines = append(lines, agentDiscoveryIntro)
+
+	// 3. 用户规则（rules.yml，实时渲染）
+	if a.rules != nil {
+		if userSection := a.rules.FormatPromptSection(); userSection != "" {
+			lines = append(lines, strings.TrimRight(userSection, "\n"))
+		}
+	}
+
+	if len(lines) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("## 扩展规则\n\n")
+	for _, line := range lines {
+		sb.WriteString("- ")
+		sb.WriteString(line)
+		sb.WriteString("\n")
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 func (a *App) SetTestDir(tmpDir string) error {
@@ -395,47 +469,50 @@ func (a *App) SetTestDir(tmpDir string) error {
 		return err
 	}
 	a.sessDB = sessDB
+
+	// 技能库必须同步重定向：DefaultApp 构造时 Test 尚未置位，skillstore 已指向
+	// 真实 ~/.mindx/skills，测试中的晋升/删除等写操作会污染真实全局技能库。
+	skills, err := skillstore.NewStore(a.settings.SkillsDir(), a.settings.AgentsDir())
+	if err != nil {
+		return fmt.Errorf("重定向测试技能库失败: %w", err)
+	}
+	a.skills = skills
+
+	// 智能体注册表同理重定向：默认构造的 AgentStore 指向真实 ~/.mindx/agents，
+	// 测试中的保存/删除/分发包导入会污染真实 Agent 库（分发包安装直接写 store.Dir()）。
+	agentsReg, _, err := agentstore.Load(a.settings.AgentsDir())
+	if err != nil {
+		return fmt.Errorf("重定向测试智能体注册表失败: %w", err)
+	}
+	a.agents = agentsReg
+
+	// 提示词组装器持有旧注册表引用，一并置空待懒重建
+	a.promptBuilderMu.Lock()
+	a.promptBuilder = nil
+	a.promptBuilderMu.Unlock()
 	return nil
 }
 
-func (a *App) Agents() *config.AgentRegistry {
+func (a *App) Agents() *agentstore.AgentStore {
 	return a.agents
-}
-
-func (a *App) SetAgentsRegistry(registry *config.AgentRegistry) {
-	a.agents = registry
-}
-
-// SetSkillsPromptOverride sets an optional function to override the default
-// skills catalog prompt section in the agent system prompt.
-// When set, it is applied via agents.WithSkillsPrompt in createRuntime.
-func (a *App) SetSkillsPromptOverride(fn func(skills []*skill.Skill) string) {
-	a.skillsPromptOverride = fn
-}
-
-// SetEnvsOverride sets an optional function to override the default
-// Environment section in the agent system prompt.
-// When set, it is applied via agents.WithEnvs in createRuntime.
-func (a *App) SetEnvsOverride(fn func(params agents.EnvsParams) string) {
-	a.envsOverride = fn
-}
-
-// SetSearchStrategyOverride sets an optional function to override the default
-// Search Strategy section in the agent system prompt.
-// When set, it is applied via agents.WithSearchStrategy in createRuntime.
-func (a *App) SetSearchStrategyOverride(fn func() string) {
-	a.searchStrategyOverride = fn
 }
 
 // ReloadAgents re-scans the agents directory and atomically swaps the in-memory registry.
 // All cached runtimes for affected agents are invalidated so they pick up the new config
 // on next ResolveRuntime() call.
+// 注意：从当前 settings 解析的目录重新加载（而非 AgentStore 构造时的旧目录），
+// 测试等先建 App 后改目录的场景才能生效。
 func (a *App) ReloadAgents() error {
-	newReg, err := config.LoadAgentsFrom(a.settings.AgentsDir())
+	fresh, _, err := agentstore.Load(a.settings.AgentsDir())
 	if err != nil {
 		return fmt.Errorf("reload agents: %w", err)
 	}
-	a.agents = newReg
+	a.agents = fresh
+
+	// 提示词组装器持有旧 AgentStore 引用，置空待下次懒重建
+	a.promptBuilderMu.Lock()
+	a.promptBuilder = nil
+	a.promptBuilderMu.Unlock()
 
 	// Invalidate runtime caches — stale runtimes hold old agent configs + skill refs
 	a.runtimeMu.Lock()
@@ -457,18 +534,13 @@ func (a *App) InvalidateRuntimeCache() {
 	a.logger.Info("runtime cache invalidated")
 }
 
-// ReloadSkills re-scans the skills directory and atomically swaps the in-memory registry.
+// ReloadSkills 重扫全局技能库并原子替换内存注册表。
+// Runtime 持有的是 LiveRegistry 活视图（Agent 级实时读盘、全局库读原子指针），
+// 替换后即刻对所有会话生效，无需失效 Runtime 缓存。
 func (a *App) ReloadSkills() error {
-	newReg, err := skill.NewSkillRegistryFromDirectory(a.settings.SkillsDir())
-	if err != nil {
-		return fmt.Errorf("reload skills: %w", err)
+	if err := a.skills.ReloadGlobal(); err != nil {
+		a.logger.Warn("skills reloaded with warnings", "dir", a.settings.SkillsDir(), "error", err)
 	}
-	a.skillReg = newReg
-
-	// Invalidate runtime caches — runtimes hold references to the old skill registry
-	a.runtimeMu.Lock()
-	a.runtimeCache = make(map[string]*agents.Runtime)
-	a.runtimeMu.Unlock()
 
 	a.logger.Info("skills reloaded", "dir", a.settings.SkillsDir())
 	return nil
@@ -542,9 +614,10 @@ func (a *App) CreateSession(agentName, projectDir string) (*session.SessionInfo,
 	return sessionInfo, nil
 }
 
-// resolveModelName resolves the model config for a given agent model name.
-func (a *App) resolveModelName(agentModelName string) (string, *config.ModelConfig, error) {
-	modelName := agentModelName
+// resolveModelName 解析当前生效的模型配置。
+// 模型选择是用户级语义（LastModel > DefaultModel），Agent 不持有模型属性。
+func (a *App) resolveModelName() (string, *config.ModelConfig, error) {
+	modelName := ""
 	if a.mindxConfig != nil {
 		if a.mindxConfig.LastModel != "" {
 			modelName = a.mindxConfig.LastModel
@@ -571,9 +644,9 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		return nil, fmt.Errorf("agent %q not found", agentName)
 	}
 
-	_, modelCfg, err := a.resolveModelName(agent.Model)
+	_, modelCfg, err := a.resolveModelName()
 	if err != nil {
-		return nil, fmt.Errorf("agent %q: %w", agent.Name, err)
+		return nil, fmt.Errorf("agent %q: %w", agent.Meta.Name, err)
 	}
 	resolvedModel := *modelCfg
 
@@ -610,9 +683,11 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	}
 	opts := []agents.RuntimeConfig{
 		agents.WithModel(resolvedModel),
-		agents.WithAgentRegistry(a.agents),
+		// Agent 存在性校验与 exclude_tools 解析均由 mindx 侧回调提供，
+		// goharness 对 Agent 结构零依赖（PR-PROMPTS 第一节）。
+		agents.WithAgentExists(a.agents.Exists),
+		agents.WithExcludeTools(a.agents.ExcludeToolsOf),
 		agents.WithProviderRegistry(a.providerReg),
-		agents.WithRuleRegistry(a.rules),
 		agents.WithLogger(a.logger),
 		agents.WithTokenUsageStore(a.tokenUsageStore),
 	}
@@ -628,73 +703,18 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		a.logger.Info("createRuntime: SessionStore ready", "agent", agentName)
 	}
 
-	if a.skillReg != nil {
-		opts = append(opts, agents.WithSkillRegistry(a.skillReg))
+	// 技能检索 SPI：按 Agent 组装（全局库 + Agent 级同名覆盖）。
+	if a.skills != nil {
+		// 活检索视图（不快照）：技能增删改经 ReloadGlobal/实时读盘即刻对
+		// 全部会话生效，无需重建 Runtime（PR-PROMPTS 第二节热加载语义）。
+		opts = append(opts, agents.WithSkillRegistry(a.skills.LiveRegistryFor(agentName)))
 	}
 
-	if a.skillsPromptOverride != nil {
-		opts = append(opts, agents.WithSkillsPrompt(a.skillsPromptOverride))
-	}
+	// 基础系统提示词由 mindx 侧组装（IDENTITY → SOUL → Skill 目录 → AGENTS.md → Env → 扩展规则），
+	// 扩展规则（权限规则 + Agent 发现引导 + 用户规则）一并由 mindx 渲染（P4 定案），
+	// goharness 不追加任何文案段，base 输出即完整 system prompt。
+	opts = append(opts, agents.WithBaseSystemPrompt(a.PromptBuilder().Build))
 
-	if a.envsOverride != nil {
-		opts = append(opts, agents.WithEnvs(a.envsOverride))
-	}
-
-	if a.searchStrategyOverride != nil {
-		opts = append(opts, agents.WithSearchStrategy(a.searchStrategyOverride))
-	}
-
-	agentDiscoveryIntro := "Agent 发现：当需要查找或列出可用 Agent 时，运行 'mindx agent list'（或 'mindx agent list --json' 获取结构化输出）。列表显示 Agent 名称、角色、描述及其技能。用于查找合适的 Agent 并通过 SubAgent 进行委托。"
-
-	if a.permissionRuleStore != nil {
-		rules, loadErr := a.permissionRuleStore.Load()
-		if loadErr == nil && rules != nil {
-			permReg := &rule.YAMLRuleRegistry{}
-			for _, pr := range rules.AlwaysAllow {
-				_ = permReg.Register(rule.Rule{
-					ID:       "perm-allow-" + pr.ToolName,
-					Intro:    "Always allow " + pr.Description,
-					Scope:    rule.ScopeGlobal,
-					Priority: 50,
-					Enabled:  true,
-				})
-			}
-			for _, pr := range rules.AlwaysDeny {
-				_ = permReg.Register(rule.Rule{
-					ID:       "perm-deny-" + pr.ToolName,
-					Intro:    "Always deny " + pr.Description,
-					Scope:    rule.ScopeGlobal,
-					Priority: 50,
-					Enabled:  true,
-				})
-			}
-			for _, pr := range rules.AlwaysAsk {
-				_ = permReg.Register(rule.Rule{
-					ID:       "perm-ask-" + pr.ToolName,
-					Intro:    "Ask before " + pr.Description,
-					Scope:    rule.ScopeGlobal,
-					Priority: 50,
-					Enabled:  true,
-				})
-			}
-			_ = permReg.Register(rule.Rule{
-				ID:       "agent-discovery",
-				Intro:    agentDiscoveryIntro,
-				Scope:    rule.ScopeGlobal,
-				Priority: 40,
-				Enabled:  true,
-			})
-			opts = append(opts, agents.WithRuleRegistry(permReg))
-		}
-	} else {
-		_ = a.rules.Register(rule.Rule{
-			ID:       "agent-discovery",
-			Intro:    agentDiscoveryIntro,
-			Scope:    rule.ScopeGlobal,
-			Priority: 40,
-			Enabled:  true,
-		})
-	}
 	// Dual memory: LongTerm (project knowledge) + SessionRAG (conversation recall)
 	if a.embedder != nil {
 		if a.isDaemonRunning() {
@@ -1063,53 +1083,6 @@ func (a *App) NewSessionFromMeta() *session.Session {
 		return nil
 	}
 	return s
-}
-
-func (a *App) IsModelAvailable(name ...string) bool {
-	n := ""
-	if len(name) == 0 {
-		agentName := a.CurrentAgentName()
-		agent := a.Agents().Get(agentName)
-		if agent == nil {
-			return false
-		}
-		mc := a.Models().Get(agent.Model)
-		if mc == nil {
-			return false
-		}
-		n = mc.Name
-	} else {
-		n = name[0]
-	}
-
-	if n == "" {
-		return false
-	}
-
-	m := a.Models().Get(n)
-	if m == nil || !m.Enabled {
-		return false
-	}
-
-	apiKey := m.APIKey
-	if strings.EqualFold(m.Provider, "ollama") {
-		apiKey = "NONEKey"
-	} else {
-		apiKey = a.resolveAPIKey(apiKey)
-	}
-	client := gochat.Client().Config(
-		gochat.WithBaseURL(m.BaseURL),
-		gochat.WithAPIKey(apiKey),
-		gochat.WithModel(m.Name),
-		gochat.WithAuthToken(m.AuthToken),
-		gochat.WithTimeout(10*time.Second),
-	)
-
-	llm, err := client.UserMessage("Hello").GetResponse()
-	if err != nil {
-		return false
-	}
-	return llm.Content != ""
 }
 
 func BuildDelegationGuidance() string {

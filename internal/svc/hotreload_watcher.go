@@ -200,15 +200,24 @@ func (w *HotReloadWatcher) eventLoop() {
 				continue
 			}
 
-			// Handle new subdirectories (e.g., new skill added)
+			// Handle new subdirectories (e.g., a new agent/skill directory was created).
+			// 目录化存储后 Agent 是 agents/<name>/ 目录、技能是 skills/<name>/ 目录：
+			// 除递归加入 watch 外，还必须把目录创建本身计入 pending，
+			// 否则目录内文件先于 watch 生效写入时会漏掉这次变更。
 			if info, statErr := os.Stat(event.Name); statErr == nil && info.IsDir() {
 				if event.Has(fsnotify.Create) {
 					_ = w.watchDir(event.Name)
+					if isAgentEvent {
+						pendingAgents = true
+					}
+					if isSkillEvent {
+						pendingSkills = true
+					}
 				}
 				continue
 			}
 
-			// Agents only care about .md files
+			// Agent 目录的变更载体是 IDENTITY.md / SOUL.md（.md 文件）
 			if isAgentEvent && !strings.HasSuffix(strings.ToLower(event.Name), ".md") {
 				continue
 			}

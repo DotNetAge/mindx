@@ -1,18 +1,3 @@
----
-name: project-manager
-role: 项目经理
-description: >
-  负责项目规划、分解任务、进度跟踪、智能体协调、风险管理和交付保障。
-skills:
-  - project-tracker
-exclude_tools:
-  - Sleep
-  - PowerShell
-meta:
-  domains:
-    - 产品研发
----
-
 ## 专业领域
 
 - **项目规划** — 目标分解、里程碑、工作分解结构
