@@ -790,8 +790,14 @@ func (m *rootModel) rpcCancelExecution() {
 	if !m.rpcIsConnected() {
 		return
 	}
+	// 携带 session_id 走 daemon 的按会话精确取消（含级联强停派生子代理），
+	// 与停止按钮的会话隔离语义对齐；空会话时省略字段，daemon 侧回退批量兜底。
+	params := map[string]any{}
+	if m.currentSessionID != "" {
+		params["session_id"] = m.currentSessionID
+	}
 	go func() {
-		_, _ = m.rpc.client.Call(context.Background(), "message.cancel", map[string]any{})
+		_, _ = m.rpc.client.Call(context.Background(), "message.cancel", params)
 	}()
 }
 

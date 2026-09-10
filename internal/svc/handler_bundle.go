@@ -128,6 +128,24 @@ func (d *Daemon) handleSkillImport(_ context.Context, params json.RawMessage) (a
 	return res, nil
 }
 
+// marketPackageDTO 是 market.list 响应的包条目投影：bundle.MarketPackage 的
+// JSON tag 为 snake_case（对齐 COS 清单格式），而前端契约（MarketPackageInfo）
+// 为 camelCase，此处逐字段转换对齐（skillNames 等映射字段的前端读取键）。
+type marketPackageDTO struct {
+	Kind        string            `json:"kind"`
+	Name        string            `json:"name"`
+	Description string            `json:"description,omitempty"`
+	Icon        string            `json:"icon,omitempty"`
+	Role        string            `json:"role,omitempty"`
+	Category    string            `json:"category,omitempty"`
+	Skills      []string          `json:"skills,omitempty"`
+	SkillNames  map[string]string `json:"skillNames,omitempty"`
+	Version     string            `json:"version,omitempty"`
+	File        string            `json:"file"`
+	Sha256      string            `json:"sha256"`
+	Size        int64             `json:"size,omitempty"`
+}
+
 // handleMarketList 拉取市场清单（在线优先，失败降级本地缓存并附原因）。
 func (d *Daemon) handleMarketList(_ context.Context, _ json.RawMessage) (any, error) {
 	res, err := d.app.Market().List()
@@ -138,8 +156,25 @@ func (d *Daemon) handleMarketList(_ context.Context, _ json.RawMessage) (any, er
 	if packages == nil {
 		packages = []bundle.MarketPackage{}
 	}
+	dtos := make([]marketPackageDTO, 0, len(packages))
+	for _, p := range packages {
+		dtos = append(dtos, marketPackageDTO{
+			Kind:        string(p.Kind),
+			Name:        p.Name,
+			Description: p.Description,
+			Icon:        p.Icon,
+			Role:        p.Role,
+			Category:    p.Category,
+			Skills:      p.Skills,
+			SkillNames:  p.SkillNames,
+			Version:     p.Version,
+			File:        p.File,
+			Sha256:      p.Sha256,
+			Size:        p.Size,
+		})
+	}
 	return map[string]any{
-		"packages":   packages,
+		"packages":   dtos,
 		"source":     res.Source,
 		"warning":    res.Warning,
 		"updated_at": res.Manifest.UpdatedAt,

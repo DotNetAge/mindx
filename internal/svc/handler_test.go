@@ -290,6 +290,9 @@ func TestHandleSessionMeta_NotFound(t *testing.T) {
 func TestHandleMemoryQuery_NilMemory(t *testing.T) {
 	d, cleanup := newTestDaemon(t)
 	defer cleanup()
+	// 显式置空被测依赖：embedder 兜底补写（DefaultApp）可能让测试 daemon
+	// 携带非 nil 的 sharedMemory，而本测试验证的是 nil 守护分支本身
+	d.sharedMemory = nil
 
 	params, _ := json.Marshal(map[string]string{"query": "test"})
 	_, err := d.handleMemoryQuery(context.Background(), params)
@@ -322,6 +325,9 @@ func TestHandleMemoryQuery_InvalidJSON(t *testing.T) {
 func TestHandleMemoryStore_NilMemory(t *testing.T) {
 	d, cleanup := newTestDaemon(t)
 	defer cleanup()
+	// 显式置空被测依赖：embedder 兜底补写（DefaultApp）可能让测试 daemon
+	// 携带非 nil 的 sharedMemory，而本测试验证的是 nil 守护分支本身
+	d.sharedMemory = nil
 
 	params, _ := json.Marshal(map[string]string{"content": "hello"})
 	_, err := d.handleMemoryStore(context.Background(), params)
@@ -354,6 +360,9 @@ func TestHandleMemoryStore_InvalidJSON(t *testing.T) {
 func TestHandleMemoryStore_SessionTypeNilMemory(t *testing.T) {
 	d, cleanup := newTestDaemon(t)
 	defer cleanup()
+	// 显式置空被测依赖：embedder 兜底补写（DefaultApp）可能让测试 daemon
+	// 携带非 nil 的 sharedMemory，而本测试验证的是 nil 守护分支本身
+	d.sharedMemory = nil
 
 	params, _ := json.Marshal(map[string]interface{}{
 		"content": "test content",

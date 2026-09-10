@@ -162,6 +162,10 @@ func ExportSkill(skills *skillstore.Store, name, outPath string) (*Manifest, err
 		Description: sk.Description,
 		Skills:      []string{sk.Name},
 	}
+	// 技能中文展示名（SKILL.md metadata.name_zh；市场卡片展示用，缺省不写入）
+	if zh := skillstore.LoadSkillDisplayName(sk.RootDir); zh != "" {
+		manifest.SkillNames = map[string]string{sk.Name: zh}
+	}
 
 	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 		return nil, fmt.Errorf("创建导出目录失败：%w", err)

@@ -61,22 +61,28 @@ func (d *Daemon) sessionQueueFor(sessionID string) *sessionQueue {
 }
 
 // cancelEntry 是客户端取消集合中的单个条目，用于按引用移除。
+// sessionID 记录该取消函数所属的会话，支撑 message.cancel 按会话精确取消：
+// 停止按钮只应终止当前对话流，不能波及同一客户端其它 Tab 的执行。
 type cancelEntry struct {
-	fn context.CancelFunc
+	sessionID string
+	fn        context.CancelFunc
 }
 
 // clientCancelSet 记录同一客户端的全部执行取消函数。
 //
 // 一个客户端可能同时有多个执行在运行或排队（不同会话并发、同会话排队），
-// 因此断开连接 / 停止按钮需要批量取消全部执行，而不是只取消最近一个。
+// 因此断开连接需要批量取消全部执行；而停止按钮按会话精确取消，
+// 仅终止目标会话的执行。注意：会话派生的运行中 SubAgent 不随主 exec ctx
+// 级联取消（子执行循环运行在独立 Background ctx 上），需由调用方按本集合
+// 提供的会话 ID 经 Runtime.CancelSubAgents 显式级联强停。
 type clientCancelSet struct {
 	mu      sync.Mutex
 	cancels []*cancelEntry
 }
 
-// Add 登记一个取消函数并返回其条目（供 Remove 使用）。
-func (s *clientCancelSet) Add(fn context.CancelFunc) *cancelEntry {
-	e := &cancelEntry{fn: fn}
+// Add 登记一个取消函数及其所属会话，返回条目（供 Remove 使用）。
+func (s *clientCancelSet) Add(sessionID string, fn context.CancelFunc) *cancelEntry {
+	e := &cancelEntry{sessionID: sessionID, fn: fn}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cancels = append(s.cancels, e)
@@ -96,14 +102,47 @@ func (s *clientCancelSet) Remove(e *cancelEntry) {
 	}
 }
 
-// CancelAll 批量取消该客户端的全部执行（运行中与排队中）。
-// 仅由断开连接 / message.cancel 停止按钮触发。
-func (s *clientCancelSet) CancelAll() {
+// CancelAll 批量取消该客户端的全部执行（运行中与排队中），
+// 返回被取消执行的去重会话 ID 列表（供调用方对每个会话级联强停其
+// 派生的运行中 SubAgent，见 Daemon.cancelSubAgents）。
+// 仅由断开连接 / message.cancel 未携带 session_id 的兜底路径触发。
+func (s *clientCancelSet) CancelAll() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	seen := make(map[string]struct{}, len(s.cancels))
+	ids := make([]string, 0)
 	for _, e := range s.cancels {
 		e.fn()
+		if e.sessionID == "" {
+			continue
+		}
+		if _, ok := seen[e.sessionID]; !ok {
+			seen[e.sessionID] = struct{}{}
+			ids = append(ids, e.sessionID)
+		}
 	}
+	return ids
+}
+
+// CancelSession 精确取消指定会话的执行（运行中与排队中），返回取消的条目数。
+// 排队中的任务启动时检查 ctx.Err() 跳过执行（见 daemon.go 请求闭包），
+// 因此提前调用 cancel 即可同时覆盖两种状态。仅移除被取消的条目，
+// 其它会话的执行不受影响。
+func (s *clientCancelSet) CancelSession(sessionID string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	count := 0
+	kept := s.cancels[:0]
+	for _, e := range s.cancels {
+		if e.sessionID == sessionID {
+			e.fn()
+			count++
+			continue
+		}
+		kept = append(kept, e)
+	}
+	s.cancels = kept
+	return count
 }
 
 // clientCancelSetFor 获取（必要时创建）指定客户端的取消集合。

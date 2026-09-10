@@ -175,6 +175,21 @@ func LoadSkillDisplayName(dir string) string {
 	return strings.TrimSpace(zh)
 }
 
+// LoadSkillMetadata 读取技能目录 SKILL.md 的 frontmatter metadata 原始键值
+// （name_zh / version 等展示字段）。仅用于 RPC 展示场景：不校验名称规范与
+// 运行时依赖；目录缺失或解析失败一律返回 nil，由调用方回退缺省展示（不构成错误）。
+func LoadSkillMetadata(dir string) map[string]any {
+	data, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
+	if err != nil {
+		return nil
+	}
+	fm, _, err := parseFrontmatter(string(data))
+	if err != nil {
+		return nil
+	}
+	return fm.Metadata
+}
+
 // parseFrontmatter 分离 frontmatter 与正文并解析 YAML。
 func parseFrontmatter(content string) (skillFrontmatter, string, error) {
 	var fm skillFrontmatter

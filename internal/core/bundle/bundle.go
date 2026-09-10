@@ -57,8 +57,9 @@ type Manifest struct {
 	Category string `json:"category,omitempty"`
 	// Skills 记录包内包含的技能名（kind=agent）；安装器据此报告落位结果。
 	Skills []string `json:"skills,omitempty"`
-	// SkillNames 技能中文展示名映射（kind=agent，技能名 → SKILL.md metadata.name_zh；
-	// 未声明中文名的技能不收录，展示端回退技能原名）。市场卡片展示技能装配用。
+	// SkillNames 技能中文展示名映射（技能名 → SKILL.md metadata.name_zh；
+	// Agent 包记录包内全部技能，Skill 包记录其自身；未声明中文名的不收录，
+	// 展示端回退原名）。市场卡片展示用。
 	SkillNames map[string]string `json:"skill_names,omitempty"`
 }
 

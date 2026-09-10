@@ -643,7 +643,9 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	// 完全结束后自动继续；只有断开连接 / message.cancel 停止按钮才批量取消执行。
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelSet := d.clientCancelSetFor(msg.ClientID)
-	cancelEntry := cancelSet.Add(cancel)
+	// 登记取消函数所属会话：停止按钮（message.cancel 带 session_id）
+	// 按会话精确取消，不波及同一客户端其它 Tab 的执行。
+	cancelEntry := cancelSet.Add(sessionID, cancel)
 
 	clientID := msg.ClientID
 	sid := sessionID
@@ -773,13 +775,15 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		// 注册 FileModifyHandler：将文件追踪事件转发为 JSON-RPC 通知，
 		// 让前端实时显示 DiffView。
 		//
-		// 防止重复触发的三重保险：
-		//  1. session.TrackModify 内部已用 containsModifyFile 去重，
-		//     同一文件被再次追踪时直接 return nil，不调 handler。
+		// 防止重复触发的保险：
+		//  1. session.TrackModify 对已追踪文件不重复备份，但再次被工具触碰时
+		//     仍发事件（文件内容相对旧快照可能已变化，前端需知道）。
 		//  2. 这里只对 Action == "tracked" 发送事件；"confirmed" / "rolled_back"
 		//     是用户后续操作结果，不应在前端再次弹出 DiffView。
-		//  3. 前端 chatStore.handleFileModified 对同路径消息做 upsert，
-		//     即使收到重复事件也只会更新而非追加。
+		//  3. 前端 chatStore.handleFileModified 对同路径消息做幂等 upsert
+		//     （已有条目保留原 diff，不降级为空），重复事件无副作用。
+		//  注意：事件在工具执行「前」发出（备份时机），事件内的文件内容尚未更新，
+		//  前端展示的最新 diff 由 openNativeDiff 失败时拉取 session.get 兜底保证。
 		s.SetFileModifyHandler(func(ev goharnesssession.FileModifyEvent) {
 			if ev.Action != "tracked" {
 				return
@@ -918,13 +922,35 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	}
 }
 
-// cancelClientExecution 批量取消指定客户端的全部执行（运行中与排队中）。
+// cancelClientExecution 批量取消指定客户端的全部执行（运行中与排队中），
+// 并对每个被执行会话级联强停其派生的运行中子代理。
 // 仅由客户端断开连接时触发；新消息不再取消旧执行，而是进入会话队列排队。
 func (d *Daemon) cancelClientExecution(clientID string) {
 	if v, ok := d.clientCancels.Load(clientID); ok {
-		v.(*clientCancelSet).CancelAll()
+		sessionIDs := v.(*clientCancelSet).CancelAll()
 		d.clientCancels.Delete(clientID)
+		for _, sid := range sessionIDs {
+			if n := d.cancelSubAgents(sid); n > 0 {
+				d.logger.Info("断连级联强停子代理", "session_id", sid, "count", n)
+			}
+		}
 	}
+}
+
+// cancelSubAgents 强停指定主会话派生的全部运行中子代理。
+// Runtime 按 agent 名缓存（runtimeCache），停止请求仅携带 session_id、
+// 无法定位执行该会话的具体 Runtime 实例，故遍历全部缓存 Runtime——
+// 仅实际持有该 sponsor 强停登记的 Runtime 会命中（见 App.ForEachRuntime）。
+// 返回被强停的子代理数。
+func (d *Daemon) cancelSubAgents(sessionID string) int {
+	if sessionID == "" || d.app == nil {
+		return 0
+	}
+	total := 0
+	d.app.ForEachRuntime(func(rt *agents.Runtime) {
+		total += rt.CancelSubAgents(sessionID)
+	})
+	return total
 }
 
 func parseAgentTarget(text string) (agentName string, sessionID string, content string) {

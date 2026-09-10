@@ -18,7 +18,10 @@ type skillEntry struct {
 	Source       string `json:"source,omitempty"`
 	Instructions string `json:"instructions,omitempty"`
 	Level        string `json:"level"`
-	Loaded       bool   `json:"loaded,omitempty"` // 仅项目级技能使用：是否已确认载入当前会话
+	// Metadata frontmatter metadata 原始键值（name_zh / version 等展示字段；
+	// 注册表存储的是瘦身 Skill 不含该字段，此处按 RootDir 轻量读取补齐）。
+	Metadata map[string]any `json:"metadata,omitempty"`
+	Loaded   bool           `json:"loaded,omitempty"` // 仅项目级技能使用：是否已确认载入当前会话
 }
 
 // projectSkillEntry 是项目级技能发现结果的精简投影（不含指令正文）。
@@ -113,6 +116,7 @@ func (d *Daemon) handleSkillList(_ context.Context, params json.RawMessage) (any
 			Source:       sk.Source,
 			Instructions: sk.Instructions,
 			Level:        level,
+			Metadata:     skillstore.LoadSkillMetadata(sk.RootDir),
 		})
 	}
 	return result, nil

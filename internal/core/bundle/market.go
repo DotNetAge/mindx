@@ -44,9 +44,12 @@ type MarketPackage struct {
 	Category string `json:"category,omitempty"`
 	// Skills 包内技能名（kind=agent，包内清单透传；市场卡片展示技能装配）。
 	Skills []string `json:"skills,omitempty"`
-	// SkillNames 技能中文展示名映射（kind=agent，技能名 → metadata.name_zh，
-	// 包内清单透传；未声明的技能由展示端回退原名）。
+	// SkillNames 技能中文展示名映射（技能名 → metadata.name_zh；
+	// Agent 包记录包内全部技能，Skill 包记录其自身，包内清单透传；
+	// 未声明的技能由展示端回退原名）。
 	SkillNames map[string]string `json:"skill_names,omitempty"`
+	// Version 包版本（kind=skill 取自 SKILL.md frontmatter metadata.version，打包时写入清单）。
+	Version string `json:"version,omitempty"`
 	// File 包文件相对清单地址的路径（如 packages/xxx.mindpkg）。
 	File string `json:"file"`
 	// Sha256 包文件内容的十六进制摘要。

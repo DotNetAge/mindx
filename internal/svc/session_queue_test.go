@@ -132,8 +132,8 @@ func TestSessionQueue_EnqueueNonBlocking(t *testing.T) {
 func TestClientCancelSet_CancelAll(t *testing.T) {
 	var cancelled int32
 	set := &clientCancelSet{}
-	set.Add(func() { atomic.AddInt32(&cancelled, 1) })
-	set.Add(func() { atomic.AddInt32(&cancelled, 1) })
+	set.Add("s1", func() { atomic.AddInt32(&cancelled, 1) })
+	set.Add("s2", func() { atomic.AddInt32(&cancelled, 1) })
 
 	set.CancelAll()
 	if got := atomic.LoadInt32(&cancelled); got != 2 {
@@ -141,11 +141,45 @@ func TestClientCancelSet_CancelAll(t *testing.T) {
 	}
 }
 
+// TestClientCancelSet_CancelSession 验证停止按钮的按会话隔离语义：
+// CancelSession 仅取消目标会话的条目（并从集合移除），
+// 其它会话的执行不受影响——多 Tab 场景下停止当前对话流不能波及别的 Tab。
+func TestClientCancelSet_CancelSession(t *testing.T) {
+	var s1Cancelled, s2Cancelled int32
+	set := &clientCancelSet{}
+	set.Add("s1", func() { atomic.AddInt32(&s1Cancelled, 1) })
+	set.Add("s2", func() { atomic.AddInt32(&s2Cancelled, 1) })
+	set.Add("s1", func() { atomic.AddInt32(&s1Cancelled, 1) })
+
+	// 取消 s1：其 2 个条目全部触发，s2 不受影响
+	if got := set.CancelSession("s1"); got != 2 {
+		t.Fatalf("expected 2 cancels for s1, got %d", got)
+	}
+	if got := atomic.LoadInt32(&s1Cancelled); got != 2 {
+		t.Fatalf("expected s1 cancelled twice, got %d", got)
+	}
+	if got := atomic.LoadInt32(&s2Cancelled); got != 0 {
+		t.Fatalf("expected s2 untouched, got %d", got)
+	}
+
+	// 被取消的条目已移除：再次 CancelSession 无效果，CancelAll 只剩 s2
+	if got := set.CancelSession("s1"); got != 0 {
+		t.Fatalf("expected 0 cancels for removed entries, got %d", got)
+	}
+	set.CancelAll()
+	if got := atomic.LoadInt32(&s1Cancelled); got != 2 {
+		t.Fatalf("expected s1 stay cancelled, got %d", got)
+	}
+	if got := atomic.LoadInt32(&s2Cancelled); got != 1 {
+		t.Fatalf("expected s2 cancelled once, got %d", got)
+	}
+}
+
 // TestClientCancelSet_Remove 验证 Remove 后 CancelAll 不再取消已移除的条目。
 func TestClientCancelSet_Remove(t *testing.T) {
 	var cancelled int32
 	set := &clientCancelSet{}
-	e := set.Add(func() { atomic.AddInt32(&cancelled, 1) })
+	e := set.Add("s1", func() { atomic.AddInt32(&cancelled, 1) })
 	set.Remove(e)
 
 	set.CancelAll()
@@ -158,7 +192,7 @@ func TestClientCancelSet_Remove(t *testing.T) {
 func TestClientCancelSet_ContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	set := &clientCancelSet{}
-	set.Add(cancel)
+	set.Add("s1", cancel)
 
 	set.CancelAll()
 	if ctx.Err() == nil {

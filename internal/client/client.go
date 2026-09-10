@@ -58,10 +58,11 @@ type rootModel struct {
 	askChoicesActive     bool                  // 区分 ChoiceSelectedMsg 来自 AskUser 面板还是授权栏
 	providerDlg          *dialog.ListDialog
 	apiKeyDlg            *dialog.InputDialog
-	modelDlg             *dialog.ListDialog // connect 流程的模型选择
-	modelSelectDlg       *dialog.ListDialog // /model 命令的模型选择浮层
-	agentSelectDlg       *dialog.ListDialog // /agent 命令的 Agent 选择浮层
-	agentSelectNames     []string           // 浮层列表项与 HiredAgents() 雇佣视图的名称映射
+	modelDlg             *dialog.ListDialog    // connect 流程的模型选择
+	modelSelectDlg       *dialog.ListDialog    // /model 命令的模型选择浮层
+	modelSelectModels    []*config.ModelConfig // 浮层打开时的模型快照，选中后按索引映射（注册表 List 顺序可能变化，禁止二次拉取）
+	agentSelectDlg       *dialog.ListDialog    // /agent 命令的 Agent 选择浮层
+	agentSelectNames     []string              // 浮层列表项与 HiredAgents() 雇佣视图的名称映射
 	connectProvider      string
 	connectProviderNames []string
 	connectAPIKey        string
@@ -86,6 +87,11 @@ type rootModel struct {
 
 	// currentCancel cancels the running agent execution (for interrupt/stop).
 	currentCancel context.CancelFunc
+
+	// executingSessionID 记录当前本地执行所属的会话 ID（发起 Ask 时捕获的快照）。
+	// 停止时据此级联强停派生子代理——不能用停止时刻的实时会话元数据：
+	// 执行中允许切换会话/Agent，实时值可能已指向别的会话而漏杀旧会话的子代理。
+	executingSessionID string
 
 	// pendingAskUserData tracks an active AskUserPending event (non-blocking) for the dialog overlay.
 	pendingAskUserData *events.AskUserPendingData
@@ -945,11 +951,10 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case overlayModelSelect:
 			m.activeOverlay = overlayNone
-			if !msg.Cancelled && msg.Index >= 0 {
-				models := m.app.Models().List()
-				if msg.Index < len(models) {
-					return m.handleSlashCommand(clientmsg.SlashCommandMsg{Name: "model", Args: []string{models[msg.Index].Name}})
-				}
+			// 按打开浮层时的快照映射索引；二次 List() 顺序可能与打开时不一致（map 遍历随机），
+			// 曾导致选中的模型与实际切换的模型错位。
+			if !msg.Cancelled && msg.Index >= 0 && msg.Index < len(m.modelSelectModels) {
+				return m.handleSlashCommand(clientmsg.SlashCommandMsg{Name: "model", Args: []string{m.modelSelectModels[msg.Index].Name}})
 			}
 		case overlayAgentSelect:
 			m.activeOverlay = overlayNone
@@ -1104,6 +1109,21 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		} else if m.currentCancel != nil {
 			m.currentCancel()
 			m.currentCancel = nil
+			// 级联强停派生子代理：子执行循环运行在 Runtime.Ask 新建的独立
+			// Background ctx 上，不随主 exec ctx（currentCancel）级联取消，
+			// 必须经 CancelSubAgents 显式强停（与 daemon 侧停止路径同语义）。
+			// 会话 ID 用发起 Ask 时捕获的快照 executingSessionID——执行中允许
+			// 切换会话，停止时刻的实时元数据可能已指向别的会话。
+			if m.executingSessionID != "" {
+				if rt, rtErr := m.app.CurrentRuntime(); rtErr == nil {
+					if n := rt.CancelSubAgents(m.executingSessionID); n > 0 {
+						if l := m.getLogger(); l != nil {
+							l.Info("主会话停止，已级联强停派生子代理",
+								"session", m.executingSessionID, "count", n)
+						}
+					}
+				}
+			}
 		}
 		return m, nil
 
@@ -1206,6 +1226,9 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 
 	// Fallback: in-process execution
 	m.executing = true
+	// 捕获本次执行的会话 ID 快照：停止时级联强停派生子代理的登记键
+	// （执行中切换会话不影响该值，保证停止动作作用于发起执行的会话）。
+	m.executingSessionID = sessionID
 	m.statusBar.CurrentState = i18n.T("client.status.thinking")
 	m.statusBar.SessionStart = time.Now()
 	m.statusBar.SessionDuration = 0
@@ -1566,7 +1589,8 @@ func (m *rootModel) refreshAfterChatOp(result CommandResult) tea.Cmd {
 }
 
 // openModelSelectDialog 激活 /model 的居中浮层选择器。
-// 列表项与 m.app.Models().List() 同序，ListDialogResult.Index 直接映射回模型。
+// 打开时对 m.app.Models().List() 做快照存入 modelSelectModels，
+// 列表项与快照同序，ListDialogResult.Index 映射回快照中的模型。
 func (m *rootModel) openModelSelectDialog() (tea.Model, tea.Cmd) {
 	if m.app == nil || m.app.Models() == nil {
 		return m, m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.system.uninitialized"), Level: data.NotifWarning})
@@ -1575,6 +1599,7 @@ func (m *rootModel) openModelSelectDialog() (tea.Model, tea.Cmd) {
 	if len(models) == 0 {
 		return m, m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.no.provider"), Level: data.NotifWarning})
 	}
+	m.modelSelectModels = models
 	names := make([]string, len(models))
 	for i, ml := range models {
 		names[i] = displayName(ml.Title, ml.Name)

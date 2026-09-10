@@ -10,6 +10,7 @@ import (
 	"github.com/aymanbagabas/go-udiff"
 
 	"github.com/DotNetAge/mindx/internal/client/data"
+	"github.com/DotNetAge/mindx/internal/diffutil"
 )
 
 // pendingCheck holds a file path and its content before modification.
@@ -78,7 +79,9 @@ func (t *Tracker) ToolExecEnd() {
 		}
 
 		label := pc.path
-		diff := udiff.Unified("a/"+label, "b/"+label, pc.content, newStr)
+		// go-udiff 在「相近修改合并进同一 hunk」时后续 hunk 头行号会偏小（上游未修），
+		// 必须经 NormalizeHunkHeaders 归一化后再下发
+		diff := diffutil.NormalizeHunkHeaders(udiff.Unified("a/"+label, "b/"+label, pc.content, newStr))
 		adds, dels := countLines(diff)
 		relPath := relativize(pc.path, t.workDir)
 

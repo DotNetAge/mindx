@@ -168,6 +168,23 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 
 	credStore := NewCredentialStore(settings.UserPreferences())
 
+	// 兜底补写 embedder_model：随包语义模型已落盘而配置缺失时写默认文件名。
+	// 此前由 App 侧（enableEmbedderIfNeeded）补写，但 daemon 内存中的旧配置在
+	// 任意一次 Save() 时会全量重写 mindx.json，抹掉 App 写入的字段（写竞争）。
+	// 统一收口到 Go 侧：daemon 是配置唯一写入方，补写一次后随配置持久化。
+	// Save 失败不中断启动：内存中已生效，本次记忆可用，下次启动重试补写。
+	if mindxConfig != nil && mindxConfig.EmbedderModel == "" {
+		defaultModelPath := filepath.Join(settings.UserPreferences(), "data", "models", "model.onnx")
+		if _, statErr := os.Stat(defaultModelPath); statErr == nil {
+			mindxConfig.EmbedderModel = "model.onnx"
+			if saveErr := mindxConfig.Save(); saveErr != nil {
+				logger.Warn("补写 embedder_model 默认值后保存配置失败，下次启动重试", "error", saveErr)
+			} else {
+				logger.Info("embedder_model 未配置，已补写默认值（检测到随包语义模型）", "model", "model.onnx")
+			}
+		}
+	}
+
 	// Create embedder if configured for semantic memory support
 	var emb goragcore.Embedder
 	if mindxConfig != nil && mindxConfig.HasEmbedder() {
@@ -900,6 +917,19 @@ func (a *App) CurrentRuntime() (*agents.Runtime, error) {
 	}
 
 	return a.ResolveRuntime(agentName)
+}
+
+// ForEachRuntime 对全部缓存 Runtime 执行 fn（读锁保护）。
+// Runtime 按 agent 名缓存，而停止请求仅携带 session_id、无法定位执行该
+// 会话的具体 Runtime 实例，故遍历全部实例（如强停派生子代理时，
+// 仅实际持有登记的 Runtime 会命中）。fn 内禁止调用会再次获取
+// runtimeMu 写锁的 App 方法（如 ResolveRuntime），避免锁重入死锁。
+func (a *App) ForEachRuntime(fn func(*agents.Runtime)) {
+	a.runtimeMu.RLock()
+	defer a.runtimeMu.RUnlock()
+	for _, rt := range a.runtimeCache {
+		fn(rt)
+	}
 }
 
 // ResolveRuntime returns (or creates and caches) a Runtime for the given agent name.
