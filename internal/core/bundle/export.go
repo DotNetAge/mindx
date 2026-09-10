@@ -107,14 +107,19 @@ func ExportAgent(agent *agentstore.Agent, skills *skillstore.Store, outPath stri
 			return nil, nil, err
 		}
 	}
-	// Agent 级技能目录整体打包；顺路收集技能中文展示名（SKILL.md metadata.name_zh）
+	// Agent 级技能目录整体打包；顺路收集技能中文展示名（metadata.name_zh）与描述（frontmatter description）
 	skillNames := make(map[string]string)
+	skillDescs := make(map[string]string)
 	for name := range agentLevel {
 		if err := zipDir(zw, filepath.Join(agentSkillDir, name), zipPrefixAgent+zipPrefixSkills+name); err != nil {
 			return nil, nil, fmt.Errorf("打包 Agent 级技能 %s 失败：%w", name, err)
 		}
-		if zh := skillstore.LoadSkillDisplayName(filepath.Join(agentSkillDir, name)); zh != "" {
+		dir := filepath.Join(agentSkillDir, name)
+		if zh := skillstore.LoadSkillDisplayName(dir); zh != "" {
 			skillNames[name] = zh
+		}
+		if desc := skillstore.LoadSkillDescription(dir); desc != "" {
+			skillDescs[name] = desc
 		}
 	}
 	// 全局引用技能副本打包（按全局库版本）
@@ -129,8 +134,12 @@ func ExportAgent(agent *agentstore.Agent, skills *skillstore.Store, outPath stri
 		if zh := skillstore.LoadSkillDisplayName(sk.RootDir); zh != "" {
 			skillNames[name] = zh
 		}
+		if desc := skillstore.LoadSkillDescription(sk.RootDir); desc != "" {
+			skillDescs[name] = desc
+		}
 	}
 	manifest.SkillNames = skillNames
+	manifest.SkillDescs = skillDescs
 	// 清单最后写入（内容已定）
 	if err := writeManifestEntry(zw, manifest); err != nil {
 		return nil, nil, err
@@ -165,6 +174,10 @@ func ExportSkill(skills *skillstore.Store, name, outPath string) (*Manifest, err
 	// 技能中文展示名（SKILL.md metadata.name_zh；市场卡片展示用，缺省不写入）
 	if zh := skillstore.LoadSkillDisplayName(sk.RootDir); zh != "" {
 		manifest.SkillNames = map[string]string{sk.Name: zh}
+	}
+	// 技能描述（frontmatter description；市场详情页展示用，缺省不写入）
+	if desc := skillstore.LoadSkillDescription(sk.RootDir); desc != "" {
+		manifest.SkillDescs = map[string]string{sk.Name: desc}
 	}
 
 	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {

@@ -140,6 +140,7 @@ type marketPackageDTO struct {
 	Category    string            `json:"category,omitempty"`
 	Skills      []string          `json:"skills,omitempty"`
 	SkillNames  map[string]string `json:"skillNames,omitempty"`
+	SkillDescs  map[string]string `json:"skillDescs,omitempty"`
 	Version     string            `json:"version,omitempty"`
 	File        string            `json:"file"`
 	Sha256      string            `json:"sha256"`
@@ -167,6 +168,7 @@ func (d *Daemon) handleMarketList(_ context.Context, _ json.RawMessage) (any, er
 			Category:    p.Category,
 			Skills:      p.Skills,
 			SkillNames:  p.SkillNames,
+			SkillDescs:  p.SkillDescs,
 			Version:     p.Version,
 			File:        p.File,
 			Sha256:      p.Sha256,

@@ -170,6 +170,8 @@ func newClientAskHandlers(
 			evSid := effectiveEventSession(sid, getSubSessionID)
 			// 实际 token 用量：exec 循环将工具所在轮次 LLM 调用的 usage 回填到事件，
 			// 随 tool_exec_end 下发，前端「查看结果」对话框展示真实消耗。
+			// result_meta：工具返回值自带的旁路统计（±行数、命中数、退出码），
+			// 供前端渲染工具名片与轮级变更摘要，无需解析 result 文本。
 			_ = gw.SendResponse(clientID, gateway.RespToolExecEnd, i18n.T("svc.event.tool.end"), map[string]any{
 				"tool_name": data.ToolName, "tool_call_id": data.ToolCallID,
 				"success": data.Success, "result": data.Result, "error": data.Error,
@@ -178,6 +180,7 @@ func newClientAskHandlers(
 				"completion_tokens": data.CompletionTokens,
 				"total_tokens":      data.TotalTokens,
 				"cached_tokens":     data.CachedTokens,
+				"result_meta":       data.ResultMeta,
 			}, gateway.WithSessionID(evSid), withAgent())
 			// 文件 diff 广播仅限主会话事件：子会话的修改文件未被 activeSessions
 			// 登记追踪（FileModifyHook 按 sessionID 查不到 tracker），此处 s（主会话）

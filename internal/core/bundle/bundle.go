@@ -61,6 +61,9 @@ type Manifest struct {
 	// Agent 包记录包内全部技能，Skill 包记录其自身；未声明中文名的不收录，
 	// 展示端回退原名）。市场卡片展示用。
 	SkillNames map[string]string `json:"skill_names,omitempty"`
+	// SkillDescs 技能描述映射（技能名 → SKILL.md frontmatter description）；
+	// 收录语义同 SkillNames。市场详情页展示用（未安装包的技能描述来源）。
+	SkillDescs map[string]string `json:"skill_descs,omitempty"`
 }
 
 // validate 校验清单完整性。

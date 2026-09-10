@@ -48,6 +48,9 @@ type MarketPackage struct {
 	// Agent 包记录包内全部技能，Skill 包记录其自身，包内清单透传；
 	// 未声明的技能由展示端回退原名）。
 	SkillNames map[string]string `json:"skill_names,omitempty"`
+	// SkillDescs 技能描述映射（技能名 → SKILL.md frontmatter description，
+	// 包内清单透传；收录语义同 SkillNames）。市场详情页展示用。
+	SkillDescs map[string]string `json:"skill_descs,omitempty"`
 	// Version 包版本（kind=skill 取自 SKILL.md frontmatter metadata.version，打包时写入清单）。
 	Version string `json:"version,omitempty"`
 	// File 包文件相对清单地址的路径（如 packages/xxx.mindpkg）。
