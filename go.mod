@@ -24,11 +24,12 @@ require (
 require (
 	github.com/DotNetAge/gochat v0.2.11
 	github.com/DotNetAge/gograph v0.4.0
-	github.com/DotNetAge/goharness v0.2.44
+	github.com/DotNetAge/goharness v0.2.45
 	github.com/DotNetAge/gorag/v2 v2.0.18
 	github.com/DotNetAge/gort v0.1.6
 	github.com/creack/pty v1.1.24
 	go.etcd.io/bbolt v1.4.3
+	golang.org/x/sync v0.21.0
 	golang.org/x/text v0.38.0
 )
 
@@ -126,7 +127,6 @@ require (
 	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
 	golang.org/x/image v0.41.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/protobuf v1.36.11 // indirect

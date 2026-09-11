@@ -1743,6 +1743,14 @@ func (r *daemonRPCClient) MCPServerAdd(p MCPServerAddParams) error {
 	return r.callInto("mcp.server.add", p, nil)
 }
 
+// MCPServerUpdateParams 更新 MCP 服务器配置，字段与 MCPServerAddParams 一致。
+// 语义差异：server 必须已存在；enabled 沿用现有配置；credential 为空时保留旧凭据。
+type MCPServerUpdateParams = MCPServerAddParams
+
+func (r *daemonRPCClient) MCPServerUpdate(p MCPServerUpdateParams) error {
+	return r.callInto("mcp.server.update", p, nil)
+}
+
 func (r *daemonRPCClient) MCPServerRemove(name string) error {
 	return r.callInto("mcp.server.remove", map[string]any{"name": name}, nil)
 }

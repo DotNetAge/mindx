@@ -33,14 +33,22 @@ type AgentHireParams struct {
 
 // AgentUpdateParams are the params for agent.update.
 type AgentUpdateParams struct {
-	Name         string         `json:"name"`
-	Role         string         `json:"role,omitempty"`
-	Description  string         `json:"description,omitempty"`
-	Introduction string         `json:"introduction,omitempty"`
-	Model        string         `json:"model,omitempty"`
-	Skills       []string       `json:"skills,omitempty"`
-	ExcludeTools []string       `json:"exclude_tools,omitempty"`
-	Meta         map[string]any `json:"meta,omitempty"`
+	Name         string `json:"name"`
+	Role         string `json:"role,omitempty"`
+	Description  string `json:"description,omitempty"`
+	Introduction string `json:"introduction,omitempty"`
+	// Soul / IdentityBody 用指针区分「未传」与「清空」：nil 保持不变，非 nil 覆盖（含空串清空）。
+	// IdentityBody 对应 IDENTITY.md 身份正文（写入后与 frontmatter introduction 保持一致），
+	// Soul 对应 SOUL.md 正文。
+	Soul         *string  `json:"soul,omitempty"`
+	IdentityBody *string  `json:"identity_body,omitempty"`
+	Model        string   `json:"model,omitempty"`
+	Skills       []string `json:"skills,omitempty"`
+	ExcludeTools []string `json:"exclude_tools,omitempty"`
+	// AllowsTools 云技能（MCP 服务）清单，条目 "mcp:<server>"；该属性放的全是 MCP 工具。
+	// 指针区分「未传」与「清空」：nil 保持不变，非 nil 全量覆盖（含空切片清空）。
+	AllowsTools *[]string      `json:"allows_tools,omitempty"`
+	Meta        map[string]any `json:"meta,omitempty"`
 }
 
 func (c *Client) AgentList() (json.RawMessage, error) {

@@ -28,6 +28,13 @@ func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any
 	return result, nil
 }
 
+// agentDetailResult 是 agent.get 的返回：Meta 全量字段内联展开，附加 SOUL.md 正文。
+// 仅做增量扩展（新增 soul 字段），既有消费方不受影响。
+type agentDetailResult struct {
+	agentstore.AgentMeta
+	Soul string `json:"soul"`
+}
+
 func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.AgentGetParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -46,7 +53,7 @@ func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any,
 	if agent == nil {
 		return nil, fmt.Errorf("agent %q not found", p.Name)
 	}
-	return agent.Meta, nil
+	return agentDetailResult{AgentMeta: agent.Meta, Soul: agent.Soul}, nil
 }
 
 func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (any, error) {
@@ -136,8 +143,19 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 	if p.ExcludeTools != nil {
 		updated.Meta.ExcludeTools = p.ExcludeTools
 	}
+	if p.AllowsTools != nil {
+		updated.Meta.AllowsTools = *p.AllowsTools
+	}
 	if p.Introduction != "" {
 		updated.Meta.Introduction = p.Introduction
+	}
+	// 指针字段：nil 表示未传（保持不变），非 nil 表示覆盖（含空串清空正文）。
+	// 与加载语义一致：parseIdentity/loadAgentDir 均对正文做 TrimSpace。
+	if p.IdentityBody != nil {
+		updated.Meta.Introduction = strings.TrimSpace(*p.IdentityBody)
+	}
+	if p.Soul != nil {
+		updated.Soul = strings.TrimSpace(*p.Soul)
 	}
 	if p.Meta != nil {
 		updated.Meta.Meta = p.Meta

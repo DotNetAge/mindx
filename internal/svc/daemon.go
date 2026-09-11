@@ -223,11 +223,28 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			"path", filepath.Join(app.Settings().DataDir(), "kvstore.db"),
 		)
 
-		// Initialize MCP Manager with the bbolt-based storage
+		// Initialize MCP Manager
+		// Server 配置由 ~/.mindx/settings/mcp.json 主存（文件），
+		// 工具清单运行时从 MCP server tools/list 动态拉取。零 bbolt 依赖。
 		credStore := core.NewCredentialStore(app.Settings().UserPreferences())
-		d.mcpMgr = mcp.NewManager(logger, mcp.NewStorage(kvDB), credStore)
+		d.mcpMgr = mcp.NewManager(logger, credStore, app.Settings().McpFile(), mcp.DefaultMarketMCPURL)
 		app.SetMCPManager(d.mcpMgr)
-		logger.Info("mcp manager initialized")
+		// 热更新：MCP 配置变更（enabled / add / remove / sync）后清空 Runtime 缓存，
+		// 下一轮对话 createRuntime 会重新 EnabledTools() 装配新的工具列表。
+		d.mcpMgr.SetOnConfigChanged(func() { app.InvalidateRuntimes() })
+		logger.Info("mcp manager initialized（Runtime 热更新已启用）")
+
+		// 后台异步同步远程 market mcp.json（懒操作，不阻塞启动）
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			result := d.mcpMgr.Sync(ctx)
+			if len(result.Added) > 0 {
+				logger.Info("mcp: 远程同步新增 server", "count", len(result.Added), "servers", strings.Join(result.Added, ","))
+			} else if result.Error != "" {
+				logger.Debug("mcp: 远程同步跳过", "reason", result.Error)
+			}
+		}()
 	}
 
 	// ── 自动升级 ──────────────────────────────────────────────

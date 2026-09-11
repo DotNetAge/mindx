@@ -23,7 +23,6 @@ type CredentialStore interface {
 type ConnectionPool struct {
 	servers     map[string]ServerConfig
 	connections map[string]*managedConn
-	storage     Storage
 	credStore   CredentialStore
 	log         Logger
 
@@ -41,7 +40,7 @@ type managedConn struct {
 
 // NewConnectionPool creates a new connection pool.
 // Call StartReapLoop to begin the reap loop.
-func NewConnectionPool(log Logger, storage Storage, credStore CredentialStore) *ConnectionPool {
+func NewConnectionPool(log Logger, credStore CredentialStore) *ConnectionPool {
 	if log == nil {
 		log = nopLogger{}
 	}
@@ -49,7 +48,6 @@ func NewConnectionPool(log Logger, storage Storage, credStore CredentialStore) *
 	return &ConnectionPool{
 		servers:     make(map[string]ServerConfig),
 		connections: make(map[string]*managedConn),
-		storage:     storage,
 		credStore:   credStore,
 		log:         log,
 		ctx:         ctx,
@@ -57,12 +55,12 @@ func NewConnectionPool(log Logger, storage Storage, credStore CredentialStore) *
 	}
 }
 
-// LoadConfig loads server configurations from storage and rebuilds
-// the server index. Does NOT establish connections.
-func (p *ConnectionPool) LoadConfig(ctx context.Context) error {
-	servers, err := LoadServers(p.storage)
+// LoadConfig 从 mcp.json 读取 server 配置，重建内存索引。
+// 不建立实际连接。enabled=false 的 server 跳过（不进索引、不参与连接）。
+func (p *ConnectionPool) LoadConfig(ctx context.Context, configPath string) error {
+	servers, err := LoadServers(configPath)
 	if err != nil {
-		return fmt.Errorf("load server config: %w", err)
+		return fmt.Errorf("读取 mcp.json 失败: %w", err)
 	}
 
 	p.mu.Lock()
@@ -70,9 +68,24 @@ func (p *ConnectionPool) LoadConfig(ctx context.Context) error {
 
 	p.servers = make(map[string]ServerConfig, len(servers))
 	for _, s := range servers {
+		if !s.Enabled {
+			continue
+		}
 		p.servers[s.Name] = s
 	}
 	return nil
+}
+
+// ActiveServerNames 返回当前已加载（enabled=true）的 server 名列表。
+// 顺序不确定——调用方不依赖特定顺序时可直接使用。
+func (p *ConnectionPool) ActiveServerNames() []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	names := make([]string, 0, len(p.servers))
+	for name := range p.servers {
+		names = append(names, name)
+	}
+	return names
 }
 
 // AddServer adds a server config to the in-memory index.
@@ -278,6 +291,7 @@ func (p *ConnectionPool) DiscoverTools(ctx context.Context, serverName string) (
 	mc := p.connections[serverName]
 	p.mu.RUnlock()
 
+	mc.touch()
 	tools, err := ToolsList(ctx, mc.client)
 	if err != nil {
 		p.log.Error("mcp: tools/list failed", err, "server", serverName)

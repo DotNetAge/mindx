@@ -50,6 +50,12 @@ func (s *Settings) RulesFile() string {
 	return filepath.Join(s.UserPreferences(), "settings", "rules.yml")
 }
 
+// McpFile 返回 MCP 配置文件路径 ~/.mindx/settings/mcp.json。
+// 文件不存在时由调用方决定如何处理（首次启动无配置属正常情况）。
+func (s *Settings) McpFile() string {
+	return filepath.Join(s.UserPreferences(), "settings", "mcp.json")
+}
+
 // DataRulesFile returns the path for the persistent rule store used at runtime
 // by the FileRuleRegistry (CRUD via JSON-RPC). Default: ~/.mindx/data/rules.yml.
 func (s *Settings) DataRulesFile() string {

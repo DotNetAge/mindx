@@ -134,14 +134,14 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"translate.rpc":                      r.daemon.handleTranslate,
 		"optimize.rpc":                       r.daemon.handleOptimize,
 
-		// MCP server & manifest management
-		"mcp.server.add":      r.daemon.handleMCPServerAdd,
-		"mcp.server.remove":   r.daemon.handleMCPServerRemove,
-		"mcp.server.list":     r.daemon.handleMCPServerList,
-		"mcp.server.test":     r.daemon.handleMCPServerTest,
-		"mcp.server.discover": r.daemon.handleMCPServerDiscover,
-		"mcp.manifest.save":   r.daemon.handleMCPManifestSave,
-		"mcp.manifest.get":    r.daemon.handleMCPManifestGet,
+		// MCP server management（工具清单不再持久化 manifest，改为运行时 tools/list 动态发现）
+		"mcp.server.add":         r.daemon.handleMCPServerAdd,
+		"mcp.server.update":      r.daemon.handleMCPServerUpdate,
+		"mcp.server.remove":      r.daemon.handleMCPServerRemove,
+		"mcp.server.set_enabled": r.daemon.handleMCPServerSetEnabled,
+		"mcp.server.list":        r.daemon.handleMCPServerList,
+		"mcp.server.test":        r.daemon.handleMCPServerTest,
+		"mcp.server.discover":    r.daemon.handleMCPServerDiscover,
 	}
 }
 

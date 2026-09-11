@@ -1,0 +1,1167 @@
+{
+  "mcpServers": {
+    "tencent-maps": {
+      "url": "https://github.com/TencentCloud/tencentcloud-sdk-python",
+      "description": "腾讯地图（官方远程）：geocode、POI、路线规划、天气；key 从 lbs.qq.com 控制台申请",
+      "title": "腾讯地图",
+      "stars": 710
+    },
+    "didi": {
+      "url": "https://github.com/JimMikola/Didi",
+      "description": "滴滴出行（官方远程）：预估车费、下单、行程状态、取消；沙箱端点 mcp-servers-sandbox",
+      "title": "滴滴出行",
+      "stars": 1
+    },
+    "tuniu-hotel": {
+      "url": "https://github.com/Tuniu/tuniu-mcp",
+      "headers": {
+        "apiKey": "<YOUR_TUNIU_API_KEY>"
+      },
+      "description": "途牛酒店（官方远程）；认证是 apiKey header，不是 Authorization: Bearer",
+      "title": "途牛酒店"
+    },
+    "tuniu-flight": {
+      "url": "https://github.com/Tuniu/tuniu-mcp",
+      "headers": {
+        "apiKey": "<YOUR_TUNIU_API_KEY>"
+      },
+      "description": "途牛机票（官方远程）",
+      "title": "途牛机票"
+    },
+    "luckin-coffee": {
+      "url": "https://github.com/AD207warlord/smart-luckin",
+      "description": "瑞幸咖啡（官方远程）：附近门店、产品浏览、下单",
+      "title": "瑞幸咖啡",
+      "stars": 2
+    },
+    "mcdonalds-china": {
+      "url": "https://github.com/y735832496/mcd-mcp-skill",
+      "headers": {
+        "Authorization": "Bearer <YOUR_MCD_TOKEN>"
+      },
+      "description": "麦当劳中国（官方远程）；或自建 https://github.com/M-China/mcd-mcp-server",
+      "title": "麦当劳中国",
+      "stars": 2
+    },
+    "huawei-cloud": {
+      "url": "https://github.com/huaweicloud/huaweicloud-sdk-python-v3",
+      "description": "华为云（官方远程）：endpoint 从华为云控制台按需签发；host 位于 huaweicloud.com / myhuaweicloud.com",
+      "title": "华为云",
+      "stars": 162
+    },
+    "meituan": {
+      "command": "需自查",
+      "description": "美团（社区 WIP）：https://github.com/LewisChen1219/Meituan-Mcp-Server-WIP",
+      "title": "美团",
+      "url": "https://github.com/LewisChen1219/Meituan-Mcp-Server-WIP",
+      "stars": 7
+    },
+    "tencent-docs": {
+      "url": "https://github.com/thetime50/simple-qqdocs-mcp",
+      "headers": {
+        "Authorization": "Bearer <YOUR_TENCENT_DOCS_TOKEN>"
+      },
+      "description": "腾讯文档（官方远程）；auth docs: docs.qq.com/open/auth/mcp.html",
+      "title": "腾讯文档",
+      "stars": 0
+    },
+    "tencent-meeting": {
+      "url": "https://github.com/TencentCloud/tencentcloud-sdk-python",
+      "headers": {
+        "Authorization": "Bearer <YOUR_WEMEET_TOKEN>"
+      },
+      "description": "腾讯会议（官方远程）",
+      "title": "腾讯会议",
+      "stars": 710
+    },
+    "wps-365": {
+      "url": "https://github.com/WPS-365/wps-mcp",
+      "headers": {
+        "Authorization": "Bearer <YOUR_WPS_TOKEN>"
+      },
+      "description": "WPS 365 金山文档（官方远程）",
+      "title": "WPS 金山文档"
+    },
+    "jiandaoyun": {
+      "url": "https://github.com/conred-lin/jiandaoyun-mcp",
+      "description": "简道云（官方远程）：apps、forms、data、todos，只读",
+      "title": "简道云",
+      "stars": 0
+    },
+    "aliyun-all-in-one": {
+      "title": "阿里云（统一入口）",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-api-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>",
+        "ALIBABA_CLOUD_REGION_ID": "cn-hangzhou"
+      },
+      "description": "阿里云统一 API MCP Server（覆盖 ECS/RDS/OSS/DNS 等）",
+      "url": "https://github.com/aliyun/alibabacloud-api-mcp-server",
+      "stars": 30
+    },
+    "aliyun-ops": {
+      "title": "阿里云 CloudOps",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-cloudops-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 CloudOps",
+      "url": "https://github.com/aliyun/alibaba-cloud-ops-mcp-server",
+      "stars": 130
+    },
+    "aliyun-tablestore": {
+      "title": "阿里云 Tablestore",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-tablestore-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 Tablestore 表格存储",
+      "url": "https://github.com/aliyun/alibabacloud-tablestore-mcp-server",
+      "stars": 157
+    },
+    "aliyun-observability": {
+      "title": "阿里云可观测",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-observability-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云可观测 MCP Server（ARMS/SLS 日志）",
+      "url": "https://github.com/aliyun/alibabacloud-observability-mcp-server",
+      "stars": 165
+    },
+    "aliyun-devops": {
+      "title": "阿里云云效 DevOps",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-devops-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云云效 DevOps",
+      "url": "https://github.com/aliyun/alibabacloud-devops-mcp-server",
+      "stars": 165
+    },
+    "aliyun-ack": {
+      "title": "阿里云容器服务 ACK",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-ack-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 ACK 容器服务",
+      "url": "https://github.com/aliyun/alibabacloud-ack-mcp-server",
+      "stars": 116
+    },
+    "aliyun-rds": {
+      "title": "阿里云 RDS",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-rds-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 RDS 关系型数据库",
+      "url": "https://github.com/aliyun/alibabacloud-rds-openapi-mcp-server",
+      "stars": 55
+    },
+    "aliyun-dms": {
+      "title": "阿里云 DMS 数据管理",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-dms-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 DMS 数据管理 MCP Server（支持 40+ 数据源）",
+      "url": "https://github.com/aliyun/alibabacloud-dms-mcp-server",
+      "stars": 52
+    },
+    "aliyun-dataworks": {
+      "title": "阿里云 DataWorks",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-dataworks-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 DataWorks 数据开发",
+      "url": "https://github.com/aliyun/alibabacloud-dataworks-mcp-server",
+      "stars": 50
+    },
+    "aliyun-hologres": {
+      "title": "阿里云 Hologres",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-hologres-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 Hologres 实时数仓",
+      "url": "https://github.com/aliyun/alibabacloud-hologres-mcp-server",
+      "stars": 35
+    },
+    "aliyun-adb-mysql": {
+      "title": "阿里云 ADB MySQL",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-adb-mysql-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 AnalyticDB MySQL",
+      "url": "https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server",
+      "stars": 32
+    },
+    "aliyun-polardb": {
+      "title": "阿里云 PolarDB",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-polardb-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 PolarDB",
+      "url": "https://github.com/aliyun/alibabacloud-polardb-mcp-server",
+      "stars": 15
+    },
+    "aliyun-opensearch": {
+      "title": "阿里云 OpenSearch",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-opensearch-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 OpenSearch 搜索",
+      "url": "https://github.com/aliyun/alibabacloud-opensearch-mcp-server",
+      "stars": 11
+    },
+    "aliyun-esa": {
+      "title": "阿里云 ESA",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-esa-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 ESA 增强安全分析",
+      "url": "https://github.com/aliyun/mcp-server-esa"
+    },
+    "aliyun-apigateway": {
+      "title": "阿里云 API 网关",
+      "command": "uvx",
+      "args": [
+        "alibabacloud-apigateway-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "<YOUR_SK>"
+      },
+      "description": "阿里云 API 网关",
+      "url": "https://github.com/aliyun/alibabacloud-apigateway-mcp-server"
+    },
+    "aliyun-dms-entry": {
+      "command": "需自查",
+      "description": "阿里云 DMS 入口（官方）：https://github.com/aliyun/alibabacloud-dms-mcp-server",
+      "title": "阿里云 DMS"
+    },
+    "aliyun-rds-entry": {
+      "command": "需自查",
+      "description": "阿里云 RDS 入口（官方）：https://github.com/aliyun/alibabacloud-rds-openapi-mcp-server",
+      "title": "阿里云 RDS"
+    },
+    "tencent-cos": {
+      "title": "腾讯云 COS",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@tencentcloud/cos-mcp@latest"
+      ],
+      "env": {
+        "TENCENTCLOUD_SECRET_ID": "<YOUR_SECRET_ID>",
+        "TENCENTCLOUD_SECRET_KEY": "<YOUR_SECRET_KEY>",
+        "TENCENTCLOUD_COS_REGION": "<YOUR_REGION>",
+        "TENCENTCLOUD_COS_BUCKET": "<YOUR_BUCKET>"
+      },
+      "description": "腾讯云 COS 对象存储",
+      "url": "https://github.com/Tencent/cos-mcp",
+      "stars": 38
+    },
+    "tencent-cls": {
+      "title": "腾讯云 CLS 日志",
+      "command": "npx",
+      "args": [
+        "-y",
+        "cls-mcp-server@latest"
+      ],
+      "env": {
+        "TRANSPORT": "stdio",
+        "TENCENTCLOUD_SECRET_ID": "<YOUR_SECRET_ID>",
+        "TENCENTCLOUD_SECRET_KEY": "<YOUR_SECRET_KEY>",
+        "TZ": "Asia/Shanghai"
+      },
+      "description": "腾讯云 CLS 日志服务",
+      "url": "https://github.com/Tencent/cls-mcp-server"
+    },
+    "volcengine-all": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@volcengine/mcp-server"
+      ],
+      "env": {
+        "VOLCENGINE_ACCESS_KEY": "<YOUR_VOL_AK>",
+        "VOLCENGINE_SECRET_KEY": "<YOUR_VOL_SK>",
+        "VOLCENGINE_REGION": "cn-beijing"
+      },
+      "description": "火山引擎 Volcengine 多产品统一入口（官方）：TOS、ECS 等 ⭐321",
+      "title": "火山引擎",
+      "url": "https://github.com/freeleepm/jimeng-ai-mcp",
+      "stars": 29
+    },
+    "volcengine-vod": {
+      "title": "火山引擎 VOD",
+      "command": "uvx",
+      "args": [
+        "vevod-mcp"
+      ],
+      "env": {
+        "VOLCENGINE_ACCESS_KEY": "<YOUR_VOLC_AK>",
+        "VOLCENGINE_SECRET_KEY": "<YOUR_VOLC_SK>"
+      },
+      "description": "火山引擎 VOD 视频点播",
+      "url": "https://github.com/volcengine/mcp-vod"
+    },
+    "volcengine-imagex": {
+      "title": "火山引擎 ImageX",
+      "command": "uvx",
+      "args": [
+        "veimagex-mcp"
+      ],
+      "env": {
+        "VOLCENGINE_ACCESS_KEY": "<YOUR_VOLC_AK>",
+        "VOLCENGINE_SECRET_KEY": "<YOUR_VOLC_SK>",
+        "SERVICE_ID": "<YOUR_SERVICE_ID>",
+        "DOMAIN": "<YOUR_IMAGEX_DOMAIN>"
+      },
+      "description": "火山引擎 ImageX 图片处理",
+      "url": "https://github.com/volcengine/mcp-imagex",
+      "stars": 4
+    },
+    "qiniu": {
+      "command": "uvx",
+      "args": [
+        "qiniu-mcp-server"
+      ],
+      "env": {
+        "QINIU_ACCESS_KEY": "<YOUR_QINIU_AK>",
+        "QINIU_SECRET_KEY": "<YOUR_QINIU_SK>"
+      },
+      "description": "七牛云 storage/upload/CDN（官方）⭐39",
+      "title": "七牛云",
+      "url": "https://github.com/qiniu/qiniu-mcp-server",
+      "stars": 39
+    },
+    "baidu-mochow": {
+      "title": "百度 Mochow 向量库",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "mochow-mcp-server-python/src/mochow_mcp_server",
+        "run",
+        "server.py",
+        "--endpoint",
+        "http://127.0.0.1:8287",
+        "--api-key",
+        "<YOUR_MOCHOW_API_KEY>"
+      ],
+      "description": "百度智能云 Mochow 向量数据库 MCP Server（需先 git clone）",
+      "url": "https://github.com/baidu/mochow-mcp-server-python",
+      "stars": 3
+    },
+    "amap": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@amap/amap-maps-mcp-server"
+      ],
+      "env": {
+        "AMAP_MAPS_API_KEY": "<YOUR_AMAP_KEY>"
+      },
+      "description": "高德地图（官方/社区）：geocode、路线、POI、天气 ⭐127",
+      "title": "高德地图",
+      "url": "https://github.com/amap/amap-mcp-server"
+    },
+    "baidu-maps": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@baidumap/mcp-server-baidu-map"
+      ],
+      "env": {
+        "BAIDU_MAP_API_KEY": "<YOUR_BAIDU_MAP_KEY>"
+      },
+      "description": "百度地图（官方）：定位、路线、天气、地点搜索 ⭐440",
+      "title": "百度地图",
+      "url": "https://github.com/baidu/baidu-maps-mcp"
+    },
+    "variflight": {
+      "title": "飞常准",
+      "command": "uvx",
+      "args": [
+        "variflight-mcp"
+      ],
+      "description": "飞常准航班查询",
+      "url": "https://github.com/variflight/variflight-mcp",
+      "stars": 31
+    },
+    "12306": {
+      "title": "12306 火车票",
+      "command": "uvx",
+      "args": [
+        "12306-mcp"
+      ],
+      "description": "火车票查询",
+      "url": "https://github.com/Joooook/12306-mcp",
+      "stars": 1
+    },
+    "alipayplus": {
+      "title": "支付宝 Alipay+",
+      "command": "uvx",
+      "args": [
+        "ant-intl-alipayplus-mcp"
+      ],
+      "env": {
+        "GATEWAY_URL": "https://open-sea-global.alipay.com",
+        "CLIENT_ID": "<YOUR_CLIENT_ID>",
+        "MERCHANT_PRIVATE_KEY": "<YOUR_MERCHANT_PRIVATE_KEY>",
+        "ALIPAY_PUBLIC_KEY": "<YOUR_ALIPAY_PUBLIC_KEY>",
+        "SETTLEMENT_CURRENCY": "USD",
+        "MERCHANT_NAME": "<YOUR_MERCHANT_NAME>",
+        "MERCHANT_ID": "<YOUR_MERCHANT_ID>",
+        "MERCHANT_MCC": "5411"
+      },
+      "description": "支付宝 Alipay+ 跨境支付",
+      "url": "https://github.com/alipay/global-alipayplus-mcp",
+      "stars": 8
+    },
+    "alipay-cn": {
+      "url": "https://github.com/alipay/alipayplus-mcp-cn",
+      "description": "支付宝国内版（托管在百炼 MCP 市场，无开源）",
+      "title": "支付宝国内版"
+    },
+    "feishu": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@larksuiteoapi/lark-mcp",
+        "mcp",
+        "-a",
+        "<YOUR_FEISHU_APP_ID>",
+        "-s",
+        "<YOUR_FEISHU_APP_SECRET>"
+      ],
+      "description": "飞书/Lark（官方 npm）：docs、sheets、IM、calendar ⭐816",
+      "title": "飞书/Lark",
+      "url": "https://github.com/modelcontextprotocol/servers",
+      "stars": 90239
+    },
+    "yuque": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@yuque/yuque-mcp-server"
+      ],
+      "env": {
+        "YUQUE_TOKEN": "<YOUR_YUQUE_TOKEN>"
+      },
+      "description": "语雀 Yuque（官方）：知识库 CRUD ⭐234",
+      "title": "语雀",
+      "url": "https://github.com/yuque/yuque-mcp"
+    },
+    "yuque-ecosystem": {
+      "title": "语雀生态",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@yuque/yuque-ecosystem-mcp"
+      ],
+      "env": {
+        "YUQUE_TOKEN": "<YOUR_YUQUE_TOKEN>"
+      },
+      "description": "语雀 AI 生态",
+      "url": "https://github.com/yuque/yuque-ecosystem",
+      "stars": 221
+    },
+    "dingtalk-doc": {
+      "title": "钉钉文档",
+      "command": "uvx",
+      "args": [
+        "dingtalk-doc-mcp"
+      ],
+      "env": {
+        "DINGTALK_APP_KEY": "<YOUR_DINGTALK_APP_KEY>",
+        "DINGTALK_APP_SECRET": "<YOUR_DINGTALK_APP_SECRET>"
+      },
+      "description": "钉钉文档 MCP Server（需自建应用获取凭证）",
+      "url": "https://github.com/hykfft/mcp-dingtalk-doc",
+      "stars": 55
+    },
+    "dingtalk-identity": {
+      "title": "钉钉身份",
+      "command": "uvx",
+      "args": [
+        "quick-dingtalk-mcp"
+      ],
+      "env": {
+        "DINGTALK_APP_KEY": "<YOUR_DINGTALK_APP_KEY>",
+        "DINGTALK_APP_SECRET": "<YOUR_DINGTALK_APP_SECRET>"
+      },
+      "description": "钉钉真实用户身份 MCP，通过官方 CLI 发送和读取消息",
+      "url": "https://github.com/keithyt06/quick-dingtalk-mcp",
+      "stars": 8
+    },
+    "dingtalk-bot": {
+      "title": "钉钉群机器人",
+      "command": "uvx",
+      "args": [
+        "mcp-dingding-bot"
+      ],
+      "env": {
+        "DINGTALK_BOT_ACCESS_TOKEN": "<YOUR_ACCESS_TOKEN>",
+        "DINGTALK_BOT_SECRET": "<YOUR_SECRET>"
+      },
+      "description": "钉钉群机器人",
+      "url": "https://github.com/Shawyeok/mcp-dingding-bot",
+      "stars": 12
+    },
+    "mastergo": {
+      "title": "MasterGo",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@mastergo/magic-mcp",
+        "--token=<YOUR_MASTERGO_TOKEN>",
+        "--url=https://mastergo.com"
+      ],
+      "description": "MasterGo 设计稿",
+      "url": "https://github.com/mastergo-design/mastergo-magic-mcp",
+      "stars": 283
+    },
+    "wolai": {
+      "title": "wolai 我来",
+      "command": "uvx",
+      "args": [
+        "wolai-mcp"
+      ],
+      "env": {
+        "WOLAI_APP_ID": "<YOUR_APP_ID>",
+        "WOLAI_APP_SECRET": "<YOUR_APP_SECRET>",
+        "WOLAI_ROOT_ID": "<YOUR_ROOT_ID>"
+      },
+      "description": "wolai 知识库",
+      "url": "https://github.com/LittlePeter52012/wolai-mcp",
+      "stars": 8
+    },
+    "shimo": {
+      "title": "石墨文档",
+      "command": "npx",
+      "args": [
+        "-y",
+        "rush-shimo-cli",
+        "mcp"
+      ],
+      "env": {
+        "SHIMO_TOKEN": "<YOUR_SHIMO_TOKEN>"
+      },
+      "description": "石墨文档",
+      "url": "https://github.com/kanyun-inc/rush-shimo-cli",
+      "stars": 3
+    },
+    "wecom-bot": {
+      "title": "企业微信群机器人",
+      "command": "uvx",
+      "args": [
+        "mcp-wecombot-server"
+      ],
+      "env": {
+        "WECOM_BOT_WEBHOOK_KEY": "<YOUR_WEBHOOK_KEY>"
+      },
+      "description": "企业微信群机器人",
+      "url": "https://github.com/gotoolkits/mcp-wecombot-server",
+      "stars": 37
+    },
+    "gitee": {
+      "title": "Gitee",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@oschina/mcp-gitee"
+      ],
+      "env": {
+        "GITEE_ACCESS_TOKEN": "<YOUR_GITEE_TOKEN>"
+      },
+      "description": "Gitee",
+      "url": "https://github.com/oschina/mcp-gitee",
+      "stars": 65
+    },
+    "apifox": {
+      "url": "https://github.com/apifox/apifox-mcp-server",
+      "description": "Apifox API specs（官方）：按文档获取 MCP 端点",
+      "title": "Apifox",
+      "stars": 94
+    },
+    "gitcode": {
+      "title": "GitCode",
+      "command": "pip",
+      "args": [
+        "install",
+        "-U",
+        "gitcode-mcp"
+      ],
+      "env": {
+        "GITCODE_TOKEN": "<YOUR_GITCODE_TOKEN>"
+      },
+      "description": "GitCode 平台",
+      "url": "https://github.com/Trenza1ore/GitCode-API",
+      "stars": 7
+    },
+    "baidu-ai-guard": {
+      "title": "百度 AI Guard",
+      "command": "uv",
+      "args": [
+        "run",
+        "--with",
+        "mcp[cli]",
+        "mcp",
+        "run",
+        "mcp-server-baidu-ai-guard/server.py"
+      ],
+      "env": {
+        "BAIDU_CLOUD_ACCESS_KEY_ID": "<YOUR_AK>",
+        "BAIDU_CLOUD_SECRET_ACCESS_KEY": "<YOUR_SK>"
+      },
+      "description": "百度 AI Guard 安全内容检测",
+      "url": "https://github.com/baidu/mcp-server-baidu-ai-guard",
+      "stars": 4
+    },
+    "harmonyos": {
+      "title": "HarmonyOS",
+      "command": "uvx",
+      "args": [
+        "harmonyos-mcp"
+      ],
+      "description": "HarmonyOS 设备操控",
+      "url": "https://github.com/XixianLiang/HarmonyOS-mcp-server",
+      "stars": 34
+    },
+    "leetcode": {
+      "title": "LeetCode",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@jinzcdev/leetcode-mcp-server"
+      ],
+      "env": {
+        "LEETCODE_SITE": "global",
+        "LEETCODE_SESSION": "<YOUR_LEETCODE_SESSION_COOKIE>"
+      },
+      "description": "LeetCode MCP Server（需登录 Cookie）",
+      "url": "https://github.com/jinzcdev/leetcode-mcp-server"
+    },
+    "xiaohongshu": {
+      "title": "小红书",
+      "url": "https://github.com/xpzouying/xiaohongshu-mcp",
+      "headers": {
+        "Authorization": "Bearer <YOUR_XHS_TOKEN>"
+      },
+      "description": "小红书 MCP Server（本地 SSE，需手动启动 xpzouying/xiaohongshu-mcp）",
+      "stars": 15
+    },
+    "xiaohongshu-alt": {
+      "title": "小红书（备用）",
+      "command": "uvx",
+      "args": [
+        "rednote-mcp",
+        "--stdio"
+      ],
+      "description": "小红书备用",
+      "url": "https://github.com/iFurySt/RedNote-MCP",
+      "stars": 1
+    },
+    "wechat-mp": {
+      "title": "微信公众号",
+      "command": "uvx",
+      "args": [
+        "wenyan-mcp"
+      ],
+      "env": {
+        "WECHAT_APP_ID": "<YOUR_APP_ID>",
+        "WECHAT_APP_SECRET": "<YOUR_APP_SECRET>"
+      },
+      "description": "微信公众号",
+      "url": "https://github.com/caol64/wenyan-mcp",
+      "stars": 1
+    },
+    "weread": {
+      "title": "微信读书",
+      "command": "uvx",
+      "args": [
+        "weread-mcp"
+      ],
+      "env": {
+        "WEREAD_WEB_COOKIE": "<YOUR_WEREAD_COOKIE>"
+      },
+      "description": "微信读书",
+      "url": "https://github.com/freestylefly/mcp-server-weread",
+      "stars": 574
+    },
+    "bilibili": {
+      "title": "Bilibili",
+      "command": "uvx",
+      "args": [
+        "bilibili-mcp"
+      ],
+      "env": {
+        "BILIBILI_SESSDATA": "<YOUR_SESSDATA>",
+        "BILIBILI_BILI_JCT": "<YOUR_BILI_JCT>"
+      },
+      "description": "Bilibili MCP Server（需登录 Cookie）",
+      "url": "https://github.com/huccihuang/bilibili-mcp-server",
+      "stars": 190
+    },
+    "zhihu": {
+      "title": "知乎",
+      "command": "uvx",
+      "args": [
+        "zhihu-mcp-server"
+      ],
+      "description": "知乎",
+      "url": "https://github.com/iteng007/zhihu-mcp-server",
+      "stars": 169
+    },
+    "weibo": {
+      "title": "微博",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "mcp-server-weibo",
+        "mcp-server-weibo"
+      ],
+      "description": "微博",
+      "url": "https://github.com/qinyuanpei/mcp-server-weibo",
+      "stars": 61
+    },
+    "douyin": {
+      "title": "抖音",
+      "command": "uvx",
+      "args": [
+        "douyin-mcp-server"
+      ],
+      "description": "抖音视频上传 MCP Server（需 Chrome 浏览器）",
+      "url": "https://github.com/lancelin111/douyin-mcp-server",
+      "stars": 36
+    },
+    "finance-akshare": {
+      "command": "uvx",
+      "args": [
+        "mcp-akshare"
+      ],
+      "description": "AKShare（社区）：A 股、加密货币、行情分析 ⭐393",
+      "title": "AKShare 金融数据",
+      "url": "https://github.com/akfamily/akshare",
+      "stars": 22529
+    },
+    "finance-mcp": {
+      "command": "uvx",
+      "args": [
+        "finance-mcp"
+      ],
+      "description": "FinanceMCP（社区）：Tushare + Binance — A 股/宏观/加密 ⭐660",
+      "title": "FinanceMCP",
+      "url": "https://github.com/FinancialMCP/mcp-server"
+    },
+    "finance-tushare": {
+      "title": "Tushare",
+      "command": "uvx",
+      "args": [
+        "tushare-mcp"
+      ],
+      "env": {
+        "TUSHARE_TOKEN": "<YOUR_TUSHARE_TOKEN>"
+      },
+      "description": "Tushare 金融数据",
+      "url": "https://github.com/zlinzzzz/finData-mcp-server",
+      "stars": 58
+    },
+    "finance-eastmoney": {
+      "title": "东方财富",
+      "command": "uvx",
+      "args": [
+        "mcp-eastmoney"
+      ],
+      "description": "东方财富",
+      "url": "https://github.com/27dream/mcp-eastmoney",
+      "stars": 9
+    },
+    "paper-search": {
+      "command": "uvx",
+      "args": [
+        "paper-search-mcp"
+      ],
+      "description": "多源论文 arXiv/PubMed/Semantic Scholar（社区）⭐2.6k",
+      "title": "论文搜索",
+      "url": "https://github.com/paper-search/paper-search-mcp"
+    },
+    "paper-search-node": {
+      "title": "论文搜索（Node）",
+      "command": "npx",
+      "args": [
+        "-y",
+        "paper-search-mcp-nodejs"
+      ],
+      "env": {
+        "WOS_API_KEY": "<YOUR_WOS_API_KEY>"
+      },
+      "description": "Web of Science 论文搜索 MCP Server（Node.js 版）",
+      "url": "https://github.com/Dianel555/paper-search-mcp-nodejs",
+      "stars": 172
+    },
+    "cnki": {
+      "title": "知网 CNKI",
+      "command": "python",
+      "args": [
+        "-m",
+        "cnki_mcp"
+      ],
+      "env": {
+        "NO_PROXY": "cnki.net,*.cnki.net"
+      },
+      "description": "知网 CNKI",
+      "url": "https://github.com/xxxxchaos/cnki-mcp-server",
+      "stars": 17
+    },
+    "aminer": {
+      "title": "AMiner",
+      "command": "uvx",
+      "args": [
+        "aminer-mcp"
+      ],
+      "env": {
+        "AMINER_API_KEY": "<YOUR_AMINER_API_KEY>"
+      },
+      "description": "AMiner 学术搜索",
+      "url": "https://github.com/huanghuoguoguo/aminer-mcp",
+      "stars": 5
+    },
+    "caiyun-weather": {
+      "title": "彩云天气",
+      "command": "uvx",
+      "args": [
+        "mcp-caiyun-weather"
+      ],
+      "env": {
+        "CAIYUN_WEATHER_API_TOKEN": "<YOUR_CAIYUN_KEY>"
+      },
+      "description": "彩云天气",
+      "url": "https://github.com/caiyunapp/mcp-caiyun-weather",
+      "stars": 47
+    },
+    "seniverse-weather": {
+      "title": "心知天气",
+      "command": "uvx",
+      "args": [
+        "mcp-seniverse-weather"
+      ],
+      "env": {
+        "SENIVERSE_KEY": "<YOUR_SENIVERSE_KEY>"
+      },
+      "description": "心知天气",
+      "url": "https://github.com/sugarforever/mcp-seniverse-weather",
+      "stars": 0
+    },
+    "netease-music": {
+      "title": "网易云/QQ 音乐",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@eldment/meting-agent"
+      ],
+      "description": "Meting-Agent 多平台音乐 MCP（网易云/QQ/酷狗）",
+      "url": "https://github.com/ELDment/Meting-Agent",
+      "stars": 105
+    },
+    "netease-music-mcp": {
+      "title": "网易云音乐",
+      "url": "https://github.com/Cheiineeey/netease-music-mcp",
+      "description": "网易云音乐 MCP Server（本地 SSE，需手动启动）",
+      "stars": 95
+    },
+    "mijia": {
+      "title": "米家",
+      "command": "uvx",
+      "args": [
+        "mijia-control-mcp"
+      ],
+      "env": {
+        "XIAOMI_USERNAME": "<YOUR_XIAOMI_USERNAME>",
+        "XIAOMI_PASSWORD": "<YOUR_XIAOMI_PASSWORD>"
+      },
+      "description": "米家智能家居控制",
+      "url": "https://github.com/handsomejustin/mijia-control",
+      "stars": 63
+    },
+    "bocha-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@bochaai/bocha-search-mcp"
+      ],
+      "env": {
+        "BOCHA_API_KEY": "<YOUR_BOCHA_KEY>"
+      },
+      "description": "博查 AI 中文 web search（官方）⭐177",
+      "title": "博查 AI 搜索",
+      "url": "https://github.com/bocha-ai/bocha-mcp"
+    },
+    "tencent-web-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@tencent/websearch-mcp"
+      ],
+      "env": {
+        "TENCENT_WEB_SEARCH_KEY": "<YOUR_KEY>"
+      },
+      "description": "腾讯 Web 搜索（官方）",
+      "title": "腾讯 Web 搜索",
+      "url": "https://github.com/TencentCloud/tencentcloud-sdk-python",
+      "stars": 710
+    },
+    "minimax": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@minimax/mcp"
+      ],
+      "env": {
+        "MINIMAX_API_KEY": "<YOUR_MINIMAX_KEY>",
+        "MINIMAX_GROUP_ID": "<YOUR_MINIMAX_GROUP_ID>"
+      },
+      "description": "MiniMax TTS/语音克隆/图像视频生成（官方 JS）⭐1.6k",
+      "title": "MiniMax",
+      "url": "https://github.com/MiniMax-AI/MiniMax-MCP",
+      "stars": 1
+    },
+    "minimax-python": {
+      "title": "MiniMax（Python）",
+      "command": "uvx",
+      "args": [
+        "minimax-mcp"
+      ],
+      "env": {
+        "MINIMAX_API_KEY": "<YOUR_MINIMAX_API_KEY>",
+        "MINIMAX_API_HOST": "https://api.minimax.io"
+      },
+      "description": "MiniMax AI MCP Server（Python 版）",
+      "url": "https://github.com/MiniMax-AI/MiniMax-MCP",
+      "stars": 1
+    },
+    "modelscope": {
+      "title": "魔搭 ModelScope",
+      "command": "uvx",
+      "args": [
+        "modelscope-mcp-server"
+      ],
+      "env": {
+        "MODELSCOPE_API_TOKEN": "<YOUR_MODELSCOPE_TOKEN>"
+      },
+      "description": "ModelScope 模型社区",
+      "url": "https://github.com/modelscope/modelscope-mcp-server",
+      "stars": 24
+    },
+    "zhipu": {
+      "title": "智谱",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@z_ai/mcp-server"
+      ],
+      "env": {
+        "ZHIPU_API_KEY": "<YOUR_ZHIPU_API_KEY>"
+      },
+      "description": "智谱 AI",
+      "url": "https://github.com/wnzzer/zhipu-tools-coding-plan",
+      "stars": 1
+    },
+    "zhipu-image": {
+      "title": "智谱图像",
+      "command": "uvx",
+      "args": [
+        "jimeng-image-mcp"
+      ],
+      "env": {
+        "ZHIPU_API_KEY": "<YOUR_ZHIPU_API_KEY>"
+      },
+      "description": "智谱图像（即梦）",
+      "url": "https://github.com/NanguangChou/zhipu_image_mcp",
+      "stars": 1
+    },
+    "qwen": {
+      "title": "通义千问",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@dashscope/mcp-qwen-omni"
+      ],
+      "env": {
+        "DASHSCOPE_API_KEY": "<YOUR_DASHSCOPE_KEY>"
+      },
+      "description": "通义千问多模态 MCP Server（DashScope）",
+      "url": "https://github.com/zk-b612/mcp-qwen-omni",
+      "stars": 6
+    },
+    "kling": {
+      "title": "可灵 Kling",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-kling@latest"
+      ],
+      "env": {
+        "KLING_ACCESS_KEY": "<YOUR_KLING_AK>",
+        "KLING_SECRET_KEY": "<YOUR_KLING_SK>"
+      },
+      "description": "可灵 AI 视频生成",
+      "url": "https://github.com/199-mcp/mcp-kling",
+      "stars": 40
+    },
+    "textin-ocr": {
+      "command": "uvx",
+      "args": [
+        "textin-mcp"
+      ],
+      "env": {
+        "TEXTIN_APP_ID": "<YOUR_TEXTIN_APP_ID>",
+        "TEXTIN_APP_SECRET": "<YOUR_TEXTIN_APP_SECRET>"
+      },
+      "description": "合合信息 TextIn PDF/图片→Markdown（官方）⭐28",
+      "title": "合合 TextIn OCR",
+      "url": "https://github.com/hiocr/TextIn-MCP"
+    },
+    "china-utils": {
+      "command": "uvx",
+      "args": [
+        "china-mcp-servers"
+      ],
+      "description": "中国法定节假日+Server酱+百度翻译（社区，zackchewa/china-mcp-servers）",
+      "title": "中国节假日/翻译",
+      "url": "https://github.com/china-utils/mcp-server"
+    },
+    "data-verify": {
+      "title": "数据核验",
+      "command": "uvx",
+      "args": [
+        "data-verify-mcp"
+      ],
+      "description": "数据核验",
+      "url": "https://github.com/CCCpan/data-verify-mcp",
+      "stars": 165
+    },
+    "enterprise-mcp": {
+      "title": "工商企业信息",
+      "url": "https://github.com/handaas/mcp-server",
+      "description": "HaaS 企业工商信息 MCP Server（远程 SSE）",
+      "stars": 12
+    },
+    "thmc": {
+      "title": "瞳虎快递/发票",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@flykid/thmc-mcp"
+      ],
+      "env": {
+        "THMC_APP_KEY": "<YOUR_APP_KEY>",
+        "THMC_APP_SECRET": "<YOUR_APP_SECRET>"
+      },
+      "description": "瞳虎快递查询/发票查验/运营商核验",
+      "url": "https://github.com/FLYKID/THMCP",
+      "stars": 6
+    },
+    "notify": {
+      "title": "多平台通知",
+      "command": "uvx",
+      "args": [
+        "mcp-notify"
+      ],
+      "env": {
+        "DISCORD_WEBHOOK_URL": "",
+        "SLACK_WEBHOOK_URL": "",
+        "WECOM_WEBHOOK_URL": "",
+        "TELEGRAM_BOT_TOKEN": "",
+        "TELEGRAM_CHAT_ID": ""
+      },
+      "description": "多平台通知 MCP Server（Discord/Slack/企微/Telegram）",
+      "url": "https://github.com/aahl/mcp-notify",
+      "stars": 29
+    },
+    "law-china": {
+      "title": "中国法律检索",
+      "command": "uvx",
+      "args": [
+        "law-crawler-mcp"
+      ],
+      "description": "中国法律法规",
+      "url": "https://github.com/Yuhamixli/Law-Crawler-RPA-RAG-MCP",
+      "stars": 31
+    },
+    "legal-tools": {
+      "title": "法律工具箱",
+      "command": "uvx",
+      "args": [
+        "legal-tools-mcp"
+      ],
+      "description": "法律文书",
+      "url": "https://github.com/moyupeng0422/legal-tools",
+      "stars": 19
+    }
+  }
+}

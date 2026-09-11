@@ -26,7 +26,7 @@ import (
 // P4 评审认定其为应用语义文案而非 goharness 运行时机制（内容引用的全是
 // mindx 概念：能力目录、Agent 委托、SubAgent 分身），按 PR 原意迁入 mindx。
 // 「沟通风格」首句与行为准则开头重复，已去重。
-const agentsCommonRules = `## 行为准则
+const agentsCommonRules = `## 核心准则
 
 - **重要**：思考流与推理过程必须全部使用中文
 - 结论先行，简短回答，像人类一样说话

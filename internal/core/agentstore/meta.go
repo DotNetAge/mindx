@@ -28,16 +28,21 @@ import (
 // 字段均为一级字段，icon / category / hired 由旧 meta map 提升而来；
 // category 为业务分类（中文，如「产品研发」），由旧 domains 字段一次性迁移而来。
 type AgentMeta struct {
-	Name         string         `yaml:"name" json:"name"`
-	Role         string         `yaml:"role" json:"role"`
-	Description  string         `yaml:"description" json:"description"`
-	Introduction string         `yaml:"introduction,omitempty" json:"introduction,omitempty"`
-	Icon         string         `yaml:"icon,omitempty" json:"icon,omitempty"`
-	Category     string         `yaml:"category,omitempty" json:"category,omitempty"`
-	Hired        bool           `yaml:"hired,omitempty" json:"hired,omitempty"`
-	Skills       []string       `yaml:"skills,omitempty" json:"skills,omitempty"`
-	ExcludeTools []string       `yaml:"exclude_tools,omitempty" json:"exclude_tools,omitempty"`
-	Meta         map[string]any `yaml:"meta,omitempty" json:"meta,omitempty"`
+	Name         string   `yaml:"name" json:"name"`
+	Role         string   `yaml:"role" json:"role"`
+	Description  string   `yaml:"description" json:"description"`
+	Introduction string   `yaml:"introduction,omitempty" json:"introduction,omitempty"`
+	Icon         string   `yaml:"icon,omitempty" json:"icon,omitempty"`
+	Category     string   `yaml:"category,omitempty" json:"category,omitempty"`
+	Hired        bool     `yaml:"hired,omitempty" json:"hired,omitempty"`
+	Skills       []string `yaml:"skills,omitempty" json:"skills,omitempty"`
+	ExcludeTools []string `yaml:"exclude_tools,omitempty" json:"exclude_tools,omitempty"`
+	// AllowsTools 该员工允许使用的云技能（MCP 服务）清单。
+	// 注意：这个属性里放的全是 MCP 工具——条目格式为 "mcp:<server>"（server 粒度），
+	// 内置工具不在此列（内置工具的裁剪走 exclude_tools）。
+	// createRuntime 组装工具时按此清单决定注入哪些 MCP server 的工具；空清单 = 不注入任何 MCP 工具。
+	AllowsTools []string       `yaml:"allows_tools,omitempty" json:"allows_tools,omitempty"`
+	Meta        map[string]any `yaml:"meta,omitempty" json:"meta,omitempty"`
 }
 
 // Agent 是加载后的内存态 Agent：强类型元数据 + SOUL 正文 + 目录路径。

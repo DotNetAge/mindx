@@ -815,12 +815,36 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 
 	// Register MCP tools from MCPManager (injected by Daemon).
 	// Each MCP tool is a separate FuncTool instance registered in goharness.
+	// 按 Agent 的 allows_tools（云技能清单，条目 "mcp:<server>"）过滤注入：
+	//   - allows_tools 为空（nil / 空数组）→ 不做白名单过滤，全部 enabled MCP server 的工具都注册
+	//   - allows_tools 非空 → 只注册条目里命中的 server（格式 "mcp:<server>"）
+	//   - mcp.json 里 enabled=false 的 server 自然不会命中（EnabledTools 已过滤）
 	if a.mcpMgr != nil {
-		for _, tool := range a.mcpMgr.EnabledTools() {
-			if err := rt.RegisterTool(tool); err != nil {
-				a.logger.Warn("createRuntime: 注册 MCP工具 失败", "agent", agentName, "tool", tool.Info().Name, "error", err)
-			} else {
-				a.logger.Info("createRuntime: MCP工具 注册成功", "agent", agentName, "tool", tool.Info().Name)
+		allowedServers := allowedMCPServers(agent.Meta.AllowsTools)
+		tools := a.mcpMgr.EnabledTools()
+		if len(tools) == 0 {
+			a.logger.Debug("createRuntime: 无 enabled MCP server", "agent", agentName)
+		} else if len(allowedServers) == 0 {
+			// 空白名单 = 不过滤，全部注册
+			for _, tool := range tools {
+				if err := rt.RegisterTool(tool); err != nil {
+					a.logger.Warn("createRuntime: 注册 MCP工具 失败", "agent", agentName, "tool", tool.Info().Name, "error", err)
+				} else {
+					a.logger.Info("createRuntime: MCP工具 注册成功", "agent", agentName, "tool", tool.Info().Name)
+				}
+			}
+		} else {
+			// 非空白名单 = 按 server 名过滤
+			for _, tool := range tools {
+				server := mcpServerOfTool(tool.Info().Name)
+				if !allowedServers[server] {
+					continue
+				}
+				if err := rt.RegisterTool(tool); err != nil {
+					a.logger.Warn("createRuntime: 注册 MCP工具 失败", "agent", agentName, "tool", tool.Info().Name, "error", err)
+				} else {
+					a.logger.Info("createRuntime: MCP工具 注册成功", "agent", agentName, "tool", tool.Info().Name)
+				}
 			}
 		}
 	}
@@ -1195,6 +1219,30 @@ func (a *App) ClearCurrentSession() (*session.SessionInfo, error) {
 	)
 
 	return newSession, nil
+}
+
+// allowedMCPServers 把 allows_tools 条目解析为允许的 MCP server 名集合。
+// 条目格式 "mcp:<server>"；缺前缀或格式不符的条目忽略（容忍手写）。
+func allowedMCPServers(entries []string) map[string]bool {
+	set := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		e = strings.TrimSpace(e)
+		if server, ok := strings.CutPrefix(e, "mcp:"); ok && server != "" {
+			set[server] = true
+		}
+	}
+	return set
+}
+
+// mcpServerOfTool 从 goharness 工具名中提取 MCP server 段。
+// 工具名格式 "mcp:<server>:<tool>"（见 internal/mcp BuildTools）；非此格式返回空串。
+func mcpServerOfTool(toolName string) string {
+	rest, ok := strings.CutPrefix(toolName, "mcp:")
+	if !ok {
+		return ""
+	}
+	server, _, _ := strings.Cut(rest, ":")
+	return server
 }
 
 func sameDirectory(dir1, dir2 string) bool {
