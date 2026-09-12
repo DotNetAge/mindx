@@ -76,6 +76,16 @@ type FetchBigModelModelsParams struct {
 	Provider string `json:"provider"`
 }
 
+// FetchKimiModelsParams are the params for provider.fetch_kimi_models.
+type FetchKimiModelsParams struct {
+	Provider string `json:"provider"`
+}
+
+// FetchMiniMaxModelsParams are the params for provider.fetch_minimax_models.
+type FetchMiniMaxModelsParams struct {
+	Provider string `json:"provider"`
+}
+
 // FetchTencentModelsParams are the params for provider.fetch_tencent_models.
 type FetchTencentModelsParams struct {
 	Provider string `json:"provider"`

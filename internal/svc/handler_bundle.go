@@ -183,6 +183,45 @@ func (d *Daemon) handleMarketList(_ context.Context, _ json.RawMessage) (any, er
 	}, nil
 }
 
+// handleMarketPackageRead 读取市场技能包的 SKILL.md 原文（详情预览用，不安装不落库）。
+// 包文件经 Market.Download 落缓存并做 sha256 校验，重复预览命中缓存不重复下载。
+func (d *Daemon) handleMarketPackageRead(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketPackageReadParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	// 清单中定位目标技能包（与 market.install 同口径；详情预览仅面向技能包）
+	res, err := d.app.Market().List()
+	if err != nil {
+		return nil, err
+	}
+	var target *bundle.MarketPackage
+	for i := range res.Manifest.Packages {
+		pkg := &res.Manifest.Packages[i]
+		if pkg.Kind == bundle.KindSkill && pkg.Name == p.Name {
+			target = pkg
+			break
+		}
+	}
+	if target == nil {
+		return nil, fmt.Errorf("市场中不存在技能包 %q", p.Name)
+	}
+
+	pkgPath, err := d.app.Market().Download(*target)
+	if err != nil {
+		return nil, err
+	}
+	content, err := bundle.ReadSkillDoc(pkgPath, p.Name)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"name": p.Name, "content": content}, nil
+}
+
 // handleMarketInstall 从市场下载分发包（sha256 校验）并安装。
 func (d *Daemon) handleMarketInstall(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketInstallParams

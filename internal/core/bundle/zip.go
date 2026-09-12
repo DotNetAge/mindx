@@ -121,3 +121,22 @@ func safeZipName(name string) (string, error) {
 	}
 	return clean, nil
 }
+
+// ReadSkillDoc 从分发包中读取指定技能的 SKILL.md 原文（市场详情预览用，不落盘安装）。
+// pkgPath 为已下载并校验的包文件；skillName 为包内技能名（Skill 包即包名）。
+func ReadSkillDoc(pkgPath, skillName string) (string, error) {
+	if skillName == "" {
+		return "", fmt.Errorf("skillName is required")
+	}
+	entries, err := readPackageEntries(pkgPath)
+	if err != nil {
+		return "", err
+	}
+	want := zipPrefixSkills + skillName + "/SKILL.md"
+	for _, e := range entries {
+		if e.Name == want {
+			return string(e.Content), nil
+		}
+	}
+	return "", fmt.Errorf("分发包中不存在 %s", want)
+}

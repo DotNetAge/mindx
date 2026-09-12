@@ -731,6 +731,167 @@ func (d *Daemon) handleProviderFetchTencentModels(_ context.Context, params json
 	}, nil
 }
 
+// --- Kimi（月之暗面）在线模型库 ---
+
+func (d *Daemon) handleProviderFetchKimiModels(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.FetchKimiModelsParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+
+	provider, err := resolveProviderConfig(d, p.Provider)
+	if err != nil {
+		return nil, err
+	}
+
+	apiKey := resolveProviderAPIKey(d, provider)
+	if apiKey == "" {
+		return nil, fmt.Errorf("供应商 %q 尚未配置 API Key，请先在供应商设置中填写", p.Provider)
+	}
+
+	// Kimi OpenAI 兼容模型列表端点（{base}/models，需 Bearer Key）。
+	// 该接口除 id 外还返回 context_length 与能力开关（supports_image_in/
+	// supports_video_in/supports_reasoning），是已接入供应商中信息最丰富的；
+	// 但不返回定价与 function-calling 标识，价格留空、能力保守标注。
+	// base_url 常省略 /v1（如 https://api.moonshot.cn），需规范化补全。
+	base := ensureV1Suffix(provider.BaseURL)
+	if base == "" {
+		base = "https://api.moonshot.cn/v1"
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, base+"/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("构造 Kimi 请求失败: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("无法连接 Kimi 服务: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// base_url 为用户可配置项，LimitReader 防止故障/恶意端点返回超大响应耗尽内存（上限 10MB）
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	if err != nil {
+		return nil, fmt.Errorf("读取 Kimi 响应失败: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Kimi 返回错误 (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	var kmResp struct {
+		Data []struct {
+			ID                string `json:"id"`
+			OwnedBy           string `json:"owned_by"`
+			ContextLength     int64  `json:"context_length"`
+			SupportsImageIn   bool   `json:"supports_image_in"`
+			SupportsVideoIn   bool   `json:"supports_video_in"`
+			SupportsReasoning bool   `json:"supports_reasoning"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &kmResp); err != nil {
+		return nil, fmt.Errorf("解析 Kimi 响应失败: %w", err)
+	}
+
+	models := make([]rpc.OnlineModelInfo, 0, len(kmResp.Data))
+	for _, m := range kmResp.Data {
+		if m.ID == "" {
+			continue
+		}
+		// 接口无价格/免费标识，Free 恒为 false；func_calling 未暴露，前端保守标注
+		models = append(models, rpc.OnlineModelInfo{
+			ID:            m.ID,
+			OwnedBy:       m.OwnedBy,
+			ContextLength: m.ContextLength,
+			Visioning:     m.SupportsImageIn,
+		})
+	}
+
+	return map[string]any{
+		"models": models,
+		"total":  len(models),
+	}, nil
+}
+
+// --- MiniMax 在线模型库 ---
+
+func (d *Daemon) handleProviderFetchMiniMaxModels(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.FetchMiniMaxModelsParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+
+	provider, err := resolveProviderConfig(d, p.Provider)
+	if err != nil {
+		return nil, err
+	}
+
+	apiKey := resolveProviderAPIKey(d, provider)
+	if apiKey == "" {
+		return nil, fmt.Errorf("供应商 %q 尚未配置 API Key，请先在供应商设置中填写", p.Provider)
+	}
+
+	// MiniMax OpenAI 兼容模型列表端点（{base}/models，需 Bearer Key），
+	// 返回 id/display_name/created_at，无价格、上下文与能力标识。
+	// 国内站域名为 api.minimaxi.com（多一个 i），注意与国际站 api.minimax.io 区分。
+	// base_url 常省略 /v1，需规范化补全。
+	base := ensureV1Suffix(provider.BaseURL)
+	if base == "" {
+		base = "https://api.minimaxi.com/v1"
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, base+"/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("构造 MiniMax 请求失败: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("无法连接 MiniMax 服务: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// base_url 为用户可配置项，LimitReader 防止故障/恶意端点返回超大响应耗尽内存（上限 10MB）
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	if err != nil {
+		return nil, fmt.Errorf("读取 MiniMax 响应失败: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("MiniMax 返回错误 (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	var mmResp struct {
+		Data []struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"display_name"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &mmResp); err != nil {
+		return nil, fmt.Errorf("解析 MiniMax 响应失败: %w", err)
+	}
+
+	models := make([]rpc.OnlineModelInfo, 0, len(mmResp.Data))
+	for _, m := range mmResp.Data {
+		if m.ID == "" {
+			continue
+		}
+		// 接口无价格/免费标识，Free 恒为 false；display_name 为展示名
+		models = append(models, rpc.OnlineModelInfo{
+			ID:    m.ID,
+			Title: m.DisplayName,
+		})
+	}
+
+	return map[string]any{
+		"models": models,
+		"total":  len(models),
+	}, nil
+}
+
 // --- USD→CNY 汇率（免费免 Key 源，带进程级缓存） ---
 
 var (

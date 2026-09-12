@@ -1,14 +1,17 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/core/agentstore"
 	"github.com/DotNetAge/mindx/internal/core/bundle"
 	"github.com/DotNetAge/mindx/internal/core/skillstore"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
 )
 
@@ -16,8 +19,17 @@ import (
 
 var marketCmd = &cobra.Command{
 	Use:   "market",
-	Short: "Market packaging toolchain (no daemon required)",
-	Long: `Package local Agent sources into .mindpkg distribution bundles for the COS static market.
+	Short: "Market commands: search & install packages, plus packaging toolchain",
+	Long: `Market commands in two groups:
+
+Consumer commands (requires mindx start) — browse the online market and
+install agent/skill packages with sha256 verification:
+
+  mindx market list [--kind agent|skill] [--filter <keyword>] [--json]
+  mindx market install <agent|skill> <name> [--overwrite]
+
+Packaging toolchain (no daemon required) — build .mindpkg bundles for the
+COS static market:
 
 Source layout is <src>/<category>/<name>/ (canonical directory format with IDENTITY.md + SOUL.md;
 category dirs: contents/data/dev/finance/marketing/office). Legacy single-file sources
@@ -30,8 +42,209 @@ Examples:
 }
 
 func init() {
-	marketCmd.AddCommand(marketCanonicalizeAgentsCmd, marketPackAgentsCmd)
+	marketListCmd.Flags().Bool("json", false, "Output structured JSON (requires mindx start)")
+	marketListCmd.Flags().String("kind", "", "Filter by package type: agent or skill")
+	marketListCmd.Flags().StringSliceP("filter", "f", nil, "Filter packages by keyword, matched against name/description/role/category/skills (case-insensitive, comma-separated)")
+	marketInstallCmd.Flags().Bool("overwrite", false, "Overwrite existing target (agent dir or skill with the same name)")
+	marketInstallCmd.Flags().Bool("auto", false, "Auto-install missing dependencies without prompting")
+	marketInstallCmd.Flags().Bool("skip-deps", false, "Skip dependency checking and installation")
+
+	marketCmd.AddCommand(marketListCmd, marketInstallCmd, marketCanonicalizeAgentsCmd, marketPackAgentsCmd)
 	rootCmd.AddCommand(marketCmd)
+}
+
+// ── market list：市场货架检索（消费端，需 daemon） ─────────────
+
+var marketListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List packages available in the online market (requires mindx start)",
+	Long: `Fetch the market manifest and list agent/skill packages.
+
+Output includes kind (agent/skill), name, category, role, description and bundled skills.
+Use --kind to filter by package type and --filter to match by keyword
+(case-insensitive, against name/description/role/category/skills).
+
+Examples:
+  mindx market list
+  mindx market list --kind agent
+  mindx market list --kind skill --filter "架构"
+  mindx market list --json`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		useJSON, _ := cmd.Flags().GetBool("json")
+		kind, _ := cmd.Flags().GetString("kind")
+		filters, _ := cmd.Flags().GetStringSlice("filter")
+
+		if kind != "" && kind != "agent" && kind != "skill" {
+			return fmt.Errorf("--kind 仅支持 agent 或 skill")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.MarketList()
+		if err != nil {
+			return err
+		}
+
+		// market.list 返回 {packages, source, warning, updated_at}；包条目为
+		// camelCase DTO。过滤在客户端完成，与 agent list 的分层一致。
+		var res struct {
+			Packages  []marketPackage `json:"packages"`
+			Source    string          `json:"source"`
+			Warning   string          `json:"warning"`
+			UpdatedAt string          `json:"updated_at"`
+		}
+		if err := json.Unmarshal(result, &res); err != nil {
+			// 兜底：无法解析时原样输出
+			fmt.Println(string(result))
+			return nil
+		}
+
+		filtered := make([]marketPackage, 0, len(res.Packages))
+		for _, p := range res.Packages {
+			if kind != "" && p.Kind != kind {
+				continue
+			}
+			if !marketPackageMatch(p, filters) {
+				continue
+			}
+			filtered = append(filtered, p)
+		}
+
+		if useJSON {
+			out := map[string]any{
+				"packages":   filtered,
+				"source":     res.Source,
+				"warning":    res.Warning,
+				"updated_at": res.UpdatedAt,
+			}
+			formatted, _ := json.MarshalIndent(out, "", "  ")
+			fmt.Println(string(formatted))
+			return nil
+		}
+
+		if len(filtered) == 0 {
+			fmt.Println("市场中没有匹配的分发包。")
+			fmt.Println("提示：调整 --filter 关键词，或运行 `mindx market list` 查看全部。")
+			return nil
+		}
+
+		table := render.NewTable([]string{"Kind", "Name", "Category", "Role", "Description", "Skills"}, 100)
+		for _, p := range filtered {
+			role := p.Role
+			if role == "" {
+				role = "—"
+			}
+			desc := p.Description
+			if desc == "" {
+				desc = "—"
+			}
+			table.AddRow([]string{p.Kind, p.Name, p.Category, role, desc, strings.Join(p.Skills, ", ")})
+		}
+		fmt.Println(table.Render())
+
+		agents, skills := 0, 0
+		for _, p := range filtered {
+			if p.Kind == "agent" {
+				agents++
+			} else {
+				skills++
+			}
+		}
+		fmt.Printf("\n%d package(s)（agent %d / skill %d）", len(filtered), agents, skills)
+		if res.Source != "" {
+			fmt.Printf(" · source: %s", res.Source)
+		}
+		fmt.Println()
+		if res.Warning != "" {
+			fmt.Printf("⚠️  %s\n", res.Warning)
+		}
+		return nil
+	},
+}
+
+// marketPackage 是 market.list 响应中包条目的 CLI 视图（camelCase 对齐 daemon DTO）。
+type marketPackage struct {
+	Kind        string   `json:"kind"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Role        string   `json:"role"`
+	Category    string   `json:"category"`
+	Skills      []string `json:"skills"`
+	Version     string   `json:"version"`
+	Size        int64    `json:"size"`
+}
+
+// marketPackageMatch 判断包条目是否命中任一关键词（大小写不敏感，匹配
+// name/description/role/category/skills；关键词为空视为不过滤）。
+func marketPackageMatch(p marketPackage, filters []string) bool {
+	if len(filters) == 0 {
+		return true
+	}
+	haystack := strings.ToLower(strings.Join([]string{
+		p.Name, p.Description, p.Role, p.Category, strings.Join(p.Skills, " "),
+	}, " "))
+	for _, f := range filters {
+		if f = strings.TrimSpace(strings.ToLower(f)); f != "" && strings.Contains(haystack, f) {
+			return true
+		}
+	}
+	return false
+}
+
+// ── market install：市场分发包安装（消费端，需 daemon） ────────
+
+var marketInstallCmd = &cobra.Command{
+	Use:   "install <agent|skill> <name>",
+	Short: "Install a package from the market (requires mindx start)",
+	Long: `Download a package from the market (sha256 verified) and install it.
+
+Agent packages land in ~/.mindx/agents/<name>/ (unhired by default — run
+'mindx agent hire <name>' to enable it for sessions). Skill packages land
+in the global skill library.
+
+Examples:
+  mindx market install agent architect
+  mindx market install skill api-design
+  mindx market install agent architect --overwrite`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		kind, name := args[0], args[1]
+		if kind != "agent" && kind != "skill" {
+			return fmt.Errorf("kind 必须为 agent 或 skill")
+		}
+		overwrite, _ := cmd.Flags().GetBool("overwrite")
+		skipDeps, _ := cmd.Flags().GetBool("skip-deps")
+		autoInstall, _ := cmd.Flags().GetBool("auto")
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.MarketInstall(kind, name, overwrite, skipDeps, autoInstall)
+		if err != nil {
+			return err
+		}
+
+		var pretty map[string]any
+		if err := json.Unmarshal(result, &pretty); err == nil {
+			formatted, _ := json.MarshalIndent(pretty, "", "  ")
+			fmt.Println(string(formatted))
+		} else {
+			fmt.Println(string(result))
+		}
+
+		// 市场分发的 Agent 模板不带 hired 字段（默认未雇佣），提示雇佣入口
+		if kind == "agent" {
+			fmt.Printf("提示：已安装智能体默认未雇佣，执行 `mindx agent hire %s` 后即可用于会话。\n", name)
+		}
+		return nil
+	},
 }
 
 // agentSource 是一个待打包的 Agent 源条目。

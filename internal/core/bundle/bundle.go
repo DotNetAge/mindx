@@ -64,6 +64,21 @@ type Manifest struct {
 	// SkillDescs 技能描述映射（技能名 → SKILL.md frontmatter description）；
 	// 收录语义同 SkillNames。市场详情页展示用（未安装包的技能描述来源）。
 	SkillDescs map[string]string `json:"skill_descs,omitempty"`
+	// Dependencies 技能的外部依赖声明（分发包格式契约字段，从外部 manifest.json
+	// 透传保留；当前打包端不写入、安装端不执行，仅供生态元数据不丢失）。
+	Dependencies *SkillDependencies `json:"dependencies,omitempty"`
+}
+
+// SkillDependencies 是一个 skill 的全部外部依赖（三层模型）。
+type SkillDependencies struct {
+	// Runtime 生态级运行时要求（跨 skill 共享）：{"node": ">=18", "python": ">=3.9"}。
+	Runtime map[string]string `json:"runtime,omitempty"`
+	// Bins 需要在 PATH 中找到的二进制名列表（如 lark-cli、ffmpeg）。
+	Bins []string `json:"bins,omitempty"`
+	// Env 需要设置的环境变量名列表。
+	Env []string `json:"env,omitempty"`
+	// Install 自定义安装脚本（相对于 skill 目录）。优先于默认 npm/pip install。
+	Install string `json:"install,omitempty"`
 }
 
 // validate 校验清单完整性。

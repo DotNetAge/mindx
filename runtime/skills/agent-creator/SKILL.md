@@ -32,7 +32,7 @@ metadata:
 **示例**：如果用户说"我需要一个项目经理"，回应：
 
 > 我可以创建一个项目管理智能体。哪种类型最合适？
-> 
+>
 > - **软件项目经理** — 管理开发冲刺、任务跟踪、敏捷工作流和团队协调
 > - **建筑项目经理** — 监督建筑项目、时间表、资源分配和合规性
 > - **营销活动经理** — 规划和执行营销活动、跟踪 KPI、管理内容日历
@@ -48,147 +48,152 @@ metadata:
 
 ### (a) 智能体名称
 
-- 小写连字符格式，基于名词，反映角色（例如 `python-engineer`、`security-auditor`）
+- 小写连字符格式，基于名词，反映角色（例如 `python-programmer`、`code-reviewer`）
 
-### (b) 领域 / 角色
+### (b) 角色与描述
 
-- 这个专家属于哪个领域？
-- 这将成为人类可读的角色标题（例如"高级前端工程师"）
-- 如果有帮助，包含资历级别
+- **角色（role）**：人类可读的中文角色头衔（例如"系统架构师"、"前端工程师"）
+- **描述（description）**：1-2 句中文职责描述，用于 LLM 路由与列表展示；写清负责什么、产出什么
 
-### (c) 工作范围与职责
+### (c) 业务分类
 
-- 这个专家将处理哪些具体任务？
-- 边界是什么（范围内 / 范围外）？
-- 他们应该遵循什么质量标准？
-- 这些信息将输入到 Markdown 正文（系统提示内容）
+- 中文业务分类（category），例如"产品研发"、"办公提效"、"市场营销"
+- 用于智能体列表的分组展示
 
-### (d) 所需技能
+### (d) 行为准则（SOUL）
+
+- 这个专家遵循什么工作方式、方法论与边界？
+- 输入到 `SOUL.md`（行为规则正文），是智能体的核心工作指令
+
+### (e) 所需技能
 
 - 根据领域和职责，运行 `mindx skill list --json` 查看可用技能
-- 预选专家需要的技能
+- 预选专家需要的技能，写入 `skills` frontmatter 字段
 - 技能是 **LLM 操作指令**，告诉 LLM 激活什么行为
 - 保持列表精简，每个技能都会增加上下文开销
 
-### (e) 所需工具
-
-- 智能体需要哪些工具？（例如 `Read`、`Edit`、`Bash`、`SubAgent`、`TeamCreate`）
-- 大多数智能体都需要：Read、Edit、Grep、Glob、WebSearch、WebFetch、Write、Ls、AskUser、Skill，这些几乎必不可少
-- 专家智能体可能与特定工具有相关性：Bash（工程师）、SubAgent/CollectResults（管理者）、Team\*（团队负责人）、Task\*（项目经理）
-- 这会写入 `allowed-tools` frontmatter 字段
-
 ### (f) 排除的工具
 
-- 智能体不应该访问哪些工具？
-- 根据角色确定：不需要委派就排除 SubAgent/CollectResults；不管理他人就排除 Team\* 工具；不运行 shell 命令就排除 Bash
-- 这会写入 `exclude_tools` frontmatter 字段
+- 内置工具默认全量可用，只按角色裁剪不需要的，写入 `exclude_tools` frontmatter 字段
+- 根据角色确定：不需要委派就排除 `SubAgent`、`CollectResults`；不管理他人就排除 `Team*` 工具；非 Windows 场景可排除 `PowerShell`
+- `exclude_tools` 不支持通配符，只能指定具体工具名
+
+### (g) MCP 服务白名单（可选）
+
+- 智能体需要哪些云技能（MCP 服务）？写入 `allows_tools` 字段，条目格式为 `mcp:<server>`
+- 空清单 = 不注入任何 MCP 工具；内置工具不在此列（内置工具的裁剪走 `exclude_tools`）
 
 > 用户描述模糊时，不要盲目猜测，提出具体的角色类别让他们选择。
 
 ## 智能体定义编写指南
 
-智能体定义是一个带 YAML frontmatter 的 Markdown 文件，格式必须与**完整模板**完全一致。
+智能体以**目录格式**存储（`agents/<name>/`），由两个文件组成：
 
+```text
+agents/<name>/
+  IDENTITY.md   # frontmatter（强类型元数据）+ 可选身份正文
+  SOUL.md       # 行为准则正文（纯 Markdown）
+  skills/       # Agent 级技能库（可选，由技能系统装载）
+```
 
-### 完整模板
+### IDENTITY.md 模板
 
 ```markdown
 ---
 name: <kebab-case-id>
-role: <角色标题>
-description: >
-  <职责>。<具体输出>。<范围边界>。
+role: <中文角色头衔>
+description: <1-2 句中文职责描述，用于路由>
+category: <中文业务分类>
 skills:
   - <skill-1>
   - <skill-2>
-allowed-tools: <tool-1> <tool-2> <tool-3>
 exclude_tools:
   - <unused-tool-1>
   - <unused-tool-2>
-meta:
-  name_zh: <中文名>
-  role_zh: <中文角色>
-  description_zh: |
-    <一句话职责>，从<xxx>角度分析问题。
 ---
 
-我是 **<角色>**。我专注于"<...>"和"<...>"。
+（正文惯例留空——留空时系统由 name/role/description 自动生成标准角色定义；
+如需自定义人设，正文非空时将整体覆盖自动生成的角色定义）
+```
 
-## 专业领域
+### SOUL.md 模板
 
-- **<领域 1>** — <简要描述>
-- **<领域 2>** — <简要描述>
-- **<领域 3>** — <简要描述>
+行为准则正文自带标题结构，系统原样注入提示词。按角色定制章节，参考范式：
 
-## 核心交付物
+```markdown
+# 行为准则
 
-- **<交付物 1>** — <包含内容>
-- **<交付物 2>** — <包含内容>
+## 决策方式
 
-## 行为规则
+- 先约束后方案：明确业务约束与质量属性优先级后，再谈技术选型。
+- 权衡显式化：每个关键决策写清备选项、取舍理由与被放弃项。
 
-### <祈使规则 1>
+## 工作流程
 
-<具体、可执行的标准。>
+- <具体、可执行的工作方法>。
+- 需要按特定技能执行时显式引用：规划流程按 <skill-name> 技能执行。
 
-### <祈使规则 2>
+## 交互规则
 
-<具体、可执行的标准。>
+1. 前置校验：需求模糊、信息缺失时精准提问补齐，禁止主观臆断。
+2. 风险前置：主动同步风险、短板与落地难点，禁止只报优势。
 
-### 不要<越界>
+## 边界
 
-<这个智能体不做什么的清晰边界。>
+- 只做<职责范围>，<明确不做的事>。
 ```
 
 ### Frontmatter 字段
 
-| 字段            | 格式        | 用途                                                 |
-| --------------- | ----------- | ---------------------------------------------------- |
-| `name`          | 小写连字符  | 唯一的机器 ID                                        |
-| `role`          | 约 2-5 个词 | 人类可读的角色标题                                   |
-| `description`   | <1024 字符  | 用于 LLM 路由；包含职责、输出和边界                  |
-| `skills`        | 列表        | 仅领域相关技能；每个都会增加上下文开销               |
-| `allowed-tools` | 空格分隔    | 智能体可使用的工具（列表）；缺失时继承默认值         |
-| `exclude_tools` | 逗号分隔    | 智能体不能使用的工具（列表）                         |
-| `requires.bins` | 列表        | 必需的可执行文件；如果 bins 不在 PATH 中则跳过智能体 |
-| `requires.env`  | 列表        | 必需的环境变量；如果缺失则跳过智能体                 |
-| `meta.name_zh`  | 2-6 个字符  | 中文显示名称                                         |
-
-
-### 正文：四部分格式
-
-每个智能体正文都遵循以下结构：
-
-1. **身份声明** — 一两句话说明你是谁、不做什么。角色名称用粗体，边界用 `**not**`。
-2. **专业领域** — 列出领域能力。格式：`**标题** — 解释`。
-3. **核心交付物** — 列出命名输出。格式：`**交付物名称** — 包含内容`。
-4. **行为规则** — 用祈使句写规则。每条规则有粗体标题和具体可执行的标准，包含明确的边界规则（`不要...`）。
+| 字段            | 格式       | 用途                                                         |
+| --------------- | ---------- | ------------------------------------------------------------ |
+| `name`          | 小写连字符 | 唯一的机器 ID                                                |
+| `role`          | 中文头衔   | 人类可读的角色标题                                           |
+| `description`   | 1-2 句中文 | 用于 LLM 路由与列表展示；写清职责与产出                      |
+| `category`      | 中文分类   | 业务分类，用于分组展示（如"产品研发"）                       |
+| `icon`          | 可选       | 图标标识                                                     |
+| `hired`         | 布尔       | 雇佣标记；新建默认未雇佣，需 `mindx agent hire` 启用         |
+| `skills`        | 列表       | 仅领域相关技能；每个都会增加上下文开销                       |
+| `exclude_tools` | 列表       | 内置工具裁剪清单；默认全量可用，按需排除                     |
+| `allows_tools`  | 列表       | MCP 服务白名单，条目 `mcp:<server>`；空 = 不注入任何 MCP 工具 |
+| `introduction`  | 可选       | 人设正文；IDENTITY.md 正文非空时覆盖此字段                   |
+| `meta`          | 映射       | 自由扩展杂项                                                 |
 
 ### 样式规则
 
 - 语言直接、简短、用祈使句。
 - 优先使用绝对术语：`每个`、`所有`、`总是`、`从不`、`没有`、`不得`。
-- 每个提案或交付物必须说明包含什么、不包含什么。
+- SOUL 每条规则必须具体可执行，禁止空泛的能力描述。
 - 定义是**约束列表**，不是能力吹嘘。
-- 中文 `description` 以视角短语结尾："从...角度分析问题"。
-
+- SOUL 中显式引用所配技能（"按 `skill-name` 技能执行"），让技能与行为规则联动。
+- `role` 与 `description` 直接使用中文，不设独立的中文字段。
 
 ### 示例
 
-参见现有智能体，如 `runtime/agents/backend-engineer.md` 和 `runtime/agents/product-manager.md`。
+参见内置智能体 `runtime/agents/executive-assistant/`，以及市场智能体
+（如 `mindx-market/agents/dev/architect/`、`dev/code-reviewer/`、`dev/frontend-engineer/`）。
+也可用 `mindx agent get <name>` 查看已注册智能体的完整 JSON。
 
 ## 工作流
 
-### 步骤 1：检查现有智能体
+### 步骤 1：本地与市场双重检索（先复用，后创建）
 
 ```bash
-mindx agent list --json
+mindx agent list --all --json
+mindx market list --kind agent --filter "<领域关键词>"
 ```
 
-- 如果已存在**相同名称**或**领域重叠**的智能体，**通知用户并停止**
-- 显示哪个现有智能体重叠，让用户决定是否继续创建不同角色
+注意：`agent list` 默认只显示已雇佣的智能体，查重时**必须加 `--all`**。
 
-你也可以检查特定名称：
+按以下顺序决策，**能复用绝不新建**：
+
+1. **本地已有**相同名称或领域重叠的智能体 → 通知用户并停止，让用户决定是否创建不同角色
+2. **市场已有**匹配的 Agent 包（对照 name/role/description/skills 判断领域是否契合）→ 呈现匹配项让用户选择：
+   - 选择安装：`mindx market install agent <name>`，然后 `mindx agent hire <name>`，跳到步骤 7 验证，**流程结束**
+   - 市场项接近但不完全契合 → 询问是安装后定制，还是从零创建
+3. 两边都没有 → 继续从零创建
+
+也可以检查特定名称：
 
 ```bash
 mindx agent get <proposed-name>
@@ -196,73 +201,97 @@ mindx agent get <proposed-name>
 
 ### 步骤 2：审查编写指南
 
-编写之前，先阅读上面的**智能体定义编写指南**和 [Agent定义最佳实践](references/agent-best-practices.md) 文件，了解精确的格式、字段规则和样式约束。
+编写之前，先阅读上面的**智能体定义编写指南**和 [Agent定义最佳实践](references/agent-best-practices.md) 文件，了解精确的目录结构、字段规则和样式约束。
 
-### 步骤 3：查询可用技能和模型
+市场清单输出自带同类 Agent 的 role/description/skills 组合，可参照目标 `category` 下的既有条目把握命名与描述风格，保持生态一致。
+
+### 步骤 3：配置技能（本地优先，市场补缺）
 
 ```bash
 mindx skill list --json
-mindx model list --json
+mindx market list --kind skill --filter "<技能关键词>"
 ```
 
 - 只选择**实现智能体所需行为**的领域相关技能
-- 根据任务复杂度匹配模型，不要在琐碎工作上用昂贵模型
+- 本地没有所需技能时，先查市场技能包（`--filter` 会匹配技能名与描述），命中则安装：
 
-### 步骤 4：确定工具访问权限
+```bash
+mindx market install skill <skill-name>
+```
 
-根据智能体的角色，确定 `allowed-tools` 和 `exclude_tools`。
+### 步骤 4：确定工具裁剪方案
+
+根据智能体的角色，确定 `exclude_tools`（内置工具裁剪）与 `allows_tools`（MCP 白名单）。
 
 **管理者角色**（协调他人、委派工作）：
-- 需要 SubAgent + CollectResults 进行委派
-- 可能需要 TeamCreate/TeamDelete/TeamList/TeamGetTasks 进行团队协调
-- 可能需要 TaskCreate/TaskList/TaskGet/TaskUpdate 进行任务跟踪
+
+- 保留 SubAgent、CollectResults 进行委派
+- 保留 Team* 工具进行团队协调
 
 **工作者角色**（专注的个人贡献者）：
-- 不需要 SubAgent、CollectResults（不委派）
-- 不需要 Team* 工具（不管理团队）
-- 可能仍需要 Task* 工具进行自我管理
+
+- 排除 SubAgent、CollectResults（不委派）
+- 排除 Team* 工具（不管理团队）
+- 常见追加：Sleep、PowerShell
 
 **工程师角色**（构建、测试、部署）：
-- 需要 Bash 用于构建工具和测试
-- 不需要 Team* 工具（exclude_tools不支持通配符，只能指定具体工具名）
 
-### 步骤 5：编写智能体定义
+- 保留 Bash 用于构建工具和测试
+- 排除 Team* 工具（exclude_tools 不支持通配符，只能指定具体工具名）
 
-按**智能体定义编写指南**中的模板和样式规则编写 YAML frontmatter 和 Markdown 正文，正文将成为智能体的系统提示和工作指令。
+**需要外部服务时**：在 `allows_tools` 中列出所需 MCP 服务（`mcp:<server>` 格式）；不写则不注入任何 MCP 工具。
 
-### 步骤 6：创建智能体
+### 步骤 5：创建智能体
 
 ```bash
 mindx agent add <agent-name> \
-    --role "Senior Role Title" \
-    --description "该知能体的角色描述" \
+    --role "中文角色头衔" \
+    --description "1-2 句中文职责描述" \
     --skills "skill1,skill2"
 ```
 
-### 步骤 7：验证
+命令会生成目录（`IDENTITY.md` + 空 `SOUL.md`），新智能体**默认未雇佣**。
+
+### 步骤 6：补全定义文件
+
+直接编辑智能体目录中的文件：
+
+- **IDENTITY.md**：补充 `category`、`exclude_tools`、`allows_tools` 等字段；正文惯例留空
+- **SOUL.md**：按模板编写行为准则（工作方式、流程、交互规则、边界）
+
+### 步骤 7：雇佣并验证
 
 ```bash
+mindx agent hire <agent-name>
 mindx agent list --json
 ```
 
-智能体现在已注册并准备好进行委派。
+- `hire` 后智能体才可用于会话、`/agent` 切换与定时任务
+- 验证已出现在雇佣列表中，并用 `mindx agent get <name>` 复查最终配置
+
+后续调整可用 `mindx agent update --agent-name <name>` 修改 role/description/skills/exclude-tools 等字段，行为准则直接编辑 `SOUL.md`。
 
 ## 注意事项
 
+- **能复用绝不新建。** 创建前必须完成本地与市场双重检索，市场已有契合的 Agent 包就直接安装雇佣。
+- **新建默认未雇佣。** `agent add` 与 `market install agent` 落地的智能体 `hired` 均为 false，必须 `mindx agent hire` 后才会出现在会话可用列表中。
 - **技能太多会导致上下文膨胀。** 每个技能的完整文本都会加入智能体上下文，5 个技能可能消耗 80% 的上下文窗口。除非角色确实需要，否则最多 2-3 个技能。
 - **技能会相互覆盖，而非补充。** 两个技能如果给出冲突指令（"总是包含测试"与"从不编写测试"），LLM 可能在它们之间不可预测地切换。添加前检查技能边界。
-- **`allowed-tools` 是限制列表，不是允许列表。** 运行时所有工具默认可用，`allowed-tools` 用来缩小范围。如果只列 3 个工具，其他工具都会被禁用，所以要包含所有需要的工具，不只是特殊的。
-- **`exclude_tools` 优先于 `allowed-tools`。** 同时列在两者中的工具会被排除，二选一使用。
-- **工作者智能体可能开始管理他人。** 给工作者智能体 SubAgent 后，它可能开始委派工作而不是自己做。只把委派工具授予明确需要协调他人的角色。
-- **中文描述要一致。** 智能体间不匹配的 `name_zh`/`description_zh` 会让中文用户难以找到正确的智能体。保持命名一致："后端工程师"对应 `backend-engineer` 智能体。
+- **内置工具默认全量可用，`exclude_tools` 是唯一裁剪手段。** 只排除确实有害的工具，不做白名单式收窄；`allows_tools` 只管 MCP 服务，与内置工具无关。
+- **IDENTITY.md 正文非空会整体覆盖自动生成的角色定义。** 惯例留空正文，人设信息写在 `description` 字段，行为规则写在 SOUL.md。
+- **工作者智能体可能开始管理他人。** 工作者智能体保留 SubAgent 后，它可能开始委派工作而不是自己做。明确需要协调他人的角色才保留委派工具。
+- **中文命名要一致。** `name` 用领域英文小写连字符，`role` 用对应中文头衔，二者一一对应（如 `code-reviewer` ↔ "代码审查员"），方便中文用户找到正确的智能体。
 
 ## 反模式
 
 - **技能够用却创建智能体** — 用户需要可重用指令就创建技能，需要硬边界角色才创建智能体。
 - **描述范围过大** — 承诺太多会导致错误路由和期望落空，精确说明智能体做什么、不做什么。
 - **通用智能体** — "我是一个有用的助手"毫无意义，每个智能体应有特定领域、视角和约束。
-- **复制不定制** — 直接套用其他智能体模板而不调整行为规则到新角色。
-- **跳过现有检查** — 没检查是否已有合适智能体就运行 `mindx agent add`。
+- **复制不定制** — 直接套用其他智能体模板而不调整 SOUL 行为规则到新角色。
+- **市场已有却从零创建** — 跳过 `mindx market list` 检索就动手造轮子，浪费生态积累。
+- **跳过现有检查** — 没用 `agent list --all` 查重就运行 `mindx agent add`（默认视图只显示已雇佣的）。
+- **忘记雇佣** — 创建后不执行 `mindx agent hire`，智能体永远不出现在会话可用列表中。
+- **SOUL 写成能力清单** — SOUL 是行为准则与约束，不是"我会什么"的罗列。
 
 ## 重要说明
 

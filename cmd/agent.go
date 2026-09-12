@@ -225,7 +225,6 @@ var agentUpdateFlags struct {
 	role         string
 	description  string
 	introduction string
-	model        string
 	skills       string
 	excludeTools string
 }
@@ -238,7 +237,7 @@ unspecified fields preserve their current values.
 
 Examples:
   mindx agent update --agent-name writer --role "Senior Writer"
-  mindx agent update --agent-name coder --model "claude-sonnet-4" --skills "find-experts,code-review"
+  mindx agent update --agent-name coder --skills "find-experts,code-review"
   mindx agent update --agent-name helper --exclude-tools "bash,sub-agent"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if agentUpdateFlags.agentName == "" {
@@ -256,9 +255,6 @@ Examples:
 		}
 		if agentUpdateFlags.introduction != "" {
 			params.Introduction = agentUpdateFlags.introduction
-		}
-		if agentUpdateFlags.model != "" {
-			params.Model = agentUpdateFlags.model
 		}
 		if agentUpdateFlags.skills != "" {
 			params.Skills = splitComma(agentUpdateFlags.skills)
@@ -456,7 +452,6 @@ func init() {
 	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.role, "role", "", "New role/title")
 	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.description, "description", "", "New description")
 	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.introduction, "introduction", "", "New introduction/prompt")
-	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.model, "model", "", "New model identifier")
 	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.skills, "skills", "", "New comma-separated skill names (replaces current)")
 	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.excludeTools, "exclude-tools", "", "New comma-separated tool names to exclude")
 

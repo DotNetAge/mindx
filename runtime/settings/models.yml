@@ -533,3 +533,123 @@ models:
     repetition_penalty: 0
     enabled: true
     max_turns: 0
+  - name: minimax-m2.7-highspeed
+    title: MiniMax M2.7 Highspeed
+    description: >
+      MiniMax M2.7 的高速版本，推理速度更快、单价翻倍（输入 4.2 / 输出 16.8 元/M），
+      适合对响应延迟敏感的交互式场景；缓存读取价与标准版一致。
+    provider: minimax
+    cost_per_1m_in: 4.2
+    cost_per_1m_in_cache: 0.42
+    cost_per_1m_out: 16.8
+    context_length: 200000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    visioning: false
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+  # --- Kimi (Moonshot) ---
+  - name: kimi-k3
+    title: Kimi K3
+    description: >
+      Kimi 迄今能力最强的旗舰模型（3T 参数级），面向长程编程、知识工作与深度推理。
+      始终进行推理，支持 reasoning_effort 调节推理强度（low/high/max，默认 max）；
+      1M 超长上下文、原生视觉输入，支持工具调用、JSON Mode、结构化输出与自动上下文缓存
+      （缓存命中输入价仅为未命中的 1/10）。联网搜索功能升级中暂不建议使用。
+      注意：输入超过 512K 后计费翻倍（输入 40 / 输出 200 元/M）。
+    provider: kimi
+    cost_per_1m_in: 20
+    cost_per_1m_in_cache: 2
+    cost_per_1m_out: 100
+    context_length: 1048576
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    visioning: true
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+  - name: kimi-k2.7-code
+    title: Kimi K2.7 Code
+    description: >
+      Kimi 编程专用模型，在长上下文中更可靠地遵循指令，能以更高成功率完成编程任务；
+      256K 上下文，支持工具调用与自动上下文缓存（缓存命中输入价 1.3 元/M），
+      适合智能体编程与长程编码任务。
+    provider: kimi
+    cost_per_1m_in: 6.5
+    cost_per_1m_in_cache: 1.3
+    cost_per_1m_out: 27
+    context_length: 262144
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    visioning: false
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+  - name: kimi-k2.7-code-highspeed
+    title: Kimi K2.7 Code Highspeed
+    description: >
+      Kimi K2.7 Code 的高速版本，推理速度更快、单价翻倍（输入 13 / 输出 54 元/M），
+      适合对响应延迟敏感的交互式编码场景。
+    provider: kimi
+    cost_per_1m_in: 13
+    cost_per_1m_in_cache: 2.6
+    cost_per_1m_out: 54
+    context_length: 262144
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    visioning: false
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0
+  - name: kimi-k2.6
+    title: Kimi K2.6
+    description: >
+      Kimi 通用模型，支持视觉与文本输入、思考与非思考模式，覆盖对话与编程 Agent 任务；
+      256K 上下文，支持工具调用与自动上下文缓存（缓存命中输入价 1.1 元/M），
+      缓存命中折扣幅度为 Kimi 系列中最高之一。
+    provider: kimi
+    cost_per_1m_in: 6.5
+    cost_per_1m_in_cache: 1.1
+    cost_per_1m_out: 27
+    context_length: 262144
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: false
+    visioning: true
+    prefix_con: false
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
+    max_turns: 0

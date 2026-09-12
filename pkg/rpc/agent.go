@@ -42,7 +42,6 @@ type AgentUpdateParams struct {
 	// Soul 对应 SOUL.md 正文。
 	Soul         *string  `json:"soul,omitempty"`
 	IdentityBody *string  `json:"identity_body,omitempty"`
-	Model        string   `json:"model,omitempty"`
 	Skills       []string `json:"skills,omitempty"`
 	ExcludeTools []string `json:"exclude_tools,omitempty"`
 	// AllowsTools 云技能（MCP 服务）清单，条目 "mcp:<server>"；该属性放的全是 MCP 工具。

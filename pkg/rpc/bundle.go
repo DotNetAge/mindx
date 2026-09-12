@@ -35,6 +35,15 @@ type MarketInstallParams struct {
 	Name string `json:"name"`
 	// Overwrite 目标已存在时覆盖安装（前端二次确认后才携带）。
 	Overwrite bool `json:"overwrite,omitempty"`
+	// SkipDeps 跳过依赖检查和安装。
+	SkipDeps bool `json:"skip_deps,omitempty"`
+	// AutoInstall 自动执行缺失依赖的安装脚本。
+	AutoInstall bool `json:"auto_install,omitempty"`
+}
+
+// MarketPackageReadParams are the params for market.package.read（市场技能包 SKILL.md 预览，不安装）。
+type MarketPackageReadParams struct {
+	Name string `json:"name"`
 }
 
 func (c *Client) AgentExport(name, outPath string) (json.RawMessage, error) {
@@ -57,6 +66,10 @@ func (c *Client) MarketList() (json.RawMessage, error) {
 	return c.CallWithTimeout("market.list", MarketListParams{})
 }
 
-func (c *Client) MarketInstall(kind, name string) (json.RawMessage, error) {
-	return c.CallWithTimeout("market.install", MarketInstallParams{Kind: kind, Name: name})
+func (c *Client) MarketInstall(kind, name string, overwrite, skipDeps, autoInstall bool) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.install", MarketInstallParams{Kind: kind, Name: name, Overwrite: overwrite, SkipDeps: skipDeps, AutoInstall: autoInstall})
+}
+
+func (c *Client) MarketPackageRead(name string) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.package.read", MarketPackageReadParams{Name: name})
 }
