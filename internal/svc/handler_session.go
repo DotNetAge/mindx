@@ -307,6 +307,9 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		"agent_name":  info.AgentName,
 		"created_at":  info.CreatedAt,
 		"project_dir": info.ProjectDir,
+		// 会话沙箱目录：前端图片粘贴即落盘（fs.write_base64 到 {session_dir}/tmp）依赖此字段，
+		// 缺失会导致懒创建会话后粘贴图片报「会话尚未就绪」
+		"session_dir": info.SessionDir,
 	}, nil
 }
 

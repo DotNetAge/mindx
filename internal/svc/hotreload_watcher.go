@@ -31,6 +31,10 @@ type HotReloadWatcher struct {
 	app    *core.App
 	logger logging.Logger
 
+	// notify 注册表重装完成后的对外通知钩子（广播 WebSocket 通知，前端收到后
+	// 自动重拉列表）。为 nil 时静默跳过，不影响重载本身。
+	notify func(method string, params any)
+
 	watcher *fsnotify.Watcher
 
 	agentsDir string
@@ -46,10 +50,13 @@ type HotReloadWatcher struct {
 }
 
 // NewHotReloadWatcher creates a watcher that monitors agents and skills directories.
-func NewHotReloadWatcher(app *core.App, logger logging.Logger) *HotReloadWatcher {
+// notify 为注册表重装后的广播钩子（可为 nil），签名对齐 gort gateway 的
+// BroadcastNotification，由 daemon 侧传入。
+func NewHotReloadWatcher(app *core.App, logger logging.Logger, notify func(method string, params any)) *HotReloadWatcher {
 	return &HotReloadWatcher{
 		app:       app,
 		logger:    logger,
+		notify:    notify,
 		agentsDir: app.Settings().AgentsDir(),
 		skillsDir: app.Settings().SkillsDir(),
 	}
@@ -165,11 +172,19 @@ func (w *HotReloadWatcher) eventLoop() {
 			if err := w.app.ReloadAgents(); err != nil && w.logger != nil {
 				w.logger.Warn("hot-reload: failed to reload agents", "error", err)
 			}
+			// 无论重载是否报错都广播：注册表已换入（部分装载失败仅记日志跳过），
+			// 前端收到 agents_changed 后自动重拉列表，保持 UI 与注册表最终一致
+			if w.notify != nil {
+				w.notify("agents_changed", map[string]any{})
+			}
 			pendingAgents = false
 		}
 		if pendingSkills {
 			if err := w.app.ReloadSkills(); err != nil && w.logger != nil {
 				w.logger.Warn("hot-reload: failed to reload skills", "error", err)
+			}
+			if w.notify != nil {
+				w.notify("skills_changed", map[string]any{})
 			}
 			pendingSkills = false
 		}

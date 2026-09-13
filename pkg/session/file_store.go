@@ -461,6 +461,9 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goharnessses
 		LastActivityAt: info.ModTime(),
 		CreatedAt:      info.ModTime(),
 	}
+	// 会话沙箱目录由目录布局推导（<root>/<agent>/<session_id>），读路径必须回填：
+	// 前端图片粘贴落盘（fs.write_base64 到 {session_dir}/tmp）依赖 session.list 供给
+	si.SessionDir = sessionDirPath
 
 	meta, metaErr := LoadSessionMeta(sessionDirPath)
 	if metaErr == nil {
@@ -585,6 +588,8 @@ func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...g
 		CreatedAt:      time.Now(),
 		LastActivityAt: time.Now(),
 		MessageCount:   0,
+		// 沙箱目录随 meta 持久化，GetMeta 读路径无需再推导
+		SessionDir: sessionDirPath,
 	}
 
 	if err := SaveSessionMeta(sessionDirPath, meta); err != nil {
@@ -601,7 +606,15 @@ func (s *FileSessionStore) GetMeta(_ context.Context, sessionID string) (*goharn
 		return nil, goharnesssession.ErrSessionNotFound
 	}
 
-	return LoadSessionMeta(dirPath)
+	info, err := LoadSessionMeta(dirPath)
+	if err != nil {
+		return nil, err
+	}
+	// 旧会话的 meta.json 未持久化 SessionDir，按目录布局回填（自愈，免迁移）
+	if info.SessionDir == "" {
+		info.SessionDir = dirPath
+	}
+	return info, nil
 }
 
 // ResolveSessionDir returns the filesystem path for the session's sandbox directory.

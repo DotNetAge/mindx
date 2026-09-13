@@ -355,7 +355,13 @@ func (d *Daemon) Start(ctx context.Context) error {
 	go d.autoUpdateLoop(ctx)
 
 	// ── Hot-reload: watch agents/skills directories for file changes ──
-	d.hotReload = NewHotReloadWatcher(d.app, d.logger)
+	// 注册表重装完成后经 gateway 广播 agents_changed/skills_changed 通知，
+	// 前端收到后自动重拉列表（目录即注册表：手动放置的 Agent/技能即时可见）。
+	d.hotReload = NewHotReloadWatcher(d.app, d.logger, func(method string, params any) {
+		if d.gw != nil {
+			d.gw.BroadcastNotification(method, params)
+		}
+	})
 	go func() {
 		defer func() {
 			if r := recover(); r != nil && d.logger != nil {
