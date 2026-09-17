@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +22,7 @@ import (
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/discovery"
 	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/internal/mcp"
 	"github.com/DotNetAge/mindx/internal/update"
@@ -83,8 +86,12 @@ type Daemon struct {
 	restartCh chan struct{}
 
 	// hotReload watches agents/ and skills/ directories for file changes
-	// and automatically reloads registries.
+	// and automatically reload registries.
 	hotReload *HotReloadWatcher
+
+	// mdns 是局域网 mDNS 服务广播（_mindx._tcp），供 iOS App 零配置发现 daemon。
+	// 在 gateway 启动成功后注册，daemon 退出时注销。
+	mdns *discovery.Broadcaster
 
 	// projectSkills 记录已确认载入项目级技能的会话（sessionID → 覆盖注册表）。
 	// 项目技能为"发现式"经验，经用户批量确认后一次性挂载到会话（PR-PROMPTS 第三节）：
@@ -388,6 +395,9 @@ func (d *Daemon) Start(ctx context.Context) error {
 	d.logger.Info("gateway started successfully, daemon is now running")
 	d.logger.Info("daemon running, waiting for shutdown signal...")
 
+	// ── mDNS 局域网广播：服务就绪后开启，iOS App 同一 WiFi 下零配置发现 daemon ──
+	d.startMDNS()
+
 	// 监听 shutdown 或 restart 信号
 	var restart bool
 	select {
@@ -463,12 +473,43 @@ func (d *Daemon) stopCloseable(name string, closer func() error) {
 	}
 }
 
+// startMDNS 注册局域网 mDNS 服务广播（_mindx._tcp）。
+// 广播失败仅告警不阻断 daemon 启动；监听端口为 0（测试场景）时跳过。
+func (d *Daemon) startMDNS() {
+	_, portStr, err := net.SplitHostPort(d.addr)
+	if err != nil {
+		d.logger.Warn("mDNS 广播跳过：无法解析监听地址", "addr", d.addr)
+		return
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port <= 0 {
+		d.logger.Warn("mDNS 广播跳过：监听端口无效", "addr", d.addr, "port", portStr)
+		return
+	}
+	b, err := discovery.Start(port, "")
+	if err != nil {
+		d.logger.Warn("mDNS 广播启动失败，局域网发现不可用", "error", err)
+		return
+	}
+	d.mdns = b
+	d.logger.Info("mDNS 广播已开启", "service", discovery.ServiceType, "port", port)
+}
+
+// stopBackgroundServices 停止所有后台辅助服务。
 func (d *Daemon) stopBackgroundServices() {
 	d.logger.Info("stopping background services...")
 
 	d.stopService("hot-reload watcher", func() {
 		if d.hotReload != nil {
 			d.hotReload.Stop()
+		}
+	})
+
+	// 注销 mDNS 广播，避免退出后 iOS 端仍发现已下线的 daemon。
+	d.stopService("mDNS 广播", func() {
+		if d.mdns != nil {
+			d.mdns.Shutdown()
+			d.mdns = nil
 		}
 	})
 
@@ -515,6 +556,8 @@ func (d *Daemon) initGateway() {
 		gateway.WithAddr(d.addr),
 		gateway.WithPath(d.wsPath),
 		gateway.WithHandler(d.defaultHandler),
+		// TODO 可行性验证通过后再启用握手鉴权（networkAuthenticator）
+		// gateway.WithAuthenticator(d.networkAuthenticator()),
 		gateway.WithDisconnectHandler(func(clientID string) {
 			// 断连不再取消执行：对话循环在服务端继续运行，消息持续持久化，
 			// 客户端重连后通过会话重载接上（断连恢复机制）。

@@ -38,7 +38,7 @@ func (l *LiveRegistry) GetSkill(name string) (*skill.Skill, error) {
 
 	// Agent 级库实时读盘：同名覆盖全局级；目录不存在/解析失败按未命中处理
 	if dir := l.store.AgentSkillDir(l.agentName); dir != "" {
-		sk, err := LoadSkillFromDir(filepath.Join(dir, name), "filesystem")
+		sk, _, err := LoadSkillFromDir(filepath.Join(dir, name), "filesystem")
 		if err == nil && sk != nil {
 			return sk, nil
 		}

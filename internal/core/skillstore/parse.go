@@ -10,11 +10,13 @@
 package skillstore
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/DotNetAge/goharness/skill"
 	"gopkg.in/yaml.v3"
@@ -99,25 +101,29 @@ type SkillDetail struct {
 }
 
 // LoadSkillDetailFromDir 加载 Skill 及其展示字段。
-// 目录不含 SKILL.md 时返回 (nil, nil)；依赖未满足时返回错误，由调用方跳过。
-func LoadSkillDetailFromDir(dir, source string) (*SkillDetail, error) {
+// 目录不含 SKILL.md 时返回 (nil, nil)；SKILL.md 解析错误（缺必填字段、YAML 错误）
+// 返回硬错误；依赖未满足不阻断注册，技能照常装载并通过 warnings 告知调用方。
+//
+// warnings 返回值：收集所有依赖未满足的告警（二进制缺失、版本不满足等）；
+// 正常情况下返回 nil。调用方可选择记录到日志或展示给用户。
+func LoadSkillDetailFromDir(dir, source string) (*SkillDetail, []string, error) {
 	data, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return nil, fmt.Errorf("读取 SKILL.md 失败：%w", err)
+		return nil, nil, fmt.Errorf("读取 SKILL.md 失败：%w", err)
 	}
 
 	fm, body, err := parseFrontmatter(string(data))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if fm.Name == "" {
-		return nil, fmt.Errorf("SKILL.md 缺少前置元数据中必需的 'name' 字段")
+		return nil, nil, fmt.Errorf("SKILL.md 缺少前置元数据中必需的 'name' 字段")
 	}
 	if fm.Description == "" {
-		return nil, fmt.Errorf("SKILL.md 缺少前置元数据中必需的 'description' 字段")
+		return nil, nil, fmt.Errorf("SKILL.md 缺少前置元数据中必需的 'description' 字段")
 	}
 
 	name := fm.Name
@@ -125,12 +131,12 @@ func LoadSkillDetailFromDir(dir, source string) (*SkillDetail, error) {
 		// 名称不规范时尝试清洗（空格转连字符、转小写）
 		sanitized := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "-"))
 		if err2 := ValidateSkillName(sanitized); err2 != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		name = sanitized
 	}
 	if err := ValidateSkillDescription(fm.Description); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 指令模板变量替换
@@ -139,9 +145,7 @@ func LoadSkillDetailFromDir(dir, source string) (*SkillDetail, error) {
 	instructions = strings.ReplaceAll(instructions, "{skill_name}", name)
 
 	req := extractRequires(fm.Metadata)
-	if err := verifyDependencies(req); err != nil {
-		return nil, fmt.Errorf("技能 %q 的依赖检查失败：%w", name, err)
-	}
+	warnings := verifyDependencies(req)
 
 	return &SkillDetail{
 		Skill: &skill.Skill{
@@ -154,17 +158,18 @@ func LoadSkillDetailFromDir(dir, source string) (*SkillDetail, error) {
 		},
 		Requires: req,
 		Metadata: fm.Metadata,
-	}, nil
+	}, warnings, nil
 }
 
 // LoadSkillFromDir 从单个技能目录加载运行时 Skill（不含展示字段）。
-// 目录不含 SKILL.md 时返回 (nil, nil)；依赖未满足时返回错误，由调用方跳过。
-func LoadSkillFromDir(dir, source string) (*skill.Skill, error) {
-	d, err := LoadSkillDetailFromDir(dir, source)
+// 目录不含 SKILL.md 时返回 (nil, nil)；SKILL.md 解析错误返回硬错误；
+// 依赖未满足不阻断注册，warnings 收集告警信息供调用方参考。
+func LoadSkillFromDir(dir, source string) (*skill.Skill, []string, error) {
+	d, warnings, err := LoadSkillDetailFromDir(dir, source)
 	if err != nil || d == nil {
-		return nil, err
+		return nil, warnings, err
 	}
-	return d.Skill, nil
+	return d.Skill, warnings, nil
 }
 
 // LoadSkillDisplayName 读取技能目录 SKILL.md 的中文展示名（metadata.name_zh）。
@@ -278,17 +283,20 @@ func extractRequires(metadata map[string]any) *Requires {
 }
 
 // verifyDependencies 检查声明的运行时依赖是否满足。
-func verifyDependencies(r *Requires) error {
+// 返回值为告警列表：依赖缺失 / 版本不满足时收集详细告警，不阻断技能注册。
+// r 为 nil 或全部满足时返回 nil。
+func verifyDependencies(r *Requires) []string {
 	if r == nil {
 		return nil
 	}
+	var warnings []string
 	for _, bin := range r.Bins {
 		bin = strings.TrimSpace(bin)
 		if bin == "" {
 			continue
 		}
-		if _, err := exec.LookPath(bin); err != nil {
-			return fmt.Errorf("在 PATH 中未找到必需的二进制文件 %q", bin)
+		if _, err := resolveBin(bin); err != nil {
+			warnings = append(warnings, fmt.Sprintf("必需的二进制文件 %q 未找到", bin))
 		}
 	}
 	for _, key := range r.Env {
@@ -297,15 +305,136 @@ func verifyDependencies(r *Requires) error {
 			continue
 		}
 		if os.Getenv(key) == "" {
-			return fmt.Errorf("必需的环境变量 %q 未设置", key)
+			warnings = append(warnings, fmt.Sprintf("必需的环境变量 %q 未设置", key))
 		}
 	}
 	for runtime, constraint := range r.Runtime {
 		if err := checkRuntimeVersion(runtime, constraint); err != nil {
-			return err
+			warnings = append(warnings, err.Error())
 		}
 	}
-	return nil
+	return warnings
+}
+
+// resolveBin 三层查找链解析二进制真实路径。
+//
+//  1. 先用 exec.LookPath 查进程 PATH（快，但 macOS GUI 进程 PATH 极其受限）；
+//  2. 再用 shell 解析——zsh -c 'which <bin>' 会 source ~/.zprofile / ~/.zshrc，
+//     拿到用户完整 PATH（nvm、bun、volta、Homebrew 等安装位置都能覆盖）；
+//  3. 最后扫常见安装目录兜底，直接读文件系统（不依赖任何 PATH）。
+//
+// 成功返回绝对路径，全部失败返回 error。
+func resolveBin(name string) (string, error) {
+	// Layer 1: 进程 PATH
+	if p, err := exec.LookPath(name); err == nil {
+		return p, nil
+	}
+
+	// Layer 2: shell 解析（zsh 会 source 用户 profile）
+	if p, err := resolveBinViaShell(name); err == nil {
+		return p, nil
+	}
+
+	// Layer 3: 常见安装目录直接扫描
+	if p, err := resolveBinInWellKnownDirs(name); err == nil {
+		return p, nil
+	}
+
+	return "", fmt.Errorf("未找到 %q", name)
+}
+
+// resolveBinViaShell 通过 zsh -c 'which <bin>' 解析二进制路径。
+// zsh 作为登录 shell 启动时会 source ~/.zprofile，拿到用户完整 PATH
+// （包含 nvm / bun / volta / Homebrew / 手动 export 的路径等），
+// 这是 macOS GUI 进程 PATH 阉割情况下最关键的补充层。
+// 超时保护：shell 启动 + profile 解析不应超过 2 秒。
+func resolveBinViaShell(name string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// -l: login shell，自动 source ~/.zprofile
+	// -c: 执行命令
+	out, err := exec.CommandContext(ctx, "zsh", "-lic", "which "+name).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("zsh which 失败: %w", err)
+	}
+	path := strings.TrimSpace(string(out))
+	if path == "" {
+		return "", fmt.Errorf("zsh which 返回空")
+	}
+	// 确认路径存在且可执行
+	if info, err := os.Stat(path); err != nil {
+		return "", fmt.Errorf("路径 %q 不存在: %w", path, err)
+	} else if info.IsDir() {
+		return "", fmt.Errorf("路径 %q 是目录而非文件", path)
+	} else if info.Mode()&0111 == 0 {
+		return "", fmt.Errorf("路径 %q 不可执行", path)
+	}
+	return path, nil
+}
+
+// resolveBinInWellKnownDirs 在常见安装目录中直接查找二进制。
+// 覆盖 Homebrew（Intel / Apple Silicon）、nvm 默认路径、bun、volta、
+// Rust cargo、Go binary、Android SDK、Android NDK 以及用户自定义 bin 等。
+// 这是最后的兜底层——不依赖 PATH 也不依赖 shell，直接扫文件系统。
+func resolveBinInWellKnownDirs(name string) (string, error) {
+	home, _ := os.UserHomeDir()
+	candidates := []string{
+		// Homebrew
+		"/opt/homebrew/bin", // Apple Silicon
+		"/usr/local/bin",    // Intel + 通用
+		"/opt/homebrew/sbin",
+		"/usr/local/sbin",
+		// bun
+		filepath.Join(home, ".bun", "bin"),
+		// volta
+		filepath.Join(home, ".volta", "bin"),
+		// cargo (Rust)
+		filepath.Join(home, ".cargo", "bin"),
+		// go binary
+		filepath.Join(home, "go", "bin"),
+		// Android SDK / NDK
+		"$ANDROID_HOME/platform-tools",
+		"$ANDROID_HOME/cmdline-tools/latest/bin",
+		"$ANDROID_NDK_HOME",
+		// 用户自定义
+		filepath.Join(home, ".local", "bin"),
+		"/usr/bin",
+		"/bin",
+		// nvm —— 版本目录是动态的，这里用 glob 扫
+	}
+
+	for _, dir := range candidates {
+		if strings.HasPrefix(dir, "$") {
+			// 环境变量展开
+			env := strings.TrimPrefix(strings.TrimSuffix(dir, "/platform-tools"), "$")
+			dir = os.Getenv(env)
+			if dir == "" {
+				continue
+			}
+			if strings.Contains(candidates[len(candidates)-3], "$platform-tools") {
+				dir = filepath.Join(dir, "platform-tools")
+			} else if strings.Contains(candidates[len(candidates)-2], "$cmdline-tools") {
+				dir = filepath.Join(dir, "cmdline-tools", "latest", "bin")
+			}
+		}
+		full := filepath.Join(dir, name)
+		if info, err := os.Stat(full); err == nil && !info.IsDir() && info.Mode()&0111 != 0 {
+			return full, nil
+		}
+	}
+
+	// nvm: ~/.nvm/versions/node/*/bin/<name>
+	nvmGlob := filepath.Join(home, ".nvm", "versions", "node", "*", "bin", name)
+	if matches, err := filepath.Glob(nvmGlob); err == nil {
+		for _, full := range matches {
+			if info, err := os.Stat(full); err == nil && !info.IsDir() && info.Mode()&0111 != 0 {
+				return full, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("常见目录未找到 %q", name)
 }
 
 // checkRuntimeVersion 检查运行时版本是否满足约束（简化版，支持 ">=N"、">N"、"N.x"、"N"）。
@@ -326,13 +455,14 @@ func checkRuntimeVersion(runtime, constraint string) error {
 		bin = "java"
 	}
 
-	// 先检查二进制是否存在
-	if _, err := exec.LookPath(bin); err != nil {
-		return fmt.Errorf("需要运行时 %q（约束 %q），但在 PATH 中未找到 %q。请先安装 %s", runtime, constraint, bin, runtime)
+	// 用 resolveBin 三层查找链找二进制真实路径
+	resolved, err := resolveBin(bin)
+	if err != nil {
+		return fmt.Errorf("需要运行时 %q（约束 %q），但未找到 %q。请先安装 %s", runtime, constraint, bin, runtime)
 	}
 
-	// 读版本号
-	ver, err := readRuntimeVersion(bin)
+	// 用真实路径读版本号
+	ver, err := readRuntimeVersion(resolved)
 	if err != nil {
 		return fmt.Errorf("读取 %q 版本失败：%w", runtime, err)
 	}
@@ -355,7 +485,7 @@ func checkRuntimeVersion(runtime, constraint string) error {
 // readRuntimeVersion 执行 <bin> --version 并返回版本号字符串。
 func readRuntimeVersion(bin string) (string, error) {
 	var args []string
-	switch bin {
+	switch filepath.Base(bin) {
 	case "python3":
 		args = []string{"--version"} // stderr 输出
 	case "dotnet":

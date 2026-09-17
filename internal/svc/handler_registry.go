@@ -89,6 +89,8 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"git.clone":                          r.daemon.handleGitClone,
 		"git.commit_message":                 r.daemon.handleCommitMessage,
 		"user.config":                        r.daemon.handleUserConfig,
+		"network.public_info":                r.daemon.handleNetworkPublicInfo,
+		"network.token.get":                  r.daemon.handleNetworkTokenGet,
 		"server.version":                     r.daemon.handleServerVersion,
 		"server.check_update":                r.daemon.handleServerCheckUpdate,
 		"server.apply_update":                r.daemon.handleServerApplyUpdate,

@@ -236,7 +236,8 @@ func (s *Store) Catalog(agentName string, declared []string) []*skill.Skill {
 }
 
 // loadInto 将一个技能库目录中的全部技能注册进 reg。
-// 目录不存在视为空库（不报错）；每个技能独立装载，失败跳过并收集错误。
+// 目录不存在视为空库（不报错）；每个技能独立装载，SKILL.md 解析错误跳过并收集；
+// 依赖未满足的技能照常注册，但将告警汇入返回的 errs（供管理界面提示用户）。
 func (s *Store) loadInto(reg *Registry, dir string) (*Registry, []error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -252,13 +253,18 @@ func (s *Store) loadInto(reg *Registry, dir string) (*Registry, []error) {
 			continue
 		}
 		skillDir := filepath.Join(dir, entry.Name())
-		sk, err := LoadSkillFromDir(skillDir, "filesystem")
+		sk, warnings, err := LoadSkillFromDir(skillDir, "filesystem")
 		if err != nil {
+			// SKILL.md 解析错误（缺必填字段、YAML 错误）等——硬错误，跳过
 			errs = append(errs, fmt.Errorf("跳过 %s：%w", skillDir, err))
 			continue
 		}
 		if sk == nil {
 			continue
+		}
+		// 依赖未满足的告警——技能仍然注册，但记下 warnings 供展示
+		for _, w := range warnings {
+			errs = append(errs, fmt.Errorf("%s：依赖告警 — %s", entry.Name(), w))
 		}
 		if err := reg.RegisterSkill(sk); err != nil {
 			errs = append(errs, err)

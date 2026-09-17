@@ -28,6 +28,7 @@ require (
 	github.com/DotNetAge/gorag/v2 v2.0.18
 	github.com/DotNetAge/gort v0.1.6
 	github.com/creack/pty v1.1.24
+	github.com/grandcat/zeroconf v1.0.0
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/sync v0.21.0
 	golang.org/x/text v0.38.0
@@ -51,6 +52,7 @@ require (
 	github.com/bogdanfinn/tls-client v1.15.1 // indirect
 	github.com/bogdanfinn/utls v1.7.7-barnius // indirect
 	github.com/bogdanfinn/websocket v1.5.5-barnius // indirect
+	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
@@ -86,6 +88,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
+	github.com/miekg/dns v1.1.27 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
@@ -132,6 +135,8 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	mvdan.cc/sh/v3 v3.13.1 // indirect
 )
+
+replace github.com/DotNetAge/gort => ../gort
 
 // replace github.com/DotNetAge/goharness => ../goharness
 
