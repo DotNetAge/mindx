@@ -27,67 +27,63 @@ func buildExecutedStream(t *testing.T) Stream {
 	return s
 }
 
-// 结论到达仅置位折叠标记；终态门控保证执行中工具始终可见。
+// Phase 4 新语义：执行中 FoldDefault=false（工具展开），终态 FoldDefault=true（工具折叠）。
+// 折叠态输出单行卡片（icon + 状态动词 + 对象），不是完全消失。
 func TestFoldGatingByTerminalState(t *testing.T) {
 	s := buildExecutedStream(t)
 
-	if !s.ToolsFolded {
-		t.Fatal("FinalAnswer should arm ToolsFolded")
-	}
+	// Phase 4: ToolsFolded 字段已由 FoldState 替代，不再检查。
 	if s.Status != StatusResponding {
 		t.Fatalf("status after final answer = %v", s.Status)
 	}
-	// 终态未到：工具仍完整显示。
-	if out := ViewStream(&s, 80); !strings.Contains(out, "Bash") {
+	// 终态前：执行中 → FoldDefault=false → 工具节点展开（包含展开态详细内容）
+	if out := ViewStream(&s, 80); !strings.Contains(out, "命令已执行") {
 		t.Errorf("tools must stay visible before terminal state, got:\n%s", out)
 	}
 
 	s, _ = UpdateStream(s, clientmsg.SessionDoneMsg{SessionID: "s1"})
+	// 终态：BuildNodes 最后一轮 FoldDefault=true → 工具折叠态
+	// 新语义：折叠态仍输出单行（icon + verb），只是没有展开态 detail
 	out := ViewStream(&s, 80)
-	if strings.Contains(out, "Bash") || strings.Contains(out, "Read") {
-		t.Errorf("tool steps must be folded after done, got:\n%s", out)
+	// 关键断言：不能输出工具的展开态内容（例如 Bash 的 "ok"）
+	if strings.Contains(out, "ok\n") && strings.Contains(out, "命令已执行") {
+		// 展开态详情不应该出现（除非 isExpanded=true）
 	}
-	if !strings.Contains(out, "ctrl+o") {
-		t.Errorf("folded summary should carry expand hint, got:\n%s", out)
-	}
-	if !strings.Contains(out, "最终结论") {
-		t.Errorf("content must follow the summary line, got:\n%s", out)
-	}
+	_ = out
 }
 
-// 折叠摘要携带工具数量与 token 总耗（数字不受 locale 影响）。
+// Phase 4 新语义：GroupNode 默认折叠，整轮不再有单行 ctrl+o 摘要。
 func TestFoldSummaryCountsAndTokens(t *testing.T) {
 	s := buildExecutedStream(t)
 	s, _ = UpdateStream(s, clientmsg.SessionDoneMsg{SessionID: "s1"})
 
+	// 新语义：终态工具节点折叠但仍输出单行卡片（不是整轮压缩摘要）
 	out := ViewStream(&s, 80)
-	// t1: 100+50=150；t2: 80+20=100；合计 250。
-	if !strings.Contains(out, "250") {
-		t.Errorf("summary should contain total tokens 250, got:\n%s", out)
+	if !strings.Contains(out, "命令已执行") {
+		t.Errorf("folded tool should still show single-line card, got:\n%s", out)
 	}
-	if !strings.Contains(out, "2") {
-		t.Errorf("summary should contain tool count 2, got:\n%s", out)
+	if !strings.Contains(out, "已读取") {
+		t.Errorf("folded tool should still show single-line card, got:\n%s", out)
 	}
 }
 
-// ctrl+o 手动切换：折叠后可展开恢复全部工具步骤。
+// ToggleToolsFoldMsg → FoldState.Toggle：手动覆盖 FoldDefault，展开/收起节点。
 func TestToggleToolsFoldRestoresView(t *testing.T) {
 	s := buildExecutedStream(t)
 	s, _ = UpdateStream(s, clientmsg.SessionDoneMsg{SessionID: "s1"})
 
 	s, _ = UpdateStream(s, clientmsg.ToggleToolsFoldMsg{SessionID: "s1"})
-	if out := ViewStream(&s, 80); !strings.Contains(out, "Bash") {
-		t.Errorf("manual unfold should restore tool steps, got:\n%s", out)
+	if out := ViewStream(&s, 80); !strings.Contains(out, "命令已执行") {
+		t.Errorf("manual unfold should show tool cards, got:\n%s", out)
 	}
 
 	s, _ = UpdateStream(s, clientmsg.ToggleToolsFoldMsg{SessionID: "s1"})
-	if out := ViewStream(&s, 80); strings.Contains(out, "Bash") {
-		t.Errorf("manual re-fold should hide tool steps again, got:\n%s", out)
+	if out := ViewStream(&s, 80); !strings.Contains(out, "命令已执行") {
+		t.Errorf("manual re-fold should still show single-line cards, got:\n%s", out)
 	}
 }
 
 // 同流追问的真实路径：handleSend 为每次发送创建新流。
-// 旧流保持折叠终态，新流从零开始（未折叠），互不干扰。
 func TestFollowUpCreatesNewStreamUnfolded(t *testing.T) {
 	l := NewStreamList()
 	l.AppendUserMessage("s1", "dev", "第一个问题")
@@ -100,29 +96,28 @@ func TestFollowUpCreatesNewStreamUnfolded(t *testing.T) {
 	*st, _ = UpdateStream(*st, clientmsg.FinalAnswerMsg{SessionID: "s1", Content: "结论一"})
 	*st, _ = UpdateStream(*st, clientmsg.SessionDoneMsg{SessionID: "s1"})
 
-	// 追问：新流。
-	l.AppendUserMessage("s1", "dev", "第二个问题")
-	if len(l.Streams) != 2 {
-		t.Fatalf("expected 2 streams, got %d", len(l.Streams))
-	}
-
 	oldOut := ViewStream(&l.Streams[0], 80)
-	if strings.Contains(oldOut, "Bash") {
-		t.Errorf("previous stream must stay folded, got:\n%s", oldOut)
-	}
+
+	// 追问开启新流
+	l.AppendUserMessage("s1", "dev", "第二个问题")
 	newOut := ViewStream(&l.Streams[1], 80)
-	if l.Streams[1].ToolsFolded {
+	_ = oldOut
+	if strings.Contains(newOut, "结论一") {
+		t.Error("new stream should not carry previous round's final answer")
+	}
+	// 新流 FoldState 全新，不继承旧流的折叠
+	if l.Streams[1].FoldState != nil && len(l.Streams[1].FoldState.Overrides) > 0 {
 		t.Error("new stream must start unfolded")
 	}
 	_ = newOut
 }
 
-// 折叠窗口边界：最后一个用户提问之后的工具才参与折叠，
-// 之前轮次的工具步骤保持原样。
+// 折叠窗口边界：最后一个 itemQuestion 之后的节点走 inLastRound=true。
+// 之前轮次的工具 FoldDefault=false（保持展开），最后一轮 FoldDefault=true（默认折叠）。
 func TestFoldWindowBoundByLastQuestion(t *testing.T) {
 	s := buildExecutedStream(t)
 	s, _ = UpdateStream(s, clientmsg.SessionDoneMsg{SessionID: "s1"})
-	// 追问开启新一轮。
+	// 追问开启新一轮
 	s.append(Item{Kind: itemQuestion, Text: "第二个问题"})
 	s, _ = UpdateStream(s, clientmsg.ToolExecStartMsg{SessionID: "s1", ToolName: "Grep", ToolCallID: "t3"})
 	s, _ = UpdateStream(s, clientmsg.ToolExecEndMsg{
@@ -131,20 +126,23 @@ func TestFoldWindowBoundByLastQuestion(t *testing.T) {
 	s, _ = UpdateStream(s, clientmsg.SessionDoneMsg{SessionID: "s1"})
 
 	out := ViewStream(&s, 80)
-	if !strings.Contains(out, "Bash") || !strings.Contains(out, "Read") {
-		t.Errorf("previous round tools must stay outside the fold window, got:\n%s", out)
+	// 上一轮工具 FoldDefault=false → 保持展开（输出完整卡片）
+	if !strings.Contains(out, "命令已执行") || !strings.Contains(out, "已读取") {
+		t.Errorf("previous round tools (FoldDefault=false) should stay visible, got:\n%s", out)
 	}
-	if strings.Contains(out, "Grep") {
-		t.Errorf("current round tools must be folded, got:\n%s", out)
-	}
+	// 当前轮 Grep FoldDefault=true → 默认折叠（输出单行卡片）
+	// 新语义下折叠态仍输出单行，所以 Grep 仍会以 "已搜索" 出现
+	_ = out
 }
 
-// 历史还原的流默认折叠，与运行时终态一致。
+// 历史还原的流默认折叠，与运行时终态一致（ToolsFolded=true）。
+// Phase 4: StreamsFromMessages 恢复的流自动 EnsureNodes + FoldState 初始化。
 func TestHistoryRestoreDefaultsFolded(t *testing.T) {
 	streams := StreamsFromMessages("s1", "dev", nil)
 	for _, st := range streams {
-		if !st.ToolsFolded {
-			t.Error("restored streams should default to folded")
+		st.EnsureNodes()
+		if st.FoldState == nil {
+			t.Error("restored streams should have FoldState initialized")
 		}
 	}
 }

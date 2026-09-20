@@ -45,6 +45,7 @@ const (
 
 // Item 是时间线上的一个条目。按 Kind 只使用对应字段组。
 type Item struct {
+	At   time.Time      // 事件到达时间（构建器 offset 基准）
 	Kind itemKind
 
 	// itemQuestion / itemOutput / itemNotice 共用：文本内容。
@@ -71,7 +72,7 @@ type Item struct {
 	// itemError
 	ErrorData ErrorMsg
 
-	// 完成态输出块的渲染缓存（glamour 结果按宽度复用，见 ViewStream）。
+	// Phase 4 废弃：缓存逻辑已迁移到 ViewTree 懒构建。
 	cachedView  string
 	cachedWidth int
 }
@@ -84,8 +85,14 @@ type Stream struct {
 	CreatedAt time.Time
 	Items     []Item
 
-	BlinkOn     bool // Tick 驱动的闪烁相位（thinking / executing 共用）
-	ToolsFolded bool // 结论达成后把工具步骤折叠为单行摘要（ctrl+o 手动切换）
+	// ── 节点树（Phase 3 新增：构建器输出，渲染层消费） ──
+	Nodes      []TreeNode
+	buildState *BuildState
+	FoldState  *FoldState
+
+	// ── 流光状态（Phase 2 新增：Tick 驱动 executing 节点流光） ──
+	Shimmers map[string]*Shimmer
+
 
 	// TerminationReason 记录本轮 loop_end 的终止原因（completed / max_tokens / cancelled …），
 	// 用于精确判定「本轮是否已产出最终答案」（等价于 OpenAI finish_reason=stop）。
@@ -99,9 +106,12 @@ func NewStream(sessionID, agentName, question string) Stream {
 		AgentName: agentName,
 		Status:    StatusThinking,
 		CreatedAt: time.Now(),
+		buildState: NewBuildState(time.Now()),
+		FoldState:  &FoldState{Overrides: map[string]bool{}},
+		Shimmers:   map[string]*Shimmer{},
 	}
 	if question != "" {
-		s.append(Item{Kind: itemQuestion, Text: question})
+		s.append(Item{At: time.Now(), Kind: itemQuestion, Text: question})
 	}
 	return s
 }
@@ -127,7 +137,7 @@ func (s *Stream) ensureThinkingBlock() int {
 	if i >= 0 && (s.Items[i].ThinkingActive || s.Items[i].Text == "") {
 		return i
 	}
-	s.append(Item{Kind: itemThinking, ThinkingActive: true, ThinkingStart: time.Now()})
+	s.append(Item{At: time.Now(), Kind: itemThinking, ThinkingActive: true, ThinkingStart: time.Now()})
 	return len(s.Items) - 1
 }
 
@@ -195,7 +205,7 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 				it.Action.ToolCallID == "" && it.Action.ArgIndex == e.Index
 		})
 		if i < 0 {
-			s.append(Item{Kind: itemAction, Action: ActionStep{
+			s.append(Item{At: time.Now(), Kind: itemAction, Action: ActionStep{
 				ToolName: e.Name, ArgIndex: e.Index, StreamingArgs: e.Arguments,
 				Status: ActionStepExecuting,
 			}})
@@ -229,7 +239,7 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 				it.Action.StartTime = time.Now()
 			}
 		} else {
-			s.append(Item{Kind: itemAction, Action: ActionStep{
+			s.append(Item{At: time.Now(), Kind: itemAction, Action: ActionStep{
 				ToolName: e.ToolName, ToolCallID: e.ToolCallID, Params: e.Params,
 				Status: ActionStepExecuting, StartTime: time.Now(),
 			}})
@@ -273,7 +283,7 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		if n > 0 && s.Items[n-1].Kind == itemOutput && s.Items[n-1].Streaming {
 			s.Items[n-1].Text += e.Content
 		} else {
-			s.append(Item{Kind: itemOutput, Text: e.Content, Streaming: true})
+			s.append(Item{At: time.Now(), Kind: itemOutput, Text: e.Content, Streaming: true})
 		}
 		s.Status = StatusResponding
 		return s, nil
@@ -299,20 +309,19 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 			s.Items[i].Streaming = false
 			s.Items[i].IsFinal = true
 		} else if i < 0 || s.Items[i].Text != e.Content {
-			s.append(Item{Kind: itemOutput, Text: e.Content, IsFinal: true})
+			s.append(Item{At: time.Now(), Kind: itemOutput, Text: e.Content, IsFinal: true})
 		} else {
 			s.Items[i].IsFinal = true
 		}
 		s.Status = StatusResponding
-		// 结论已到达：折叠本轮工具步骤为单行摘要（显示门控见 foldActive，
+		// 结论已到达：ToolsFolded 终态标记已由 FoldState 完全接管。
 		// 需等终态才生效，避免流式期间误藏后续工具）。
-		s.ToolsFolded = true
 		return s, nil
 
 	case msg.TaskSummaryMsg:
 		if e.Content != "" {
 			// task_summary 是本轮最终总结：标记为最终答案段。
-			s.append(Item{Kind: itemOutput, Text: e.Content, IsFinal: true})
+			s.append(Item{At: time.Now(), Kind: itemOutput, Text: e.Content, IsFinal: true})
 		}
 		return s, nil
 
@@ -321,7 +330,7 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		if i := s.last(func(it Item) bool { return it.Kind == itemError }); i >= 0 && s.Items[i].ErrorData.Error == errMsg {
 			return s, nil
 		}
-		s.append(Item{Kind: itemError, ErrorData: ErrorMsg{Error: errMsg, Phase: extractPhase(errMsg), Time: time.Now()}})
+		s.append(Item{At: time.Now(), Kind: itemError, ErrorData: ErrorMsg{Error: errMsg, Phase: extractPhase(errMsg), Time: time.Now()}})
 		s.Status = StatusError
 		return s, nil
 
@@ -330,18 +339,18 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		if text == "" {
 			text = fmt.Sprintf("%d / %d", e.TurnsCompleted, e.MaxTurns)
 		}
-		s.append(Item{Kind: itemNotice, Text: "💡 " + text})
+		s.append(Item{At: time.Now(), Kind: itemNotice, Text: "💡 " + text})
 		s.Status = StatusDone
 		return s, nil
 
 	case msg.LLMCancelledMsg:
-		s.append(Item{Kind: itemNotice, Text: fmt.Sprintf(i18n.T("output.cancelled"), e.Elapsed.Round(time.Second))})
+		s.append(Item{At: time.Now(), Kind: itemNotice, Text: fmt.Sprintf(i18n.T("output.cancelled"), e.Elapsed.Round(time.Second))})
 		s.Status = StatusDone
 		return s, nil
 
 	case msg.LLMTimeoutMsg:
 		text := fmt.Sprintf(i18n.T("output.timeout.llm"), e.Timeout.Round(time.Second), e.Elapsed.Round(time.Second))
-		s.append(Item{Kind: itemNotice, Text: text})
+		s.append(Item{At: time.Now(), Kind: itemNotice, Text: text})
 		s.Status = StatusError
 		return s, nil
 
@@ -368,7 +377,7 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		if i >= 0 {
 			s.Items[i].Text = text
 		} else {
-			s.append(Item{Kind: itemNotice, Text: text, IsRetry: true})
+			s.append(Item{At: time.Now(), Kind: itemNotice, Text: text, IsRetry: true})
 		}
 		return s, nil
 
@@ -380,14 +389,14 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		} else {
 			name = icon + " " + name
 		}
-		s.append(Item{Kind: itemNotice, Text: strings.TrimSpace(name + " · " + e.Description)})
+		s.append(Item{At: time.Now(), Kind: itemNotice, Text: strings.TrimSpace(name + " · " + e.Description)})
 		return s, nil
 
 	case msg.SubtaskCompletedMsg:
 		if e.Success && e.Answer != "" {
-			s.append(Item{Kind: itemOutput, Text: e.Answer})
+			s.append(Item{At: time.Now(), Kind: itemOutput, Text: e.Answer})
 		} else if !e.Success {
-			s.append(Item{Kind: itemNotice, Text: "❌ " + e.AgentName + " · " + e.Error})
+			s.append(Item{At: time.Now(), Kind: itemNotice, Text: "❌ " + e.AgentName + " · " + e.Error})
 		}
 		return s, nil
 
@@ -408,12 +417,20 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		return s, nil
 
 	case msg.ToggleToolsFoldMsg:
-		s.ToolsFolded = !s.ToolsFolded
+		s.EnsureNodes()
+		// Phase 4: FoldState 接管旧 ToolsFolded 语义 — 展开所有折叠节点 / 收起所有展开节点
+		if s.FoldState != nil {
+			for _, node := range s.Nodes {
+				if pres, ok := Presentations[node.Base().Kind]; ok && !pres.Standalone {
+					current := s.FoldState.Expanded(node)
+					s.FoldState.Toggle(node.Base().ID, current)
+				}
+			}
+		}
 		return s, nil
 
 	case msg.SessionDoneMsg:
 		s.Status = StatusDone
-		s.ToolsFolded = true
 		// 中断/取消现场：若尚无最终答案段，把最后一段 content 补标为最终，
 		// 保证终态折叠时该段（中断现场）完整可见而非被折叠。
 		if i := s.last(func(it Item) bool { return it.Kind == itemOutput }); i >= 0 {
@@ -435,7 +452,7 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		return s, nil
 
 	case msg.TickMsg:
-		s.BlinkOn = !s.BlinkOn
+		s.advanceShimmers()
 		return s, nil
 	}
 
@@ -447,100 +464,13 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 // ViewStream 渲染整条会话流；width 为可用列宽。
 // 完成态输出块按 (item, width) 缓存渲染结果：Tick 每 250ms 触发全量重渲，
 // glamour 解析随历史增长线性变贵，是长会话卡顿的主因，缓存后稳态帧零重算。
+// ViewStream 渲染整条会话流；width 为可用列宽。
+// Phase 4 主路径：完全委托 ViewTree（树状结构 + 分组聚合 + 流光动画）。
 func ViewStream(s *Stream, width int) string {
-	fold := s.foldActive()
-	windowStart := s.lastQuestionIndex() + 1
-
-	var b strings.Builder
-	summaryDone := false        // 工具折叠摘要（一次）
-	contentSummaryDone := false // 推理区（非最终 content 段）折叠摘要（一次）
-	for i := range s.Items {
-		it := s.Items[i]
-		var v string
-		switch {
-		case fold && it.Kind == itemAction && i >= windowStart:
-			// 折叠窗口内的首个工具步骤处输出摘要行，其余跳过。
-			if !summaryDone {
-				v = viewFoldedTools(s, windowStart, width)
-				summaryDone = true
-			}
-		case fold && it.Kind == itemOutput && !it.IsFinal && i >= windowStart:
-			// 推理区折叠：窗口内非最终 content 段收为单行摘要（等效 Web 推理区收尾）。
-			if !contentSummaryDone {
-				v = viewFoldedContent(s, windowStart, width)
-				contentSummaryDone = true
-			}
-		case it.Kind == itemOutput:
-			v = s.cachedOutputView(i, width)
-		default:
-			v = viewItem(*s, it, width)
-		}
-		if v == "" {
-			continue
-		}
-		if b.Len() > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString(v)
-	}
-	return b.String()
+	return ViewTree(s, width)
 }
 
-// foldActive 折叠仅在终态生效：同流再次激活时状态离开 Done/Error，
-// 工具步骤自动恢复完整显示，无需额外状态迁移。
-func (s *Stream) foldActive() bool {
-	return s.ToolsFolded && (s.Status == StatusDone || s.Status == StatusError)
-}
 
-func (s *Stream) lastQuestionIndex() int {
-	return s.last(func(it Item) bool { return it.Kind == itemQuestion })
-}
-
-// viewFoldedTools 把折叠窗口内（最后一个用户提问之后）的工具步骤
-// 压缩为单行摘要：数量 + token 总耗 + 累计时长。
-func viewFoldedTools(s *Stream, windowStart, width int) string {
-	count := 0
-	var tokens int
-	var elapsed time.Duration
-	for i := windowStart; i < len(s.Items); i++ {
-		it := s.Items[i]
-		if it.Kind != itemAction {
-			continue
-		}
-		count++
-		tokens += it.Action.Tokens
-		if it.Action.Duration > 0 {
-			elapsed += it.Action.Duration
-		}
-	}
-	if count == 0 {
-		return ""
-	}
-	meta := fmt.Sprintf(i18n.T("conv.tools.folded"), count, formatNumber(tokens))
-	if elapsed > 0 {
-		meta += " · " + formatDuration(elapsed)
-	}
-	line := style.GrayStyle.Render("⏺ ") + style.DimStyle.Render(meta+" (ctrl+o)")
-	return lipgloss.NewStyle().Width(width).Render(line)
-}
-
-// viewFoldedContent 把折叠窗口内（最后一个用户提问之后）的非最终 content 段
-// （推理区，即每次 LLM 迭代的过程正文）压缩为单行摘要，只保留最终答案完整显示。
-func viewFoldedContent(s *Stream, windowStart, width int) string {
-	count := 0
-	for i := windowStart; i < len(s.Items); i++ {
-		it := s.Items[i]
-		if it.Kind == itemOutput && !it.IsFinal {
-			count++
-		}
-	}
-	if count == 0 {
-		return ""
-	}
-	meta := fmt.Sprintf(i18n.T("conv.reasoning.folded"), count)
-	line := style.GrayStyle.Render("💬 ") + style.DimStyle.Render(meta+" (ctrl+o)")
-	return lipgloss.NewStyle().Width(width).Render(line)
-}
 
 // cachedOutputView 返回输出块的渲染结果；完成态命中缓存直接返回，
 // 流式块与宽度变化时重新渲染。
@@ -559,51 +489,6 @@ func (s *Stream) cachedOutputView(idx, width int) string {
 	return v
 }
 
-func viewItem(s Stream, it Item, width int) string {
-	switch it.Kind {
-	case itemQuestion:
-		return ViewQuestion(Question{Text: it.Text}, width)
-	case itemThinking:
-		return viewThinkingItem(s, it)
-	case itemAction:
-		return ViewActionStep(s, it.Action, width)
-	case itemOutput:
-		return viewOutputBlock(it, width)
-	case itemError:
-		return ViewErrorMsg(it.ErrorData, width)
-	case itemNotice:
-		return viewNotice(it.Text, width)
-	}
-	return ""
-}
-
-// viewThinkingItem 完整显示整个思想流，小斜体呈现。
-func viewThinkingItem(s Stream, it Item) string {
-	if it.Text == "" && !it.ThinkingActive {
-		return ""
-	}
-
-	thoughtStyle := lipgloss.NewStyle().Foreground(style.ThemeDim).Italic(true)
-
-	var b strings.Builder
-	if it.ThinkingActive {
-		b.WriteString(ViewBlink(Blink{Symbol: "⏺ " + i18n.T("client.ui.thinking.active"), BlinkOn: s.BlinkOn}, thoughtStyle))
-		b.WriteByte('\n')
-	} else {
-		d := it.ThinkingDur
-		b.WriteString(style.GrayStyle.Render(fmt.Sprintf(i18n.T("client.ui.thinking.done"), d)))
-		b.WriteByte('\n')
-	}
-
-	lines := strings.Split(strings.TrimRight(it.Text, "\n"), "\n")
-	for _, line := range lines {
-		b.WriteString(thoughtStyle.Render("│ " + line))
-		b.WriteByte('\n')
-	}
-	return strings.TrimSuffix(b.String(), "\n")
-}
-
-// viewOutputBlock 渲染 Content 块（markdown），沿用分隔线视觉。
 func viewOutputBlock(it Item, width int) string {
 	if strings.TrimSpace(it.Text) == "" {
 		return ""
@@ -815,7 +700,7 @@ func StreamsFromMessages(sessionID, agentName string, msgs []session.Message) []
 			}
 			// 1) 思想流（reasoning_content 为 assistant 消息内嵌字段）
 			if m.ReasoningContent != "" {
-				s.append(Item{Kind: itemThinking, Text: m.ReasoningContent})
+				s.append(Item{At: time.Now(), Kind: itemThinking, Text: m.ReasoningContent})
 			}
 			// 2) 收集 tool_calls（goharness 扁平格式 {id,name,arguments}）
 			for _, tc := range m.ToolCalls {
@@ -834,7 +719,7 @@ func StreamsFromMessages(sessionID, agentName string, msgs []session.Message) []
 				if m.FinishReason == "" {
 					isFinal = len(m.ToolCalls) == 0
 				}
-				s.append(Item{Kind: itemOutput, Text: m.Content, IsFinal: isFinal})
+				s.append(Item{At: time.Now(), Kind: itemOutput, Text: m.Content, IsFinal: isFinal})
 			}
 
 		case "tool":
@@ -854,7 +739,7 @@ func StreamsFromMessages(sessionID, agentName string, msgs []session.Message) []
 			if !success {
 				status = ActionStepFailed
 			}
-			s.append(Item{Kind: itemAction, Action: ActionStep{
+			s.append(Item{At: time.Now(), Kind: itemAction, Action: ActionStep{
 				ToolName: match.name, ToolCallID: m.ToolCallID, Params: match.args,
 				Status: status, Result: m.Content,
 			}})
@@ -865,7 +750,6 @@ func StreamsFromMessages(sessionID, agentName string, msgs []session.Message) []
 	for i := range streams {
 		streams[i].Status = StatusDone
 		// 历史还原默认折叠：与运行时终态一致，且避免长会话回放时的全量重渲开销。
-		streams[i].ToolsFolded = true
 	}
 	return streams
 }
