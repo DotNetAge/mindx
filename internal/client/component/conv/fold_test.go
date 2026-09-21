@@ -45,11 +45,10 @@ func TestFoldGatingByTerminalState(t *testing.T) {
 	// 终态：BuildNodes 最后一轮 FoldDefault=true → 工具折叠态
 	// 新语义：折叠态仍输出单行（icon + verb），只是没有展开态 detail
 	out := ViewStream(&s, 80)
-	// 关键断言：不能输出工具的展开态内容（例如 Bash 的 "ok"）
-	if strings.Contains(out, "ok\n") && strings.Contains(out, "命令已执行") {
-		// 展开态详情不应该出现（除非 isExpanded=true）
+	// 关键断言：折叠态不能输出工具的展开态内容（例如 Bash 的结果 "ok"）
+	if strings.Contains(out, "ok\n") {
+		t.Errorf("folded tool must not render expanded detail, got:\n%s", out)
 	}
-	_ = out
 }
 
 // Phase 4 新语义：GroupNode 默认折叠，整轮不再有单行 ctrl+o 摘要。

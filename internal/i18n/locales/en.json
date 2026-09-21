@@ -292,6 +292,7 @@
   "svc.event.permission.denied": "Permission Denied",
   "svc.event.permission.request": "Permission Request",
   "svc.event.request.failed": "Request failed",
+  "svc.event.subagent.wait": "Waiting for Subtasks",
   "svc.event.subtask.completed": "Subtask Completed",
   "svc.event.subtask.spawned": "Subtask Spawned",
   "svc.event.task.summary": "Task Summary",

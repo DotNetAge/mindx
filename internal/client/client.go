@@ -103,6 +103,10 @@ type rootModel struct {
 		MultiSelect bool
 	}
 
+	// rpcAskUserTargetSession 是子智能体提问冒泡时发起提问的子会话 ID。
+	// 空表示主会话自身的提问，走原有恢复路径（答案发给当前会话）。
+	rpcAskUserTargetSession string
+
 	// RPC client for daemon communication.
 	rpc          *daemonRPCClient
 	rpcConnected bool
@@ -597,7 +601,9 @@ func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, cust
 	}
 
 	m.pendingAskUserData = nil
+	targetSession := m.rpcAskUserTargetSession
 	m.rpcAskUserQuestions = nil
+	m.rpcAskUserTargetSession = ""
 
 	if cancelled {
 		return
@@ -634,7 +640,16 @@ func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, cust
 
 	// Non-blocking: send answer as user message to re-enter the LLM loop.
 	if useRPC {
-		if m.currentSessionID != "" {
+		if targetSession != "" {
+			// 子代理提问冒泡：答案精确送达发起提问的子会话，daemon 据此
+			// 注入挂起等待的子 exec（askCh）恢复其执行循环。
+			if err := m.sendUserMessageTo(targetSession, answer); err != nil {
+				m.notifBar.Add(data.Notification{
+					Message: fmt.Sprintf(i18n.T("client.notify.rpc.send.failed"), err),
+					Level:   data.NotifError,
+				})
+			}
+		} else if m.currentSessionID != "" {
 			m.rpcSendMessage(answer)
 		}
 	} else {

@@ -499,6 +499,15 @@ func (d *Daemon) startMDNS() {
 func (d *Daemon) stopBackgroundServices() {
 	d.logger.Info("stopping background services...")
 
+	// 停机安全网：先于 gateway 关闭级联强停全部运行中的子代理，并留出
+	// 短暂宽限让 spawn 的 defer 写入 [sub-agent-terminated] 终止标记。
+	// 否则子代理被进程死亡杀死且无终止标记，重启后 CollectResults 对其
+	// 轮询将死等到上限（30 分钟）才判定失败。
+	if n := d.cancelAllSubAgents(); n > 0 {
+		d.logger.Info("停机级联强停运行中子代理", "count", n)
+		time.Sleep(2 * time.Second)
+	}
+
 	d.stopService("hot-reload watcher", func() {
 		if d.hotReload != nil {
 			d.hotReload.Stop()
@@ -662,6 +671,18 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 
 	agentName, providedSessionID, content := parseAgentTarget(text)
 
+	// 子代理提问回答分派：目标会话存在挂起等待回答的子智能体提问时，
+	// 本条消息即用户对提问的回答，注入挂起的子 exec（askCh）恢复其执行
+	// 循环后直接返回，不再进入正常 Ask 流程。未命中（无挂起提问）按普通
+	// 消息处理，保留旧的子会话 Tab 直接作答路径。
+	askTarget := msg.SessionID
+	if providedSessionID != "" {
+		askTarget = providedSessionID
+	}
+	if content != "" && d.dispatchAskAnswer(askTarget, content) {
+		return
+	}
+
 	rt, err := d.app.ResolveRuntime(agentName)
 	if err != nil {
 		d.logger.Error("defaultHandler: failed to resolve runtime", err,
@@ -741,6 +762,30 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				"session_id":     data.SessionID,
 			},
 			"type": gateway.RespPermissionRequest,
+		})
+	})
+
+	// 子智能体提问冒泡旁路：镜像授权旁路。子会话（spawn 的子 Agent 执行循环）
+	// 调用 AskUser 提问时，经此发送器把提问直达前端——父 exec 结束/被取消后
+	// 其 EventBus 订阅已销毁，parentEmit 转发链路会静默丢事件，前端收不到
+	// 提问、子会话只能干等到超时。envelope 结构（session_id / meta.agent_name /
+	// title / data / type）与授权旁路一致；data.session_id 为发起提问的子会话
+	// ID，前端作答时携带该 ID 发送普通消息，daemon 据此精确路由到挂起的子 exec。
+	// 主会话自身的提问不走旁路（b.askCh == nil），仍经原 EventBus 转发链路。
+	ctx = agents.WithAskSink(ctx, func(data events.AskUserPendingData) {
+		if d.gw == nil {
+			return
+		}
+		askType := gateway.ResponseType(events.AskUserRequest)
+		d.gw.BroadcastNotification(string(askType), map[string]any{
+			"session_id": sid,
+			"meta":       map[string]any{"agent_name": currentAgentName},
+			"title":      i18n.T("svc.event.ask.user"),
+			"data": map[string]any{
+				"questions":  data.Questions,
+				"session_id": data.SessionID,
+			},
+			"type": askType,
 		})
 	})
 
@@ -1017,6 +1062,39 @@ func (d *Daemon) cancelSubAgents(sessionID string) int {
 		total += rt.CancelSubAgents(sessionID)
 	})
 	return total
+}
+
+// cancelAllSubAgents 强停本进程全部 Runtime 派生的运行中子代理（不限 sponsor）。
+// 供停机安全网使用：停机没有「活跃 sponsor 清单」可遍历，直接全量强停更完备，
+// 无需宿主追踪哪些主会话派生过子代理。返回被强停的子代理总数。
+func (d *Daemon) cancelAllSubAgents() int {
+	if d.app == nil {
+		return 0
+	}
+	total := 0
+	d.app.ForEachRuntime(func(rt *agents.Runtime) {
+		total += rt.CancelAllSubAgents()
+	})
+	return total
+}
+
+// dispatchAskAnswer 将用户对子代理提问的回答路由到挂起等待的子会话。
+// Runtime 按 agent 名缓存（runtimeCache），回答仅携带目标子会话 ID、
+// 无法定位持有该会话的 Runtime 实例，故遍历全部缓存 Runtime 逐一尝试——
+// 仅实际持有挂起提问登记的 Runtime 会命中（见 App.ForEachRuntime）。
+// 返回是否命中并已送达；false 时调用方按普通消息走正常 Ask 流程。
+func (d *Daemon) dispatchAskAnswer(target, answer string) bool {
+	if target == "" || answer == "" || d.app == nil {
+		return false
+	}
+	dispatched := false
+	d.app.ForEachRuntime(func(rt *agents.Runtime) {
+		if dispatched {
+			return
+		}
+		dispatched = rt.DispatchAskAnswer(target, answer)
+	})
+	return dispatched
 }
 
 func parseAgentTarget(text string) (agentName string, sessionID string, content string) {

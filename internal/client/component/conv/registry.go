@@ -17,15 +17,15 @@ import (
 // 其他字段（Verb / Executing / Attention / Object / Badges / Summarize / Standalone / HasDetail）
 // 全部与 Desktop registry/summary.ts 语义等价。
 type NodePresentation struct {
-	Icon       string                               // 图标符号（Terminal 无 Vue Component → emoji/ASCII）
-	Verb       func(TreeNode) string                // 完成态状态动词
-	Executing  func(TreeNode) string                // executing 流光文案
-	Attention  bool                                 // 静态 attention 类型（成功也着黄色）
-	Object     func(TreeNode) string                // 名片对象（精选主体，单行截断）
-	Badges     func(TreeNode) []string              // 元信息徽标（空串项过滤）
-	Summarize  func(int) string                     // 组头单类型模板
-	Standalone bool                                 // 全卡直渲（树壳不套统一名片）
-	HasDetail  bool                                 // 有展开态视图
+	Icon       string                  // 图标符号（Terminal 无 Vue Component → emoji/ASCII）
+	Verb       func(TreeNode) string   // 完成态状态动词
+	Executing  func(TreeNode) string   // executing 流光文案
+	Attention  bool                    // 静态 attention 类型（成功也着黄色）
+	Object     func(TreeNode) string   // 名片对象（精选主体，单行截断）
+	Badges     func(TreeNode) []string // 元信息徽标（空串项过滤）
+	Summarize  func(int) string        // 组头单类型模板
+	Standalone bool                    // 全卡直渲（树壳不套统一名片）
+	HasDetail  bool                    // 有展开态视图
 }
 
 // Presentations 32 种类型全量注册表（对齐 Desktop PRESENTATIONS 表，漏类型编译报错由 TreeNodeTypes 运行时校验）。
@@ -38,7 +38,7 @@ var Presentations = map[string]NodePresentation{
 	// content 行内 markdown 直渲，不走统一名片。
 	// 但 Executing 文案是树尾 pending 行的措辞来源（§3.4）。
 	"content": {
-		Executing: func(TreeNode) string { return "正在规划下一步" },
+		Executing:  func(TreeNode) string { return "正在规划下一步" },
 		Standalone: true,
 	},
 
@@ -59,8 +59,8 @@ var Presentations = map[string]NodePresentation{
 	// ═══════════════════════════════════════════════════════════
 
 	"task": {
-		Icon:      "📋",
-		Verb:      func(TreeNode) string { return "" },
+		Icon: "📋",
+		Verb: func(TreeNode) string { return "" },
 		Executing: func(n TreeNode) string {
 			if t, ok := n.(*TaskNode); ok && t.ActiveForm != "" {
 				return t.ActiveForm
@@ -102,9 +102,9 @@ var Presentations = map[string]NodePresentation{
 	},
 
 	"subagent": {
-		Icon:       "🚀",
-		Verb:       func(TreeNode) string { return "执行子任务" },
-		Executing:  func(TreeNode) string { return "正在执行子任务" },
+		Icon:      "🚀",
+		Verb:      func(TreeNode) string { return "执行子任务" },
+		Executing: func(TreeNode) string { return "正在执行子任务" },
 		Object: func(n TreeNode) string {
 			if s, ok := n.(*SubagentNode); ok {
 				return joinNonEmpty(s.AgentName, truncate(s.TaskDigest, 60))
@@ -138,7 +138,7 @@ var Presentations = map[string]NodePresentation{
 	// ═══════════════════════════════════════════════════════════
 
 	"permission": {
-		Icon:      "🔒",
+		Icon: "🔒",
 		Verb: func(n TreeNode) string {
 			if p, ok := n.(*PermissionNode); ok {
 				switch p.Decision {
@@ -169,7 +169,7 @@ var Presentations = map[string]NodePresentation{
 	},
 
 	"ask_user": {
-		Icon:      "💬",
+		Icon: "💬",
 		Verb: func(n TreeNode) string {
 			if a, ok := n.(*AskUserNode); ok && len(a.Answers) > 0 {
 				return "已回答"
@@ -202,8 +202,8 @@ var Presentations = map[string]NodePresentation{
 	},
 
 	"error": {
-		Icon:      "❌",
-		Verb:      func(TreeNode) string { return "执行出错" },
+		Icon: "❌",
+		Verb: func(TreeNode) string { return "执行出错" },
 		Object: func(n TreeNode) string {
 			if e, ok := n.(*ErrorNode); ok {
 				return truncate(e.Message, 120)
@@ -225,9 +225,9 @@ var Presentations = map[string]NodePresentation{
 	},
 
 	"compaction": {
-		Icon:       "🔄",
-		Verb:       func(TreeNode) string { return "上下文已压缩" },
-		Attention:  true,
+		Icon:      "🔄",
+		Verb:      func(TreeNode) string { return "上下文已压缩" },
+		Attention: true,
 		Object: func(n TreeNode) string {
 			if c, ok := n.(*CompactionNode); ok {
 				return fmt.Sprintf("滑动 %d 条消息", c.MessagesSlid)
@@ -243,9 +243,9 @@ var Presentations = map[string]NodePresentation{
 	},
 
 	"max_turns": {
-		Icon:       "⚠️",
-		Verb:       func(TreeNode) string { return "已达最大轮数" },
-		Attention:  true,
+		Icon:      "⚠️",
+		Verb:      func(TreeNode) string { return "已达最大轮数" },
+		Attention: true,
 		Object: func(n TreeNode) string {
 			if m, ok := n.(*MaxTurnsNode); ok {
 				return fmt.Sprintf("%d/%d 轮", m.TurnsCompleted, m.MaxTurns)
@@ -261,10 +261,10 @@ var Presentations = map[string]NodePresentation{
 	},
 
 	"llm_retry": {
-		Icon:       "🔁",
-		Verb:       func(TreeNode) string { return "请求重试" },
-		Executing:  func(TreeNode) string { return "正在重试" },
-		Attention:  true,
+		Icon:      "🔁",
+		Verb:      func(TreeNode) string { return "请求重试" },
+		Executing: func(TreeNode) string { return "正在重试" },
+		Attention: true,
 		Object: func(n TreeNode) string {
 			if r, ok := n.(*LlmRetryNode); ok {
 				return joinNonEmpty(r.Provider, r.Model)
@@ -285,9 +285,9 @@ var Presentations = map[string]NodePresentation{
 	},
 
 	"cancelled": {
-		Icon:      "⏹",
-		Verb:      func(TreeNode) string { return "已中断" },
-		Object:    func(TreeNode) string { return "" },
+		Icon:   "⏹",
+		Verb:   func(TreeNode) string { return "已中断" },
+		Object: func(TreeNode) string { return "" },
 		Badges: func(n TreeNode) []string {
 			if c, ok := n.(*CancelledNode); ok && c.Elapsed > 0 {
 				return []string{formatDuration(c.Elapsed)}
@@ -721,10 +721,10 @@ func hostOf(url string) string {
 
 // taskStatusLabel 任务状态中文标签（对齐 Desktop TASK_STATUS_LABELS）。
 var taskStatusLabels = map[string]string{
-	"pending":    "待处理",
+	"pending":     "待处理",
 	"in_progress": "进行中",
-	"completed":  "已完成",
-	"cancelled":  "已取消",
+	"completed":   "已完成",
+	"cancelled":   "已取消",
 }
 
 func taskStatusLabel(s string) string {
@@ -759,7 +759,6 @@ func formatCompactNumber(n int) string {
 		return fmt.Sprintf("%d", n)
 	}
 }
-
 
 // ensureStyleImport 确保 style 包被引用（registry 不直接用 style 但 Go 编译器不允许空 import，此处占位）。
 var _ = style.ThemeCyan

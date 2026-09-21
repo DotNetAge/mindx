@@ -20,7 +20,7 @@ const (
 // - FoldDefault: 折叠策略的每类型静态声明（UI 折叠态不进数据）。
 type NodeBase struct {
 	ID          string
-	Kind        string        // TreeNodeType: "content" | "thinking" | "group" | "tool.bash" | "task" | ...
+	Kind        string // TreeNodeType: "content" | "thinking" | "group" | "tool.bash" | "task" | ...
 	Status      NodeStatus
 	Offset      time.Duration // 轮内偏移（相对轮首）
 	Duration    time.Duration
@@ -40,20 +40,21 @@ type TreeNode interface {
 
 // TurnUsage 单轮 LLM token 消耗口径（对齐 Desktop TurnUsage）。
 type TurnUsage struct {
-	PromptTokens   int
+	PromptTokens     int
 	CompletionTokens int
-	CachedTokens   int
-	ActualTokens   int // Prompt + Completion - Cached
-	TotalTokens    int
-	CallCount      int
-	Cost           float64
+	CachedTokens     int
+	ActualTokens     int // Prompt + Completion - Cached
+	TotalTokens      int
+	CallCount        int
+	Cost             float64
 }
 
 // ContentNode 正文/过程段（对齐 Desktop ContentNode）。
 // finishReason 区分过程段（推理区）与最终答案段：
-//   stop     = 最终答案定稿（final_answer / task_summary / finish_reason=stop）
-//   tool_calls = 过程段（每次 T-A-O 迭代的 content）
-//   streaming = 流式中
+//
+//	stop     = 最终答案定稿（final_answer / task_summary / finish_reason=stop）
+//	tool_calls = 过程段（每次 T-A-O 迭代的 content）
+//	streaming = 流式中
 type ContentNode struct {
 	NodeBase
 	Text         string
@@ -107,11 +108,11 @@ type TaskSnapshotItem struct {
 // 叶子状态卡，不挂执行子树——并行交错时工具流无法可靠归属任务。
 type TaskNode struct {
 	NodeBase
-	TaskID     string
-	Subject    string
-	ActiveForm string
-	TaskStatus string
-	Checklist  []TaskSnapshotItem
+	TaskID      string
+	Subject     string
+	ActiveForm  string
+	TaskStatus  string
+	Checklist   []TaskSnapshotItem
 	Transitions []TaskTransition
 }
 
@@ -138,11 +139,11 @@ func (n *TeamNode) Base() NodeBase { return n.NodeBase }
 // 一阶段展开态沿用卡片不挂子树。restored=true 表示 localStorage 旁路补齐。
 type SubagentNode struct {
 	NodeBase
-	AgentName   string
-	TaskDigest  string
-	SessionID   string
+	AgentName    string
+	TaskDigest   string
+	SessionID    string
 	ResultDigest string
-	Restored    bool
+	Restored     bool
 }
 
 func (n *SubagentNode) Base() NodeBase { return n.NodeBase }
@@ -151,7 +152,7 @@ func (n *SubagentNode) Base() NodeBase { return n.NodeBase }
 // 按 SessionID 关联对应 SubagentNode，完成后回填其状态。
 type CollectNode struct {
 	NodeBase
-	SessionIDs   []string
+	SessionIDs    []string
 	ResultDigests []string
 }
 
@@ -166,18 +167,18 @@ func (n *CollectNode) Base() NodeBase { return n.NodeBase }
 // 阻塞授权的审计闭环：请求 + 决定 = 完整留痕。
 type PermissionNode struct {
 	NodeBase
-	ToolName       string
-	Reason         string
-	SecurityLevel  string
-	Decision       string // "pending" | "granted" | "denied"
+	ToolName      string
+	Reason        string
+	SecurityLevel string
+	Decision      string // "pending" | "granted" | "denied"
 }
 
 func (n *PermissionNode) Base() NodeBase { return n.NodeBase }
 
 // AskUserQuestion AskUser 问题条目。
 type AskUserQuestion struct {
-	Question   string
-	Options    []string
+	Question    string
+	Options     []string
 	MultiSelect bool
 }
 
@@ -264,9 +265,9 @@ type ToolNode struct {
 	// ── 18 种工具的 payload 字段（按 registry/summary.ts 的 object/badges 提取所需） ──
 
 	// Bash / RunScript
-	BashCmd      string
-	BashExitCode int
-	RunSkillName string
+	BashCmd       string
+	BashExitCode  int
+	RunSkillName  string
 	RunScriptArgs string
 
 	// Read / Write / Edit
@@ -277,9 +278,9 @@ type ToolNode struct {
 	EditDels   int
 
 	// Ls / Glob
-	LsPath     string
+	LsPath      string
 	LsRecursive bool
-	LsEntries  int
+	LsEntries   int
 	GlobPattern string
 	GlobMatches int
 
@@ -289,16 +290,16 @@ type ToolNode struct {
 	GrepInclude string
 
 	// WebFetch / WebSearch
-	WebFetchURL   string
-	WebFetchTitle string
-	WebFetchBytes int
-	WebSearchQuery string
-	WebSearchCount int
+	WebFetchURL     string
+	WebFetchTitle   string
+	WebFetchBytes   int
+	WebSearchQuery  string
+	WebSearchCount  int
 	WebSearchCached bool
 
 	// KB Search / Memory Search
-	KBSearchQuery  string
-	KBSearchHits   int
+	KBSearchQuery     string
+	KBSearchHits      int
 	MemorySearchQuery string
 	MemorySearchHits  int
 
@@ -312,14 +313,14 @@ type ToolNode struct {
 	TaskQueryResult string
 
 	// TeamOps
-	TeamOpsAction  string
-	TeamOpsTeam    string
+	TeamOpsAction string
+	TeamOpsTeam   string
 
 	// Cron
-	CronAction string
-	CronID     string
-	CronAgent  string
-	CronExpr   string
+	CronAction  string
+	CronID      string
+	CronAgent   string
+	CronExpr    string
 	CronEnabled *bool
 
 	// Notify
@@ -327,8 +328,8 @@ type ToolNode struct {
 	NotifyMessage string
 
 	// 通用展开态原始输出
-	ResultText  string
-	ResultTail   string // 长截断（对齐 Desktop outputTail 20KB）
+	ResultText string
+	ResultTail string // 长截断（对齐 Desktop outputTail 20KB）
 }
 
 func (n *ToolNode) Base() NodeBase { return n.NodeBase }
@@ -352,37 +353,37 @@ func IsToolNode(n TreeNode) bool {
 // TreeNodeTypes 全量节点类型名（与 Desktop TreeNodeType 联合派生的枚举对齐）。
 // 用于断言构建器不私加未登记类型。
 var TreeNodeTypes = map[string]bool{
-	"content":      true,
-	"thinking":     true,
-	"group":        true,
-	"task":         true,
-	"team":         true,
-	"subagent":     true,
-	"collect":      true,
-	"permission":   true,
-	"ask_user":     true,
-	"error":        true,
-	"compaction":   true,
-	"max_turns":    true,
-	"llm_retry":    true,
-	"cancelled":    true,
+	"content":    true,
+	"thinking":   true,
+	"group":      true,
+	"task":       true,
+	"team":       true,
+	"subagent":   true,
+	"collect":    true,
+	"permission": true,
+	"ask_user":   true,
+	"error":      true,
+	"compaction": true,
+	"max_turns":  true,
+	"llm_retry":  true,
+	"cancelled":  true,
 	// 工具 18 种
-	"tool.read":        true,
-	"tool.write":       true,
-	"tool.edit":        true,
-	"tool.ls":          true,
-	"tool.glob":        true,
-	"tool.grep":        true,
-	"tool.bash":        true,
-	"tool.run_script":  true,
-	"tool.web_fetch":   true,
-	"tool.web_search":  true,
-	"tool.kb_search":   true,
+	"tool.read":          true,
+	"tool.write":         true,
+	"tool.edit":          true,
+	"tool.ls":            true,
+	"tool.glob":          true,
+	"tool.grep":          true,
+	"tool.bash":          true,
+	"tool.run_script":    true,
+	"tool.web_fetch":     true,
+	"tool.web_search":    true,
+	"tool.kb_search":     true,
 	"tool.memory_search": true,
-	"tool.skill":       true,
-	"tool.sleep":       true,
-	"tool.task_query":  true,
-	"tool.team_ops":    true,
-	"tool.cron":        true,
-	"tool.notify":      true,
+	"tool.skill":         true,
+	"tool.sleep":         true,
+	"tool.task_query":    true,
+	"tool.team_ops":      true,
+	"tool.cron":          true,
+	"tool.notify":        true,
 }

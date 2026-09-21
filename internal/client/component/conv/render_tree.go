@@ -46,7 +46,7 @@ const gapThreshold = 30 * time.Second
 // width 为可用列宽。先懒构建 Nodes。
 func ViewTree(s *Stream, width int) string {
 	s.EnsureNodes()
-	if s.Nodes == nil || len(s.Nodes) == 0 {
+	if len(s.Nodes) == 0 {
 		return ""
 	}
 

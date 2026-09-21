@@ -1,7 +1,6 @@
 package conv
 
 import (
-
 	"image/color"
 	"math"
 	"strings"
@@ -43,9 +42,9 @@ const ShimmerDuration = 1800 // ms
 // Shimmer 结构：一次流光动画的状态。
 // 每个 executing 节点对应一个 Shimmer；Tick 驱动 Pos 推进。
 type Shimmer struct {
-	Text string    // 被渲染的文案
-	Pos  float64   // 0.0 ~ 1.0，当前扫描峰值位置（相对于 rune 数的比例）
-	Len  int       // rune 数量（utf8.RuneCountInString）
+	Text string  // 被渲染的文案
+	Pos  float64 // 0.0 ~ 1.0，当前扫描峰值位置（相对于 rune 数的比例）
+	Len  int     // rune 数量（utf8.RuneCountInString）
 }
 
 // NewShimmer 创建并启动一个流光动画（Pos 初始 0）。
@@ -110,10 +109,11 @@ func (s *Shimmer) RenderBold() string {
 // charIntensity 计算某字符位置的流光强度（0.0 = 全 dim gray，1.0 = 全 accent cyan）。
 //
 // Desktop CSS 渐变的比例映射：
-//   0%~35% = 全 text-secondary（dim gray）
-//   35%~50% = 线性过渡到 accent-cyan（cyan）
-//   50%~65% = 线性过渡回 text-secondary
-//   65%~100% = 全 text-secondary
+//
+//	0%~35% = 全 text-secondary（dim gray）
+//	35%~50% = 线性过渡到 accent-cyan（cyan）
+//	50%~65% = 线性过渡回 text-secondary
+//	65%~100% = 全 text-secondary
 //
 // 扫描峰值 peakPos 对应 CSS 渐变中 accent-cyan 的位置（50% 那一点）。
 // 字符距 peakPos 的距离决定了 intensity。
@@ -158,7 +158,6 @@ func interpolateColor(a, b color.Color, t float64) color.Color {
 		A: 255,
 	}
 }
-
 
 func clampByte(v int) int {
 	if v < 0 {

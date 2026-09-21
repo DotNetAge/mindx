@@ -26,13 +26,12 @@ import (
 // ═══════════════════════════════════════════════════════════
 
 // BuildState 构建器会话级状态（对齐 Desktop SessionBuildState）。
-// 负责实体注册表（taskNodes / subagentNodes / taskBoard），
+// 负责实体注册表（taskNodes / subagentNodes），
 // 跨轮 upsert 时新轮可以更新旧轮创建的实体卡。
 type BuildState struct {
 	roundStart    time.Time
 	taskNodes     map[string]*TaskNode
 	subagentNodes map[string]*SubagentNode
-	taskBoard     []TaskSnapshotItem
 }
 
 // NewBuildState 创建会话级构建状态。
@@ -245,7 +244,7 @@ doneStatus:
 			FoldDefault: true,
 		},
 		GroupKey: string(g.groupKey),
-		Children:  g.members,
+		Children: g.members,
 	}
 }
 
@@ -605,7 +604,7 @@ func buildCollectNode(state *BuildState, it Item, offset time.Duration) *Collect
 			Duration:    it.Action.Duration,
 			FoldDefault: true,
 		},
-		SessionIDs:   sessionIDs,
+		SessionIDs:    sessionIDs,
 		ResultDigests: digests,
 	}
 }
@@ -805,16 +804,4 @@ func formatDuration(d time.Duration) string {
 	m := int(d.Minutes())
 	s := int(d.Seconds()) % 60
 	return fmt.Sprintf("%dm%02ds", m, s)
-}
-
-// formatNumber 数字压缩显示。
-func formatNumber(n int) string {
-	switch {
-	case n >= 1_000_000:
-		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
-	case n >= 1_000:
-		return fmt.Sprintf("%.1fK", float64(n)/1_000)
-	default:
-		return fmt.Sprintf("%d", n)
-	}
 }

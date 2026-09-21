@@ -8,11 +8,8 @@ import (
 
 	"charm.land/bubbles/v2/timer"
 	tea "charm.land/bubbletea/v2"
-	lipgloss "charm.land/lipgloss/v2"
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/client/msg"
-	"github.com/DotNetAge/mindx/internal/client/render"
-	"github.com/DotNetAge/mindx/internal/client/style"
 	"github.com/DotNetAge/mindx/internal/i18n"
 )
 
@@ -45,7 +42,7 @@ const (
 
 // Item 是时间线上的一个条目。按 Kind 只使用对应字段组。
 type Item struct {
-	At   time.Time      // 事件到达时间（构建器 offset 基准）
+	At   time.Time // 事件到达时间（构建器 offset 基准）
 	Kind itemKind
 
 	// itemQuestion / itemOutput / itemNotice 共用：文本内容。
@@ -71,10 +68,6 @@ type Item struct {
 
 	// itemError
 	ErrorData ErrorMsg
-
-	// Phase 4 废弃：缓存逻辑已迁移到 ViewTree 懒构建。
-	cachedView  string
-	cachedWidth int
 }
 
 // Stream 是单会话的事件驱动对话流。
@@ -93,7 +86,6 @@ type Stream struct {
 	// ── 流光状态（Phase 2 新增：Tick 驱动 executing 节点流光） ──
 	Shimmers map[string]*Shimmer
 
-
 	// TerminationReason 记录本轮 loop_end 的终止原因（completed / max_tokens / cancelled …），
 	// 用于精确判定「本轮是否已产出最终答案」（等价于 OpenAI finish_reason=stop）。
 	TerminationReason string
@@ -102,10 +94,10 @@ type Stream struct {
 // NewStream 创建以用户提问开头的会话流。
 func NewStream(sessionID, agentName, question string) Stream {
 	s := Stream{
-		SessionID: sessionID,
-		AgentName: agentName,
-		Status:    StatusThinking,
-		CreatedAt: time.Now(),
+		SessionID:  sessionID,
+		AgentName:  agentName,
+		Status:     StatusThinking,
+		CreatedAt:  time.Now(),
 		buildState: NewBuildState(time.Now()),
 		FoldState:  &FoldState{Overrides: map[string]bool{}},
 		Shimmers:   map[string]*Shimmer{},
@@ -462,53 +454,9 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 // ── 渲染 ────────────────────────────────────────────────────
 
 // ViewStream 渲染整条会话流；width 为可用列宽。
-// 完成态输出块按 (item, width) 缓存渲染结果：Tick 每 250ms 触发全量重渲，
-// glamour 解析随历史增长线性变贵，是长会话卡顿的主因，缓存后稳态帧零重算。
-// ViewStream 渲染整条会话流；width 为可用列宽。
 // Phase 4 主路径：完全委托 ViewTree（树状结构 + 分组聚合 + 流光动画）。
 func ViewStream(s *Stream, width int) string {
 	return ViewTree(s, width)
-}
-
-
-
-// cachedOutputView 返回输出块的渲染结果；完成态命中缓存直接返回，
-// 流式块与宽度变化时重新渲染。
-func (s *Stream) cachedOutputView(idx, width int) string {
-	it := &s.Items[idx]
-	if strings.TrimSpace(it.Text) == "" {
-		return ""
-	}
-	if !it.Streaming && it.cachedWidth == width && it.cachedView != "" {
-		return it.cachedView
-	}
-	v := viewOutputBlock(*it, width)
-	if !it.Streaming {
-		it.cachedView, it.cachedWidth = v, width
-	}
-	return v
-}
-
-func viewOutputBlock(it Item, width int) string {
-	if strings.TrimSpace(it.Text) == "" {
-		return ""
-	}
-	sep := style.Divider(strings.Repeat("─", width))
-	content := render.MarkdownWithWidth(it.Text, width-4)
-	if it.Streaming {
-		content += style.DimStyle.Render("▌")
-	}
-	return sep + "\n" + content
-}
-
-func viewNotice(text string, width int) string {
-	yellow := lipgloss.NewStyle().Foreground(style.ThemeYellow)
-	border := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(style.ThemeYellow).
-		Padding(0, 1).
-		Width(width - 4)
-	return border.Render(yellow.Render(text))
 }
 
 // ── 多会话列表 ──────────────────────────────────────────────

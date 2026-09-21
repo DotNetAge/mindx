@@ -42,9 +42,9 @@ var ToolDescriptors = map[string]ToolDescriptor{
 	"Write": {NodeType: "tool.write", GroupKey: ptr(GroupFSWrite)},
 	"Edit":  {NodeType: "tool.edit", GroupKey: ptr(GroupFSWrite)},
 	// 目录浏览/文件匹配
-	"Ls":     {NodeType: "tool.ls", GroupKey: ptr(GroupFSBrowse)},
-	"LsPro":  {NodeType: "tool.ls", GroupKey: ptr(GroupFSBrowse)},
-	"Glob":   {NodeType: "tool.glob", GroupKey: ptr(GroupFSBrowse)},
+	"Ls":    {NodeType: "tool.ls", GroupKey: ptr(GroupFSBrowse)},
+	"LsPro": {NodeType: "tool.ls", GroupKey: ptr(GroupFSBrowse)},
+	"Glob":  {NodeType: "tool.glob", GroupKey: ptr(GroupFSBrowse)},
 	// 内容搜索
 	"Grep": {NodeType: "tool.grep", GroupKey: ptr(GroupFSSearch)},
 	// 命令执行
@@ -68,7 +68,7 @@ var ToolDescriptors = map[string]ToolDescriptor{
 	"TeamList":     {NodeType: "tool.team_ops", GroupKey: ptr(GroupTeamQuery)},
 	"TeamGetTasks": {NodeType: "tool.team_ops", GroupKey: ptr(GroupTeamQuery)},
 	// 定时/通知
-	"Cron":       {NodeType: "tool.cron", GroupKey: ptr(GroupSys)},
+	"Cron":        {NodeType: "tool.cron", GroupKey: ptr(GroupSys)},
 	"SendMessage": {NodeType: "tool.notify", GroupKey: ptr(GroupSys)},
 }
 
@@ -80,8 +80,8 @@ var TaskUpsertTools = map[string]bool{
 
 // 实体协作工具名常量（归一规则 3/4/11）。
 const (
-	SubagentTool  = "SubAgent"
-	CollectTool   = "CollectResults"
+	SubagentTool   = "SubAgent"
+	CollectTool    = "CollectResults"
 	TeamCreateTool = "TeamCreate"
 )
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DotNetAge/goharness/events"
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/client/data"
@@ -459,29 +460,25 @@ func (m *rootModel) registerNotificationHandlers() {
 		if !ok {
 			return
 		}
+		m.rpcAskUserQuestions = parseAskQuestions(data)
+		m.program.Send(clientmsg.AskUserEventMsg{})
+	})
 
-		m.rpcAskUserQuestions = nil
-		if rawQuestions, ok := data["questions"].([]any); ok {
-			for _, rq := range rawQuestions {
-				if qm, ok := rq.(map[string]any); ok {
-					q := struct {
-						Question    string
-						Options     []string
-						MultiSelect bool
-					}{
-						Question:    fmt.Sprint(qm["question"]),
-						MultiSelect: toBool(qm["multi_select"]),
-					}
-					if opts, ok := qm["options"].([]any); ok {
-						for _, o := range opts {
-							q.Options = append(q.Options, fmt.Sprint(o))
-						}
-					}
-					m.rpcAskUserQuestions = append(m.rpcAskUserQuestions, q)
-				}
-			}
+	// 子智能体提问冒泡：ask_user_request 广播（镜像 RespPermissionRequest 旁路）。
+	// 子会话 exec 调用 AskUser 提问时经 daemon 的 askSink 直达前端，不依赖父
+	// exec EventBus 存活。data.session_id 为发起提问的子会话 ID，作答时据此把
+	// 答案精确路由到挂起等待的子 exec；为空表示主会话自身提问（防御性处理）。
+	c.OnResponse(gateway.ResponseType(events.AskUserRequest), func(env *gateway.ResponseEnvelope, _ *gateway.Message) {
+		data, ok := env.Data.(map[string]any)
+		if !ok {
+			return
 		}
-
+		questions := parseAskQuestions(data)
+		if len(questions) == 0 {
+			return
+		}
+		m.rpcAskUserQuestions = questions
+		m.rpcAskUserTargetSession, _ = data["session_id"].(string)
 		m.program.Send(clientmsg.AskUserEventMsg{})
 	})
 
@@ -736,6 +733,46 @@ func floatFromAny(v any) float64 {
 // 出站消息（user.message 通知）
 // ---------------------------------------------------------------------------
 
+// parseAskQuestions 从 gateway 事件 data 中解析 AskUser 问题列表。
+// RespForm（主会话提问）与 ask_user_request 广播（子智能体提问冒泡）
+// 携带同一 questions 形态，解析逻辑共用。
+func parseAskQuestions(data map[string]any) []struct {
+	Question    string
+	Options     []string
+	MultiSelect bool
+} {
+	var questions []struct {
+		Question    string
+		Options     []string
+		MultiSelect bool
+	}
+	rawQuestions, ok := data["questions"].([]any)
+	if !ok {
+		return nil
+	}
+	for _, rq := range rawQuestions {
+		qm, ok := rq.(map[string]any)
+		if !ok {
+			continue
+		}
+		q := struct {
+			Question    string
+			Options     []string
+			MultiSelect bool
+		}{
+			Question:    fmt.Sprint(qm["question"]),
+			MultiSelect: toBool(qm["multi_select"]),
+		}
+		if opts, ok := qm["options"].([]any); ok {
+			for _, o := range opts {
+				q.Options = append(q.Options, fmt.Sprint(o))
+			}
+		}
+		questions = append(questions, q)
+	}
+	return questions
+}
+
 func (m *rootModel) rpcSendMessage(text string) {
 	if !m.rpcIsConnected() {
 		m.notifBar.Add(data.Notification{
@@ -772,6 +809,20 @@ func (m *rootModel) sendUserMessage(text, jobEntryID, jobRunID string) error {
 	}
 	if jobRunID != "" {
 		payload["job_run_id"] = jobRunID
+	}
+	return m.rpc.client.Notify("user.message", payload)
+}
+
+// sendUserMessageTo 通过 user.message 通知向指定会话发送用户消息。
+// 子代理提问冒泡场景使用：答案需送达发起提问的子会话（而非当前查看的
+// 主会话），daemon 据此路由到挂起等待的子 exec（askCh）。
+func (m *rootModel) sendUserMessageTo(sessionID, text string) error {
+	if !m.rpcIsConnected() {
+		return errors.New(i18n.T("client.notify.rpc.disconnected"))
+	}
+	payload := map[string]string{"text": text}
+	if sessionID != "" {
+		payload["session_id"] = sessionID
 	}
 	return m.rpc.client.Notify("user.message", payload)
 }
