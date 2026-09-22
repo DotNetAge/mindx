@@ -51,6 +51,11 @@ var userConfigFieldSetters = map[string]func(cfg *core.MindxConfig, val any){
 			cfg.KBAddr = s
 		}
 	},
+	"channel_url": func(cfg *core.MindxConfig, v any) {
+		if s, ok := v.(string); ok {
+			cfg.ChannelURL = s
+		}
+	},
 }
 
 func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (any, error) {
@@ -62,6 +67,7 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 		if err := json.Unmarshal(params, &updates); err == nil {
 			changed := false
 			kbChanged := false
+			channelChanged := false
 			for key, val := range updates {
 				if setter, ok := userConfigFieldSetters[key]; ok {
 					old := getConfigField(cfg, key)
@@ -72,6 +78,9 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 						changed = true
 						if key == "kb_addr" {
 							kbChanged = true
+						}
+						if key == "channel_url" {
+							channelChanged = true
 						}
 					}
 				}
@@ -88,6 +97,10 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 			if kbChanged {
 				d.app.InvalidateRuntimes()
 			}
+			// 中继地址变更后通知 Channel 管理器按新地址重连（清空则断开离线）。
+			if channelChanged {
+				d.onChannelURLChanged(cfg.ChannelURL)
+			}
 		}
 	}
 
@@ -101,6 +114,7 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 		"last_model":       cfg.LastModel,
 		"embedder_model":   cfg.EmbedderModel,
 		"kb_addr":          cfg.KBAddr,
+		"channel_url":      cfg.ChannelURL,
 	}
 	if cfg.PermissionRules != nil {
 		result["permission_rules"] = cfg.PermissionRules
@@ -136,6 +150,8 @@ func getConfigField(cfg *core.MindxConfig, key string) any {
 		return cfg.AutoIndexing
 	case "kb_addr":
 		return cfg.KBAddr
+	case "channel_url":
+		return cfg.ChannelURL
 	}
 	return nil
 }

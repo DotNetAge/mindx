@@ -21,6 +21,7 @@ import (
 	"github.com/DotNetAge/goharness/hooks/action"
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/gort/pkg/gateway"
+	"github.com/DotNetAge/mindx/internal/channel"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/discovery"
 	"github.com/DotNetAge/mindx/internal/i18n"
@@ -92,6 +93,10 @@ type Daemon struct {
 	// mdns 是局域网 mDNS 服务广播（_mindx._tcp），供 iOS App 零配置发现 daemon。
 	// 在 gateway 启动成功后注册，daemon 退出时注销。
 	mdns *discovery.Broadcaster
+
+	// chMgr 是 AgentHub 中继管理器（手机连接）：连接中继、配对同意闸、
+	// 网关桥接。在 gateway 启动成功后开启，停机时关闭。
+	chMgr *channel.Manager
 
 	// projectSkills 记录已确认载入项目级技能的会话（sessionID → 覆盖注册表）。
 	// 项目技能为"发现式"经验，经用户批量确认后一次性挂载到会话（PR-PROMPTS 第三节）：
@@ -395,6 +400,13 @@ func (d *Daemon) Start(ctx context.Context) error {
 	d.logger.Info("gateway started successfully, daemon is now running")
 	d.logger.Info("daemon running, waiting for shutdown signal...")
 
+	// ── 手机连接：中继管理器随网关就绪后开启（依赖网关自拨建桥） ──
+	d.initChannelManager()
+	if d.chMgr != nil {
+		d.chMgr.Start(ctx)
+		d.logger.Info("channel manager started")
+	}
+
 	// ── mDNS 局域网广播：服务就绪后开启，iOS App 同一 WiFi 下零配置发现 daemon ──
 	d.startMDNS()
 
@@ -511,6 +523,13 @@ func (d *Daemon) stopBackgroundServices() {
 	d.stopService("hot-reload watcher", func() {
 		if d.hotReload != nil {
 			d.hotReload.Stop()
+		}
+	})
+
+	// 关闭中继管理器：断开中继连接与网关桥
+	d.stopService("channel 中继管理器", func() {
+		if d.chMgr != nil {
+			d.chMgr.Stop()
 		}
 	})
 
