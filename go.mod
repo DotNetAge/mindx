@@ -36,6 +36,7 @@ require (
 
 require (
 	github.com/DataDog/zstd v1.5.7 // indirect
+	github.com/DotNetAge/goagent v0.0.0 // indirect
 	github.com/DotNetAge/govector v0.1.10 // indirect
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0 // indirect
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
@@ -143,3 +144,5 @@ replace github.com/DotNetAge/goharness => ../core/goharness
 // replace github.com/DotNetAge/gorag/v2 => ../gorag
 
 // replace github.com/DotNetAge/gochat => ../gochat
+
+replace github.com/DotNetAge/goagent => ../core/goagent

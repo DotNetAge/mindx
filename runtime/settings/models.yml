@@ -132,7 +132,7 @@ models:
     temperature: 0.6
     repetition_penalty: 0
     enabled: true
-  - name: deepseek-v4-flash
+  - name: deepseek-flash
     title: Deepseek V4 Flash
     description: DeepSeek官方V4系列最新模型，速度更快但推理能力下降，具备当今世界上最强推理能力的模型。
     provider: deepseek
@@ -149,6 +149,7 @@ models:
     top_p: 0
     top_k: 0
     temperature: 0.7
+    visioning: true
     repetition_penalty: 0
     enabled: true
     max_turns: 0

@@ -93,6 +93,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"channel.bootstrap":                  r.daemon.handleChannelBootstrap,
 		"channel.approve":                    r.daemon.handleChannelApprove,
 		"channel.deny":                       r.daemon.handleChannelDeny,
+		"channel.verify":                     r.daemon.handleChannelVerify,
 		"network.public_info":                r.daemon.handleNetworkPublicInfo,
 		"network.token.get":                  r.daemon.handleNetworkTokenGet,
 		"server.version":                     r.daemon.handleServerVersion,

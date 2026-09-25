@@ -3,9 +3,11 @@ package channel
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -29,15 +31,17 @@ const (
 	reqApproved = "approved"
 	reqDenied   = "denied"
 	requestTTL  = 5 * time.Minute  // 请求（含拒绝结果）的失效时长
-	codeMaxAge  = 50 * time.Second // 引导下发的短码最大龄（低于服务端 60s TTL）
 	codeRefresh = 55 * time.Second // 后台重拨刷新短码的龄阈值
+
+	gateCodeTTL = 5 * time.Minute // 本地软准入短码有效期（过期重签并重新广播）
 )
 
 // 证书存储键（经 CertStore 持久化，断线重连凭证书免配对）
 const (
-	keyCert  = "channel_device_cert"
-	keyKey   = "channel_device_key"
-	keyGroup = "channel_device_group"
+	keyCert          = "channel_device_cert"
+	keyKey           = "channel_device_key"
+	keyGroup         = "channel_device_group"
+	keyPairedDevices = "channel_paired_devices" // 已软准入设备表（JSON map[hint]RFC3339）
 )
 
 // CertStore 证书存取最小接口（由 core.CredentialStore 满足，保持本包与其解耦）
@@ -57,12 +61,14 @@ type PairRequest struct {
 }
 
 // BootstrapResult channel.bootstrap 返回结果：
-// pending=等待桌面端同意；ready=下发中继地址与短码；denied=已被拒绝。
+// pending=等待桌面端同意；ready=软准入闸（需输入桌面端展示的本地短码）；
+// denied=已被拒绝；paired=已软准入（本地短码配对完成）。
 type BootstrapResult struct {
-	Status     string `json:"status"`
-	ChannelURL string `json:"channel_url,omitempty"`
-	Code       string `json:"code,omitempty"`
-	ExpiresIn  int    `json:"expires_in,omitempty"`
+	Status      string `json:"status"`
+	ChannelURL  string `json:"channel_url,omitempty"`
+	Code        string `json:"code,omitempty"`
+	RequireCode bool   `json:"require_code,omitempty"`
+	ExpiresIn   int    `json:"expires_in,omitempty"`
 }
 
 // Config 管理器构造参数
@@ -97,7 +103,11 @@ type Manager struct {
 	paired     bool                    // 是否已与手机配对
 	groupID    string                  // 配对组标识
 	requests   map[string]*PairRequest // 同意闸请求表
-	br         *bridge                 // 网关桥（nil=未建立）
+
+	localCode     string               // 本地软准入短码（同意后签发，桌面端展示、手机端输入）
+	localCodeAt   time.Time            // 本地短码签发时刻
+	pairedDevices map[string]time.Time // 已软准入设备（设备提示→准入时刻），持久化
+	br            *bridge              // 网关桥（nil=未建立）
 
 	urlChanged chan struct{}
 	cancel     context.CancelFunc
@@ -114,14 +124,17 @@ func NewManager(cfg Config) (*Manager, error) {
 	if cfg.GatewayDial == nil {
 		return nil, fmt.Errorf("channel: 网关拨号器不能为空")
 	}
-	return &Manager{
-		cfg:        cfg,
-		logger:     cfg.Logger,
-		url:        cfg.URL,
-		state:      StateOffline,
-		requests:   map[string]*PairRequest{},
-		urlChanged: make(chan struct{}, 1),
-	}, nil
+	mgr := &Manager{
+		cfg:           cfg,
+		logger:        cfg.Logger,
+		url:           cfg.URL,
+		state:         StateOffline,
+		requests:      map[string]*PairRequest{},
+		pairedDevices: map[string]time.Time{},
+		urlChanged:    make(chan struct{}, 1),
+	}
+	mgr.loadPairedDevices()
+	return mgr, nil
 }
 
 // Start 启动重连循环（后台 goroutine），ctx 取消后退出。
@@ -192,6 +205,24 @@ func (m *Manager) Status() map[string]any {
 	if m.groupID != "" {
 		resp["group_id"] = m.groupID
 	}
+	// 本地软准入短码（同意闸第二关：桌面端展示、手机端输入校验）
+	if m.localCode != "" {
+		resp["gate_code"] = m.localCode
+		left := int((gateCodeTTL - time.Since(m.localCodeAt)).Seconds())
+		if left < 0 {
+			left = 0
+		}
+		resp["gate_code_expires_in"] = left
+	}
+	// 已软准入设备列表（状态栏手机标识数据源，按提示名稳定排序）
+	if len(m.pairedDevices) > 0 {
+		devices := make([]string, 0, len(m.pairedDevices))
+		for hint := range m.pairedDevices {
+			devices = append(devices, hint)
+		}
+		sort.Strings(devices)
+		resp["paired_devices"] = devices
+	}
 	// 待审批请求（同刻至多一个活跃引导流程，取最早创建的一个）
 	var earliest *PairRequest
 	for _, req := range m.requests {
@@ -209,17 +240,23 @@ func (m *Manager) Status() map[string]any {
 }
 
 // Bootstrap 处理手机端引导配对请求（同意闸入口）：
-// 未批准 → 登记请求并广播桌面端；已批准 → 下发中继地址与短码；
-// 已拒绝（TTL 内）→ 返回 denied 让手机停止重试。
+// 已软准入 → 直接返回 paired；未批准 → 登记请求并广播桌面端；
+// 已批准 → 进入本地短码闸（ready+require_code，短码经桌面端展示、
+// 手机端 channel.verify 校验）；已拒绝（TTL 内）→ 返回 denied 让手机停止重试。
 func (m *Manager) Bootstrap(deviceHint string) BootstrapResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// 已软准入设备直接放行（快路径，不再走同意闸）
+	if _, ok := m.pairedDevices[deviceHint]; ok {
+		return BootstrapResult{Status: "paired", ChannelURL: m.url}
+	}
 
 	// 命中既有请求（手机端每 2s 重试引导，按设备提示匹配）
 	if req := m.latestRequestByHintLocked(deviceHint); req != nil {
 		switch req.status {
 		case reqApproved:
-			return m.readyResultLocked()
+			return m.gateReadyResultLocked(deviceHint)
 		case reqDenied:
 			if time.Since(req.decidedAt) < requestTTL {
 				return BootstrapResult{Status: "denied"}
@@ -253,7 +290,8 @@ func (m *Manager) Bootstrap(deviceHint string) BootstrapResult {
 	return BootstrapResult{Status: "pending"}
 }
 
-// Approve 批准配对请求：下次引导即下发短码。
+// Approve 批准配对请求：签发本地软准入短码并广播桌面端展示
+// （已持有未过期短码时复用，避免覆盖其它设备正在输入的码）。
 func (m *Manager) Approve(requestID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -263,6 +301,9 @@ func (m *Manager) Approve(requestID string) error {
 	}
 	req.status = reqApproved
 	req.decidedAt = time.Now()
+	if m.localCode == "" || time.Since(m.localCodeAt) >= gateCodeTTL {
+		m.issueGateCodeLocked(req.DeviceHint)
+	}
 	return nil
 }
 
@@ -276,6 +317,43 @@ func (m *Manager) Deny(requestID string) error {
 	}
 	req.status = reqDenied
 	req.decidedAt = time.Now()
+	return nil
+}
+
+// Verify 校验手机端提交的本地配对短码（软准入第二关）：
+// 匹配且未过期 → 登记已准入设备并持久化、清理该设备的同意闸请求与短码、
+// 广播完成事件；失败返回错误（手机端保持短码闸并提示）。
+func (m *Manager) Verify(deviceHint, code string) error {
+	if deviceHint == "" {
+		return fmt.Errorf("缺少设备标识")
+	}
+	if code == "" {
+		return fmt.Errorf("缺少短码")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.localCode == "" || m.localCode != code || time.Since(m.localCodeAt) >= gateCodeTTL {
+		return fmt.Errorf("短码错误或已过期")
+	}
+	m.pairedDevices[deviceHint] = time.Now()
+	m.persistPairedDevicesLocked()
+	for id, req := range m.requests {
+		if req.DeviceHint == deviceHint {
+			delete(m.requests, id)
+		}
+	}
+	m.localCode = ""
+	m.localCodeAt = time.Time{}
+	if m.cfg.Notify != nil {
+		m.cfg.Notify("channel.pair_completed", map[string]any{
+			"type":  "channel.pair_completed",
+			"title": "手机配对完成",
+			"data": map[string]any{
+				"device_hint": deviceHint,
+			},
+		})
+	}
+	m.logger.Info("channel: 手机软准入完成", "device_hint", deviceHint)
 	return nil
 }
 
@@ -483,8 +561,8 @@ func (m *Manager) onServerError(msg *serverMsg) {
 	}
 }
 
-// onRevoked 吊销处理：拆桥、清空本地证书与配对态；连接随后被服务端关闭，
-// 重连后重新下发短码，手机需重新走同意闸引导。
+// onRevoked 吊销处理：拆桥、清空本地证书、配对态与软准入表；连接随后被
+// 服务端关闭，重连后重新下发短码，手机需重新走同意闸引导。
 func (m *Manager) onRevoked(reason string) {
 	m.logger.Warn("channel: " + reason)
 	m.teardownBridge()
@@ -492,6 +570,9 @@ func (m *Manager) onRevoked(reason string) {
 	m.mu.Lock()
 	m.paired = false
 	m.groupID = ""
+	// 通道吊销即解除软准入：已配对设备需重新走同意闸
+	m.pairedDevices = map[string]time.Time{}
+	m.persistPairedDevicesLocked()
 	m.mu.Unlock()
 }
 
@@ -505,24 +586,39 @@ func (m *Manager) handleRelayBinary(data []byte) {
 	}
 }
 
-// readyResultLocked 构造就绪结果：携带当前短码；短码过龄时先重拨再返回 pending，
-// 保证手机拿到的短码至少还有约 10 秒有效期。
-func (m *Manager) readyResultLocked() BootstrapResult {
-	if m.code == "" {
-		return BootstrapResult{Status: "pending"} // 中继暂无可用短码，手机稍后重试
+// gateReadyResultLocked 构造软准入就绪结果：同意后进入本地短码闸，
+// 短码空/过期先重签并广播。结果只带 require_code 标记不带码本身——
+// 短码由桌面端对话框展示，用户在手机端输入后经 channel.verify 校验。
+func (m *Manager) gateReadyResultLocked(deviceHint string) BootstrapResult {
+	if m.localCode == "" || time.Since(m.localCodeAt) >= gateCodeTTL {
+		m.issueGateCodeLocked(deviceHint)
 	}
-	left := 60 - int(time.Since(m.codeAt).Seconds())
-	if time.Since(m.codeAt) >= codeMaxAge {
-		if c := m.cn; c != nil {
-			c.close() // 触发重拨取新码
-		}
-		return BootstrapResult{Status: "pending"}
+	left := int((gateCodeTTL - time.Since(m.localCodeAt)).Seconds())
+	if left < 1 {
+		left = 1
 	}
 	return BootstrapResult{
-		Status:     "ready",
-		ChannelURL: m.url,
-		Code:       m.code,
-		ExpiresIn:  left,
+		Status:      "ready",
+		ChannelURL:  m.url,
+		RequireCode: true,
+		ExpiresIn:   left,
+	}
+}
+
+// issueGateCodeLocked 签发本地软准入短码并广播桌面端展示（调用方须持锁）。
+func (m *Manager) issueGateCodeLocked(deviceHint string) {
+	m.localCode = newGateCode()
+	m.localCodeAt = time.Now()
+	if m.cfg.Notify != nil {
+		m.cfg.Notify("channel.pair_approved", map[string]any{
+			"type":  "channel.pair_approved",
+			"title": "手机配对短码",
+			"data": map[string]any{
+				"device_hint": deviceHint,
+				"code":        m.localCode,
+				"expires_in":  int(gateCodeTTL.Seconds()),
+			},
+		})
 	}
 }
 
@@ -622,11 +718,54 @@ func (m *Manager) clearCerts() {
 	}
 }
 
+// loadPairedDevices 启动时恢复已软准入设备表（解析失败按空表处理）。
+func (m *Manager) loadPairedDevices() {
+	raw, err := m.cfg.Certs.Get(keyPairedDevices)
+	if err != nil || raw == "" {
+		return
+	}
+	var stored map[string]string
+	if err := json.Unmarshal([]byte(raw), &stored); err != nil {
+		m.logger.Warn("channel: 已配对设备记录解析失败，按空表处理", "error", err.Error())
+		return
+	}
+	for hint, at := range stored {
+		t, err := time.Parse(time.RFC3339, at)
+		if err != nil {
+			continue
+		}
+		m.pairedDevices[hint] = t
+	}
+}
+
+// persistPairedDevicesLocked 持久化已软准入设备表（调用方须持锁）。
+func (m *Manager) persistPairedDevicesLocked() {
+	stored := make(map[string]string, len(m.pairedDevices))
+	for hint, at := range m.pairedDevices {
+		stored[hint] = at.Format(time.RFC3339)
+	}
+	data, err := json.Marshal(stored)
+	if err != nil {
+		m.logger.Warn("channel: 已配对设备记录序列化失败", "error", err.Error())
+		return
+	}
+	if err := m.cfg.Certs.Set(keyPairedDevices, string(data)); err != nil {
+		m.logger.Warn("channel: 已配对设备记录持久化失败", "error", err.Error())
+	}
+}
+
 // newRequestID 生成 16 位 hex 随机请求标识。
 func newRequestID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b) // crypto/rand.Read 不会返回错误
 	return hex.EncodeToString(b)
+}
+
+// newGateCode 生成 6 位数字本地配对短码。
+func newGateCode() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b) // crypto/rand.Read 不会返回错误
+	return fmt.Sprintf("%06d", binary.BigEndian.Uint32(b)%1000000)
 }
 
 // sleepCtx 可中断休眠；ctx 取消返回 false。

@@ -14,30 +14,28 @@ import (
 // （调度任务已改为前台执行，与主动对话走同一条事件路由）。
 // 字段为 nil 表示对应事件不注册到 builder。
 type askEventHandlers struct {
-	Thinking            func(chunk string)
-	Content             func(chunk string)
-	ToolUseDelta        func(data goharnessevents.ToolUseDeltaData)
-	ThinkingDone        func()
-	ToolStart           func(data goharnessevents.ToolExecStartData)
-	ToolEnd             func(data goharnessevents.ToolExecEndData)
-	Answer              func(answer string)
-	ExecutionSummary    func(data goharnessevents.ExecutionSummaryData)
-	LoopEnd             func(data goharnessevents.CycleInfo)
-	Compaction          func(data goharnessevents.CompactionData)
-	MaxTurnsReached     func(data goharnessevents.MaxTurnsReachedData)
-	Error               func(errMsg string)
-	SubtaskSpawned      func(data goharnessevents.SubtaskInfo)
-	SubtaskCompleted    func(data goharnessevents.SubtaskResult)
-	TaskSummary         func(data goharnessevents.TaskSummaryData)
-	LLMTimeout          func(data goharnessevents.LLMTimeoutData)
-	LLMCancelled        func(data goharnessevents.LLMCancelledData)
-	LLMRetry            func(data goharnessevents.LLMRetryData)
-	TokenUsageRecorded  func(record goharnesssession.TokenUsageRecord)
-	AskUserPending      func(data goharnessevents.AskUserPendingData)
-	PermissionPending   func(data goharnessevents.PermissionPendingData)
-	SubagentWaitStarted func(data goharnessevents.SubagentWaitData)
-	SubagentWaitEnded   func(data goharnessevents.SubagentWaitData)
-	UserMessageSaved    func(timestamp int64)
+	Thinking           func(chunk string)
+	Content            func(chunk string)
+	ToolUseDelta       func(data goharnessevents.ToolUseDeltaData)
+	ThinkingDone       func()
+	ToolStart          func(data goharnessevents.ToolExecStartData)
+	ToolEnd            func(data goharnessevents.ToolExecEndData)
+	Answer             func(answer string)
+	ExecutionSummary   func(data goharnessevents.ExecutionSummaryData)
+	LoopEnd            func(data goharnessevents.CycleInfo)
+	Compaction         func(data goharnessevents.CompactionData)
+	MaxTurnsReached    func(data goharnessevents.MaxTurnsReachedData)
+	Error              func(errMsg string)
+	SubtaskSpawned     func(data goharnessevents.SubtaskInfo)
+	SubtaskCompleted   func(data goharnessevents.SubtaskResult)
+	TaskSummary        func(data goharnessevents.TaskSummaryData)
+	LLMTimeout         func(data goharnessevents.LLMTimeoutData)
+	LLMCancelled       func(data goharnessevents.LLMCancelledData)
+	LLMRetry           func(data goharnessevents.LLMRetryData)
+	TokenUsageRecorded func(record goharnesssession.TokenUsageRecord)
+	AskUserPending     func(data goharnessevents.AskUserPendingData)
+	PermissionPending  func(data goharnessevents.PermissionPendingData)
+	UserMessageSaved   func(timestamp int64)
 }
 
 // wireAskEvents attaches the common set of event handlers onto an AskBuilder.
@@ -107,12 +105,6 @@ func wireAskEvents(b *agents.AskBuilder, h askEventHandlers) *agents.AskBuilder 
 	}
 	if h.PermissionPending != nil {
 		b = b.OnPermissionPending(h.PermissionPending)
-	}
-	if h.SubagentWaitStarted != nil {
-		b = b.OnSubagentWaitStarted(h.SubagentWaitStarted)
-	}
-	if h.SubagentWaitEnded != nil {
-		b = b.OnSubagentWaitEnded(h.SubagentWaitEnded)
 	}
 	if h.UserMessageSaved != nil {
 		b = b.OnUserMessageSaved(func(d goharnessevents.UserMessageSavedData) {
@@ -243,6 +235,7 @@ func newClientAskHandlers(
 		SubtaskSpawned: func(data goharnessevents.SubtaskInfo) {
 			_ = gw.SendResponse(clientID, gateway.RespSubtaskSpawned, i18n.T("svc.event.subtask.spawned"), map[string]any{
 				"session_id":  data.SessionID,
+				"task_id":     data.TaskID,
 				"agent_name":  data.AgentName,
 				"description": data.Description,
 				"timeout":     data.Timeout,
@@ -251,27 +244,12 @@ func newClientAskHandlers(
 		SubtaskCompleted: func(data goharnessevents.SubtaskResult) {
 			_ = gw.SendResponse(clientID, gateway.RespSubtaskCompleted, i18n.T("svc.event.subtask.completed"), map[string]any{
 				"session_id":  data.SessionID,
+				"task_id":     data.TaskID,
 				"agent_name":  data.AgentName,
 				"success":     data.Success,
 				"answer":      data.Answer,
 				"error":       data.Error,
 				"description": data.Description,
-			}, gateway.WithSessionID(sid), withAgent())
-		},
-		SubagentWaitStarted: func(data goharnessevents.SubagentWaitData) {
-			// 主回合进入「等待子代理落定」阶段：事件由主 exec 自身发射，
-			// envelope 固定路由主会话（sid）；data.session_id 为发起等待的
-			// 会话 ID（主会话等待时与 sid 相同），嵌套等待（子代理派孙代理）
-			// 时为子会话 ID，前端按此过滤只对主回合显示等待徽标。
-			_ = gw.SendResponse(clientID, gateway.ResponseType(goharnessevents.SubagentWaitStarted), i18n.T("svc.event.subagent.wait"), map[string]any{
-				"session_id":     data.SessionID,
-				"subagent_count": data.SubagentCount,
-			}, gateway.WithSessionID(sid), withAgent())
-		},
-		SubagentWaitEnded: func(data goharnessevents.SubagentWaitData) {
-			_ = gw.SendResponse(clientID, gateway.ResponseType(goharnessevents.SubagentWaitEnded), i18n.T("svc.event.subagent.wait"), map[string]any{
-				"session_id":     data.SessionID,
-				"subagent_count": data.SubagentCount,
 			}, gateway.WithSessionID(sid), withAgent())
 		},
 		TaskSummary: func(data goharnessevents.TaskSummaryData) {

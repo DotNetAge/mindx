@@ -279,7 +279,6 @@
   "svc.event.permission.denied": "權限被拒絕",
   "svc.event.permission.request": "權限請求",
   "svc.event.request.failed": "請求失敗",
-  "svc.event.subagent.wait": "正在等待子任務完成",
   "svc.event.subtask.completed": "子任務已完成",
   "svc.event.subtask.spawned": "子任務已建立",
   "svc.event.task.summary": "任務總結",

@@ -13,12 +13,14 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// channel.* RPC —— 手机连接（AgentHub 中继集成）
+// channel.* RPC —— 手机连接（局域网软准入 + AgentHub 中继集成）
 //
 // 数据流：手机经局域网网关调 channel.bootstrap → daemon 弹窗征求用户同意
 // （notify 广播 channel.pair_request）→ 用户同意后 channel.approve →
-// 手机再次 bootstrap 拿到中继地址与短码 → 双方连中继完成配对 → daemon
-// 建立网关桥，手机经中继远程访问桌面控制台。
+// daemon 生成本地短码并广播 channel.pair_approved（桌面端全局弹窗展示）→
+// 手机再次 bootstrap 拿到 ready(require_code) 弹出短码闸，用户在手机端
+// 输入短码经 channel.verify 完成软准入（paired_devices 持久化，后续引导
+// 直接返回 paired）。跨网段场景仍走中继短码（channel.status 展示，手动输入）。
 // ---------------------------------------------------------------------------
 
 // initChannelManager 创建中继管理器（NewDaemon 阶段调用）。
@@ -109,6 +111,24 @@ func (d *Daemon) handleChannelDeny(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("手机连接功能未启用")
 	}
 	if err := d.chMgr.Deny(requestID); err != nil {
+		return nil, err
+	}
+	return map[string]any{"ok": true}, nil
+}
+
+// handleChannelVerify 处理 channel.verify：手机端提交本地配对短码（软准入第二关）。
+func (d *Daemon) handleChannelVerify(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		DeviceHint string `json:"device_hint"`
+		Code       string `json:"code"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, fmt.Errorf("参数解析失败")
+	}
+	if d.chMgr == nil {
+		return nil, fmt.Errorf("手机连接功能未启用")
+	}
+	if err := d.chMgr.Verify(p.DeviceHint, p.Code); err != nil {
 		return nil, err
 	}
 	return map[string]any{"ok": true}, nil
