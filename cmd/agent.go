@@ -435,11 +435,105 @@ Examples:
 	},
 }
 
+// ── agent info ─────────────────────────────────────────────────
+
+var agentInfoCmd = &cobra.Command{
+	Use:   "info <names...>",
+	Short: "Show roles of the given agents (for team leaders to inspect members)",
+	Long: `按名称查看一组智能体的角色、描述与技能（供团队负责人了解成员分工）。
+名称支持空格分隔的多个参数，也接受逗号分隔；未找到的名称逐条提示，不报错。
+
+Examples:
+  mindx agents info writer reviewer
+  mindx agents info writer,reviewer
+  mindx agents info writer --json`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		useJSON, _ := cmd.Flags().GetBool("json")
+
+		// 展开逗号分隔的名称（info 常由 LLM 以 "a,b" 形式调用）
+		var names []string
+		for _, arg := range args {
+			for n := range strings.SplitSeq(arg, ",") {
+				if n = strings.TrimSpace(n); n != "" {
+					names = append(names, n)
+				}
+			}
+		}
+
+		store, _, err := agentstore.Load(agentDir())
+		if err != nil {
+			return fmt.Errorf("cannot load agents: %w", err)
+		}
+
+		type memberInfo struct {
+			Name        string   `json:"name"`
+			Role        string   `json:"role,omitempty"`
+			Description string   `json:"description,omitempty"`
+			Skills      []string `json:"skills,omitempty"`
+			Team        string   `json:"team,omitempty"`
+			Members     []string `json:"members,omitempty"`
+			IsLeader    bool     `json:"is_leader"`
+		}
+
+		var matched []memberInfo
+		var missing []string
+		for _, n := range names {
+			a := store.Get(n)
+			if a == nil {
+				missing = append(missing, n)
+				continue
+			}
+			matched = append(matched, memberInfo{
+				Name:        a.Meta.Name,
+				Role:        a.Meta.Role,
+				Description: a.Meta.Description,
+				Skills:      a.Meta.Skills,
+				Team:        a.Meta.Team,
+				Members:     a.Meta.Members,
+				IsLeader:    a.IsLeader(),
+			})
+		}
+
+		if useJSON {
+			formatted, _ := json.MarshalIndent(matched, "", "  ")
+			fmt.Println(string(formatted))
+		} else {
+			if len(matched) == 0 {
+				fmt.Println("未找到指定的智能体。")
+			} else {
+				table := render.NewTable([]string{"Name", "Role", "Description", "Skills"}, 100)
+				for _, m := range matched {
+					role := m.Role
+					if role == "" {
+						role = "—"
+					}
+					desc := m.Description
+					if desc == "" {
+						desc = "—"
+					}
+					skills := ""
+					if len(m.Skills) > 0 {
+						skills = strings.Join(m.Skills, ", ")
+					}
+					table.AddRow([]string{m.Name, role, desc, skills})
+				}
+				fmt.Println(table.Render())
+			}
+		}
+		for _, n := range missing {
+			fmt.Printf("未找到智能体 %q（可用 `mindx agent list --all` 查看全部名称）。\n", n)
+		}
+		return nil
+	},
+}
+
 // ── init ───────────────────────────────────────────────────────
 
 func init() {
 	agentListCmd.Flags().Bool("json", false, "Output JSON via daemon (requires mindx start)")
 	agentListCmd.Flags().Bool("all", false, "Include all agents (default shows hired only)")
+	agentInfoCmd.Flags().Bool("json", false, "Output structured JSON (local files, no daemon needed)")
 	agentScoreCmd.Flags().StringVar(&agentScoreFlags.agentName, "agent-name", "", "Agent name (required)")
 	agentScoreCmd.Flags().StringVar(&agentScoreFlags.task, "task", "", "Task description (required)")
 	agentScoreCmd.Flags().IntVar(&agentScoreFlags.score, "score", 0, "Score 1-10 (required)")
@@ -455,6 +549,9 @@ func init() {
 	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.skills, "skills", "", "New comma-separated skill names (replaces current)")
 	agentUpdateCmd.Flags().StringVar(&agentUpdateFlags.excludeTools, "exclude-tools", "", "New comma-separated tool names to exclude")
 
+	// Aliases 使 TODO 原文的 `mindx agents filter`（复数）可直接使用，
+	// 连带 `mindx agents list` 等成为合法别名。
+	agentCmd.Aliases = []string{"agents"}
 	agentCmd.AddCommand(agentListCmd)
 	agentCmd.AddCommand(agentGetCmd)
 	agentCmd.AddCommand(agentScoreCmd)
@@ -463,6 +560,7 @@ func init() {
 	agentCmd.AddCommand(agentFireCmd)
 	agentCmd.AddCommand(agentRmCmd)
 	agentCmd.AddCommand(agentAddCmd)
+	agentCmd.AddCommand(agentInfoCmd)
 	rootCmd.AddCommand(agentCmd)
 }
 

@@ -50,7 +50,7 @@ type App struct {
 	providerReg config.ProviderRegistry
 	versions    *FileVersionStore
 	rules       rules.RuleRegistry
-	sessDB      *mindxses.FileSessionStore
+	sessDB      *mindxses.RoutedSessionStore
 
 	// Loaded provider configs (for RPC queries)
 	providerConfigs []*config.ProviderConfig
@@ -160,10 +160,16 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		logger.Warn("Failed to load skills", "dir", settings.SkillsDir(), "error", skillErr)
 	}
 
-	logger.Info("正在加载会话", "dir", settings.SessionsDir())
-	sessDB, err := mindxses.NewFileSessionStore(settings.SessionsDir())
+	// 会话存储：会话实体落各工作目录 <project_dir>/.sessions（工作目录与会话生命周期
+	// 绑定，目录消失会话即消失），工作目录清单持久化在 <DataDir>/session_dirs.json；
+	// 旧全局布局（~/.mindx/sessions）在启动时一次性搬迁。
+	sessDB, err := mindxses.NewRoutedSessionStore(settings.SessionDirsFile())
 	if err != nil {
 		logger.Warn("Failed to init session store", "error", err)
+	} else if moved, kept, mErr := mindxses.MigrateLegacySessions(settings.SessionsDir(), sessDB.RegisterDir); mErr != nil {
+		logger.Warn("旧会话搬迁未完成，下次启动重试", "error", mErr, "moved", moved, "kept", kept)
+	} else if moved > 0 {
+		logger.Info("旧会话已搬迁至各工作目录 .sessions", "moved", moved, "kept", kept)
 	}
 
 	credStore := NewCredentialStore(settings.UserPreferences())
@@ -396,7 +402,7 @@ func (a *App) RuleRegistry() rules.RuleRegistry {
 	return a.rules
 }
 
-func (a *App) SessionDB() *mindxses.FileSessionStore {
+func (a *App) SessionDB() *mindxses.RoutedSessionStore {
 	return a.sessDB
 }
 
@@ -481,7 +487,9 @@ func (a *App) BuildRulesSection() string {
 func (a *App) SetTestDir(tmpDir string) error {
 	a.settings.Test = true
 	a.settings.testDir = tmpDir
-	sessDB, err := mindxses.NewFileSessionStore(filepath.Join(tmpDir, "sessions"))
+	// 测试路由器：清单文件隔离在测试目录内，会话实体按 project_dir 落
+	// <project_dir>/.sessions（测试中 project_dir 用 t.TempDir，随测试清理）。
+	sessDB, err := mindxses.NewRoutedSessionStore(filepath.Join(tmpDir, "data", "session_dirs.json"))
 	if err != nil {
 		return err
 	}
@@ -591,7 +599,7 @@ func (a *App) SetCurrentSessionMeta(meta *session.SessionInfo) {
 	a.currentSessionMeta = meta
 }
 
-func (a *App) SessDB() *mindxses.FileSessionStore {
+func (a *App) SessDB() *mindxses.RoutedSessionStore {
 	return a.sessDB
 }
 
@@ -609,6 +617,13 @@ func (a *App) SetProviderConfigs(providers []*config.ProviderConfig) {
 
 // CreateSession creates a new session with metadata including the captured project directory (os.Getwd() at invocation time).
 func (a *App) CreateSession(agentName, projectDir string) (*session.SessionInfo, error) {
+	// 空目录兜底 Getwd：维持旧 FileSessionStore.Create 的语义（工作目录分片存储
+	// 要求 project_dir 明确，路由器不接受空值落盘）。
+	if projectDir == "" {
+		if wd, wdErr := os.Getwd(); wdErr == nil {
+			projectDir = wd
+		}
+	}
 	var opts []session.SessionOption
 	if projectDir != "" {
 		opts = append(opts, session.WithProjectDirOption(projectDir))
@@ -725,6 +740,11 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		// 活检索视图（不快照）：技能增删改经 ReloadGlobal/实时读盘即刻对
 		// 全部会话生效，无需重建 Runtime（PR-PROMPTS 第二节热加载语义）。
 		opts = append(opts, agents.WithSkillRegistry(a.skills.LiveRegistryFor(agentName)))
+		// 动态技能回退解析器：Skill 工具在基础库未命中时按会话项目目录
+		// 解析 <ProjectDir>/.agents/skills/<name>（军规：动态技能绝不进入
+		// 系统提示词，经 mindx skills discovery 发现后按需加载；
+		// 执行期解析不触碰 system prompt，不影响 KV 缓存前缀）。
+		opts = append(opts, agents.WithProjectSkillResolver(a.skills.ResolveProject))
 	}
 
 	// 基础系统提示词由 mindx 侧组装（IDENTITY → SOUL → Skill 目录 → AGENTS.md → Env → 扩展规则），

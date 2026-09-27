@@ -71,8 +71,9 @@ func (r *Registry) List() []*skill.Skill {
 //
 //   - 全局库：~/.mindx/skills，全部 Agent 共享的"最佳实践"库；
 //   - Agent 级库：agents/<name>/skills，Agent 独有技能；
-//   - 项目级库：<ProjectDir>/.skills，发现式"可能"经验（DiscoverProject 扫描，
-//     用户批量确认后经会话覆盖挂载，见 promote.go 的晋升管线）；
+//   - 项目级库：<ProjectDir>/.agents/skills，发现式的"可能"经验（军规：
+//     动态技能绝不进入系统提示词——经 mindx skills discovery 发现、
+//     Skill 工具按需加载回退解析，见 promote.go 的 ResolveProject/晋升管线）；
 //   - 同名覆盖：运行时注册顺序为"先全局、后 Agent 级"，同名技能
 //     Agent 级版本生效（逻辑重写），分发包安装与用户手动放置均走此语义。
 type Store struct {

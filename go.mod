@@ -24,7 +24,7 @@ require (
 require (
 	github.com/DotNetAge/gochat v0.2.11
 	github.com/DotNetAge/gograph v0.4.0
-	github.com/DotNetAge/goharness v0.2.46
+	github.com/DotNetAge/goharness v0.2.48
 	github.com/DotNetAge/gorag/v2 v2.0.18
 	github.com/DotNetAge/gort v0.1.6
 	github.com/creack/pty v1.1.24
@@ -36,7 +36,7 @@ require (
 
 require (
 	github.com/DataDog/zstd v1.5.7 // indirect
-	github.com/DotNetAge/goagent v0.0.0 // indirect
+	github.com/DotNetAge/goagent v0.1.0 // indirect
 	github.com/DotNetAge/govector v0.1.10 // indirect
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0 // indirect
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
@@ -137,12 +137,12 @@ require (
 	mvdan.cc/sh/v3 v3.13.1 // indirect
 )
 
-replace github.com/DotNetAge/gort => ../core/gort
+// replace github.com/DotNetAge/gort => ../core/gort
 
-replace github.com/DotNetAge/goharness => ../core/goharness
+// replace github.com/DotNetAge/goharness => ../core/goharness
 
 // replace github.com/DotNetAge/gorag/v2 => ../gorag
 
 // replace github.com/DotNetAge/gochat => ../gochat
 
-replace github.com/DotNetAge/goagent => ../core/goagent
+// replace github.com/DotNetAge/goagent => ../core/goagent

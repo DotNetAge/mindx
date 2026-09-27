@@ -49,9 +49,11 @@ func newTestDaemon(t *testing.T) (*Daemon, func()) {
 	return d, cleanup
 }
 
-func mustCreateSession(t *testing.T, sessDB *mindxses.FileSessionStore, agentName string) string {
+func mustCreateSession(t *testing.T, sessDB *mindxses.RoutedSessionStore, agentName string) string {
 	t.Helper()
-	info, err := goharnesssession.CreateSession(context.Background(), sessDB, agentName)
+	// 工作目录分片存储：project_dir 用测试临时目录（会话落 <dir>/.sessions，随测试清理）
+	info, err := goharnesssession.CreateSession(context.Background(), sessDB, agentName,
+		goharnesssession.WithProjectDirOption(t.TempDir()))
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
@@ -621,6 +623,158 @@ func TestHandleAgentUpdate_PartialFieldsOnly(t *testing.T) {
 	}
 	if cfg.Meta.Role != "Test Role" {
 		t.Errorf("role should remain unchanged, got %s", cfg.Meta.Role)
+	}
+}
+
+// TestHandleAgentUpdate_TeamMembers 验证组队属性的指针语义：
+// 传 team/members 覆盖并派生负责人；不传保持不变；传空 members 清空（负责人退位）。
+func TestHandleAgentUpdate_TeamMembers(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
+	mustCreateAgentFile(t, agentsDir, "team-agent")
+	if err := d.app.ReloadAgents(); err != nil {
+		t.Fatalf("ReloadAgents() error = %v", err)
+	}
+
+	// 1) 传 team/members → 覆盖并派生负责人
+	params, _ := json.Marshal(map[string]interface{}{
+		"name":    "team-agent",
+		"team":    "产品研发",
+		"members": []string{"writer", "coder"},
+	})
+	if _, err := d.handleAgentUpdate(context.Background(), params); err != nil {
+		t.Fatalf("handleAgentUpdate error = %v", err)
+	}
+	cfg := d.app.Agents().Get("team-agent")
+	if cfg == nil {
+		t.Fatal("team-agent 丢失")
+	}
+	if cfg.Meta.Team != "产品研发" {
+		t.Errorf("team = %q, want 产品研发", cfg.Meta.Team)
+	}
+	if len(cfg.Meta.Members) != 2 || cfg.Meta.Members[0] != "writer" {
+		t.Errorf("members = %v, want [writer coder]", cfg.Meta.Members)
+	}
+	if !cfg.IsLeader() {
+		t.Error("members 非空应派生为负责人")
+	}
+
+	// 磁盘落盘验证：frontmatter 含 team/members 原始属性
+	data, err := os.ReadFile(filepath.Join(agentsDir, "team-agent", "IDENTITY.md"))
+	if err != nil {
+		t.Fatalf("read updated file: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "team: 产品研发") || !strings.Contains(content, "members:") {
+		t.Errorf("frontmatter 缺少组队字段:\n%s", content)
+	}
+
+	// 2) 不传 team/members → 保持不变
+	params2, _ := json.Marshal(map[string]interface{}{"name": "team-agent", "role": "New Role"})
+	if _, err := d.handleAgentUpdate(context.Background(), params2); err != nil {
+		t.Fatalf("handleAgentUpdate(仅 role) error = %v", err)
+	}
+	cfg = d.app.Agents().Get("team-agent")
+	if cfg.Meta.Team != "产品研发" || len(cfg.Meta.Members) != 2 {
+		t.Errorf("未传 team/members 应保持不变，got team=%q members=%v", cfg.Meta.Team, cfg.Meta.Members)
+	}
+
+	// 3) 传空 members → 清空（负责人退位），frontmatter 移除 members 键
+	params3, _ := json.Marshal(map[string]interface{}{
+		"name":    "team-agent",
+		"members": []string{},
+	})
+	if _, err := d.handleAgentUpdate(context.Background(), params3); err != nil {
+		t.Fatalf("handleAgentUpdate(空 members) error = %v", err)
+	}
+	cfg = d.app.Agents().Get("team-agent")
+	if len(cfg.Meta.Members) != 0 {
+		t.Errorf("空 members 应清空，got %v", cfg.Meta.Members)
+	}
+	if cfg.IsLeader() {
+		t.Error("members 清空后不应再是负责人")
+	}
+	data, err = os.ReadFile(filepath.Join(agentsDir, "team-agent", "IDENTITY.md"))
+	if err != nil {
+		t.Fatalf("read cleared file: %v", err)
+	}
+	if strings.Contains(string(data), "members") {
+		t.Errorf("清空后 frontmatter 不应含 members 键:\n%s", data)
+	}
+}
+
+// TestHandleAgentListAndGet_IsLeader 验证 agent.list / agent.get 投影 is_leader 派生字段
+// （TODO 场景：手写带 team/members 的 IDENTITY.md，加载后无需 RPC 即可读出负责人身份）。
+func TestHandleAgentListAndGet_IsLeader(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
+	agentDir := filepath.Join(agentsDir, "pm")
+	if err := os.MkdirAll(agentDir, 0755); err != nil {
+		t.Fatalf("create agent dir: %v", err)
+	}
+	identity := `---
+name: pm
+role: 项目经理
+description: 协调团队
+team: 交付一组
+members:
+  - writer
+  - coder
+---
+
+我是项目经理。
+`
+	if err := os.WriteFile(filepath.Join(agentDir, "IDENTITY.md"), []byte(identity), 0644); err != nil {
+		t.Fatalf("write agent file: %v", err)
+	}
+	if err := d.app.ReloadAgents(); err != nil {
+		t.Fatalf("ReloadAgents() error = %v", err)
+	}
+
+	// agent.list：is_leader = true
+	listResult, err := d.handleAgentList(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("handleAgentList error = %v", err)
+	}
+	list, ok := listResult.([]agentListResult)
+	if !ok {
+		t.Fatalf("expected []agentListResult, got %T", listResult)
+	}
+	found := false
+	for _, it := range list {
+		if it.Name == "pm" {
+			found = true
+			if !it.IsLeader {
+				t.Error("agent.list 应投影 is_leader=true")
+			}
+			if it.Team != "交付一组" {
+				t.Errorf("team = %q, want 交付一组", it.Team)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("agent.list 未包含 pm")
+	}
+
+	// agent.get：is_leader = true
+	params, _ := json.Marshal(map[string]string{"name": "pm"})
+	getResult, err := d.handleAgentGet(context.Background(), params)
+	if err != nil {
+		t.Fatalf("handleAgentGet error = %v", err)
+	}
+	detail, ok := getResult.(agentDetailResult)
+	if !ok {
+		t.Fatalf("expected agentDetailResult, got %T", getResult)
+	}
+	if !detail.IsLeader {
+		t.Error("agent.get 应投影 is_leader=true")
+	}
+	if detail.Soul != "" {
+		t.Errorf("无 SOUL.md 时 soul 应为空，got %q", detail.Soul)
 	}
 }
 

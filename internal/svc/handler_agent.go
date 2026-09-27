@@ -17,22 +17,30 @@ import (
 func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any, error) {
 	agents := d.app.Agents()
 	if agents == nil {
-		return []agentstore.AgentMeta{}, nil
+		return []agentListResult{}, nil
 	}
 	list := agents.List()
 
-	result := make([]agentstore.AgentMeta, 0, len(list))
+	result := make([]agentListResult, 0, len(list))
 	for _, a := range list {
-		result = append(result, a.Meta)
+		result = append(result, agentListResult{AgentMeta: a.Meta, IsLeader: a.IsLeader()})
 	}
 	return result, nil
+}
+
+// agentListResult 是 agent.list 的返回投影：Meta 全量字段内联展开，
+// 附加派生的 is_leader（Members 非空即负责人，派生值不落盘）。
+type agentListResult struct {
+	agentstore.AgentMeta
+	IsLeader bool `json:"is_leader"`
 }
 
 // agentDetailResult 是 agent.get 的返回：Meta 全量字段内联展开，附加 SOUL.md 正文。
 // 仅做增量扩展（新增 soul 字段），既有消费方不受影响。
 type agentDetailResult struct {
 	agentstore.AgentMeta
-	Soul string `json:"soul"`
+	IsLeader bool   `json:"is_leader"`
+	Soul     string `json:"soul"`
 }
 
 func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any, error) {
@@ -53,7 +61,7 @@ func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any,
 	if agent == nil {
 		return nil, fmt.Errorf("agent %q not found", p.Name)
 	}
-	return agentDetailResult{AgentMeta: agent.Meta, Soul: agent.Soul}, nil
+	return agentDetailResult{AgentMeta: agent.Meta, IsLeader: agent.IsLeader(), Soul: agent.Soul}, nil
 }
 
 func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (any, error) {
@@ -145,6 +153,13 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 	}
 	if p.AllowsTools != nil {
 		updated.Meta.AllowsTools = *p.AllowsTools
+	}
+	// 组队属性：指针字段 nil 保持不变，非 nil 覆盖（含清空）。
+	if p.Team != nil {
+		updated.Meta.Team = strings.TrimSpace(*p.Team)
+	}
+	if p.Members != nil {
+		updated.Meta.Members = *p.Members
 	}
 	if p.Introduction != "" {
 		updated.Meta.Introduction = p.Introduction

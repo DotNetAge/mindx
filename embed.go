@@ -2,6 +2,7 @@ package main
 
 import "embed"
 
+//go:embed runtime/AGENTS.md
 //go:embed runtime/agents
 //go:embed runtime/settings
 //go:embed runtime/skills

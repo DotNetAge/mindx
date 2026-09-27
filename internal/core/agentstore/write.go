@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Save 将 Agent 持久化为目录格式（IDENTITY.md + SOUL.md）并更新内存注册表。
+// Save 将 Agent 持久化为目录格式（IDENTITY.md + SOUL.md + TEAM.md）并更新内存注册表。
 //
 // 原子性：单文件采用"写临时文件 → rename"原子替换；目录已存在时原地更新，
 // 不重建目录（避免 rename 目录的窗口期）。全量强类型序列化保证不丢字段。
@@ -32,6 +32,9 @@ func (s *AgentStore) Save(agent *Agent) error {
 		return fmt.Errorf("写入 %s 失败: %w", dir, err)
 	}
 	if err := writeFileAtomic(filepath.Join(dir, soulFileName), []byte(agent.Soul)); err != nil {
+		return fmt.Errorf("写入 %s 失败: %w", dir, err)
+	}
+	if err := writeFileAtomic(filepath.Join(dir, teamFileName), []byte(agent.TeamDuty)); err != nil {
 		return fmt.Errorf("写入 %s 失败: %w", dir, err)
 	}
 

@@ -46,8 +46,13 @@ type AgentUpdateParams struct {
 	ExcludeTools []string `json:"exclude_tools,omitempty"`
 	// AllowsTools 云技能（MCP 服务）清单，条目 "mcp:<server>"；该属性放的全是 MCP 工具。
 	// 指针区分「未传」与「清空」：nil 保持不变，非 nil 全量覆盖（含空切片清空）。
-	AllowsTools *[]string      `json:"allows_tools,omitempty"`
-	Meta        map[string]any `json:"meta,omitempty"`
+	AllowsTools *[]string `json:"allows_tools,omitempty"`
+	// Team / Members 固定组队属性：team 所属团队名，members 团队成员名单。
+	// 指针语义与 AllowsTools 一致（nil 保持不变，非 nil 覆盖，含清空）；
+	// Members 非空即视为团队负责人（is_leader 派生，不落盘）。
+	Team    *string        `json:"team,omitempty"`
+	Members *[]string      `json:"members,omitempty"`
+	Meta    map[string]any `json:"meta,omitempty"`
 }
 
 func (c *Client) AgentList() (json.RawMessage, error) {

@@ -66,6 +66,13 @@ func (s *Settings) SessionsDir() string {
 	return filepath.Join(s.UserPreferences(), "sessions")
 }
 
+// SessionDirsFile 返回工作目录清单文件路径（<DataDir>/session_dirs.json）。
+// RoutedSessionStore 据此发现各工作目录下的 .sessions 分片；清单独立于
+// ~/.mindx/sessions（迁移源目录），避免搬迁完成后旧目录更名 .bak 时把清单带走。
+func (s *Settings) SessionDirsFile() string {
+	return filepath.Join(s.DataDir(), "session_dirs.json")
+}
+
 func (s *Settings) SchedulesDir() string {
 	return filepath.Join(s.DataDir(), "schedules")
 }

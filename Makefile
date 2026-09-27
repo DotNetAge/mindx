@@ -239,7 +239,7 @@ stop:
 	@"$$HOME/.mindx/bin/$(BINARY_NAME)" stop || echo "$(YELLOW)  ⚠ Daemon may not have been running.$(NC)"
 	@echo "$(GREEN)✅ mindx daemon stopped.$(NC)"
 
-## sync: 将 runtime 中的 agents、schemas、skills、web 同步覆盖至 ~/.mindx
+## sync: 将 runtime 中的 agents、schemas、skills、web、AGENTS.md 同步覆盖至 ~/.mindx
 sync:
 	@echo "$(GREEN)➡ Syncing runtime/ → ~/.mindx/ ...$(NC)"
 	@for dir in agents schemas skills web; do \
@@ -254,6 +254,13 @@ sync:
 			echo "  $(YELLOW)⚠ Source not found: $$src$(NC)"; \
 		fi; \
 	done
+	@if [ -f runtime/AGENTS.md ]; then \
+		cp runtime/AGENTS.md "$$HOME/.mindx/AGENTS.md" && \
+		echo "  $(GREEN)✅ runtime/AGENTS.md → ~/.mindx/AGENTS.md$(NC)" || \
+		echo "  $(RED)❌ Failed: AGENTS.md$(NC)"; \
+	else \
+		echo "  $(YELLOW)⚠ Source not found: runtime/AGENTS.md$(NC)"; \
+	fi
 	@echo "$(GREEN)✅ Sync complete!$(NC)"
 
 ## dev: 开发模式（go run，不编译，推荐日常开发）

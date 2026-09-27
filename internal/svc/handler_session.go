@@ -222,6 +222,38 @@ func (d *Daemon) handleSessionMeta(_ context.Context, params json.RawMessage) (a
 	return meta, nil
 }
 
+// handleSessionRename 更新会话标题（用户可编辑）。仅覆写 meta.json 的 Title 字段，
+// 元数据读取沿用 FileSessionStore.GetSessionMeta 的定位逻辑（遍历 agent 目录找会话）。
+func (d *Daemon) handleSessionRename(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.SessionRenameParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	sessDB := d.app.SessDB()
+	if sessDB == nil {
+		return nil, fmt.Errorf("session store not available")
+	}
+
+	if err := sessDB.RenameSession(p.SessionID, p.Title); err != nil {
+		return nil, fmt.Errorf("rename session %q failed: %w", p.SessionID, err)
+	}
+
+	d.logger.Info("session.rename: called",
+		"session_id", p.SessionID,
+		"title", p.Title,
+	)
+
+	return map[string]any{
+		"session_id": p.SessionID,
+		"title":      p.Title,
+		"renamed":    true,
+	}, nil
+}
+
 func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.SessionDeleteParams
 	if err := unmarshalParams(params, &p); err != nil {

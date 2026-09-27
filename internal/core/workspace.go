@@ -90,9 +90,9 @@ func fileHash(data []byte) string {
 // version has changed. Behaviour differs by directory:
 //
 //   - schemas, web — unconditionally overwritten (program assets)
-//   - agents, skills — overwritten only if the file has not been modified
-//     by the user, determined by comparing the on-disk SHA-256 against the
-//     checksum stored in cfg.AgentSkillChecksums at deploy time.
+//   - agents, skills, 根级 AGENTS.md — overwritten only if the file has not been
+//     modified by the user, determined by comparing the on-disk SHA-256 against
+//     the checksum stored in cfg.AgentSkillChecksums at deploy time.
 //
 // Settings and data directories are intentionally skipped.
 //
@@ -111,6 +111,13 @@ func SyncRuntimeAssets(embeddedFS fs.FS, workspaceDir, appVersion string, cfg *M
 	checkDirs := map[string]bool{
 		"agents": true,
 		"skills": true,
+	}
+
+	// Root-level files protected from overwriting user edits (same checksum
+	// semantics as checkDirs, keyed by relPath whose first component is itself).
+	// AGENTS.md 是全体 Agent 公共行为准则，用户可编辑，仅在未被修改时随版本更新。
+	checkFiles := map[string]bool{
+		"AGENTS.md": true,
 	}
 
 	// Initialise checksum map on first call
@@ -163,8 +170,8 @@ func SyncRuntimeAssets(embeddedFS fs.FS, workspaceDir, appVersion string, cfg *M
 			return os.WriteFile(targetPath, embeddedData, 0644)
 		}
 
-		// ── Check before overwrite (agents, skills) ────────────────
-		if checkDirs[firstComponent] {
+		// ── Check before overwrite (agents, skills, 根级 AGENTS.md) ──
+		if checkDirs[firstComponent] || checkFiles[relPath] {
 			deployedData, statErr := os.ReadFile(targetPath)
 			if os.IsNotExist(statErr) {
 				// New file — create

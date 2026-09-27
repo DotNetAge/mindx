@@ -223,6 +223,123 @@ func TestSetHiredPersists(t *testing.T) {
 	}
 }
 
+// TestSaveTeamRoundTrip 验证组队属性（team/members）的序列化回读与 IsLeader 派生：
+// 原始属性落盘 frontmatter，IsLeader 为派生值不落盘，重载后派生结果一致。
+func TestSaveTeamRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	store, _, err := Load(dir)
+	if err != nil {
+		t.Fatalf("加载失败: %v", err)
+	}
+
+	if err := store.Save(&Agent{Meta: AgentMeta{
+		Name:        "lead",
+		Role:        "团队负责人",
+		Description: "带团队",
+		Team:        "产品研发",
+		Members:     []string{"writer", "coder"},
+	}, TeamDuty: "## 产品研发团队\n\n负责 mindx 的产品设计与研发交付。",
+	}); err != nil {
+		t.Fatalf("Save 失败: %v", err)
+	}
+
+	// 磁盘验证：TEAM.md 独立落盘为负责人自定义团队职责
+	teamData, err := os.ReadFile(filepath.Join(dir, "lead", "TEAM.md"))
+	if err != nil {
+		t.Fatalf("读取 TEAM.md 失败: %v", err)
+	}
+	if !strings.Contains(string(teamData), "产品设计与研发交付") {
+		t.Errorf("TEAM.md 内容不一致:\n%s", teamData)
+	}
+
+	// 磁盘验证：team/members 原始属性落盘，派生值 IsLeader 不落盘
+	data, err := os.ReadFile(filepath.Join(dir, "lead", "IDENTITY.md"))
+	if err != nil {
+		t.Fatalf("读取 IDENTITY.md 失败: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "team: 产品研发") {
+		t.Errorf("frontmatter 缺少 team 字段:\n%s", content)
+	}
+	if !strings.Contains(content, "members:") || !strings.Contains(content, "writer") {
+		t.Errorf("frontmatter 缺少 members 字段:\n%s", content)
+	}
+	if strings.Contains(content, "is_leader") {
+		t.Errorf("派生值 IsLeader 不应落盘:\n%s", content)
+	}
+
+	// 重载 round-trip：原始属性回读一致，IsLeader 正确派生
+	fresh, _, err := Load(dir)
+	if err != nil {
+		t.Fatalf("重载失败: %v", err)
+	}
+	got := fresh.Get("lead")
+	if got == nil {
+		t.Fatal("重载后 lead 丢失")
+	}
+	if got.Meta.Team != "产品研发" {
+		t.Errorf("team 回读不一致: got %q", got.Meta.Team)
+	}
+	if len(got.Meta.Members) != 2 || got.Meta.Members[0] != "writer" || got.Meta.Members[1] != "coder" {
+		t.Errorf("members 回读不一致: got %v", got.Meta.Members)
+	}
+	if !strings.Contains(got.TeamDuty, "产品设计与研发交付") {
+		t.Errorf("TEAM.md 回读不一致: got %q", got.TeamDuty)
+	}
+	if !got.IsLeader() {
+		t.Error("Members 非空应派生为负责人")
+	}
+
+	// 成员侧：仅带 team 无 members → 非负责人
+	if err := store.Save(&Agent{Meta: AgentMeta{
+		Name: "member", Role: "成员", Description: "被协调", Team: "产品研发",
+	}}); err != nil {
+		t.Fatalf("Save 成员失败: %v", err)
+	}
+	fresh2, _, err := Load(dir)
+	if err != nil {
+		t.Fatalf("二次重载失败: %v", err)
+	}
+	m := fresh2.Get("member")
+	if m == nil {
+		t.Fatal("重载后 member 丢失")
+	}
+	if m.IsLeader() {
+		t.Error("仅带 team 无 members 不应派生为负责人")
+	}
+}
+
+// TestLoadLegacyWithoutTeamKeys 验证无 team/members 键的旧 IDENTITY.md 加载不受影响。
+func TestLoadLegacyWithoutTeamKeys(t *testing.T) {
+	dir := t.TempDir()
+	agentDir := filepath.Join(dir, "solo")
+	if err := os.MkdirAll(agentDir, 0755); err != nil {
+		t.Fatalf("创建 Agent 目录失败: %v", err)
+	}
+	identity := "---\nname: solo\nrole: 独立开发者\ndescription: 无组队属性\n---\n\n身份正文。\n"
+	if err := os.WriteFile(filepath.Join(agentDir, "IDENTITY.md"), []byte(identity), 0644); err != nil {
+		t.Fatalf("写入 IDENTITY.md 失败: %v", err)
+	}
+
+	store, _, err := Load(dir)
+	if err != nil {
+		t.Fatalf("加载失败: %v", err)
+	}
+	a := store.Get("solo")
+	if a == nil {
+		t.Fatal("solo 未加载")
+	}
+	if a.Meta.Team != "" || len(a.Meta.Members) != 0 {
+		t.Errorf("未写组队属性时应保持零值，got team=%q members=%v", a.Meta.Team, a.Meta.Members)
+	}
+	if a.IsLeader() {
+		t.Error("无 members 不应派生为负责人")
+	}
+	if a.Soul != "" {
+		t.Errorf("无 SOUL.md 时 Soul 应为空，got %q", a.Soul)
+	}
+}
+
 func TestLoadEmptyAndInvalid(t *testing.T) {
 	if _, _, err := Load(""); err == nil {
 		t.Error("空目录参数应报错")

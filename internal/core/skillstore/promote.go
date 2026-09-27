@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/DotNetAge/goharness/skill"
 )
 
 // SkillLevel 标识技能库层级（PR-PROMPTS 第三节三级库）。
@@ -17,7 +19,9 @@ const (
 	LevelGlobal SkillLevel = "global"
 	// LevelAgent Agent 级库：agents/<name>/skills，Agent 私有经验。
 	LevelAgent SkillLevel = "agent"
-	// LevelProject 项目级库：<ProjectDir>/.skills，发现式的"可能"经验。
+	// LevelProject 项目级库：<ProjectDir>/.agents/skills，发现式的"可能"经验
+	// （军规：动态技能绝不进入系统提示词，经 mindx skills discovery 发现、
+	// Skill 工具按需加载回退解析）。
 	LevelProject SkillLevel = "project"
 )
 
@@ -46,19 +50,33 @@ type PromoteOptions struct {
 	Overwrite bool
 }
 
-// ProjectSkillDir 返回项目级技能库目录（<projectDir>/.skills，隐藏目录）。
-// projectDir 为空时返回空字符串。
+// ProjectSkillDir 返回项目级技能库目录（<projectDir>/.agents/skills，
+// 隐藏目录）。projectDir 为空时返回空字符串。
 func (s *Store) ProjectSkillDir(projectDir string) string {
 	if strings.TrimSpace(projectDir) == "" {
 		return ""
 	}
-	return filepath.Join(projectDir, ".skills")
+	return filepath.Join(projectDir, ".agents", "skills")
 }
 
 // DiscoverProject 扫描项目级技能库（发现式：仅扫描装载，不写入任何内存注册表）。
 // 目录不存在视为空库（不报错）；单技能装载失败跳过并汇入错误汇总。
 func (s *Store) DiscoverProject(projectDir string) (*Registry, []error) {
 	return s.loadDir(s.ProjectSkillDir(projectDir))
+}
+
+// ResolveProject 按名称解析项目动态技能（Skill 工具回退加载入口）。
+// 仅读取装载，不写入注册表；名称为空、含路径分隔符（防目录穿越）或
+// 技能不存在时返回 ErrSkillNotFound。
+func (s *Store) ResolveProject(projectDir, name string) (*skill.Skill, error) {
+	if name == "" || name != filepath.Base(name) {
+		return nil, skill.ErrSkillNotFound
+	}
+	sk, _, err := LoadSkillFromDir(filepath.Join(s.ProjectSkillDir(projectDir), name), "project")
+	if err != nil || sk == nil {
+		return nil, skill.ErrSkillNotFound
+	}
+	return sk, nil
 }
 
 // Promote 将技能在库层级间晋升（目录整体复制，保留 SKILL.md 与 references/scripts 资源）。

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime"
 	"os"
@@ -97,6 +98,96 @@ func defaultFSHome() string {
 
 func (d *Daemon) handleFSHome(_ context.Context, _ json.RawMessage) (any, error) {
 	return map[string]string{"path": defaultFSHome()}, nil
+}
+
+// handleFSChooseDir 弹出系统级目录选择对话框（macOS NSOpenPanel / Windows
+// FolderBrowserDialog / Linux zenity），供无文件系统能力的 Web 前端选取
+// 工作区绝对路径。用户取消返回空 path（不视为错误）；无 GUI 可弹（纯
+// CLI/headless 环境）时返回明确错误。
+func (d *Daemon) handleFSChooseDir(_ context.Context, _ json.RawMessage) (any, error) {
+	var (
+		path string
+		err  error
+	)
+	switch runtime.GOOS {
+	case "darwin":
+		path, err = chooseDirDarwin()
+	case "windows":
+		path, err = chooseDirWindows()
+	case "linux":
+		path, err = chooseDirLinux()
+	default:
+		return nil, fmt.Errorf("目录选择对话框不支持当前平台: %s", runtime.GOOS)
+	}
+	// 调用留痕：方法缺失（旧二进制）与系统层失败在日志侧可区分，便于前端报错溯源
+	d.logger.Info("fs.choose_dir: finished", "path", path, "err", err)
+	if err != nil {
+		return nil, err
+	}
+	if path == "" {
+		return map[string]string{"path": ""}, nil
+	}
+	abs, absErr := filepath.Abs(path)
+	if absErr != nil {
+		return nil, fmt.Errorf("invalid path: %w", absErr)
+	}
+	return map[string]string{"path": abs}, nil
+}
+
+// chooseDirDarwin 经 osascript 调原生 choose folder；用户取消（-128）返回空路径，
+// 自动化授权被拒（-1743）返回明确指引（首次调用 macOS 会弹授权确认）
+func chooseDirDarwin() (string, error) {
+	out, err := exec.Command("osascript", "-e",
+		`POSIX path of (choose folder with prompt "选择工作区目录")`).CombinedOutput()
+	if err != nil {
+		combined := string(out)
+		switch {
+		case strings.Contains(combined, "-128"):
+			return "", nil // 用户取消
+		case strings.Contains(combined, "-1743"):
+			return "", fmt.Errorf("系统未授权 Apple 事件：请在 系统设置 → 隐私与安全性 → 自动化 中允许终端/daemon 控制 Finder，然后重试")
+		}
+		return "", fmt.Errorf("系统目录选择失败: %w: %s", err, strings.TrimSpace(combined))
+	}
+	return strings.TrimSuffix(strings.TrimSpace(string(out)), "/"), nil
+}
+
+// chooseDirWindows 经 PowerShell FolderBrowserDialog；取消无 stdout，返回空路径
+func chooseDirWindows() (string, error) {
+	script := `
+Add-Type -AssemblyName System.Windows.Forms | Out-Null
+$f = New-Object System.Windows.Forms.FolderBrowserDialog
+$f.Description = '选择工作区目录'
+$f.ShowNewFolderButton = $true
+if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }
+`
+	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script).Output()
+	if err != nil {
+		return "", fmt.Errorf("系统目录选择失败: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// chooseDirLinux 经 zenity；取消（exit 1）返回空路径，未安装 zenity 返回明确错误
+func chooseDirLinux() (string, error) {
+	out, err := exec.Command("zenity", "--file-selection", "--directory",
+		"--title", "选择工作区目录").Output()
+	if err != nil {
+		if exitCode(err) == 1 {
+			return "", nil // 用户取消
+		}
+		return "", fmt.Errorf("系统目录选择失败（需要 zenity）: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// exitCode 提取 exec.ExitError 的退出码，非 ExitError 返回 -1
+func exitCode(err error) int {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	return -1
 }
 
 func (d *Daemon) handleFSRead(_ context.Context, params json.RawMessage) (any, error) {

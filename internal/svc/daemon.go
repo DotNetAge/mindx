@@ -97,12 +97,6 @@ type Daemon struct {
 	// chMgr 是 AgentHub 中继管理器（手机连接）：连接中继、配对同意闸、
 	// 网关桥接。在 gateway 启动成功后开启，停机时关闭。
 	chMgr *channel.Manager
-
-	// projectSkills 记录已确认载入项目级技能的会话（sessionID → 覆盖注册表）。
-	// 项目技能为"发现式"经验，经用户批量确认后一次性挂载到会话（PR-PROMPTS 第三节）：
-	// daemon 在每轮 Ask 重建会话实例时重新应用覆盖；daemon 重启后丢失，
-	// 由前端在会话打开时重新发现并确认，符合"仅在该项目内可见"的语义。
-	projectSkills sync.Map
 }
 
 func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
@@ -891,13 +885,6 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			d.logger.Error("failed to load session", err, "session_id", sessionID)
 			d.sendEvent(clientID, sessionID, gateway.RespError, "Session Error", err.Error())
 			return
-		}
-
-		// 应用项目级技能覆盖（用户批量确认后一次性载入）。
-		// 会话实例按轮次从存储重建，覆盖须在每轮载入时重新挂载；
-		// 未确认载入的会话不受影响（nil 跳过）。
-		if overlay := d.projectOverlayFor(sessionID); overlay != nil {
-			s.SetSkillOverlay(overlay)
 		}
 
 		d.activeSessions.Store(sessionID, s)

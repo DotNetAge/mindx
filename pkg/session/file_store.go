@@ -515,6 +515,25 @@ func (s *FileSessionStore) GetSessionMeta(sessionID string) (*goharnesssession.S
 	return LoadSessionMeta(dirPath)
 }
 
+// RenameSession 更新会话标题（用户可编辑，session.rename RPC 承载）。
+// 仅覆写 meta.json 的 Title 字段，其余元数据原样保留；SaveSessionMeta 统一刷新 UpdatedAt。
+// 置空后回退自动补录语义：下次 user 消息追加时按首条消息重新生成标题（AppendMessage 仅在 Title 为空时补录）。
+func (s *FileSessionStore) RenameSession(sessionID string, title string) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return goharnesssession.ErrSessionNotFound
+	}
+	info, err := LoadSessionMeta(dirPath)
+	if err != nil {
+		return err
+	}
+	info.Title = strings.TrimSpace(title)
+	return SaveSessionMeta(dirPath, info)
+}
+
 // updateSessionMeta updates the UpdatedAt and LastActivityAt timestamps in meta.json.
 // If meta.json does not exist (first append), it creates one with available session info.
 // This is called after each message append to keep metadata current.

@@ -201,7 +201,7 @@ goharness BeforeLLM Hook（当轮首轮注入）
 | ② SOUL | 文件 | SOUL.md 正文 | 空则整段跳过 |
 | ③ 能力 | mindx | Catalog（全局+Agent 级+项目覆盖） | 无技能整段跳过 |
 | ④ AGENTS.md | mindx 常量 | `agentsCommonRules`（与应用版本绑定） | 常量非空恒在 |
-| ⑤ 环境/搜索 | mindx | Session（ProjectDir 空时取 cwd） | 恒有 |
+| ⑤ 环境/搜索 | mindx | Session（ProjectDir 空时取 cwd）+ `experienceSystemNote` 常量（.agents/ 体系说明与 MemorySearch/TeamList 工具配合） | 恒有 |
 | ⑥ 扩展规则 | mindx（App.BuildRulesSection） | mindx.json 权限规则 + 固定引导 + rules.yml 用户规则 | 三者皆空才跳过 |
 | ⑦ 记忆摘要 | goharness Hook | LongTerm 检索（确定性：压缩/显式写入才变化） | 无记忆不注入 |
 
@@ -250,6 +250,7 @@ goharness BeforeLLM Hook（当轮首轮注入）
 
 - **项目目录**: /Users/ray/workspaces/demo
  用户工作目录 — 文件在此永久保留，跨会话持续存在。……
+- **经验沉淀体系**: 项目目录下的 .agents/ 目录承载跨会话经验 —— AGENTS.md 为项目军规与工作目标；notes/ 记录踩坑经验；skills/ 存放可复用技能；reports/ 存放复盘日报。回忆过往决策调用 MemorySearch 工具；查看会话团队与成员调用 TeamList 工具。
 - **会话目录**: ~/.mindx/sessions/2026xxxx-xxxx
   当前对话的临时工作区。……
 - **会话ID**: 2026xxxx-xxxx-xxxx

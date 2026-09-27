@@ -34,6 +34,13 @@ type SessionMetaParams struct {
 	SessionID string `json:"session_id"`
 }
 
+// SessionRenameParams are the params for session.rename（用户编辑会话标题）。
+// title 允许为空：置空后回退首条 user 消息自动补录语义。
+type SessionRenameParams struct {
+	SessionID string `json:"session_id"`
+	Title     string `json:"title"`
+}
+
 // SessionFileActionParams are the params for session.confirm_files and session.rollback_files.
 type SessionFileActionParams struct {
 	SessionID string   `json:"session_id"`
@@ -100,6 +107,11 @@ func (c *Client) SessionDelete(sessionID string) (json.RawMessage, error) {
 
 func (c *Client) SessionMeta(sessionID string) (json.RawMessage, error) {
 	return c.CallWithTimeout("session.meta", SessionMetaParams{SessionID: sessionID})
+}
+
+// SessionRename 更新会话标题（用户可编辑）。
+func (c *Client) SessionRename(sessionID, title string) (json.RawMessage, error) {
+	return c.CallWithTimeout("session.rename", SessionRenameParams{SessionID: sessionID, Title: title})
 }
 
 func (c *Client) SessionConfirmFiles(sessionID string, files []string) (json.RawMessage, error) {
