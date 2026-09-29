@@ -35,12 +35,13 @@ type agentListResult struct {
 	IsLeader bool `json:"is_leader"`
 }
 
-// agentDetailResult 是 agent.get 的返回：Meta 全量字段内联展开，附加 SOUL.md 正文。
-// 仅做增量扩展（新增 soul 字段），既有消费方不受影响。
+// agentDetailResult 是 agent.get 的返回：Meta 全量字段内联展开，附加 SOUL.md 与
+// TEAM.md 正文。仅做增量扩展（新增 soul / team_duty 字段），既有消费方不受影响。
 type agentDetailResult struct {
 	agentstore.AgentMeta
 	IsLeader bool   `json:"is_leader"`
 	Soul     string `json:"soul"`
+	TeamDuty string `json:"team_duty"`
 }
 
 func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any, error) {
@@ -61,7 +62,7 @@ func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any,
 	if agent == nil {
 		return nil, fmt.Errorf("agent %q not found", p.Name)
 	}
-	return agentDetailResult{AgentMeta: agent.Meta, IsLeader: agent.IsLeader(), Soul: agent.Soul}, nil
+	return agentDetailResult{AgentMeta: agent.Meta, IsLeader: agent.IsLeader(), Soul: agent.Soul, TeamDuty: agent.TeamDuty}, nil
 }
 
 func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (any, error) {
@@ -142,6 +143,10 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 	if p.Role != "" {
 		updated.Meta.Role = p.Role
 	}
+	// 昵称：指针语义（nil 不变，非 nil 覆盖；TrimSpace 后空串即清空，展示回退 role/name）
+	if p.NickName != nil {
+		updated.Meta.NickName = strings.TrimSpace(*p.NickName)
+	}
 	if p.Description != "" {
 		updated.Meta.Description = p.Description
 	}
@@ -171,6 +176,9 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 	}
 	if p.Soul != nil {
 		updated.Soul = strings.TrimSpace(*p.Soul)
+	}
+	if p.TeamDuty != nil {
+		updated.TeamDuty = strings.TrimSpace(*p.TeamDuty)
 	}
 	if p.Meta != nil {
 		updated.Meta.Meta = p.Meta

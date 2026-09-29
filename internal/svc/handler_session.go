@@ -41,6 +41,46 @@ func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (a
 	return sessions, nil
 }
 
+// SessionRunStatus 单个会话的运行态条目：kind 区分主会话执行与子代理执行。
+type SessionRunStatus struct {
+	SessionID string `json:"session_id"`
+	Kind      string `json:"kind"` // "main"（会话串行队列执行中）| "sub"（运行中子代理会话）
+}
+
+// handleSessionStatuses 返回 daemon 内全部运行中会话的清单（跨客户端可见）。
+//
+// 运行态不落库、只在进程内存：主会话取会话串行队列（sessionQueues）的
+// running 标志，子代理取各 Runtime 的强停登记表（sponsored）。
+// 事件按发起客户端单播，其它端接入后收不到在途执行的事件——前端据此
+// RPC 轮询对齐会话列表的运行状态（侧栏头像呼吸、ChatInput 停止态）。
+func (d *Daemon) handleSessionStatuses(_ context.Context, _ json.RawMessage) (any, error) {
+	statuses := make([]SessionRunStatus, 0, 4)
+
+	// 主会话：遍历会话串行队列，仅暴露 running 中的（队列对象在任务结束后
+	// 仍留在 map，但 running=false，跳过即可）。
+	d.sessionQueues.Range(func(key, value any) bool {
+		q := value.(*sessionQueue)
+		q.mu.Lock()
+		running := q.running
+		q.mu.Unlock()
+		if running {
+			statuses = append(statuses, SessionRunStatus{SessionID: key.(string), Kind: "main"})
+		}
+		return true
+	})
+
+	// 子代理：遍历全部缓存 Runtime，收集登记中的运行中子会话。
+	if d.app != nil {
+		d.app.ForEachRuntime(func(rt *agents.Runtime) {
+			for _, id := range rt.RunningSubAgentSessions() {
+				statuses = append(statuses, SessionRunStatus{SessionID: id, Kind: "sub"})
+			}
+		})
+	}
+
+	return statuses, nil
+}
+
 // handleSessionLatestByDir 按工作目录过滤所有会话，返回该目录下最近活跃的 0-1 个会话。
 // 用于「打开工作目录」流程：客户端据此跨 Agent 定位该目录最近使用的会话，
 // 并切换到该会话对应的 Agent。

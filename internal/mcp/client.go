@@ -100,9 +100,14 @@ func newStdioClient(cfg ServerConfig, creds map[string]string) (*stdioClient, er
 }
 
 func buildCommand(command string, args []string, env map[string]string) *exec.Cmd {
-	cmd := exec.Command(command, args...)
-	// 继承系统环境（PATH 等必需），再叠加 mcp.json 配置的 env（同名覆盖）
+	// 先在增强 PATH 里解析命令（exec.Command 构造期只看 daemon 自身 PATH，
+	// 精简 PATH 下找不到 npx，见 env_path.go resolveCommand）
+	cmd := exec.Command(resolveCommand(command), args...)
+	// 继承系统环境，再并入登录 shell 的用户 PATH（GUI 拉起的 daemon PATH 精简，
+	// 子进程内部 spawn 依赖它，如 npx 的 shebang env node），最后叠加 mcp.json
+	// 配置的 env（append 同名保留最后：显式配置的 PATH 优先于增强值）
 	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "PATH="+enhancedPath())
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}

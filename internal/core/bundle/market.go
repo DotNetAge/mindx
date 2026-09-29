@@ -38,6 +38,8 @@ type MarketPackage struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description,omitempty"`
 	Icon        string      `json:"icon,omitempty"`
+	// NickName 昵称（kind=agent，2-3 字外号，展示主名；统一显示规则 = 昵称 + Role 小字）。
+	NickName string `json:"nick_name,omitempty"`
 	// Role 岗位头衔（kind=agent，包内清单透传；市场卡片大标题）。
 	Role string `json:"role,omitempty"`
 	// Category 业务分类（kind=agent，中文，包内清单透传；市场陈列与本地注册表同口径）。

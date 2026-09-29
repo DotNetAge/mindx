@@ -123,6 +123,8 @@ func TestSetAgentHiredEndToEnd(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(agentDir, "IDENTITY.md"), []byte(identity), 0644); err != nil {
 		t.Fatalf("写入 IDENTITY.md 失败: %v", err)
 	}
+	// 第二成员 guard：散伙守卫要求系统至少保留一个已招募智能体，解雇 architect 前需先有其他在编成员
+	mustWriteAgentDir(t, dir, "guard", "", "正文")
 	soul := "## 核心准则\n\n分层解耦。\n"
 	if err := os.WriteFile(filepath.Join(agentDir, "SOUL.md"), []byte(soul), 0644); err != nil {
 		t.Fatalf("写入 SOUL.md 失败: %v", err)
@@ -165,6 +167,11 @@ func TestSetAgentHiredEndToEnd(t *testing.T) {
 		t.Fatalf("雇佣视图应含 1 个 Agent, 实际 %d", len(hired))
 	}
 
+	// 招募第二成员 guard：使 architect 不再是唯一在编，散伙守卫放行
+	if err := SetAgentHired(store, "guard", true); err != nil {
+		t.Fatalf("SetAgentHired(guard) 失败: %v", err)
+	}
+
 	// 解雇：文件写入 hired: false、内存同步
 	if err := SetAgentHired(store, "architect", false); err != nil {
 		t.Fatalf("SetAgentHired(false) 失败: %v", err)
@@ -178,6 +185,11 @@ func TestSetAgentHiredEndToEnd(t *testing.T) {
 	}
 	if AgentIsHired(store.Get("architect")) {
 		t.Fatalf("内存注册表应同步为未雇佣")
+	}
+
+	// 守卫：guard 已是唯一在编成员，散伙应被拒绝
+	if err := SetAgentHired(store, "guard", false); err == nil {
+		t.Fatalf("散伙唯一在编 Agent 应被守卫拒绝")
 	}
 
 	// 不存在的 Agent 应报错

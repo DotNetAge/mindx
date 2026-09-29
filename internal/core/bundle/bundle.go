@@ -52,6 +52,8 @@ type Manifest struct {
 	Icon        string      `json:"icon,omitempty"`
 	// Role 岗位头衔（kind=agent，来自 IDENTITY frontmatter；市场卡片大标题用）。
 	Role string `json:"role,omitempty"`
+	// NickName 昵称（kind=agent，2-3 字外号，展示主名；统一显示规则 = 昵称 + Role 小字）。
+	NickName string `json:"nick_name,omitempty"`
 	// Category 业务分类（kind=agent，中文，取自 IDENTITY.md frontmatter category；
 	// 市场陈列与本地注册表同口径，三端统一用它过滤与展示）。
 	Category string `json:"category,omitempty"`

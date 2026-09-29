@@ -19,8 +19,10 @@ func testDeadline(t *testing.T) {
 	}()
 }
 
-// 预置 runtime/agents 目录化资源加载验证：11 个 Agent 全部可加载，
+// 预置 runtime/agents 目录化资源加载验证：预置 Agent 全部可加载，
 // frontmatter 强类型字段就位，SOUL.md 承载行为规则，IDENTITY 正文留空走兜底。
+// 注：预置数量随目录化改造收缩（10 个迁至 mindx-market，仅留 assistant），
+// 断言不再写死数量，只要求非空（历史快照断言在数据迁移后会永久失败）。
 func TestRuntimeAgentsLoad(t *testing.T) {
 	testDeadline(t)
 	store, report, err := Load("../../../runtime/agents")
@@ -31,8 +33,8 @@ func TestRuntimeAgentsLoad(t *testing.T) {
 		t.Errorf("预置 agent %s 迁移报告含错误: %v", name, e)
 	}
 	agents := store.List()
-	if len(agents) != 11 {
-		t.Fatalf("预置 Agent 应为 11 个, 实际 %d", len(agents))
+	if len(agents) == 0 {
+		t.Fatalf("预置 Agent 不应为空")
 	}
 	for _, a := range agents {
 		if a.Meta.Name == "" || a.Meta.Role == "" || a.Meta.Description == "" {
@@ -45,14 +47,8 @@ func TestRuntimeAgentsLoad(t *testing.T) {
 			t.Errorf("%s: IDENTITY.md 正文应留空（走兜底角色定义）", a.Meta.Name)
 		}
 	}
-	if a := store.Get("architect"); a != nil {
-		if a.Meta.Category != "产品研发" {
-			t.Errorf("architect category 断言失败: got %q", a.Meta.Category)
-		}
-		if len(a.Meta.Skills) != 2 {
-			t.Errorf("architect skills 引用错误: %v", a.Meta.Skills)
-		}
-	} else {
-		t.Error("architect 未加载")
+	// 历史断言针对 architect（已迁至 mindx-market）；现预置仅剩 assistant，改存在性断言
+	if store.Get("assistant") == nil {
+		t.Error("assistant 未加载")
 	}
 }

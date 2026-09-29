@@ -28,8 +28,10 @@ import (
 // 字段均为一级字段，icon / category / hired 由旧 meta map 提升而来；
 // category 为业务分类（中文，如「产品研发」），由旧 domains 字段一次性迁移而来。
 type AgentMeta struct {
-	Name         string   `yaml:"name" json:"name"`
-	Role         string   `yaml:"role" json:"role"`
+	Name string `yaml:"name" json:"name"`
+	Role string `yaml:"role" json:"role"`
+	// NickName 昵称（2-3 字外号，展示主名；统一显示规则 = 昵称 + Role 小字）。
+	NickName     string   `yaml:"nick_name,omitempty" json:"nick_name,omitempty"`
 	Description  string   `yaml:"description" json:"description"`
 	Introduction string   `yaml:"introduction,omitempty" json:"introduction,omitempty"`
 	Icon         string   `yaml:"icon,omitempty" json:"icon,omitempty"`

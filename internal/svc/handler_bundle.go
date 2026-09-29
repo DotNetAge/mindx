@@ -136,6 +136,7 @@ type marketPackageDTO struct {
 	Name        string            `json:"name"`
 	Description string            `json:"description,omitempty"`
 	Icon        string            `json:"icon,omitempty"`
+	NickName    string            `json:"nick_name,omitempty"`
 	Role        string            `json:"role,omitempty"`
 	Category    string            `json:"category,omitempty"`
 	Skills      []string          `json:"skills,omitempty"`
@@ -164,6 +165,7 @@ func (d *Daemon) handleMarketList(_ context.Context, _ json.RawMessage) (any, er
 			Name:        p.Name,
 			Description: p.Description,
 			Icon:        p.Icon,
+			NickName:    p.NickName,
 			Role:        p.Role,
 			Category:    p.Category,
 			Skills:      p.Skills,

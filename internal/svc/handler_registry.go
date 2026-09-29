@@ -15,6 +15,7 @@ func NewRPCHandlerRegistry(d *Daemon) *RPCHandlerRegistry {
 func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 	return map[string]gateway.MethodHandler{
 		"session.list":                       r.daemon.handleSessionList,
+		"session.statuses":                   r.daemon.handleSessionStatuses,
 		"session.latest_by_dir":              r.daemon.handleSessionLatestByDir,
 		"session.get":                        r.daemon.handleSessionGet,
 		"session.meta":                       r.daemon.handleSessionMeta,

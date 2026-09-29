@@ -33,15 +33,20 @@ type AgentHireParams struct {
 
 // AgentUpdateParams are the params for agent.update.
 type AgentUpdateParams struct {
-	Name         string `json:"name"`
-	Role         string `json:"role,omitempty"`
-	Description  string `json:"description,omitempty"`
-	Introduction string `json:"introduction,omitempty"`
+	Name string `json:"name"`
+	Role string `json:"role,omitempty"`
+	// NickName 昵称（frontmatter 顶级键）：指针区分「未传」与「清空」——nil 保持不变，
+	// 非 nil 覆盖（TrimSpace 后空串即清空昵称，展示回退 role/name）。
+	NickName     *string `json:"nick_name,omitempty"`
+	Description  string  `json:"description,omitempty"`
+	Introduction string  `json:"introduction,omitempty"`
 	// Soul / IdentityBody 用指针区分「未传」与「清空」：nil 保持不变，非 nil 覆盖（含空串清空）。
 	// IdentityBody 对应 IDENTITY.md 身份正文（写入后与 frontmatter introduction 保持一致），
 	// Soul 对应 SOUL.md 正文。
-	Soul         *string  `json:"soul,omitempty"`
-	IdentityBody *string  `json:"identity_body,omitempty"`
+	Soul         *string `json:"soul,omitempty"`
+	IdentityBody *string `json:"identity_body,omitempty"`
+	// TeamDuty 团队职责（TEAM.md 正文）：指针区分「未传」与「清空」，仅负责人语义相关。
+	TeamDuty     *string  `json:"team_duty,omitempty"`
 	Skills       []string `json:"skills,omitempty"`
 	ExcludeTools []string `json:"exclude_tools,omitempty"`
 	// AllowsTools 云技能（MCP 服务）清单，条目 "mcp:<server>"；该属性放的全是 MCP 工具。

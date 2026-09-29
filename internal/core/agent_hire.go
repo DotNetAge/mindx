@@ -26,6 +26,12 @@ func SetAgentHired(store *agentstore.AgentStore, name string, hired bool) error 
 		return fmt.Errorf("未找到智能体 %q，请确认名称是否正确", name)
 	}
 
+	// 散伙守卫：系统至少保留一个已招募智能体——散伙唯一在编成员会让新会话
+	// 无 Agent 可用（仅拦截真实在编成员的散伙，对未招募成员的重复散伙不拦）
+	if !hired && agent.Meta.Hired && len(store.Hired()) <= 1 {
+		return fmt.Errorf("系统至少需要保留一个智能体，不能散伙「%s」", name)
+	}
+
 	updated := *agent
 	updated.Meta = agent.Meta
 	updated.Meta.Hired = hired
