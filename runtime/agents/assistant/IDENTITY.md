@@ -11,8 +11,9 @@ exclude_tools:
   - PowerShell
   - SubAgent
 skills:
-  - dashboard 
+  - dashboard
   - generate-readme
   - agent-creator
   - mbti-g-user-profile
+  - project-overview
 ---

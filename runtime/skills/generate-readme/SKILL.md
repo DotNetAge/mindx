@@ -1,6 +1,8 @@
 ---
 name: generate-readme
 description: 为目录生成或更新 README.md，让人与 Agent 一眼知道该目录是关于什么、有些什么内容。无 README 则生成；已有 README 则只更新 frontmatter 元数据，正文不动。
+metadata:
+  name_zh: 生成 README
 ---
 
 # 生成 README

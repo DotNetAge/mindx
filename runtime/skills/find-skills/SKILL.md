@@ -1,6 +1,8 @@
 ---
 name: find-skills
 description: 发现与加载技能：先用 mindx cli 查本地技能库（项目级 .agents/skills 与已注入的内置技能），未命中再查 mindx 市场技能库（market list/install）。当用户问"如何做某事"、"找一个能做 X 的技能"、"有没有能...的技能"，或表达扩展能力的兴趣时使用。
+metadata:
+  name_zh: 查找技能
 ---
 
 # 查找技能

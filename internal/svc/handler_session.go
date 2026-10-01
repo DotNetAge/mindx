@@ -28,6 +28,32 @@ func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (a
 		return nil, fmt.Errorf("list sessions failed: %w", err)
 	}
 
+	// 同 session_id 多副本去重：分片存储按 agent 目录归档，同一会话可能因
+	// 历史/迁移在多个 agent 目录下各存一份（如 assistant 下 ProjectDir 为空
+	// 的副本 + architect 下正常副本）。空目录副本对客户端不可用（发送链路与
+	// explorer 工作区都依赖 project_dir），去重时 ProjectDir 非空优先，其次
+	// LastActivityAt 较新；保留首次出现位置（输出仍按活跃度倒序）。
+	seen := make(map[string]goharnesssession.SessionInfo, len(sessions))
+	order := make([]string, 0, len(sessions))
+	for _, si := range sessions {
+		prev, ok := seen[si.SessionID]
+		if !ok {
+			seen[si.SessionID] = si
+			order = append(order, si.SessionID)
+			continue
+		}
+		better := (si.ProjectDir != "" && prev.ProjectDir == "") ||
+			((si.ProjectDir != "") == (prev.ProjectDir != "") && si.LastActivityAt.After(prev.LastActivityAt))
+		if better {
+			seen[si.SessionID] = si
+		}
+	}
+	deduped := make([]goharnesssession.SessionInfo, 0, len(order))
+	for _, id := range order {
+		deduped = append(deduped, seen[id])
+	}
+	sessions = deduped
+
 	if p.Agent != "" {
 		filtered := make([]goharnesssession.SessionInfo, 0)
 		for i := range sessions {

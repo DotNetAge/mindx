@@ -1,6 +1,8 @@
 ---
 name: agent-creator
 description: 创建并注册具有特定角色、专业知识或能力的新智能体（Agent）。当你需要某个特定领域的专家且没有现有智能体（Agent）符合要求时使用。
+metadata:
+  name_zh: 智能体创建器
 ---
 
 ## 何时用
