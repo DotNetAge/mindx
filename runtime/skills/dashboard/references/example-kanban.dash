@@ -1,0 +1,85 @@
+<board name="任务看板" gap="12" class="kanban">
+  <style>
+    /* stat 统计卡 */
+    .w-stat .s{display:flex;flex-direction:column;gap:4px}
+    .w-stat .s .n{font:600 28px/36px var(--mx-font-family)}
+    .w-stat .s .d{font-size:12px;color:var(--mx-text-secondary)}
+    /* progress 进度条 */
+    .w-progress .bar{position:relative;height:10px;border-radius:5px;background:color-mix(in currentColor,12%,transparent)}
+    .w-progress .bar i{display:block;height:100%;border-radius:5px}
+    .w-progress .mark{position:absolute;top:-4px;width:2px;height:18px;background:color-mix(in currentColor,45%,transparent)}
+    /* bars 横向条形 */
+    .w-bars .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:13px}
+    .w-bars .row .name{width:64px;flex-shrink:0;color:var(--mx-text-secondary)}
+    .w-bars .row .track{flex:1;height:10px;border-radius:5px;background:color-mix(in currentColor,10%,transparent)}
+    .w-bars .row .track i{display:block;height:100%;border-radius:5px}
+    .w-bars .row .v{width:28px;text-align:right;font-weight:600;flex-shrink:0}
+    /* funnel 漏斗 */
+    .w-funnel .f{display:flex;flex-direction:column;gap:6px;font-size:13px}
+    .w-funnel .step{display:flex;align-items:center;gap:10px}
+    .w-funnel .step .label{width:64px;flex-shrink:0;color:var(--mx-text-secondary);font-size:12px}
+    .w-funnel .step .bar{height:22px;border-radius:6px;min-width:36px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:var(--mx-text-on-accent);font-size:12px;font-weight:600}
+    /* flow 流转列 */
+    .w-flow .cols{display:flex;gap:12px}
+    .w-flow .col{flex:1;min-width:0}
+    .w-flow .col h4{margin:0 0 8px;font-size:12px;font-weight:500;color:var(--mx-text-secondary)}
+    .w-flow .col h4 b{font-weight:600}
+    .w-flow .t{padding:8px 10px;border-radius:8px;background:color-mix(in currentColor,6%,transparent);margin-bottom:8px;font-size:13px}
+    .w-flow .t .meta{display:flex;gap:6px;margin-top:6px;font-size:11px;color:var(--mx-text-tertiary);align-items:center}
+    .w-flow .tag{padding:1px 8px;border-radius:999px;font-size:11px}
+    /* table 表格 */
+    .w-table table{width:100%;border-collapse:collapse;font-size:13px}
+    .w-table th{text-align:left;font-weight:500;color:var(--mx-text-tertiary);padding:6px 10px;border-bottom:1px solid var(--mx-separator-soft);font-size:12px}
+    .w-table td{padding:8px 10px;border-bottom:1px solid var(--mx-separator-soft)}
+    .w-table tr:last-child td{border-bottom:none}
+    .w-table .tag{padding:1px 8px;border-radius:999px;font-size:11px}
+    /* timeline 时间线 */
+    .w-timeline .tl{position:relative;padding-left:18px}
+    .w-timeline .tl::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:1.5px;background:color-mix(in currentColor,18%,transparent)}
+    .w-timeline .m{position:relative;padding-bottom:14px;font-size:13px}
+    .w-timeline .m::before{content:"";position:absolute;left:-18px;top:4px;width:9px;height:9px;border-radius:50%;background:color-mix(in currentColor,30%,transparent)}
+    .w-timeline .m.done::before{background:var(--mx-success)}
+    .w-timeline .m.doing::before{background:var(--mx-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--mx-accent) 18%,transparent)}
+    .w-timeline .m .d{font-size:11px;color:var(--mx-text-tertiary);margin-left:6px}
+    /* members 成员墙 */
+    .w-members .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+    .w-members .m{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:color-mix(in currentColor,5%,transparent)}
+    .w-members .ava{flex-shrink:0;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--mx-text-on-accent)}
+    .w-members .who{min-width:0}
+    .w-members .who b{display:block;font-size:13px;font-weight:600}
+    .w-members .who span{display:block;font-size:11px;color:var(--mx-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .w-members .st{flex-shrink:0;margin-left:auto;width:7px;height:7px;border-radius:50%}
+    .w-members .st.on{background:var(--mx-success)}
+    .w-members .st.busy{background:var(--mx-warning)}
+    .w-members .st.off{background:color-mix(in currentColor,30%,transparent)}
+  </style>
+  <card id="total" span="6" title="全部任务" class="w-stat">
+<div class="s"><span class="n">7</span><span class="d">未开始 3 · 进行中 2 · 已完成 2</span></div>
+  </card>
+  <card id="todo" span="6" title="未开始" class="w-stat">
+<div class="s"><span class="n">3</span><span class="d">含 1 项重要紧急</span></div>
+  </card>
+  <card id="doing" span="6" title="进行中" class="w-stat">
+<div class="s"><span class="n" style="color:var(--mx-accent)">2</span><span class="d">累计耗时 3 天</span></div>
+  </card>
+  <card id="done" span="6" title="已完成" class="w-stat">
+<div class="s"><span class="n" style="color:var(--mx-success)">2</span><span class="d">累计耗时 2 天</span></div>
+  </card>
+  <card id="board" span="24" h="280" title="任务看板" class="w-flow">
+<div class="cols">
+    <div class="col"><h4>未开始 <b>3</b></h4>
+      <div class="t">官网改版落地页设计<span class="meta"><span class="tag" style="background:color-mix(in srgb,var(--mx-danger) 12%,transparent);color:var(--mx-danger)">重要紧急</span>2026/08/28 创建 · 设计</span></div>
+      <div class="t">手机连接短码配对<span class="meta"><span class="tag" style="background:color-mix(in currentColor,12%,transparent);color:currentColor">重要不紧急</span>2026/08/29 创建 · 开发</span></div>
+      <div class="t">导出性能优化<span class="meta"><span class="tag" style="background:color-mix(in currentColor,12%,transparent);color:currentColor">次要</span>2026/08/30 创建 · 优化</span></div>
+    </div>
+    <div class="col"><h4>进行中 <b>2</b></h4>
+      <div class="t">状态栏手机图标<span class="meta"><span class="tag" style="background:color-mix(in srgb,var(--mx-danger) 12%,transparent);color:var(--mx-danger)">重要紧急</span>耗时 2 天 · 2026/08/30 创建 · 开发</span></div>
+      <div class="t">Session 目录迁移<span class="meta"><span class="tag" style="background:color-mix(in currentColor,12%,transparent);color:currentColor">重要不紧急</span>耗时 1 天 · 2026/08/30 创建 · 重构</span></div>
+    </div>
+    <div class="col"><h4>已完成 <b>2</b></h4>
+      <div class="t">任务提炼命名<span class="meta">耗时 0 天 · 2026/08/30 完成 · 学习</span></div>
+      <div class="t">桌面状态栏驻留<span class="meta">耗时 2 天 · 2026/08/30 完成 · 调研</span></div>
+    </div>
+    </div>
+  </card>
+</board>

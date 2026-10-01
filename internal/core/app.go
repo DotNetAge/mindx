@@ -78,6 +78,10 @@ type App struct {
 	// Scheduler store (injected by Daemon after initialization)
 	schedulerStore *scheduler.FileSchedulerStore
 
+	// uiBroadcast 是 UI 命令通道的广播回调（Daemon 注入其 broadcastUI），
+	// 供 Open/Visit/TerminalRun 三工具把呈现请求广播给各客户端。
+	uiBroadcast mindxtools.UIBroadcast
+
 	// Embedded app icon filesystem (for favicon / .app bundle)
 	iconFS fs.FS
 
@@ -263,6 +267,12 @@ func (a *App) Embedder() goragcore.Embedder {
 // Called by Daemon after shared memory is initialized; TUI mode sets it in createRuntime.
 func (a *App) SetLongTermMemory(mem goharnessmemory.Memory) {
 	a.longTermMemory = mem
+}
+
+// SetUIBroadcast 注入 UI 命令通道广播回调（Daemon 的 broadcastUI）。由 Daemon
+// 初始化时调用；未注入时 createRuntime 不注册 Open/Visit/TerminalRun 三工具。
+func (a *App) SetUIBroadcast(broadcast mindxtools.UIBroadcast) {
+	a.uiBroadcast = broadcast
 }
 
 // LongTermMemory returns the long-term memory store, or nil if not configured.
@@ -810,6 +820,26 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	rt := agents.NewRuntime(opts...)
 	a.logger.Info("createRuntime: done", "agent", agentName)
 
+	// TeamXXX 默认剥离：组队语义由 mindx 侧 agentstore（agent.yaml 的
+	// team/members）承担，goharness 的内存版组队工具不参与 mindx 流程。
+	// Agent 在 IDENTITY.md frontmatter 的 include_tools 里声明条目即装配回来
+	//（opt-in 白名单，与 exclude_tools 对称）。
+	included := make(map[string]bool)
+	for _, name := range a.agents.IncludeToolsOf(agentName) {
+		included[name] = true
+	}
+	for _, name := range []string{"TeamCreate", "TeamDelete", "TeamList", "TeamGetTasks"} {
+		if included[name] {
+			a.logger.Info("createRuntime: Team 工具按声明装配", "agent", agentName, "tool", name)
+			continue
+		}
+		if err := rt.ToolRegistry().Remove(name); err != nil {
+			a.logger.Debug("createRuntime: 剥离 Team 工具跳过（不存在）", "agent", agentName, "tool", name)
+		} else {
+			a.logger.Info("createRuntime: Team 工具已剥离", "agent", agentName, "tool", name)
+		}
+	}
+
 	// Configure RunScript tool: use the mindx-managed Python venv instead
 	// of auto-creating per-skill virtual environments.
 	if t, ok := rt.ToolRegistry().Get("RunScript"); ok {
@@ -886,6 +916,23 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 			a.logger.Warn("createRuntime: 注册 SendMessage 失败", "agent", agentName, "error", err)
 		} else {
 			a.logger.Info("createRuntime: SendMessage 注册成功", "agent", agentName)
+		}
+	}
+
+	// Register UI 呈现三工具（Agent-Driven UI 命令通道）：广播回调由 Daemon 注入，
+	// 未注入（TUI 等无 daemon 场景）不注册，避免 Agent 调用无人执行的命令。
+	if a.uiBroadcast != nil {
+		uiTools := []tools.FuncTool{
+			mindxtools.NewOpen(a.uiBroadcast),
+			mindxtools.NewVisit(a.uiBroadcast),
+			mindxtools.NewTerminalRun(a.uiBroadcast),
+		}
+		for _, t := range uiTools {
+			if err := rt.RegisterTool(t); err != nil {
+				a.logger.Warn("createRuntime: 注册 UI工具 失败", "agent", agentName, "tool", t.Info().Name, "error", err)
+			} else {
+				a.logger.Info("createRuntime: UI工具 注册成功", "agent", agentName, "tool", t.Info().Name)
+			}
 		}
 	}
 

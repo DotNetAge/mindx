@@ -210,9 +210,13 @@ func TestBuildEnvSectionContainsExperienceSystem(t *testing.T) {
 	pb := NewPromptBuilder(store, nil, "", "", nil)
 	out := pb.Build("", mustLeaderTestSession(t, "solo"))
 
-	for _, want := range []string{"经验沉淀体系", "notes/", "skills/", "reports/", "MemorySearch", "TeamList"} {
+	for _, want := range []string{"经验沉淀体系", "notes/", "skills/", "reports/", "MemorySearch"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("配置环境段应含 %q:\n%s", want, out)
 		}
+	}
+	// TeamXXX 已从默认注册剥离，系统提示不得再引用 TeamList
+	if strings.Contains(out, "TeamList") {
+		t.Errorf("系统提示不应引用已剥离的 TeamList 工具:\n%s", out)
 	}
 }

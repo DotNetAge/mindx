@@ -1,0 +1,99 @@
+<board name="项目跟踪 · M2026-40" gap="12">
+  <style>
+    .k-s{display:flex;flex-direction:column;gap:4px}
+    .k-s .n{font-size:28px;font-weight:700}
+    .k-s .d{font-size:12px;color:var(--mx-text-secondary)}
+  </style>
+  <card id="s-total" span="6" title="需求总数">
+    <div class="k-s"><span class="n">24</span><span class="d">本期迭代 M2026-40</span></div>
+  </card>
+  <card id="s-doing" span="6" title="进行中">
+    <div class="k-s"><span class="n">5</span><span class="d">较昨日 +1</span></div>
+  </card>
+  <card id="s-done" span="6" title="已完成">
+    <style>.k-s .n{color:var(--mx-success)}</style>
+    <div class="k-s"><span class="n">17</span><span class="d">完成率 71%</span></div>
+  </card>
+  <card id="s-block" span="6" title="阻塞">
+    <style>.k-s .n{color:var(--mx-danger)}</style>
+    <div class="k-s"><span class="n">2</span><span class="d">需关注</span></div>
+  </card>
+
+  <card id="gantt" span="10" h="360" title="全局排期（左栏通栏）">
+    <style>
+      .g{display:grid;grid-template-columns:56px repeat(14,1fr);font-size:12px;row-gap:8px;align-items:center}
+      .g .h{color:var(--mx-text-tertiary);text-align:center;font-size:10px;white-space:nowrap;overflow:hidden}
+      .g .name{color:var(--mx-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:6px;font-size:11.5px}
+      .g .track{grid-column:2 / span 14;position:relative;height:14px;border-radius:4px;background:color-mix(in currentColor,6%,transparent)}
+      .g .bar{position:absolute;top:2px;bottom:2px;border-radius:4px;background:var(--mx-accent);color:var(--mx-text-on-accent);font-size:10px;line-height:10px;padding:0 5px;white-space:nowrap;overflow:hidden}
+      .g .bar.ok{background:var(--mx-success)}
+      .g .bar.risk{background:var(--mx-danger)}
+      .g .today{position:absolute;top:-3px;bottom:-3px;width:1.5px;background:var(--mx-danger)}
+      .g .grp{grid-column:1 / -1;font-size:11px;color:var(--mx-text-tertiary);margin-top:2px}
+    </style>
+    <div class="g">
+      <span></span><span class="h">09-24</span><span class="h">25</span><span class="h">26</span><span class="h">27</span><span class="h">28</span><span class="h">29</span><span class="h">30</span><span class="h">10-01</span><span class="h">02</span><span class="h">03</span><span class="h">04</span><span class="h">05</span><span class="h">06</span><span class="h">07</span>
+      <span class="grp">李响 · 服务端</span>
+      <span class="name">报表优化</span>
+      <span class="track"><i class="bar" style="left:0;width:42%">报表优化</i><span class="today" style="left:50%"></span></span>
+      <span class="name">网关限流</span>
+      <span class="track"><i class="bar risk" style="left:50%;width:28%">等确认</i><span class="today" style="left:50%"></span></span>
+      <span class="grp">陈晓 · 客户端</span>
+      <span class="name">偏好设置</span>
+      <span class="track"><i class="bar" style="left:21%;width:50%">偏好设置</i><span class="today" style="left:50%"></span></span>
+      <span class="grp">王一 · 测试</span>
+      <span class="name">回归测试</span>
+      <span class="track"><i class="bar ok" style="left:64%;width:28%">回归</i><span class="today" style="left:50%"></span></span>
+    </div>
+  </card>
+
+  <card id="goals" span="14" title="达成目标（右栏 · 结论先行）">
+    <style>
+      .o{margin-bottom:12px}
+      .o .t{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
+      .o .t b{font-weight:600}
+      .o .t span{color:var(--mx-text-secondary);font-size:12px}
+      .bar{height:8px;border-radius:4px;background:color-mix(in currentColor,12%,transparent)}
+      .bar i{display:block;height:100%;border-radius:4px;background:var(--mx-success)}
+    </style>
+    <div class="o"><div class="t"><b>迭代按期交付</b><span>17/24 需求</span></div><div class="bar"><i style="width:71%"></i></div></div>
+    <div class="o"><div class="t"><b>P0 缺陷清零</b><span>1 个未修复</span></div><div class="bar"><i style="width:83%;background:var(--mx-warning)"></i></div></div>
+    <div class="o"><div class="t"><b>回归覆盖率 90%</b><span>78% 当前</span></div><div class="bar"><i style="width:78%;background:var(--mx-business)"></i></div></div>
+  </card>
+
+  <card id="people" span="14" title="人员组成与负载">
+    <style>
+      .p{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px}
+      .p b{width:48px;font-weight:600;flex-shrink:0}
+      .p .role{width:56px;color:var(--mx-text-secondary);font-size:12px;flex-shrink:0}
+      .p .track{flex:1;height:8px;border-radius:4px;background:color-mix(in currentColor,10%,transparent)}
+      .p .track i{display:block;height:100%;border-radius:4px;background:var(--mx-accent)}
+      .p .track i.over{background:var(--mx-danger)}
+      .p .v{width:64px;text-align:right;font-size:12px;color:var(--mx-text-secondary);flex-shrink:0}
+    </style>
+    <div class="p"><b>李响</b><span class="role">服务端</span><span class="track"><i style="width:110%" class="over"></i></span><span class="v">3 任务 · 超载</span></div>
+    <div class="p"><b>陈晓</b><span class="role">客户端</span><span class="track"><i style="width:73%"></i></span><span class="v">2 任务 · 73%</span></div>
+    <div class="p"><b>王一</b><span class="role">测试</span><span class="track"><i style="width:55%"></i></span><span class="v">2 任务 · 55%</span></div>
+  </card>
+
+  <card id="delay" span="14" title="延期事项">
+    <style>
+      .r{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;background:color-mix(in currentColor,5%,transparent);margin-bottom:8px;font-size:13px}
+      .lv{flex-shrink:0;width:56px;text-align:center;padding:2px 0;border-radius:6px;font-size:11px}
+      .high{background:color-mix(in srgb,var(--mx-danger) 12%,transparent);color:var(--mx-danger)}
+      .mid{background:color-mix(in srgb,var(--mx-warning) 12%,transparent);color:var(--mx-warning)}
+      .why{color:var(--mx-text-secondary);font-size:12px;margin-top:2px}
+      .who{margin-left:auto;font-size:12px;color:var(--mx-text-secondary);flex-shrink:0;text-align:right}
+    </style>
+    <div class="r">
+      <span class="lv high">延期 3 天</span>
+      <span><span>第三方网关限流方案确认</span><span class="why">原计划 09-27 · 等对方排期</span></span>
+      <span class="who">李响</span>
+    </div>
+    <div class="r">
+      <span class="lv mid">延期 1 天</span>
+      <span><span>测试环境数据刷新</span><span class="why">原计划 09-29 · 脚本故障已修复</span></span>
+      <span class="who">王一</span>
+    </div>
+  </card>
+</board>

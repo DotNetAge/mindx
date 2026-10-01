@@ -1,0 +1,91 @@
+<board name="架构仪表板 · 平台总览" gap="12">
+  <style>
+    .k-s{display:flex;flex-direction:column;gap:4px}
+    .k-s .n{font-size:28px;font-weight:700}
+    .k-s .d{font-size:12px;color:var(--mx-text-secondary)}
+  </style>
+  <card id="topo" span="24" h="380" title="系统拓扑（手写分层示例；完整交互架构图走 Archify 植入）">
+    <style>
+      .layer{display:flex;justify-content:center;gap:8px;margin-bottom:6px}
+      .node{padding:7px 14px;border-radius:8px;background:color-mix(in currentColor,7%,transparent);border:1px solid color-mix(in currentColor,12%,transparent);font-size:12.5px;white-space:nowrap;text-align:center}
+      .node b{font-weight:600}
+      .node small{display:block;font-size:10.5px;color:var(--mx-text-tertiary)}
+      .arrow{text-align:center;font-size:12px;opacity:.4;line-height:1;margin-bottom:6px}
+    </style>
+    <div class="layer">
+      <span class="node"><b>客户端</b><small>Electron / iOS</small></span>
+    </div>
+    <div class="arrow">↓ gRPC</div>
+    <div class="layer">
+      <span class="node"><b>gateway</b><small>入口 / 鉴权 / 限流</small></span>
+      <span class="node"><b>session</b><small>会话与凭证</small></span>
+    </div>
+    <div class="arrow">↓ 内部调用</div>
+    <div class="layer">
+      <span class="node"><b>knowledge</b><small>知识库检索</small></span>
+      <span class="node"><b>renderer</b><small>文档渲染</small></span>
+    </div>
+    <div class="arrow">↓</div>
+    <div class="layer">
+      <span class="node"><b>SQLite / 向量库</b><small>存储</small></span>
+    </div>
+  </card>
+
+  <card id="a-total" span="6" title="服务总数">
+    <div class="k-s"><span class="n">12</span><span class="d">4 个域</span></div>
+  </card>
+  <card id="a-run" span="6" title="运行中">
+    <style>.k-s .n{color:var(--mx-success)}</style>
+    <div class="k-s"><span class="n">11</span><span class="d">1 个维护中</span></div>
+  </card>
+  <card id="a-warn" span="6" title="告警">
+    <style>.k-s .n{color:var(--mx-danger)}</style>
+    <div class="k-s"><span class="n">1</span><span class="d">网关 P99 偏高</span></div>
+  </card>
+  <card id="a-chg" span="6" title="本周变更">
+    <style>.k-s .n{color:var(--mx-accent)}</style>
+    <div class="k-s"><span class="n">3</span><span class="d">发布 2 次</span></div>
+  </card>
+
+  <card id="svc" span="24" title="服务清单">
+    <style>
+      table{width:100%;border-collapse:collapse;font-size:13px}
+      th{text-align:left;font-weight:500;color:var(--mx-text-secondary);padding:6px 10px;border-bottom:1px solid color-mix(in currentColor,15%,transparent);font-size:12px}
+      td{padding:8px 10px;border-bottom:1px solid color-mix(in currentColor,8%,transparent)}
+      tr:last-child td{border-bottom:none}
+      td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;opacity:.75}
+      .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
+      .ok{background:var(--mx-success)}.warn{background:var(--mx-warning)}.down{background:var(--mx-danger)}
+    </style>
+    <table>
+      <tr><th>服务</th><th>职责</th><th>技术栈</th><th>端口</th><th>状态</th></tr>
+      <tr><td>gateway</td><td>统一入口 / 鉴权 / 限流</td><td class="mono">Go</td><td class="mono">:8080</td><td><span class="dot warn"></span>告警</td></tr>
+      <tr><td>session</td><td>会话与凭证管理</td><td class="mono">Go</td><td class="mono">:8081</td><td><span class="dot ok"></span>正常</td></tr>
+      <tr><td>knowledge</td><td>知识库检索</td><td class="mono">Go + RAG</td><td class="mono">:8082</td><td><span class="dot ok"></span>正常</td></tr>
+      <tr><td>renderer</td><td>文档渲染</td><td class="mono">Node</td><td class="mono">:8090</td><td><span class="dot down"></span>维护中</td></tr>
+    </table>
+  </card>
+
+  <card id="stack" span="12" title="技术栈分布">
+    <style>
+      .row{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px}
+      .row .name{width:72px;flex-shrink:0;opacity:.75}
+      .row .track{flex:1;height:10px;border-radius:5px;background:color-mix(in currentColor,10%,transparent)}
+      .row .track i{display:block;height:100%;border-radius:5px;background:var(--mx-business)}
+      .row .v{width:24px;text-align:right;font-weight:600;flex-shrink:0}
+    </style>
+    <div class="row"><span class="name">Go</span><span class="track"><i style="width:67%"></i></span><span class="v">8</span></div>
+    <div class="row"><span class="name">TypeScript</span><span class="track"><i style="width:33%;background:var(--mx-accent)"></i></span><span class="v">4</span></div>
+    <div class="row"><span class="name">Swift</span><span class="track"><i style="width:17%;background:var(--mx-warning)"></i></span><span class="v">2</span></div>
+  </card>
+
+  <card id="arch-map-note" span="12" title="Archify 植入卡占位说明">
+    <div style="font-size:13px;line-height:1.7">
+      此卡位（span 24、h 420~560、board 首位）留给 Archify 产物：
+      按 archify 技能生成 standalone HTML 后整段粘进 card 即可
+      （解析器自动剥离 html/head/body 包裹，样式与脚本保留），
+      或用 new_board.py 的 raw 卡 html_file 参数指向产物文件。
+      产物自带的 pan/zoom/搜索/主题在沙箱内可用。
+    </div>
+  </card>
+</board>

@@ -31,7 +31,7 @@ const agentDiscoveryIntro = "Agent 发现：当需要查找或列出可用 Agent
 // experienceSystemNote 是经验沉淀体系说明（配置环境段固定条目）：
 // 说明项目目录 .agents/ 体系的作用与配合工具，行为判据（小复盘触发条件）
 // 由 runtime/AGENTS.md 公共规则承载，此处只交代环境事实。
-const experienceSystemNote = "- **经验沉淀体系**: 项目目录下的 .agents/ 目录承载跨会话经验 —— AGENTS.md 为项目军规与工作目标；notes/ 记录踩坑经验；skills/ 存放可复用技能；reports/ 存放复盘日报。回忆过往决策调用 MemorySearch 工具；查看会话团队与成员调用 TeamList 工具。"
+const experienceSystemNote = "- **经验沉淀体系**: 项目目录下的 .agents/ 目录承载跨会话经验 —— AGENTS.md 为项目军规与工作目标；notes/ 记录踩坑经验；skills/ 存放可复用技能；reports/ 存放复盘日报。回忆过往决策调用 MemorySearch 工具。"
 
 // PromptBuilder 组装 mindx 侧的基础系统提示词。
 // 依赖注入 AgentStore（身份/行为/Skills 声明）与 SkillStore（技能摘要目录），

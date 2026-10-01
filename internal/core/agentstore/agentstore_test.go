@@ -104,13 +104,14 @@ func TestSaveRoundTrip(t *testing.T) {
 
 	agent := &Agent{
 		Meta: AgentMeta{
-			Name:        "writer",
-			Role:        "写手",
-			Description: "写测试数据",
-			Icon:        "pen",
-			Category:    "文档创作",
-			Hired:       true,
-			Skills:      []string{"summarize"},
+			Name:         "writer",
+			Role:         "写手",
+			Description:  "写测试数据",
+			Icon:         "pen",
+			Category:     "文档创作",
+			Hired:        true,
+			Skills:       []string{"summarize"},
+			IncludeTools: []string{"TeamCreate", "TeamList"},
 		},
 		Soul: "行为规则：简洁。",
 	}
@@ -137,6 +138,13 @@ func TestSaveRoundTrip(t *testing.T) {
 	}
 	if got.Meta.Icon != "pen" || !got.Meta.Hired || got.Soul != "行为规则：简洁。" {
 		t.Errorf("round-trip 数据不一致: %+v / soul=%q", got.Meta, got.Soul)
+	}
+	// include_tools 声明（默认剥离工具的 opt-in 装配）应完整回读
+	if len(got.Meta.IncludeTools) != 2 || got.Meta.IncludeTools[0] != "TeamCreate" || got.Meta.IncludeTools[1] != "TeamList" {
+		t.Errorf("include_tools round-trip 错误: %v", got.Meta.IncludeTools)
+	}
+	if len(fresh.IncludeToolsOf("writer")) != 2 {
+		t.Errorf("IncludeToolsOf 应返回声明的装配清单: %v", fresh.IncludeToolsOf("writer"))
 	}
 }
 

@@ -28,6 +28,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"session.truncate":                   r.daemon.handleSessionTruncate,
 		"session.delete_round":               r.daemon.handleSessionDeleteRound,
 		"session.compact":                    r.daemon.handleSessionCompact,
+		"project.list":                       r.daemon.handleProjectList,
 		"memory.query":                       r.daemon.handleMemoryQuery,
 		"memory.store":                       r.daemon.handleMemoryStore,
 		"memory.delete":                      r.daemon.handleMemoryDelete,
@@ -145,6 +146,9 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"terminal.list":                      r.daemon.handleTerminalList,
 		"translate.rpc":                      r.daemon.handleTranslate,
 		"optimize.rpc":                       r.daemon.handleOptimize,
+		"ui.open":                            r.daemon.handleUIOpen,
+		"ui.open_link":                       r.daemon.handleUIOpenLink,
+		"ui.run":                             r.daemon.handleUIRun,
 
 		// MCP server management（工具清单不再持久化 manifest，改为运行时 tools/list 动态发现）
 		"mcp.server.add":         r.daemon.handleMCPServerAdd,

@@ -5,12 +5,13 @@
 ```text
 agents/<name>/
   IDENTITY.md   # 唯一 meta 入口：frontmatter（强类型一级字段）+ 可选身份正文
-  SOUL.md       # 行为规则与负责范围，纯正文
+  SOUL.md       # 角色职责与负责范围，纯正文
+  TEAM.md       # 负责人的团队职责（可选，缺省用系统兜底文案）
   skills/       # Agent 级技能库（可选，由技能系统装载）
 ```
 
 - **IDENTITY.md** 是身份卡：frontmatter 承载全部路由元数据；正文惯例留空。
-- **SOUL.md** 是行为准则：Agent 的核心工作指令，自带标题结构，系统原样注入提示词。
+- **SOUL.md** 是角色职责：Agent 的核心工作指令，自带标题结构，系统原样注入提示词。
 
 ## IDENTITY.md frontmatter 字段
 
@@ -25,10 +26,13 @@ agents/<name>/
 | `skills`        | 来自 `skill list` 的列表 | 仅领域相关技能 —— 每个技能都会增加上下文开销                         |
 | `exclude_tools` | 列表                     | 内置工具裁剪清单；内置工具默认全量可用，按需排除，不支持通配符       |
 | `allows_tools`  | 列表                     | MCP 服务白名单，条目格式 `mcp:<server>`；空清单 = 不注入任何 MCP 工具 |
+| `include_tools` | 列表                     | 唤回默认不在场的内置工具（如 `TeamCreate` 等组队工具）               |
+| `team`          | 团队名                   | 所属团队（固定组队声明；成员的 team 指向团队名）                     |
+| `members`       | 列表                     | 团队成员名单；非空即负责人，自动注入团队职责段                       |
 | `introduction`  | 可选                     | 人设正文备用入口；IDENTITY.md 正文非空时覆盖此字段                   |
 | `meta`          | 映射                     | 自由扩展杂项                                                         |
 
-已废弃的旧字段（新定义中**不得出现**）：`allowed-tools`（允许列表）、`requires.bins` / `requires.env`、`meta.name_zh` / `meta.role_zh` / `meta.description_zh`、旧 `domains`（已迁移为 `category`）。
+已废弃的旧字段（新定义中**不得出现**）：`allowed-tools`（允许列表）、`requires.bins` / `requires.env`、`meta.name_zh` / `meta.role_zh` / `meta.description_zh`、旧 `domains`（已迁移为 `category`）。技能（SKILL.md）的 frontmatter 与 Agent 定义对齐：同样不得出现 `allowed-tools`、`requires.*`、`meta.*_zh`。
 
 ## `description` — LLM 路由描述
 
@@ -59,30 +63,33 @@ agents/<name>/
 
 ---
 
-## SOUL.md — 行为准则（核心工作指令）
+## SOUL.md — 角色职责（核心工作指令）
 
-SOUL.md 定义 Agent 怎么工作：
+SOUL.md 用**三段式**表述角色职责，顺序固定：
 
-- **工作方式**（怎么思考、怎么决策）
-- **工作流程**（按什么步骤干、何时调用哪个技能）
-- **交互规则**（何时提问、何时同步风险）
-- **边界**（只做什么、不做什么）
+- **职责**（要干什么）：负责什么、产出什么
+- **方式**（怎么干）：怎么思考决策、按什么步骤干、何时调用哪个技能、何时提问——可展开为多节
+- **边界**（不干什么）：只做什么、不做什么
 
 标题由 SOUL.md 自身处理，系统原样注入提示词，不注入额外标题。
 
 ### 编写规则
 
-- 自带标题结构（如 `# 行为准则`），按角色定制章节，不套用统一模板章节名。
+- 按三段式组织：**职责 → 方式 → 边界**，"方式"段可按角色展开为多节，不套用统一模板章节名。
 - 每条规则具体、可执行，用祈使句；禁止空泛的能力描述。
 - 显式引用所配技能："规划流程按 implementation-planning 技能执行"、"按 silent-failure-detection 技能逐条排查"。
-- 必须包含**边界**节：明确只做什么、不做什么。
+- **职责**与**边界**两段缺一不可：职责写清负责什么、产出什么；边界写清只做什么、不做什么。
 - 优先使用绝对性用语：`每个`、`所有`、`总是`、`从不`、`禁止`、`不得`。
 - 定义是一份**约束清单**，不是能力炫耀。
 
 ### 示例一（`architect`，决策密集型）
 
 ```markdown
-# 架构行为准则
+# 角色职责
+
+## 职责
+
+- 负责系统与服务的架构设计与关键技术决策，产出设计文档、ADR 与实施蓝图。
 
 ## 决策方式
 
@@ -109,7 +116,11 @@ SOUL.md 定义 Agent 怎么工作：
 ### 示例二（`code-reviewer`，流程密集型）
 
 ```markdown
-# 行为准则
+# 角色职责
+
+## 职责
+
+- 负责代码质量、安全与可维护性审查，按严重度分组输出可执行的问题清单；无问题时明确说明，不凑数。
 
 ## 审查流程
 
@@ -144,10 +155,23 @@ SOUL.md 定义 Agent 怎么工作：
 
 内置工具默认全量可用，控制手段只有两个：
 
-- **`exclude_tools`（内置工具裁剪）**：按角色排除确实有害的工具。工作者排除 `SubAgent`、`CollectResults`、`Team*`（不委派、不管理团队）；常见追加 `Sleep`、`PowerShell`。不支持通配符，只能指定具体工具名。
+- **`exclude_tools`（内置工具裁剪）**：按角色排除确实有害的工具。工作者排除 `SubAgent`、`CollectResults`（不委派）；常见追加 `Sleep`、`PowerShell`。不支持通配符，只能指定具体工具名。`Team*` 组队工具默认不在场，无需排除。
+- **`include_tools`（唤回默认不在场的工具）**：`Team*` 组队工具（`TeamCreate`/`TeamDelete`/`TeamList`/`TeamGetTasks`）默认剥离，需要运行期组队时在此列出唤回。
 - **`allows_tools`（MCP 服务白名单）**：条目格式 `mcp:<server>`（server 粒度），决定注入哪些 MCP server 的工具；空清单 = 不注入任何 MCP 工具。内置工具不在此列。
 
 工作者智能体保留 `SubAgent` 后可能开始委派工作而不是自己做 —— 只给明确需要协调他人的角色保留委派工具。
+
+---
+
+## `team` / `members` / `TEAM.md` — 固定组队与负责人
+
+固定组队（部门）语义由 frontmatter 声明，弱一致设计，不做交叉校验：
+
+- `team`：所属团队名；成员的 `team` 指向团队名
+- `members`：负责人的团队成员名单；**非空即负责人**（`IsLeader` 为派生值，不落盘、不作 frontmatter 字段）
+- 带 `members` 的智能体，提示词自动注入**团队负责人职责段**：`TEAM.md` 正文优先，缺失时用兜底文案（团队名 + 职责声明）
+- 团队职责（怎么协调成员、跟踪结果、汇报成果）写 `TEAM.md`；个人角色职责写 `SOUL.md`——两者不混
+- `Team*` 组队工具默认剥离，需要运行期组队时经 `include_tools` 唤回
 
 ---
 
@@ -166,12 +190,12 @@ SOUL.md 定义 Agent 怎么工作：
 - 市场已有却重复创建 —— 先用 `mindx market list --kind agent` 检索，能复用就安装雇佣
 - 职责范围过广 —— 会破坏专家委派机制
 - 技能贪多 —— 每个技能都会增加上下文开销
-- SOUL 缺少边界节 —— 会导致误路由与越界
+- SOUL 缺少职责或边界段 —— 会导致误路由与越界
 - 名称与角色不匹配 —— `python-programmer` 的描述却写成"全栈开发"，会干扰路由
 - `description` 写成营销文案 —— 它是给 LLM 路由用的
 - 创建后忘记 `mindx agent hire` —— 智能体永远不出现在会话可用列表中
 - 使用已废弃的旧字段（`allowed-tools`、`requires.*`、`meta.*_zh`）
-- SOUL 写成能力清单 —— SOUL 是行为准则与约束，不是"我会什么"的罗列
+- SOUL 写成能力清单 —— SOUL 是角色职责与约束，不是"我会什么"的罗列
 
 ---
 
@@ -182,7 +206,7 @@ SOUL.md 定义 Agent 怎么工作：
 - [ ] 已与用户确认名称、角色、业务分类、工作范围
 - [ ] 已运行 `mindx agent list --all --json` —— 确认无重复或重叠的 Agent
 - [ ] 已运行 `mindx market list --kind agent --filter "<关键词>"` —— 确认市场无现成可复用的 Agent 包
-- [ ] 已运行 `mindx skill list --json` —— 已识别相关技能；本地缺失的技能已查 `mindx market list --kind skill` 并安装
+- [ ] 已运行 `mindx skill list --json` —— 已识别相关技能；本地缺失的技能已按 `find-skills` 技能查找并安装
 - [ ] `name` 为小写连字符格式，唯一，基于名词
 - [ ] `role` 为简洁中文头衔；`description` 为 1-2 句中文路由描述，含边界
 - [ ] `category` 已确定为中文业务分类
@@ -191,6 +215,7 @@ SOUL.md 定义 Agent 怎么工作：
 
 创建之后：
 
-- [ ] 已编写 SOUL.md（工作方式、流程、交互规则、边界，显式引用技能）
+- [ ] 已编写 SOUL.md（职责、方式、边界三段式，显式引用技能）
 - [ ] IDENTITY.md 正文留空（除非确需自定义人设）
+- [ ] 团队负责人：`members` 已列成员名单，`TEAM.md` 已写团队职责（无团队需求可跳过）
 - [ ] 已执行 `mindx agent hire <name>` 并通过 `mindx agent list --json` 验证

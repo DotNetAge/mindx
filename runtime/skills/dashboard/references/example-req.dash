@@ -1,0 +1,98 @@
+<board name="需求池总览" gap="12" class="req">
+  <style>
+    /* stat 统计卡 */
+    .w-stat .s{display:flex;flex-direction:column;gap:4px}
+    .w-stat .s .n{font:600 28px/36px var(--mx-font-family)}
+    .w-stat .s .d{font-size:12px;color:var(--mx-text-secondary)}
+    /* progress 进度条 */
+    .w-progress .bar{position:relative;height:10px;border-radius:5px;background:color-mix(in currentColor,12%,transparent)}
+    .w-progress .bar i{display:block;height:100%;border-radius:5px}
+    .w-progress .mark{position:absolute;top:-4px;width:2px;height:18px;background:color-mix(in currentColor,45%,transparent)}
+    /* bars 横向条形 */
+    .w-bars .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:13px}
+    .w-bars .row .name{width:64px;flex-shrink:0;color:var(--mx-text-secondary)}
+    .w-bars .row .track{flex:1;height:10px;border-radius:5px;background:color-mix(in currentColor,10%,transparent)}
+    .w-bars .row .track i{display:block;height:100%;border-radius:5px}
+    .w-bars .row .v{width:28px;text-align:right;font-weight:600;flex-shrink:0}
+    /* funnel 漏斗 */
+    .w-funnel .f{display:flex;flex-direction:column;gap:6px;font-size:13px}
+    .w-funnel .step{display:flex;align-items:center;gap:10px}
+    .w-funnel .step .label{width:64px;flex-shrink:0;color:var(--mx-text-secondary);font-size:12px}
+    .w-funnel .step .bar{height:22px;border-radius:6px;min-width:36px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:var(--mx-text-on-accent);font-size:12px;font-weight:600}
+    /* flow 流转列 */
+    .w-flow .cols{display:flex;gap:12px}
+    .w-flow .col{flex:1;min-width:0}
+    .w-flow .col h4{margin:0 0 8px;font-size:12px;font-weight:500;color:var(--mx-text-secondary)}
+    .w-flow .col h4 b{font-weight:600}
+    .w-flow .t{padding:8px 10px;border-radius:8px;background:color-mix(in currentColor,6%,transparent);margin-bottom:8px;font-size:13px}
+    .w-flow .t .meta{display:flex;gap:6px;margin-top:6px;font-size:11px;color:var(--mx-text-tertiary);align-items:center}
+    .w-flow .tag{padding:1px 8px;border-radius:999px;font-size:11px}
+    /* table 表格 */
+    .w-table table{width:100%;border-collapse:collapse;font-size:13px}
+    .w-table th{text-align:left;font-weight:500;color:var(--mx-text-tertiary);padding:6px 10px;border-bottom:1px solid var(--mx-separator-soft);font-size:12px}
+    .w-table td{padding:8px 10px;border-bottom:1px solid var(--mx-separator-soft)}
+    .w-table tr:last-child td{border-bottom:none}
+    .w-table .tag{padding:1px 8px;border-radius:999px;font-size:11px}
+    /* timeline 时间线 */
+    .w-timeline .tl{position:relative;padding-left:18px}
+    .w-timeline .tl::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:1.5px;background:color-mix(in currentColor,18%,transparent)}
+    .w-timeline .m{position:relative;padding-bottom:14px;font-size:13px}
+    .w-timeline .m::before{content:"";position:absolute;left:-18px;top:4px;width:9px;height:9px;border-radius:50%;background:color-mix(in currentColor,30%,transparent)}
+    .w-timeline .m.done::before{background:var(--mx-success)}
+    .w-timeline .m.doing::before{background:var(--mx-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--mx-accent) 18%,transparent)}
+    .w-timeline .m .d{font-size:11px;color:var(--mx-text-tertiary);margin-left:6px}
+    /* members 成员墙 */
+    .w-members .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+    .w-members .m{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:color-mix(in currentColor,5%,transparent)}
+    .w-members .ava{flex-shrink:0;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--mx-text-on-accent)}
+    .w-members .who{min-width:0}
+    .w-members .who b{display:block;font-size:13px;font-weight:600}
+    .w-members .who span{display:block;font-size:11px;color:var(--mx-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .w-members .st{flex-shrink:0;margin-left:auto;width:7px;height:7px;border-radius:50%}
+    .w-members .st.on{background:var(--mx-success)}
+    .w-members .st.busy{background:var(--mx-warning)}
+    .w-members .st.off{background:color-mix(in currentColor,30%,transparent)}
+  </style>
+  <card id="total" span="6" title="需求总数" class="w-stat">
+<div class="s"><span class="n">12</span><span class="d">未完成 10 · 已完成 2</span></div>
+  </card>
+  <card id="doing" span="6" title="进行中" class="w-stat">
+<div class="s"><span class="n" style="color:var(--mx-accent)">6</span><span class="d">待启动 2 · 设计中 2 · 开发中 2</span></div>
+  </card>
+  <card id="review" span="6" title="待评审" class="w-stat">
+<div class="s"><span class="n">4</span><span class="d">进入执行前需评审</span></div>
+  </card>
+  <card id="done" span="6" title="已完成" class="w-stat">
+<div class="s"><span class="n" style="color:var(--mx-success)">2</span><span class="d">占全部 17%</span></div>
+  </card>
+  <card id="priority" span="12" title="未完成需求优先级分布" class="w-bars">
+    <div class="row"><span class="name">P0</span><span class="track"><i style="width:100.0%;background:var(--mx-danger)"></i></span><span class="v">5</span></div>
+    <div class="row"><span class="name">P1</span><span class="track"><i style="width:80.0%;background:var(--mx-warning)"></i></span><span class="v">4</span></div>
+    <div class="row"><span class="name">P2</span><span class="track"><i style="width:20.0%;background:currentColor"></i></span><span class="v">1</span></div>
+  </card>
+  <card id="status" span="12" title="需求状态流转分布" class="w-bars">
+    <div class="row"><span class="name">待评审</span><span class="track"><i style="width:100.0%;background:currentColor"></i></span><span class="v">4</span></div>
+    <div class="row"><span class="name">待启动</span><span class="track"><i style="width:50.0%;background:currentColor"></i></span><span class="v">2</span></div>
+    <div class="row"><span class="name">设计中</span><span class="track"><i style="width:50.0%;background:var(--mx-accent)"></i></span><span class="v">2</span></div>
+    <div class="row"><span class="name">开发中</span><span class="track"><i style="width:50.0%;background:var(--mx-accent)"></i></span><span class="v">2</span></div>
+    <div class="row"><span class="name">已完成</span><span class="track"><i style="width:50.0%;background:var(--mx-success)"></i></span><span class="v">2</span></div>
+  </card>
+  <card id="owner" span="12" title="需求状态统计 · 负责人维度" class="w-table">
+    <table>
+    <tr><th>负责人</th><th>待评审</th><th>待启动</th><th>设计中</th><th>开发中</th><th>已完成</th><th>合计</th></tr>
+    <tr><td>黄志</td><td>1</td><td>2</td><td>1</td><td>1</td><td>-</td><td>5</td></tr>
+    <tr><td>王小玲</td><td>1</td><td>-</td><td>1</td><td>1</td><td>2</td><td>5</td></tr>
+    <tr><td>于小宁</td><td>2</td><td>-</td><td>-</td><td>-</td><td>-</td><td>2</td></tr>
+    </table>
+  </card>
+  <card id="detail" span="12" title="需求明细" class="w-table">
+    <table>
+    <tr><th>编号</th><th>标题</th><th>优先级</th><th>状态</th><th>负责人</th></tr>
+    <tr><td><span class="tag" style="background:color-mix(in srgb,var(--mx-business) 12%,transparent);color:var(--mx-business)">REQ-101</span></td><td>手机连接短码配对</td><td><span class="tag" style="background:color-mix(in srgb,var(--mx-danger) 12%,transparent);color:var(--mx-danger)">P0</span></td><td><span class="tag" style="background:color-mix(in srgb,var(--mx-accent) 12%,transparent);color:var(--mx-accent)">开发中</span></td><td>黄志</td></tr>
+    <tr><td><span class="tag" style="background:color-mix(in srgb,var(--mx-business) 12%,transparent);color:var(--mx-business)">REQ-102</span></td><td>官网改版落地页</td><td><span class="tag" style="background:color-mix(in srgb,var(--mx-danger) 12%,transparent);color:var(--mx-danger)">P0</span></td><td><span class="tag" style="background:color-mix(in srgb,var(--mx-accent) 12%,transparent);color:var(--mx-accent)">设计中</span></td><td>黄志</td></tr>
+    <tr><td><span class="tag" style="background:color-mix(in srgb,var(--mx-business) 12%,transparent);color:var(--mx-business)">REQ-103</span></td><td>状态栏手机图标</td><td><span class="tag" style="background:color-mix(in srgb,var(--mx-warning) 12%,transparent);color:var(--mx-warning)">P1</span></td><td><span class="tag" style="background:color-mix(in srgb,var(--mx-accent) 12%,transparent);color:var(--mx-accent)">开发中</span></td><td>王小玲</td></tr>
+    <tr><td><span class="tag" style="background:color-mix(in srgb,var(--mx-business) 12%,transparent);color:var(--mx-business)">REQ-104</span></td><td>导出性能优化</td><td><span class="tag" style="background:color-mix(in currentColor,12%,transparent);color:currentColor">P2</span></td><td><span class="tag" style="background:color-mix(in currentColor,12%,transparent);color:currentColor">待评审</span></td><td>于小宁</td></tr>
+    <tr><td><span class="tag" style="background:color-mix(in srgb,var(--mx-business) 12%,transparent);color:var(--mx-business)">REQ-105</span></td><td>Session 目录迁移</td><td><span class="tag" style="background:color-mix(in srgb,var(--mx-warning) 12%,transparent);color:var(--mx-warning)">P1</span></td><td><span class="tag" style="background:color-mix(in srgb,var(--mx-success) 12%,transparent);color:var(--mx-success)">已完成</span></td><td>王小玲</td></tr>
+    </table>
+  </card>
+</board>

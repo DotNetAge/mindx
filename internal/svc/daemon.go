@@ -168,6 +168,10 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		restartCh:    make(chan struct{}, 1),
 	}
 
+	// UI 命令通道：把 daemon 广播回调注入 App，createRuntime 据此注册
+	// Open/Visit/TerminalRun 三工具（未走 daemon 的 TUI 场景不注册）。
+	app.SetUIBroadcast(d.broadcastUI)
+
 	// Pass shared memory to App for MemorySearch tool registration.
 	if sharedMemory != nil {
 		app.SetLongTermMemory(sharedMemory)

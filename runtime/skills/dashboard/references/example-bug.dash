@@ -1,0 +1,107 @@
+<board name="缺陷仪表板 · M2026-40" gap="12">
+  <style>
+    .k-s{display:flex;flex-direction:column;gap:4px}
+    .k-s .n{font-size:28px;font-weight:700}
+    .k-s .d{font-size:12px;color:var(--mx-text-secondary)}
+    .k-tag{padding:1px 8px;border-radius:999px;font-size:11px}
+    .k-tag.k-p0{background:color-mix(in srgb,var(--mx-danger) 12%,transparent);color:var(--mx-danger)}
+    .k-tag.k-p1{background:color-mix(in srgb,var(--mx-warning) 12%,transparent);color:var(--mx-warning)}
+    .k-tag.k-p2{background:color-mix(in srgb,var(--mx-business) 12%,transparent);color:var(--mx-business)}
+  </style>
+  <card id="b-new" span="6" title="本周新增">
+    <div class="k-s"><span class="n">9</span><span class="d" style="color:var(--mx-danger)">环比 +3</span></div>
+  </card>
+  <card id="b-open" span="6" title="待处理">
+    <div class="k-s"><span class="n">14</span><span class="d">含 1 个 P0</span></div>
+  </card>
+  <card id="b-fix" span="6" title="修复中">
+    <style>.k-s .n{color:var(--mx-warning)}</style>
+    <div class="k-s"><span class="n">4</span><span class="d">平均修复 1.8 天</span></div>
+  </card>
+  <card id="b-done" span="6" title="已修复">
+    <style>.k-s .n{color:var(--mx-success)}</style>
+    <div class="k-s"><span class="n">23</span><span class="d">回归通过 21</span></div>
+  </card>
+
+  <card id="trend" span="12" h="240" title="七日趋势（新增 vs 修复）">
+    <div id="trend-main" style="width:100%;height:220px"></div>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script>
+      var cs = getComputedStyle(document.documentElement);
+      var danger = cs.getPropertyValue('--mx-danger').trim();
+      var success = cs.getPropertyValue('--mx-success').trim();
+      var chart = echarts.init(document.getElementById('trend-main'));
+      chart.setOption({
+        grid: { left: 32, right: 12, top: 30, bottom: 24 },
+        legend: { top: 0, textStyle: { color: 'currentColor' } },
+        xAxis: { type: 'category', data: ['09-24','09-25','09-26','09-27','09-28','09-29','09-30'],
+                 axisLabel: { color: 'currentColor', opacity: 0.6 } },
+        yAxis: { type: 'value', axisLabel: { color: 'currentColor', opacity: 0.6 },
+                 splitLine: { lineStyle: { color: 'currentColor', opacity: 0.2 } } },
+        series: [
+          { name: '新增', type: 'line', smooth: true, data: [2, 1, 3, 0, 2, 1, 0],
+            itemStyle: { color: danger } },
+          { name: '修复', type: 'line', smooth: true, data: [1, 2, 2, 3, 1, 2, 3],
+            itemStyle: { color: success } }
+        ]
+      });
+      window.addEventListener('resize', function () { chart.resize(); });
+    </script>
+  </card>
+
+  <card id="sev" span="12" title="严重级分布（待处理）">
+    <style>
+      .row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:13px}
+      .lv{width:32px;flex-shrink:0;font-weight:600}
+      .track{flex:1;height:10px;border-radius:5px;background:color-mix(in currentColor,10%,transparent)}
+      .track i{display:block;height:100%;border-radius:5px}
+      .v{width:24px;text-align:right;font-weight:600;flex-shrink:0}
+    </style>
+    <div class="row"><span class="lv" style="color:var(--mx-danger)">P0</span><span class="track"><i style="width:20%;background:var(--mx-danger)"></i></span><span class="v">1</span></div>
+    <div class="row"><span class="lv" style="color:var(--mx-warning)">P1</span><span class="track"><i style="width:60%;background:var(--mx-warning)"></i></span><span class="v">3</span></div>
+    <div class="row"><span class="lv" style="color:var(--mx-business)">P2</span><span class="track"><i style="width:100%;background:var(--mx-business)"></i></span><span class="v">5</span></div>
+    <div class="row"><span class="lv" style="color:var(--mx-success)">P3</span><span class="track"><i style="width:100%;background:var(--mx-success)"></i></span><span class="v">5</span></div>
+  </card>
+
+  <card id="flow" span="24" title="缺陷流转">
+    <style>
+      .cols{display:flex;gap:12px}
+      .col{flex:1;min-width:0}
+      .col h4{margin:0 0 8px;font-size:12px;font-weight:500;color:var(--mx-text-secondary)}
+      .col h4 b{font-weight:600}
+      .t{padding:8px 10px;border-radius:8px;background:color-mix(in currentColor,6%,transparent);margin-bottom:8px;font-size:13px}
+      .t .meta{display:flex;gap:6px;margin-top:6px;font-size:11px;color:var(--mx-text-secondary);align-items:center}
+    </style>
+    <div class="cols">
+      <div class="col"><h4>待确认 <b>3</b></h4>
+        <div class="t">设置页偶发白屏<span class="meta"><span class="k-tag k-p1">P1</span><span>陈晓</span></span></div>
+      </div>
+      <div class="col"><h4>修复中 <b>4</b></h4>
+        <div class="t">导出报表超时<span class="meta"><span class="k-tag k-p0">P0</span><span>李响</span></span></div>
+      </div>
+      <div class="col"><h4>待回归 <b>2</b></h4>
+        <div class="t">附件预览失败<span class="meta"><span class="k-tag k-p2">P2</span><span>王一</span></span></div>
+      </div>
+      <div class="col"><h4>已关闭 <b>21</b></h4>
+        <div class="t">列表分页错位<span class="meta"><span class="k-tag k-p2">P2</span></span></div>
+      </div>
+    </div>
+  </card>
+
+  <card id="table" span="24" title="P0/P1 缺陷明细">
+    <style>
+      table{width:100%;border-collapse:collapse;font-size:13px}
+      th{text-align:left;font-weight:500;color:var(--mx-text-secondary);padding:6px 10px;border-bottom:1px solid color-mix(in currentColor,15%,transparent);font-size:12px}
+      td{padding:8px 10px;border-bottom:1px solid color-mix(in currentColor,8%,transparent)}
+      tr:last-child td{border-bottom:none}
+      td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;opacity:.75}
+      .st{font-size:12px;color:var(--mx-text-secondary)}
+    </style>
+    <table>
+      <tr><th>编号</th><th>标题</th><th>级别</th><th>负责人</th><th>状态</th></tr>
+      <tr><td class="mono">BUG-231</td><td>导出报表超时</td><td><span class="k-tag k-p0">P0</span></td><td>李响</td><td class="st">修复中</td></tr>
+      <tr><td class="mono">BUG-229</td><td>设置页偶发白屏</td><td><span class="k-tag k-p1">P1</span></td><td>陈晓</td><td class="st">待确认</td></tr>
+      <tr><td class="mono">BUG-227</td><td>通知重复推送</td><td><span class="k-tag k-p1">P1</span></td><td>王一</td><td class="st">待回归</td></tr>
+    </table>
+  </card>
+</board>

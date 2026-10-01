@@ -122,6 +122,16 @@ func (s *AgentStore) ExcludeToolsOf(name string) []string {
 	return a.Meta.ExcludeTools
 }
 
+// IncludeToolsOf 返回指定 Agent 声明的装配工具集合（默认不在场、声明即装配），
+// 未找到时返回 nil。createRuntime 据此决定是否跳过默认剥离（TeamXXX）。
+func (s *AgentStore) IncludeToolsOf(name string) []string {
+	a := s.Get(name)
+	if a == nil {
+		return nil
+	}
+	return a.Meta.IncludeTools
+}
+
 // agentDirPath 返回指定名称的 Agent 目录绝对路径（小写目录名，与旧单文件命名一致）。
 func (s *AgentStore) agentDirPath(name string) string {
 	return filepath.Join(s.dir, strings.ToLower(name))

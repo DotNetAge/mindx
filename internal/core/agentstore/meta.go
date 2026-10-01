@@ -39,6 +39,11 @@ type AgentMeta struct {
 	Hired        bool     `yaml:"hired,omitempty" json:"hired,omitempty"`
 	Skills       []string `yaml:"skills,omitempty" json:"skills,omitempty"`
 	ExcludeTools []string `yaml:"exclude_tools,omitempty" json:"exclude_tools,omitempty"`
+	// IncludeTools 声明装配默认不在场的内置工具（opt-in 白名单）。
+	// mindx 默认剥离 TeamXXX 组队工具（组队语义由 team/members 承担），
+	// Agent 在此列出条目（如 "TeamCreate"）即装配回来；与 exclude_tools
+	// 对称——exclude 裁默认在场的工具，include 唤回默认不在场的工具。
+	IncludeTools []string `yaml:"include_tools,omitempty" json:"include_tools,omitempty"`
 	// AllowsTools 该员工允许使用的云技能（MCP 服务）清单。
 	// 注意：这个属性里放的全是 MCP 工具——条目格式为 "mcp:<server>"（server 粒度），
 	// 内置工具不在此列（内置工具的裁剪走 exclude_tools）。
