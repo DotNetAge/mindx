@@ -40,6 +40,28 @@ func ResolveAPIKey(store CredentialStore, ref string) string {
 	return ""
 }
 
+// SkillCredentialKey 生成技能凭据存储键 <skill_name>:<env_name>——
+// 键带技能名前缀，技能间不共享凭据。MCP 对称复用：<mcp_name>:<env_name>。
+func SkillCredentialKey(ownerName, envName string) string {
+	return ownerName + ":" + envName
+}
+
+// ResolveSkillCredential 技能凭据三层解析链：
+// 1. 私有凭据存储（键 <skill_name>:<env_name>，OAuth 令牌为整体 JSON）
+// 2. 进程环境变量（envName）
+// 3. 均缺失 → 返回 ("", false)，由调用方触发准备流程（OAuth 授权 / 安装确认）
+func ResolveSkillCredential(store CredentialStore, skillName, envName string) (string, bool) {
+	if store != nil {
+		if v, err := store.Get(SkillCredentialKey(skillName, envName)); err == nil && v != "" {
+			return v, true
+		}
+	}
+	if v := os.Getenv(envName); v != "" {
+		return v, true
+	}
+	return "", false
+}
+
 type macKeychainStore struct {
 	service string
 }

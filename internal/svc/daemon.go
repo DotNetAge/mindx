@@ -97,6 +97,15 @@ type Daemon struct {
 	// chMgr 是 AgentHub 中继管理器（手机连接）：连接中继、配对同意闸、
 	// 网关桥接。在 gateway 启动成功后开启，停机时关闭。
 	chMgr *channel.Manager
+
+	// oauthRegistry OAuth 客户端提供商注册表（client-provider.yml，启动期加载）
+	oauthRegistry *core.OAuthProviderRegistry
+
+	// oauthCredStore OAuth 凭据库（client_id/client_secret 覆盖值与令牌落点）
+	oauthCredStore core.CredentialStore
+
+	// oauthFlows 进行中的授权流程登记（每 provider 至多一条）
+	oauthFlows *oauthFlowManager
 }
 
 func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
@@ -256,6 +265,17 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 			}
 		}()
 	}
+
+	// ── OAuth 提供商注册表：client-provider.yml 加载失败降级为空注册表 ──
+	// （RPC 层报「暂无可用提供商」，不阻断 daemon 启动——文件可随版本修复）
+	if oauthProviders, oauthErr := core.LoadClientProviders(app.Settings().ClientProvidersFile()); oauthErr != nil {
+		logger.Warn("failed to load client providers, oauth providers disabled", "error", oauthErr)
+		d.oauthRegistry = core.NewOAuthProviderRegistry(nil)
+	} else {
+		d.oauthRegistry = core.NewOAuthProviderRegistry(oauthProviders)
+	}
+	d.oauthCredStore = core.NewCredentialStore(app.Settings().UserPreferences())
+	d.oauthFlows = newOAuthFlowManager()
 
 	// ── 自动升级 ──────────────────────────────────────────────
 	// 确保 config.InstalledVersion 不为空（首次启动时设置）

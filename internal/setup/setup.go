@@ -13,10 +13,15 @@ import (
 // then automatically executes all remaining installation steps (daemon,
 // python venv, embedder model, path) with a progress display (step 3),
 // and finally shows the completion summary (step 4).
-func RunWizard(modelsPath, providersPath, agentsDir, workspaceDir string, cfg *core.MindxConfig, embeddedFS fs.FS) error {
+func RunWizard(modelsPath, providersPath, clientProvidersPath, agentsDir, workspaceDir string, cfg *core.MindxConfig, embeddedFS fs.FS) error {
 	// 强制将内置的 providers.yml 同步到用户设置目录（覆盖旧版本）
 	if err := core.SyncEmbeddedFile(embeddedFS, "runtime/settings/providers.yml", providersPath); err != nil {
 		return fmt.Errorf(i18n.T("setup.sync.providers.failed"), err)
+	}
+
+	// 强制将内置的 client-provider.yml（OAuth 客户端提供商注册表）同步到用户设置目录（覆盖旧版本）
+	if err := core.SyncEmbeddedFile(embeddedFS, "runtime/settings/client-provider.yml", clientProvidersPath); err != nil {
+		return fmt.Errorf(i18n.T("setup.sync.clientproviders.failed"), err)
 	}
 
 	result := runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg)

@@ -145,6 +145,7 @@
   "config.error.path.unset": "mindx.json path not set",
   "config.error.mkdir.failed": "Failed to create config directory: %w",
   "setup.sync.providers.failed": "Failed to sync built-in providers: %w",
+  "setup.sync.clientproviders.failed": "Failed to sync built-in OAuth provider registry: %w",
   "setup.update.provider.config.failed": "Failed to update provider config: %w",
   "setup.store.apikey.failed": "Failed to save API Key: %w",
   "setup.store.apikey.provider.failed": "Failed to save API Key for %s: %v",

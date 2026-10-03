@@ -131,13 +131,14 @@ func (h *RPCHandler) handleServerAdd(ctx context.Context, raw json.RawMessage) (
 	}
 
 	if len(p.Credential) > 0 {
-		ref := fmt.Sprintf("mcp_cred_%s", p.Name)
+		// 对称键写入：<mcp_name>:<env_name>（与技能凭据同构，resolveCreds
+		// 按 env 声明逐键解析）。历史 mcp_cred_<name>_<k> 键因存储接口无
+		// 删除能力而残留，但不再被解析引用。
 		for k, v := range p.Credential {
-			if err := h.mgr.credStore.Set(ref+"_"+k, v); err != nil {
+			if err := h.mgr.credStore.Set(p.Name+":"+k, v); err != nil {
 				return nil, fmt.Errorf("store credential: %w", err)
 			}
 		}
-		cfg.CredentialRef = ref
 	}
 
 	if err := h.mgr.AddServer(ctx, cfg); err != nil {
@@ -191,15 +192,14 @@ func (h *RPCHandler) handleServerUpdate(ctx context.Context, raw json.RawMessage
 	}
 
 	if len(p.Credential) > 0 {
-		ref := fmt.Sprintf("mcp_cred_%s", p.Name)
-		// 按同名 ref 覆盖凭据值；新凭据少于旧值时 credStore 旧 key 残留
-		//（凭据存储接口无删除能力），可接受：多出的残留值不会被引用。
+		// 对称键写入：<mcp_name>:<env_name>（同 add）。新凭据少于旧值时
+		// credStore 旧 key 残留（凭据存储接口无删除能力），可接受：多出的
+		// 残留值不会被 resolveCreds 引用（解析只认 env 声明中值为空的键）。
 		for k, v := range p.Credential {
-			if err := h.mgr.credStore.Set(ref+"_"+k, v); err != nil {
+			if err := h.mgr.credStore.Set(p.Name+":"+k, v); err != nil {
 				return nil, fmt.Errorf("store credential: %w", err)
 			}
 		}
-		cfg.CredentialRef = ref
 	}
 
 	if err := h.mgr.AddServer(ctx, cfg); err != nil {

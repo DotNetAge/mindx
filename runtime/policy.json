@@ -1,0 +1,12 @@
+{
+  "file": {
+    "allowed_paths": ["~/.mindx/USER.md"],
+    "allowed_globs": []
+  },
+  "command": {
+    "allowed": []
+  },
+  "network": {
+    "allow_cidrs": []
+  }
+}

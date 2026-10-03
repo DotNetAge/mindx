@@ -73,9 +73,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		settingsDir := filepath.Join(workspaceDir, "settings")
 		modelsPath := filepath.Join(settingsDir, "models.yml")
 		providersPath := filepath.Join(settingsDir, "providers.yml")
+		clientProvidersPath := filepath.Join(settingsDir, "client-provider.yml")
 		agentsDir := filepath.Join(workspaceDir, "agents")
 
-		if err := setup.RunWizard(modelsPath, providersPath, agentsDir, workspaceDir, cfg, RuntimeFS); err != nil {
+		if err := setup.RunWizard(modelsPath, providersPath, clientProvidersPath, agentsDir, workspaceDir, cfg, RuntimeFS); err != nil {
 			fmt.Fprintf(os.Stderr, "⚠️  Setup wizard failed: %v\n", err)
 			fmt.Println("   You can run 'mindx' later to complete configuration.")
 		} else {

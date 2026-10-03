@@ -125,7 +125,8 @@ func (d *Daemon) handleSkillImport(_ context.Context, params json.RawMessage) (a
 	d.app.InvalidateRuntimes()
 
 	d.logger.Info("Skill 分发包安装完成", "name", res.Name, "overwrite", res.Overwritten)
-	return res, nil
+	// 安装即触发准备流程（requires.oauth 授权 / install 命令确认随响应带回）
+	return installWithPrepare{InstallResult: *res, Prepares: d.prepareInstalledSkills(res.SkillsGlobal)}, nil
 }
 
 // marketPackageDTO 是 market.list 响应的包条目投影：bundle.MarketPackage 的
@@ -225,7 +226,9 @@ func (d *Daemon) handleMarketPackageRead(_ context.Context, params json.RawMessa
 }
 
 // handleMarketInstall 从市场下载分发包（sha256 校验）并安装。
-func (d *Daemon) handleMarketInstall(_ context.Context, params json.RawMessage) (any, error) {
+// 安装即触发准备流程（requires.oauth 授权 / install 命令块）；skip_deps 跳过
+// 准备；auto_install 时安装命令免确认直接执行（CLI --auto 契约）。
+func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketInstallParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
@@ -281,5 +284,15 @@ func (d *Daemon) handleMarketInstall(_ context.Context, params json.RawMessage) 
 	d.app.InvalidateRuntimes()
 
 	d.logger.Info("市场分发包安装完成", "kind", p.Kind, "name", p.Name)
-	return installed, nil
+	// 安装即触发准备流程（agent 包携带的技能也落入全局库，一并准备）；
+	// skip_deps 显式跳过准备；auto_install 时安装命令免确认直接执行（CLI --auto 契约）
+	var prepares []skillPrepareResult
+	if !p.SkipDeps {
+		if p.AutoInstall {
+			prepares = d.prepareAndAutoInstall(ctx, installed.SkillsGlobal)
+		} else {
+			prepares = d.prepareInstalledSkills(installed.SkillsGlobal)
+		}
+	}
+	return installWithPrepare{InstallResult: *installed, Prepares: prepares}, nil
 }

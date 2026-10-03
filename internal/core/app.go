@@ -808,6 +808,13 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		DeniedCommandPatterns: sandbox.DefaultDeniedCommandPatterns(),
 		NetworkCommands:       sandbox.DefaultNetworkCommands(),
 	}
+	// 外部豁免扩展：~/.mindx/policy.json（Path/Command/Network 三类统一入口，
+	// 详见 policy_loader.go）。文件缺失属常规路径；损坏仅告警并忽略，不阻断沙箱创建。
+	if ov, ovErr := loadPolicyOverrides(homeDir); ovErr != nil {
+		a.logger.Warn("createRuntime: 读取 policy.json 失败，忽略外部豁免配置", "error", ovErr)
+	} else {
+		applyPolicyOverrides(&sandboxPolicy, ov, a.logger)
+	}
 	sb, sbErr := sandbox.NewSandbox(&sandboxPolicy, a.logger)
 	if sbErr != nil {
 		a.logger.Warn("createRuntime: 沙箱创建失败，回退到旧安全逻辑", "agent", agentName, "error", sbErr)

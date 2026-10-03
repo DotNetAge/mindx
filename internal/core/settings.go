@@ -30,6 +30,11 @@ func (s *Settings) ProvidersFile() string {
 	return filepath.Join(s.UserPreferences(), "settings", "providers.yml")
 }
 
+// ClientProvidersFile 返回 OAuth 客户端提供商注册表路径 ~/.mindx/settings/client-provider.yml
+func (s *Settings) ClientProvidersFile() string {
+	return filepath.Join(s.UserPreferences(), "settings", "client-provider.yml")
+}
+
 // func (s *Settings) ProgramDir() string {
 // 	return filepath.Join(s.UserPreferences(), "programs")
 // }

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -268,7 +269,23 @@ func (m *managedConn) touch() {
 
 func (p *ConnectionPool) resolveCreds(cfg ServerConfig) (map[string]string, error) {
 	result := make(map[string]string)
-	if cfg.CredentialRef != "" && p.credStore != nil {
+	if p.credStore == nil {
+		return result, nil
+	}
+	// 对称键解析（<mcp_name>:<env_name>，与技能凭据 <skill_name>:<env_name>
+	// 同构）：env 声明中值为空的变量从凭据库取值。取不到时留空，进程环境
+	// 兜底由 buildCommand 的 os.Environ 继承保证。
+	for key, val := range cfg.Env {
+		if strings.TrimSpace(val) != "" {
+			continue
+		}
+		if v, err := p.credStore.Get(cfg.Name + ":" + key); err == nil && v != "" {
+			result[key] = v
+		}
+	}
+	// 既有 credential_ref 机制保留：手写 mcp.json 的单凭据引用（ref 既是
+	// 存储键又是注入名——env 变量名或 SSE/HTTP header 名）。
+	if cfg.CredentialRef != "" {
 		val, err := p.credStore.Get(cfg.CredentialRef)
 		if err != nil {
 			return nil, fmt.Errorf("resolve %s: %w", cfg.CredentialRef, err)

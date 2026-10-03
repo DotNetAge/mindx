@@ -77,18 +77,26 @@ type skillFrontmatter struct {
 	AllowedTools AllowedToolsList `yaml:"allowed-tools"`
 }
 
+// OAuthRequirement 声明技能所需的 OAuth 授权（requires.oauth）。
+// provider 引用 client-provider.yml 注册表名；env 是授权成功后令牌落库的
+// 凭据名，存储键为 <skill_name>:<env>（三层解析链第一层）。
+type OAuthRequirement struct {
+	Provider string `yaml:"provider"`
+	Env      string `yaml:"env"`
+}
+
 // Requires 声明技能的运行时依赖。
 type Requires struct {
 	// Bins 需要在 PATH 中找到的二进制名列表（如 lark-cli、ffmpeg）。
 	Bins []string `yaml:"bins"`
-	// Env 需要设置的环境变量名列表。
-	Env []string `yaml:"env"`
+	// Env 需要设置的环境变量名列表。定稿键为 envs，兼容存量 env 写法（两者都收）。
+	Env []string `yaml:"-"`
 	// Runtime 生态级运行时版本要求（跨 skill 共享），如 node: ">=18"、python: ">=3.9"。
 	// key 是运行时名（node / python / dotnet / go / rust / java 等），
 	// value 是 semver 范围字符串（如 ">=18"、"^3.9"、"8.x"）。
 	Runtime map[string]string `yaml:"runtime"`
-	// Install 自定义安装脚本路径（相对于 skill 目录），优先于默认的 npm/pip install。
-	Install string `yaml:"install"`
+	// OAuth 技能运行所需 OAuth 授权（provider + env，缺失触发准备流程）。
+	OAuth *OAuthRequirement `yaml:"oauth"`
 }
 
 // SkillDetail 在运行时 Skill 之上补充应用侧展示字段：
@@ -98,6 +106,10 @@ type SkillDetail struct {
 	*skill.Skill
 	Requires *Requires      // metadata.requires 依赖声明（可为 nil）
 	Metadata map[string]any // frontmatter metadata 原始键值（可为 nil）
+	// InstallCommands metadata.install 修复动作命令块（平台名 → 命令列表，
+	// 如 darwin / linux；定稿：安装时展示命令清单，用户确认一次后自动执行）。
+	// 与 requires 平级（metadata.install），可为 nil。
+	InstallCommands map[string][]string
 }
 
 // LoadSkillDetailFromDir 加载 Skill 及其展示字段。
@@ -156,8 +168,9 @@ func LoadSkillDetailFromDir(dir, source string) (*SkillDetail, []string, error) 
 			RootDir:      dir,
 			Source:       source,
 		},
-		Requires: req,
-		Metadata: fm.Metadata,
+		Requires:        req,
+		Metadata:        fm.Metadata,
+		InstallCommands: extractInstallCommands(fm.Metadata),
 	}, warnings, nil
 }
 
@@ -241,6 +254,7 @@ func parseFrontmatter(content string) (skillFrontmatter, string, error) {
 }
 
 // extractRequires 从 metadata 中提取 requires 声明（规范：扩展键放在 metadata）。
+// env 名单定稿键为 envs，兼容存量 env 写法；oauth 为 provider+env 两字段对象。
 func extractRequires(metadata map[string]any) *Requires {
 	raw, ok := metadata["requires"]
 	if !ok {
@@ -258,12 +272,11 @@ func extractRequires(metadata map[string]any) *Requires {
 			}
 		}
 	}
-	if envs, ok := reqMap["env"].([]any); ok {
-		for _, e := range envs {
-			if s, ok := e.(string); ok {
-				r.Env = append(r.Env, s)
-			}
-		}
+	// env 名单：envs（定稿）优先，env（存量兼容）兜底
+	if envs, ok := reqMap["envs"].([]any); ok {
+		r.Env = stringList(envs)
+	} else if envs, ok := reqMap["env"].([]any); ok {
+		r.Env = stringList(envs)
 	}
 	if rt, ok := reqMap["runtime"].(map[string]any); ok {
 		r.Runtime = make(map[string]string, len(rt))
@@ -273,13 +286,81 @@ func extractRequires(metadata map[string]any) *Requires {
 			}
 		}
 	}
-	if inst, ok := reqMap["install"].(string); ok {
-		r.Install = strings.TrimSpace(inst)
+	if oauthMap, ok := reqMap["oauth"].(map[string]any); ok {
+		oauth := &OAuthRequirement{}
+		if s, ok := oauthMap["provider"].(string); ok {
+			oauth.Provider = strings.TrimSpace(s)
+		}
+		if s, ok := oauthMap["env"].(string); ok {
+			oauth.Env = strings.TrimSpace(s)
+		}
+		if oauth.Provider != "" && oauth.Env != "" {
+			r.OAuth = oauth
+		}
 	}
-	if len(r.Bins) == 0 && len(r.Env) == 0 && len(r.Runtime) == 0 && r.Install == "" {
+	if len(r.Bins) == 0 && len(r.Env) == 0 && len(r.Runtime) == 0 && r.OAuth == nil {
 		return nil
 	}
 	return r
+}
+
+// stringList 把 YAML 反序列化出的 any 列表收窄为字符串列表。
+func stringList(raw []any) []string {
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// extractInstallCommands 从 metadata 中提取 install 命令块（与 requires 平级）：
+// 平台名（darwin / linux 等）→ 命令列表。仅收字符串数组值，空块返回 nil。
+func extractInstallCommands(metadata map[string]any) map[string][]string {
+	raw, ok := metadata["install"]
+	if !ok {
+		return nil
+	}
+	installMap, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	out := make(map[string][]string, len(installMap))
+	for platform, cmds := range installMap {
+		list, ok := cmds.([]any)
+		if !ok {
+			continue
+		}
+		commands := stringList(list)
+		if len(commands) > 0 {
+			out[platform] = commands
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// MissingBins 返回声明但未在执行端找到的二进制名（准备流程 needs_confirm 判定
+// 与「环境不满足」报错的输入）。三层查找链同 verifyDependencies（PATH → shell
+// → 常见目录扫描）。
+func MissingBins(r *Requires) []string {
+	if r == nil {
+		return nil
+	}
+	var missing []string
+	for _, bin := range r.Bins {
+		bin = strings.TrimSpace(bin)
+		if bin == "" {
+			continue
+		}
+		if _, err := resolveBin(bin); err != nil {
+			missing = append(missing, bin)
+		}
+	}
+	return missing
 }
 
 // verifyDependencies 检查声明的运行时依赖是否满足。

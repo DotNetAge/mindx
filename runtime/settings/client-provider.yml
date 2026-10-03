@@ -1,0 +1,82 @@
+# client-provider.yml —— OAuth 客户端提供商注册表
+# 技能 frontmatter 的 metadata.requires.oauth.provider 引用此处的 name。
+# 硬约束：client_secret 绝不写入本文件（预置他人 secret = 冒用；自己的 secret 明文分发 = 泄露），
+# 机密客户端凭据仅经 CredentialStore 存放。
+oauth_providers:
+  # ── 第一层：CLI 复用型（公开 client_id 的 PKCE 公共客户端，完整预置）──
+  - name: qwen
+    title: Qwen Code
+    kind: device_code
+    device_url: https://chat.qwen.ai/api/v1/oauth2/device/code
+    token_url: https://chat.qwen.ai/api/v1/oauth2/token
+    client_id: f0304373b74a44d2b584a3fb70ca9e56
+    scopes: [openid, profile, email, model.completion]
+    uses_pkce: true
+    listen_addr: "127.0.0.1:0"
+    interaction: device_code
+
+  - name: minimax
+    title: MiniMax
+    kind: user_code
+    authorize_url: https://api.minimaxi.com/oauth/code
+    token_url: https://api.minimaxi.com/oauth/token
+    client_id: 78257093-7e40-4613-99e0-527b14b39113
+    scopes: [group_id, profile, model.completion]
+    uses_pkce: true
+    listen_addr: "127.0.0.1:0"
+    interaction: user_code
+    # 国际站端点为 https://api.minimax.io（对应 gochat region=intl 分支）
+
+  # gemini 走 Google OAuth：gochat gemini.go 中 client_id 为构造参数（机密客户端，
+  # 须搭配用户自备 client_secret），故此处仅预置端点与授权参数，client_id 留空。
+  - name: gemini
+    title: Google Gemini
+    kind: authorization_code
+    authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+    token_url: https://oauth2.googleapis.com/token
+    client_id: ""
+    scopes: [https://www.googleapis.com/auth/generative-language.retriever]
+    extra_params:
+      access_type: offline
+      prompt: consent
+    uses_pkce: false
+    listen_addr: "127.0.0.1:0"
+    interaction: callback
+
+  # ── 第二层：通用平台模板（仅预置端点与 scopes，client_id 留空 = 未配置态）──
+  # 用户在对应平台注册应用后，经设置面板将 client_id 填入 CredentialStore。
+  - name: github
+    title: GitHub
+    kind: authorization_code
+    authorize_url: https://github.com/login/oauth/authorize
+    token_url: https://github.com/login/oauth/access_token
+    client_id: ""
+    scopes: []
+    uses_pkce: false
+    listen_addr: "127.0.0.1:0"
+    interaction: callback
+
+  - name: google
+    title: Google
+    kind: authorization_code
+    authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+    token_url: https://oauth2.googleapis.com/token
+    client_id: ""
+    scopes: []
+    extra_params:
+      access_type: offline
+      prompt: consent
+    uses_pkce: false
+    listen_addr: "127.0.0.1:0"
+    interaction: callback
+
+  - name: gitlab
+    title: GitLab
+    kind: authorization_code
+    authorize_url: https://gitlab.com/oauth/authorize
+    token_url: https://gitlab.com/oauth/token
+    client_id: ""
+    scopes: []
+    uses_pkce: false
+    listen_addr: "127.0.0.1:0"
+    interaction: callback

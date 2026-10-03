@@ -145,6 +145,7 @@
   "config.error.path.unset": "mindx.json 路径未设置",
   "config.error.mkdir.failed": "创建配置目录失败: %w",
   "setup.sync.providers.failed": "同步内置 providers 失败: %w",
+  "setup.sync.clientproviders.failed": "同步内置 OAuth 提供商注册表失败: %w",
   "setup.update.provider.config.failed": "更新提供商配置失败: %w",
   "setup.store.apikey.failed": "保存 API Key 失败: %w",
   "setup.store.apikey.provider.failed": "保存 %s 的 API Key 失败: %v",

@@ -73,6 +73,8 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"agent.import":                       r.daemon.handleAgentImport,
 		"skill.export":                       r.daemon.handleSkillExport,
 		"skill.import":                       r.daemon.handleSkillImport,
+		"skill.prepare":                      r.daemon.handleSkillPrepare,
+		"skill.prepare.confirm_install":      r.daemon.handleSkillPrepareConfirmInstall,
 		"market.list":                        r.daemon.handleMarketList,
 		"market.install":                     r.daemon.handleMarketInstall,
 		"market.package.read":                r.daemon.handleMarketPackageRead,
@@ -158,6 +160,12 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"mcp.server.list":        r.daemon.handleMCPServerList,
 		"mcp.server.test":        r.daemon.handleMCPServerTest,
 		"mcp.server.discover":    r.daemon.handleMCPServerDiscover,
+
+		// OAuth 提供商（阶段四壳侧授权配合：设置区状态 + client_id 填入 + 授权流程）
+		"oauth.provider.list":      r.daemon.handleOAuthProviderList,
+		"oauth.provider.configure": r.daemon.handleOAuthConfigure,
+		"oauth.authorize.start":    r.daemon.handleOAuthAuthorizeStart,
+		"oauth.authorize.cancel":   r.daemon.handleOAuthAuthorizeCancel,
 	}
 }
 
