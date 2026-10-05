@@ -188,7 +188,7 @@ docker exec -it mindx mindx skill list
 docker exec -it mindx mindx agent list
 ```
 
-> Docker 镜像基于 debian:bookworm-slim，内置 ONNX Runtime，多架构支持（linux/amd64, linux/arm64）。
+> Docker 镜像基于 debian:bookworm-slim，多架构支持（linux/amd64, linux/arm64）。
 
 ---
 
@@ -229,7 +229,33 @@ flatpak install flathub com.dotnetage.mindx
 flatpak run com.dotnetage.mindx
 ```
 
-**Debian/Ubuntu 与 Fedora/RHEL**
+**APT（Debian/Ubuntu）**
+
+```bash
+echo "deb [trusted=yes] https://dotnetage.github.io/mindx/apt stable main" | sudo tee /etc/apt/sources.list.d/mindx.list
+sudo apt update
+sudo apt install mindx
+
+# 启动服务
+sudo systemctl start mindx-daemon
+```
+
+**YUM/DNF（Fedora/RHEL）**
+
+```bash
+sudo tee /etc/yum.repos.d/mindx.repo <<'EOF'
+[mindx]
+name=MindX
+baseurl=https://dotnetage.github.io/mindx/rpm/$basearch
+enabled=1
+gpgcheck=0
+EOF
+sudo dnf install mindx
+```
+
+> APT/YUM 仓库托管于 GitHub Pages，随每次发布自动更新，后续升级走标准 `apt upgrade` / `dnf upgrade` 流程。
+
+**Debian/Ubuntu 与 Fedora/RHEL（手动 .deb/.rpm）**
 
 从 GitHub Releases 下载 `.deb` 或 `.rpm` 包：
 

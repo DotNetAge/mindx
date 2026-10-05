@@ -189,7 +189,7 @@ docker exec -it mindx mindx skill list
 docker exec -it mindx mindx agent list
 ```
 
-> The Docker image is based on debian:bookworm-slim with ONNX Runtime included. Supports multi-architecture (linux/amd64, linux/arm64).
+> The Docker image is based on debian:bookworm-slim. Supports multi-architecture (linux/amd64, linux/arm64).
 
 ---
 
@@ -233,7 +233,33 @@ flatpak install flathub com.dotnetage.mindx
 flatpak run com.dotnetage.mindx
 ```
 
-**Debian/Ubuntu & Fedora/RHEL**
+**APT (Debian/Ubuntu)**
+
+```bash
+echo "deb [trusted=yes] https://dotnetage.github.io/mindx/apt stable main" | sudo tee /etc/apt/sources.list.d/mindx.list
+sudo apt update
+sudo apt install mindx
+
+# Start the daemon service
+sudo systemctl start mindx-daemon
+```
+
+**YUM/DNF (Fedora/RHEL)**
+
+```bash
+sudo tee /etc/yum.repos.d/mindx.repo <<'EOF'
+[mindx]
+name=MindX
+baseurl=https://dotnetage.github.io/mindx/rpm/$basearch
+enabled=1
+gpgcheck=0
+EOF
+sudo dnf install mindx
+```
+
+> The APT/YUM repositories are hosted on GitHub Pages and updated on every release. Package upgrades follow the standard `apt upgrade` / `dnf upgrade` flow.
+
+**Debian/Ubuntu & Fedora/RHEL (Manual .deb/.rpm)**
 
 Download `.deb` or `.rpm` packages from GitHub Releases:
 

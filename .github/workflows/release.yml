@@ -664,6 +664,137 @@ jobs:
             [ -f "$f" ] && echo "| \`$(basename $f)\` | Fedora/RHEL |" >> "$GITHUB_STEP_SUMMARY"
           done
 
+  # ==========================================================================
+  # APT/YUM Package Repository — 发布 .deb/.rpm 到 GitHub Pages 托管的包仓库
+  #
+  # 每次发布：从 Release 下载 deb/rpm → 归档进 gh-pages 的 pool/ → 重建仓库元数据
+  #   APT: https://dotnetage.github.io/mindx/apt   (dists/stable, 标准 tree 布局)
+  #        使用: deb [trusted=yes] https://dotnetage.github.io/mindx/apt stable main
+  #   YUM: https://dotnetage.github.io/mindx/rpm   (按 $basearch 分目录 + repodata)
+  #        使用: baseurl=https://dotnetage.github.io/mindx/rpm/$basearch (gpgcheck=0)
+  #
+  # 注意：
+  #   - gh-pages 分支仅由本 job 写入（--force 全量重建），勿手动存放其他内容
+  #   - 包按版本累积保留（deb/rpm 体积小，暂不配置自动清理）
+  #   - 无 GPG 签名，客户端需 trusted=yes / gpgcheck=0
+  # ==========================================================================
+  pkg-repo:
+    name: APT/YUM Repo (GitHub Pages)
+    runs-on: ubuntu-latest
+    needs: [prepare, linux]
+    permissions:
+      contents: write
+    steps:
+      - name: Install repo tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq dpkg-dev createrepo-c
+
+      - name: Download packages from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p incoming
+          gh release download "${{ needs.prepare.outputs.version }}" \
+            --repo "${{ env.GITHUB_REPO }}" \
+            --pattern '*.deb' --pattern '*.rpm' --dir incoming
+          ls -lh incoming/
+
+      - name: Checkout existing gh-pages
+        run: |
+          if git ls-remote --heads "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ env.GITHUB_REPO }}.git" gh-pages | grep -q refs/heads/gh-pages; then
+            git clone --depth 1 --branch gh-pages \
+              "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ env.GITHUB_REPO }}.git" pub
+          else
+            mkdir pub
+          fi
+
+      - name: Build APT repository
+        run: |
+          mkdir -p pub/apt/pool/stable/m/mindx
+          cp incoming/*.deb pub/apt/pool/stable/m/mindx/
+
+          cd pub/apt
+          # 全量扫描 pool（Packages 含两架构条目，apt 客户端按 Architecture 自过滤）
+          dpkg-scanpackages --multiversion pool/ /dev/null > Packages
+          gzip -9 -n -k Packages
+
+          mkdir -p dists/stable/main/binary-amd64 dists/stable/main/binary-arm64
+          for ARCH in amd64 arm64; do
+            cp Packages "dists/stable/main/binary-${ARCH}/Packages"
+            gzip -9 -n -k "dists/stable/main/binary-${ARCH}/Packages"
+          done
+
+          # 生成 dists/stable/Release（apt 必需的元数据校验文件）
+          {
+            echo "Origin: mindx"
+            echo "Label: mindx"
+            echo "Suite: stable"
+            echo "Codename: stable"
+            echo "Architectures: amd64 arm64"
+            echo "Components: main"
+            echo "Date: $(date -u -R)"
+            echo "MD5Sum:"
+            for f in $(find dists -type f | sort); do
+              echo " $(md5sum "$f" | cut -d' ' -f1) $(wc -c < "$f" | tr -d ' ') ${f#dists/stable/}"
+            done
+            echo "SHA256:"
+            for f in $(find dists -type f | sort); do
+              echo " $(sha256sum "$f" | cut -d' ' -f1) $(wc -c < "$f" | tr -d ' ') ${f#dists/stable/}"
+            done
+          } > dists/stable/Release
+
+          rm -f Packages Packages.gz
+
+      - name: Build YUM repository
+        run: |
+          # nfpm rpm 命名：mindx-<ver>.<rpm_arch>.rpm（amd64→x86_64, arm64→aarch64）
+          for pair in "amd64:x86_64" "arm64:aarch64"; do
+            GO_ARCH="${pair%%:*}"; RPM_ARCH="${pair##*:}"
+            mkdir -p "pub/rpm/${RPM_ARCH}"
+            cp incoming/*_"${GO_ARCH}".rpm "pub/rpm/${RPM_ARCH}/" 2>/dev/null \
+              || cp incoming/*."${RPM_ARCH}".rpm "pub/rpm/${RPM_ARCH}/" 2>/dev/null \
+              || echo "WARNING: no rpm for ${GO_ARCH}"
+          done
+          for dir in pub/rpm/*/; do
+            createrepo_c "$dir"
+          done
+          find pub/rpm -type f | sort
+
+      - name: Publish to gh-pages
+        run: |
+          VERSION_NUM=${{ needs.prepare.outputs.version_num }}
+          cd pub
+          if [ ! -d .git ]; then
+            git init -b gh-pages
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "pkg repo: mindx ${VERSION_NUM}" || echo "No changes to publish"
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ env.GITHUB_REPO }}.git" 2>/dev/null || true
+          git push origin gh-pages --force
+
+      - name: Summary
+        run: |
+          echo "## APT/YUM Repository Updated" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo '# Debian / Ubuntu' >> "$GITHUB_STEP_SUMMARY"
+          echo 'echo "deb [trusted=yes] https://dotnetage.github.io/mindx/apt stable main" | sudo tee /etc/apt/sources.list.d/mindx.list' >> "$GITHUB_STEP_SUMMARY"
+          echo 'sudo apt update && sudo apt install mindx' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '# Fedora / RHEL' >> "$GITHUB_STEP_SUMMARY"
+          echo 'sudo tee /etc/yum.repos.d/mindx.repo <<EOF' >> "$GITHUB_STEP_SUMMARY"
+          echo '[mindx]' >> "$GITHUB_STEP_SUMMARY"
+          echo 'name=MindX' >> "$GITHUB_STEP_SUMMARY"
+          echo 'baseurl=https://dotnetage.github.io/mindx/rpm/$basearch' >> "$GITHUB_STEP_SUMMARY"
+          echo 'enabled=1' >> "$GITHUB_STEP_SUMMARY"
+          echo 'gpgcheck=0' >> "$GITHUB_STEP_SUMMARY"
+          echo 'EOF' >> "$GITHUB_STEP_SUMMARY"
+          echo 'sudo dnf install mindx' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
 
 
   # ==========================================================================
