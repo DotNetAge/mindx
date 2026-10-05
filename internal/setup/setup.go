@@ -11,7 +11,7 @@ import (
 // RunWizard runs the interactive setup wizard and applies the results.
 // The wizard collects Provider/Model/APIKey from the user (steps 0-2),
 // then automatically executes all remaining installation steps (daemon,
-// python venv, embedder model, path) with a progress display (step 3),
+// python venv, path) with a progress display (step 3),
 // and finally shows the completion summary (step 4).
 func RunWizard(modelsPath, providersPath, clientProvidersPath, agentsDir, workspaceDir string, cfg *core.MindxConfig, embeddedFS fs.FS) error {
 	// 强制将内置的 providers.yml 同步到用户设置目录（覆盖旧版本）
@@ -80,11 +80,6 @@ func RunWizard(modelsPath, providersPath, clientProvidersPath, agentsDir, worksp
 		fmt.Printf("⚠️  "+i18n.T("setup.python.config.failed")+"\n", result.PythonErr)
 	} else {
 		cfg.Python = result.PythonInfo
-	}
-
-	// Embedder 模型（已由 wizard 内部执行）
-	if result.EmbedderModel != "" {
-		cfg.EmbedderModel = result.EmbedderModel
 	}
 
 	// PATH 配置（仅 Windows，已由 wizard 内部执行）

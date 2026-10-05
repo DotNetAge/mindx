@@ -200,30 +200,7 @@ func runAllChecks() []Check {
 		})
 	}
 
-	// 5. Embedder model
-	modelPath := filepath.Join(workspaceDir, "data", "models", "model.onnx")
-	if _, err := os.Stat(modelPath); err == nil {
-		checks = append(checks, Check{
-			Name:    "Embedder Model",
-			Status:  "✅",
-			Message: "model.onnx present — memory search enabled",
-		})
-	} else if cfgErr == nil && cfg.HasEmbedder() {
-		checks = append(checks, Check{
-			Name:    "Embedder Model",
-			Status:  "❌",
-			Message: fmt.Sprintf("Configured but file missing at %s — memory search will fail", modelPath),
-			Fix:     nil, // Needs download step
-		})
-	} else {
-		checks = append(checks, Check{
-			Name:    "Embedder Model",
-			Status:  "ℹ️",
-			Message: "Not configured — memory search disabled (optional)",
-		})
-	}
-
-	// 6. Workspace directory permissions
+	// 5. Workspace directory permissions
 	if info, err := os.Stat(workspaceDir); err == nil {
 		if info.Mode().Perm()&0200 == 0 {
 			checks = append(checks, Check{
@@ -234,7 +211,7 @@ func runAllChecks() []Check {
 		}
 	}
 
-	// 7. Port availability (quick check)
+	// 6. Port availability (quick check)
 	if daemonStatus == setup.DaemonRunning {
 		// If daemon is running, assume port is fine
 		checks = append(checks, Check{Name: "WebUI Port", Status: "✅", Message: "Daemon managing port allocation"})

@@ -18,7 +18,6 @@ import (
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/goharness/store"
 	"github.com/DotNetAge/goharness/tools"
-	goragcore "github.com/DotNetAge/gorag/v2/core"
 	"github.com/DotNetAge/mindx/internal/core/agentstore"
 	"github.com/DotNetAge/mindx/internal/core/bundle"
 	"github.com/DotNetAge/mindx/internal/core/skillstore"
@@ -65,9 +64,6 @@ type App struct {
 
 	// Permission rules
 	permissionRuleStore *MindxPermissionRuleStore
-
-	// Optional components
-	embedder goragcore.Embedder
 
 	// fileMemory 把压缩摘要原文写为 .agents/memory/ markdown 记忆文件
 	//（2026-10-06 记忆剥离重构：替代 RAGMemory/RAGMemoryAdapter）
@@ -194,34 +190,6 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 
 	credStore := NewCredentialStore(settings.UserPreferences())
 
-	// 兜底补写 embedder_model：随包语义模型已落盘而配置缺失时写默认文件名。
-	// 此前由 App 侧（enableEmbedderIfNeeded）补写，但 daemon 内存中的旧配置在
-	// 任意一次 Save() 时会全量重写 mindx.json，抹掉 App 写入的字段（写竞争）。
-	// 统一收口到 Go 侧：daemon 是配置唯一写入方，补写一次后随配置持久化。
-	// Save 失败不中断启动：内存中已生效，本次记忆可用，下次启动重试补写。
-	if mindxConfig != nil && mindxConfig.EmbedderModel == "" {
-		defaultModelPath := filepath.Join(settings.UserPreferences(), "data", "models", "model.onnx")
-		if _, statErr := os.Stat(defaultModelPath); statErr == nil {
-			mindxConfig.EmbedderModel = "model.onnx"
-			if saveErr := mindxConfig.Save(); saveErr != nil {
-				logger.Warn("补写 embedder_model 默认值后保存配置失败，下次启动重试", "error", saveErr)
-			} else {
-				logger.Info("embedder_model 未配置，已补写默认值（检测到随包语义模型）", "model", "model.onnx")
-			}
-		}
-	}
-
-	// Create embedder if configured for semantic memory support
-	var emb goragcore.Embedder
-	if mindxConfig != nil && mindxConfig.HasEmbedder() {
-		modelPath := mindxConfig.EmbedderModelPath(settings.UserPreferences())
-		var embErr error
-		emb, embErr = NewEmbedderFromConfig(modelPath)
-		if embErr != nil {
-			logger.Warn("Failed to create embedder, memory disabled", "error", embErr, "model", modelPath)
-		}
-	}
-
 	// Create permission rule store (nil-safe: if mindxConfig is nil, returns no-op store)
 	permStore := NewMindxPermissionRuleStore(mindxConfig)
 
@@ -239,7 +207,6 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		skills:              skillStore,
 		sessDB:              sessDB,
 		runtimeCache:        make(map[string]*agents.Runtime),
-		embedder:            emb,
 		fileMemory:          NewFileMemorySink(logger, settings.UserPreferences()),
 		permissionRuleStore: permStore,
 		tokenUsageStore:     mindxses.NewFileTokenUsageStore(settings.DataDir()),
@@ -275,10 +242,6 @@ func resolveCurrentAgentName(cfg *MindxConfig, agents *agentstore.AgentStore, lo
 
 func (a *App) Settings() *Settings {
 	return a.settings
-}
-
-func (a *App) Embedder() goragcore.Embedder {
-	return a.embedder
 }
 
 // SetUIBroadcast 注入 UI 命令通道广播回调（Daemon 的 broadcastUI）。由 Daemon

@@ -23,9 +23,8 @@ type WizardResult struct {
 	APIKey        string
 	Err           error
 
-	DaemonSetup   bool
-	PythonSetup   bool
-	PythonInfo    PythonInfo
-	EmbedderModel string
-	PathSetup     bool
+	DaemonSetup bool
+	PythonSetup bool
+	PythonInfo  PythonInfo
+	PathSetup   bool
 }

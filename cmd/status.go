@@ -20,7 +20,6 @@ var statusCmd = &cobra.Command{
   - Daemon service state
   - Configuration status
   - Python environment
-  - Embedder model availability
   - System PATH registration
 
 Examples:
@@ -66,9 +65,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		if cfg.DefaultModel != "" {
 			fmt.Printf("   Model:    %s\n", cfg.DefaultModel)
 		}
-		if cfg.HasEmbedder() {
-			fmt.Printf("   Embedder: %s\n", cfg.EmbedderModel)
-		}
 	}
 
 	// Daemon
@@ -101,16 +97,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		fmt.Printf("🐍 Python:   ⚠️  no venv (run 'mindx doctor')\n")
-	}
-
-	// Embedder model file check
-	modelPath := filepath.Join(workspaceDir, "data", "models", "model.onnx")
-	if _, err := os.Stat(modelPath); err == nil {
-		fmt.Printf("🧠 Embedder: ✅ model.onnx present\n")
-	} else if cfg != nil && cfg.HasEmbedder() {
-		fmt.Printf("🧠 Embedder: ⚠️  configured but file missing (%s)\n", modelPath)
-	} else {
-		fmt.Printf("🧠 Embedder: ⬜  not configured\n")
 	}
 
 	// Platform info

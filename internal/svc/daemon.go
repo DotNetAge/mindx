@@ -15,12 +15,10 @@ import (
 	"sync"
 	"time"
 
-	graphapi "github.com/DotNetAge/gograph/pkg/api"
 	"github.com/DotNetAge/goharness/agents"
 	"github.com/DotNetAge/goharness/events"
 	"github.com/DotNetAge/goharness/hooks/action"
 	goharnesssession "github.com/DotNetAge/goharness/session"
-	"github.com/DotNetAge/gorag/v2/native"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/channel"
 	"github.com/DotNetAge/mindx/internal/core"
@@ -59,15 +57,8 @@ type Daemon struct {
 	// to look up the session's TrackModify function.
 	activeSessions sync.Map
 
-	// knowledge-graph database (gograph)
-	graphDB    *graphapi.DB
-	graphStore *graphapi.GraphStore
-
 	// global key-value store (bbolt)
 	kvStore *bbolt.DB
-
-	// NativeRAG 条目语义索引（族 = Collection），为 rag.seg.* RPC 提供底层
-	segIndexer *native.SegIndexer
 
 	// mcp manager for MCP server integration
 	mcpMgr *mcp.Manager
@@ -131,47 +122,25 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		logger.Info("scheduler store created", "dir", app.Settings().SchedulesDir())
 	}
 
-	// ── 图数据库 (gograph) — 为 graph.* RPC 提供底层存储 ────────
-	var graphDB *graphapi.DB
-	var graphStore *graphapi.GraphStore
-	var graphErr error
-
-	graphDB, graphStore, graphErr = initGraphDB(app.Settings().DataDir())
-	if graphErr != nil {
-		logger.Warn("failed to initialize graph database", "error", graphErr)
-	} else {
-		logger.Info("graph database initialized",
-			"path", filepath.Join(app.Settings().DataDir(), "kb.db"),
-		)
-	}
-
 	// ── Shared Memory（对话记忆）─────────────────────────────────
 	// 2026-10-06 记忆剥离重构：RAGMemory 退役，压缩摘要改经 FileMemorySink
 	// 落盘为 .agents/memory/ markdown 文件（App 内置），daemon 不再持有共享记忆。
 
 	d := &Daemon{
-		app:          app,
-		addr:         addr,
-		wsPath:       wsPath,
-		schedulerDB:  schedulerDB,
-		dataDir:      app.Settings().DataDir(),
-		usageStore:   app.TokenUsageStore(),
-		runtimeFS:    runtimeFS,
-		logger:       logger,
-		restartCh:    make(chan struct{}, 1),
+		app:         app,
+		addr:        addr,
+		wsPath:      wsPath,
+		schedulerDB: schedulerDB,
+		dataDir:     app.Settings().DataDir(),
+		usageStore:  app.TokenUsageStore(),
+		runtimeFS:   runtimeFS,
+		logger:      logger,
+		restartCh:   make(chan struct{}, 1),
 	}
 
 	// UI 命令通道：把 daemon 广播回调注入 App，createRuntime 据此注册
 	// Open/Visit/TerminalRun 三工具（未走 daemon 的 TUI 场景不注册）。
 	app.SetUIBroadcast(d.broadcastUI)
-
-	// Wire graphDB to daemon fields (deferred because d is needed)
-	if graphDB != nil {
-		d.graphDB = graphDB
-		d.graphStore = graphStore
-	} else {
-		logger.Warn("graph database unavailable, graph RPC disabled")
-	}
 
 	if schedulerDB != nil {
 		d.scheduler = scheduler.NewScheduler(schedulerDB, logger)
@@ -244,23 +213,6 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		}()
 	}
 
-	// ── NativeRAG 条目语义索引（族 = Collection）────────────────
-	// 与 sharedMemory 复用同一 embedder 实例（避免重复加载 ONNX 模型），
-	// 数据落 ~/.mindx/data/native.db，仅 daemon 持有写连接。
-	if emb := app.Embedder(); emb != nil {
-		segIdx, segErr := native.NewSegIndexer(filepath.Join(app.Settings().DataDir(), "native.db"), emb)
-		if segErr != nil {
-			logger.Warn("failed to initialize rag seg index", "error", segErr)
-		} else {
-			d.segIndexer = segIdx
-			logger.Info("rag seg index initialized",
-				"path", filepath.Join(app.Settings().DataDir(), "native.db"),
-			)
-		}
-	} else {
-		logger.Info("no embedder configured, rag seg disabled")
-	}
-
 	// ── OAuth 提供商注册表：client-provider.yml 加载失败降级为空注册表 ──
 	// （RPC 层报「暂无可用提供商」，不阻断 daemon 启动——文件可随版本修复）
 	if oauthProviders, oauthErr := core.LoadClientProviders(app.Settings().ClientProvidersFile()); oauthErr != nil {
@@ -294,7 +246,6 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 
 	d.logger.Info("=== Daemon initialization complete ===",
 		"has_scheduler", d.scheduler != nil,
-		"has_graph_db", d.graphDB != nil,
 		"has_kvstore", d.kvStore != nil,
 	)
 
@@ -567,20 +518,6 @@ func (d *Daemon) stopBackgroundServices() {
 		if d.scheduler != nil {
 			d.scheduler.Stop()
 		}
-	})
-
-	d.stopCloseable("knowledge-graph database", func() error {
-		if d.graphDB != nil {
-			return d.graphDB.Close()
-		}
-		return nil
-	})
-
-	d.stopCloseable("rag seg index", func() error {
-		if d.segIndexer != nil {
-			return d.segIndexer.Close()
-		}
-		return nil
 	})
 
 	d.stopCloseable("kvstore", func() error {
@@ -1233,14 +1170,6 @@ func (d *Daemon) Addr() string {
 
 func (d *Daemon) WSPath() string {
 	return d.wsPath
-}
-
-func (d *Daemon) GraphDB() *graphapi.DB {
-	return d.graphDB
-}
-
-func (d *Daemon) GraphStore() *graphapi.GraphStore {
-	return d.graphStore
 }
 
 func (d *Daemon) KVStore() *bbolt.DB {

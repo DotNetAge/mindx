@@ -112,7 +112,6 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 		"default_model":    cfg.DefaultModel,
 		"default_provider": cfg.DefaultProvider,
 		"last_model":       cfg.LastModel,
-		"embedder_model":   cfg.EmbedderModel,
 		"kb_addr":          cfg.KBAddr,
 		"channel_url":      cfg.ChannelURL,
 	}

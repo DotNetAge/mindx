@@ -6,7 +6,6 @@
   "last_model": "",
   "default_model": "",
   "default_provider": "",
-  "embedder_model": "model.onnx",
   "daemon": {
     "enabled": false
   },

@@ -280,9 +280,6 @@ func TestApp_Accessors_Nil(t *testing.T) {
 	if app.CurrentAgentName() != "" {
 		t.Error("CurrentAgentName() should return empty when no config")
 	}
-	if app.Embedder() != nil {
-		t.Error("Embedder() should return nil")
-	}
 	if app.Config() != nil {
 		t.Error("Config() should return nil")
 	}

@@ -371,56 +371,6 @@ func TestProviderMethods(t *testing.T) {
 }
 
 // ============================================================================
-// Graph domain
-// ============================================================================
-
-func TestGraphMethods(t *testing.T) {
-	m := newMockGateway()
-	c := &Client{gw: m}
-
-	t.Run("Query", func(t *testing.T) {
-		params := map[string]interface{}{"key": "val"}
-		testRPC(t, c, m, "graph.query", GraphQueryParams{Query: "match (n)", Params: params}, func() (json.RawMessage, error) {
-			return c.GraphQuery("match (n)", params)
-		})
-	})
-
-	t.Run("Exec", func(t *testing.T) {
-		testRPC(t, c, m, "graph.exec", GraphQueryParams{Query: "create (n)"}, func() (json.RawMessage, error) {
-			return c.GraphExec("create (n)", nil)
-		})
-	})
-
-	t.Run("UpsertNodes", func(t *testing.T) {
-		nodes := []GraphNodeParam{{ID: "n1", Labels: []string{"Person"}}}
-		testRPC(t, c, m, "graph.upsert_nodes", GraphUpsertNodesParams{Nodes: nodes}, func() (json.RawMessage, error) {
-			return c.GraphUpsertNodes(nodes)
-		})
-	})
-
-	t.Run("UpsertEdges", func(t *testing.T) {
-		edges := []GraphEdgeParam{{FromNodeID: "n1", ToNodeID: "n2", Type: "KNOWS"}}
-		testRPC(t, c, m, "graph.upsert_edges", GraphUpsertEdgesParams{Edges: edges}, func() (json.RawMessage, error) {
-			return c.GraphUpsertEdges(edges)
-		})
-	})
-
-	t.Run("GetNode", func(t *testing.T) {
-		testRPC(t, c, m, "graph.get_node", GraphGetNodeParams{ID: "n1"}, func() (json.RawMessage, error) {
-			return c.GraphGetNode("n1")
-		})
-	})
-
-	t.Run("GetNeighbors", func(t *testing.T) {
-		testRPC(t, c, m, "graph.get_neighbors", GraphGetNeighborsParams{
-			ID: "n1", Depth: 2, Limit: 10, Types: []string{"KNOWS"},
-		}, func() (json.RawMessage, error) {
-			return c.GraphGetNeighbors("n1", 2, 10, []string{"KNOWS"})
-		})
-	})
-}
-
-// ============================================================================
 // FS domain
 // ============================================================================
 
@@ -744,28 +694,6 @@ func TestKVStoreMethods(t *testing.T) {
 	t.Run("Clear", func(t *testing.T) {
 		testRPC(t, c, m, "kvstore.clear", KVClearParams{Prefix: "tmp"}, func() (json.RawMessage, error) {
 			return c.KVClear("tmp")
-		})
-	})
-}
-
-// ============================================================================
-// Entity Tags domain
-// ============================================================================
-
-func TestEntityTagsMethods(t *testing.T) {
-	m := newMockGateway()
-	c := &Client{gw: m}
-
-	t.Run("Get", func(t *testing.T) {
-		testRPCNoParams(t, c, m, "entity_tags.get", func() (json.RawMessage, error) {
-			return c.EntityTagsGet()
-		})
-	})
-
-	t.Run("Save", func(t *testing.T) {
-		defs := []EntityTagDef{{Name: "t1", Title: "Tag 1", Desc: "desc"}}
-		testRPC(t, c, m, "entity_tags.save", EntityTagsSaveParams{Types: defs}, func() (json.RawMessage, error) {
-			return c.EntityTagsSave(defs)
 		})
 	})
 }

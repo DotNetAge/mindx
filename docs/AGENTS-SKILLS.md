@@ -197,8 +197,11 @@ SkillTool.GetSkill(name)
 
 - **mindx**（PromptBuilder，`internal/core/prompt_builder.go`）：组装全部应用语义段落，
   经 `WithBaseSystemPrompt` 注入 goharness；
-- **goharness**：不生成、不追加任何文案段，输出即 base 的原样透传（单条 system 消息）；
-- **Memory 注入**：保留在 goharness Hook 路径（动态内容随轮次变化，与静态拼装是两条路径）。
+- **goharness**：不生成、不追加任何文案段，输出即 base 的原样透传（单条 system 消息）。
+
+> 2026-10-06 记忆剥离重构：原 goharness memory_hook 记忆注入路径与 RAG 记忆线
+> （mindx-rag / mindx-graph）已整体退役，压缩摘要改经 mindx 的 SummarySink 写入
+> 项目目录 `.agents/memory/` markdown 文件，Agent 按提示词规则自助加载。
 
 ### 3.2 拼接流程图
 
@@ -210,13 +213,10 @@ goharness executor（每次 Ask 构建一次）
   └─ BuildSystemPrompts(sessionID, session)
        └─ base 输出原样透传（无任何追加）                    # 单条 system 消息
        │
-goharness BeforeLLM Hook（当轮首轮注入）
-  └─ memory_hook 追加「## 历史对话摘要」到 system 消息末尾    # 动态区
-       │
   └─ AssembleMessages: [system] + [history 过滤孤立 tool_call] + [当前问题]
 ```
 
-### 3.3 段落布局（静态在前、动态在后，保证 KV 缓存前缀稳定）
+### 3.3 段落布局（纯静态区，保证 KV 缓存前缀稳定）
 
 ```text
 ╔══════════════════════════════════════════════════════════════╗
@@ -229,10 +229,6 @@ goharness BeforeLLM Hook（当轮首轮注入）
 ║ ┃ ⑤ 环境/搜索策略  ProjectDir / 会话目录 / venv / 时间（动态） ┃ ║
 ║ ┃ ⑥ 扩展规则  权限规则 + Agent 发现引导 + 用户规则（动态渲染）  ┃ ║
 ║ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ ║
-║  动态区（变化点与压缩窗口清空重合，无额外缓存损失）              ║
-║ ┏━━━ memory_hook（BeforeLLM 首轮）━━━━━━━━━━━━━━━━━━━━━━━━━┓ ║
-║ ┃ ⑦ ## 历史对话摘要  LongTerm 记忆检索 top-20                  ┃ ║
-║ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
@@ -244,9 +240,8 @@ goharness BeforeLLM Hook（当轮首轮注入）
 | ② SOUL | 文件 | SOUL.md 正文 | 空则整段跳过 |
 | ③ 能力 | mindx | Catalog（全局+Agent 级；项目级绝不参与，见 2.3） | 无技能整段跳过 |
 | ④ AGENTS.md | mindx 常量 | `agentsCommonRules`（与应用版本绑定） | 常量非空恒在 |
-| ⑤ 环境/搜索 | mindx | Session（ProjectDir 空时取 cwd）+ `experienceSystemNote` 常量（.agents/ 体系说明与 MemorySearch/TeamList 工具配合） | 恒有 |
+| ⑤ 环境/搜索 | mindx | Session（ProjectDir 空时取 cwd）+ `experienceSystemNote` 常量（.agents/ 体系说明与 TeamList 工具配合） | 恒有 |
 | ⑥ 扩展规则 | mindx（App.BuildRulesSection） | mindx.json 权限规则 + 固定引导 + rules.yml 用户规则 | 三者皆空才跳过 |
-| ⑦ 记忆摘要 | goharness Hook | LongTerm 检索（确定性：压缩/显式写入才变化） | 无记忆不注入 |
 
 ### 3.4 效果示例
 
@@ -293,7 +288,7 @@ goharness BeforeLLM Hook（当轮首轮注入）
 
 - **项目目录**: /Users/ray/workspaces/demo
  用户工作目录 — 文件在此永久保留，跨会话持续存在。……
-- **经验沉淀体系**: 项目目录下的 .agents/ 目录承载跨会话经验 —— AGENTS.md 为项目军规与工作目标；notes/ 记录踩坑经验；skills/ 存放可复用技能；reports/ 存放复盘日报。回忆过往决策调用 MemorySearch 工具；查看会话团队与成员调用 TeamList 工具。
+- **经验沉淀体系**: 项目目录下的 .agents/ 目录承载跨会话经验 —— AGENTS.md 为项目军规与工作目标；notes/ 记录踩坑经验；memory/ 存放会话压缩摘要；skills/ 存放可复用技能；reports/ 存放复盘日报。查看会话团队与成员调用 TeamList 工具。
 - **会话目录**: ~/.mindx/sessions/2026xxxx-xxxx
   当前对话的临时工作区。……
 - **会话ID**: 2026xxxx-xxxx-xxxx
@@ -308,19 +303,12 @@ goharness BeforeLLM Hook（当轮首轮注入）
 - Always allow 运行 go build
 - Agent 发现：当需要查找或列出可用 Agent 时，运行 'mindx agent list'……
 - 禁止强推主分支
-
-## 历史对话摘要
-
-以下为与用户过往对话的决策记录，作为延续上下文使用；
-
-- [2026-09-05 14:30] [技术选型] - 选定 govector 作为向量存储……
 ```
 
 ### 3.5 KV 缓存稳定性要点
 
 - ①-⑥ 在会话内逐字不变（动态段如时间只精确到日期，跨天才会变化）；
-- ⑦ 的摘要文本具有确定性：记忆条目只在压缩（`persistCompactionChunks`）与显式
-  `memory.add` 时写入，`RetrieveLatest` 按 Timestamp 倒序（唯一时间戳 → 排序确定），
-  `FormatMemoryRecords` 只含绝对时间戳——记忆库不变则文本逐字节相同；
-- 摘要变化仅发生在压缩时（新摘要条目写入 + 窗口清空），缓存失效点与窗口清空重合，
-  无额外损失。
+- 原 ⑦ 记忆摘要注入段（goharness memory_hook + LongTerm 检索）已随 2026-10-06
+  记忆剥离重构退役：压缩摘要经 SummarySink 写入项目目录 `.agents/memory/`
+  markdown 文件，由 Agent 按提示词规则自助加载，不再进入 system 消息，
+  system 消息因此变为纯静态，KV 缓存前缀跨轮次全程稳定。

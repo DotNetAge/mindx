@@ -2,7 +2,6 @@ package setup
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,7 +15,6 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	goharnessconfig "github.com/DotNetAge/goharness/config"
-	goragutils "github.com/DotNetAge/gorag/v2/utils"
 	"gopkg.in/yaml.v3"
 
 	"github.com/DotNetAge/mindx/internal/setup/style"
@@ -93,45 +91,6 @@ func (t *setupTask) statusIcon() string {
 // autoSetupDoneMsg 在所有自动安装任务完成后发送。
 type autoSetupDoneMsg struct{}
 
-// downloadProgressMsg 用于 embedder 模型下载进度。
-type downloadProgressMsg struct {
-	Current int64
-	Total   int64
-	File    string
-	Done    bool
-	Err     error
-	Status  string
-}
-
-// downloadObserver 将 goragutils 的下载事件转换为 Bubble Tea 消息。
-type downloadObserver struct {
-	ch      chan<- downloadProgressMsg
-	taskIdx int
-}
-
-func (o *downloadObserver) OnEvent(event goragutils.DownloadEvent) {
-	msg := downloadProgressMsg{
-		Current: event.Current,
-		Total:   event.Total,
-		File:    event.File,
-	}
-	switch event.Type {
-	case goragutils.EventStart:
-		msg.Status = fmt.Sprintf(i18n.T("setup.memory.downloading"), event.File)
-	case goragutils.EventProgress:
-		downloadedMB := float64(event.Current) / (1024 * 1024)
-		if event.Total > 0 {
-			totalMB := float64(event.Total) / (1024 * 1024)
-			msg.Status = fmt.Sprintf(i18n.T("setup.memory.download.progress"), downloadedMB, totalMB)
-		} else {
-			msg.Status = fmt.Sprintf(i18n.T("setup.memory.download.progress.mb"), downloadedMB)
-		}
-	case goragutils.EventComplete:
-		msg.Status = fmt.Sprintf(i18n.T("setup.memory.download.complete"), event.File)
-	}
-	o.ch <- msg
-}
-
 // ── Wizard model ─────────────────────────────────────────────────────────
 
 type firstRunModel struct {
@@ -156,7 +115,6 @@ type firstRunModel struct {
 	// Step 3: 自动安装进度
 	autoTasks     []*setupTask
 	autoSetupDone bool
-	downloadCh    chan downloadProgressMsg
 
 	// 通用状态
 	err      error
@@ -181,15 +139,13 @@ type firstRunResult struct {
 	Err              error
 
 	// 自动安装结果（由 wizard 内部执行，不再询问用户）
-	DaemonOK      bool
-	DaemonErr     error
-	PythonOK      bool
-	PythonInfo    core.PythonConfig
-	PythonErr     error
-	EmbedderOK    bool
-	EmbedderModel string
-	PathOK        bool
-	PathErr       error
+	DaemonOK   bool
+	DaemonErr  error
+	PythonOK   bool
+	PythonInfo core.PythonConfig
+	PythonErr  error
+	PathOK     bool
+	PathErr    error
 }
 
 // ── Constructor & helpers ─────────────────────────────────────────────────
@@ -379,11 +335,9 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		result.PythonOK = fm.autoTasks[1].Status == taskDone || fm.autoTasks[1].Status == taskSkipped
 		result.PythonErr = fm.autoTasks[1].Err
 		result.PythonInfo = fm.pythonInfoFromTask(fm.autoTasks[1])
-		result.EmbedderOK = fm.autoTasks[2].Status == taskDone || fm.autoTasks[2].Status == taskSkipped
-		result.EmbedderModel = fm.autoTasks[2].Detail
-		if runtime.GOOS == "windows" && len(fm.autoTasks) > 3 {
-			result.PathOK = fm.autoTasks[3].Status == taskDone || fm.autoTasks[3].Status == taskSkipped
-			result.PathErr = fm.autoTasks[3].Err
+		if runtime.GOOS == "windows" && len(fm.autoTasks) > 2 {
+			result.PathOK = fm.autoTasks[2].Status == taskDone || fm.autoTasks[2].Status == taskSkipped
+			result.PathErr = fm.autoTasks[2].Err
 		} else {
 			result.PathOK = true // 非 Windows 不需要 PATH 设置
 		}
@@ -680,7 +634,6 @@ func (m *firstRunModel) initAutoSetupTasks() {
 	tasks := []*setupTask{
 		{Name: i18n.T("wizard.autosetup.task.daemon"), spinner: spinner.New(spinner.WithSpinner(spinner.Dot))},
 		{Name: i18n.T("wizard.autosetup.task.python"), spinner: spinner.New(spinner.WithSpinner(spinner.Dot))},
-		{Name: i18n.T("wizard.autosetup.task.embedder"), spinner: spinner.New(spinner.WithSpinner(spinner.Dot))},
 	}
 	// Windows 额外需要 PATH 配置任务
 	if runtime.GOOS == "windows" {
@@ -690,7 +643,6 @@ func (m *firstRunModel) initAutoSetupTasks() {
 		})
 	}
 	m.autoTasks = tasks
-	m.downloadCh = make(chan downloadProgressMsg, 100)
 	m.autoSetupDone = false
 }
 
@@ -737,13 +689,8 @@ func (m *firstRunModel) startAutoSetup() tea.Cmd {
 		}
 	}(1)
 
-	// Embedder 模型下载
-	go func(idx int) {
-		m.runEmbedderDownload(idx)
-	}(2)
-
 	// PATH 配置（仅 Windows）
-	if runtime.GOOS == "windows" && taskCount > 3 {
+	if runtime.GOOS == "windows" && taskCount > 2 {
 		go func(idx int) {
 			exe, exeErr := os.Executable()
 			if exeErr != nil {
@@ -760,7 +707,7 @@ func (m *firstRunModel) startAutoSetup() tea.Cmd {
 			} else {
 				m.markTaskDone(idx, taskDone, nil, installDir)
 			}
-		}(3)
+		}(2)
 	}
 
 	return tea.Batch(append([]tea.Cmd{m.listenTaskResults(taskCount)}, m.spinnerTickCmds()...)...)
@@ -804,74 +751,6 @@ func (m *firstRunModel) listenTaskResults(expected int) tea.Cmd {
 	}
 }
 
-// runEmbedderDownload 在 goroutine 中执行 embedder 模型下载并通过 channel 报告进度。
-func (m *firstRunModel) runEmbedderDownload(taskIdx int) {
-	defer close(m.downloadCh)
-
-	cacheDir := filepath.Join(m.workspaceDir, "data", "models")
-	modelID := "Xenova/bge-small-zh-v1.5"
-	modelFile := "onnx/model.onnx"
-	dstPath := filepath.Join(cacheDir, filepath.Base(modelFile))
-
-	m.markTaskDone(taskIdx, taskRunning, nil, "")
-
-	if _, err := os.Stat(dstPath); err == nil {
-		m.downloadCh <- downloadProgressMsg{Done: true}
-		m.markTaskDone(taskIdx, taskSkipped, nil, "model.onnx")
-		return
-	}
-
-	observer := &downloadObserver{ch: m.downloadCh, taskIdx: taskIdx}
-
-	downloader, err := goragutils.NewModelDownloader(cacheDir)
-	if err != nil {
-		m.downloadCh <- downloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.downloader.create.failed"), err)}
-		m.markTaskDone(taskIdx, taskFailed, err, "")
-		return
-	}
-	downloader.WithObserver(observer)
-
-	files := []string{modelFile}
-	if _, err := downloader.Download(modelID, files); err != nil {
-		m.downloadCh <- downloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.download.failed.err"), err)}
-		m.markTaskDone(taskIdx, taskFailed, err, "")
-		return
-	}
-
-	srcPath := filepath.Join(cacheDir, strings.ReplaceAll(modelID, "/", string(filepath.Separator)), modelFile)
-
-	src, err := os.Open(srcPath)
-	if err != nil {
-		m.downloadCh <- downloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.open.failed"), err)}
-		m.markTaskDone(taskIdx, taskFailed, err, "")
-		return
-	}
-	defer func() { _ = src.Close() }()
-
-	dst, err := os.Create(dstPath)
-	if err != nil {
-		m.downloadCh <- downloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.create.failed"), err)}
-		m.markTaskDone(taskIdx, taskFailed, err, "")
-		return
-	}
-	defer func() { _ = dst.Close() }()
-
-	if _, err := io.Copy(dst, src); err != nil {
-		m.downloadCh <- downloadProgressMsg{Done: true, Err: fmt.Errorf(i18n.T("setup.memory.model.copy.failed"), err)}
-		m.markTaskDone(taskIdx, taskFailed, err, "")
-		return
-	}
-
-	srcDir := filepath.Join(cacheDir, strings.ReplaceAll(modelID, "/", string(filepath.Separator)))
-	_ = os.RemoveAll(srcDir)
-
-	m.downloadCh <- downloadProgressMsg{
-		Done:   true,
-		Status: i18n.T("setup.memory.model.download.complete"),
-	}
-	m.markTaskDone(taskIdx, taskDone, nil, "model.onnx")
-}
-
 func (m *firstRunModel) updateAutoSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
@@ -879,22 +758,6 @@ func (m *firstRunModel) updateAutoSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
-		}
-	case downloadProgressMsg:
-		// 更新 embedder 任务的状态文本
-		if len(m.autoTasks) > 2 {
-			if msg.Err != nil {
-				m.autoTasks[2].Status = taskFailed
-				m.autoTasks[2].Err = msg.Err
-			} else if msg.Done {
-				m.autoTasks[2].Status = taskDone
-				if m.autoTasks[2].Detail == "" || m.autoTasks[2].Status == taskRunning {
-					m.autoTasks[2].Detail = "model.onnx"
-				}
-			}
-			if msg.Status != "" {
-				m.autoTasks[2].Detail = msg.Status
-			}
 		}
 	case autoSetupDoneMsg:
 		m.autoSetupDone = true
@@ -1045,21 +908,11 @@ func (m *firstRunModel) renderComplete() string {
 		}
 	}
 
-	// Embedder
-	if len(m.autoTasks) > 2 {
-		modelPath := filepath.Join(m.workspaceDir, "data", "models", "model.onnx")
-		if _, err := os.Stat(modelPath); err == nil {
-			items = append(items, i18n.T("wizard.complete.item.embedder.ready"))
-		} else {
-			items = append(items, i18n.T("wizard.complete.item.embedder.pending"))
-		}
-	}
-
 	// PATH (Windows only)
-	if runtime.GOOS == "windows" && len(m.autoTasks) > 3 {
-		if CheckInPath(m.autoTasks[3].Detail) || m.autoTasks[3].Status == taskDone {
+	if runtime.GOOS == "windows" && len(m.autoTasks) > 2 {
+		if CheckInPath(m.autoTasks[2].Detail) || m.autoTasks[2].Status == taskDone {
 			items = append(items, i18n.T("wizard.complete.item.path.added"))
-		} else if m.autoTasks[3].Status == taskFailed {
+		} else if m.autoTasks[2].Status == taskFailed {
 			items = append(items, i18n.T("wizard.complete.item.path.failed"))
 		} else {
 			items = append(items, i18n.T("wizard.complete.item.path.skipped"))

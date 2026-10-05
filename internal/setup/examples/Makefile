@@ -10,7 +10,7 @@
 #
 # =============================================================================
 
-.PHONY: help all modelselect apikeyinput daemoncheck pythoncheck memoryconfig pathsetup
+.PHONY: help all modelselect apikeyinput daemoncheck pythoncheck pathsetup
 
 ROOT := ../../..
 SRC  := internal/setup/examples
@@ -26,7 +26,6 @@ help:
 	@echo "  apikeyinput   — 步骤1: API Key 密码输入（密码模式 / Esc 返回）"
 	@echo "  daemoncheck   — 步骤2: Daemon 后台服务检查（← → 切换 Yes/No）"
 	@echo "  pythoncheck   — 步骤3: Python 环境检测（按 1/2/3 切换场景）"
-	@echo "  memoryconfig  — 步骤4: 记忆体 Embedder 配置（含下载进度）"
 	@echo "  pathsetup     — 步骤5: 系统 PATH 配置（Windows 专用）"
 	@echo ""
 	@echo "Other:"
@@ -45,5 +44,4 @@ modelselect:   ; $(call RUN_EXAMPLE,modelselect)
 apikeyinput:   ; $(call RUN_EXAMPLE,apikeyinput)
 daemoncheck:   ; $(call RUN_EXAMPLE,daemoncheck)
 pythoncheck:   ; $(call RUN_EXAMPLE,pythoncheck)
-memoryconfig:  ; $(call RUN_EXAMPLE,memoryconfig)
 pathsetup:     ; $(call RUN_EXAMPLE,pathsetup)
