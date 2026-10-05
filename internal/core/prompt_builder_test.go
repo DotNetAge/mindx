@@ -210,7 +210,9 @@ func TestPromptBuilderLoadsAgentsMD(t *testing.T) {
 }
 
 // TestBuildEnvSectionContainsExperienceSystem 验证配置环境段注入经验沉淀体系
-// 说明：.agents/ 四目录作用与 MemorySearch/TeamList 工具配合，逐字静态输出。
+// 说明：.agents/ 目录作用与记忆文件加载规则，逐字静态输出。
+// 2026-10-06 记忆剥离重构：MemorySearch 工具退役，记忆改为 .agents/memory/ 文件
+// 自助加载，断言同步更新且禁止旧工具名回潮。
 func TestBuildEnvSectionContainsExperienceSystem(t *testing.T) {
 	dir := t.TempDir()
 	store, _, err := agentstore.Load(dir)
@@ -228,13 +230,17 @@ func TestBuildEnvSectionContainsExperienceSystem(t *testing.T) {
 	pb := NewPromptBuilder(store, nil, nil, "", "", nil)
 	out := pb.Build("", mustLeaderTestSession(t, "solo"))
 
-	for _, want := range []string{"经验沉淀体系", "notes/", "skills/", "reports/", "MemorySearch"} {
+	for _, want := range []string{"经验沉淀体系", "notes/", "skills/", "reports/", "memory/", "Grep"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("配置环境段应含 %q:\n%s", want, out)
 		}
 	}
-	// TeamXXX 已从默认注册剥离，系统提示不得再引用 TeamList
+	// TeamXXX 已从默认注册剥离，系统提示不得再引用 TeamList；
+	// MemorySearch 已随记忆剥离退役，同样不得回潮
 	if strings.Contains(out, "TeamList") {
 		t.Errorf("系统提示不应引用已剥离的 TeamList 工具:\n%s", out)
+	}
+	if strings.Contains(out, "MemorySearch") {
+		t.Errorf("系统提示不应引用已退役的 MemorySearch 工具:\n%s", out)
 	}
 }

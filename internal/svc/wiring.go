@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	goharnessmemory "github.com/DotNetAge/goharness/memory"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/commands"
 	"github.com/DotNetAge/mindx/internal/core"
@@ -23,30 +22,6 @@ func RegisterBuiltinCommands(gw *gateway.Server, app *core.App, d *Daemon) {
 	commands.SetSchedulerDeps(commands.SchedulerDeps{
 		SchedulerDB: func() *scheduler.FileSchedulerStore { return d.SchedulerDB() },
 		Scheduler:   func() *scheduler.Scheduler { return d.Scheduler() },
-	})
-
-	commands.SetMemoryDeps(commands.MemoryDeps{
-		SearchMemory: func(ctx context.Context, params rpc.MemoryQueryParams) ([]goharnessmemory.MemoryChunk, error) {
-			raw, err := json.Marshal(params)
-			if err != nil {
-				return nil, err
-			}
-			result, err := d.handleMemoryQuery(ctx, raw)
-			if err != nil {
-				return nil, err
-			}
-			chunks, ok := result.([]goharnessmemory.MemoryChunk)
-			if !ok {
-				// Try JSON round-trip
-				data, _ := json.Marshal(result)
-				var out []goharnessmemory.MemoryChunk
-				if err := json.Unmarshal(data, &out); err != nil {
-					return nil, err
-				}
-				return out, nil
-			}
-			return chunks, nil
-		},
 	})
 
 	commands.SetCompactDeps(commands.CompactDeps{

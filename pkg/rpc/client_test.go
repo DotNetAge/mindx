@@ -371,53 +371,6 @@ func TestProviderMethods(t *testing.T) {
 }
 
 // ============================================================================
-// Memory domain
-// ============================================================================
-
-func TestMemoryMethods(t *testing.T) {
-	m := newMockGateway()
-	c := &Client{gw: m}
-
-	t.Run("Query", func(t *testing.T) {
-		testRPC(t, c, m, "memory.query", MemoryQueryParams{Query: "test", Limit: 10, MinScore: 0.5}, func() (json.RawMessage, error) {
-			return c.MemoryQuery("test", 10, 0.5)
-		})
-	})
-
-	t.Run("Store", func(t *testing.T) {
-		testRPC(t, c, m, "memory.store", MemoryStoreParams{
-			Content: "hello", Title: "t", Description: "d", Source: "s",
-		}, func() (json.RawMessage, error) {
-			return c.MemoryStore("hello", "t", "d", "s")
-		})
-	})
-
-	t.Run("Delete", func(t *testing.T) {
-		testRPC(t, c, m, "memory.delete", MemoryDeleteParams{ID: "mem_1"}, func() (json.RawMessage, error) {
-			return c.MemoryDelete("mem_1")
-		})
-	})
-
-	t.Run("Chunks", func(t *testing.T) {
-		testRPC(t, c, m, "memory.chunks", MemoryChunksParams{Page: 1, PageSize: 20, DocID: "doc_1"}, func() (json.RawMessage, error) {
-			return c.MemoryChunks(1, 20, "doc_1")
-		})
-	})
-
-	t.Run("GetChunks", func(t *testing.T) {
-		testRPC(t, c, m, "memory.get_chunks", MemoryGetChunksParams{DocID: "doc_1"}, func() (json.RawMessage, error) {
-			return c.MemoryGetChunks("doc_1")
-		})
-	})
-
-	t.Run("Count", func(t *testing.T) {
-		testRPCNoParams(t, c, m, "memory.count", func() (json.RawMessage, error) {
-			return c.MemoryCount()
-		})
-	})
-}
-
-// ============================================================================
 // Graph domain
 // ============================================================================
 

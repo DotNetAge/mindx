@@ -29,9 +29,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/mcp"
 	"github.com/DotNetAge/mindx/internal/update"
 	"github.com/DotNetAge/mindx/pkg/logging"
-	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
-	mindxses "github.com/DotNetAge/mindx/pkg/session"
 	"go.etcd.io/bbolt"
 )
 
@@ -41,11 +39,10 @@ var (
 )
 
 type Daemon struct {
-	app          *core.App
-	gw           *gateway.Server
-	scheduler    *scheduler.Scheduler
-	schedulerDB  *scheduler.FileSchedulerStore
-	sharedMemory *memory.RAGMemory
+	app         *core.App
+	gw          *gateway.Server
+	scheduler   *scheduler.Scheduler
+	schedulerDB *scheduler.FileSchedulerStore
 
 	// token usage recording
 	usageStore    goharnesssession.TokenUsageStore
@@ -149,24 +146,8 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	}
 
 	// ── Shared Memory（对话记忆）─────────────────────────────────
-	// Memory 仅为对话服务，基于 SemanticIndexer，不与知识库耦合
-	var sharedMemory *memory.RAGMemory
-	if emb := app.Embedder(); emb != nil {
-		sharedMem, memErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-			AgentName: "_shared",
-			MemoryDir: filepath.Join(app.Settings().UserPreferences(), "memory"),
-			Embedder:  emb,
-			Logger:    logger,
-		})
-		if memErr != nil {
-			logger.Warn("failed to create shared RAG memory", "error", memErr)
-		} else {
-			sharedMemory = sharedMem
-			logger.Info("shared RAG memory initialized for conversation")
-		}
-	} else {
-		logger.Info("no embedder configured, memory and search disabled")
-	}
+	// 2026-10-06 记忆剥离重构：RAGMemory 退役，压缩摘要改经 FileMemorySink
+	// 落盘为 .agents/memory/ markdown 文件（App 内置），daemon 不再持有共享记忆。
 
 	d := &Daemon{
 		app:          app,
@@ -174,7 +155,6 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		wsPath:       wsPath,
 		schedulerDB:  schedulerDB,
 		dataDir:      app.Settings().DataDir(),
-		sharedMemory: sharedMemory,
 		usageStore:   app.TokenUsageStore(),
 		runtimeFS:    runtimeFS,
 		logger:       logger,
@@ -184,11 +164,6 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	// UI 命令通道：把 daemon 广播回调注入 App，createRuntime 据此注册
 	// Open/Visit/TerminalRun 三工具（未走 daemon 的 TUI 场景不注册）。
 	app.SetUIBroadcast(d.broadcastUI)
-
-	// Pass shared memory to App for MemorySearch tool registration.
-	if sharedMemory != nil {
-		app.SetLongTermMemory(sharedMemory)
-	}
 
 	// Wire graphDB to daemon fields (deferred because d is needed)
 	if graphDB != nil {
@@ -319,12 +294,21 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 
 	d.logger.Info("=== Daemon initialization complete ===",
 		"has_scheduler", d.scheduler != nil,
-		"has_shared_memory", d.sharedMemory != nil,
 		"has_graph_db", d.graphDB != nil,
 		"has_kvstore", d.kvStore != nil,
 	)
 
 	return d
+}
+
+// sessionProjectDir 查询会话的项目目录（用于记忆文件落盘定位）。
+// 查询失败返回空串（回退到 ~/.mindx/.agents/memory/）。
+func (d *Daemon) sessionProjectDir(sessionID string) string {
+	meta, err := d.app.SessDB().GetMeta(context.Background(), sessionID)
+	if err != nil || meta == nil {
+		return ""
+	}
+	return meta.ProjectDir
 }
 
 // autoUpdateLoop 在启动时进行一次检查，之后每 24 小时检查一次。
@@ -922,15 +906,12 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		sessOpts = append(sessOpts,
 			goharnesssession.WithModelContextResolver(d.resolveSessionModelContextLength),
 		)
-		// 绑定 RAG 记忆存储，使压缩摘要持久化到 RAG indexer（浏览器可读）
-		if d.sharedMemory != nil {
-			// 获取会话的 project_dir 用于存储元数据
-			projectDir := ""
-			if meta, metaErr := d.app.SessDB().GetMeta(context.Background(), sessionID); metaErr == nil && meta != nil {
-				projectDir = meta.ProjectDir
-			}
-			sessOpts = append(sessOpts, goharnesssession.WithMemory(mindxses.NewRAGMemoryAdapter(d.sharedMemory, resolvedAgentName, projectDir)))
-		}
+		// 文件记忆：压缩摘要经 SummarySink 落盘到会话项目目录 .agents/memory/
+		//（2026-10-06 记忆剥离重构，替代 RAGMemoryAdapter）
+		memoryDir := d.app.FileMemory().MemoryDirFor(d.sessionProjectDir(sessionID))
+		sessOpts = append(sessOpts, goharnesssession.WithSummarySink(func(ctx context.Context, summary string) error {
+			return d.app.FileMemory().Write(ctx, memoryDir, resolvedAgentName, sessionID, summary)
+		}))
 		s, err := goharnesssession.Load(context.Background(), sessionID, resolvedAgentName, d.app.SessDB(), d.logger, sessOpts...)
 		if err != nil {
 			d.logger.Error("failed to load session", err, "session_id", sessionID)

@@ -14,7 +14,6 @@ import (
 
 	"github.com/DotNetAge/goharness/agents"
 	"github.com/DotNetAge/goharness/config"
-	goharnessmemory "github.com/DotNetAge/goharness/memory"
 	"github.com/DotNetAge/goharness/sandbox"
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/goharness/store"
@@ -26,7 +25,6 @@ import (
 	"github.com/DotNetAge/mindx/internal/core/teamstore"
 	mindxtools "github.com/DotNetAge/mindx/internal/tools"
 	"github.com/DotNetAge/mindx/pkg/logging"
-	"github.com/DotNetAge/mindx/pkg/memory"
 	"github.com/DotNetAge/mindx/pkg/rules"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
@@ -71,8 +69,9 @@ type App struct {
 	// Optional components
 	embedder goragcore.Embedder
 
-	// Long-term memory store (injected by Daemon; TUI mode creates locally)
-	longTermMemory goharnessmemory.Memory
+	// fileMemory 把压缩摘要原文写为 .agents/memory/ markdown 记忆文件
+	//（2026-10-06 记忆剥离重构：替代 RAGMemory/RAGMemoryAdapter）
+	fileMemory *FileMemorySink
 
 	// MCP manager (injected by Daemon after initialization)
 	mcpMgr MCPToolProvider
@@ -217,7 +216,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	if mindxConfig != nil && mindxConfig.HasEmbedder() {
 		modelPath := mindxConfig.EmbedderModelPath(settings.UserPreferences())
 		var embErr error
-		emb, embErr = memory.NewEmbedderFromConfig(modelPath)
+		emb, embErr = NewEmbedderFromConfig(modelPath)
 		if embErr != nil {
 			logger.Warn("Failed to create embedder, memory disabled", "error", embErr, "model", modelPath)
 		}
@@ -241,6 +240,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		sessDB:              sessDB,
 		runtimeCache:        make(map[string]*agents.Runtime),
 		embedder:            emb,
+		fileMemory:          NewFileMemorySink(logger, settings.UserPreferences()),
 		permissionRuleStore: permStore,
 		tokenUsageStore:     mindxses.NewFileTokenUsageStore(settings.DataDir()),
 		providerConfigs:     providers,
@@ -281,21 +281,15 @@ func (a *App) Embedder() goragcore.Embedder {
 	return a.embedder
 }
 
-// SetLongTermMemory injects the long-term memory store for MemorySearch tool registration.
-// Called by Daemon after shared memory is initialized; TUI mode sets it in createRuntime.
-func (a *App) SetLongTermMemory(mem goharnessmemory.Memory) {
-	a.longTermMemory = mem
-}
-
 // SetUIBroadcast 注入 UI 命令通道广播回调（Daemon 的 broadcastUI）。由 Daemon
 // 初始化时调用；未注入时 createRuntime 不注册 Open/Visit/TerminalRun 三工具。
 func (a *App) SetUIBroadcast(broadcast mindxtools.UIBroadcast) {
 	a.uiBroadcast = broadcast
 }
 
-// LongTermMemory returns the long-term memory store, or nil if not configured.
-func (a *App) LongTermMemory() goharnessmemory.Memory {
-	return a.longTermMemory
+// FileMemory 返回文件记忆交付器（压缩摘要 → .agents/memory/*.md）。
+func (a *App) FileMemory() *FileMemorySink {
+	return a.fileMemory
 }
 
 // SetMCPManager injects the MCP manager for MCP tool registration.
@@ -332,7 +326,7 @@ func (a *App) isDaemonRunning() bool {
 	}
 	_ = conn.Close()
 	if a.logger != nil {
-		a.logger.Info("daemon detected, opening LongTerm memory in read-only mode")
+		a.logger.Info("daemon detected, local memory creation delegated to daemon via RPC")
 	}
 	return true
 }
@@ -813,38 +807,6 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	// goharness 不追加任何文案段，base 输出即完整 system prompt。
 	opts = append(opts, agents.WithBaseSystemPrompt(a.PromptBuilder().Build))
 
-	// Dual memory: LongTerm (project knowledge) + SessionRAG (conversation recall)
-	if a.embedder != nil {
-		if a.isDaemonRunning() {
-			// When Daemon is running, it manages the shared bbolt database with an
-			// exclusive file lock (LOCK_EX). Opening the same .db file from the TUI
-			// in read-only mode would block indefinitely trying to acquire a shared
-			// lock (LOCK_SH), preventing messages from ever reaching the LLM.
-			// The TUI delegates all local memory creation to the Daemon via RPC instead.
-			// Memory store itself is still needed for MemoryThoughtHook (取出最近记忆
-			// 注入系统提示词)，因此用 daemon 已注入的 longTermMemory。
-			if a.longTermMemory != nil {
-				opts = append(opts, agents.WithMemory(a.longTermMemory))
-				a.logger.Info("createRuntime: using daemon-provided long-term memory for MemoryThoughtHook", "agent", agentName)
-			}
-		} else {
-			a.logger.Info("createRuntime: creating shared memory", "agent", agentName)
-			ltMem, ltErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-				AgentName: "_shared",
-				MemoryDir: filepath.Join(a.settings.UserPreferences(), "memory"),
-				Embedder:  a.embedder,
-				Logger:    a.logger,
-			})
-			if ltErr != nil {
-				a.logger.Warn("Failed to create long-term memory", "agent", agent.Name, "error", ltErr)
-			} else {
-				opts = append(opts, agents.WithMemory(ltMem))
-				a.SetLongTermMemory(ltMem)
-				a.logger.Info("createRuntime: long-term memory OK", "agent", agentName)
-			}
-		}
-	}
-
 	// 构造会话级逻辑沙箱：统一文件、命令、URL 安全决策。
 	// AllowedDirs 仅包含用户主目录（~/.mindx），projectDir 在运行时由 CheckFile/EnforceFile 传入，
 	// isOutsideWorkspace 已修复为始终将 projectDir 视为允许目录。
@@ -905,19 +867,6 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 			rs.SetPythonVenv(a.settings.VenvDir())
 			a.logger.Info("createRuntime: RunScript venv configured",
 				"agent", agentName, "venv", a.settings.VenvDir())
-		}
-	}
-
-	// Register MemorySearch tool whenever long-term memory is available.
-	// This gives the LLM a tool to actively recall past conversation summaries.
-	if mem := a.LongTermMemory(); mem != nil {
-		ms := tools.NewMemorySearch(mem)
-		if ms != nil {
-			if err := rt.RegisterTool(ms); err != nil {
-				a.logger.Warn("createRuntime: 注册 MemorySearch 失败", "agent", agentName, "error", err)
-			} else {
-				a.logger.Info("createRuntime: MemorySearch 注册成功", "agent", agentName)
-			}
 		}
 	}
 
@@ -1211,9 +1160,8 @@ func (a *App) EnsureSession() (string, error) {
 //
 // Dual-Store Architecture:
 //   - SessionStore (sessDB): Persists raw messages to disk for history recovery
-//   - MemoryStore: Stores compaction summaries for semantic recall via MemoryThoughtHook
-//   - When external RAG is available (embedder configured): summaries → RAG (priority path)
-//   - When no external RAG: summaries → in-memory fallback (lost on exit)
+//   - SummarySink: Delivers compaction summaries to .agents/memory/ markdown files
+//     (2026-10-06 记忆剥离重构：文件记忆替代 RAGMemory，Agent 按提示词规则自助加载)
 func (a *App) NewSessionFromMeta() *session.Session {
 	if a.currentSessionMeta == nil {
 		agentName := a.CurrentAgentName()
@@ -1237,24 +1185,8 @@ func (a *App) NewSessionFromMeta() *session.Session {
 	// 注入 modelContextResolver，保证窗口大小动态查询当前模型
 	opts = append(opts, session.WithModelContextResolver(a.ModelContextLength))
 
-	if a.embedder != nil {
-		sessRAG, ragErr := memory.NewRAGMemoryFromConfig(memory.MemoryConfig{
-			AgentName: agentName,
-			MemoryDir: filepath.Join(a.settings.UserPreferences(), "memory"),
-			Embedder:  a.embedder,
-			Logger:    a.logger,
-		})
-		if ragErr != nil {
-			a.logger.Warn("failed to create session RAG memory, compaction summaries will use in-memory fallback", "error", ragErr)
-		} else {
-			projectDir := ""
-			if a.currentSessionMeta != nil {
-				projectDir = a.currentSessionMeta.ProjectDir
-			}
-			opts = append(opts, session.WithMemory(mindxses.NewRAGMemoryAdapter(sessRAG, agentName, projectDir)))
-
-		}
-	}
+	// 文件记忆：压缩摘要经 SummarySink 落盘到项目目录 .agents/memory/
+	opts = append(opts, session.WithSummarySink(a.memorySinkFor(agentName)))
 
 	s, err := session.Load(context.Background(), a.currentSessionMeta.SessionID, agentName, a.sessDB, a.logger, opts...)
 	if err != nil {
@@ -1262,6 +1194,20 @@ func (a *App) NewSessionFromMeta() *session.Session {
 		return nil
 	}
 	return s
+}
+
+// memorySinkFor 构造绑定会话上下文的摘要交付闭包：
+// 记忆写入会话项目目录的 .agents/memory/（无项目目录回退 ~/.mindx/.agents/memory/）。
+func (a *App) memorySinkFor(agentName string) func(ctx context.Context, summary string) error {
+	projectDir := ""
+	sessionID := ""
+	if a.currentSessionMeta != nil {
+		projectDir = a.currentSessionMeta.ProjectDir
+		sessionID = a.currentSessionMeta.SessionID
+	}
+	return func(ctx context.Context, summary string) error {
+		return a.fileMemory.Write(ctx, a.fileMemory.MemoryDirFor(projectDir), agentName, sessionID, summary)
+	}
 }
 
 func BuildDelegationGuidance() string {

@@ -9,7 +9,6 @@ import (
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/pkg/rpc"
-	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
 
 func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (any, error) {
@@ -651,10 +650,12 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 	}
 
 	// 窗口大小已通过 modelContextResolver 回调动态获取，无需手动 SetMaxWindowSize。
-	// 绑定 RAG 记忆存储，使压缩摘要持久化到 RAG indexer（浏览器可读）
-	if d.sharedMemory != nil {
-		sess.SetMemory(mindxses.NewRAGMemoryAdapter(d.sharedMemory, sess.AgentName(), sess.ProjectDir()))
-	}
+	// 文件记忆：压缩摘要经 SummarySink 落盘到项目目录 .agents/memory/
+	//（2026-10-06 记忆剥离重构，替代 RAGMemoryAdapter）
+	memoryDir := d.app.FileMemory().MemoryDirFor(sess.ProjectDir())
+	sess.SetSummarySink(func(ctx context.Context, summary string) error {
+		return d.app.FileMemory().Write(ctx, memoryDir, sess.AgentName(), sess.ID(), summary)
+	})
 
 	// 补充装配 Compactor：活跃会话由 rt.SessionConfigs() 自动装配（daemon.go 主流程），
 	// 但非活跃会话经 getOrLoadSession 持久化加载时只有 resolver 注入，compactor 为 nil。

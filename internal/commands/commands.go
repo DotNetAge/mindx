@@ -46,7 +46,6 @@ func New() *Registry {
 	registerSystemCommands(r)
 	registerCatalogCommands(r)
 	registerSchedulerCommands(r)
-	registerMemoryCommands(r)
 	registerCompactCommands(r)
 	return r
 }
