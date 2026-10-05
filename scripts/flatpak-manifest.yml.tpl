@@ -1,20 +1,20 @@
 app-id: com.dotnetage.mindx
 runtime: org.freedesktop.Platform//24.08
 runtime-version: '24.08'
-sdk: org.freedesktop.Sdk//24.08'
+sdk: org.freedesktop.Sdk//24.08
 command: mindx
 
 finish-args:
   # Network access
-  --share=network
+  - --share=network
   # File system access
-  --filesystem=home
-  --filesystem=host
+  - --filesystem=home
+  - --filesystem=host
   # D-Bus (for desktop integration)
-  --talk-name=org.freedesktop.DBus
-  --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.DBus
+  - --talk-name=org.freedesktop.Notifications
   # D-Bus (for daemon activation)
-  --own-name=com.dotnetage.MindX.Daemon
+  - --own-name=com.dotnetage.MindX.Daemon
 
 modules:
   - name: mindx

@@ -187,7 +187,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	} else {
 		d.kvStore = kvDB
 		logger.Info("kvstore initialized",
-			"path", filepath.Join(app.Settings().DataDir(), "kvstore.db"),
+			"path", filepath.Join(app.Settings().DataDir(), "kv.db"),
 		)
 		// Initialize MCP Manager
 		// Server 配置由 ~/.mindx/settings/mcp.json 主存（文件），

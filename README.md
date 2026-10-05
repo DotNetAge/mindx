@@ -129,7 +129,7 @@ Users focus purely on goals and outcomes. All decomposition, scheduling, collabo
 
 > **Compilation produces a single executable binary. No Python runtime, no Node.js, no external databases. `scp mindx` to any Linux server and run.**
 
-___
+---
 
 ## Full-Stack Interaction
 

@@ -15,7 +15,7 @@ import (
 
 // ---------------------------------------------------------------------------
 // bbolt-based global KV Store JSON-RPC handlers
-// Data stored in ~/.mindx/data/kvstore.db
+// Data stored in ~/.mindx/data/kv.db
 // ---------------------------------------------------------------------------
 
 const kvStoreBucket = "default"
