@@ -1,0 +1,333 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "MindX 单核架构：Agent Harness",
+    "locale": "zh-CN",
+    "output": "architecture.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "tui",
+      "type": "frontend",
+      "label": "mindx TUI",
+      "sublabel": "终端界面",
+      "pos": [
+        40,
+        100
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "desktop",
+      "type": "frontend",
+      "label": "mindx-desktop / work",
+      "sublabel": "Electron 工作台",
+      "pos": [
+        40,
+        220
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "mobile",
+      "type": "frontend",
+      "label": "mindx-app",
+      "sublabel": "iOS / Android",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "backend",
+      "label": "gort Gateway",
+      "sublabel": "Daemon :1314",
+      "pos": [
+        300,
+        220
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "harness",
+      "type": "backend",
+      "label": "Agent Harness",
+      "sublabel": "goharness Runtime",
+      "pos": [
+        540,
+        212
+      ],
+      "size": [
+        180,
+        80
+      ],
+      "tag": "单核"
+    },
+    {
+      "id": "gochat",
+      "type": "backend",
+      "label": "gochat",
+      "sublabel": "LLM 统一网关",
+      "pos": [
+        810,
+        220
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "external",
+      "label": "LLM 提供商",
+      "sublabel": "OpenAI 兼容 API",
+      "pos": [
+        1050,
+        220
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "DeepSeek / GLM / Ollama"
+    },
+    {
+      "id": "mcp",
+      "type": "external",
+      "label": "MCP Servers",
+      "sublabel": "外部工具",
+      "pos": [
+        545,
+        50
+      ],
+      "size": [
+        170,
+        60
+      ]
+    },
+    {
+      "id": "sessdb",
+      "type": "database",
+      "label": "Session Store",
+      "sublabel": "bbolt · 会话与游标",
+      "pos": [
+        300,
+        470
+      ],
+      "size": [
+        145,
+        60
+      ]
+    },
+    {
+      "id": "kvstore",
+      "type": "database",
+      "label": "KV Store",
+      "sublabel": "bbolt · kv.db",
+      "pos": [
+        465,
+        470
+      ],
+      "size": [
+        145,
+        60
+      ]
+    },
+    {
+      "id": "filemem",
+      "type": "database",
+      "label": "File Memory",
+      "sublabel": ".agents/memory/*.md",
+      "pos": [
+        795,
+        470
+      ],
+      "size": [
+        145,
+        60
+      ]
+    },
+    {
+      "id": "credstore",
+      "type": "security",
+      "label": "Credential Store",
+      "sublabel": "加密凭据库",
+      "pos": [
+        630,
+        470
+      ],
+      "size": [
+        150,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "客户端层",
+      "wraps": [
+        "tui",
+        "desktop",
+        "mobile"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "mindx Daemon（Go 单进程）",
+      "wraps": [
+        "gateway",
+        "harness",
+        "gochat"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "本地存储（~/.mindx 与项目 .agents）",
+      "wraps": [
+        "sessdb",
+        "kvstore",
+        "filemem",
+        "credstore"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "外部依赖",
+      "wraps": [
+        "llm",
+        "mcp"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "tui-to-gateway",
+      "from": "tui",
+      "to": "gateway",
+      "label": "JSON-RPC",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "desktop-to-gateway",
+      "from": "desktop",
+      "to": "gateway",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "mobile-to-gateway",
+      "from": "mobile",
+      "to": "gateway",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "gateway-to-harness",
+      "from": "gateway",
+      "to": "harness",
+      "label": "会话执行 Ask"
+    },
+    {
+      "id": "harness-to-gochat",
+      "from": "harness",
+      "to": "gochat",
+      "label": "流式 LLM 调用"
+    },
+    {
+      "id": "gochat-to-llm",
+      "from": "gochat",
+      "to": "llm",
+      "label": "OpenAI 兼容 API"
+    },
+    {
+      "id": "harness-to-mcp",
+      "from": "harness",
+      "to": "mcp",
+      "label": "tools/list 动态工具",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "harness-to-sessdb",
+      "from": "harness",
+      "to": "sessdb",
+      "label": "消息与游标持久化",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "harness-to-kvstore",
+      "from": "harness",
+      "to": "kvstore",
+      "label": "KV 状态",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "harness-to-filemem",
+      "from": "harness",
+      "to": "filemem",
+      "label": "摘要落盘",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "harness-to-credstore",
+      "from": "harness",
+      "to": "credstore",
+      "label": "凭据解析",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 50
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "接入",
+      "items": [
+        "gort 承载 WebSocket JSON-RPC 网关",
+        "TUI / 桌面壳 / 移动端同协议接入 Daemon"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Agent Harness 单核",
+      "items": [
+        "goharness Runtime：思考循环、工具沙箱、技能与子智能体调度",
+        "上下文压缩产 markdown 摘要，经 SummarySink 落盘为文件记忆"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "存储与凭据",
+      "items": [
+        "bbolt 承载会话历史与 KV 状态",
+        "项目目录 .agents/memory/ 存放可读可编辑的记忆文件",
+        "Credential Store 加密保管提供商与技能凭据"
+      ]
+    }
+  ]
+}
