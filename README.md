@@ -10,50 +10,44 @@
   <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
 </p>
 
-**Production-Grade Agent Operating System | Native Dual-Core: Agent Harness + Enhanced AgenticRAG**
+**Production-Grade Agent Operating System | Native Core: Agent Harness**
 
-MindX is a modern AgentOS designed for long-running, stateful, and multi-agent collaborative scenarios. It provides full-stack infrastructure including agent orchestration, hierarchical persistent memory, multi-dimensional knowledge cognition, multi-terminal interaction, and native storage primitives, supporting enterprise automation, knowledge platforms, and private agent clusters.
+MindX is a modern AgentOS designed for long-running, stateful, and multi-agent collaborative scenarios. It provides full-stack infrastructure including agent orchestration, hierarchical persistent memory, multi-terminal interaction, and native storage primitives, supporting enterprise automation and private agent clusters.
 
 ---
 
 ## Overview
 
-Most mainstream agent frameworks adopt stateless single-turn execution, requiring frequent manual instructions. They lack persistent memory, standardized team collaboration, and structured knowledge understanding, resulting in common industry pain points: memory decay, context overflow, rigid execution, and disconnection between knowledge and action.
+Most mainstream agent frameworks adopt stateless single-turn execution, requiring frequent manual instructions. They lack persistent memory and standardized team collaboration, resulting in common industry pain points: memory decay, context overflow, and rigid execution.
 
-MindX introduces a dual-core architecture. The **Agent Harness** enables stateful, reflective, and collaborative agent scheduling. The **self-developed AgenticRAG** delivers high-precision, low-cost, incrementally evolvable cognitive capabilities, upgrading traditional disposable tool agents into long-term, self-growing digital workforce clusters.
+MindX introduces the **Agent Harness** core, enabling stateful, reflective, and collaborative agent scheduling, upgrading traditional disposable tool agents into long-term, self-growing digital workforce clusters.
 
 ---
 
 ## Why MindX?
 
-> **Most agent frameworks are either stateless toolchains or rigid workflow orchestrators — none are true Agent Operating Systems. MindX is the only AgentOS with a fully self-developed stack spanning scheduling, memory, cognition, storage, and interaction.**
+> **Most agent frameworks are either stateless toolchains or rigid workflow orchestrators — none are true Agent Operating Systems. MindX is the only AgentOS with a fully self-developed stack spanning scheduling, memory, storage, and interaction.**
 
 | Dimension          | MindX                                               | LangChain         | AutoGen (Microsoft) | CrewAI                  | Dify            |
 | ------------------ | --------------------------------------------------- | ----------------- | ------------------- | ----------------------- | --------------- |
 | Runtime            | **Go native, single binary**                        | Python            | Python              | Python                  | Python          |
 | Persistent Memory  | **3-tier (session/task/global)**                    | ❌ None            | ❌ None              | ❌ None                  | Session only    |
-| RAG Engine         | **4-dim fusion** (vector+BM25+graph+schema)         | Basic vector      | ❌ None              | ❌ None                  | Basic vector    |
-| Knowledge Graph    | **Embedded GoGraph + Cypher**                       | Needs Neo4j       | ❌ None              | ❌ None                  | Needs external  |
 | Multi-Agent        | **OPC paradigm + 4 modes**                          | ❌ None            | Fixed linear        | Sequential/hierarchical | Workflow DAG    |
 | Pre-built Agents   | **12** (PM/architect/engineer...)                   | ❌ None            | ❌ None              | ❌ None                  | ❌ None          |
 | Pre-built Skills   | **45+** (design/writing/coding/browser...)          | ❌ None            | ❌ None              | ❌ None                  | ❌ None          |
 | Native Tools       | **24+**                                             | ✅ Yes             | ✅ Yes               | Limited                 | Limited         |
 | Offline Deployment | **Single binary, zero deps**                        | ❌ Python env      | ❌ Python env        | ❌ Python env            | Docker required |
 | Interaction        | **TUI + CLI + JSON-RPC**                            | CLI only          | CLI only            | CLI only                | Web only        |
-| Self-developed MW  | **6 full-stack**                                    | 0 (all assembled) | 0                   | 0                       | 0               |
+| Self-developed MW  | **3 full-stack**                                    | 0 (all assembled) | 0                   | 0                       | 0               |
 | Install Experience | **`docker pull` → run / `npx skills` → add skills** | pip install       | pip install         | pip install             | docker compose  |
 
 ---
 
 ## Core Architecture
 
-MindX decouples task scheduling from knowledge cognition, ensuring engineering stability and continuous intelligent iteration.
+MindX is built around the Agent Harness scheduling core, ensuring engineering stability and continuous intelligent iteration.
 
 - **Agent Harness Scheduling Core**: Enterprise-grade multi-agent runtime for task decomposition, reflective reasoning, role collaboration, workflow orchestration, and persistent task management
-
-- **AgenticRAG Cognitive Core**: 4-dimensional enhanced cognitive engine for semantic understanding, structured parsing, multi-path retrieval fusion, and incremental knowledge iteration
-
-![Dual-core architecture diagram](assets/images/arch-en.jpg)
 
 ---
 
@@ -91,46 +85,6 @@ Supports multi-vendor LLM scheduling with fine-grained cost and consumption stat
 
 ---
 
-## Self-Developed AgenticRAG｜4-Dimensional Enhanced Cognitive Engine
-
-Traditional RAG and GraphRAG rely on single-path vector similarity matching, causing semantic drift, false recall, excessive token consumption, weak structured parsing, and high long-term iteration costs.
-
-MindX AgenticRAG adopts a **4-dimensional fusion engine: semantic vector recall first, graph topology enhancement, BM25 lexical calibration, and schema structure constraint**. Four heterogeneous retrieval paths are fused via unbiased RRF, solving inaccuracy, redundancy, hallucination, and poor iteration at the architectural level.
-
-### 4-Dimensional Unified Cognitive System
-
-- **Semantic Vector Layer**: Captures fuzzy user intent for unstructured language understanding
-
-- **BM25 Lexical Layer**: Precise term matching to suppress semantic generalization and false positives
-
-- **Graph Topology Layer**: Mines entity relations and implicit business logic beyond plain text
-
-- **Structured Schema Layer**: Native parsing of document structures, data fields, and business constraints for rule-based accurate filtering
-
-### Key Enhanced Capabilities
-
-- **Graph-Enhanced Precision Addressing & Drastic Token Reduction**: Instead of full text injection, the system performs semantic vector recall first, then applies graph topology and schema constraints for secondary filtering, reducing token consumption by **1–2 orders of magnitude** in long-term multi-round scenarios, lowering costs and latency.
-
-- **Full-Link Noise Reduction & Higher Accuracy**: Multi-layer filtering through vector semantic screening, lexical calibration, graph topology filtering, and structure constraints eliminates redundant noise, fundamentally reducing semantic drift and hallucinations for superior factual consistency.
-
-- **HyDE Hypothetical Reverse Retrieval**: Generates hypothetical standard answers based on user intent, then matches real knowledge against the semantic anchor, solving sparse-query failure in short, ambiguous, or professional questions.
-
-- **RRF Reciprocal Rank Fusion**: Unbiased fusion of vector, lexical, graph, and structured retrieval results. Requires no manual weight tuning or score normalization, improving stability and generalization across scenarios.
-
-- **Tree-Sharded Progressive Retrieval**: On-demand loading for massive knowledge bases, avoiding timeout and congestion while balancing accuracy and performance.
-
-![GraphRAG Search Tree](./assets/images/graph-rag-screen-shot.png)
-
-![Schema Panel](./assets/images/schema-screen-shot.png)
-
-- **Adaptive Context Compression**: Long conversations and texts are intelligently summarized via LLM, preserving core decisions and key information, breaking model window limits.
-
-- **Incremental Knowledge Internalization**: New documents trigger automatic incremental indexing via file monitoring, updating graphs and vector stores; conversation and task memories are accumulated into the knowledge base through the memory API for continuous self-improvement.
-
-- **Pure Go High-Performance Runtime**: Eliminates Python overhead with low latency, low memory, and high concurrency for 7×24 production stability.
-
----
-
 ## Core Design: OPC Responsibility-Driven Architecture
 
 Most agent systems are task-driven: requiring step-by-step human instructions. AI acts only as a passive tool without goal awareness, division of labor, or process governance.
@@ -163,17 +117,14 @@ Users focus purely on goals and outcomes. All decomposition, scheduling, collabo
 
 ## Self-Developed Full Tech Stack
 
-> **Six core middleware layers, all self-developed from scratch. No Pinecone, no Neo4j, no LangChain — this is MindX's deepest moat.**
+> **Three core middleware layers, all self-developed from scratch. No LangChain — this is MindX's deepest moat.**
 
-<!-- TODO: 插入图片 - Full tech stack architecture diagram (GoHarness→GoChat→GoRAG→GoVector→GoGraph→GoRT stacked layers) -->
+<!-- TODO: 插入图片 - Full tech stack architecture diagram (GoHarness→GoChat→GoRT stacked layers) -->
 
 | Middleware    | Role                        | Description                                                                     |
 | ------------- | --------------------------- | ------------------------------------------------------------------------------- |
 | **GoHarness** | Agent Scheduling Framework  | Multi-agent runtime, state management, Skill loading, ReAct reasoning loop      |
 | **GoChat**    | LLM Unified Gateway         | Multi-vendor adapters (OpenAI/Claude/Gemini/local), usage stats, load balancing |
-| **GoRAG**     | High-Performance RAG Engine | 4-dim fusion (vector+BM25+graph+schema), HyDE, RRF, progressive retrieval       |
-| **GoVector**  | Embedded Vector Database    | HNSW index, efficient similarity search, direct-to-disk persistence             |
-| **GoGraph**   | Embedded Graph Database     | Cypher queries, property graph model, entity/relation persistence               |
 | **GoRT**      | Real-Time Gateway           | WebSocket JSON-RPC protocol, bidirectional notifications, session management    |
 
 > **Compilation produces a single executable binary. No Python runtime, no Node.js, no external databases. `scp mindx` to any Linux server and run.**
@@ -194,15 +145,9 @@ ___
 
 ## Native Storage Infrastructure
 
-Complete built-in storage primitives without third-party dependencies, supporting persistent memory and knowledge iteration:
+Complete built-in storage primitives without third-party dependencies, supporting persistent memory:
 
 - KV Store: High-speed cache and state storage
-
-- Graph Store: Structured entity and relation topology storage
-
-- Memory Pool: Hierarchical persistent memory management
-
-- Knowledge Base: Enterprise global knowledge carrier
 
 - File System: Native file parsing and resource management
 
@@ -211,8 +156,6 @@ Complete built-in storage primitives without third-party dependencies, supportin
 ## Application Scenarios
 
 - **Enterprise Digital Employees**: Long-term automation, business review, and experience iteration
-
-- **Enterprise Knowledge Platform**: Global document structuring, multi-dimensional Q&A, and relational analysis
 
 - **Private Offline AI Platform**: Stable deployment for intranet and isolated confidential environments
 
@@ -370,7 +313,7 @@ mindx agent list
 
 ## Architecture Overview
 
-Pure Go Native Kernel | Agent Harness Organizational Scheduling | 4D AgenticRAG Cognition (HyDE+RRF Enhanced) | Multi-Terminal Interaction | Full-Scenario Private Deployment
+Pure Go Native Kernel | Agent Harness Organizational Scheduling | Multi-Terminal Interaction | Full-Scenario Private Deployment
 
 ---
 
@@ -380,4 +323,4 @@ MindX is open-sourced under the MIT License, allowing free commercial use, secon
 
 ---
 
-**MindX AgentOS｜Empower Agents with Collaborative Scheduling, Define Next-Gen Intelligence with Persistent Cognition**
+**MindX AgentOS｜Empower Agents with Collaborative Scheduling, Define Next-Gen Intelligence with Persistent Memory**

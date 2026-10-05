@@ -70,9 +70,7 @@ $MINDX_WORKSPACE/             # 工作目录（默认：~/.mindx）
 │   ├── capabilities.json    # 能力配置
 │   └── channels.json      # 渠道配置
 ├── data/                  # 数据存储目录
-│   ├── memory/            # 记忆数据
 │   ├── sessions/          # 会话数据
-│   ├── vectors/           # 向量索引
 │   └── training/          # 训练数据
 └── logs/                  # 日志目录
 ```
@@ -370,7 +368,6 @@ make doctor
 | 检查项目    | 说明                                 |
 | ----------- | ------------------------------------ |
 | 系统依赖    | Go、Node.js、Ollama                  |
-| Ollama 模型 | qwen3:0.6b、qwen3:1.7b、bge-small-zh |
 | 安装状态    | mindx 是否在 PATH、安装目录是否存在  |
 | 工作区状态  | 配置文件、数据目录是否存在           |
 | 权限        | 工作区是否可写                       |

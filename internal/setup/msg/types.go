@@ -20,19 +20,6 @@ type PythonDecisionMsg struct {
 	Version string
 }
 
-type MemoryDecisionMsg struct {
-	Download bool
-}
-
-type DownloadProgressMsg struct {
-	Current int64
-	Total   int64
-	File    string
-	Done    bool
-	Err     error
-	Status  string
-}
-
 type PathDecisionMsg struct {
 	AddToPath bool
 }

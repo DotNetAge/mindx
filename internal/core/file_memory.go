@@ -78,12 +78,15 @@ func (s *FileMemorySink) fileName(sessionID, summary string) string {
 	title := summaryTitle(summary)
 	slug := slugSanitize.ReplaceAllString(title, "-")
 	slug = strings.Trim(slug, "-")
-	if len(slug) > 40 {
-		slug = slug[:40]
-	}
 	if slug == "" {
 		slug = "summary"
 	}
+	// 按 rune 截断：标题多为中文，按字节切片会产生无效 UTF-8 的乱码文件名
+	runes := []rune(slug)
+	if len(runes) > 20 {
+		runes = runes[:20]
+	}
+	slug = string(runes)
 	sess := sessionID
 	if len(sess) > 8 {
 		sess = sess[:8]
