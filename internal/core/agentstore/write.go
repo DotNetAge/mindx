@@ -34,9 +34,8 @@ func (s *AgentStore) Save(agent *Agent) error {
 	if err := writeFileAtomic(filepath.Join(dir, soulFileName), []byte(agent.Soul)); err != nil {
 		return fmt.Errorf("写入 %s 失败: %w", dir, err)
 	}
-	if err := writeFileAtomic(filepath.Join(dir, teamFileName), []byte(agent.TeamDuty)); err != nil {
-		return fmt.Errorf("写入 %s 失败: %w", dir, err)
-	}
+	// TEAM.md 已随一等 Team 实体（teamstore）退役，Save 停写；
+	// 旧文件由 MigrateLegacyTeams 搬运正文后改名 .bak 留档
 
 	// 更新内存缓存（深拷贝语义：直接存调用方对象即可，调用方此后不应再修改）
 	stored := *agent

@@ -74,8 +74,8 @@ Examples:
 		kind, _ := cmd.Flags().GetString("kind")
 		filters, _ := cmd.Flags().GetStringSlice("filter")
 
-		if kind != "" && kind != "agent" && kind != "skill" {
-			return fmt.Errorf("--kind 仅支持 agent 或 skill")
+		if kind != "" && kind != "agent" && kind != "skill" && kind != "team" {
+			return fmt.Errorf("--kind 仅支持 agent、skill 或 team")
 		}
 
 		cl, err := rpc.Dial(daemonAddr)
@@ -213,8 +213,8 @@ Examples:
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		kind, name := args[0], args[1]
-		if kind != "agent" && kind != "skill" {
-			return fmt.Errorf("kind 必须为 agent 或 skill")
+		if kind != "agent" && kind != "skill" && kind != "team" {
+			return fmt.Errorf("kind 必须为 agent、skill 或 team")
 		}
 		overwrite, _ := cmd.Flags().GetBool("overwrite")
 		skipDeps, _ := cmd.Flags().GetBool("skip-deps")
@@ -242,6 +242,10 @@ Examples:
 		// 市场分发的 Agent 模板不带 hired 字段（默认未雇佣），提示雇佣入口
 		if kind == "agent" {
 			fmt.Printf("提示：已安装智能体默认未雇佣，执行 `mindx agent hire %s` 后即可用于会话。\n", name)
+		}
+		// 团队整包安装提示：团队与成员雇佣后才能发起团队会话
+		if kind == "team" {
+			fmt.Printf("提示：已安装团队与成员默认未雇佣，执行 `mindx agent hire <成员>` 与 `mindx team hire %s` 后即可发起团队会话。\n", name)
 		}
 		return nil
 	},

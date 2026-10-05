@@ -44,6 +44,10 @@ type MarketPackage struct {
 	Role string `json:"role,omitempty"`
 	// Category 业务分类（kind=agent，中文，包内清单透传；市场陈列与本地注册表同口径）。
 	Category string `json:"category,omitempty"`
+	// Leader 负责人 Agent 名（kind=team，包内清单透传；市场卡片展示）。
+	Leader string `json:"leader,omitempty"`
+	// Members 包内成员 Agent 名（kind=team，含负责人；市场卡片显示成员数）。
+	Members []string `json:"members,omitempty"`
 	// Skills 包内技能名（kind=agent，包内清单透传；市场卡片展示技能装配）。
 	Skills []string `json:"skills,omitempty"`
 	// SkillNames 技能中文展示名映射（技能名 → metadata.name_zh；

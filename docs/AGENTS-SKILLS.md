@@ -1,6 +1,7 @@
 # Agent 与 Skill 实现文档
 
-本文档描述 mindx 中 Agent 与 Skill 的存储格式、加载规则，以及 System Prompt 的完整拼接过程。
+本文档描述 mindx 中 Agent 与 Skill 的存储格式、加载规则、进化机制（晋升/取用对偶），
+以及 System Prompt 的完整拼接过程。
 对应重构设计见 [PR-PROMPTS.md](../PR/PR-PROMPTS.md)；分发包格式见 [AGENT-SPEC.md](./AGENT-SPEC.md)。
 
 ---
@@ -89,27 +90,35 @@ frontmatter（不丢手写字段）+ 正文同步 introduction → 写 IDENTITY.
 | --- | --- | --- | --- |
 | 全局库 | `~/.mindx/skills/<skill-name>/SKILL.md` | 验证过的最佳实践，所有 Agent 可引用 | 声明式引用（frontmatter `skills`） |
 | Agent 级库 | `agents/<name>/skills/<skill-name>/SKILL.md` | Agent 私有经验 | 用户放置 / 分发包同名落地 / 自省生成 |
-| 项目级库 | `<ProjectDir>/.skills/<skill-name>/SKILL.md` | 尚未验证的"可能"经验 | 发现式，仅该项目内可见（Session 批量确认载入） |
+| 项目级库 | `<ProjectDir>/.agents/skills/<skill-name>/SKILL.md` | 尚未验证的"可能"经验 | 发现式：`mindx skills discovery` 发现、Skill 工具按需加载回退解析；**绝不进入系统提示词** |
 
 技能目录结构：`<skill-name>/SKILL.md`（frontmatter：name/description + 指令正文），
-目录加载器统一复用。
+目录加载器统一复用。frontmatter 扩展键（`metadata.name_zh` / `version` / `requires` /
+`install`，正文模板变量 `{base_dir}` / `{skill_name}`）的完整数据模型见
+skill-creator 技能的 `references/schemas.md`（加载器 `skillstore.LoadSkillDetailFromDir`
+同源）。
 
-### 2.2 检索规则（同名覆盖链）
+### 2.2 检索规则（两条链路，顺序不同）
 
-运行时检索由两条路径承载，检索顺序均为 **Agent 级 → 全局级**（Agent 级覆盖 = 逻辑重写）：
+**链路 A：系统提示词技能目录**（`PromptBuilder.buildSkillsSection`，每次 Ask 构建）：
 
 ```
-┌─ 运行时检索（Skill 工具，LLM 主动调用）───────────────────────────┐
-│  SkillTool.GetSkill(name)                                        │
-│    └─ Runtime.skillReg = skillstore.LiveRegistry（活视图，不快照） │
-│         ├─ ① 会话 SkillOverlay（项目级技能，每轮重建重挂载）        │
-│         ├─ ② Agent 级库：agents/<name>/skills/<name>/ 实时读盘     │
-│         └─ ③ 全局库：ReloadGlobal 原子替换后的当前注册表指针        │
-├─ 提示词目录（每次 Ask 构建 System Prompt 时）──────────────────────┤
-│  skillstore.Catalog(agentName, declared)                          │
-│    └─ RegistryFor 快照复制当前全局库 + Agent 级覆盖，按名排序        │
-│       + 会话 SkillOverlay 项目技能并入（同名替换，标注"项目技能"）   │
-└───────────────────────────────────────────────────────────────────┘
+skillstore.Catalog(agentName, declared)
+  └─ RegistryFor：全局库快照复制 + Agent 级覆盖（同名以 Agent 级为准）
+  └─ 选取：Agent 级技能全部入选 + 全局库中 Agent frontmatter `skills` 声明者
+  └─ 按名称排序（提示词前缀稳定，KV 缓存友好）
+  └─ 项目级技能完全不参与（军规，见 2.3）
+```
+
+**链路 B：Skill 工具运行时解析**（LLM 主动调用，`LiveRegistry` 活视图 + 项目回退）：
+
+```
+SkillTool.GetSkill(name)
+  ├─ ① Agent 级库：agents/<name>/skills/<name>/ 实时读盘（同名覆盖全局）
+  ├─ ② 全局库：ReloadGlobal 原子替换后的当前注册表指针
+  └─ ③ 未命中 → ProjectResolver 回退（WithProjectSkillResolver 注入
+       skillstore.ResolveProject）：按会话项目目录解析
+       <ProjectDir>/.agents/skills/<name>，实时读盘，不写入任何注册表
 ```
 
 **热加载即刻生效**（PR 定案，禁止回退为快照）：
@@ -117,34 +126,68 @@ frontmatter（不丢手写字段）+ 正文同步 introduction → 写 IDENTITY.
 - `App.ReloadSkills()` → `Store.ReloadGlobal()` 原子替换全局注册表指针 →
   已存在的 LiveRegistry 下一轮 `GetSkill` 即读到新库，**无需重建 Runtime**；
 - Agent 级技能落盘即生效（LiveRegistry 实时读盘）；
+- 项目级技能落盘即生效（ResolveProject 每次实时读盘，无注册表可失效）；
 - `ReloadSkills` 不再失效 runtimeCache（快照消除后无需）。
 
 `LiveRegistry.GetSkill` 对技能名做规范校验（小写字母/数字/连字符，≤64 字符），
-阻断路径穿越；Agent 级解析失败按未命中回退全局库。
+阻断路径穿越；Agent 级解析失败按未命中回退全局库，两级均未命中由 ProjectResolver
+兜底项目级。
 
-### 2.3 项目级技能的会话生命周期
+### 2.3 项目级技能：绝不进入系统提示词（军规）
 
 ```
-session.create / 会话加载
-  └─ 扫描 <ProjectDir>/.skills/ → 发现项目技能 → RPC skill.project.list
-      → 前端批量确认（一次性载入）
-       └─ 确认后：mindxses.Session 挂载 SkillOverlay（项目级 Registry 快照）
-            ├─ 不持久化：每轮由 daemon 重建重挂载（会话级隔离）
-            └─ 并入提示词目录（标注"项目技能"）+ 检索优先级最高
+项目技能落盘 <ProjectDir>/.agents/skills/
+  └─ 发现：LLM 按 AGENTS.md 军规在上下文无清单时运行 `mindx skills discovery`
+       （CLI 直读项目目录，列名称与描述，--json 供 LLM 消费，不依赖 daemon）
+  └─ 加载：任务命中 → Skill 工具按名 → 链路 B ①②未命中 → ResolveProject 回退
+       └─ 指令进入对话上下文（非 system prompt），下一次解析即可见，无需重载
 ```
 
-### 2.4 晋升管线（一切晋升由用户裁决）
+三条设计理由（三处源码注释一致）：
 
-`skill.promote` RPC（`skillstore.Promote`）：
+1. **KV 缓存稳定性**：项目技能随时增删，进 system prompt 则会话中途改写使
+   KV 缓存前缀全部失效（成本与首 token 延迟）；发现清单进对话上下文则无此问题；
+2. **信任分级**：项目级是发现式的"可能"经验，未验证不入册。进提示词目录的只有
+   Agent 级（自动信任）与全局声明（Agent 作者声明信任）；
+3. **热加载语义**：技能增删改即刻对全部会话生效，无需失效或重建 Runtime。
+
+### 2.4 进化机制（晋升与取用对偶，一切搬运由用户裁决）
+
+技能库间的经验流动由一对方向相反的受控通道承载：
+
+**晋升（向上，`skill.promote` RPC → `skillstore.Promote`）**——验证过的经验上收：
 
 ```text
-项目级(.skills) ──→ Agent 级(agents/<n>/skills) ──→ 全局库(~/.mindx/skills)
-                    copyDir 复制目录                copyDir 复制目录
-                                                     └─ 完成后自动 ReloadGlobal
-                                                        （原子替换，即刻全会话生效）
+项目级(.agents/skills) ──→ Agent 级(agents/<n>/skills) ──→ 全局库(~/.mindx/skills)
+                            copyDir 复制目录                copyDir 复制目录
+                                                             └─ 完成后自动 ReloadGlobal
+                                                                （原子替换，即刻全会话生效）
 ```
 
 目标为 Agent 级时无需重载（LiveRegistry 实时读盘）；晋升后源目录不变（复制语义）。
+硬约束：全局库是晋升终点，**不作为晋升来源**（From=Global 直接拒绝）。
+
+**取用（向下，`mindx skills fetch <name>` CLI → `skillstore.Fetch`）**——全局最佳实践
+下发为项目级进化的起点：
+
+```text
+全局库(~/.mindx/skills) ──→ 项目级(<ProjectDir>/.agents/skills)
+                              点前缀暂存目录 + 原子 Rename（中途失败不残留残缺技能）
+                              └─ 项目级同名默认拒绝；--force 才覆盖，
+                                 覆盖时旧 notes/ 整体迁入 notes.prev-<unix>/ 留档
+                              └─ 完成后无需重载（ResolveProject 实时读盘）
+```
+
+与 Promote 不合并的原因：晋升管线"全局库不能作为来源"是单向向上的语义校验，
+下发是另一条受控通道，分开表达避免破坏晋升校验。
+
+**进化闭环（军规定稿）**：
+
+1. 智能体（skill-creator）创建的技能一律落项目级，禁止直接读写全局库；
+2. 优化全局库技能：先 `mindx skills fetch` 取到项目级副本再修改，全局库原版不动；
+3. 技能目录内 `notes/` 是该技能的进化履历，每次进化后追加记录（模板见
+   skill-creator `references/notes-convention.md`；fetch 覆盖时自动留档）；
+4. 是否晋升 / 回装全局由用户在界面裁决，智能体不代做。
 
 ---
 
@@ -199,7 +242,7 @@ goharness BeforeLLM Hook（当轮首轮注入）
 | --- | --- | --- | --- |
 | ① 身份 | mindx 渲染 / 文件正文 | IDENTITY.md 正文优先，否则 frontmatter 兜底 | Agent 必有 name/role，不空悬 |
 | ② SOUL | 文件 | SOUL.md 正文 | 空则整段跳过 |
-| ③ 能力 | mindx | Catalog（全局+Agent 级+项目覆盖） | 无技能整段跳过 |
+| ③ 能力 | mindx | Catalog（全局+Agent 级；项目级绝不参与，见 2.3） | 无技能整段跳过 |
 | ④ AGENTS.md | mindx 常量 | `agentsCommonRules`（与应用版本绑定） | 常量非空恒在 |
 | ⑤ 环境/搜索 | mindx | Session（ProjectDir 空时取 cwd）+ `experienceSystemNote` 常量（.agents/ 体系说明与 MemorySearch/TeamList 工具配合） | 恒有 |
 | ⑥ 扩展规则 | mindx（App.BuildRulesSection） | mindx.json 权限规则 + 固定引导 + rules.yml 用户规则 | 三者皆空才跳过 |

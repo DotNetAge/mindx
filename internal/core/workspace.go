@@ -116,8 +116,10 @@ func SyncRuntimeAssets(embeddedFS fs.FS, workspaceDir, appVersion string, cfg *M
 	// Root-level files protected from overwriting user edits (same checksum
 	// semantics as checkDirs, keyed by relPath whose first component is itself).
 	// AGENTS.md 是全体 Agent 公共行为准则，用户可编辑，仅在未被修改时随版本更新。
+	// policy.json 是用户沙箱豁免配置（allowed_dirs/paths/globs），同理受保护。
 	checkFiles := map[string]bool{
-		"AGENTS.md": true,
+		"AGENTS.md":   true,
+		"policy.json": true,
 	}
 
 	// Initialise checksum map on first call

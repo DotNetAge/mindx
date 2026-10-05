@@ -60,6 +60,7 @@ func (d *Daemon) handleAgentImport(_ context.Context, params json.RawMessage) (a
 
 	res, err := bundle.Install(p.Path, bundle.InstallOptions{
 		AgentsDir: d.app.Agents().Dir(),
+		TeamsDir:  d.app.Teams().Dir(),
 		GlobalDir: d.app.Skills().GlobalDir(),
 		Overwrite: p.Overwrite,
 	})
@@ -70,6 +71,9 @@ func (d *Daemon) handleAgentImport(_ context.Context, params json.RawMessage) (a
 	// 安装改变了 agents 与全局技能库内容，重载注册表并失效运行时缓存
 	if err := d.app.ReloadAgents(); err != nil {
 		return nil, fmt.Errorf("分发包已落盘但智能体重载失败：%w", err)
+	}
+	if err := d.app.ReloadTeams(); err != nil {
+		return nil, fmt.Errorf("分发包已落盘但团队重载失败：%w", err)
 	}
 	if err := d.app.ReloadSkills(); err != nil {
 		return nil, fmt.Errorf("分发包已落盘但技能库重载失败：%w", err)
@@ -129,6 +133,75 @@ func (d *Daemon) handleSkillImport(_ context.Context, params json.RawMessage) (a
 	return installWithPrepare{InstallResult: *res, Prepares: d.prepareInstalledSkills(res.SkillsGlobal)}, nil
 }
 
+// handleTeamExport 导出团队整包（team/TEAM.md + 成员 Agent 实际生效内容）。
+// 成员缺失时记入 warnings（引用降级语义，不阻断导出）。
+func (d *Daemon) handleTeamExport(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.TeamExportParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Name == "" || p.OutPath == "" {
+		return nil, fmt.Errorf("name 与 out_path 均为必填")
+	}
+
+	team := d.app.Teams().Get(p.Name)
+	if team == nil {
+		return nil, fmt.Errorf("team %q not found", p.Name)
+	}
+
+	manifest, warnings, err := bundle.ExportTeam(team, d.app.Agents(), d.app.Skills(), p.OutPath)
+	if err != nil {
+		return nil, err
+	}
+	result := map[string]any{
+		"status":   "ok",
+		"name":     manifest.Name,
+		"out_path": p.OutPath,
+		"members":  manifest.Members,
+	}
+	if len(warnings) > 0 {
+		result["warnings"] = warnings
+	}
+	d.logger.Info("Team 分发包导出完成", "name", p.Name, "out_path", p.OutPath, "members", len(manifest.Members))
+	return result, nil
+}
+
+// handleTeamImport 从本地团队分发包安装（整队落位，展开规则见 bundle.Install）。
+func (d *Daemon) handleTeamImport(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.TeamImportParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Path == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+
+	res, err := bundle.Install(p.Path, bundle.InstallOptions{
+		AgentsDir: d.app.Agents().Dir(),
+		TeamsDir:  d.app.Teams().Dir(),
+		GlobalDir: d.app.Skills().GlobalDir(),
+		Overwrite: p.Overwrite,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 整队落位改变 agents/teams/全局技能库，全部重载并失效运行时缓存
+	if err := d.app.ReloadAgents(); err != nil {
+		return nil, fmt.Errorf("分发包已落盘但智能体重载失败：%w", err)
+	}
+	if err := d.app.ReloadTeams(); err != nil {
+		return nil, fmt.Errorf("分发包已落盘但团队重载失败：%w", err)
+	}
+	if err := d.app.ReloadSkills(); err != nil {
+		return nil, fmt.Errorf("分发包已落盘但技能库重载失败：%w", err)
+	}
+	d.app.InvalidateRuntimes()
+
+	d.logger.Info("Team 分发包安装完成", "name", res.Name, "members", len(res.Members), "overwrite", res.Overwritten)
+	return res, nil
+}
+
 // marketPackageDTO 是 market.list 响应的包条目投影：bundle.MarketPackage 的
 // JSON tag 为 snake_case（对齐 COS 清单格式），而前端契约（MarketPackageInfo）
 // 为 camelCase，此处逐字段转换对齐（skillNames 等映射字段的前端读取键）。
@@ -140,6 +213,8 @@ type marketPackageDTO struct {
 	NickName    string            `json:"nick_name,omitempty"`
 	Role        string            `json:"role,omitempty"`
 	Category    string            `json:"category,omitempty"`
+	Leader      string            `json:"leader,omitempty"`
+	Members     []string          `json:"members,omitempty"`
 	Skills      []string          `json:"skills,omitempty"`
 	SkillNames  map[string]string `json:"skillNames,omitempty"`
 	SkillDescs  map[string]string `json:"skillDescs,omitempty"`
@@ -169,6 +244,8 @@ func (d *Daemon) handleMarketList(_ context.Context, _ json.RawMessage) (any, er
 			NickName:    p.NickName,
 			Role:        p.Role,
 			Category:    p.Category,
+			Leader:      p.Leader,
+			Members:     p.Members,
 			Skills:      p.Skills,
 			SkillNames:  p.SkillNames,
 			SkillDescs:  p.SkillDescs,
@@ -233,8 +310,8 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
-	if p.Name == "" || (p.Kind != "agent" && p.Kind != "skill") {
-		return nil, fmt.Errorf("kind（agent/skill）与 name 均为必填")
+	if p.Name == "" || (p.Kind != "agent" && p.Kind != "skill" && p.Kind != "team") {
+		return nil, fmt.Errorf("kind（agent/skill/team）与 name 均为必填")
 	}
 
 	// 清单中定位目标包（同时为下载与安装提供元数据）
@@ -261,10 +338,11 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 
 	installOpts := bundle.InstallOptions{
 		GlobalDir: d.app.Skills().GlobalDir(),
+		TeamsDir:  d.app.Teams().Dir(),
 		// 在线安装首次落地不做覆盖；目标已存在时由前端二次确认后携带 overwrite 重试
 		Overwrite: p.Overwrite,
 	}
-	if bundle.PackageKind(p.Kind) == bundle.KindAgent {
+	if bundle.PackageKind(p.Kind) == bundle.KindAgent || bundle.PackageKind(p.Kind) == bundle.KindTeam {
 		installOpts.AgentsDir = d.app.Agents().Dir()
 	}
 	installed, err := bundle.Install(pkgPath, installOpts)
@@ -273,9 +351,14 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 	}
 
 	// 重载与失效逻辑与本地导入一致
-	if installed.Kind == bundle.KindAgent {
+	if installed.Kind == bundle.KindAgent || installed.Kind == bundle.KindTeam {
 		if err := d.app.ReloadAgents(); err != nil {
 			return nil, fmt.Errorf("分发包已落盘但智能体重载失败：%w", err)
+		}
+	}
+	if installed.Kind == bundle.KindTeam {
+		if err := d.app.ReloadTeams(); err != nil {
+			return nil, fmt.Errorf("分发包已落盘但团队重载失败：%w", err)
 		}
 	}
 	if err := d.app.ReloadSkills(); err != nil {

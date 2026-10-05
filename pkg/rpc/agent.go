@@ -45,19 +45,14 @@ type AgentUpdateParams struct {
 	// Soul 对应 SOUL.md 正文。
 	Soul         *string `json:"soul,omitempty"`
 	IdentityBody *string `json:"identity_body,omitempty"`
-	// TeamDuty 团队职责（TEAM.md 正文）：指针区分「未传」与「清空」，仅负责人语义相关。
-	TeamDuty     *string  `json:"team_duty,omitempty"`
+	// TeamDuty / Team / Members 已随一等 Team 实体（team.* RPC）退役：
+	// 组队属性不再经 agent.update 管理，字段移除（旧客户端传入被静默忽略）。
 	Skills       []string `json:"skills,omitempty"`
 	ExcludeTools []string `json:"exclude_tools,omitempty"`
 	// AllowsTools 云技能（MCP 服务）清单，条目 "mcp:<server>"；该属性放的全是 MCP 工具。
 	// 指针区分「未传」与「清空」：nil 保持不变，非 nil 全量覆盖（含空切片清空）。
-	AllowsTools *[]string `json:"allows_tools,omitempty"`
-	// Team / Members 固定组队属性：team 所属团队名，members 团队成员名单。
-	// 指针语义与 AllowsTools 一致（nil 保持不变，非 nil 覆盖，含清空）；
-	// Members 非空即视为团队负责人（is_leader 派生，不落盘）。
-	Team    *string        `json:"team,omitempty"`
-	Members *[]string      `json:"members,omitempty"`
-	Meta    map[string]any `json:"meta,omitempty"`
+	AllowsTools *[]string      `json:"allows_tools,omitempty"`
+	Meta        map[string]any `json:"meta,omitempty"`
 }
 
 func (c *Client) AgentList() (json.RawMessage, error) {

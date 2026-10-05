@@ -96,6 +96,94 @@ func defaultFSHome() string {
 	return home
 }
 
+// fsFindSkipDirs 递归搜索时剪枝的目录名（依赖/构建产物/运行时数据等
+// 大体量无关目录）。隐藏目录不整体剪枝（.agents 内可能有目标文件），
+// 仅按名单精确匹配。
+var fsFindSkipDirs = map[string]struct{}{
+	".git": {}, "node_modules": {}, ".sessions": {}, ".mindx": {},
+	"dist": {}, "build": {}, "vendor": {}, "coverage": {},
+	"__pycache__": {}, ".venv": {}, "venv": {}, ".next": {}, ".nuxt": {},
+	"target": {}, ".gradle": {}, ".idea": {},
+}
+
+// fsFindDefaultMaxResults fs.find 结果缺省上限（防大项目全量返回撑爆响应）。
+const fsFindDefaultMaxResults = 200
+
+// handleFSFind 在目录树内递归查找文件名匹配 pattern 的文件（filepath.Match
+// 语法，如 "*.dash"）。返回与 fs.list 同形状的条目数组（浅排序：目录序 =
+// WalkDir 字典序）。依赖与构建目录剪枝；结果上限缺省 200。
+func (d *Daemon) handleFSFind(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.FSFindParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Path == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+	if p.Pattern == "" {
+		return nil, fmt.Errorf("pattern is required")
+	}
+	if _, err := filepath.Match(p.Pattern, ""); err != nil {
+		return nil, fmt.Errorf("invalid pattern: %w", err)
+	}
+	maxResults := p.MaxResults
+	if maxResults <= 0 {
+		maxResults = fsFindDefaultMaxResults
+	}
+
+	absPath, err := filepath.Abs(filepath.Clean(p.Path))
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("access error: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("not a directory: %s", absPath)
+	}
+
+	result := make([]FSEntry, 0, 16)
+	err = filepath.WalkDir(absPath, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil // 无权限/消失的子树静默跳过，不中断整体搜索
+		}
+		name := entry.Name()
+		if entry.IsDir() {
+			if path != absPath {
+				if _, skip := fsFindSkipDirs[name]; skip {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		matched, matchErr := filepath.Match(p.Pattern, name)
+		if matchErr != nil || !matched {
+			return nil
+		}
+		fi, err := entry.Info()
+		if err != nil {
+			return nil
+		}
+		result = append(result, FSEntry{
+			Name:    name,
+			Path:    path,
+			Size:    fi.Size(),
+			IsDir:   false,
+			Mode:    fi.Mode().String(),
+			ModTime: fi.ModTime(),
+		})
+		if len(result) >= maxResults {
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find failed: %w", err)
+	}
+	return result, nil
+}
+
 func (d *Daemon) handleFSHome(_ context.Context, _ json.RawMessage) (any, error) {
 	return map[string]string{"path": defaultFSHome()}, nil
 }

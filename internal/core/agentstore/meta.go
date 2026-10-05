@@ -49,11 +49,9 @@ type AgentMeta struct {
 	// 内置工具不在此列（内置工具的裁剪走 exclude_tools）。
 	// createRuntime 组装工具时按此清单决定注入哪些 MCP server 的工具；空清单 = 不注入任何 MCP 工具。
 	AllowsTools []string `yaml:"allows_tools,omitempty" json:"allows_tools,omitempty"`
-	// Team / Members 是固定组队（部门）语义（TODO 定案）：
-	//   - team：所属团队名；members：团队成员名单（成员的 team 指向团队名，
-	//     负责人的 members 列出团队成员，弱一致设计，不做交叉校验）；
-	//   - IsLeader 为派生值（Members 非空即负责人），不落盘、不作 frontmatter 字段，
-	//     避免手写文件与派生值双源冲突。
+	// Deprecated：team/members 已随一等 Team 实体（teamstore）退役，Agent 对团队
+	// 零感知（引用单向 Team→Agent）。字段仅为 MigrateLegacyTeams 迁移旧数据保留，
+	// 迁移完成后 IDENTITY.md 不再包含这两个键；新代码禁止消费。
 	Team    string         `yaml:"team,omitempty" json:"team,omitempty"`
 	Members []string       `yaml:"members,omitempty" json:"members,omitempty"`
 	Meta    map[string]any `yaml:"meta,omitempty" json:"meta,omitempty"`
@@ -63,18 +61,15 @@ type AgentMeta struct {
 type Agent struct {
 	Meta AgentMeta
 	Soul string // SOUL.md 正文（行为规则），可为空
-	// TeamDuty 是 TEAM.md 正文（负责人自定义的团队职责），可为空；
-	// 仅负责人语义相关（团队由 team/members 声明），提示词组装时优先于兜底文案。
+	// Deprecated：TEAM.md 正文已随一等 Team 实体（teamstore.Profile）退役。
+	// 仅为 MigrateLegacyTeams 搬运旧数据保留（加载时读取，迁移后改名 .bak）；
+	// 新代码禁止消费，Save 不再写该文件。
 	TeamDuty string
 	Dir      string // Agent 目录的绝对路径
 }
 
 // Name 返回 Agent 名称。
 func (a *Agent) Name() string { return a.Meta.Name }
-
-// IsLeader 返回该 Agent 是否为团队负责人（TODO 定案：Members 非空即负责人）。
-// 派生值不落盘：IDENTITY.md 只存 team/members 原始属性。
-func (a *Agent) IsLeader() bool { return len(a.Meta.Members) > 0 }
 
 // identityFileName / soulFileName / teamFileName 是目录内固定文件名。
 const (

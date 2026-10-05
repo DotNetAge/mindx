@@ -15,28 +15,24 @@ func TestLoadClientProviders_BuiltInFile(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, providers)
 
-	// 预置清单：qwen/minimax 完整预置，gemini/github/google/gitlab 未配置态
+	// 预置清单：minimax 完整预置，gemini/github/google/gitlab 未配置态；
+	// qwen 已移除——Qwen OAuth 免费层于 2026-04-15 官方下线，禁止再预置死路条目
 	registry := NewOAuthProviderRegistry(providers)
-	assert.True(t, registry.Configured("qwen"))
+	_, qwenExists := registry.Provider("qwen")
+	assert.False(t, qwenExists, "Qwen OAuth 已官方下线，不应再出现在注册表")
 	assert.True(t, registry.Configured("minimax"))
 	assert.False(t, registry.Configured("gemini"), "gemini 为机密客户端，client_id 留空")
 	assert.False(t, registry.Configured("github"))
 	assert.False(t, registry.Configured("google"))
 	assert.False(t, registry.Configured("gitlab"))
 
-	// kind 与 interaction 派生一致
-	qwen, ok := registry.Provider("qwen")
-	require.True(t, ok)
-	assert.Equal(t, OAuthKindDeviceCode, qwen.Kind)
-	assert.Equal(t, OAuthInteractionDeviceCode, qwen.DeriveInteraction())
-
+	// kind 与 interaction 派生一致（minimax: user_code）
 	minimax, ok := registry.Provider("minimax")
 	require.True(t, ok)
 	assert.Equal(t, OAuthKindUserCode, minimax.Kind)
+	assert.Equal(t, OAuthInteractionUserCode, minimax.DeriveInteraction())
 
 	// 公共客户端必须 PKCE 开启且无 secret
-	assert.True(t, qwen.UsePKCE)
-	assert.Empty(t, qwen.ClientSecret)
 	assert.True(t, minimax.UsePKCE)
 	assert.Empty(t, minimax.ClientSecret)
 

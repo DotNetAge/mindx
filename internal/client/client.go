@@ -63,6 +63,7 @@ type rootModel struct {
 	modelSelectModels    []*config.ModelConfig // 浮层打开时的模型快照，选中后按索引映射（注册表 List 顺序可能变化，禁止二次拉取）
 	agentSelectDlg       *dialog.ListDialog    // /agent 命令的 Agent 选择浮层
 	agentSelectNames     []string              // 浮层列表项与 HiredAgents() 雇佣视图的名称映射
+	agentSelectTeams     []string              // 与 agentSelectNames 平行的团队名映射（个人条目为空串）
 	connectProvider      string
 	connectProviderNames []string
 	connectAPIKey        string
@@ -227,11 +228,21 @@ func (m *rootModel) loadCommands() {
 		})
 	}
 
-	// @ 补全只提供雇佣视图中的 Agent：未雇佣 Agent 不允许作为会话对象
+	// @ 补全提供雇佣视图中的 Agent：未雇佣 Agent 不允许作为会话对象。
+	// 已雇佣团队的负责人条目带团队标识（与团队对话 = 与负责人对话，由当前
+	// 会话是否绑定团队决定注入）。
+	teamLeader := make(map[string]string)
+	for _, t := range m.app.HiredTeams() {
+		teamLeader[t.Meta.Leader] = t.Meta.Name
+	}
 	for _, a := range m.app.HiredAgents() {
+		desc := a.Meta.Description
+		if team, ok := teamLeader[a.Meta.Name]; ok {
+			desc = fmt.Sprintf("「%s」团队负责人 · %s", team, desc)
+		}
 		m.input.Agents = append(m.input.Agents, data.AgentInfo{
 			Name:        a.Meta.Name,
-			Description: a.Meta.Description,
+			Description: desc,
 		})
 	}
 
@@ -974,6 +985,13 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 		case overlayAgentSelect:
 			m.activeOverlay = overlayNone
 			if !msg.Cancelled && msg.Index >= 0 && msg.Index < len(m.agentSelectNames) {
+				// 团队条目：直接走团队切换（新建团队会话），不走 /agent 个人命令
+				if team := m.agentSelectTeams[msg.Index]; team != "" {
+					return m.handleAgentSwitch(clientmsg.AgentSwitchMsg{
+						AgentName: m.agentSelectNames[msg.Index],
+						TeamName:  team,
+					})
+				}
 				return m.handleSlashCommand(clientmsg.SlashCommandMsg{Name: "agent", Args: []string{m.agentSelectNames[msg.Index]}})
 			}
 		}
@@ -1424,7 +1442,13 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 // resolveSessionForAgent 落实"Agent 切换即 Session 切换"的强规则：
 // 从服务端读取当前 ProjectDir 下的全部会话，过滤出新 Agent 所属的会话并取
 // 最新一条；不存在则在该 Agent + ProjectDir 下创建新会话。
-func (m *rootModel) resolveSessionForAgent(agentName string) (*goharnesssession.SessionInfo, error) {
+// teamName 非空时（团队切换）只复用绑定该团队的会话，新建会话也绑定该团队；
+// 空串（个人切换）只复用未绑定团队的会话——团队会话与个人会话互不复用。
+func (m *rootModel) resolveSessionForAgent(agentName string, teamName ...string) (*goharnesssession.SessionInfo, error) {
+	team := ""
+	if len(teamName) > 0 {
+		team = teamName[0]
+	}
 	projectDir := ""
 	if meta := m.app.CurrentSessionMeta(); meta != nil && meta.ProjectDir != "" {
 		projectDir = meta.ProjectDir
@@ -1441,7 +1465,7 @@ func (m *rootModel) resolveSessionForAgent(agentName string) (*goharnesssession.
 	var latest *goharnesssession.SessionInfo
 	for i := range sessions {
 		s := &sessions[i]
-		if s.AgentName != agentName || s.ProjectDir != projectDir {
+		if s.AgentName != agentName || s.ProjectDir != projectDir || s.TeamName != team {
 			continue
 		}
 		if latest == nil || s.LastActivityAt.After(latest.LastActivityAt) {
@@ -1451,7 +1475,7 @@ func (m *rootModel) resolveSessionForAgent(agentName string) (*goharnesssession.
 	if latest != nil {
 		return m.app.SwitchSession(latest.SessionID)
 	}
-	return m.app.CreateSession(agentName, projectDir)
+	return m.app.CreateSession(agentName, projectDir, team)
 }
 
 func (m *rootModel) handleAgentSwitch(e clientmsg.AgentSwitchMsg) (tea.Model, tea.Cmd) {
@@ -1468,7 +1492,8 @@ func (m *rootModel) handleAgentSwitch(e clientmsg.AgentSwitchMsg) (tea.Model, te
 
 	// 强规则：Agent 变更必须联动 Session 切换（复用最新或创建新的），
 	// 失败不阻断切换本身——保留旧会话上下文并提示用户。
-	newMeta, sessErr := m.resolveSessionForAgent(e.AgentName)
+	// 团队条目（e.TeamName 非空）：会话绑定该团队；个人条目：不绑定。
+	newMeta, sessErr := m.resolveSessionForAgent(e.AgentName, e.TeamName)
 	var sessNotifCmd tea.Cmd
 	if sessErr != nil {
 		sessNotifCmd = m.notifBar.Add(data.Notification{
@@ -1627,30 +1652,58 @@ func (m *rootModel) openModelSelectDialog() (tea.Model, tea.Cmd) {
 }
 
 // openAgentSelectDialog 激活 /agent 的居中浮层选择器。
-// 列表项格式为 "Role (name) - Description"，agentSelectNames 保持与
-// HiredAgents() 雇佣视图同序，ListDialogResult.Index 映射回 Agent 名称后
-// 走既有 handleAgentSwitch 链路（状态栏/配置持久化零改动）。
+// 条目两类：团队条目（已雇佣团队，格式 "「昵称」团队 (N 名成员) - 描述"，
+// 映射名 = team.Leader）在前，个人条目（"Role (name) - Description"）在后；
+// 已雇佣团队的负责人个人条目跳过（找队长 = 找团队，去重避免双入口歧义）。
+// agentSelectNames/agentSelectTeams 与列表项同序，ListDialogResult.Index
+// 映射回 Agent 名称与团队名后走 handleAgentSwitch 链路。
 func (m *rootModel) openAgentSelectDialog() (tea.Model, tea.Cmd) {
 	if m.app == nil || m.app.Agents() == nil {
 		return m, m.notifBar.Add(data.Notification{Message: i18n.T("client.notify.system.uninitialized"), Level: data.NotifWarning})
 	}
 	// 选择器只列已雇佣 Agent：未雇佣 Agent 不允许切入会话
 	agents := m.app.HiredAgents()
-	if len(agents) == 0 {
+	teams := m.app.HiredTeams()
+
+	// 已雇佣团队的负责人：个人条目跳过（其团队条目已代表）
+	teamLeader := make(map[string]bool, len(teams))
+	for _, t := range teams {
+		teamLeader[t.Meta.Leader] = true
+	}
+
+	items := make([]string, 0, len(teams)+len(agents))
+	m.agentSelectNames = make([]string, 0, len(teams)+len(agents))
+	m.agentSelectTeams = make([]string, 0, len(teams)+len(agents))
+	for _, t := range teams {
+		name := t.Meta.NickName
+		if name == "" {
+			name = t.Meta.Name
+		}
+		desc := t.Meta.Description
+		if desc == "" {
+			desc = "—"
+		}
+		items = append(items, fmt.Sprintf("「%s」团队 (%d 名成员) - %s", name, len(t.Meta.Members), desc))
+		m.agentSelectNames = append(m.agentSelectNames, t.Meta.Leader)
+		m.agentSelectTeams = append(m.agentSelectTeams, t.Meta.Name)
+	}
+	for _, a := range agents {
+		if teamLeader[a.Meta.Name] {
+			continue
+		}
+		if a.Meta.Role != "" {
+			items = append(items, fmt.Sprintf("%s (%s) - %s", a.Meta.Role, a.Meta.Name, a.Meta.Description))
+		} else {
+			items = append(items, displayName(a.Meta.Name, a.Meta.Name)+" - "+a.Meta.Description)
+		}
+		m.agentSelectNames = append(m.agentSelectNames, a.Meta.Name)
+		m.agentSelectTeams = append(m.agentSelectTeams, "")
+	}
+	if len(items) == 0 {
 		return m, m.notifBar.Add(data.Notification{
 			Message: "暂无已雇佣的 Agent：可执行 mindx agent hire <name> 或在 AgentBrowser 中雇佣",
 			Level:   data.NotifWarning,
 		})
-	}
-	items := make([]string, len(agents))
-	m.agentSelectNames = make([]string, len(agents))
-	for i, a := range agents {
-		m.agentSelectNames[i] = a.Meta.Name
-		if a.Meta.Role != "" {
-			items[i] = fmt.Sprintf("%s (%s) - %s", a.Meta.Role, a.Meta.Name, a.Meta.Description)
-		} else {
-			items[i] = displayName(a.Meta.Name, a.Meta.Name) + " - " + a.Meta.Description
-		}
 	}
 	m.agentSelectDlg = dialog.NewListDialog(i18n.T("client.ui.dialog.agent.select"))
 	m.agentSelectDlg.SetItems(items)

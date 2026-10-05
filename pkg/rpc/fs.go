@@ -7,6 +7,21 @@ type FSListParams struct {
 	Path string `json:"path"`
 }
 
+// FSFindParams are the params for fs.find：在目录树内递归查找匹配文件。
+type FSFindParams struct {
+	// Path 搜索根目录（绝对路径）
+	Path string `json:"path"`
+	// Pattern 文件名匹配模式（filepath.Match 语法，如 "*.dash"）
+	Pattern string `json:"pattern"`
+	// MaxResults 结果上限（<=0 时按 200 处理，防大项目全量返回）
+	MaxResults int `json:"max_results,omitempty"`
+}
+
+// FSFind 在目录树内递归查找匹配文件，返回与 fs.list 同形状的条目数组。
+func (c *Client) FSFind(path, pattern string, maxResults int) (json.RawMessage, error) {
+	return c.CallWithTimeout("fs.find", FSFindParams{Path: path, Pattern: pattern, MaxResults: maxResults})
+}
+
 // FSReadParams are the params for fs.read.
 type FSReadParams struct {
 	Path string `json:"path"`

@@ -14,6 +14,7 @@ import (
 	"github.com/DotNetAge/goharness/logging"
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/core/teamstore"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
@@ -626,9 +627,10 @@ func TestHandleAgentUpdate_PartialFieldsOnly(t *testing.T) {
 	}
 }
 
-// TestHandleAgentUpdate_TeamMembers 验证组队属性的指针语义：
-// 传 team/members 覆盖并派生负责人；不传保持不变；传空 members 清空（负责人退位）。
-func TestHandleAgentUpdate_TeamMembers(t *testing.T) {
+// TestHandleAgentUpdate_TeamFieldsRetired 验证组队属性退役语义：
+// agent.update 传入 team/members/team_duty 被静默忽略（Agent 对团队零感知，
+// 组队管理改走 team.* RPC），其余字段更新不受影响。
+func TestHandleAgentUpdate_TeamFieldsRetired(t *testing.T) {
 	d, cleanup := newTestDaemon(t)
 	defer cleanup()
 
@@ -638,11 +640,12 @@ func TestHandleAgentUpdate_TeamMembers(t *testing.T) {
 		t.Fatalf("ReloadAgents() error = %v", err)
 	}
 
-	// 1) 传 team/members → 覆盖并派生负责人
 	params, _ := json.Marshal(map[string]interface{}{
-		"name":    "team-agent",
-		"team":    "产品研发",
-		"members": []string{"writer", "coder"},
+		"name":      "team-agent",
+		"role":      "New Role",
+		"team":      "产品研发",
+		"members":   []string{"writer", "coder"},
+		"team_duty": "自定义职责",
 	})
 	if _, err := d.handleAgentUpdate(context.Background(), params); err != nil {
 		t.Fatalf("handleAgentUpdate error = %v", err)
@@ -651,96 +654,66 @@ func TestHandleAgentUpdate_TeamMembers(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("team-agent 丢失")
 	}
-	if cfg.Meta.Team != "产品研发" {
-		t.Errorf("team = %q, want 产品研发", cfg.Meta.Team)
+	// role 正常更新
+	if cfg.Meta.Role != "New Role" {
+		t.Errorf("role = %q, want New Role", cfg.Meta.Role)
 	}
-	if len(cfg.Meta.Members) != 2 || cfg.Meta.Members[0] != "writer" {
-		t.Errorf("members = %v, want [writer coder]", cfg.Meta.Members)
+	// 退役字段被忽略：frontmatter 不落 team/members 键
+	if cfg.Meta.Team != "" || len(cfg.Meta.Members) != 0 {
+		t.Errorf("退役组队字段应被忽略，got team=%q members=%v", cfg.Meta.Team, cfg.Meta.Members)
 	}
-	if !cfg.IsLeader() {
-		t.Error("members 非空应派生为负责人")
-	}
-
-	// 磁盘落盘验证：frontmatter 含 team/members 原始属性
 	data, err := os.ReadFile(filepath.Join(agentsDir, "team-agent", "IDENTITY.md"))
 	if err != nil {
 		t.Fatalf("read updated file: %v", err)
 	}
-	content := string(data)
-	if !strings.Contains(content, "team: 产品研发") || !strings.Contains(content, "members:") {
-		t.Errorf("frontmatter 缺少组队字段:\n%s", content)
-	}
-
-	// 2) 不传 team/members → 保持不变
-	params2, _ := json.Marshal(map[string]interface{}{"name": "team-agent", "role": "New Role"})
-	if _, err := d.handleAgentUpdate(context.Background(), params2); err != nil {
-		t.Fatalf("handleAgentUpdate(仅 role) error = %v", err)
-	}
-	cfg = d.app.Agents().Get("team-agent")
-	if cfg.Meta.Team != "产品研发" || len(cfg.Meta.Members) != 2 {
-		t.Errorf("未传 team/members 应保持不变，got team=%q members=%v", cfg.Meta.Team, cfg.Meta.Members)
-	}
-
-	// 3) 传空 members → 清空（负责人退位），frontmatter 移除 members 键
-	params3, _ := json.Marshal(map[string]interface{}{
-		"name":    "team-agent",
-		"members": []string{},
-	})
-	if _, err := d.handleAgentUpdate(context.Background(), params3); err != nil {
-		t.Fatalf("handleAgentUpdate(空 members) error = %v", err)
-	}
-	cfg = d.app.Agents().Get("team-agent")
-	if len(cfg.Meta.Members) != 0 {
-		t.Errorf("空 members 应清空，got %v", cfg.Meta.Members)
-	}
-	if cfg.IsLeader() {
-		t.Error("members 清空后不应再是负责人")
-	}
-	data, err = os.ReadFile(filepath.Join(agentsDir, "team-agent", "IDENTITY.md"))
-	if err != nil {
-		t.Fatalf("read cleared file: %v", err)
-	}
-	if strings.Contains(string(data), "members") {
-		t.Errorf("清空后 frontmatter 不应含 members 键:\n%s", data)
+	if strings.Contains(string(data), "members") || strings.Contains(string(data), "team:") {
+		t.Errorf("frontmatter 不应再落组队键:\n%s", data)
 	}
 }
 
-// TestHandleAgentListAndGet_IsLeader 验证 agent.list / agent.get 投影 is_leader 派生字段
-// （TODO 场景：手写带 team/members 的 IDENTITY.md，加载后无需 RPC 即可读出负责人身份）。
+// TestHandleAgentListAndGet_IsLeader 验证 agent.list / agent.get 投影 is_leader
+// 派生字段（新模型：由团队注册表 Leader 反查，Agent frontmatter 不再有 team/members）。
 func TestHandleAgentListAndGet_IsLeader(t *testing.T) {
 	d, cleanup := newTestDaemon(t)
 	defer cleanup()
 
 	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
-	agentDir := filepath.Join(agentsDir, "pm")
-	if err := os.MkdirAll(agentDir, 0755); err != nil {
-		t.Fatalf("create agent dir: %v", err)
-	}
-	identity := `---
-name: pm
-role: 项目经理
-description: 协调团队
-team: 交付一组
-members:
-  - writer
-  - coder
----
-
-我是项目经理。
-`
-	if err := os.WriteFile(filepath.Join(agentDir, "IDENTITY.md"), []byte(identity), 0644); err != nil {
-		t.Fatalf("write agent file: %v", err)
-	}
+	mustCreateAgentFile(t, agentsDir, "pm")
 	if err := d.app.ReloadAgents(); err != nil {
 		t.Fatalf("ReloadAgents() error = %v", err)
 	}
 
-	// agent.list：is_leader = true
+	// 无团队：is_leader = false
 	listResult, err := d.handleAgentList(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("handleAgentList error = %v", err)
 	}
 	list, ok := listResult.([]agentListResult)
+	if !ok {
+		t.Fatalf("expected []agentListResult, got %T", listResult)
+	}
+	for _, it := range list {
+		if it.Name == "pm" && it.IsLeader {
+			t.Error("无团队时 is_leader 应为 false")
+		}
+	}
+
+	// 建团队（pm 为负责人）→ is_leader = true
+	if err := d.app.Teams().Save(&teamstore.Team{Meta: teamstore.TeamMeta{
+		Name:        "delivery-1",
+		Description: "交付一组",
+		Leader:      "pm",
+		Members:     []string{"pm", "writer", "coder"},
+	}}); err != nil {
+		t.Fatalf("Save team error = %v", err)
+	}
+
+	// agent.list：is_leader = true
+	listResult, err = d.handleAgentList(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("handleAgentList error = %v", err)
+	}
+	list, ok = listResult.([]agentListResult)
 	if !ok {
 		t.Fatalf("expected []agentListResult, got %T", listResult)
 	}
@@ -751,9 +724,6 @@ members:
 			if !it.IsLeader {
 				t.Error("agent.list 应投影 is_leader=true")
 			}
-			if it.Team != "交付一组" {
-				t.Errorf("team = %q, want 交付一组", it.Team)
-			}
 		}
 	}
 	if !found {
@@ -761,8 +731,8 @@ members:
 	}
 
 	// agent.get：is_leader = true
-	params, _ := json.Marshal(map[string]string{"name": "pm"})
-	getResult, err := d.handleAgentGet(context.Background(), params)
+	getParams, _ := json.Marshal(map[string]string{"name": "pm"})
+	getResult, err := d.handleAgentGet(context.Background(), getParams)
 	if err != nil {
 		t.Fatalf("handleAgentGet error = %v", err)
 	}

@@ -8,6 +8,7 @@ import "embed"
 //go:embed runtime/skills
 //go:embed runtime/data
 //go:embed runtime/mindx.json
+//go:embed runtime/policy.json
 var runtimeFS embed.FS
 
 //go:embed assets/images/mindx.png

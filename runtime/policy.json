@@ -1,5 +1,6 @@
 {
   "file": {
+    "allowed_dirs": ["/tmp"],
     "allowed_paths": ["~/.mindx/USER.md"],
     "allowed_globs": []
   },

@@ -39,6 +39,7 @@ type HotReloadWatcher struct {
 
 	agentsDir string
 	skillsDir string
+	teamsDir  string
 
 	// Lifecycle
 	ctx    context.Context
@@ -59,6 +60,7 @@ func NewHotReloadWatcher(app *core.App, logger logging.Logger, notify func(metho
 		notify:    notify,
 		agentsDir: app.Settings().AgentsDir(),
 		skillsDir: app.Settings().SkillsDir(),
+		teamsDir:  app.Settings().TeamsDir(),
 	}
 }
 
@@ -87,6 +89,11 @@ func (w *HotReloadWatcher) Start(ctx context.Context) error {
 	} else if w.logger != nil {
 		w.logger.Warn("hot-reload: failed to watch skills dir", "dir", w.skillsDir, "error", err)
 	}
+	if err := w.watchDir(w.teamsDir); err == nil {
+		added++
+	} else if w.logger != nil {
+		w.logger.Warn("hot-reload: failed to watch teams dir", "dir", w.teamsDir, "error", err)
+	}
 
 	if added == 0 {
 		if w.logger != nil {
@@ -104,6 +111,7 @@ func (w *HotReloadWatcher) Start(ctx context.Context) error {
 		w.logger.Info("hot-reload watcher started",
 			"agents_dir", w.agentsDir,
 			"skills_dir", w.skillsDir,
+			"teams_dir", w.teamsDir,
 		)
 	}
 	return nil
@@ -166,6 +174,7 @@ func (w *HotReloadWatcher) eventLoop() {
 
 	pendingAgents := false
 	pendingSkills := false
+	pendingTeams := false
 
 	flush := func() {
 		if pendingAgents {
@@ -188,6 +197,15 @@ func (w *HotReloadWatcher) eventLoop() {
 			}
 			pendingSkills = false
 		}
+		if pendingTeams {
+			if err := w.app.ReloadTeams(); err != nil && w.logger != nil {
+				w.logger.Warn("hot-reload: failed to reload teams", "error", err)
+			}
+			if w.notify != nil {
+				w.notify("teams_changed", map[string]any{})
+			}
+			pendingTeams = false
+		}
 	}
 
 	for {
@@ -207,18 +225,20 @@ func (w *HotReloadWatcher) eventLoop() {
 			// Classify which root directory this event belongs to
 			relAgents, _ := filepath.Rel(w.agentsDir, event.Name)
 			relSkills, _ := filepath.Rel(w.skillsDir, event.Name)
+			relTeams, _ := filepath.Rel(w.teamsDir, event.Name)
 
 			isAgentEvent := !strings.HasPrefix(relAgents, "..") && relAgents != "."
 			isSkillEvent := !strings.HasPrefix(relSkills, "..") && relSkills != "."
+			isTeamEvent := !strings.HasPrefix(relTeams, "..") && relTeams != "."
 
-			if !isAgentEvent && !isSkillEvent {
+			if !isAgentEvent && !isSkillEvent && !isTeamEvent {
 				continue
 			}
 
-			// Handle new subdirectories (e.g., a new agent/skill directory was created).
-			// 目录化存储后 Agent 是 agents/<name>/ 目录、技能是 skills/<name>/ 目录：
-			// 除递归加入 watch 外，还必须把目录创建本身计入 pending，
-			// 否则目录内文件先于 watch 生效写入时会漏掉这次变更。
+			// Handle new subdirectories (e.g., a new agent/skill/team directory was created).
+			// 目录化存储后 Agent 是 agents/<name>/ 目录、技能是 skills/<name>/ 目录、
+			// 团队是 teams/<name>/ 目录：除递归加入 watch 外，还必须把目录创建本身计入
+			// pending，否则目录内文件先于 watch 生效写入时会漏掉这次变更。
 			if info, statErr := os.Stat(event.Name); statErr == nil && info.IsDir() {
 				if event.Has(fsnotify.Create) {
 					_ = w.watchDir(event.Name)
@@ -227,6 +247,9 @@ func (w *HotReloadWatcher) eventLoop() {
 					}
 					if isSkillEvent {
 						pendingSkills = true
+					}
+					if isTeamEvent {
+						pendingTeams = true
 					}
 				}
 				continue
@@ -242,6 +265,9 @@ func (w *HotReloadWatcher) eventLoop() {
 			}
 			if isSkillEvent {
 				pendingSkills = true
+			}
+			if isTeamEvent {
+				pendingTeams = true
 			}
 
 		case _, ok := <-w.watcher.Errors:

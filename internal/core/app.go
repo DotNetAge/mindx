@@ -23,6 +23,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/core/agentstore"
 	"github.com/DotNetAge/mindx/internal/core/bundle"
 	"github.com/DotNetAge/mindx/internal/core/skillstore"
+	"github.com/DotNetAge/mindx/internal/core/teamstore"
 	mindxtools "github.com/DotNetAge/mindx/internal/tools"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/memory"
@@ -46,6 +47,7 @@ type App struct {
 
 	// Registries (shared across all agents)
 	agents      *agentstore.AgentStore
+	teams       *teamstore.Store
 	models      *config.ModelRegistry
 	providerReg config.ProviderRegistry
 	versions    *FileVersionStore
@@ -134,6 +136,21 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		logger.Warn("agent 迁移/加载警告", "file", name, "error", loadErr)
 	}
 
+	logger.Info("loading teams", "dir", settings.TeamsDir())
+	teamsReg, teamLoadErrs, err := teamstore.Load(settings.TeamsDir())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load teams: %w", err)
+	}
+	for name, loadErr := range teamLoadErrs {
+		logger.Warn("team 加载警告", "dir", name, "error", loadErr)
+	}
+
+	// 旧弱一致组队（Agent frontmatter team/members + 负责人 TEAM.md）一次性
+	// 迁移为一等 Team 实体；幂等，键清空后再次启动零开销
+	if n := MigrateLegacyTeams(agentsReg, teamsReg, logger); n > 0 {
+		logger.Info("legacy team data migrated", "teams", n)
+	}
+
 	logger.Info("Loading models", "dir", settings.ModelsFile())
 	models, err := config.LoadModels(settings.ModelsFile())
 	if err != nil {
@@ -215,6 +232,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		credStore:           credStore,
 		logger:              logger,
 		agents:              agentsReg,
+		teams:               teamsReg,
 		models:              models,
 		providerReg:         models.ProviderRegistry(),
 		versions:            versions,
@@ -438,6 +456,7 @@ func (a *App) PromptBuilder() *PromptBuilder {
 	defer a.promptBuilderMu.Unlock()
 	if a.promptBuilder == nil {
 		a.promptBuilder = NewPromptBuilder(a.agents, a.skills,
+			func() *teamstore.Store { return a.teams },
 			a.settings.UserPreferences(), a.settings.VenvDir(), a.BuildRulesSection)
 	}
 	return a.promptBuilder
@@ -521,6 +540,14 @@ func (a *App) SetTestDir(tmpDir string) error {
 	}
 	a.agents = agentsReg
 
+	// 团队注册表同理重定向：默认构造的 teamstore 指向真实 ~/.mindx/teams，
+	// 测试中的建队/迁移写回会污染真实团队库。
+	teamsReg, _, err := teamstore.Load(a.settings.TeamsDir())
+	if err != nil {
+		return fmt.Errorf("重定向测试团队注册表失败: %w", err)
+	}
+	a.teams = teamsReg
+
 	// 提示词组装器持有旧注册表引用，一并置空待懒重建
 	a.promptBuilderMu.Lock()
 	a.promptBuilder = nil
@@ -530,6 +557,25 @@ func (a *App) SetTestDir(tmpDir string) error {
 
 func (a *App) Agents() *agentstore.AgentStore {
 	return a.agents
+}
+
+// Teams 返回团队注册表（管理与浏览入口走全量；会话选择走 HiredTeams）。
+func (a *App) Teams() *teamstore.Store {
+	return a.teams
+}
+
+// ReloadTeams 重扫团队目录并原子换入内存注册表。
+// 不置空 promptBuilder、不清 runtimeCache：Build 每次 Ask 实时执行并经
+// teamsFn 闭包取当前注册表，换指针后下一次 Ask 即输出新团队段；
+// Runtime 缓存的工具装配不含团队内容，无需失效。
+func (a *App) ReloadTeams() error {
+	fresh, _, err := teamstore.Load(a.settings.TeamsDir())
+	if err != nil {
+		return fmt.Errorf("reload teams: %w", err)
+	}
+	a.teams = fresh
+	a.logger.Info("teams reloaded", "dir", a.settings.TeamsDir())
+	return nil
 }
 
 // ReloadAgents re-scans the agents directory and atomically swaps the in-memory registry.
@@ -626,7 +672,9 @@ func (a *App) SetProviderConfigs(providers []*config.ProviderConfig) {
 }
 
 // CreateSession creates a new session with metadata including the captured project directory (os.Getwd() at invocation time).
-func (a *App) CreateSession(agentName, projectDir string) (*session.SessionInfo, error) {
+// CreateSession 创建会话。team 变参非空时（团队会话）绑定该团队：
+// TeamName 随 meta 持久化，重载后 System Prompt 的团队段与原会话一致。
+func (a *App) CreateSession(agentName, projectDir string, team ...string) (*session.SessionInfo, error) {
 	// 空目录兜底 Getwd：维持旧 FileSessionStore.Create 的语义（工作目录分片存储
 	// 要求 project_dir 明确，路由器不接受空值落盘）。
 	if projectDir == "" {
@@ -637,6 +685,9 @@ func (a *App) CreateSession(agentName, projectDir string) (*session.SessionInfo,
 	var opts []session.SessionOption
 	if projectDir != "" {
 		opts = append(opts, session.WithProjectDirOption(projectDir))
+	}
+	if len(team) > 0 && team[0] != "" {
+		opts = append(opts, session.WithTeamNameOption(team[0]))
 	}
 
 	sessionInfo, err := session.CreateSession(context.Background(), a.sessDB, agentName, opts...)

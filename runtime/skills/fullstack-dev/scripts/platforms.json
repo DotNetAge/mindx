@@ -1,0 +1,237 @@
+{
+  "_comment": [
+    "平台落点声明（单一事实源 / single source of truth）。被 scripts/init_deploy.py 读取，用于探测使用者机器上的工具并决定 hooks 配置落点。",
+    "职责边界：本文件【仅作声明】——记录各平台的探测路径、配置落点与 skill 加载形态，供人阅读、文档引用与后续扩展；它【不触发任何自动安装】。特别地 skills_dir 只描述『该平台从哪些目录加载 skill』，本技能包不会把自身写入这些目录，也不会写各平台的注册表文件（那属破坏性操作，须由使用者自行决定）。",
+    "路径书写约定：一律用 `%VAR%`（Windows 环境变量）与 `~`（用户主目录）以及相对项目根的相对路径；禁用任何具体机器的绝对路径。展开由 init_deploy.py 的 expand_path() 完成。",
+    "字段语义：exe=可执行文件候选（安装证据）/ cmd=PATH 中的命令名（CLI 证据）/ data=应用数据目录（『用过』证据）/ user_cfg=用户级配置落点（⚠️ 影响该用户所有项目）/ proj_cfg=项目级配置落点（相对项目根）/ skills_dir=该平台加载 skill 的目录（声明用，不被本技能包消费）/ skills_naming=skill 目录命名约定（声明用）/ registry=平台注册表文件（声明用，非目录扫描式平台为 null）/ sources=逐字段可信度标注 / notes=实测说明与未验证点。",
+    "sources 取值（保守取该字段内『最低』可信度，细分见 notes）：measured=本机实测确认 / documented=有官方文档或规范依据但本机未实测 / candidate=常见约定候选、未验证 / unknown=本机未安装该工具、无依据可测（对应值为 null）。",
+    "sources 与空值的组合读法（防误读）：值为 null 且标 measured＝『本机实测确认该项不存在』（如 codebuddy / trae 无 skill 注册表）；值为 null 且标 unknown＝『本机未安装该工具，无从实测』。故『标 measured 但值为 null』并不表示该字段有实测取值，切勿据此推定存在。",
+    "schema_version：本文件的结构版本号，供人工阅读与未来兼容判断；当前不被部署器校验（加载器只校验 platforms 数组非空、各条目含 id/name、id 不重复）。",
+    "维护方式：新增平台或修正落点只改本文件；`python scripts/init_deploy.py --apply` 后各平台行为随之更新，无需改代码。本文件缺失时部署器【拒绝启动】并提示修复（fail-closed，不静默降级为空表）。"
+  ],
+  "schema_version": 1,
+  "platforms": [
+    {
+      "id": "codebuddy",
+      "name": "CodeBuddy CN",
+      "exe": [
+        "%LOCALAPPDATA%/Programs/CodeBuddy/CodeBuddy.exe",
+        "%LOCALAPPDATA%/Programs/CodeBuddy CN/CodeBuddy CN.exe",
+        "%PROGRAMFILES%/CodeBuddy/CodeBuddy.exe",
+        "/Applications/CodeBuddy.app",
+        "~/Applications/CodeBuddy.app"
+      ],
+      "cmd": ["codebuddy"],
+      "data": [
+        "%APPDATA%/CodeBuddy CN",
+        "%APPDATA%/CodeBuddy",
+        "~/Library/Application Support/CodeBuddy CN",
+        "~/.config/CodeBuddy"
+      ],
+      "user_cfg": ["~/.codebuddy/settings.json", "~/.codebuddycn/settings.json"],
+      "proj_cfg": [".codebuddy/settings.json", ".codebuddycn/settings.json"],
+      "skills_dir": ["~/.codebuddy/skills", "~/.codebuddy/skills-marketplace"],
+      "skills_naming": "英文目录名",
+      "registry": null,
+      "sources": {
+        "exe": "candidate",
+        "cmd": "candidate",
+        "data": "candidate",
+        "user_cfg": "measured",
+        "proj_cfg": "candidate",
+        "skills_dir": "measured",
+        "skills_naming": "measured",
+        "registry": "measured"
+      },
+      "notes": "实测（本机）：~/.codebuddy/settings.json 与 ~/.codebuddycn/settings.json 均含 hooks 键 → user_cfg 双落点可用。skill 侧：~/.codebuddy/skills/ 内含 dev-expert/、pua/（已装技能，英文目录名，实测）；~/.codebuddy/skills-marketplace/ 同为平台目录（目录存在实测，是否亦参与 skill 扫描未验证）。未发现 skill 注册表文件（registry=null，属目录扫描式）。"
+    },
+    {
+      "id": "trae",
+      "name": "Trae / Trae CN",
+      "exe": [
+        "%LOCALAPPDATA%/Programs/Trae/Trae.exe",
+        "%LOCALAPPDATA%/Programs/Trae CN/Trae CN.exe",
+        "%PROGRAMFILES%/Trae/Trae.exe",
+        "/Applications/Trae.app"
+      ],
+      "cmd": ["trae"],
+      "data": [
+        "%APPDATA%/Trae",
+        "%APPDATA%/Trae CN",
+        "%APPDATA%/TRAE SOLO CN",
+        "~/Library/Application Support/Trae",
+        "~/.config/Trae"
+      ],
+      "user_cfg": ["~/.trae-cn/hooks.json", "~/.trae/hooks.json"],
+      "proj_cfg": [".trae-cn/hooks.json", ".trae/hooks.json"],
+      "skills_dir": ["~/.trae-cn/skills", "~/.trae-cn/builtin_skills"],
+      "skills_naming": "中文目录名",
+      "registry": null,
+      "sources": {
+        "exe": "candidate",
+        "cmd": "candidate",
+        "data": "candidate",
+        "user_cfg": "measured",
+        "proj_cfg": "candidate",
+        "skills_dir": "measured",
+        "skills_naming": "measured",
+        "registry": "measured"
+      },
+      "notes": "实测（本机）：Trae CN 的 hooks 落点为 ~/.trae-cn/hooks.json；~/.trae/hooks.json 作候选（未实测）。skill 侧：~/.trae-cn/skills/ 下技能以【中文目录名】存放（实测样例：编程专家/），与 CodeBuddy 的英文名约定不同——跨平台分发时目录名不可直接复用；~/.trae-cn/builtin_skills/ 为内置技能目录。平台另有 commands/、user_rules/ 目录。未发现 skill 注册表文件（registry=null）。"
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "exe": [
+        "%LOCALAPPDATA%/Programs/cursor/Cursor.exe",
+        "%LOCALAPPDATA%/Programs/Cursor/Cursor.exe",
+        "/Applications/Cursor.app"
+      ],
+      "cmd": ["cursor"],
+      "data": [
+        "%APPDATA%/Cursor",
+        "~/Library/Application Support/Cursor",
+        "~/.config/Cursor"
+      ],
+      "user_cfg": ["~/.cursor/hooks.json"],
+      "proj_cfg": [".cursor/hooks.json"],
+      "skills_dir": null,
+      "skills_naming": null,
+      "registry": null,
+      "sources": {
+        "exe": "candidate",
+        "cmd": "candidate",
+        "data": "candidate",
+        "user_cfg": "candidate",
+        "proj_cfg": "candidate",
+        "skills_dir": "unknown",
+        "skills_naming": "unknown",
+        "registry": "unknown"
+      },
+      "notes": "未验证：hooks 落点 ~/.cursor/hooks.json 为常见约定。skill 侧：本机未安装 Cursor（~/.cursor 不存在），其 skill 加载目录未实测；Cursor 的规则体系以 .cursor/rules 为主，是否提供 skill 目录机制未验证，故三字段留 null。"
+    },
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "exe": [
+        "%APPDATA%/npm/claude.cmd",
+        "%LOCALAPPDATA%/Programs/claude/claude.exe",
+        "/usr/local/bin/claude",
+        "/opt/homebrew/bin/claude"
+      ],
+      "cmd": ["claude"],
+      "data": ["~/.claude", "~/Library/Application Support/claude"],
+      "user_cfg": ["~/.claude/settings.json"],
+      "proj_cfg": [".claude/settings.json"],
+      "skills_dir": ["~/.claude/skills"],
+      "skills_naming": null,
+      "registry": null,
+      "sources": {
+        "exe": "candidate",
+        "cmd": "candidate",
+        "data": "candidate",
+        "user_cfg": "candidate",
+        "proj_cfg": "candidate",
+        "skills_dir": "documented",
+        "skills_naming": "unknown",
+        "registry": "unknown"
+      },
+      "notes": "未验证：用户级配置落点 ~/.claude/settings.json 为常见约定。skill 侧：~/.claude/skills 有 Agent Skills 规范依据（documented），但【本机未实测】（本机无 ~/.claude 目录）；目录命名约定与是否有注册表均未验证，故 skills_naming/registry 留 null。"
+    },
+    {
+      "id": "windsurf",
+      "name": "Windsurf",
+      "exe": [
+        "%LOCALAPPDATA%/Programs/Windsurf/Windsurf.exe",
+        "/Applications/Windsurf.app"
+      ],
+      "cmd": ["windsurf"],
+      "data": [
+        "%APPDATA%/Windsurf",
+        "~/Library/Application Support/Windsurf",
+        "~/.config/Windsurf"
+      ],
+      "user_cfg": ["~/.windsurf/hooks.json"],
+      "proj_cfg": [".windsurf/hooks.json"],
+      "skills_dir": null,
+      "skills_naming": null,
+      "registry": null,
+      "sources": {
+        "exe": "candidate",
+        "cmd": "candidate",
+        "data": "candidate",
+        "user_cfg": "candidate",
+        "proj_cfg": "candidate",
+        "skills_dir": "unknown",
+        "skills_naming": "unknown",
+        "registry": "unknown"
+      },
+      "notes": "未验证：落点 ~/.windsurf/hooks.json 为常见约定；其工具名与主流不同，接入后需在 hooks 模板的 matcher 中追加 write_file|edit_file 一类别名。skill 侧：本机未安装 Windsurf，加载目录未实测，三字段留 null。"
+    },
+    {
+      "id": "qoder",
+      "name": "Qoder CN",
+      "exe": [
+        "%LOCALAPPDATA%/Programs/Qoder/Qoder.exe",
+        "%PROGRAMFILES%/Qoder/Qoder.exe",
+        "/Applications/Qoder.app"
+      ],
+      "cmd": ["qoder"],
+      "data": [
+        "%APPDATA%/QoderCN",
+        "~/Library/Application Support/Qoder",
+        "~/.config/Qoder"
+      ],
+      "user_cfg": ["~/.qoder-cn/settings.json", "~/.lingma/settings.json"],
+      "proj_cfg": [".qoder-cn/settings.json", ".lingma/settings.json"],
+      "skills_dir": ["~/.qoder-cn/plugins"],
+      "skills_naming": null,
+      "registry": [
+        "~/.qoder-cn/plugins/installed_plugins.json",
+        "~/.qoder-cn/plugins/installed_plugins-v2.json",
+        "~/.qoder-cn/plugins/installed_plugins_v2.json"
+      ],
+      "sources": {
+        "exe": "candidate",
+        "cmd": "candidate",
+        "data": "candidate",
+        "user_cfg": "measured",
+        "proj_cfg": "candidate",
+        "skills_dir": "measured",
+        "skills_naming": "unknown",
+        "registry": "measured"
+      },
+      "notes": "exe/cmd 为常见位置候选（未验证，探测不到即跳过）。实测（本机）：~/.qoder-cn/settings.json 存在（尚无 hooks 键，--apply 会新建并标注）；~/.lingma/settings.json 为官方文档落点（documented，未本机实测）。skill 侧：~/.qoder-cn/plugins/ 存在（目录实测），内含 3 个插件注册 JSON（registry 实测存在）——属【注册表式】而非纯目录扫描，与 CodeBuddy/Trae 形态不同；其 skill 加载是否由这些注册文件决定【未验证】。另有 ~/.qoder-cn/rules/。"
+    },
+    {
+      "id": "workbuddy",
+      "name": "WorkBuddy",
+      "exe": [
+        "%LOCALAPPDATA%/Programs/WorkBuddy/WorkBuddy.exe",
+        "%PROGRAMFILES%/WorkBuddy/WorkBuddy.exe",
+        "/Applications/WorkBuddy.app"
+      ],
+      "cmd": ["workbuddy"],
+      "data": [
+        "%APPDATA%/WorkBuddy",
+        "~/Library/Application Support/WorkBuddy"
+      ],
+      "user_cfg": ["~/.workbuddy/settings.json"],
+      "proj_cfg": [".workbuddy/settings.json"],
+      "skills_dir": ["~/.workbuddy/skills", "~/.workbuddy/plugin-marketplace-state-new"],
+      "skills_naming": null,
+      "registry": null,
+      "sources": {
+        "exe": "candidate",
+        "cmd": "candidate",
+        "data": "candidate",
+        "user_cfg": "measured",
+        "proj_cfg": "candidate",
+        "skills_dir": "measured",
+        "skills_naming": "unknown",
+        "registry": "measured"
+      },
+      "notes": "exe/cmd 为常见位置候选（未验证）。实测（本机）：~/.workbuddy/settings.json 存在且含 hooks 键 → user_cfg 可用。skill 侧：~/.workbuddy/skills/ 与 ~/.workbuddy/plugin-marketplace-state-new/ 均实测存在（后者为插件市场状态目录，内容未逐查，是否为 skill 加载注册机制未验证，故 registry 留 null）；~/.workbuddy/plugin-marketplace-state-new/ 亦另有 ~/.workbuddy/skill-cloud-sync/ 等平台目录。"
+    }
+  ]
+}

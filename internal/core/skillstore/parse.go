@@ -6,7 +6,7 @@
 //     （agents/<name>/skills），同名技能"Agent 级覆盖全局级"（逻辑重写）；
 //   - goharness 只消费检索 SPI（skill.SkillRegistry），本包是注入方。
 //
-// 项目级库（<ProjectDir>/.skills）的发现式载入属 P2 晋升管线，不在本包。
+// 项目级库（<ProjectDir>/.agents/skills）的发现式载入属 P2 晋升管线，不在本包。
 package skillstore
 
 import (

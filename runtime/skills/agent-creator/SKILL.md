@@ -67,7 +67,7 @@ metadata:
 
 - 内置工具默认全量可用，只按角色裁剪不需要的，写入 `exclude_tools` frontmatter 字段
 - 根据角色确定：不需要委派就排除 `SubAgent`、`CollectResults`；非 Windows 场景可排除 `PowerShell`
-- `Team*` 组队工具（TeamCreate 等）默认不在场（组队语义由 `team`/`members` 声明承担），需要运行期组队时在 `include_tools` 中列出唤回
+- `Team*` 运行期组队工具（TeamCreate 等）默认不在场（固定团队走一等 Team 实体，见"团队招募"节），需要运行期组队时在 `include_tools` 中列出唤回
 - `exclude_tools` 不支持通配符，只能指定具体工具名
 
 ### (g) MCP 服务白名单（可选）
@@ -85,9 +85,11 @@ metadata:
 agents/<name>/
   IDENTITY.md   # frontmatter（强类型元数据）+ 可选身份正文
   SOUL.md       # 角色职责正文（纯 Markdown）
-  TEAM.md       # 负责人的团队职责（可选，缺省用系统兜底文案）
   skills/       # Agent 级技能库（可选，由技能系统装载）
 ```
+
+> 团队是独立的一等实体（`~/.mindx/teams/<team>/TEAM.md`），不在 Agent 目录内。
+> Agent 对团队零感知——团队归属由 Team 实体引用 Agent 名表达，见"团队招募"节。
 
 ### IDENTITY.md 模板
 
@@ -145,9 +147,7 @@ exclude_tools:
 | `skills`        | 列表       | 仅领域相关技能；每个都会增加上下文开销                        |
 | `exclude_tools` | 列表       | 内置工具裁剪清单；默认全量可用，按需排除                      |
 | `allows_tools`  | 列表       | MCP 服务白名单，条目 `mcp:<server>`；空 = 不注入任何 MCP 工具 |
-| `include_tools` | 列表       | 唤回默认不在场的内置工具（如 `TeamCreate` 等组队工具）        |
-| `team`          | 团队名     | 所属团队（固定组队声明；成员的 team 指向团队名）              |
-| `members`       | 列表       | 团队成员名单；非空即负责人，自动注入团队职责段                |
+| `include_tools` | 列表       | 唤回默认不在场的内置工具（如 `TeamCreate` 等运行期组队工具）  |
 | `introduction`  | 可选       | 人设正文；IDENTITY.md 正文非空时覆盖此字段                    |
 | `meta`          | 映射       | 自由扩展杂项                                                  |
 
@@ -173,6 +173,7 @@ exclude_tools:
 ```bash
 mindx agent list --all --json
 mindx market list --kind agent --filter "<领域关键词>"
+mindx market list --kind team --filter "<领域关键词>"
 ```
 
 注意：`agent list` 默认只显示已雇佣的智能体，查重时**必须加 `--all`**。
@@ -183,7 +184,8 @@ mindx market list --kind agent --filter "<领域关键词>"
 2. **市场已有**匹配的 Agent 包（对照 name/role/description/skills 判断领域是否契合）→ 呈现匹配项让用户选择：
    - 选择安装：`mindx market install agent <name>`，然后 `mindx agent hire <name>`，跳到步骤 7 验证，**流程结束**
    - 市场项接近但不完全契合 → 询问是安装后定制，还是从零创建
-3. 两边都没有 → 继续从零创建
+3. **市场已有**匹配的团队包（用户目标是成建制的多人协作时优先考虑）→ 整队招聘：`mindx market install team <name>`（团队与成员一次装齐），雇佣后即可发起团队会话，**流程结束**
+4. 两边都没有 → 继续从零创建
 
 也可以检查特定名称：
 
@@ -214,7 +216,7 @@ mindx skill list --json
 **管理者角色**（协调他人、委派工作）：
 
 - 保留 SubAgent、CollectResults 进行委派
-- 需要运行期组队时在 `include_tools` 列出 Team* 工具（默认不在场）；固定团队直接用 `team`/`members` 声明
+- 需要运行期组队时在 `include_tools` 列出 Team* 工具（默认不在场）；固定团队走 Team 实体（见"团队招募"节），与 Agent 定义无关
 
 **工作者角色**（专注的个人贡献者）：
 
@@ -259,13 +261,31 @@ mindx agent list --json
 
 ## 团队招募
 
-用户的目标不是单个 Agent 能完成时（如开发一个项目），为其组建团队：
+用户的目标不是单个 Agent 能完成时（如开发一个项目），为其组建团队。团队是**独立的一等实体**（`~/.mindx/teams/<team>/TEAM.md`）：任命负责人（leader）、引用成员、持有独立的团队 Profile；团队会话以负责人身份发起，由负责人协调成员。
 
 1. **拆解领域**：与用户确认团队要覆盖的领域清单（如前端、后端、测试），每个领域对应一位成员。
 2. **逐领域招募**：每位成员按「工作流」步骤 1-7 招募——先查本地与市场，能复用绝不新建。
-3. **任命负责人**：为团队任命一位负责人。负责人用 frontmatter 的 `members` 列出团队成员（成员的 `team` 指向团队名，弱一致设计不交叉校验）；`members` 非空即负责人，系统自动注入团队负责人职责段。
-4. **落团队职责**：负责人怎么协调成员、跟踪结果、汇报成果，写入目录内 `TEAM.md`；缺失时系统注入兜底文案（团队名 + 职责声明）。SOUL.md 只写个人角色职责，团队职责归 `TEAM.md`，两者不混。
-5. **驱动与验收**：团队组建后，跨 Agent 的工作安排通过 Cron 定时驱动负责人主导，由负责人协调成员并向用户汇报成果——调度链保持"发起方 → 负责人 → 成员"，发起方不越过负责人直管成员。
+3. **建队与任命负责人**：为团队任命一位负责人（必须是已招募的 Agent）：
+
+   ```bash
+   mindx team add <team-name> --leader <lead-agent> \
+       --member <lead-agent> --member <member-1> --member <member-2> \
+       --description "团队一句话定位" --nick_name "两三字外号"
+   ```
+
+   引用是单向的（Team→Agent）：团队成员名单由 Team 实体持有，Agent 定义里不写任何团队信息。同一 Agent 可被多个团队引用。
+4. **落团队职责（Profile）**：负责人怎么协调成员、跟踪结果、汇报成果，写进团队实体的 Profile（`~/.mindx/teams/<team>/TEAM.md` 正文，可用 `mindx team update <team> --profile "..."` 或直接编辑文件）；缺失时系统注入兜底文案。SOUL.md 只写个人角色职责，团队职责归 Team Profile，两者不混。
+5. **雇佣团队**：`mindx team hire <team-name>`——雇佣后团队才出现在会话选择器（选团队 = 以负责人身份新建团队会话）。
+6. **驱动与验收**：团队组建后，跨 Agent 的工作安排通过 Cron 定时驱动负责人主导，由负责人协调成员并向用户汇报成果——调度链保持"发起方 → 负责人 → 成员"，发起方不越过负责人直管成员。
+
+**整队进市场**：团队可整体导出为分发包上架市场，消费者一次安装即把团队与全部成员 Agent 装齐（成员缺失时告警跳过）：
+
+```bash
+mindx team export <team-name>            # 产出 <team-name>.mindpkg
+mindx market install team <team-name>    # 消费者整队招聘（团队+成员一次落位）
+```
+
+发布上架流程与 Agent 包一致（发布脚本同口径支持 kind=team）。
 
 ## 注意事项
 

@@ -33,7 +33,7 @@ func TestSoulSectionNoInjectedTitle(t *testing.T) {
 		t.Fatalf("保存 Agent 失败: %v", err)
 	}
 
-	pb := NewPromptBuilder(agents, skills, "/tmp/prefs", "/tmp/venv", nil)
+	pb := NewPromptBuilder(agents, skills, nil, "/tmp/prefs", "/tmp/venv", nil)
 
 	store, err := mindxses.NewFileSessionStore(filepath.Join(tmp, "sessions"))
 	if err != nil {

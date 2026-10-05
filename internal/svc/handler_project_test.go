@@ -10,6 +10,7 @@ import (
 
 	"github.com/DotNetAge/goharness/logging"
 	goharnesssession "github.com/DotNetAge/goharness/session"
+	"github.com/DotNetAge/mindx/internal/core/teamstore"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
 
@@ -38,7 +39,7 @@ func mustCreateProjectSession(t *testing.T, sessDB *mindxses.RoutedSessionStore,
 	return info.SessionID
 }
 
-// mustCreateLeaderAgent 落盘一个带 members 的负责人 Agent 并重载注册表。
+// mustCreateLeaderAgent 落盘一个 Agent 并建以其为负责人的团队，重载注册表。
 func mustCreateLeaderAgent(t *testing.T, d *Daemon, name string) {
 	t.Helper()
 	agentsDir := filepath.Join(d.app.Settings().UserPreferences(), "agents")
@@ -50,9 +51,6 @@ func mustCreateLeaderAgent(t *testing.T, d *Daemon, name string) {
 name: %s
 role: Lead
 description: test leader
-members:
-  - worker-a
-  - worker-b
 ---
 `, name)
 	if err := os.WriteFile(filepath.Join(agentDir, "IDENTITY.md"), []byte(content), 0644); err != nil {
@@ -61,8 +59,19 @@ members:
 	if err := d.app.ReloadAgents(); err != nil {
 		t.Fatalf("ReloadAgents() error = %v", err)
 	}
-	if got := d.app.Agents().Get(name); got == nil || !got.IsLeader() {
-		t.Fatalf("leader agent %q 未注册或未派生为负责人", name)
+	// 新模型：负责人身份由团队注册表反查（Leader == agent 名）
+	if err := d.app.Teams().Save(&teamstore.Team{Meta: teamstore.TeamMeta{
+		Name:    name + "-team",
+		Leader:  name,
+		Members: []string{name, "worker-a", "worker-b"},
+	}}); err != nil {
+		t.Fatalf("Save team error = %v", err)
+	}
+	if got := d.app.Agents().Get(name); got == nil {
+		t.Fatalf("leader agent %q 未注册", name)
+	}
+	if d.app.Teams().FindByLeader(name) == nil {
+		t.Fatalf("leader agent %q 的团队未注册", name)
 	}
 }
 

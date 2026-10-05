@@ -49,14 +49,12 @@ func (d *Daemon) handleProjectList(_ context.Context, _ json.RawMessage) (any, e
 		return nil, fmt.Errorf("list sessions failed: %w", err)
 	}
 
-	// 团队负责人候选集（Members 非空即负责人，派生值不落盘）：
+	// 团队负责人候选集（团队注册表 Leader 反查，派生值不落盘）：
 	// 项目会话的 Sponsor 命中候选集即视为该项目已委派负责人。
 	leaderAgents := make(map[string]bool)
-	if ag := d.app.Agents(); ag != nil {
-		for _, a := range ag.List() {
-			if a.IsLeader() {
-				leaderAgents[a.Name()] = true
-			}
+	for _, t := range d.app.Teams().List() {
+		if t.Meta.Leader != "" {
+			leaderAgents[t.Meta.Leader] = true
 		}
 	}
 

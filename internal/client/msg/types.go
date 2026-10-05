@@ -143,6 +143,10 @@ type UserSendMsg struct {
 
 type AgentSwitchMsg struct {
 	AgentName string
+	// TeamName 非空表示切换为团队会话（选择器团队条目）：
+	// 会话绑定该团队并 resolve 到 AgentName（即 team.Leader）。
+	// 空串 = 个人会话（Agent 直选）。
+	TeamName string
 }
 
 type SlashCommandMsg struct {

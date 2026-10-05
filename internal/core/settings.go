@@ -51,6 +51,11 @@ func (s *Settings) AgentsDir() string {
 	return filepath.Join(s.UserPreferences(), "agents")
 }
 
+// TeamsDir 返回团队库根目录 ~/.mindx/teams（目录即注册表，与 agents 同模式）。
+func (s *Settings) TeamsDir() string {
+	return filepath.Join(s.UserPreferences(), "teams")
+}
+
 func (s *Settings) RulesFile() string {
 	return filepath.Join(s.UserPreferences(), "settings", "rules.yml")
 }

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/core/skillstore"
 	"github.com/spf13/cobra"
 )
@@ -31,6 +32,10 @@ func init() {
 	discoveryCmd.Flags().String("dir", "", "Project directory to scan (defaults to the current working directory)")
 	discoveryCmd.Flags().Bool("json", false, "Output structured JSON (for LLM consumption)")
 	skillsCmd.AddCommand(discoveryCmd)
+
+	fetchCmd.Flags().String("dir", "", "Project directory (defaults to the current working directory)")
+	fetchCmd.Flags().Bool("force", false, "Overwrite an existing project-level skill with the same name")
+	skillsCmd.AddCommand(fetchCmd)
 	rootCmd.AddCommand(skillsCmd)
 }
 
@@ -92,8 +97,12 @@ func skillsDiscovery(projectDir string, useJSON bool) error {
 			continue
 		}
 		sk, _, loadErr := skillstore.LoadSkillFromDir(filepath.Join(skillsRoot, e.Name()), "project")
-		if loadErr != nil || sk == nil {
+		if loadErr != nil {
 			warnings = append(warnings, fmt.Sprintf("跳过 %s: %v", e.Name(), loadErr))
+			continue
+		}
+		if sk == nil {
+			// 无 SKILL.md 的目录（如瞬态暂存目录）静默跳过，不产生噪声
 			continue
 		}
 		skills = append(skills, discovered{
@@ -136,5 +145,60 @@ func skillsDiscovery(projectDir string, useJSON bool) error {
 	for _, s := range skills {
 		fmt.Printf("%-*s  %s\n", maxName, s.Name, s.Description)
 	}
+	return nil
+}
+
+var fetchCmd = &cobra.Command{
+	Use:   "fetch <skill_name>",
+	Short: "Fetch a global skill into the project-level skills directory",
+	Long: `Copy a skill from the global library (~/.mindx/skills) into
+<projectDir>/.agents/skills as the starting point for skill evolution.
+
+The copy is performed by this command (controlled replication), so agents
+never read or write the global library directly. Fails if a project-level
+skill with the same name already exists; pass --force to overwrite.
+
+Examples:
+  mindx skills fetch pdf
+  mindx skills fetch pdf --dir /path/to/project
+  mindx skills fetch pdf --force`,
+	Args: cobra.ExactArgs(1),
+	RunE: runSkillsFetch,
+}
+
+func runSkillsFetch(cmd *cobra.Command, args []string) error {
+	name := args[0]
+	dir, _ := cmd.Flags().GetString("dir")
+	force, _ := cmd.Flags().GetBool("force")
+
+	if strings.TrimSpace(dir) == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("无法确定工作目录: %w", err)
+		}
+		dir = wd
+	}
+	projectDir, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("无法解析项目目录: %w", err)
+	}
+
+	// 直接读盘，不依赖 daemon（与 discovery 同模式）；
+	// Settings 零值按默认全局约定解析 ~/.mindx/skills。
+	settings := &core.Settings{}
+	store, err := skillstore.NewStore(settings.SkillsDir(), settings.AgentsDir())
+	if err != nil {
+		return fmt.Errorf("无法初始化技能库: %w", err)
+	}
+
+	if err := store.Fetch(skillstore.FetchOptions{
+		SkillName:  name,
+		ProjectDir: projectDir,
+		Overwrite:  force,
+	}); err != nil {
+		return err
+	}
+
+	fmt.Printf("已将技能 %q 取用到项目级库: %s\n", name, filepath.Join(projectDir, ".agents", "skills", name))
 	return nil
 }

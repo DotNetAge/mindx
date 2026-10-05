@@ -19,17 +19,18 @@ func (d *Daemon) handleAgentList(_ context.Context, params json.RawMessage) (any
 	if agents == nil {
 		return []agentListResult{}, nil
 	}
+	teams := d.app.Teams()
 	list := agents.List()
 
 	result := make([]agentListResult, 0, len(list))
 	for _, a := range list {
-		result = append(result, agentListResult{AgentMeta: a.Meta, IsLeader: a.IsLeader()})
+		result = append(result, agentListResult{AgentMeta: a.Meta, IsLeader: core.AgentIsLeader(teams, a)})
 	}
 	return result, nil
 }
 
 // agentListResult 是 agent.list 的返回投影：Meta 全量字段内联展开，
-// 附加派生的 is_leader（Members 非空即负责人，派生值不落盘）。
+// 附加派生的 is_leader（团队注册表 Leader 反查，派生值不落盘）。
 type agentListResult struct {
 	agentstore.AgentMeta
 	IsLeader bool `json:"is_leader"`
@@ -62,7 +63,7 @@ func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any,
 	if agent == nil {
 		return nil, fmt.Errorf("agent %q not found", p.Name)
 	}
-	return agentDetailResult{AgentMeta: agent.Meta, IsLeader: agent.IsLeader(), Soul: agent.Soul, TeamDuty: agent.TeamDuty}, nil
+	return agentDetailResult{AgentMeta: agent.Meta, IsLeader: core.AgentIsLeader(d.app.Teams(), agent), Soul: agent.Soul, TeamDuty: agent.TeamDuty}, nil
 }
 
 func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (any, error) {
@@ -159,13 +160,8 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 	if p.AllowsTools != nil {
 		updated.Meta.AllowsTools = *p.AllowsTools
 	}
-	// 组队属性：指针字段 nil 保持不变，非 nil 覆盖（含清空）。
-	if p.Team != nil {
-		updated.Meta.Team = strings.TrimSpace(*p.Team)
-	}
-	if p.Members != nil {
-		updated.Meta.Members = *p.Members
-	}
+	// 组队属性（team/members/TeamDuty）已随一等 Team 实体退役：agent.update
+	// 不再受理（旧客户端传入的键被 JSON 反序列化静默忽略），组队管理走 team.* RPC。
 	if p.Introduction != "" {
 		updated.Meta.Introduction = p.Introduction
 	}
@@ -176,9 +172,6 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 	}
 	if p.Soul != nil {
 		updated.Soul = strings.TrimSpace(*p.Soul)
-	}
-	if p.TeamDuty != nil {
-		updated.TeamDuty = strings.TrimSpace(*p.TeamDuty)
 	}
 	if p.Meta != nil {
 		updated.Meta.Meta = p.Meta

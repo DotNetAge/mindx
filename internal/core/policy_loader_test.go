@@ -34,6 +34,7 @@ func TestLoadPolicyOverrides_Parse(t *testing.T) {
 	dir := t.TempDir()
 	content := `{
 		"file": {
+			"allowed_dirs": ["/tmp", "~/.mindx/share"],
 			"allowed_paths": ["~/.mindx/USER.md"],
 			"allowed_globs": ["*.pem.example"]
 		},
@@ -47,6 +48,8 @@ func TestLoadPolicyOverrides_Parse(t *testing.T) {
 	require.NoError(t, err)
 	home, homeErr := os.UserHomeDir()
 	require.NoError(t, homeErr)
+	assert.Equal(t, []string{"/tmp", filepath.Join(home, ".mindx", "share")}, ov.File.AllowedDirs,
+		"目录边界豁免应解析，~/ 前缀应展开")
 	assert.Equal(t, []string{filepath.Join(home, ".mindx", "USER.md")}, ov.File.AllowedPaths,
 		"~/ 前缀应展开为用户主目录")
 	assert.Equal(t, []string{"*.pem.example"}, ov.File.AllowedGlobs)
@@ -121,6 +124,36 @@ func TestApplyPolicyOverrides_BadCIDR_SkipsAndKeepsOthers(t *testing.T) {
 		applyPolicyOverrides(&base, ov, testPolicyLogger())
 	})
 	assert.Len(t, base.NetworkAllowSubnets, 1, "非法项跳过，合法项保留")
+}
+
+// TestApplyPolicyOverrides_AllowedDirs_ExtendsBoundary 验证 allowed_dirs
+// 扩展目录边界：豁免目录内的文件不再触发越界授权（如 /tmp 免授权），
+// 且默认 AllowedDirs 保留。
+func TestApplyPolicyOverrides_AllowedDirs_ExtendsBoundary(t *testing.T) {
+	home, homeErr := os.UserHomeDir()
+	require.NoError(t, homeErr)
+	base := sandbox.SandboxPolicy{
+		// 默认策略仅含用户主目录（对齐 app.go 的默认 AllowedDirs）
+		AllowedDirs:     []string{filepath.Join(home, ".mindx")},
+		DeniedFileGlobs: sandbox.DefaultDeniedFileGlobs(),
+	}
+	ov := policyOverrides{
+		File: policyFileOverrides{AllowedDirs: []string{"/tmp"}},
+	}
+
+	applyPolicyOverrides(&base, ov, testPolicyLogger())
+	assert.Contains(t, base.AllowedDirs, "/tmp", "目录豁免应追加进 AllowedDirs")
+	assert.Contains(t, base.AllowedDirs, filepath.Join(home, ".mindx"), "默认 AllowedDirs 应保留")
+
+	// 决策验证：豁免目录内的文件不触发越界 AskUser（此前会 AskUser）
+	sb, err := sandbox.NewSandbox(&base, testPolicyLogger())
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile("/tmp/mx-policy-loader-selftest.txt", []byte("x"), 0644))
+	defer os.Remove("/tmp/mx-policy-loader-selftest.txt")
+
+	dec := sb.CheckFile("/tmp/mx-policy-loader-selftest.txt", filepath.Join(home, "some-project"))
+	assert.Equal(t, sandbox.DecisionAllow, dec.Decision,
+		"allowed_dirs 豁免目录内的文件应免越界授权")
 }
 
 // TestExpandTilde 验证 ~/ 前缀展开的各形态。

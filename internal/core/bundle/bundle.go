@@ -1,4 +1,4 @@
-// Package bundle 实现 Agent / Skill 分发包的导出、安装与 COS 静态市场客户端。
+// Package bundle 实现 Agent / Skill / Team 分发包的导出、安装与 COS 静态市场客户端。
 //
 // 分发包格式（PR-PROMPTS 第四节定稿；Skill 包是 Agent 包的子集）：
 //
@@ -8,12 +8,15 @@
 //	│   ├── IDENTITY.md
 //	│   ├── SOUL.md
 //	│   └── skills/<skill-name>/...     Agent 级技能（含同名覆盖版本）+ 引用的全局技能副本
-//	└── skills/<skill-name>/...          kind=skill 时存在：单个技能目录
+//	├── team/TEAM.md                     kind=team 时存在：Team 实体本体（frontmatter + Profile）
+//	└── agents/<agent-name>/...          kind=team 时存在：成员 Agent 目录（传输层包含，落地纯引用）
 //
 // 安装展开规则（分发格式 ≠ 存储格式，冗余只存在于传输层）：
 //   - Agent 包：agent/ → agents/<name>/；包内技能与全局库同名 → 落 Agent 目录
 //     skills/（Agent 级覆盖 = 逻辑重写），不同名 → 进全局库；
 //   - Skill 包：skills/<name>/ → 全局库；
+//   - Team 包：team/ → teams/<name>/；包内 agents/<n>/ 逐成员按 Agent 包规则落位
+//     （整队招聘：团队与成员一次装齐，落地后恢复纯引用）；
 //   - 同名冲突默认拒绝，覆盖需显式确认（Overwrite）。
 package bundle
 
@@ -30,6 +33,8 @@ const (
 	KindAgent PackageKind = "agent"
 	// KindSkill Skill 分发包（单技能，Agent 包的子集）。
 	KindSkill PackageKind = "skill"
+	// KindTeam Team 分发包（team/TEAM.md + 成员 Agent 目录整包）。
+	KindTeam PackageKind = "team"
 )
 
 // zip 容器内的固定路径前缀。
@@ -37,6 +42,10 @@ const (
 	zipPathManifest = "manifest.json"
 	zipPrefixAgent  = "agent/"
 	zipPrefixSkills = "skills/"
+	zipPrefixTeam   = "team/"
+	zipPrefixAgents = "agents/"
+	zipPathTeamDoc  = zipPrefixTeam + "TEAM.md"
+	teamDocFileName = "TEAM.md"
 
 	// agent 目录内固定文件名（与 agentstore 的目录格式一致）。
 	identityFileName = "IDENTITY.md"
@@ -69,6 +78,10 @@ type Manifest struct {
 	// Dependencies 技能的外部依赖声明（分发包格式契约字段，从外部 manifest.json
 	// 透传保留；当前打包端不写入、安装端不执行，仅供生态元数据不丢失）。
 	Dependencies *SkillDependencies `json:"dependencies,omitempty"`
+	// Leader 负责人 Agent 名（kind=team，取自 TEAM.md frontmatter leader；市场卡片展示）。
+	Leader string `json:"leader,omitempty"`
+	// Members 包内成员 Agent 名清单（kind=team，含负责人；安装器据此报告落位结果）。
+	Members []string `json:"members,omitempty"`
 }
 
 // SkillDependencies 是一个 skill 的全部外部依赖（三层模型）。
@@ -91,7 +104,7 @@ func (m *Manifest) validate() error {
 	if m.Format != PackageFormat {
 		return fmt.Errorf("不支持的包格式版本：%d（当前支持 %d）", m.Format, PackageFormat)
 	}
-	if m.Kind != KindAgent && string(m.Kind) != "skill" {
+	if m.Kind != KindAgent && m.Kind != KindSkill && m.Kind != KindTeam {
 		return fmt.Errorf("未知的分发包类型：%q", m.Kind)
 	}
 	if m.Name == "" {
@@ -108,6 +121,8 @@ type InstallResult struct {
 	SkillsGlobal []string `json:"skills_global,omitempty"`
 	// SkillsAgent 落入 Agent 级库的技能名（同名覆盖，逻辑重写）。
 	SkillsAgent []string `json:"skills_agent,omitempty"`
+	// Members kind=team 时报告落位的成员 Agent 名（含负责人）。
+	Members []string `json:"members,omitempty"`
 	// Overwritten 是否覆盖了已存在的同名目标（用户显式确认）。
 	Overwritten bool `json:"overwritten,omitempty"`
 }

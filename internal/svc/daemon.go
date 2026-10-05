@@ -20,6 +20,7 @@ import (
 	"github.com/DotNetAge/goharness/events"
 	"github.com/DotNetAge/goharness/hooks/action"
 	goharnesssession "github.com/DotNetAge/goharness/session"
+	"github.com/DotNetAge/gorag/v2/native"
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/channel"
 	"github.com/DotNetAge/mindx/internal/core"
@@ -67,6 +68,9 @@ type Daemon struct {
 
 	// global key-value store (bbolt)
 	kvStore *bbolt.DB
+
+	// NativeRAG 条目语义索引（族 = Collection），为 rag.seg.* RPC 提供底层
+	segIndexer *native.SegIndexer
 
 	// mcp manager for MCP server integration
 	mcpMgr *mcp.Manager
@@ -241,7 +245,6 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		logger.Info("kvstore initialized",
 			"path", filepath.Join(app.Settings().DataDir(), "kvstore.db"),
 		)
-
 		// Initialize MCP Manager
 		// Server 配置由 ~/.mindx/settings/mcp.json 主存（文件），
 		// 工具清单运行时从 MCP server tools/list 动态拉取。零 bbolt 依赖。
@@ -264,6 +267,23 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 				logger.Debug("mcp: 远程同步跳过", "reason", result.Error)
 			}
 		}()
+	}
+
+	// ── NativeRAG 条目语义索引（族 = Collection）────────────────
+	// 与 sharedMemory 复用同一 embedder 实例（避免重复加载 ONNX 模型），
+	// 数据落 ~/.mindx/data/native.db，仅 daemon 持有写连接。
+	if emb := app.Embedder(); emb != nil {
+		segIdx, segErr := native.NewSegIndexer(filepath.Join(app.Settings().DataDir(), "native.db"), emb)
+		if segErr != nil {
+			logger.Warn("failed to initialize rag seg index", "error", segErr)
+		} else {
+			d.segIndexer = segIdx
+			logger.Info("rag seg index initialized",
+				"path", filepath.Join(app.Settings().DataDir(), "native.db"),
+			)
+		}
+	} else {
+		logger.Info("no embedder configured, rag seg disabled")
 	}
 
 	// ── OAuth 提供商注册表：client-provider.yml 加载失败降级为空注册表 ──
@@ -568,6 +588,13 @@ func (d *Daemon) stopBackgroundServices() {
 	d.stopCloseable("knowledge-graph database", func() error {
 		if d.graphDB != nil {
 			return d.graphDB.Close()
+		}
+		return nil
+	})
+
+	d.stopCloseable("rag seg index", func() error {
+		if d.segIndexer != nil {
+			return d.segIndexer.Close()
 		}
 		return nil
 	})

@@ -231,8 +231,9 @@ func TestSetHiredPersists(t *testing.T) {
 	}
 }
 
-// TestSaveTeamRoundTrip 验证组队属性（team/members）的序列化回读与 IsLeader 派生：
-// 原始属性落盘 frontmatter，IsLeader 为派生值不落盘，重载后派生结果一致。
+// TestSaveTeamRoundTrip 验证已退役组队属性（team/members/TeamDuty）的迁移语义：
+// team/members 仍可序列化落盘（仅 MigrateLegacyTeams 迁移旧数据消费），
+// TEAM.md 不再由 Save 写出（正文迁移由 teamstore 承载），重载回读一致。
 func TestSaveTeamRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	store, _, err := Load(dir)
@@ -251,16 +252,12 @@ func TestSaveTeamRoundTrip(t *testing.T) {
 		t.Fatalf("Save 失败: %v", err)
 	}
 
-	// 磁盘验证：TEAM.md 独立落盘为负责人自定义团队职责
-	teamData, err := os.ReadFile(filepath.Join(dir, "lead", "TEAM.md"))
-	if err != nil {
-		t.Fatalf("读取 TEAM.md 失败: %v", err)
-	}
-	if !strings.Contains(string(teamData), "产品设计与研发交付") {
-		t.Errorf("TEAM.md 内容不一致:\n%s", teamData)
+	// 磁盘验证：Save 停写 TEAM.md（退役，正文由 Team 实体的 Profile 承载）
+	if _, err := os.Stat(filepath.Join(dir, "lead", "TEAM.md")); !os.IsNotExist(err) {
+		t.Errorf("TEAM.md 已退役，Save 不应写出: %v", err)
 	}
 
-	// 磁盘验证：team/members 原始属性落盘，派生值 IsLeader 不落盘
+	// 磁盘验证：team/members 键仍落盘（迁移器消费），派生值 is_leader 不落盘
 	data, err := os.ReadFile(filepath.Join(dir, "lead", "IDENTITY.md"))
 	if err != nil {
 		t.Fatalf("读取 IDENTITY.md 失败: %v", err)
@@ -276,7 +273,7 @@ func TestSaveTeamRoundTrip(t *testing.T) {
 		t.Errorf("派生值 IsLeader 不应落盘:\n%s", content)
 	}
 
-	// 重载 round-trip：原始属性回读一致，IsLeader 正确派生
+	// 重载 round-trip：原始属性回读一致（迁移器可读），TeamDuty 因停写为空
 	fresh, _, err := Load(dir)
 	if err != nil {
 		t.Fatalf("重载失败: %v", err)
@@ -291,29 +288,8 @@ func TestSaveTeamRoundTrip(t *testing.T) {
 	if len(got.Meta.Members) != 2 || got.Meta.Members[0] != "writer" || got.Meta.Members[1] != "coder" {
 		t.Errorf("members 回读不一致: got %v", got.Meta.Members)
 	}
-	if !strings.Contains(got.TeamDuty, "产品设计与研发交付") {
-		t.Errorf("TEAM.md 回读不一致: got %q", got.TeamDuty)
-	}
-	if !got.IsLeader() {
-		t.Error("Members 非空应派生为负责人")
-	}
-
-	// 成员侧：仅带 team 无 members → 非负责人
-	if err := store.Save(&Agent{Meta: AgentMeta{
-		Name: "member", Role: "成员", Description: "被协调", Team: "产品研发",
-	}}); err != nil {
-		t.Fatalf("Save 成员失败: %v", err)
-	}
-	fresh2, _, err := Load(dir)
-	if err != nil {
-		t.Fatalf("二次重载失败: %v", err)
-	}
-	m := fresh2.Get("member")
-	if m == nil {
-		t.Fatal("重载后 member 丢失")
-	}
-	if m.IsLeader() {
-		t.Error("仅带 team 无 members 不应派生为负责人")
+	if got.TeamDuty != "" {
+		t.Errorf("Save 已停写 TEAM.md，TeamDuty 应为空: got %q", got.TeamDuty)
 	}
 }
 
@@ -339,9 +315,6 @@ func TestLoadLegacyWithoutTeamKeys(t *testing.T) {
 	}
 	if a.Meta.Team != "" || len(a.Meta.Members) != 0 {
 		t.Errorf("未写组队属性时应保持零值，got team=%q members=%v", a.Meta.Team, a.Meta.Members)
-	}
-	if a.IsLeader() {
-		t.Error("无 members 不应派生为负责人")
 	}
 	if a.Soul != "" {
 		t.Errorf("无 SOUL.md 时 Soul 应为空，got %q", a.Soul)

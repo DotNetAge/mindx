@@ -6,6 +6,10 @@ import "encoding/json"
 type SessionCreateParams struct {
 	Agent      string `json:"agent"`
 	ProjectDir string `json:"project_dir,omitempty"`
+	// Team 团队会话绑定的团队名（空 = 个人会话）。会话级事实：创建时写入并随
+	// meta 持久化，重载后 System Prompt 的团队段重建与原会话一致。
+	// 校验：团队存在、已雇佣、Leader == Agent。
+	Team string `json:"team,omitempty"`
 }
 
 // SessionGetParams are the params for session.get.
@@ -83,10 +87,12 @@ type ContextWindowUsage struct {
 	TotalCost          float64 `json:"total_cost"`
 }
 
-func (c *Client) SessionCreate(agent, projectDir string) (json.RawMessage, error) {
-	return c.CallWithTimeout("session.create", SessionCreateParams{
-		Agent: agent, ProjectDir: projectDir,
-	})
+func (c *Client) SessionCreate(agent, projectDir string, team ...string) (json.RawMessage, error) {
+	params := SessionCreateParams{Agent: agent, ProjectDir: projectDir}
+	if len(team) > 0 {
+		params.Team = team[0]
+	}
+	return c.CallWithTimeout("session.create", params)
 }
 
 func (c *Client) SessionList(agent string) (json.RawMessage, error) {

@@ -603,6 +603,7 @@ func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...g
 		SessionID:      sessionID,
 		AgentName:      agentName,
 		Sponsor:        sessionInfo.Sponsor,
+		TeamName:       sessionInfo.TeamName,
 		ProjectDir:     sessionInfo.ProjectDir,
 		CreatedAt:      time.Now(),
 		LastActivityAt: time.Now(),

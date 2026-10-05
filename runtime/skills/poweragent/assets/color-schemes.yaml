@@ -1,0 +1,45 @@
+# tiangong-skill 色标方案配置
+# 岗位型专家按所属部门使用对应色系，人格蒸馏型使用默认色系
+
+departments:
+  engineering:
+    name: "工程部"
+    primary: "#2ecc71"
+    secondary: "#27ae60"
+    accent: "#a8e6cf"
+    label: "绿色系 - 技术可靠"
+
+  product:
+    name: "产品部"
+    primary: "#3498db"
+    secondary: "#2980b9"
+    accent: "#a9cce3"
+    label: "蓝色系 - 理性决策"
+
+  design:
+    name: "设计部"
+    primary: "#9b59b6"
+    secondary: "#8e44ad"
+    accent: "#d7bde2"
+    label: "紫色系 - 创意表达"
+
+  operations:
+    name: "运营部"
+    primary: "#e67e22"
+    secondary: "#d35400"
+    accent: "#f5cba7"
+    label: "橙色系 - 活力执行"
+
+  default:
+    name: "通用"
+    primary: "#95a5a6"
+    secondary: "#7f8c8d"
+    accent: "#d5dbdb"
+    label: "灰色系 - 中性专业"
+
+# 人格蒸馏型 Agent 的色标独立配置
+persona:
+  default:
+    primary: "#1abc9c"
+    secondary: "#16a085"
+    label: "青绿色系 - 人格鲜明"

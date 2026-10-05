@@ -369,9 +369,26 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 		}
 	}
 
+	// 团队绑定校验：团队会话必须满足 团队存在、已雇佣、Agent 是该团队负责人
+	//（与团队对话 = 与负责人对话，这是根基约束）。
+	if p.Team != "" {
+		teams := d.app.Teams()
+		team := teams.Get(p.Team)
+		if team == nil {
+			return nil, fmt.Errorf("未找到团队 %q，请确认名称是否正确", p.Team)
+		}
+		if !team.Meta.Hired {
+			return nil, fmt.Errorf("团队 %q 尚未雇佣，无法创建团队会话（可执行 mindx team hire %s 启用）", p.Team, p.Team)
+		}
+		if team.Meta.Leader != p.Agent {
+			return nil, fmt.Errorf("团队 %q 的负责人是 %q，与团队对话必须以负责人身份创建会话", p.Team, team.Meta.Leader)
+		}
+	}
+
 	d.logger.Info("session.create: called",
 		"agent", p.Agent,
 		"project_dir", p.ProjectDir,
+		"team", p.Team,
 	)
 
 	sessDB := d.app.SessDB()
@@ -385,6 +402,10 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 	// Pass project_dir as a session option so it gets persisted to session meta.
 	opts := []goharnesssession.SessionOption{
 		goharnesssession.WithProjectDirOption(p.ProjectDir),
+	}
+	// 团队会话：TeamName 随 meta 持久化，重载后注入段与原会话一致
+	if p.Team != "" {
+		opts = append(opts, goharnesssession.WithTeamNameOption(p.Team))
 	}
 	info, err := goharnesssession.CreateSession(context.Background(), sessDB, p.Agent, opts...)
 	if err != nil {
@@ -403,6 +424,7 @@ func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) 
 	return map[string]any{
 		"session_id":  info.SessionID,
 		"agent_name":  info.AgentName,
+		"team_name":   info.TeamName,
 		"created_at":  info.CreatedAt,
 		"project_dir": info.ProjectDir,
 		// 会话沙箱目录：前端图片粘贴即落盘（fs.write_base64 到 {session_dir}/tmp）依赖此字段，

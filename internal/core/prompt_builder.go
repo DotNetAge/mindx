@@ -10,6 +10,7 @@ import (
 	"github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core/agentstore"
 	"github.com/DotNetAge/mindx/internal/core/skillstore"
+	"github.com/DotNetAge/mindx/internal/core/teamstore"
 )
 
 // 本文件是 mindx 侧的基础系统提示词组装器（PR-PROMPTS 第一节定案）：
@@ -37,19 +38,25 @@ const experienceSystemNote = "- **经验沉淀体系**: 项目目录下的 .agen
 // 依赖注入 AgentStore（身份/行为/Skills 声明）与 SkillStore（技能摘要目录），
 // 环境参数在构造时固化（它们是 mindx 的领地，不随会话变化）；
 // rulesSection 为扩展规则段渲染回调（App.BuildRulesSection，P4 规则收口）。
+// teams 为团队注册表闭包回调（App 层 func(){ return a.teams }）：Build 每次
+// Ask 实时解引用，ReloadTeams 原子换指针后即刻生效，promptBuilder 与
+// runtimeCache 均无需失效（Runtime 的方法值隐式持有本实例，直接持指针会使
+// 换指针后已建 Runtime 仍读旧库，闭包是关键）。
 type PromptBuilder struct {
 	agents       *agentstore.AgentStore
 	skills       *skillstore.Store
+	teamsFn      func() *teamstore.Store
 	userPrefs    string // ~/.mindx 用户配置目录（Env 段）
 	venvDir      string // Python 虚拟环境目录（Env 段）
 	rulesSection func() string
 }
 
 // NewPromptBuilder 创建提示词组装器。
-func NewPromptBuilder(agents *agentstore.AgentStore, skills *skillstore.Store, userPrefs, venvDir string, rulesSection func() string) *PromptBuilder {
+func NewPromptBuilder(agents *agentstore.AgentStore, skills *skillstore.Store, teamsFn func() *teamstore.Store, userPrefs, venvDir string, rulesSection func() string) *PromptBuilder {
 	return &PromptBuilder{
 		agents:       agents,
 		skills:       skills,
+		teamsFn:      teamsFn,
 		userPrefs:    userPrefs,
 		venvDir:      venvDir,
 		rulesSection: rulesSection,
@@ -81,10 +88,12 @@ func (b *PromptBuilder) Build(_ string, s *session.Session) string {
 		sections = append(sections, soul)
 	}
 
-	// 3. 团队负责人职责（条件段：带 members 的智能体注入；TEAM.md 自定义内容
-	// 优先，缺失走兜底文案）；静态段紧随身份/行为段，维持「静态在前、动态在后」
-	// 的 KV 缓存前缀稳定
-	if sec := buildLeaderSection(agent); sec != "" {
+	// 3. 团队负责人职责（条件段：会话绑定了团队且当前 Agent 是该团队负责人时
+	// 注入；团队 Profile 正文优先，缺失走兜底文案）；静态段紧随身份/行为段，
+	// 维持「静态在前、动态在后」的 KV 缓存前缀稳定。
+	// 生成根基：团队会话的 System Prompt 仍由 Agent（负责人）生成，本段只是
+	// buildLeaderSection 的内容来源更换，其余段落与结构零改动。
+	if sec := b.buildLeaderSection(agent, s); sec != "" {
 		sections = append(sections, sec)
 	}
 
@@ -129,31 +138,49 @@ func buildIdentitySection(agent *agentstore.Agent) string {
 		meta.Name, meta.Role, meta.Description)
 }
 
-// buildLeaderSection 渲染团队负责人职责段（TODO 定案：带 members 的智能体注入，
-// 成员不注入——成员受负责人调度即可，自身职责由 role/description 承载）。
-// 内容优先级与 IDENTITY/SOUL 同模式：Agent 目录存在 TEAM.md 时正文即自定义团队
-// 职责（原样拼接，标题由文件自身处理），缺失时走兜底文案（标题由本函数注入）。
+// buildLeaderSection 渲染团队负责人职责段。
+// 注入条件（三重，任一不满足整段跳过）：
+//  1. 会话绑定了团队（s.TeamName() 非空——会话级事实，个人会话即使面对
+//     负责人也不注入，与团队对话 = 与负责人对话只在团队会话成立）；
+//  2. 团队注册表中存在该团队（Team 中途被删则容错降级为普通个体，log 不可用
+//     静默跳过）；
+//  3. 当前 Agent 是该团队的负责人（team.Leader == agent.Name，Leader 被换后
+//     旧负责人的团队会话容错降级）。
+//
+// 内容优先级与 IDENTITY/SOUL 同模式：Team 实体 Profile 正文（teams/<team>/TEAM.md
+// 正文）原样拼接（标题由文件自身处理），缺失时走兜底文案（标题由本函数注入）。
 // 「团队成员」名单与成员角色查询引导为机械部分，两种形态下都保留在段尾。
-// 条件注入：非负责人返回空串，段落整体不出现。
-func buildLeaderSection(agent *agentstore.Agent) string {
-	if agent == nil || !agent.IsLeader() {
+func (b *PromptBuilder) buildLeaderSection(agent *agentstore.Agent, s *session.Session) string {
+	if agent == nil || s == nil {
 		return ""
 	}
+	teamName := s.TeamName()
+	if teamName == "" {
+		return ""
+	}
+	if b == nil || b.teamsFn == nil {
+		return ""
+	}
+	teams := b.teamsFn()
+	if teams == nil {
+		return ""
+	}
+	team := teams.Get(teamName)
+	if team == nil || team.Meta.Leader != agent.Name() {
+		return ""
+	}
+
 	var sb strings.Builder
-	if duty := strings.TrimSpace(agent.TeamDuty); duty != "" {
-		sb.WriteString(duty)
+	if profile := strings.TrimSpace(team.Profile); profile != "" {
+		sb.WriteString(profile)
 	} else {
 		sb.WriteString("## 团队负责人职责\n\n")
-		if team := strings.TrimSpace(agent.Meta.Team); team != "" {
-			fmt.Fprintf(&sb, "你是「%s」团队的负责人。", team)
-		} else {
-			sb.WriteString("你是所在团队的负责人。")
-		}
+		fmt.Fprintf(&sb, "你是「%s」团队的负责人。", teamName)
 		sb.WriteString("作为负责人，你对团队的工作结果负最终责任，协调与分派团队成员的工作是你的重要职责之一；" +
 			"需要成员配合时，把任务委托给对应的成员并跟进交付结果。")
 	}
 	sb.WriteString("\n\n")
-	fmt.Fprintf(&sb, "团队成员：%s\n\n", strings.Join(agent.Meta.Members, "、"))
+	fmt.Fprintf(&sb, "团队成员：%s\n\n", strings.Join(team.Meta.Members, "、"))
 	sb.WriteString("如果不了解成员的职责，可以运行 `mindx agents info <成员名...>` 查看成员的角色与职责，再决定委托对象。")
 	return sb.String()
 }

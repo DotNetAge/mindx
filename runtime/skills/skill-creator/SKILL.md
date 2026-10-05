@@ -1,22 +1,22 @@
 ---
 name: skill-creator
 description: >
-  创建和改进 MindX 技能。当用户需要新的可复用能力、现有技能需要改进，或者需要将领域知识结构化为可挂载到智能体的技能时使用。
+  创建、审查和改进 MindX 技能。当用户需要新的可复用能力、需要将领域知识结构化为可挂载到智能体的技能，或要求检查、审查、修正、优化已有技能（frontmatter 校验、触发不准、边界不清、输出质量差）时使用。
 metadata:
   name_zh: 创建技能
-  name_zh-tw: 创建技能
-  description_zh: 创建和改进 MindX 技能，将领域知识封装为可挂载到智能体的复用能力
-  description_zh-tw: 建立和改進 MindX 技能，將領域知識封裝為可掛載到智慧體的複用能力
+  version: 1.3.0
+  author: Ray
 ---
 
 # 技能创建器
 
-创建和改进 MindX 技能。
+创建、审查和改进 MindX 技能。
 
 ## 何时使用
 
 - 用户说"我需要一个能处理 X 的技能"、"帮我写个技能"
 - 工作流需要可复用的指令，且能附加到多个智能体
+- 用户说"检查一下这个技能"、"审查这份 SKILL.md"、"这个技能为什么没触发 / 输出不对"
 - 现有技能触发不准、边界不清、需要优化
 
 **已有合适技能时不要使用。**
@@ -60,6 +60,20 @@ metadata:
 - **给默认方案，别列一堆选项** — 选定一种方法，简要提及替代方案即可
 - **越容易出错的操作，规定越要具体** — 脆弱操作写详细，创造性任务留空间
 
+## 参考文档索引
+
+深度参考材料在 `references/` 目录，**按需加载，不要一次全读**。用 `{base_dir}` 引用：
+
+| 文档                                    | 何时加载                                                                                                                                              |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `references/schemas.md`                 | 编写或校验 frontmatter 时 — MindX 字段数据模型，`metadata` 扩展键（`requires` / `install` / `name_zh` / `version`）的完整定义、校验规则与正文模板变量 |
+| `references/spec.md`                    | 需要 agentskills.io 通用格式规范细节时 — 注意文首的 MindX 差异说明，与 schemas.md 冲突时以 schemas.md 为准                                            |
+| `references/best-practices.md`          | 编写或审查技能正文时 — 真实专业知识、上下文精简、指令设计的完整模式                                                                                   |
+| `references/optimizing-descriptions.md` | 触发评估不达标、需要系统性优化 description 时 — 触发机制、评估查询设计与优化循环细节                                                                  |
+| `references/using-scripts.md`           | 技能需要附带可执行脚本时 — 脚本引用方式与"为智能体使用设计"的细节                                                                                     |
+| `references/evaluating-skills.md`       | 运行评估或依据评估结果改进技能时 — 测试用例设计、断言好坏标准、评分原则与盲评、benchmark 汇总、人工审查与迭代循环                                     |
+| `references/notes-convention.md`        | 对已有技能进化、需要写进化记录时 — 记录模板、字段语义与反模式                                                                                         |
+
 ## 信息收集
 
 编写前，先确认以下信息都已明确。如果不确定，提供假设选项让用户确认。
@@ -91,7 +105,8 @@ metadata:
 #### 步骤 1：检查现有技能
 
 ```bash
-mindx skill list --json
+mindx skill list --json     # 全局库
+mindx skills discovery      # 项目级库
 ```
 
 检查是否存在同名或领域重叠的技能。存在则通知用户，让他们决定。
@@ -108,8 +123,10 @@ mindx skill get <proposed-name>
 
 #### 步骤 3：创建技能目录
 
+在项目级技能库中创建目录（落位规则见[技能位置与进化](#技能位置与进化)）：
+
 ```
-<skill-name>/
+<ProjectDir>/.agents/skills/<skill-name>/
   SKILL.md
 ```
 
@@ -127,7 +144,7 @@ mindx skill get <proposed-name>
 - 宁可触发积极一些，也别漏掉该触发的场景
 - 长度控制在 1024 字符以内
 
-**`metadata.requires`**：声明需要的二进制文件和环境变量。运行环境不满足时，系统会自动跳过这个技能。
+**`metadata.requires`**：声明需要的二进制文件、环境变量和运行时版本。依赖未满足不阻断装载，但技能运行前的准备流程会卡住——声明要准确，完整定义见 `references/schemas.md`。
 
 **工作流**：带具体、可执行指令的编号步骤。
 
@@ -156,27 +173,15 @@ mindx skill get <proposed-name>
 
 脚本设计详见[脚本设计指南](#脚本设计指南)。
 
-### 安装阶段
+### 落位与验证阶段
 
-#### 步骤 6：安装技能
+#### 步骤 6：落位与确认
 
-```bash
-mindx skill add <path-to-skill-directory>
-```
+技能目录已在 `<ProjectDir>/.agents/skills/<skill-name>/`，项目级实时读盘无需安装。`mindx skills discovery` 确认可见。
 
-验证安装：
+#### 步骤 7：自检验证
 
-```bash
-mindx skill get <skill-name>
-```
-
-#### 步骤 7：验证
-
-```bash
-mindx skill validate <skill-name>
-```
-
-这会捕获 frontmatter 错误，使用与守护进程相同的加载器。
+`mindx skill validate` 只支持全局库技能。项目级技能按[审查已有技能](#审查已有技能)步骤 B 的清单自检；通过后告知用户技能已可在本项目使用，全局可用由用户通过界面安装。
 
 ### 优化触发
 
@@ -212,55 +217,14 @@ mindx skill validate <skill-name>
 
 ### 评估输出质量
 
-#### 步骤 9a：创建测试用例
+详细方法论（断言好坏标准、评分与盲评、benchmark 汇总、人工审查、迭代循环）见 `references/evaluating-skills.md`。主干步骤：
 
-创建 `evals/evals.json`，包含 2-3 个测试用例：
+1. **创建测试用例**：在 `evals/evals.json` 写 2-3 个用例，每个含 `prompt`（真实上下文、覆盖边界）、`expected_output`、可选 `files`。第一轮不写断言，看过输出再加。
+2. **运行基线对照**：每用例跑两次——用技能与不用技能（或旧版本快照），分别保存到 `iteration-N/eval-ID/{with,without}_skill/`，每次运行记录 `timing.json`（token、耗时）。
+3. **评分**：对每条断言判 PASS/FAIL 并附具体证据，写入 `grading.json`。机械检查用脚本，主观判断交给 LLM。比较两个版本时用盲评。
+4. **汇总与审查**：计算 `benchmark.json` 的通过率 delta 与 token 开销；人工审查产出 `feedback.json`。删除两种配置都恒过的断言，排查两种配置都恒挂的断言。
 
-```json
-{
-  "skill_name": "my-skill",
-  "evals": [
-    {
-      "id": 1,
-      "prompt": "Realistic user prompt with file paths and details...",
-      "expected_output": "Description of what success looks like",
-      "files": ["evals/files/input.csv"],
-      "assertions": [
-        "The output includes a chart image",
-        "Both axes are labeled"
-      ]
-    }
-  ]
-}
-```
-
-用真实上下文（文件路径、列名）。覆盖边界情况。
-
-#### 步骤 9b：运行基线比较
-
-每个测试用例运行两次——一次**使用技能**，一次**不使用技能**。输出保存到 `evals/workspace/iteration-N/eval-ID/{with,without}_skill/`。记录每次运行的 token 消耗和耗时。
-
-#### 步骤 9c：评估断言
-
-对每个断言判定通过或失败，并给出具体证据：
-
-```json
-{
-  "assertion_results": [
-    { "text": "Output includes a chart", "passed": true, "evidence": "Found chart.png" },
-    { "text": "Both axes are labeled", "passed": false, "evidence": "Y-axis labeled, X-axis missing" }
-  ],
-  "summary": { "passed": 1, "failed": 1, "total": 2, "pass_rate": 0.5 }
-}
-```
-
-主观性检查交给 LLM 判断，机械性检查用脚本（比如检查文件是否存在、JSON 是否有效、行数是否符合）。
-
-#### 步骤 9d：汇总
-
-对比使用技能和不使用技能的通过率、token 消耗和耗时差异。通过率提升 50% 但 token 开销增加不多的技能，才是有价值的。
-
-删除两种配置都通过的断言（没有区分度）。对于总是失败的断言，要排查是断言本身写错了，还是任务确实太难。
+通过率提升显著且 token 开销可接受、人工反馈持续为空，才算有价值的技能。
 
 ### 迭代
 
@@ -279,7 +243,46 @@ mindx skill validate <skill-name>
 - 解释原因 — 讲清楚"为什么"比死板的规定更有效
 - 合并重复工作 — 智能体每次运行都写相同的辅助函数时，把它移到 `scripts/` 里
 
-修改后，重新安装并重新运行相关阶段。如果没有更多反馈或改进已经停滞，就停止迭代。
+修改后，重新运行自检验证和相关评估阶段。如果没有更多反馈或改进已经停滞，就停止迭代。
+
+## 审查已有技能
+
+用户要求检查、审查、修正已有技能时走本流程。本技能承载了 SKILL 编写标准的唯一事实，审查就是把标准逐条套用到目标技能上。
+
+### 步骤 A：定位与装载
+
+1. 全局库技能：按[技能位置与进化](#技能位置与进化)先 `mindx skills fetch <name>` 取到项目级副本，所有修改在副本上进行
+2. 项目级技能：直接读取 SKILL.md 全文
+
+### 步骤 B：frontmatter 机器校验
+
+加载 `references/schemas.md`，对照其校验规则逐项检查：
+
+- [ ] `name` 符合规范：小写字母/数字/连字符，1-64 字符，不以 `-` 开头结尾，无 `--`
+- [ ] 目录名与 `name` 一致
+- [ ] `description` 1-1024 字符，说明了"何时使用"，不是营销文案
+- [ ] `allowed-tools` 中的工具真实存在且正文确实会用到
+- [ ] `requires` 声明与正文引用一致：正文用到的二进制/环境变量/运行时都已声明；没有声明用不到的
+- [ ] 正文引用 `scripts/`、`references/` 时使用 `{base_dir}` 模板变量
+- [ ] YAML 语法正确：frontmatter 以 `---` 开头且闭合；缺 `name`/`description` 会在守护进程装载时报硬错误
+
+### 步骤 C：正文质量审查
+
+对照核心原则与反模式清单：
+
+- [ ] 上下文精简：只补智能体不知道的，没有解释智能体已懂的概念
+- [ ] 有"注意事项"且记录了真实的易错点，而非正确的废话
+- [ ] 职责单一、边界明确，没有"一个技能想做所有事"的迹象
+- [ ] `references/` 下每个文档都在正文中有关联（何时加载）
+- [ ] 破坏性或批量操作有计划-验证-执行模式或 `--dry-run`
+
+### 步骤 D：输出报告并修复
+
+按严重程度分级输出：**硬错误**（装载失败）→ **依赖问题**（运行前准备会卡）→ **质量问题**（触发不准/输出差）。每条给出依据和修改建议，用户确认后直接修复。
+
+- 触发问题转入[优化触发](#优化触发)
+- 输出质量问题转入[评估输出质量](#评估输出质量)
+- 修复后重新运行步骤 B 自检确认
 
 ## 文件结构约定
 
@@ -296,7 +299,13 @@ mindx skill validate <skill-name>
     evals.json
     files/              # 测试输入文件
     workspace/          # 评估运行输出
+  notes/                # 进化履历。对已有技能进化后必须追加记录，编写规范见 references/notes-convention.md
 ```
+
+## 技能位置与进化
+
+- 本技能创建的技能一律写 `<ProjectDir>/.agents/skills/`，禁止写全局库 `~/.mindx/skills`
+- 优化全局库技能：先 `mindx skills fetch <name>` 取到项目级再修改，禁止直接读写全局库
 
 ## 脚本设计指南
 
@@ -382,3 +391,4 @@ import * as cheerio from "cheerio@1.0.0";
 - **触发优化 ≠ 输出评估。** 技能可能正确触发了但输出很烂，也可能输出不错但根本没被触发。两者都要测。
 - **从小处开始。** 第一轮评估用 2-3 个测试用例，后续再逐步扩展。
 - **每次评估用干净的上下文** — 不要残留上一次运行的状态。
+

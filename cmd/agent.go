@@ -10,6 +10,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/client/render"
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/core/agentstore"
+	"github.com/DotNetAge/mindx/internal/core/teamstore"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
 )
@@ -465,6 +466,10 @@ Examples:
 		if err != nil {
 			return fmt.Errorf("cannot load agents: %w", err)
 		}
+		teams, _, err := teamstore.Load(teamsDir())
+		if err != nil {
+			return fmt.Errorf("cannot load teams: %w", err)
+		}
 
 		type memberInfo struct {
 			Name        string   `json:"name"`
@@ -484,14 +489,24 @@ Examples:
 				missing = append(missing, n)
 				continue
 			}
+			// 团队归属由 Team 实体反查（Agent 对团队零感知）：
+			// team = 所属团队名列表（负责人或成员），members = 作为负责人的成员集
+			var teamNames []string
+			var memberList []string
+			for _, t := range teams.TeamOf(a.Name()) {
+				teamNames = append(teamNames, t.Meta.Name)
+				if t.Meta.Leader == a.Name() {
+					memberList = append(memberList, t.Meta.Members...)
+				}
+			}
 			matched = append(matched, memberInfo{
 				Name:        a.Meta.Name,
 				Role:        a.Meta.Role,
 				Description: a.Meta.Description,
 				Skills:      a.Meta.Skills,
-				Team:        a.Meta.Team,
-				Members:     a.Meta.Members,
-				IsLeader:    a.IsLeader(),
+				Team:        strings.Join(teamNames, ", "),
+				Members:     memberList,
+				IsLeader:    core.AgentIsLeader(teams, a),
 			})
 		}
 
@@ -566,4 +581,8 @@ func init() {
 
 func agentDir() string {
 	return filepath.Join(core.DefaultUserPrefsDir(), "agents")
+}
+
+func teamsDir() string {
+	return filepath.Join(core.DefaultUserPrefsDir(), "teams")
 }

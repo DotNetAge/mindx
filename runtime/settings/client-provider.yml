@@ -4,17 +4,8 @@
 # 机密客户端凭据仅经 CredentialStore 存放。
 oauth_providers:
   # ── 第一层：CLI 复用型（公开 client_id 的 PKCE 公共客户端，完整预置）──
-  - name: qwen
-    title: Qwen Code
-    kind: device_code
-    device_url: https://chat.qwen.ai/api/v1/oauth2/device/code
-    token_url: https://chat.qwen.ai/api/v1/oauth2/token
-    client_id: f0304373b74a44d2b584a3fb70ca9e56
-    scopes: [openid, profile, email, model.completion]
-    uses_pkce: true
-    listen_addr: "127.0.0.1:0"
-    interaction: device_code
-
+  # qwen（Qwen Code）已移除：Qwen OAuth 免费层于 2026-04-15 官方下线，
+  # device_code 端点仍发码但 token 端点被服务端阻断（HTTP 405），流程永久无法完成。
   - name: minimax
     title: MiniMax
     kind: user_code

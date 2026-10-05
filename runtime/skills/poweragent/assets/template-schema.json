@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "岗位型专家 Agent 产出 Schema",
+  "description": "验证 tiangong-skill 岗位型专家产出的 SKILL.md 结构完整性",
+  "type": "object",
+  "required": ["role", "identity", "personality", "rules", "kpi"],
+  "properties": {
+    "role": {
+      "type": "object",
+      "description": "角色身份四字段",
+      "required": ["name", "domain", "function", "qualifier"],
+      "properties": {
+        "name": {"type": "string", "description": "角色名称，如 CodeGuard"},
+        "domain": {"type": "string", "description": "领域，如 代码审查"},
+        "function": {"type": "string", "description": "职能，如 安全审计专家"},
+        "qualifier": {"type": "string", "description": "限定词，如 20年经验的"}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "description": "身份声明",
+      "properties": {
+        "statement_type": {
+          "type": "string",
+          "enum": ["professional", "character_driven", "philosophical"],
+          "description": "句型类型：专业定位型/性格驱动型/哲学立场型"
+        },
+        "statement": {"type": "string", "description": "完整的身份声明语句"}
+      }
+    },
+    "personality": {
+      "type": "object",
+      "description": "人格设定",
+      "properties": {
+        "traits": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 3,
+          "maxItems": 5,
+          "description": "3-5个特质标签"
+        },
+        "communication_style": {
+          "type": "object",
+          "properties": {
+            "tone": {"type": "string", "description": "语气，如 严谨简洁"},
+            "signature_quote": {"type": "string", "description": "标志性引语句"}
+          }
+        }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "properties": {
+        "do": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 3
+        },
+        "dont": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 2
+        }
+      }
+    },
+    "kpi": {
+      "type": "object",
+      "properties": {
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "target"],
+            "properties": {
+              "name": {"type": "string"},
+              "target": {"type": "string"}
+            }
+          },
+          "minItems": 1,
+          "maxItems": 3
+        }
+      }
+    },
+    "domain_knowledge": {
+      "type": "object",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "领域知识来源引用"
+        }
+      }
+    },
+    "workflow": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step", "action", "output"],
+        "properties": {
+          "step": {"type": "string"},
+          "action": {"type": "string"},
+          "output": {"type": "string"}
+        }
+      }
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$",
+      "description": "色标，参考 color-schemes.yaml"
+    }
+  }
+}

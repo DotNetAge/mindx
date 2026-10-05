@@ -6,12 +6,13 @@
 agents/<name>/
   IDENTITY.md   # 唯一 meta 入口：frontmatter（强类型一级字段）+ 可选身份正文
   SOUL.md       # 角色职责与负责范围，纯正文
-  TEAM.md       # 负责人的团队职责（可选，缺省用系统兜底文案）
   skills/       # Agent 级技能库（可选，由技能系统装载）
 ```
 
 - **IDENTITY.md** 是身份卡：frontmatter 承载全部路由元数据；正文惯例留空。
 - **SOUL.md** 是角色职责：Agent 的核心工作指令，自带标题结构，系统原样注入提示词。
+
+> 团队是独立的一等实体（`~/.mindx/teams/<team>/TEAM.md`，frontmatter：name/nick_name/description/leader/members/icon/category/hired + 正文 Profile），不在 Agent 目录内；组队语义见下文"团队实体"节。
 
 ## IDENTITY.md frontmatter 字段
 
@@ -26,9 +27,7 @@ agents/<name>/
 | `skills`        | 来自 `skill list` 的列表 | 仅领域相关技能 —— 每个技能都会增加上下文开销                         |
 | `exclude_tools` | 列表                     | 内置工具裁剪清单；内置工具默认全量可用，按需排除，不支持通配符       |
 | `allows_tools`  | 列表                     | MCP 服务白名单，条目格式 `mcp:<server>`；空清单 = 不注入任何 MCP 工具 |
-| `include_tools` | 列表                     | 唤回默认不在场的内置工具（如 `TeamCreate` 等组队工具）               |
-| `team`          | 团队名                   | 所属团队（固定组队声明；成员的 team 指向团队名）                     |
-| `members`       | 列表                     | 团队成员名单；非空即负责人，自动注入团队职责段                       |
+| `include_tools` | 列表                     | 唤回默认不在场的内置工具（如 `TeamCreate` 等运行期组队工具）         |
 | `introduction`  | 可选                     | 人设正文备用入口；IDENTITY.md 正文非空时覆盖此字段                   |
 | `meta`          | 映射                     | 自由扩展杂项                                                         |
 
@@ -155,23 +154,23 @@ SOUL.md 用**三段式**表述角色职责，顺序固定：
 
 内置工具默认全量可用，控制手段只有两个：
 
-- **`exclude_tools`（内置工具裁剪）**：按角色排除确实有害的工具。工作者排除 `SubAgent`、`CollectResults`（不委派）；常见追加 `Sleep`、`PowerShell`。不支持通配符，只能指定具体工具名。`Team*` 组队工具默认不在场，无需排除。
-- **`include_tools`（唤回默认不在场的工具）**：`Team*` 组队工具（`TeamCreate`/`TeamDelete`/`TeamList`/`TeamGetTasks`）默认剥离，需要运行期组队时在此列出唤回。
+- **`exclude_tools`（内置工具裁剪）**：按角色排除确实有害的工具。工作者排除 `SubAgent`、`CollectResults`（不委派）；常见追加 `Sleep`、`PowerShell`。不支持通配符，只能指定具体工具名。`Team*` 运行期组队工具默认不在场，无需排除。
+- **`include_tools`（唤回默认不在场的工具）**：`Team*` 运行期组队工具（`TeamCreate`/`TeamDelete`/`TeamList`/`TeamGetTasks`）默认剥离，需要运行期组队时在此列出唤回。
 - **`allows_tools`（MCP 服务白名单）**：条目格式 `mcp:<server>`（server 粒度），决定注入哪些 MCP server 的工具；空清单 = 不注入任何 MCP 工具。内置工具不在此列。
 
 工作者智能体保留 `SubAgent` 后可能开始委派工作而不是自己做 —— 只给明确需要协调他人的角色保留委派工具。
 
 ---
 
-## `team` / `members` / `TEAM.md` — 固定组队与负责人
+## Team 实体 — 一等团队与负责人
 
-固定组队（部门）语义由 frontmatter 声明，弱一致设计，不做交叉校验：
+固定团队不是 Agent 的属性，而是独立的一等实体（`~/.mindx/teams/<team>/TEAM.md`）：
 
-- `team`：所属团队名；成员的 `team` 指向团队名
-- `members`：负责人的团队成员名单；**非空即负责人**（`IsLeader` 为派生值，不落盘、不作 frontmatter 字段）
-- 带 `members` 的智能体，提示词自动注入**团队负责人职责段**：`TEAM.md` 正文优先，缺失时用兜底文案（团队名 + 职责声明）
-- 团队职责（怎么协调成员、跟踪结果、汇报成果）写 `TEAM.md`；个人角色职责写 `SOUL.md`——两者不混
-- `Team*` 组队工具默认剥离，需要运行期组队时经 `include_tools` 唤回
+- frontmatter：`name`（内部标识）/ `nick_name`（展示主名）/ `description` / `leader`（负责人 Agent 名）/ `members`（成员 Agent 名列表，纯引用）/ `icon` / `category` / `hired`
+- 正文 Profile：团队人设定义（负责人怎么协调成员、跟踪结果、汇报成果），系统在团队会话中原样注入（缺失时用兜底文案）
+- **引用单向（Team→Agent）**：团队持有成员名单，Agent 定义里不写任何团队信息；同一 Agent 可被多个团队引用
+- **团队会话以负责人身份发起**（团队会话 resolve 到 leader，与团队对话 = 与负责人对话）；雇佣团队（`mindx team hire`）后团队才出现在会话选择器
+- 管理命令：`mindx team add/update/hire/fire/rm/export`；团队可整包进市场（`mindx team export` 产出 kind=team 包，消费者 `mindx market install team` 整队招聘）
 
 ---
 
@@ -217,5 +216,5 @@ SOUL.md 用**三段式**表述角色职责，顺序固定：
 
 - [ ] 已编写 SOUL.md（职责、方式、边界三段式，显式引用技能）
 - [ ] IDENTITY.md 正文留空（除非确需自定义人设）
-- [ ] 团队负责人：`members` 已列成员名单，`TEAM.md` 已写团队职责（无团队需求可跳过）
+- [ ] 需要固定团队时：建 Team 实体（`mindx team add`）并雇佣（`mindx team hire`），团队职责写 Team Profile——不在 Agent 定义里写团队信息
 - [ ] 已执行 `mindx agent hire <name>` 并通过 `mindx agent list --json` 验证
