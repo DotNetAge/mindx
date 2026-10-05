@@ -142,17 +142,6 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Download embedder model
-        run: |
-          MODEL_PATH="runtime/data/models/model.onnx"
-          mkdir -p "$(dirname "$MODEL_PATH")"
-          rm -f "$MODEL_PATH"
-          echo "Downloading embedder model from HuggingFace..."
-          curl -fL -o "$MODEL_PATH" \
-            "https://huggingface.co/Xenova/bge-small-zh-v1.5/resolve/main/onnx/model.onnx" || \
-          { echo "ERROR: Failed to download embedder model"; exit 1; }
-          echo "Model file size: $(wc -c < "$MODEL_PATH") bytes"
-
       - name: Install musl cross-compiler
         if: matrix.goos == 'linux'
         run: |
@@ -212,38 +201,13 @@ jobs:
 
           ls -lh dist/
 
-      - name: Download ONNX Runtime library (Linux)
-        if: matrix.goos == 'linux'
-        run: |
-          ONNX_VERSION="1.24.4"
-          if [ "${{ matrix.goarch }}" = "arm64" ]; then
-            ARCH="aarch64"
-          else
-            ARCH="x64"
-          fi
-          curl -fL -o /tmp/onnxruntime.tgz \
-            "https://github.com/microsoft/onnxruntime/releases/download/v${ONNX_VERSION}/onnxruntime-linux-${ARCH}-${ONNX_VERSION}.tgz"
-          tar xzf /tmp/onnxruntime.tgz -C /tmp
-          cp -P "/tmp/onnxruntime-linux-${ARCH}-${ONNX_VERSION}/lib/libonnxruntime.so"* dist/
-          rm -rf /tmp/onnxruntime*
-
-      - name: Bundle ONNX Runtime library (macOS)
-        if: matrix.goos == 'darwin'
-        run: |
-          brew install onnxruntime
-          cp -P "$(brew --prefix onnxruntime)/lib/libonnxruntime."* dist/
-
       - name: Package (tar.gz)
         shell: bash
         run: |
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
-          # Copy embedder model into dist/ for packaging
-          cp runtime/data/models/model.onnx dist/
           cd dist
           tar czf "../${{ env.BINARY_NAME }}-${VERSION_NUM}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
-            "${{ env.BINARY_NAME }}" \
-            libonnxruntime.* \
-            model.onnx
+            "${{ env.BINARY_NAME }}"
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
@@ -312,27 +276,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Download embedder model
-        run: |
-          MODEL_PATH="runtime/data/models/model.onnx"
-          mkdir -p "$(dirname "$MODEL_PATH")"
-          rm -f "$MODEL_PATH"
-          echo "Downloading embedder model from HuggingFace..."
-          curl -fL -o "$MODEL_PATH" \
-            "https://huggingface.co/Xenova/bge-small-zh-v1.5/resolve/main/onnx/model.onnx" || \
-          { echo "ERROR: Failed to download embedder model"; exit 1; }
-          echo "Model file size: $(wc -c < "$MODEL_PATH") bytes"
-
-      - name: Prepare runtime environment (model file)
-        run: |
-          # Model file was downloaded above
-          echo "Model file:"
-          ls -lh runtime/data/models/model.onnx 2>/dev/null || echo "  NOT FOUND"
-
-          # Verify runtime structure
-          echo "Runtime layout:"
-          find runtime/ -maxdepth 3 -type f | head -20
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -634,24 +577,6 @@ jobs:
 
           ls -lh dist/*.AppImage 2>/dev/null || echo "No AppImage generated"
 
-      - name: Download ONNX Runtime library
-        run: |
-          ONNX_VERSION="1.24.4"
-          mkdir -p dist/onnx-lib
-          for ARCH_GO in amd64 arm64; do
-            if [ "$ARCH_GO" = "arm64" ]; then
-              ONNX_ARCH="aarch64"
-            else
-              ONNX_ARCH="x64"
-            fi
-            curl -fL -o /tmp/onnxruntime-${ARCH_GO}.tgz \
-              "https://github.com/microsoft/onnxruntime/releases/download/v${ONNX_VERSION}/onnxruntime-linux-${ONNX_ARCH}-${ONNX_VERSION}.tgz"
-            tar xzf /tmp/onnxruntime-${ARCH_GO}.tgz -C /tmp
-            cp -P "/tmp/onnxruntime-linux-${ONNX_ARCH}-${ONNX_VERSION}/lib/libonnxruntime.so"* "dist/onnx-lib/"
-            rm -rf "/tmp/onnxruntime-linux-${ONNX_ARCH}-${ONNX_VERSION}"
-          done
-          ls -la dist/onnx-lib/
-
       - name: Build .deb packages
         run: |
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
@@ -687,10 +612,6 @@ jobs:
               echo "    dst: /lib/systemd/system/mindx-daemon.service"
               echo "    file_info:"
               echo "      mode: 0644"
-              echo "  - src: dist/onnx-lib/libonnxruntime.so*"
-              echo "    dst: /usr/local/lib/"
-              echo "    file_info:"
-              echo "      mode: 0755"
               echo ""
               echo "scripts:"
               echo "  postinstall: scripts/postinstall.sh"
@@ -765,19 +686,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # embed.go embeds runtime/data, so the model file must be present in the
-      # clean checkout before `go build` (same step as the build job).
-      - name: Download embedder model
-        run: |
-          MODEL_PATH="runtime/data/models/model.onnx"
-          mkdir -p "$(dirname "$MODEL_PATH")"
-          rm -f "$MODEL_PATH"
-          echo "Downloading embedder model from HuggingFace..."
-          curl -fL -o "$MODEL_PATH" \
-            "https://huggingface.co/Xenova/bge-small-zh-v1.5/resolve/main/onnx/model.onnx" || \
-          { echo "ERROR: Failed to download embedder model"; exit 1; }
-          echo "Model file size: $(wc -c < "$MODEL_PATH") bytes"
 
       - name: Generate snapcraft.yaml from template
         run: |

@@ -1,5 +1,5 @@
 # =============================================================================
-# MindX Docker Image — Multi-stage build with ONNX Runtime support
+# MindX Docker Image — Multi-stage build
 # =============================================================================
 # Build:
 #   Local:  make docker                (auto-build .env + docker compose)
@@ -32,26 +32,6 @@ RUN CGO_ENABLED=1 go build \
   -o /usr/local/bin/mindx \
   .
 
-# ---- ONNX Runtime download stage ----
-FROM debian:bookworm-slim AS onnxruntime-dl
-
-ARG TARGETARCH
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
-
-RUN set -ex; \
-  ONNX_VERSION="1.26.0"; \
-  if [ "$TARGETARCH" = "arm64" ]; then \
-  ARCH="aarch64"; \
-  else \
-  ARCH="x64"; \
-  fi; \
-  curl -fL --retry 5 --retry-delay 5 -o /tmp/onnxruntime.tgz \
-  "https://github.com/microsoft/onnxruntime/releases/download/v${ONNX_VERSION}/onnxruntime-linux-${ARCH}-${ONNX_VERSION}.tgz"; \
-  tar xzf /tmp/onnxruntime.tgz -C /tmp; \
-  cp -P "/tmp/onnxruntime-linux-${ARCH}-${ONNX_VERSION}/lib/libonnxruntime.so"* /usr/local/lib/; \
-  rm -rf /tmp/onnxruntime*
-
 # ---- Runtime stage ----
 FROM debian:bookworm-slim
 
@@ -73,10 +53,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   nodejs \
   npm \
   && rm -rf /var/lib/apt/lists/*
-
-# Copy ONNX Runtime shared library
-COPY --from=onnxruntime-dl /usr/local/lib/libonnxruntime.so* /usr/local/lib/
-RUN ldconfig
 
 # Copy binary
 COPY --from=builder /usr/local/bin/mindx /usr/local/bin/mindx
