@@ -52,7 +52,7 @@ metadata:
 继续之前，先确认是否已收集所有必要信息。如果有不清楚或缺失的项目，用上述假设选项方法与用户澄清。
 
 - **(a) 名称**：小写连字符，基于名词，反映角色（`python-programmer`、`code-reviewer`）
-- **(b) 角色与描述**：role 为中文头衔；description 为 1-2 句中文**概览**——只写负责什么、能干什么、什么时候用，禁止路由指派与技术细节（详见 [agent-writing.md](references/agent-writing.md)）。可选昵称（nick_name，2-3 字展示主名）创建后经 `mindx agent update --agent-name <name>` 设置或直接编辑 IDENTITY.md
+- **(b) 角色与描述**：role 为中文头衔；description 为 1-2 句中文**概览**——只写负责什么、能干什么、什么时候用，禁止路由指派与技术细节（详见 [agent-writing.md](references/agent-writing.md)）。可选昵称（nick_name，2-3 字展示主名）创建时经 `--nick_name` 一并设置
 - **(c) 业务分类**：中文 category，如"产品研发"、"办公提效"
 - **(d) 角色职责（SOUL）**：负责什么、怎么工作、不做什么——三段式（职责→方式→边界）+ 三要素规则 + 价值观排序 + 两层边界（编写规范见 [agent-writing.md](references/agent-writing.md)）
 - **(e) 所需技能**：`mindx skill list --json` 查看可用技能后预选；技能是 LLM 操作指令，保持精简
@@ -113,6 +113,7 @@ mindx skill list --json
 mindx agent add <agent-name> \
     --role "中文角色头衔" \
     --description "1-2 句中文职责描述" \
+    --nick_name "两三字外号" \
     --skills "skill1,skill2"
 ```
 

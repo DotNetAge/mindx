@@ -380,8 +380,8 @@ var agentRmCmd = &cobra.Command{
 
 var agentAddFlags struct {
 	role        string
+	nickName    string
 	description string
-	model       string
 	skills      string
 }
 
@@ -415,6 +415,7 @@ Examples:
 		meta := agentstore.AgentMeta{
 			Name:        name,
 			Role:        agentAddFlags.role,
+			NickName:    agentAddFlags.nickName,
 			Description: agentAddFlags.description,
 		}
 		if agentAddFlags.skills != "" {
@@ -554,6 +555,7 @@ func init() {
 	agentScoreCmd.Flags().IntVar(&agentScoreFlags.score, "score", 0, "Score 1-10 (required)")
 	agentScoreCmd.Flags().StringVar(&agentScoreFlags.notes, "notes", "", "Optional evaluation notes")
 	agentAddCmd.Flags().StringVar(&agentAddFlags.role, "role", "", "Agent role/title")
+	agentAddCmd.Flags().StringVar(&agentAddFlags.nickName, "nick_name", "", "Agent nickname (2-3 chars, display name)")
 	agentAddCmd.Flags().StringVar(&agentAddFlags.description, "description", "", "Agent description")
 	agentAddCmd.Flags().StringVar(&agentAddFlags.skills, "skills", "", "Comma-separated skill names")
 
