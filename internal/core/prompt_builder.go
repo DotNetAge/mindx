@@ -34,7 +34,7 @@ const agentDiscoveryIntro = "Agent 发现：当需要查找或列出可用 Agent
 // 公理引用、复盘触发）由 runtime/AGENTS.md 公共规则承载，此处只交代环境事实。
 // 记忆加载规则（2026-10-06 双系统记忆理论）：压缩产物为多条独立记忆条目
 // （每条一个 markdown 文件），Agent 以文件工具自助加载，无注入 Hook 与检索工具。
-const experienceSystemNote = "- **经验沉淀体系**: 项目目录下的 .agents/ 目录承载跨会话经验 —— AGENTS.md 为项目军规与工作目标；notes/ 记录随手笔记；memory/ 存放会话压缩产生的记忆条目（每条一个 markdown 文件）；skills/ 存放可复用技能；references/ 存放权威资料公理（原文只读，引用标注 [ref:ID]）；reports/ 存放复盘日报。会话开始处理实质性任务前，先列出 .agents/memory/ 目录并读取最新的相关记忆条目了解历史上下文；需要回忆更早的决策时用 Grep 按关键词检索记忆与笔记目录。"
+const experienceSystemNote = "- **经验沉淀体系**: 项目目录下的 .agents/ 目录承载跨会话经验 —— AGENTS.md 为项目军规与工作目标；notes/ 记录随手笔记；memory/ 存放会话压缩产生的记忆条目（每条一个 markdown 文件）；skills/ 存放可复用技能；references/ 存放权威资料公理（原文只读，引用标注 [ref:ID]）；reports/ 存放复盘日报。会话开始处理实质性任务前或上下文压缩后恢复工作时，先列出 .agents/memory/ 目录并读取时间上最相近的相关记忆条目了解历史上下文；需要回忆更早的决策时用 Grep 按关键词检索记忆与笔记目录。"
 
 // PromptBuilder 组装 mindx 侧的基础系统提示词。
 // 依赖注入 AgentStore（身份/行为/Skills 声明）与 SkillStore（技能摘要目录），
