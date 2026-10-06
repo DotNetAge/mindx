@@ -30,11 +30,11 @@ const agentsMDFileName = "AGENTS.md"
 const agentDiscoveryIntro = "Agent 发现：当需要查找或列出可用 Agent 时，运行 'mindx agent list'（或 'mindx agent list --json' 获取结构化输出）。列表显示 Agent 名称、角色、描述及其技能。用于查找合适的 Agent 并通过 SubAgent 进行委托。"
 
 // experienceSystemNote 是经验沉淀体系说明（配置环境段固定条目）：
-// 说明项目目录 .agents/ 体系的作用与配合工具，行为判据（小复盘触发条件）
-// 由 runtime/AGENTS.md 公共规则承载，此处只交代环境事实。
-// 记忆加载规则（2026-10-06 记忆剥离重构）：压缩摘要落盘为 .agents/memory/ 下的
-// markdown 文件，Agent 以文件工具自助加载，替代原 MemorySearch 工具与注入 Hook。
-const experienceSystemNote = "- **经验沉淀体系**: 项目目录下的 .agents/ 目录承载跨会话经验 —— AGENTS.md 为项目军规与工作目标；notes/ 记录踩坑经验；skills/ 存放可复用技能；reports/ 存放复盘日报；memory/ 存放上下文压缩产生的会话记忆（markdown）。会话开始处理实质性任务前，先列出 .agents/memory/ 目录并读取最新记忆文件了解历史上下文；需要回忆更早的决策时用 Grep 按关键词检索记忆目录。"
+// 说明项目目录 .agents/ 体系的作用与配合工具，行为判据（随手记、只读共享、
+// 公理引用、复盘触发）由 runtime/AGENTS.md 公共规则承载，此处只交代环境事实。
+// 记忆加载规则（2026-10-06 双系统记忆理论）：压缩产物为多条独立记忆条目
+// （每条一个 markdown 文件），Agent 以文件工具自助加载，无注入 Hook 与检索工具。
+const experienceSystemNote = "- **经验沉淀体系**: 项目目录下的 .agents/ 目录承载跨会话经验 —— AGENTS.md 为项目军规与工作目标；notes/ 记录随手笔记；memory/ 存放会话压缩产生的记忆条目（每条一个 markdown 文件）；skills/ 存放可复用技能；references/ 存放权威资料公理（原文只读，引用标注 [ref:ID]）；reports/ 存放复盘日报。会话开始处理实质性任务前，先列出 .agents/memory/ 目录并读取最新的相关记忆条目了解历史上下文；需要回忆更早的决策时用 Grep 按关键词检索记忆与笔记目录。"
 
 // PromptBuilder 组装 mindx 侧的基础系统提示词。
 // 依赖注入 AgentStore（身份/行为/Skills 声明）与 SkillStore（技能摘要目录），
