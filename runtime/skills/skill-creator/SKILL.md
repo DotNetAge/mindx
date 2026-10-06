@@ -105,8 +105,8 @@ metadata:
 #### 步骤 1：检查现有技能
 
 ```bash
-mindx skill list --json     # 全局库
-mindx skills discovery      # 项目级库
+mindx skill list --json          # 全局库（可加 -f <关键词> 过滤）
+mindx skills discovery           # 项目级库
 ```
 
 检查是否存在同名或领域重叠的技能。存在则通知用户，让他们决定。
@@ -181,7 +181,7 @@ mindx skill get <proposed-name>
 
 #### 步骤 7：自检验证
 
-`mindx skill validate` 只支持全局库技能。项目级技能按[审查已有技能](#审查已有技能)步骤 B 的清单自检；通过后告知用户技能已可在本项目使用，全局可用由用户通过界面安装。
+`mindx skill validate --path <技能目录>` 支持任意技能目录（含项目级）。对新建技能运行自检；通过后告知用户技能已可在本项目使用，全局可用由用户通过界面安装。
 
 ### 优化触发
 
