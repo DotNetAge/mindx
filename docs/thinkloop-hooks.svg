@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" font-family="PingFang SC, Microsoft YaHei, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a6572"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="560" fill="#fafbfc"/>
+  <text x="480" y="34" text-anchor="middle" font-size="20" font-weight="700" fill="#2d3436">Thinkloop 循环与钩子挂点</text>
+  <text x="480" y="56" text-anchor="middle" font-size="12" fill="#7a828a">LoopHook 治理决策序列 · ToolHook 治理副作用边界 · HookResult 提供打断与中途改动</text>
+
+  <rect x="60" y="90" width="600" height="360" rx="14" fill="#ffffff" stroke="#d5dbe1"/>
+  <text x="360" y="118" text-anchor="middle" font-size="14" font-weight="600" fill="#5a6572">Thinkloop（Think–Act 循环，单 goroutine 顺序执行）</text>
+
+  <rect x="100" y="140" width="200" height="72" rx="10" fill="#eaf2f8" stroke="#2471a3" stroke-width="1.5"/>
+  <text x="200" y="164" text-anchor="middle" font-size="14" font-weight="700" fill="#2471a3">BeforeLLM</text>
+  <text x="200" y="182" text-anchor="middle" font-size="11" fill="#4a5560">持 *CallInput 指针</text>
+  <text x="200" y="198" text-anchor="middle" font-size="11" fill="#4a5560">可改写 System / History / Tools</text>
+
+  <rect x="400" y="140" width="200" height="72" rx="10" fill="#f4f6f7" stroke="#95a5a6"/>
+  <text x="500" y="170" text-anchor="middle" font-size="14" font-weight="600" fill="#5a6572">LLM 调用（Think）</text>
+  <text x="500" y="190" text-anchor="middle" font-size="11" fill="#7a828a">产出 ToolCalls / Content / Usage</text>
+
+  <rect x="100" y="290" width="200" height="96" rx="10" fill="#eaf2f8" stroke="#2471a3" stroke-width="1.5"/>
+  <text x="200" y="314" text-anchor="middle" font-size="14" font-weight="700" fill="#2471a3">工具执行（Act）</text>
+  <text x="200" y="334" text-anchor="middle" font-size="11" fill="#4a5560">ToolHook.Before → 执行 → After</text>
+  <text x="200" y="350" text-anchor="middle" font-size="11" fill="#4a5560">SkipWithResult 可短路执行</text>
+  <text x="200" y="366" text-anchor="middle" font-size="11" fill="#4a5560">（去重钩子直接回缓存）</text>
+
+  <rect x="400" y="290" width="200" height="96" rx="10" fill="#eaf2f8" stroke="#2471a3" stroke-width="1.5"/>
+  <text x="500" y="314" text-anchor="middle" font-size="14" font-weight="700" fill="#2471a3">AfterLLM</text>
+  <text x="500" y="334" text-anchor="middle" font-size="11" fill="#4a5560">持本轮响应 + 上一轮结果快照</text>
+  <text x="500" y="350" text-anchor="middle" font-size="11" fill="#4a5560">收敛判断 / 注入 / 中止</text>
+  <text x="500" y="366" text-anchor="middle" font-size="11" fill="#4a5560">（iteration 序号可见）</text>
+
+  <line x1="300" y1="176" x2="392" y2="176" stroke="#5a6572" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="500" y1="212" x2="500" y2="282" stroke="#5a6572" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="300" y1="338" x2="392" y2="338" stroke="#5a6572" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <path d="M 400 374 C 260 470 200 400 200 220" fill="none" stroke="#5a6572" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="150" y="470" font-size="12" fill="#5a6572">下一轮（iteration + 1）</text>
+
+  <path d="M 500 386 C 560 470 620 470 660 440" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrowRed)"/>
+  <rect x="660" y="420" width="150" height="44" rx="8" fill="#fdedec" stroke="#c0392b" stroke-dasharray="5 3"/>
+  <text x="735" y="438" text-anchor="middle" font-size="12" font-weight="600" fill="#c0392b">Abort 出口</text>
+  <text x="735" y="454" text-anchor="middle" font-size="10.5" fill="#c0392b">循环有序终止，原因入事件流</text>
+
+  <rect x="700" y="90" width="220" height="280" rx="14" fill="#ffffff" stroke="#d5dbe1"/>
+  <text x="810" y="118" text-anchor="middle" font-size="14" font-weight="600" fill="#2d3436">HookResult 三态</text>
+  <rect x="716" y="136" width="188" height="62" rx="8" fill="#eaf2f8" stroke="#2471a3"/>
+  <text x="810" y="158" text-anchor="middle" font-size="12.5" font-weight="600" fill="#2471a3">改写（中途改动）</text>
+  <text x="810" y="176" text-anchor="middle" font-size="10.5" fill="#4a5560">BeforeLLM 改写输入 / ToolHook</text>
+  <text x="810" y="190" text-anchor="middle" font-size="10.5" fill="#4a5560">SkipWithResult 以结果替换执行</text>
+  <rect x="716" y="212" width="188" height="62" rx="8" fill="#eaf2f8" stroke="#2471a3"/>
+  <text x="810" y="234" text-anchor="middle" font-size="12.5" font-weight="600" fill="#2471a3">短路</text>
+  <text x="810" y="252" text-anchor="middle" font-size="10.5" fill="#4a5560">收敛判断 / 记忆注入 / 去重</text>
+  <text x="810" y="266" text-anchor="middle" font-size="10.5" fill="#4a5560">循环视野才可判定</text>
+  <rect x="716" y="288" width="188" height="62" rx="8" fill="#fdedec" stroke="#c0392b"/>
+  <text x="810" y="310" text-anchor="middle" font-size="12.5" font-weight="600" fill="#c0392b">打断（Abort）</text>
+  <text x="810" y="328" text-anchor="middle" font-size="10.5" fill="#4a5560">BeforeLLM / AfterLLM / ToolHook</text>
+  <text x="810" y="342" text-anchor="middle" font-size="10.5" fill="#4a5560">均可请求，原因回写事件流</text>
+
+  <rect x="700" y="386" width="220" height="64" rx="10" fill="#fef9e7" stroke="#d4ac0d"/>
+  <text x="810" y="408" text-anchor="middle" font-size="12" font-weight="600" fill="#7d6608">优先级链（小者先执行）</text>
+  <text x="810" y="426" text-anchor="middle" font-size="10.5" fill="#7d6608">权限 41 → 循环日志 45 → 工具日志 46</text>
+  <text x="810" y="442" text-anchor="middle" font-size="10.5" fill="#7d6608">→ 图片 47 → 收敛 49</text>
+
+  <text x="480" y="530" text-anchor="middle" font-size="11.5" fill="#5a6572">与进程外事件钩子的分野：事件钩子治理副作用边界（approve / deny 二元），LoopHook 治理决策序列（改写 / 短路 / 打断，持循环状态）</text>
+</svg>
