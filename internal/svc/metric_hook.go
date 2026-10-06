@@ -60,10 +60,19 @@ func (d *Daemon) withMetricHook(
 		if sub := getSubSessionID(); sub != "" && sub != sid {
 			return
 		}
+		// 轮号 = 该会话既有 round 事件数 + 1（判定按 session + 轮号定位事件，
+		// daemon 重启后计数自然从存量恢复）。
+		roundNo := 1
+		if existing, err := store.Query(context.Background(), metric.MetricFilter{
+			SessionID: sid, Kind: metric.KindRound,
+		}); err == nil {
+			roundNo = len(existing) + 1
+		}
 		ev := metric.MetricEvent{
 			Kind:            metric.KindRound,
 			SessionID:       sid,
 			AgentName:       agentName,
+			RoundNo:         roundNo,
 			DurationMS:      data.TotalDuration.Milliseconds(),
 			Tokens:          data.TokensUsed.ActualTokens(),
 			RoundIterations: data.TotalIterations,

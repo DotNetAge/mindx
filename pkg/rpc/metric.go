@@ -15,3 +15,41 @@ type MetricReportParams struct {
 func (c *Client) MetricReport(params MetricReportParams) (json.RawMessage, error) {
 	return c.CallWithTimeout("metric.report", params)
 }
+
+// RoundRatingParams are the params for round.rating（壳侧轮次赞/踩，主收集）。
+type RoundRatingParams struct {
+	SessionID string `json:"session_id"`
+	Value     string `json:"value"` // "up" | "down"
+	Text      string `json:"text,omitempty"`
+}
+
+// RoundRating 上报轮次主观评价：写入判定版本链（user_feedback 源），
+// 可选文本汇入项目 notes"偏好"类。
+func (c *Client) RoundRating(params RoundRatingParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("round.rating", params)
+}
+
+// AgentRateParams are the params for agent.rate（管理页整体评价，限频：同对象每日一次）。
+type AgentRateParams struct {
+	SubjectType string `json:"subject_type"` // agent | team | skill
+	Name        string `json:"name"`
+	Value       string `json:"value"` // "up" | "down"
+	Text        string `json:"text,omitempty"`
+}
+
+// AgentRate 上报整体评价。同对象当日已评时返回 ok=false + reason=already_rated_today。
+func (c *Client) AgentRate(params AgentRateParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("agent.rate", params)
+}
+
+// MetricRecordParams are the params for metric.record（Agent 收尾上报，降级判定源）。
+type MetricRecordParams struct {
+	SessionID string `json:"session_id"`
+	Outcome   string `json:"outcome"` // success | fail | rework
+	Note      string `json:"note,omitempty"`
+}
+
+// MetricRecord 上报任务判定；outcome=rework 时回溯标记同任务意图的历史会话。
+func (c *Client) MetricRecord(params MetricRecordParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("metric.record", params)
+}
