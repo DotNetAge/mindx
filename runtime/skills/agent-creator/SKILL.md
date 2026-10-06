@@ -14,12 +14,12 @@ metadata:
 
 ## 分级导航
 
-| 层级 | 内容 | 何时加载 |
-|:---:|------|---------|
-| 本文件 | 交互范式 + 信息收集 + 工作流主干 | 常驻 |
-| [references/agent-schema.md](references/agent-schema.md) | 文件结构、frontmatter 字段表、工具控制、样式规则、创建检查清单 | 填字段、定工具裁剪时 |
-| [references/agent-writing.md](references/agent-writing.md) | description 路由五要素、排他性检验、SOUL 三段式编写规范与示例 | 编写 description 与 SOUL.md 时 |
-| [references/team-design.md](references/team-design.md) | Team 实体、编制设计规范、招募与雇佣要点 | 组建团队时 |
+|                            层级                            | 内容                                                           | 何时加载                       |
+| :--------------------------------------------------------: | -------------------------------------------------------------- | ------------------------------ |
+|                           本文件                           | 交互范式 + 信息收集 + 工作流主干                               | 常驻                           |
+|  [references/agent-schema.md](references/agent-schema.md)  | 文件结构、frontmatter 字段表、工具控制、样式规则、创建检查清单 | 填字段、定工具裁剪时           |
+| [references/agent-writing.md](references/agent-writing.md) | description 概览三问、独特可辨自检、SOUL 三段式编写规范与示例  | 编写 description 与 SOUL.md 时 |
+|   [references/team-design.md](references/team-design.md)   | Team 实体、编制设计规范、招募与雇佣要点                        | 组建团队时                     |
 
 ## 指导原则：先提供假设选项
 
@@ -47,7 +47,7 @@ metadata:
 继续之前，先确认是否已收集所有必要信息。如果有不清楚或缺失的项目，用上述假设选项方法与用户澄清。
 
 - **(a) 名称**：小写连字符，基于名词，反映角色（`python-programmer`、`code-reviewer`）
-- **(b) 角色与描述**：role 为中文头衔；description 为 1-2 句中文路由描述——按路由五要素写，写完做排他性检验（详见 [agent-writing.md](references/agent-writing.md)）
+- **(b) 角色与描述**：role 为中文头衔；description 为 1-2 句中文**概览**——只写负责什么、能干什么、什么时候用，禁止路由指派与技术细节（详见 [agent-writing.md](references/agent-writing.md)）
 - **(c) 业务分类**：中文 category，如"产品研发"、"办公提效"
 - **(d) 角色职责（SOUL）**：负责什么、怎么工作、不做什么——三段式（职责→方式→边界）+ 三要素规则 + 价值观排序 + 两层边界（编写规范见 [agent-writing.md](references/agent-writing.md)）
 - **(e) 所需技能**：`mindx skill list --json` 查看可用技能后预选；技能是 LLM 操作指令，保持精简
@@ -118,14 +118,14 @@ mindx agent add <agent-name> \
 - **IDENTITY.md**：补充 `category`、`exclude_tools`、`allows_tools` 等字段；正文惯例留空
 - **SOUL.md**：按 [agent-writing.md](references/agent-writing.md) 编写角色职责（三段式、三要素、价值观排序、两层边界、按需退化行为与自检清单）
 
-### 步骤 7：路由验证（行为面验收）
+### 步骤 7：概览选择验证（行为面验收）
 
-注册面验证（hire + list）只能证明"存在"，不能证明"会被正确路由"。雇佣前做一次路由命中测试：
+注册面验证（hire + list）只能证明"存在"，不能证明"会被选对"。雇佣前做一次概览选择测试：
 
-1. 写 3-5 个典型任务表述（模拟用户真实说法）+ 1-2 个**应排除**的相邻任务（归属既有相邻 Agent 或不该接的）
-2. 派一个 SubAgent 以纯读者视角，仅凭 `mindx agent list --json` 的 role/description 判断每个任务该派给谁——禁止自己写自己验
-3. 典型任务命中失败 → description 领域词或产出物不清，回改重测；应排除的任务被命中 → 边界排除或相邻区分缺失，回改重测
-4. 相邻 Agent 的描述与新人设重叠不可分 → 回改双方 description，写明分界
+1. 写 3-5 个典型任务表述（模拟用户真实说法）+ 1-2 个**不该派给它**的相邻任务
+2. 派一个 SubAgent 模拟选择者：同时阅读 `mindx agent list --json` 中多条 Agent 的概览，为每个任务挑一个 Agent——禁止自己写自己验
+3. 典型任务没选中它 → 概览的"负责什么/能干什么"不清晰，回改自己的概览；不该接的任务选中了它 → 概览"什么时候用"含混，回改自己的概览。修补只落在自己的概览内，禁止写指派他人的文本
+4. 若两个相邻 Agent 的概览并排仍难区分 → 这是编制层切分问题：改双方概览的领域限定词与产出物使其可辨，或合并角色
 
 ### 步骤 8：雇佣并验证
 
@@ -157,9 +157,9 @@ mindx agent list --json
 - **能复用绝不新建** — 跳过本地与市场双重检索就动手是造轮子；查重必须 `agent list --all`（默认视图只显示已雇佣）。
 - **新建默认未雇佣** — `agent add` 与 `market install agent` 落地均为 `hired: false`，忘记 `mindx agent hire` 就永远不出现在会话列表。
 - **技能贪多与硬凑** — 5 个技能可能消耗 80% 上下文窗口，最多 2-3 个；本地与市场都没有就告知暂缺，禁止塞不相关技能。冲突指令的技能会让 LLM 不可预测地切换。
-- **描述范围过大或无排他性** — description 套到同领域任何 Agent 身上都成立，等于没有领域；与相邻 Agent 都说"归我"时路由不可预测。
+- **概览写成路由或含混不清** — description 里塞"归谁/不归谁"的指派是指代噪声，LLM 并列对比时只会被干扰；概览只写负责什么、能干什么、什么时候用。
+- **跳过概览选择验证** — 只做注册面验证（hire 后出现在列表），选错人要到任务被错派时才暴露。
 - **规则写成空泛口号** — 缺触发场景与理据的职责（"保证质量""输出专业"）不产生行为约束；SOUL 写成能力清单同理。
-- **跳过路由验证** — 只做注册面验证（hire 后出现在列表），路由失效要到用户任务被错派时才暴露。
 - **通用智能体** — "我是一个有用的助手"毫无意义，每个智能体应有特定领域、视角和约束。
 - **技能够用却创建智能体** — 需要可重用指令就创建技能，需要硬边界角色才创建智能体。
 

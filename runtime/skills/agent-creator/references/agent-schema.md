@@ -24,7 +24,7 @@ agents/<name>/
 | --------------- | ------------------------ | -------------------------------------------------------------------- |
 | `name`          | 小写连字符               | 唯一，基于名词，体现角色（如 `code-reviewer`）                       |
 | `role`          | 中文头衔                 | 人类可读的角色标题（如"代码审查员"）                                 |
-| `description`   | 1-2 句中文               | 用于 **LLM 路由** 与列表展示 —— 写法见 [agent-writing.md](agent-writing.md) |
+| `description`   | 1-2 句中文               | **概览**（负责什么/能干什么/什么时候用），供 LLM 并列对比选择；写法见 [agent-writing.md](agent-writing.md) |
 | `category`      | 中文业务分类             | 分组展示用（如"产品研发"、"办公提效"、"市场营销"）                   |
 | `icon`          | 可选                     | 图标标识                                                             |
 | `hired`         | 布尔，缺省 false         | 雇佣标记；新建智能体默认未雇佣，`mindx agent hire` 后才可用于会话    |
@@ -69,7 +69,7 @@ agents/<name>/
 - [ ] 已运行 `mindx market list --kind agent --filter "<关键词>"` —— 确认市场无现成可复用的 Agent 包
 - [ ] 已运行 `mindx skill list --json` —— 已识别相关技能；本地缺失的技能已按 `find-skills` 技能查找并安装
 - [ ] `name` 为小写连字符格式，唯一，基于名词
-- [ ] `role` 为简洁中文头衔；`description` 为 1-2 句中文路由描述，含边界
+- [ ] `role` 为简洁中文头衔；`description` 为 1-2 句中文概览（负责什么/能干什么/什么时候用）
 - [ ] `category` 已确定为中文业务分类
 - [ ] `skills` 列表精简 —— 仅包含领域相关技能
 - [ ] `exclude_tools` 按角色裁剪；需要 MCP 服务时已列 `allows_tools`
@@ -77,12 +77,11 @@ agents/<name>/
 创建之后：
 
 - [ ] 已编写 SOUL.md（职责、方式、边界三段式，显式引用技能）
-- [ ] description 过排他性检验（见 [agent-writing.md](agent-writing.md)）
-- [ ] 与职责最接近的既有 Agent 已写明相邻区分
+- [ ] description 是干净概览，无路由指派与指代其他实体的文本；并排对比与相邻 Agent 不混淆
 - [ ] 规则条目含触发场景 + 具体行为 + 理据；单段规则 ≤8 条，工作流 ≤5 步
 - [ ] 价值取向有冲突可能的角色已写价值观排序；面向用户的角色已写退化行为
 - [ ] 边界段含职责边界与诚实边界两层
 - [ ] IDENTITY.md 正文留空（除非确需自定义人设）
 - [ ] 需要固定团队时：建 Team 实体（`mindx team add`）并雇佣（`mindx team hire`），团队职责写 Team Profile——不在 Agent 定义里写团队信息
 - [ ] 已执行 `mindx agent hire <name>` 并通过 `mindx agent list --json` 验证
-- [ ] 已做路由命中验证（见 SKILL.md 工作流"路由验证"步）
+- [ ] 已做概览选择验证（见 SKILL.md 工作流"概览选择验证"步）
