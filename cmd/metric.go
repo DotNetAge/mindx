@@ -146,3 +146,136 @@ func init() {
 	metricReportCmd.Flags().Bool("json", false, "输出 JSON（LLM 消费格式）")
 	metricCmd.AddCommand(metricReportCmd)
 }
+
+// ── metric baseline save / list ───────────────────────────────
+
+var metricBaselineSaveCmd = &cobra.Command{
+	Use:     "baseline save <name>",
+	Short:   "Save current window scorecard as a named baseline",
+	Example: `  mindx metric baseline save sprint-42 --window-days 7`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) < 1 {
+			return fmt.Errorf("baseline name is required")
+		}
+		windowDays, _ := cmd.Flags().GetInt("window-days")
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.MetricBaselineSave(rpc.MetricBaselineSaveParams{Name: args[0], WindowDays: windowDays})
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(result))
+		return nil
+	},
+}
+
+var metricBaselineListCmd = &cobra.Command{
+	Use:     "baseline list",
+	Short:   "List saved baselines",
+	Example: `  mindx metric baseline list`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.MetricBaselineList()
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(result))
+		return nil
+	},
+}
+
+// ── metric compare ────────────────────────────────────────────
+
+var metricCompareCmd = &cobra.Command{
+	Use:           "compare --baseline <name>",
+	Short:         "Compare current window against a baseline (Pareto verdict)",
+	SilenceErrors: true, // 非改善退出时静默返回非零码（ verdict 已在 stdout 呈现）
+	Long: `Compare the current scorecard window against a saved baseline.
+
+Verdict semantics (Pareto): any factor significantly regressed → "regressed";
+otherwise any improved → "improved"; else "flat". A confounding list
+(model/daemon changes during the window) is always attached — the scorecard
+is a signal for review, not proof of causality.
+
+Exit code 0 = improved, 1 = flat or regressed (for retrospective automation).`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		baseline, _ := cmd.Flags().GetString("baseline")
+		windowDays, _ := cmd.Flags().GetInt("window-days")
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		if baseline == "" {
+			return fmt.Errorf("--baseline is required")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.MetricCompare(rpc.MetricCompareParams{Baseline: baseline, WindowDays: windowDays})
+		if err != nil {
+			return err
+		}
+
+		var data struct {
+			Verdict string `json:"verdict"`
+			Factors []struct {
+				Factor    string  `json:"factor"`
+				Direction string  `json:"direction"`
+				Baseline  float64 `json:"baseline"`
+				Current   float64 `json:"current"`
+				Change    string  `json:"change"`
+			} `json:"factors"`
+			Confoundings []struct {
+				Kind   string `json:"kind"`
+				Detail string `json:"detail"`
+			} `json:"confoundings"`
+		}
+		if err := json.Unmarshal(result, &data); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+		} else {
+			fmt.Printf("对比基线 %q：%s\n\n", baseline, data.Verdict)
+			for _, f := range data.Factors {
+				status := map[string]string{"improved": "↑", "regressed": "↓", "flat": "→", "null": "n/a"}[f.Change]
+				fmt.Printf("  %-22s %8.3f → %8.3f  %s\n", f.Factor, f.Baseline, f.Current, status)
+			}
+			if len(data.Confoundings) > 0 {
+				fmt.Println("\n窗口内混杂事件（归因解读前先看这里）：")
+				for _, c := range data.Confoundings {
+					fmt.Printf("  [%s] %s\n", c.Kind, c.Detail)
+				}
+			}
+		}
+
+		// 退出码语义：0 = 改善、1 = 持平/劣化（供复盘自动化）。
+		if data.Verdict != "improved" {
+			return errSilentExit
+		}
+		return nil
+	},
+}
+
+// errSilentExit 让命令以非零码退出（compare 配 SilenceErrors 静默，verdict 已在 stdout）。
+var errSilentExit = fmt.Errorf("verdict not improved")
+
+func init() {
+	metricBaselineSaveCmd.Flags().Int("window-days", 7, "统计窗口（天）")
+	metricCompareCmd.Flags().String("baseline", "", "基线名称")
+	metricCompareCmd.Flags().Int("window-days", 7, "统计窗口（天）")
+	metricCompareCmd.Flags().Bool("json", false, "输出 JSON")
+	metricCmd.AddCommand(metricBaselineSaveCmd, metricBaselineListCmd, metricCompareCmd)
+}

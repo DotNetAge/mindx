@@ -189,6 +189,9 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		logger.Info("kvstore initialized",
 			"path", filepath.Join(app.Settings().DataDir(), "kv.db"),
 		)
+		// 决策计量混杂登记（白皮书 2.1）：daemon 版本变化自动登记——
+		// compare 归因解读时区分"路由修订效果"与"daemon 更新混杂"。
+		d.checkMetricVersionSnapshot(core.Version)
 		// Initialize MCP Manager
 		// Server 配置由 ~/.mindx/settings/mcp.json 主存（文件），
 		// 工具清单运行时从 MCP server tools/list 动态拉取。零 bbolt 依赖。

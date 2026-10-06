@@ -53,3 +53,32 @@ type MetricRecordParams struct {
 func (c *Client) MetricRecord(params MetricRecordParams) (json.RawMessage, error) {
 	return c.CallWithTimeout("metric.record", params)
 }
+
+// MetricBaselineSaveParams are the params for metric.baseline.save
+// （复盘收尾存基线：当前窗口量表快照，供下轮 compare 验收）。
+type MetricBaselineSaveParams struct {
+	Name       string `json:"name"`
+	WindowDays int    `json:"window_days,omitempty"`
+}
+
+// MetricBaselineSave 保存当前窗口量表为具名基线。
+func (c *Client) MetricBaselineSave(params MetricBaselineSaveParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("metric.baseline.save", params)
+}
+
+// MetricBaselineList 列出全部已存基线（名称 + 保存时间）。
+func (c *Client) MetricBaselineList() (json.RawMessage, error) {
+	return c.CallWithTimeout("metric.baseline.list", nil)
+}
+
+// MetricCompareParams are the params for metric.compare（复盘开工前的定量验收）。
+type MetricCompareParams struct {
+	Baseline   string `json:"baseline"`
+	WindowDays int    `json:"window_days,omitempty"`
+}
+
+// MetricCompare 当前窗口 vs 基线的帕累托对比 + 强制混杂清单。
+// verdict：improved | flat | regressed（任一因子显著劣化即 regressed）。
+func (c *Client) MetricCompare(params MetricCompareParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("metric.compare", params)
+}
