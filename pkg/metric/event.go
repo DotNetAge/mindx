@@ -77,10 +77,12 @@ type MetricEvent struct {
 	SkillName string    `yaml:"skill_name,omitempty" json:"skill_name,omitempty"`
 
 	// —— S/E 客观量（round 事件）——
-	DurationMS int64    `yaml:"duration_ms,omitempty" json:"duration_ms,omitempty"`
-	Tokens     int      `yaml:"tokens,omitempty" json:"tokens,omitempty"`
-	Cost       float64  `yaml:"cost,omitempty" json:"cost,omitempty"`
-	SkillsUsed []string `yaml:"skills_used,omitempty" json:"skills_used,omitempty"`
+	DurationMS      int64    `yaml:"duration_ms,omitempty" json:"duration_ms,omitempty"`
+	Tokens          int      `yaml:"tokens,omitempty" json:"tokens,omitempty"`
+	Cost            float64  `yaml:"cost,omitempty" json:"cost,omitempty"`
+	RoundIterations int      `yaml:"round_iterations,omitempty" json:"round_iterations,omitempty"`
+	RouteCorrection int      `yaml:"route_correction,omitempty" json:"route_correction,omitempty"`
+	SkillsUsed      []string `yaml:"skills_used,omitempty" json:"skills_used,omitempty"`
 
 	// —— 判定版本链（rating / overall 事件；round 事件可被回溯追加）——
 	Judgments []JudgmentRecord `yaml:"judgments,omitempty" json:"judgments,omitempty"`

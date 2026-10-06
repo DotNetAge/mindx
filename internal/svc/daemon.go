@@ -901,7 +901,10 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			OnEvent(func(ev events.ReactEvent) {
 				currentAgentName = ev.AgentName
 				eventSubSessionID = ev.SessionID
-			}).
+			})
+		// 决策计量埋点：在 UI emitter 之外独立注册（OnXxx 追加语义），
+		// 每次任务执行结束落一条 round 事件（白皮书第 4 章采集层）。
+		builder = d.withMetricHook(builder, sid, resolvedAgentName, func() string { return eventSubSessionID }, content).
 			OnEvent(func(ev events.ReactEvent) {
 				// Forward Compact events as JSON-RPC broadcast notifications
 				// so all connected clients get real-time context window

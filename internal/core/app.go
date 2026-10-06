@@ -24,6 +24,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/core/teamstore"
 	mindxtools "github.com/DotNetAge/mindx/internal/tools"
 	"github.com/DotNetAge/mindx/pkg/logging"
+	"github.com/DotNetAge/mindx/pkg/metric"
 	"github.com/DotNetAge/mindx/pkg/rules"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
@@ -93,6 +94,10 @@ type App struct {
 
 	// TokenUsageStore for persistent LLM token usage records
 	tokenUsageStore *mindxses.FileTokenUsageStore
+
+	// metricStore 决策计量事件存储（白皮书《决策量表》第 4 章存储层）：
+	// 轮次事件自动埋点 + 判定版本链 + 混杂登记，本地单文件 YAML，90 天滚动保留。
+	metricStore *metric.FileMetricStore
 
 	// market 是 COS 静态市场客户端（懒创建，见 Market()）
 	market     *bundle.MarketClient
@@ -210,6 +215,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		fileMemory:          NewFileMemorySink(logger, settings.UserPreferences()),
 		permissionRuleStore: permStore,
 		tokenUsageStore:     mindxses.NewFileTokenUsageStore(settings.DataDir()),
+		metricStore:         metric.NewFileMetricStore(settings.DataDir()),
 		providerConfigs:     providers,
 	}, nil
 }
@@ -618,6 +624,11 @@ func (a *App) SessDB() *mindxses.RoutedSessionStore {
 
 func (a *App) TokenUsageStore() *mindxses.FileTokenUsageStore {
 	return a.tokenUsageStore
+}
+
+// MetricStore 返回决策计量事件存储。
+func (a *App) MetricStore() *metric.FileMetricStore {
+	return a.metricStore
 }
 
 func (a *App) ProviderConfigs() []*config.ProviderConfig {

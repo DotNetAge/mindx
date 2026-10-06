@@ -107,6 +107,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"server.apply_update":                r.daemon.handleServerApplyUpdate,
 		"server.restart_daemon":              r.daemon.handleServerRestartDaemon,
 		"token.usage.overview":               r.daemon.handleTokenUsageOverview,
+		"metric.report":                      r.daemon.handleMetricReport,
 		"token.usage.monthly":                r.daemon.handleTokenUsageMonthly,
 		"token.usage.by_model":               r.daemon.handleTokenUsageByModel,
 		"token.usage.total":                  r.daemon.handleTokenUsageTotal,
