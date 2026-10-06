@@ -306,6 +306,7 @@ frontmatter 的深度字段语义（`requires`/`install`/模板变量）仍以 `
 
 - 本技能创建的技能一律写 `<ProjectDir>/.agents/skills/`，禁止写全局库 `~/.mindx/skills`
 - 优化全局库技能：先 `mindx skills fetch <name>` 取到项目级再修改，禁止直接读写全局库
+- 进化的触发来源有两类：对话回观发现的技能问题，与复盘产出的技能修订提议（`.agents/notes/` 中缺口类记录）——两者都按上述流程修正并追加履历
 
 ## 脚本设计指南
 
