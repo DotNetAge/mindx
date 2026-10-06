@@ -25,3 +25,8 @@
 * 禁止未经核实断言 runtime/ 下文件的"引用/生效"状态——embedding、初装释放、版本同步三层机制都要查证
 * 禁止删除 RPC handler / 功能代码时不同步清理对应测试段——`*_test.go` 与被删代码同包同编译单元，遗留段直接导致 `go vet` 编译失败（2026-10-06 实锤：阶段二删 handler_graph.go 漏删 handler_test.go 中 250 行 graph 测试段，阶段三 vet 才暴露）；删除后必须以 `go vet ./...`（而非仅 `go build`）作为完成门槛，测试代码才会进入编译检查
 * 禁止在功能退役修订文档时只改任务点名的位置——必须同步核查三类隐性残留：(1) 图片内容是否也与现状不符（2026-10-06 实锤：arch-en.jpg/arch.jpg 仍为双核 AgenticRAG 架构图，引用已删、文件待重绘单核版）；(2) 总述句与数字是否联动（对比表行数、中间件层数、存储条目数、场景清单）；(3) 文档宣称的工具行为是否与代码一致（实锤：INSTALL.md 宣称 doctor 检查 qwen3/bge-small-zh，cmd/doctor.go 早已无此检查）
+
+## internal/svc 测试纪律（2026-10-06 实锤）
+
+* **kvStore 由 `NewDaemon` 构造函数直接初始化**（bbolt 打开并持锁，不是 Start 流程专属——initKVStore/mcp 装配/"Daemon initialization complete" 都在构造函数体内）。测试夹具 `newTestDaemon` 返回的 `d.kvStore` 已可用；**测试内禁止再调 `initKVStore`**——同进程二次打开同一 `kv.db` 会 flock 互斥，`bbolt.Open(Timeout:2s)` 随机超时（实锤：metric.consent 测试首版自调 initKVStore，DefaultDenied 偶过、SetAndRevoke 稳定 timeout，lsof 抓到本进程 fd 12u 持锁才定位）。需要 bbolt 的 handler 测试直接用 `d.kvStore`，需要独立文件时用全新路径自行 `bbolt.Open`
+* 测试超时类失败先怀疑**资源在测试进程内被重复持有**（lsof -p <pid> 抓本进程句柄），不要先怀疑环境/沙箱——本次 sandbox 与缓存假设全部排查一轮后才发现是自撞锁
