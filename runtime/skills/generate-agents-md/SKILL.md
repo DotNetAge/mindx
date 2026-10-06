@@ -1,6 +1,6 @@
 ---
 name: generate-agents-md
-description: 扫描仓库，生成/更新AGENTS.md、子目录AGENTS.md、.agents规则片段；产出物严格遵循AAIF AGENTS.md社区规范。
+description: 扫描仓库，生成/更新AGENTS.md、子目录AGENTS.md、.agents规则片段，产出物严格遵循AAIF AGENTS.md社区规范。当用户要求生成、新建、重构、更新项目的 AGENTS.md 或重建 .agents 目录脚手架时使用。
 tags: agents-md, scaffolding, meta-skill
 metadata:
   name_zh: 生成AGENTS.md
@@ -39,6 +39,6 @@ metadata:
 4. 脚手架创建原则：**按需创建，不空建目录**；已有目录/文件不强制删除，只增量补充缺失项。
 
 ## 注意事项
-- 不同Agent平台对嵌套AGENTS.md支持不一致，重要红线规则建议放置根目录兜底。
+- 不同Agent平台对嵌套AGENTS.md支持不一致，重要红线规则必须放置根目录兜底。
 - `@`片段导入是AAIF社区约定，部分老Agent不支持。
 - 本技能**仅生成符合规范的文件，不负责强制运行时校验**；AGENTS.md只是指引，不是沙箱硬隔离。
