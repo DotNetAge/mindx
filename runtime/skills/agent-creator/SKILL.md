@@ -63,7 +63,7 @@ metadata:
 
 ## 智能体定义速览
 
-智能体以目录格式存储（`agents/<name>/`）：`IDENTITY.md`（frontmatter 强类型元数据 + 正文惯例留空）+ `SOUL.md`（角色职责正文，原样注入提示词）。完整字段表与废弃字段见 [agent-schema.md](references/agent-schema.md)；编写规范与示例见 [agent-writing.md](references/agent-writing.md)。
+智能体以目录格式存储（`agents/<name>/`）：`IDENTITY.md`（frontmatter 强类型元数据 + 正文惯例留空）+ `SOUL.md`（角色职责正文，原样注入提示词）。完整字段表见 [agent-schema.md](references/agent-schema.md)；编写规范与示例见 [agent-writing.md](references/agent-writing.md)。
 
 ## 工作流
 

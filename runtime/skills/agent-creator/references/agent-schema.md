@@ -20,22 +20,20 @@ agents/<name>/
 
 ## IDENTITY.md frontmatter 字段
 
-| 字段            | 格式                     | 规则                                                                 |
-| --------------- | ------------------------ | -------------------------------------------------------------------- |
-| `name`          | 小写连字符               | 唯一，基于名词，体现角色（如 `code-reviewer`）                       |
-| `role`          | 中文头衔                 | 人类可读的角色标题（如"代码审查员"）                                 |
+| 字段            | 格式                     | 规则                                                                                                       |
+| --------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `name`          | 小写连字符               | 唯一，基于名词，体现角色（如 `code-reviewer`）                                                             |
+| `role`          | 中文头衔                 | 人类可读的角色标题（如"代码审查员"）                                                                       |
 | `description`   | 1-2 句中文               | **概览**（负责什么/能干什么/什么时候用），供 LLM 并列对比选择；写法见 [agent-writing.md](agent-writing.md) |
-| `category`      | 中文业务分类             | 分组展示用（如"产品研发"、"办公提效"、"市场营销"）                   |
-| `icon`          | 可选                     | 图标标识                                                             |
-| `hired`         | 布尔，缺省 false         | 雇佣标记；新建智能体默认未雇佣，`mindx agent hire` 后才可用于会话    |
-| `skills`        | 来自 `skill list` 的列表 | 仅领域相关技能 —— 每个技能都会增加上下文开销                         |
-| `exclude_tools` | 列表                     | 内置工具裁剪清单；内置工具默认全量可用，按需排除，不支持通配符       |
-| `allows_tools`  | 列表                     | MCP 服务白名单，条目格式 `mcp:<server>`；空清单 = 不注入任何 MCP 工具 |
-| `include_tools` | 列表                     | 唤回默认不在场的内置工具（如 `TeamCreate` 等运行期组队工具）         |
-| `introduction`  | 可选                     | 人设正文备用入口；IDENTITY.md 正文非空时覆盖此字段                   |
-| `meta`          | 映射                     | 自由扩展杂项                                                         |
-
-已废弃的旧字段（新定义中**不得出现**）：`allowed-tools`（允许列表）、`requires.bins` / `requires.env`、`meta.name_zh` / `meta.role_zh` / `meta.description_zh`、旧 `domains`（已迁移为 `category`）。技能（SKILL.md）的 frontmatter 与 Agent 定义对齐：同样不得出现 `allowed-tools`、`requires.*`、`meta.*_zh`。
+| `category`      | 中文业务分类             | 分组展示用（如"产品研发"、"办公提效"、"市场营销"）                                                         |
+| `icon`          | 可选                     | 图标标识                                                                                                   |
+| `hired`         | 布尔，缺省 false         | 雇佣标记；新建智能体默认未雇佣，`mindx agent hire` 后才可用于会话                                          |
+| `skills`        | 来自 `skill list` 的列表 | 仅领域相关技能 —— 每个技能都会增加上下文开销                                                               |
+| `exclude_tools` | 列表                     | 内置工具裁剪清单；内置工具默认全量可用，按需排除，不支持通配符                                             |
+| `allows_tools`  | 列表                     | MCP 服务白名单，条目格式 `mcp:<server>`；空清单 = 不注入任何 MCP 工具                                      |
+| `include_tools` | 列表                     | 唤回默认不在场的内置工具（如 `TeamCreate` 等运行期组队工具）                                               |
+| `introduction`  | 可选                     | 人设正文备用入口；IDENTITY.md 正文非空时覆盖此字段                                                         |
+| `meta`          | 映射                     | 自由扩展杂项                                                                                               |
 
 ## IDENTITY.md 正文
 
