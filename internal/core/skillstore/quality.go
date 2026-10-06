@@ -49,8 +49,15 @@ var suggestWhitelist = regexp.MustCompile(`建议\s*(?:升级|安装|使用|先|
 var (
 	refRe       = regexp.MustCompile(`\[ref:([A-Za-z0-9_\-]+)\]`)
 	mdLinkRe    = regexp.MustCompile(`\(([^)\s]+\.md)\)`)
+	inlineCode  = regexp.MustCompile("`[^`]*`")
 	triggerSema = []string{"时使用", "时调用", "触发"}
 )
+
+// stripInlineCode 剥离行内代码段——文档中以反引号引用的规则示例
+// （如"`建议…`"、"[ref:ID]"）是自指引用，不是待检对象，避免误报。
+func stripInlineCode(line string) string {
+	return inlineCode.ReplaceAllString(line, "")
+}
 
 const (
 	maxDescChars = 1024
@@ -107,10 +114,10 @@ func CheckQuality(dir string) (*QualityReport, error) {
 		}
 	}
 
-	// 2. 软化词扫描（逐行，"建议"检查后缀白名单）
+	// 2. 软化词扫描（逐行，"建议"检查后缀白名单；行内代码先剥离防自指误报）
 	for i, line := range lines {
 		for _, p := range softPatterns {
-			if p.re.MatchString(line) {
+			if p.re.MatchString(stripInlineCode(line)) {
 				if p.label == "建议句式" && suggestWhitelist.MatchString(line) {
 					continue
 				}
@@ -132,9 +139,9 @@ func CheckQuality(dir string) (*QualityReport, error) {
 		})
 	}
 
-	// 4. 引文格式：[ref:ID] 的 ID 必须 ref_ 前缀
+	// 4. 引文格式：[ref:ID] 的 ID 必须 ref_ 前缀（行内代码剥离防自指）
 	for i, line := range lines {
-		for _, ref := range refRe.FindAllStringSubmatch(line, -1) {
+		for _, ref := range refRe.FindAllStringSubmatch(stripInlineCode(line), -1) {
 			rep.Stats.Refs++
 			if !strings.HasPrefix(ref[1], "ref_") {
 				rep.Issues = append(rep.Issues, QualityIssue{
