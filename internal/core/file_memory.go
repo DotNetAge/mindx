@@ -97,16 +97,12 @@ func (s *FileMemorySink) Write(_ context.Context, memoryDir, agentName, sessionI
 	}
 
 	batch := time.Now()
-	sess := sessionID
-	if len(sess) > 8 {
-		sess = sess[:8]
-	}
 
 	entries := parseEntries(summary)
 	if len(entries) == 0 {
 		// 兜底：产物不是合法 JSON 数组（LLM 输出走样），整篇原文写单文件。
 		// 记忆不丢，格式偏差留给复盘阶段清洗。
-		name := fmt.Sprintf("%s-%s-summary.md", batch.Format("20060102-150405"), sess)
+		name := s.fileName(memoryDir, batch, agentName, "fallback", "未解析记忆")
 		path := filepath.Join(memoryDir, name)
 		content := fallbackHeader(batch, agentName, sessionID) + strings.TrimRight(summary, "\n") + "\n"
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -117,35 +113,53 @@ func (s *FileMemorySink) Write(_ context.Context, memoryDir, agentName, sessionI
 		return nil
 	}
 
-	written := 0
 	for _, e := range entries {
-		name := s.fileName(batch, sess, e.Title)
+		name := s.fileName(memoryDir, batch, agentName, categoryOf(e), e.Title)
 		path := filepath.Join(memoryDir, name)
 		if err := os.WriteFile(path, []byte(renderEntry(batch, agentName, sessionID, e)), 0o644); err != nil {
 			return fmt.Errorf("filememory: 写入记忆文件 %s 失败: %w", path, err)
 		}
-		written++
 	}
 	s.logger.Info("filememory: 记忆条目已落盘",
-		"dir", memoryDir, "entries", written, "bytes", len(summary))
+		"dir", memoryDir, "entries", len(entries), "bytes", len(summary))
 	return nil
 }
 
-// fileName 生成记忆文件名：批次时间戳 + session 前 8 位保证时序与批次归组，
-// 标题 slug 供人类与 Agent 浏览识别。同秒同标题冲突时追加 -N 序号。
-func (s *FileMemorySink) fileName(batch time.Time, sess, title string) string {
-	slug := strings.Trim(slugSanitize.ReplaceAllString(title, "-"), "-")
-	// 按 rune 截断：标题多为中文，按字节切片会产生无效 UTF-8 的乱码文件名
-	runes := []rune(slug)
-	if len(runes) > 20 {
-		runes = runes[:20]
+// categoryOf 返回记忆条目的分类（tags 首个关键词；空则 general）。
+func categoryOf(e memoryEntry) string {
+	if len(e.Tags) > 0 && strings.TrimSpace(e.Tags[0]) != "" {
+		return strings.TrimSpace(e.Tags[0])
 	}
-	slug = string(runes)
-	if slug == "" {
-		slug = "memory"
+	return "general"
+}
+
+// fileName 生成记忆文件名：{记录时间}-{agent名}-{分类}-{标题}.md。
+// 四元组即索引信息——时间定新旧、Agent 定归属与置信度、分类定主题域、标题
+// 定语义，ls/grep 文件名即可完成粗筛，无需打开文件；与 notes 的命名约定
+// （runtime/AGENTS.md）对称。标题按 rune 截断（中文按字节切片会产生无效
+// UTF-8 的乱码文件名）；同批同标题冲突时追加 -N 序号。
+func (s *FileMemorySink) fileName(memoryDir string, batch time.Time, agentName, category, title string) string {
+	clean := func(in string) string {
+		out := strings.Trim(slugSanitize.ReplaceAllString(in, "-"), "-")
+		runes := []rune(out)
+		if len(runes) > 20 {
+			runes = runes[:20]
+		}
+		out = string(runes)
+		if out == "" {
+			out = "unknown"
+		}
+		return out
 	}
-	base := fmt.Sprintf("%s-%s-%s", batch.Format("20060102-150405"), sess, slug)
-	return base + ".md"
+	base := fmt.Sprintf("%s-%s-%s-%s", batch.Format("20060102-150405"),
+		clean(agentName), clean(category), clean(title))
+	name := base + ".md"
+	for i := 2; ; i++ {
+		if _, err := os.Stat(filepath.Join(memoryDir, name)); os.IsNotExist(err) {
+			return name
+		}
+		name = fmt.Sprintf("%s-%d.md", base, i)
+	}
 }
 
 // renderEntry 把一条记忆渲染为人可读可编辑的 markdown 文件内容。
@@ -178,10 +192,12 @@ func renderEntry(batch time.Time, agentName, sessionID string, e memoryEntry) st
 	b.WriteString(strings.Join(meta, " | "))
 	b.WriteString("\n\n")
 	if sm := strings.TrimSpace(e.Summary); sm != "" {
-		b.WriteString(sm + "\n\n")
+		b.WriteString(sm)
+		b.WriteString("\n\n")
 	}
 	if ct := strings.TrimSpace(e.Content); ct != "" {
-		b.WriteString(strings.TrimRight(ct, "\n") + "\n")
+		b.WriteString(strings.TrimRight(ct, "\n"))
+		b.WriteString("\n")
 	}
 	return b.String()
 }

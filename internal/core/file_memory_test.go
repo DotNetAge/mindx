@@ -70,6 +70,15 @@ func TestWrite_JsonEntries_OneFilePerEntry(t *testing.T) {
 	if len(mdFiles) != 2 {
 		t.Fatalf("两条记忆应落盘两个文件, got %v", mdFiles)
 	}
+	// 文件名四元组：记录时间-agent名-分类-标题（分类 = tags 首个关键词）
+	for _, f := range mdFiles {
+		if !strings.Contains(f, "-agent-x-") {
+			t.Errorf("文件名应包含 agent 名: %s", f)
+		}
+	}
+	if !strings.Contains(mdFiles[0], "-a-") && !strings.Contains(mdFiles[1], "-a-") {
+		t.Errorf("文件名应包含分类（tags[0]）: %v", mdFiles)
+	}
 	for _, f := range mdFiles {
 		data, _ := os.ReadFile(filepath.Join(dir, f))
 		text := string(data)
