@@ -43,6 +43,7 @@ func (s *FileMemorySink) MemoryDirFor(projectDir string) string {
 
 // memoryEntry 是压缩条目的内部结构（与压缩提示词的 JSON 字段一一对应）。
 type memoryEntry struct {
+	Kind      string   `json:"kind"`
 	Title     string   `json:"title"`
 	Summary   string   `json:"summary"`
 	Content   string   `json:"content"`
@@ -173,6 +174,9 @@ func renderEntry(batch time.Time, agentName, sessionID string, e memoryEntry) st
 		}
 	}
 	meta := []string{eventAt.Format("2006-01-02 15:04"), "agent: " + agentName, "session: " + sessionID}
+	if e.Kind != "" {
+		meta = append(meta, "kind: "+e.Kind)
+	}
 	if len(e.Tags) > 0 {
 		meta = append(meta, "tags: "+strings.Join(e.Tags, ", "))
 	}
