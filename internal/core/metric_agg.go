@@ -10,10 +10,12 @@ import (
 // 输入窗口内的 metric 事件，输出四因子 + P 的结构化量表。全部为确定性计算，
 // 禁止 LLM 心算——LLM 只负责解读本聚合器的 JSON 输出。
 
-// Stat 是单个指标的统计量：样本量 + 中位数 + P90。
-// Null 为 true 表示样本不足（低于最小样本阈值），Median/P90 无意义不得引用。
+// Stat 是单个指标的统计量。分位数类指标填 Median/P90；比率类指标填
+// Mean（0-1 占比），此时 Median/P90 与 Mean 同值便于统一渲染。
+// Null 为 true 表示样本不足（低于最小样本阈值），其余字段无意义不得引用。
 type Stat struct {
 	Samples int     `json:"samples"`
+	Mean    float64 `json:"mean"`
 	Median  float64 `json:"median"`
 	P90     float64 `json:"p90"`
 	Null    bool    `json:"null"`
@@ -40,8 +42,8 @@ type MetricReport struct {
 	Speed     SpeedStats       `json:"speed"`
 	Effort    EffortStats      `json:"effort"`
 	Quality   QualityStats     `json:"quality"`
+	Perceived PerceivedStats   `json:"perceived"`
 	Yield     map[string]Stat  `json:"yield"`
-	Perceived map[string]Stat  `json:"perceived"`
 	ByAgent   []AgentMetricRow `json:"by_agent,omitempty"`
 	BySkill   []SkillMetricRow `json:"by_skill,omitempty"`
 	Notes     []string         `json:"notes,omitempty"` // 口径说明（如简化口径声明）
@@ -62,9 +64,20 @@ type EffortStats struct {
 }
 
 // QualityStats：q_route_correction = 会话内相邻技能切换计数（v1 简化口径：
-// 轮次技能序列中相邻不同技能的次数，按会话汇总）。完整口径见指标字典。
+// 轮次技能序列中相邻不同技能的次数，按会话汇总）；q_task_success /
+// q_rework_rate 为会话级比率（生效判定取会话最新轮次的判定——白皮书 4.3）。
 type QualityStats struct {
+	QTaskSuccess     *Stat `json:"q_task_success"`
+	QReworkRate      *Stat `json:"q_rework_rate"`
 	QRouteCorrection *Stat `json:"q_route_correction"`
+}
+
+// PerceivedStats：主观感知（P 维度，白皮书第 7 章）。p_round_agg = 轮次
+// 赞踩聚合（user_feedback 判定中"赞"占比，事件满意度构念）；p_overall =
+// 管理页整体评价"赞"占比（整体印象构念）。两构念分开呈现不混算（MTMM）。
+type PerceivedStats struct {
+	PRoundAgg *Stat `json:"p_round_agg"`
+	POverall  *Stat `json:"p_overall"`
 }
 
 // AgentMetricRow 是 Agent 维度的下钻行。
@@ -85,13 +98,12 @@ type SkillMetricRow struct {
 // minMetricSamples 是最小样本阈值（附录 B 第 1 条默认 10）。
 const minMetricSamples = 10
 
-// AggregateMetricReport 从窗口内的 round 事件聚合量表。
-// now 用于生成窗口Until；事件由调用方先行过滤窗口。
+// AggregateMetricReport 从窗口内的 metric 事件聚合量表。
+// round 事件驱动 S/E 与判定类指标；overall 事件驱动 p_overall。
 func AggregateMetricReport(events []metric.MetricEvent, since, until string) *MetricReport {
 	report := &MetricReport{
-		Window:    MetricWindow{Since: since, Until: until},
-		Yield:     map[string]Stat{"y_adoption": {Null: true}},
-		Perceived: map[string]Stat{"p_round_agg": {Null: true}, "p_overall": {Null: true}},
+		Window: MetricWindow{Since: since, Until: until},
+		Yield:  map[string]Stat{"y_adoption": {Null: true}}, // 采纳信号 v2 接入
 		Notes: []string{
 			"v1 口径：q_route_correction 为相邻技能切换的简化计数；e_cost 需定价 join，v2 交付",
 		},
@@ -102,16 +114,41 @@ func AggregateMetricReport(events []metric.MetricEvent, since, until string) *Me
 	var tokens []float64
 	var routeCorrections []float64
 
+	// 会话级生效判定：每会话取最新 round 事件的判定（白皮书 4.3——
+	// 返工回溯写入的 rework_trace 天然是最新记录，覆盖早先乐观判定）。
+	sessionOutcome := map[string]metric.Outcome{}
+	ratingUp, ratingTotal := 0, 0
+	overallUp, overallTotal := 0, 0
+
 	byAgent := map[string]*AgentMetricRow{}
 	bySkill := map[string]*SkillMetricRow{}
 
 	for _, ev := range events {
 		if ev.Kind != metric.KindRound {
+			// overall 事件：管理页整体评价（P 的整体印象构念）。
+			if ev.Kind == metric.KindOverall {
+				if j, ok := ev.LatestJudgment(); ok && j.Source == metric.SourceUserFeedback {
+					overallTotal++
+					if j.Value == metric.OutcomeSuccess {
+						overallUp++
+					}
+				}
+			}
 			continue
 		}
+
 		report.Samples.Rounds++
-		if _, judged := ev.LatestJudgment(); judged {
+		judged, hasJudgment := ev.LatestJudgment()
+		if hasJudgment {
 			report.Samples.Judged++
+			sessionOutcome[ev.SessionID] = judged.Value
+			// P 的轮次赞踩：仅统计用户结构化反馈源（user_feedback）。
+			if judged.Source == metric.SourceUserFeedback {
+				ratingTotal++
+				if judged.Value == metric.OutcomeSuccess {
+					ratingUp++
+				}
+			}
 		}
 
 		iterations = append(iterations, float64(ev.RoundIterations))
@@ -129,7 +166,7 @@ func AggregateMetricReport(events []metric.MetricEvent, since, until string) *Me
 		row.Rounds++
 		row.TokensSum += ev.Tokens
 		row.DurationMS += ev.DurationMS
-		if _, judged := ev.LatestJudgment(); judged {
+		if hasJudgment {
 			row.Coverage++
 		}
 
@@ -163,16 +200,46 @@ func AggregateMetricReport(events []metric.MetricEvent, since, until string) *Me
 	report.Effort.ECost = &Stat{Null: true}
 	report.Quality.QRouteCorrection = buildStat(routeCorrections)
 
+	// 会话级比率：成功 / 返工（有判定会话为分母）。
+	successCount, reworkCount := 0, 0
+	for _, v := range sessionOutcome {
+		switch v {
+		case metric.OutcomeSuccess:
+			successCount++
+		case metric.OutcomeRework:
+			reworkCount++
+		}
+	}
+	report.Quality.QTaskSuccess = ratioStat(successCount, len(sessionOutcome))
+	report.Quality.QReworkRate = ratioStat(reworkCount, len(sessionOutcome))
+	report.Perceived.PRoundAgg = ratioStat(ratingUp, ratingTotal)
+	report.Perceived.POverall = ratioStat(overallUp, overallTotal)
+
 	return report
 }
 
-// buildStat 由样本集构造 Stat；样本不足阈值时返回 Null。
+// ratioStat 构造比率型 Stat（Mean/Median/P90 同值，0-1 占比）；
+// 分母不足阈值时为 Null——禁止以小样本冒充统计（白皮书 9 章通用口径）。
+func ratioStat(numerator, denominator int) *Stat {
+	if denominator < minMetricSamples {
+		return &Stat{Samples: denominator, Null: true}
+	}
+	r := float64(numerator) / float64(denominator)
+	return &Stat{Samples: denominator, Mean: r, Median: r, P90: r}
+}
+
+// buildStat 由样本集构造 Stat（分位数类：Mean 为算术均值）；样本不足阈值时返回 Null。
 func buildStat(samples []float64) *Stat {
 	if len(samples) < minMetricSamples {
 		return &Stat{Samples: len(samples), Null: true}
 	}
+	mean := 0.0
+	for _, v := range samples {
+		mean += v
+	}
 	return &Stat{
 		Samples: len(samples),
+		Mean:    mean / float64(len(samples)),
 		Median:  quantile(samples, 0.5),
 		P90:     quantile(samples, 0.9),
 	}

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -85,12 +86,63 @@ func TestAggregateMetricReportBelowThresholdIsNull(t *testing.T) {
 	if report.Speed.SRounds.Samples != 1 {
 		t.Fatalf("expected samples 1, got %d", report.Speed.SRounds.Samples)
 	}
-	// Yield/Perceived 在 v2 前为 null 占位。
+	// Yield/Perceived 在判定数据接入前为 null 占位。
 	if report.Yield["y_adoption"].Null != true {
 		t.Fatal("expected y_adoption null placeholder")
 	}
-	if report.Perceived["p_round_agg"].Null != true {
-		t.Fatal("expected p_round_agg null placeholder")
+	if report.Perceived.PRoundAgg.Null != true {
+		t.Fatal("expected p_round_agg null placeholder (no user feedback)")
+	}
+	if report.Perceived.POverall.Null != true {
+		t.Fatal("expected p_overall null placeholder (no overall events)")
+	}
+	// 判定类指标：无判定会话 → null。
+	if report.Quality.QTaskSuccess.Null != true {
+		t.Fatal("expected q_task_success null (no judgments)")
+	}
+	if report.Quality.QReworkRate.Null != true {
+		t.Fatal("expected q_rework_rate null (no judgments)")
+	}
+}
+
+func TestAggregateJudgmentMetrics(t *testing.T) {
+	// 12 个会话：8 个用户点赞（success）、2 个点踩（fail）、2 个返工回溯。
+	var events []metric.MetricEvent
+	outcomes := []metric.Outcome{
+		metric.OutcomeSuccess, metric.OutcomeSuccess, metric.OutcomeSuccess,
+		metric.OutcomeSuccess, metric.OutcomeSuccess, metric.OutcomeSuccess,
+		metric.OutcomeSuccess, metric.OutcomeSuccess,
+		metric.OutcomeFail, metric.OutcomeFail,
+		metric.OutcomeRework, metric.OutcomeRework,
+	}
+	for i, o := range outcomes {
+		ev := metricRound(fmt.Sprintf("j%d", i), "assistant", 2, 100, 10, nil)
+		ev.SessionID = fmt.Sprintf("sess-j%d", i)
+		ev.Judgments = []metric.JudgmentRecord{{
+			Value: o, Source: metric.SourceUserFeedback, At: time.Now(),
+		}}
+		events = append(events, ev)
+	}
+
+	report := AggregateMetricReport(events, "since", "until")
+
+	if report.Quality.QTaskSuccess.Null {
+		t.Fatal("q_task_success should be measurable (12 judged sessions)")
+	}
+	// 8/12 = 0.667。
+	if diff := report.Quality.QTaskSuccess.Mean - 8.0/12.0; diff > 0.001 || diff < -0.001 {
+		t.Fatalf("expected task success 8/12, got %v", report.Quality.QTaskSuccess.Mean)
+	}
+	if diff := report.Quality.QReworkRate.Mean - 2.0/12.0; diff > 0.001 || diff < -0.001 {
+		t.Fatalf("expected rework rate 2/12, got %v", report.Quality.QReworkRate.Mean)
+	}
+	// P：8 个赞 / 12 个判定（fail 与 rework 均非赞）= 0.667。
+	if diff := report.Perceived.PRoundAgg.Mean - 8.0/12.0; diff > 0.001 || diff < -0.001 {
+		t.Fatalf("expected round agg 8/12, got %v", report.Perceived.PRoundAgg.Mean)
+	}
+	// Judged = 12 轮有判定。
+	if report.Samples.Judged != 12 {
+		t.Fatalf("expected 12 judged rounds, got %d", report.Samples.Judged)
 	}
 }
 
