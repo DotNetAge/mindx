@@ -114,6 +114,8 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"metric.baseline.save":               r.daemon.handleMetricBaselineSave,
 		"metric.baseline.list":               r.daemon.handleMetricBaselineList,
 		"metric.compare":                     r.daemon.handleMetricCompare,
+		"metric.consent.get":                 r.daemon.handleMetricConsentGet,
+		"metric.consent.set":                 r.daemon.handleMetricConsentSet,
 		"token.usage.monthly":                r.daemon.handleTokenUsageMonthly,
 		"token.usage.by_model":               r.daemon.handleTokenUsageByModel,
 		"token.usage.total":                  r.daemon.handleTokenUsageTotal,

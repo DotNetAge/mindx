@@ -82,3 +82,19 @@ type MetricCompareParams struct {
 func (c *Client) MetricCompare(params MetricCompareParams) (json.RawMessage, error) {
 	return c.CallWithTimeout("metric.compare", params)
 }
+
+// MetricConsentSetParams are the params for metric.consent.set（出网授权开关）。
+type MetricConsentSetParams struct {
+	Granted bool `json:"granted"` // true=授权聚合评分出网；false=撤回授权
+}
+
+// MetricConsentSet 写入用户对决策计量出网的授权状态（幂等，覆盖旧状态）。
+// 授权是市场评分上传的前置条件；未授权时任何上传路径不得发起网络请求。
+func (c *Client) MetricConsentSet(params MetricConsentSetParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("metric.consent.set", params)
+}
+
+// MetricConsentGet 返回授权状态 {granted, updated_at}；从未设置时 granted=false。
+func (c *Client) MetricConsentGet() (json.RawMessage, error) {
+	return c.CallWithTimeout("metric.consent.get", nil)
+}
