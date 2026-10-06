@@ -254,17 +254,17 @@ mindx skill get <proposed-name>
 1. 全局库技能：按[技能位置与进化](#技能位置与进化)先 `mindx skills fetch <name>` 取到项目级副本，所有修改在副本上进行
 2. 项目级技能：直接读取 SKILL.md 全文
 
-### 步骤 B：frontmatter 机器校验
+### 步骤 B：确定性机器校验
 
-加载 `references/schemas.md`，对照其校验规则逐项检查：
+跑 `mindx skill validate --path <技能目录>`（唯一实现：skillstore.CheckQuality，输出 JSON 报告，退出码 0=通过 / 1=发现问题）。覆盖项：
 
-- [ ] `name` 符合规范：小写字母/数字/连字符，1-64 字符，不以 `-` 开头结尾，无 `--`
-- [ ] 目录名与 `name` 一致
-- [ ] `description` 1-1024 字符，说明了"何时使用"，不是营销文案
-- [ ] `allowed-tools` 中的工具真实存在且正文确实会用到
-- [ ] `requires` 声明与正文引用一致：正文用到的二进制/环境变量/运行时都已声明；没有声明用不到的
-- [ ] 正文引用 `scripts/`、`references/` 时使用 `{base_dir}` 模板变量
-- [ ] YAML 语法正确：frontmatter 以 `---` 开头且闭合；缺 `name`/`description` 会在守护进程装载时报硬错误
+- [ ] frontmatter 解析与字段合规（name 规范、description 长度与触发语义）
+- [ ] 软化词扫描（HASP：`建议…`/`可以考虑…`/`根据情况…`/`是可选的`，逐行定位）
+- [ ] 体积（正文 >150 行告警）
+- [ ] 引文格式（`[ref:ID]` 须 ref_ 前缀）
+- [ ] 正文 .md 链接可达性（含 `{base_dir}` 引用）
+
+frontmatter 的深度字段语义（`requires`/`install`/模板变量）仍以 `references/schemas.md` 为准，机器校验之外人工核对。
 
 ### 步骤 C：正文质量审查
 

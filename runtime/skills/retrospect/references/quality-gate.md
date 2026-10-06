@@ -2,17 +2,18 @@
 
 候选技能落位前的评分与棘轮规则。内嵌自包含，不依赖外部优化技能。
 
-## 铁律：确定性计算统一走 scripts/
+## 铁律：确定性计算统一走 CLI / scripts/
 
-`scripts/` 下三个脚本是确定性计算的**唯一实现**（阈值、正则、公式全在脚本内，本文件不重复算法，防文档与实现漂移）：
+SKILL.md 规范的机器校验唯一实现是 CLI：`mindx skill validate --path <技能目录>`（skillstore.CheckQuality，JSON 报告，退出码 0=通过 / 1=error）。skill-creator 审查步骤 B 与本质量门均调用它——禁止复写检查逻辑，防止实现漂移。
+
+记忆治理专属的两个脚本仍是确定性计算的补充实现：
 
 | 脚本 | 用途 | 调用 |
 |---|---|---|
 | `scripts/fapprox.py` | 记忆条目引用密度先验（主线二去存量排序） | `python3 {base_dir}/scripts/fapprox.py <agents_dir>` |
-| `scripts/softscan.py` | 候选技能确定性自查（frontmatter/软化词/体积/引文格式） | `python3 {base_dir}/scripts/softscan.py <skill_dir>` |
 | `scripts/refcheck.py` | 引文连锁校验（[ref:ID] 断裂检测） | `python3 {base_dir}/scripts/refcheck.py <agents_dir>` |
 
-三者均输出 JSON、退出码 0=通过 / 2=发现问题。禁止 LLM 心算替代脚本；LLM 负责决定跑哪个、解读 verdict 与 reason。
+禁止 LLM 心算替代；LLM 负责决定跑哪个、解读 verdict 与 reason。
 
 ## 五维评分（每维 0-10，总分 50）
 

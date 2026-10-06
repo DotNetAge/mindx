@@ -68,7 +68,7 @@ metadata:
 
 评分方法与棘轮规则详见 `references/quality-gate.md`。要点：
 
-1. **确定性自查**：跑 `python3 {base_dir}/scripts/softscan.py <skill_dir>`，覆盖 frontmatter 合规、软化词、体积、引文格式——禁止心算，以脚本输出为准
+1. **确定性自查**：跑 `mindx skill validate --path <skill_dir>`（唯一实现：skillstore.CheckQuality），覆盖 frontmatter 合规、软化词、体积、引文格式、链接可达——禁止心算，以 CLI 输出为准
 2. **独立复评**：派 SubAgent 以纯读者视角给模糊维度（具体性、失败模式）评分，禁止自己写自己评
 3. **棘轮**：新稿分数 > 旧版才落位；否则保留旧版，把被拒方案与理由记入技能的 `notes/` 进化履历
 4. **单轮只改一个维度**；连续 2 轮无提升即停，不硬凑

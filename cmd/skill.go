@@ -94,17 +94,27 @@ Examples:
 }
 
 var skillValidateCmd = &cobra.Command{
-	Use:   "validate <name>",
-	Short: "Validate an installed skill",
-	Long: `Check that an installed skill's frontmatter and structure are valid.
+	Use:   "validate <name> | --path <dir>",
+	Short: "Validate an installed skill or a skill directory",
+	Long: `Run deterministic quality checks on a skill: frontmatter compliance,
+name/description rules, trigger semantics, soft-rule (HASP) scan, size budget,
+ref tag format, and .md link reachability.
 
-The skill must already be installed in the managed registry. Use "mindx skill add"
-to install a skill from a local directory first if needed.
+Two forms:
+  mindx skill validate <name>       # installed skill from the managed registry
+  mindx skill validate --path <dir> # any skill directory (project-level or arbitrary)
 
-Examples:
-  mindx skill validate batch`,
-	Args: cobra.ExactArgs(1),
+Output is a JSON report; exit code 0 = pass, 1 = issues found.
+This command is the single implementation of skill quality checks —
+skill-creator review (step B) and the retrospect quality gate both call it.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		pathFlag, _ := cmd.Flags().GetString("path")
+		if pathFlag != "" {
+			return validateSkillPath(pathFlag)
+		}
+		if len(args) != 1 {
+			return fmt.Errorf("usage: mindx skill validate <name> | --path <dir>")
+		}
 		return validateSkill(args[0])
 	},
 }
@@ -112,6 +122,7 @@ Examples:
 func init() {
 	skillListJSONCmd.Flags().Bool("json", false, "Output JSON via daemon (requires mindx start)")
 	skillListJSONCmd.Flags().StringSliceP("filter", "f", nil, "Filter skills by name or description (case-insensitive, comma-separated)")
+	skillValidateCmd.Flags().String("path", "", "Validate a skill directory directly (project-level or arbitrary path)")
 	skillCmd.AddCommand(skillListJSONCmd)
 	skillCmd.AddCommand(skillGetCmd)
 	skillCmd.AddCommand(skillAddCmd)
@@ -357,6 +368,25 @@ func validateSkill(name string) error {
 	fmt.Printf("  Description: %s\n", strings.TrimSpace(sk.Description))
 	if sk.AllowedTools != "" {
 		fmt.Printf("  Allowed Tools: %s\n", sk.AllowedTools)
+	}
+	return nil
+}
+
+// validateSkillPath 对任意技能目录执行质量检查（softscan/质量门的唯一实现），
+// 输出 JSON 报告，退出码 0=通过 / 1=发现问题。skill-creator 审查与 retrospect
+// 质量门均调用本命令，禁止在技能文档内复写检查逻辑。
+func validateSkillPath(dir string) error {
+	rep, err := skillstore.CheckQuality(dir)
+	if err != nil {
+		return err
+	}
+	out, err := json.MarshalIndent(rep, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(out))
+	if !rep.OK {
+		return fmt.Errorf("quality check failed: %d issue(s)", len(rep.Issues))
 	}
 	return nil
 }
