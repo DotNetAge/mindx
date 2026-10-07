@@ -222,15 +222,42 @@ type marketPackageDTO struct {
 	File        string            `json:"file"`
 	Sha256      string            `json:"sha256"`
 	Size        int64             `json:"size,omitempty"`
+	DownloadURL string            `json:"downloadUrl,omitempty"`
 }
 
-// handleMarketList 拉取市场清单（在线优先，失败降级本地缓存并附原因）。
-func (d *Daemon) handleMarketList(_ context.Context, _ json.RawMessage) (any, error) {
-	res, err := d.app.Market().List()
-	if err != nil {
-		return nil, err
+// handleMarketList 市场浏览：带分页/过滤参数走服务端分页 API（主入口），
+// 空参保持存量全量清单语义（过渡兼容，壳侧逐个切换期间不断供）。
+func (d *Daemon) handleMarketList(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketListParams
+	if params != nil {
+		_ = json.Unmarshal(params, &p) // 参数解析失败按空参处理（兼容存量调用方）
 	}
-	packages := res.Manifest.Packages
+	paged := p.Page > 0 || p.PageSize > 0 || p.Q != "" || p.Kind != "" || p.Sort != ""
+
+	var (
+		packages  []bundle.MarketPackage
+		source    string
+		warning   string
+		total     int
+		page      int
+		updatedAt string
+	)
+	if paged {
+		res, err := d.app.Market().ListPage(bundle.MarketQuery{
+			Page: p.Page, PageSize: p.PageSize, Kind: p.Kind, Q: p.Q, Sort: p.Sort,
+		})
+		if err != nil {
+			return nil, err
+		}
+		packages, source, warning, total, page = res.Packages, res.Source, res.Warning, res.Total, res.Page
+	} else {
+		res, err := d.app.Market().List()
+		if err != nil {
+			return nil, err
+		}
+		packages, source, warning = res.Manifest.Packages, res.Source, res.Warning
+		updatedAt = res.Manifest.UpdatedAt
+	}
 	if packages == nil {
 		packages = []bundle.MarketPackage{}
 	}
@@ -253,14 +280,21 @@ func (d *Daemon) handleMarketList(_ context.Context, _ json.RawMessage) (any, er
 			File:        p.File,
 			Sha256:      p.Sha256,
 			Size:        p.Size,
+			DownloadURL: p.DownloadURL,
 		})
 	}
-	return map[string]any{
-		"packages":   dtos,
-		"source":     res.Source,
-		"warning":    res.Warning,
-		"updated_at": res.Manifest.UpdatedAt,
-	}, nil
+	resp := map[string]any{
+		"packages": dtos,
+		"source":   source,
+		"warning":  warning,
+	}
+	if paged {
+		resp["total"] = total
+		resp["page"] = page
+	} else {
+		resp["updated_at"] = updatedAt
+	}
+	return resp, nil
 }
 
 // handleMarketPackageRead 读取市场技能包的 SKILL.md 原文（详情预览用，不安装不落库）。
@@ -274,21 +308,10 @@ func (d *Daemon) handleMarketPackageRead(_ context.Context, params json.RawMessa
 		return nil, fmt.Errorf("name is required")
 	}
 
-	// 清单中定位目标技能包（与 market.install 同口径；详情预览仅面向技能包）
-	res, err := d.app.Market().List()
+	// 单包定位：服务端详情 API 优先，清单回退（与 market.install 同口径；预览仅面向技能包）
+	target, err := d.app.Market().PackageByKindName(string(bundle.KindSkill), p.Name)
 	if err != nil {
 		return nil, err
-	}
-	var target *bundle.MarketPackage
-	for i := range res.Manifest.Packages {
-		pkg := &res.Manifest.Packages[i]
-		if pkg.Kind == bundle.KindSkill && pkg.Name == p.Name {
-			target = pkg
-			break
-		}
-	}
-	if target == nil {
-		return nil, fmt.Errorf("市场中不存在技能包 %q", p.Name)
 	}
 
 	pkgPath, err := d.app.Market().Download(*target)
@@ -314,21 +337,10 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 		return nil, fmt.Errorf("kind（agent/skill/team）与 name 均为必填")
 	}
 
-	// 清单中定位目标包（同时为下载与安装提供元数据）
-	res, err := d.app.Market().List()
+	// 单包定位：服务端详情 API 优先（download_url 直连），全量清单回退（过渡兼容）
+	target, err := d.app.Market().PackageByKindName(p.Kind, p.Name)
 	if err != nil {
 		return nil, err
-	}
-	var target *bundle.MarketPackage
-	for i := range res.Manifest.Packages {
-		pkg := &res.Manifest.Packages[i]
-		if string(pkg.Kind) == p.Kind && pkg.Name == p.Name {
-			target = pkg
-			break
-		}
-	}
-	if target == nil {
-		return nil, fmt.Errorf("市场中不存在 %s 类型包 %q", p.Kind, p.Name)
 	}
 
 	pkgPath, err := d.app.Market().Download(*target)

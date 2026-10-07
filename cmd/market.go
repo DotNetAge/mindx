@@ -45,6 +45,10 @@ func init() {
 	marketListCmd.Flags().Bool("json", false, "Output structured JSON (requires mindx start)")
 	marketListCmd.Flags().String("kind", "", "Filter by package type: agent or skill")
 	marketListCmd.Flags().StringSliceP("filter", "f", nil, "Filter packages by keyword, matched against name/description/role/category/skills (case-insensitive, comma-separated)")
+	marketListCmd.Flags().String("q", "", "Server-side keyword search against name/description")
+	marketListCmd.Flags().String("sort", "", "Server-side sort: likes, newest or downloads")
+	marketListCmd.Flags().Int("page", 0, "Page number (1-based; server-side pagination)")
+	marketListCmd.Flags().Int("page-size", 0, "Page size (server-side, default 50, max 200)")
 	marketInstallCmd.Flags().Bool("overwrite", false, "Overwrite existing target (agent dir or skill with the same name)")
 	marketInstallCmd.Flags().Bool("auto", false, "Auto-install missing dependencies without prompting")
 	marketInstallCmd.Flags().Bool("skip-deps", false, "Skip dependency checking and installation")
@@ -58,24 +62,33 @@ func init() {
 var marketListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List packages available in the online market (requires mindx start)",
-	Long: `Fetch the market manifest and list agent/skill packages.
+	Long: `Browse the market via the paged API (server-side filtering and pagination).
 
 Output includes kind (agent/skill), name, category, role, description and bundled skills.
-Use --kind to filter by package type and --filter to match by keyword
-(case-insensitive, against name/description/role/category/skills).
+Use --kind to filter by package type, --q for server-side keyword search
+(name/description), --page/--page-size for pagination, and --filter for
+additional client-side keyword matching (legacy).
 
 Examples:
   mindx market list
   mindx market list --kind agent
-  mindx market list --kind skill --filter "架构"
+  mindx market list --kind skill --q "架构"
+  mindx market list --page 2 --page-size 20
   mindx market list --json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		useJSON, _ := cmd.Flags().GetBool("json")
 		kind, _ := cmd.Flags().GetString("kind")
 		filters, _ := cmd.Flags().GetStringSlice("filter")
+		q, _ := cmd.Flags().GetString("q")
+		sortBy, _ := cmd.Flags().GetString("sort")
+		page, _ := cmd.Flags().GetInt("page")
+		pageSize, _ := cmd.Flags().GetInt("page-size")
 
 		if kind != "" && kind != "agent" && kind != "skill" && kind != "team" {
 			return fmt.Errorf("--kind 仅支持 agent、skill 或 team")
+		}
+		if sortBy != "" && sortBy != "likes" && sortBy != "newest" && sortBy != "downloads" {
+			return fmt.Errorf("--sort 仅支持 likes、newest 或 downloads")
 		}
 
 		cl, err := rpc.Dial(daemonAddr)
@@ -84,18 +97,22 @@ Examples:
 		}
 		defer func() { _ = cl.Close() }()
 
-		result, err := cl.MarketList()
+		result, err := cl.MarketList(rpc.MarketListParams{
+			Page: page, PageSize: pageSize, Kind: kind, Q: q, Sort: sortBy,
+		})
 		if err != nil {
 			return err
 		}
 
-		// market.list 返回 {packages, source, warning, updated_at}；包条目为
-		// camelCase DTO。过滤在客户端完成，与 agent list 的分层一致。
+		// market.list 响应：分页形态 {total,page,packages,...} 或全量形态
+		// {packages,source,warning,updated_at}（存量兼容）。--filter 为客户端二次过滤（遗留）。
 		var res struct {
 			Packages  []marketPackage `json:"packages"`
 			Source    string          `json:"source"`
 			Warning   string          `json:"warning"`
 			UpdatedAt string          `json:"updated_at"`
+			Total     int             `json:"total"`
+			Page      int             `json:"page"`
 		}
 		if err := json.Unmarshal(result, &res); err != nil {
 			// 兜底：无法解析时原样输出
@@ -105,7 +122,8 @@ Examples:
 
 		filtered := make([]marketPackage, 0, len(res.Packages))
 		for _, p := range res.Packages {
-			if kind != "" && p.Kind != kind {
+			if kind != "" && p.Kind != kind && q == "" {
+				// 服务端 kind 过滤已生效时不再重复（仅空参全量回退路径需要）
 				continue
 			}
 			if !marketPackageMatch(p, filters) {
@@ -119,6 +137,8 @@ Examples:
 				"packages":   filtered,
 				"source":     res.Source,
 				"warning":    res.Warning,
+				"total":      res.Total,
+				"page":       res.Page,
 				"updated_at": res.UpdatedAt,
 			}
 			formatted, _ := json.MarshalIndent(out, "", "  ")
@@ -128,7 +148,7 @@ Examples:
 
 		if len(filtered) == 0 {
 			fmt.Println("市场中没有匹配的分发包。")
-			fmt.Println("提示：调整 --filter 关键词，或运行 `mindx market list` 查看全部。")
+			fmt.Println("提示：调整 --q/--filter 关键词，或运行 `mindx market list` 查看全部。")
 			return nil
 		}
 
@@ -154,7 +174,11 @@ Examples:
 				skills++
 			}
 		}
-		fmt.Printf("\n%d package(s)（agent %d / skill %d）", len(filtered), agents, skills)
+		if res.Total > 0 {
+			fmt.Printf("\n%d package(s)（本页 %d · 服务端共 %d，page %d）", len(filtered), len(filtered), res.Total, res.Page)
+		} else {
+			fmt.Printf("\n%d package(s)（agent %d / skill %d）", len(filtered), agents, skills)
+		}
 		if res.Source != "" {
 			fmt.Printf(" · source: %s", res.Source)
 		}

@@ -27,7 +27,14 @@ type SkillImportParams struct {
 }
 
 // MarketListParams are the params for market.list。
-type MarketListParams struct{}
+// 全部字段可选：空参 = 存量全量清单语义（过渡兼容）；带分页/过滤参数 = 走服务端分页 API。
+type MarketListParams struct {
+	Page     int    `json:"page,omitempty"`      // 1 起始
+	PageSize int    `json:"page_size,omitempty"` // 缺省 50，服务端上限 200
+	Kind     string `json:"kind,omitempty"`      // agent | skill | team
+	Q        string `json:"q,omitempty"`         // 对 name/description 查找
+	Sort     string `json:"sort,omitempty"`      // likes | newest | downloads
+}
 
 // MarketInstallParams are the params for market.install（下载市场分发包并安装）。
 type MarketInstallParams struct {
@@ -62,8 +69,8 @@ func (c *Client) SkillImport(path string, overwrite bool) (json.RawMessage, erro
 	return c.CallWithTimeout("skill.import", SkillImportParams{Path: path, Overwrite: overwrite})
 }
 
-func (c *Client) MarketList() (json.RawMessage, error) {
-	return c.CallWithTimeout("market.list", MarketListParams{})
+func (c *Client) MarketList(params MarketListParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.list", params)
 }
 
 func (c *Client) MarketInstall(kind, name string, overwrite, skipDeps, autoInstall bool) (json.RawMessage, error) {
