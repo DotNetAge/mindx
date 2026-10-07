@@ -387,8 +387,8 @@ func (a *App) Skills() *skillstore.Store {
 	return a.skills
 }
 
-// Market 返回市场客户端（懒创建；缓存目录位于数据目录 market-cache 下按源哈希隔离）。
-// manifestURL 取配置 market_manifest_url（源 id 解析结果缓存，为空回退官方默认源），
+// Market 返回市场客户端（懒创建；缓存目录位于数据目录 market-cache 下按
+// apiBase+sourceID 哈希隔离）。全部数据走服务端分页 API（清单机制已废除），
 // 创建后按配置注入商户访问令牌。
 func (a *App) Market() *bundle.MarketClient {
 	a.marketMu.RLock()
@@ -401,31 +401,31 @@ func (a *App) Market() *bundle.MarketClient {
 	a.marketMu.Lock()
 	defer a.marketMu.Unlock()
 	if a.market == nil {
-		a.market = bundle.NewMarketClient(a.mindxConfig.MarketManifestURL,
+		a.market = bundle.NewMarketClient(a.mindxConfig.MarketAPIBase, a.mindxConfig.MarketSourceID,
 			filepath.Join(a.settings.DataDir(), "market-cache"))
 		a.market.SetPAT(a.mindxConfig.MarketPAT)
 	}
 	return a.market
 }
 
-// SetMarketSource 运行时换源/换令牌：按源 id 经市场服务端解析清单地址后重建客户端
-// （缓存目录随源哈希隔离）；sourceID 为空或解析失败回退默认官方源（日志 warn，不阻断）。
+// SetMarketSource 运行时换源/换令牌：校验源 id 后重建客户端（缓存目录随
+// apiBase+sourceID 哈希隔离）；校验失败回退官方默认源（日志 warn，不阻断）。
 // 调用方（user.config 副作用）负责广播 market_changed 通知前端刷新货架。
 func (a *App) SetMarketSource(sourceID, pat string) {
 	a.marketMu.Lock()
 	defer a.marketMu.Unlock()
 
-	probe := bundle.NewMarketClient(a.mindxConfig.MarketManifestURL,
+	probe := bundle.NewMarketClient(a.mindxConfig.MarketAPIBase, "",
 		filepath.Join(a.settings.DataDir(), "market-cache"))
 	probe.SetPAT(pat)
-
-	url, err := probe.ResolveSourceURL(sourceID)
-	if err != nil {
-		a.logger.Warn("市场源解析失败，回退官方默认源", "source_id", sourceID, "error", err)
-		url = ""
+	if err := probe.ResolveSource(sourceID); err != nil {
+		a.logger.Warn("市场源校验失败，回退官方默认源", "source_id", sourceID, "error", err)
+		sourceID = ""
 	}
-	a.mindxConfig.MarketManifestURL = url
-	a.market = bundle.NewMarketClient(url, filepath.Join(a.settings.DataDir(), "market-cache"))
+	a.mindxConfig.MarketSourceID = sourceID
+	a.mindxConfig.MarketPAT = pat
+	a.market = bundle.NewMarketClient(a.mindxConfig.MarketAPIBase, sourceID,
+		filepath.Join(a.settings.DataDir(), "market-cache"))
 	a.market.SetPAT(pat)
 }
 

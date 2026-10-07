@@ -15,28 +15,16 @@ import (
 	"time"
 )
 
-// DefaultMarketManifestURL 是 COS 静态市场的清单地址（bucket repo-1257961037，
-// 与 mindx-app 发布桶同账号，公有读私有写；发布走 publish-market.mjs 脚本）。
-// 过渡兼容：静态清单是文件目录时代的形态，新消费路径走 DefaultMarketAPIBase 分页 API。
-const DefaultMarketManifestURL = "https://repo-1257961037.cos.ap-guangzhou.myqcloud.com/market/manifest.json"
-
-// DefaultMarketAPIBase 是市场服务端分页 API 的基址（市场消费主入口，契约 §2.2）。
+// DefaultMarketAPIBase 是市场服务端 API 的基址（市场消费唯一入口：分页货架、
+// 单包详情、源列表均出自此处；静态清单机制已废除，不再有任何清单回退路径）。
 const DefaultMarketAPIBase = "https://www.mindx.chat/api/v1"
 
 // 市场交互的体积与超时上限。
 const (
-	manifestMaxSize = 10 << 20 // 清单上限 10MB
-	packageMaxSize  = 200 << 20
-	httpTimeout     = 15 * time.Second
+	apiMaxSize     = 10 << 20 // API 响应上限 10MB
+	packageMaxSize = 200 << 20
+	httpTimeout    = 15 * time.Second
 )
-
-// MarketManifest 是市场清单（与包内 Manifest 不同：这是"货架"，描述可安装的分发包）。
-// sha256 仅用于传输完整性校验，不构成版本管理（与"Skill 暂无版本管理策略"一致）。
-type MarketManifest struct {
-	Version   int             `json:"version"`
-	UpdatedAt string          `json:"updated_at,omitempty"`
-	Packages  []MarketPackage `json:"packages"`
-}
 
 // MarketPackage 描述一个可安装的分发包条目。预留扩展字段，不做超前设计。
 type MarketPackage struct {
@@ -63,25 +51,17 @@ type MarketPackage struct {
 	// SkillDescs 技能描述映射（技能名 → SKILL.md frontmatter description，
 	// 包内清单透传；收录语义同 SkillNames）。市场详情页展示用。
 	SkillDescs map[string]string `json:"skill_descs,omitempty"`
-	// Version 包版本（kind=skill 取自 SKILL.md frontmatter metadata.version，打包时写入清单）。
+	// Version 包版本（kind=skill 取自 SKILL.md frontmatter metadata.version，发布时录入）。
 	Version string `json:"version,omitempty"`
-	// File 包文件相对清单地址的路径（如 packages/xxx.mindpkg；API 形态下可为空）。
-	File string `json:"file"`
-	// DownloadURL 包文件下载直连地址（服务端分页 API 下发，安装直连无需清单拼接）。
+	// File 包文件的缓存相对路径（内容寻址布局 packages/<kind>/<name>.mindpkg；
+	// 仅用于本地缓存定位，不再承担清单拼接语义）。
+	File string `json:"file,omitempty"`
+	// DownloadURL 包文件下载直连地址（服务端 API 下发，安装直连）。
 	DownloadURL string `json:"download_url,omitempty"`
 	// Sha256 包文件内容的十六进制摘要。
 	Sha256 string `json:"sha256"`
 	// Size 包文件字节数（列表展示用）。
 	Size int64 `json:"size,omitempty"`
-}
-
-// MarketListResult 是一次清单拉取的结果。
-type MarketListResult struct {
-	Manifest *MarketManifest `json:"manifest"`
-	// Source 数据来源：remote（在线清单）/ cache（降级本地缓存）。
-	Source string `json:"source"`
-	// Warning 降级原因（Source=cache 时非空），供前端提示。
-	Warning string `json:"warning,omitempty"`
 }
 
 // MarketQuery 是分页浏览市场的查询参数（契约 §2.2，全部可选）。
@@ -98,22 +78,20 @@ type MarketPage struct {
 	Total    int             `json:"total"`
 	Page     int             `json:"page"`
 	Packages []MarketPackage `json:"packages"`
-	// Source 数据来源：api（分页 API）/ manifest（回退全量清单过滤）。
-	Source  string `json:"source"`
-	Warning string `json:"warning,omitempty"`
+	Source   string          `json:"source"`
 }
 
-// MarketClient 消费市场：分页 API 优先（服务端主入口），静态清单回退（过渡兼容）；
+// MarketClient 消费市场：全部数据走服务端分页 API（无清单回退）；
 // 分发包下载带 sha256 校验。pat 非空时所有出站请求携带 Authorization（商户源鉴权）。
 type MarketClient struct {
-	httpClient  *http.Client
-	manifestURL string
-	apiBase     string
-	cacheDir    string
+	httpClient *http.Client
+	// apiBase 市场服务端 API 基址（默认官方；本地调试/自托管经配置覆盖）
+	apiBase string
+	// sourceID 商户源标识（空/default = 官方公开货架，请求不带 source 参数）
+	sourceID string
+	cacheDir string
 	// pat 商户访问令牌（用户在网页签发的 PAT，经设置粘贴；空 = 匿名）
 	pat string
-	// sourceID 从 manifestURL 的 ?source= 参数解析（商户源标识，fetchAPIPage 透传）
-	sourceID string
 }
 
 // SetPAT 设置商户访问令牌（换令牌后由调用方重建客户端或直接复用本实例均可）。
@@ -134,48 +112,62 @@ func (m *MarketClient) authedGet(url string) (*http.Response, error) {
 }
 
 // NewMarketClient 创建市场客户端。
-// manifestURL 为空或为默认 COS 清单地址时，API 基址使用 DefaultMarketAPIBase（服务端分页 API
-// 是市场消费主入口，不能因清单在 COS 而把 API 请求也打到 COS）；显式配置其他清单地址
-// （测试/自托管）时 apiBase 由其同源推导（清单目录 + /api/v1），推导出的 API 路径不存在时
-// 由调用方快速回退清单路径，不产生长等待。
-// cacheDir 为缓存根目录：内部按清单地址哈希开子目录（market-cache/<sha8>），
-// 多源切换时清单与包缓存互不串扰；旧源缓存随换源自然废弃。
-func NewMarketClient(manifestURL, cacheDir string) *MarketClient {
-	if strings.TrimSpace(manifestURL) == "" {
-		manifestURL = DefaultMarketManifestURL
+// apiBase 为市场服务端 API 基址（空 = 官方 DefaultMarketAPIBase；本地调试/自托管显式传入）；
+// sourceID 为选中市场源 id（空/default = 官方公开货架）。
+// cacheDir 为缓存根目录：内部按 apiBase+sourceID 哈希开子目录（market-cache/<sha8>），
+// 多源/多基址切换时包缓存互不串扰。
+func NewMarketClient(apiBase, sourceID, cacheDir string) *MarketClient {
+	apiBase = strings.TrimRight(strings.TrimSpace(apiBase), "/")
+	if apiBase == "" {
+		apiBase = DefaultMarketAPIBase
 	}
-	apiBase := DefaultMarketAPIBase
-	if manifestURL != DefaultMarketManifestURL {
-		if i := strings.LastIndex(manifestURL, "/"); i >= 0 {
-			apiBase = manifestURL[:i+1] + "api/v1"
-		}
-	}
-	// 缓存目录按源哈希隔离：同根目录下不同源各有清单/包缓存空间
-	sum := sha256.Sum256([]byte(manifestURL))
+	sum := sha256.Sum256([]byte(apiBase + "|" + sourceID))
 	cacheDir = filepath.Join(cacheDir, hex.EncodeToString(sum[:])[:8])
-	c := &MarketClient{
-		httpClient:  &http.Client{Timeout: httpTimeout},
-		manifestURL: manifestURL,
-		apiBase:     apiBase,
-		cacheDir:    cacheDir,
+	return &MarketClient{
+		httpClient: &http.Client{Timeout: httpTimeout},
+		apiBase:    apiBase,
+		sourceID:   sourceID,
+		cacheDir:   cacheDir,
 	}
-	// 商户源的 manifestURL 形如 .../manifest?source=<id>：解析出 source id，
-	// fetchAPIPage 请求货架时透传（服务端按源的 registry 过滤货架）
-	if u, perr := url.Parse(manifestURL); perr == nil && u.Query().Get("source") != "" {
-		c.sourceID = u.Query().Get("source")
+}
+
+// apiPackage 服务端包条目的原始响应结构（列表/详情一致）：基础字段在顶层，
+// 展示元数据（昵称/负责人/成员/技能装配）在嵌套 meta 对象中。
+type apiPackage struct {
+	Kind        string         `json:"kind"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Category    string         `json:"category"`
+	DownloadURL string         `json:"download_url"`
+	Sha256      string         `json:"sha256"`
+	Size        int64          `json:"size"`
+	Version     string         `json:"version"`
+	Meta        apiPackageMeta `json:"meta"`
+}
+
+// toMarketPackage 转为统一包条目（分类归一；版本优先取 meta.version，回退顶层）。
+func (ap apiPackage) toMarketPackage() MarketPackage {
+	version := ap.Meta.Version
+	if version == "" {
+		version = ap.Version
 	}
-	return c
+	return MarketPackage{
+		Kind: PackageKind(ap.Kind), Name: ap.Name, Description: ap.Description,
+		Icon: ap.Meta.Icon, NickName: ap.Meta.NickName, Role: ap.Meta.Role,
+		Category: normalizeCategory(ap.Category), Leader: ap.Meta.Leader, Members: ap.Meta.Members,
+		Skills: ap.Meta.Skills, SkillNames: ap.Meta.SkillNames, SkillDescs: ap.Meta.SkillDescs,
+		Version: version, DownloadURL: ap.DownloadURL, Sha256: ap.Sha256, Size: ap.Size,
+	}
 }
 
 // MarketSource 市场源条目（服务端 GET /api/v1/sources 下发）。
 type MarketSource struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	Tier        string `json:"tier"`
-	ManifestURL string `json:"manifest_url"`
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	Tier string `json:"tier"`
 }
 
-// Sources 拉取可用市场源清单（商户用户携带 PAT 可见商户源；default 为空 URL 语义）。
+// Sources 拉取可用市场源清单（商户用户携带 PAT 可见商户源；default 为空 id 语义）。
 func (m *MarketClient) Sources() ([]MarketSource, error) {
 	resp, err := m.authedGet(m.apiBase + "/sources")
 	if err != nil {
@@ -185,7 +177,7 @@ func (m *MarketClient) Sources() ([]MarketSource, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("源列表响应状态 %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, manifestMaxSize))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return nil, err
 	}
@@ -198,68 +190,44 @@ func (m *MarketClient) Sources() ([]MarketSource, error) {
 	return body.Sources, nil
 }
 
-// ResolveSourceURL 按源 id 解析清单地址：default 或未知空 id 返回空串（走官方默认链路）；
-// 源列表拉取失败或 id 不在列表时返回错误（调用方回退默认源）。
-func (m *MarketClient) ResolveSourceURL(sourceID string) (string, error) {
+// ResolveSource 校验源 id 有效性：空或 "default" 视为官方公开源直接通过；
+// 其余 id 必须出现在源列表中（源列表拉取失败或 id 不在列表时报错，调用方回退官方源）。
+func (m *MarketClient) ResolveSource(sourceID string) error {
 	if strings.TrimSpace(sourceID) == "" || sourceID == "default" {
-		return "", nil
+		return nil
 	}
 	sources, err := m.Sources()
 	if err != nil {
-		return "", err
+		return err
 	}
 	for _, s := range sources {
 		if strconv.FormatInt(s.ID, 10) == sourceID {
-			return s.ManifestURL, nil
+			return nil
 		}
 	}
-	return "", fmt.Errorf("市场源 %s 不存在或不可用", sourceID)
+	return fmt.Errorf("市场源 %s 不存在或不可用", sourceID)
 }
 
-// ListPage 分页浏览市场：优先分页 API（市场消费主入口）；API 不可达时回退
-// 全量清单（COS 过渡兼容）在内存中过滤分页，并在结果上标注来源与降级原因。
+// ListPage 分页浏览市场（服务端 GET /api/v1/packages 唯一数据路径）；
+// API 不可达直接报错——静态清单机制已废除，不再有任何回退。
 func (m *MarketClient) ListPage(q MarketQuery) (*MarketPage, error) {
-	if page, err := m.fetchAPIPage(q); err == nil {
-		return page, nil
-	} else if q.Q == "" && q.Kind == "" && q.Sort == "" && (q.Page <= 1) {
-		// 未带过滤条件且要第一页：旧全量清单可直接兜底（保持存量语义）
-		res, listErr := m.List()
-		if listErr != nil {
-			return nil, fmt.Errorf("分页 API 与清单均不可达：%v；%v", err, listErr)
-		}
-		warning := "市场分页 API 不可达，已回退静态清单（过渡兼容）"
-		if res.Warning != "" {
-			warning = res.Warning
-		}
-		return &MarketPage{
-			Total: len(res.Manifest.Packages), Page: 1,
-			Packages: res.Manifest.Packages, Source: "manifest", Warning: warning,
-		}, nil
-	} else {
-		// 带过滤条件的请求：拉全量清单在内存过滤分页（过渡兼容，服务端上线后自然消失）
-		res, listErr := m.List()
-		if listErr != nil {
-			return nil, fmt.Errorf("分页 API 与清单均不可达：%v；%v", err, listErr)
-		}
-		filtered := filterPackages(res.Manifest.Packages, q)
-		page, pageSize := normalizePage(q)
-		start := (page - 1) * pageSize
-		if start > len(filtered) {
-			start = len(filtered)
-		}
-		end := start + pageSize
-		if end > len(filtered) {
-			end = len(filtered)
-		}
-		return &MarketPage{
-			Total: len(filtered), Page: page,
-			Packages: filtered[start:end], Source: "manifest",
-			Warning: "市场分页 API 不可达，已回退静态清单过滤（过渡兼容）",
-		}, nil
-	}
+	return m.fetchAPIPage(q)
 }
 
-// fetchAPIPage 走服务端分页 API。
+// apiPackageMeta 服务端包条目的嵌套元数据（meta 对象，列表/详情共用结构）。
+type apiPackageMeta struct {
+	Icon       string            `json:"icon"`
+	NickName   string            `json:"nick_name"`
+	Role       string            `json:"role"`
+	Leader     string            `json:"leader"`
+	Members    []string          `json:"members"`
+	Skills     []string          `json:"skills"`
+	SkillNames map[string]string `json:"skill_names"`
+	SkillDescs map[string]string `json:"skill_descs"`
+	Version    string            `json:"version"`
+}
+
+// fetchAPIPage 走服务端分页 API（响应条目为顶层基础字段 + meta 嵌套元数据）。
 func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 	params := url.Values{}
 	params.Set("page", strconv.Itoa(maxInt(q.Page, 1)))
@@ -272,80 +240,63 @@ func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 		}
 	}
 	// 商户源货架：透传 source id（服务端按源的 registry 过滤）
-	if m.sourceID != "" {
+	if m.sourceID != "" && m.sourceID != "default" {
 		params.Set("source", m.sourceID)
 	}
 	resp, err := m.authedGet(m.apiBase + "/packages?" + params.Encode())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("市场服务不可达：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("分页 API 响应状态 %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, manifestMaxSize))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return nil, err
 	}
 	var body struct {
-		Total    int             `json:"total"`
-		Page     int             `json:"page"`
-		Packages []MarketPackage `json:"packages"`
+		Total    int          `json:"total"`
+		Page     int          `json:"page"`
+		Packages []apiPackage `json:"packages"`
 	}
 	if err := json.Unmarshal(data, &body); err != nil {
 		return nil, fmt.Errorf("解析分页响应失败：%w", err)
 	}
-	normalizePackages(body.Packages)
-	return &MarketPage{Total: body.Total, Page: body.Page, Packages: body.Packages, Source: "api"}, nil
+	packages := make([]MarketPackage, 0, len(body.Packages))
+	for _, ap := range body.Packages {
+		packages = append(packages, ap.toMarketPackage())
+	}
+	normalizePackages(packages)
+	return &MarketPage{Total: body.Total, Page: body.Page, Packages: packages, Source: "api"}, nil
 }
 
-// PackageByKindName 从服务端查单包详情（安装/预览的定位路径，替代「拉全量清单线性查找」）。
-// API 不可达时回退全量清单定位（过渡兼容）。
+// PackageByKindName 从服务端查单包详情（安装/预览的定位路径）；
+// API 不可达直接报错——静态清单机制已废除，不再有全量清单线性定位回退。
 func (m *MarketClient) PackageByKindName(kind, name string) (*MarketPackage, error) {
-	resp, err := m.authedGet(m.apiBase + "/packages/" + kind + "/" + name)
-	if err == nil {
-		defer resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			data, readErr := io.ReadAll(io.LimitReader(resp.Body, manifestMaxSize))
-			if readErr != nil {
-				return nil, readErr
-			}
-			return packageFromDetail(data)
-		}
+	resp, err := m.authedGet(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name))
+	if err != nil {
+		return nil, fmt.Errorf("市场服务不可达：%w", err)
 	}
-	// 回退：全量清单线性定位（COS 过渡兼容）
-	res, listErr := m.List()
-	if listErr != nil {
-		return nil, fmt.Errorf("市场 API 与清单均不可达：%v；%v", err, listErr)
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("市场中不存在 %s 类型包 %q", kind, name)
 	}
-	for i := range res.Manifest.Packages {
-		p := &res.Manifest.Packages[i]
-		if string(p.Kind) == kind && p.Name == name {
-			return p, nil
-		}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("包详情 API 响应状态 %d", resp.StatusCode)
 	}
-	return nil, fmt.Errorf("市场中不存在 %s 类型包 %q", kind, name)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return nil, err
+	}
+	return packageFromDetail(data)
 }
 
-// packageFromDetail 从服务端单包详情响应组装 MarketPackage。
+// packageFromDetail 从服务端单包详情响应组装 MarketPackage
+// （基础字段 + meta 与列表条目同构；sha256/size 取最新未删除版本）。
 func packageFromDetail(data []byte) (*MarketPackage, error) {
 	var body struct {
-		Kind        string `json:"kind"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Category    string `json:"category"`
-		DownloadURL string `json:"download_url"`
-		Meta        struct {
-			Icon       string            `json:"icon"`
-			NickName   string            `json:"nick_name"`
-			Role       string            `json:"role"`
-			Leader     string            `json:"leader"`
-			Members    []string          `json:"members"`
-			Skills     []string          `json:"skills"`
-			SkillNames map[string]string `json:"skill_names"`
-			SkillDescs map[string]string `json:"skill_descs"`
-			Version    string            `json:"version"`
-		} `json:"meta"`
+		apiPackage
 		Versions []struct {
 			Version     string `json:"version"`
 			Sha256      string `json:"sha256"`
@@ -357,13 +308,7 @@ func packageFromDetail(data []byte) (*MarketPackage, error) {
 	if err := json.Unmarshal(data, &body); err != nil {
 		return nil, fmt.Errorf("解析包详情失败：%w", err)
 	}
-	pkg := &MarketPackage{
-		Kind: PackageKind(body.Kind), Name: body.Name, Description: body.Description,
-		Icon: body.Meta.Icon, NickName: body.Meta.NickName, Role: body.Meta.Role,
-		Category: normalizeCategory(body.Category), Leader: body.Meta.Leader, Members: body.Meta.Members,
-		Skills: body.Meta.Skills, SkillNames: body.Meta.SkillNames, SkillDescs: body.Meta.SkillDescs,
-		DownloadURL: body.DownloadURL,
-	}
+	pkg := body.apiPackage.toMarketPackage()
 	for _, v := range body.Versions {
 		if !v.Deleted {
 			// 最新未删除版本：与安装校验链对齐
@@ -371,7 +316,7 @@ func packageFromDetail(data []byte) (*MarketPackage, error) {
 			break
 		}
 	}
-	return pkg, nil
+	return &pkg, nil
 }
 
 // categoryAliasZh 分类归一表：非规范写法（发布目录 slug / 旧译中文）→ 规范中文显示名
@@ -398,39 +343,11 @@ func normalizeCategory(category string) string {
 	return category
 }
 
-// normalizePackages 批量归一包分类（清单/API 解析后调用，展示口径统一）。
+// normalizePackages 批量归一包分类（API 解析后调用，展示口径统一）。
 func normalizePackages(packages []MarketPackage) {
 	for i := range packages {
 		packages[i].Category = normalizeCategory(packages[i].Category)
 	}
-}
-
-// filterPackages 全量清单的内存过滤（回退路径专用）。
-func filterPackages(packages []MarketPackage, q MarketQuery) []MarketPackage {
-	out := make([]MarketPackage, 0, len(packages))
-	needle := strings.ToLower(q.Q)
-	for _, p := range packages {
-		if q.Kind != "" && string(p.Kind) != q.Kind {
-			continue
-		}
-		if needle != "" &&
-			!strings.Contains(strings.ToLower(p.Name), needle) &&
-			!strings.Contains(strings.ToLower(p.Description), needle) {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
-}
-
-// normalizePage 归一化分页参数。
-func normalizePage(q MarketQuery) (page, pageSize int) {
-	page = maxInt(q.Page, 1)
-	pageSize = q.PageSize
-	if pageSize <= 0 {
-		pageSize = 50
-	}
-	return page, pageSize
 }
 
 // maxInt 返回较大值。
@@ -441,116 +358,28 @@ func maxInt(a, b int) int {
 	return b
 }
 
-// List 拉取市场清单：优先在线，网络失败降级本地缓存并附降级原因；
-// 在线与缓存均不可用时返回错误（不静默吞掉）。
-func (m *MarketClient) List() (*MarketListResult, error) {
-	manifest, err := m.fetchRemote()
-	if err == nil {
-		// 在线成功即刷新缓存；写失败仅影响下次降级质量，不影响本次结果
-		_ = m.writeCache(manifest)
-		return &MarketListResult{Manifest: manifest, Source: "remote"}, nil
-	}
-
-	remoteErr := err
-	cached, cacheErr := m.readCache()
-	if cacheErr == nil {
-		return &MarketListResult{
-			Manifest: cached,
-			Source:   "cache",
-			Warning:  fmt.Sprintf("在线清单拉取失败，已展示本地缓存（%v）", remoteErr),
-		}, nil
-	}
-	return nil, fmt.Errorf("在线清单拉取失败且本地缓存不可用：%v；缓存读取错误：%v", remoteErr, cacheErr)
-}
-
-// fetchRemote 在线拉取清单。
-func (m *MarketClient) fetchRemote() (*MarketManifest, error) {
-	resp, err := m.authedGet(m.manifestURL)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("清单响应状态 %d", resp.StatusCode)
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, manifestMaxSize))
-	if err != nil {
-		return nil, err
-	}
-	var manifest MarketManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, fmt.Errorf("解析清单失败：%w", err)
-	}
-	normalizePackages(manifest.Packages)
-	return &manifest, nil
-}
-
-// writeCache 将清单写入本地缓存（原子替换）。
-func (m *MarketClient) writeCache(manifest *MarketManifest) error {
-	if err := os.MkdirAll(m.cacheDir, 0755); err != nil {
-		return err
-	}
-	data, err := json.Marshal(manifest)
-	if err != nil {
-		return err
-	}
-	tmp := filepath.Join(m.cacheDir, ".manifest.json.tmp")
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, m.cacheManifestPath())
-}
-
-// readCache 读取本地缓存的清单（含旧格式缓存，分类归一与在线路径同口径）。
-func (m *MarketClient) readCache() (*MarketManifest, error) {
-	data, err := os.ReadFile(m.cacheManifestPath())
-	if err != nil {
-		return nil, err
-	}
-	var manifest MarketManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, fmt.Errorf("缓存清单损坏：%w", err)
-	}
-	normalizePackages(manifest.Packages)
-	return &manifest, nil
-}
-
-// cacheManifestPath 返回缓存清单路径。
-func (m *MarketClient) cacheManifestPath() string {
-	return filepath.Join(m.cacheDir, "manifest.json")
-}
-
-// cachePackagePath 返回包文件的本地缓存路径（File 为清单声明的相对路径）。
+// cachePackagePath 返回包文件的本地缓存路径（File 为内容寻址相对路径，拒绝穿越）。
 func (m *MarketClient) cachePackagePath(file string) (string, error) {
 	clean := filepath.Clean(filepath.FromSlash(file))
 	if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
-		return "", fmt.Errorf("清单中的包文件路径非法：%q", file)
+		return "", fmt.Errorf("包文件缓存路径非法：%q", file)
 	}
 	return filepath.Join(m.cacheDir, clean), nil
 }
 
-// packageURL 拼接包文件的下载地址（清单地址所在目录 + File 相对路径）。
-func (m *MarketClient) packageURL(file string) string {
-	base := m.manifestURL
-	if i := strings.LastIndex(base, "/"); i >= 0 {
-		base = base[:i+1]
-	}
-	return base + file
-}
-
 // Download 下载分发包到缓存目录并做 sha256 完整性校验，返回本地文件路径。
 // 缓存中已有校验通过的副本时直接复用，不重复下载。
-// 下载地址优先 DownloadURL（服务端 API 直连），回退清单 File 相对路径拼接（过渡兼容）。
+// 下载地址取服务端 API 下发的 DownloadURL（清单拼接机制已废除）。
 func (m *MarketClient) Download(pkg MarketPackage) (string, error) {
-	if pkg.DownloadURL == "" && pkg.File == "" {
-		return "", fmt.Errorf("分发包条目缺少下载地址（download_url / file 均为空）")
+	if pkg.DownloadURL == "" {
+		return "", fmt.Errorf("分发包 %s/%s 缺少下载地址（服务端未下发 download_url）", pkg.Kind, pkg.Name)
 	}
 	if len(pkg.Sha256) != 64 {
 		return "", fmt.Errorf("分发包 %s/%s 的 sha256 缺失或格式非法", pkg.Kind, pkg.Name)
 	}
+	// 内容寻址缓存布局：packages/<kind>/<name>.mindpkg（File 缺省时按此推导）
 	file := pkg.File
 	if file == "" {
-		// API 形态：按服务端内容寻址布局推导缓存路径（与 file 常规值一致）
 		file = "packages/" + string(pkg.Kind) + "/" + pkg.Name + ".mindpkg"
 	}
 	dest, err := m.cachePackagePath(file)
@@ -567,11 +396,7 @@ func (m *MarketClient) Download(pkg MarketPackage) (string, error) {
 		return "", fmt.Errorf("创建缓存目录失败：%w", err)
 	}
 
-	downloadURL := pkg.DownloadURL
-	if downloadURL == "" {
-		downloadURL = m.packageURL(pkg.File)
-	}
-	resp, err := m.authedGet(downloadURL)
+	resp, err := m.authedGet(pkg.DownloadURL)
 	if err != nil {
 		return "", fmt.Errorf("下载分发包失败：%w", err)
 	}

@@ -9,11 +9,11 @@ import (
 	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
-// 本文件实现分发包安装导出闭环与 COS 静态市场的 RPC（PR-PROMPTS 第四节）：
+// 本文件实现分发包安装导出闭环与市场 RPC（PR-PROMPTS 第四节）：
 //
 //   - agent.export / skill.export：导出分发包（zip 容器，保真原则）；
 //   - agent.import / skill.import：本地安装（同名冲突默认拒绝，覆盖需显式确认）；
-//   - market.list：在线清单拉取（失败降级本地缓存并附原因）；
+//   - market.list：服务端分页 API 浏览（清单机制已废除，无回退）；
 //   - market.install：下载 → sha256 校验 → 复用本地安装展开逻辑。
 
 // handleAgentExport 导出 Agent 分发包到指定路径（out_path 来自前端保存对话框）。
@@ -225,39 +225,21 @@ type marketPackageDTO struct {
 	DownloadURL string            `json:"downloadUrl,omitempty"`
 }
 
-// handleMarketList 市场浏览：带分页/过滤参数走服务端分页 API（主入口），
-// 空参保持存量全量清单语义（过渡兼容，壳侧逐个切换期间不断供）。
+// handleMarketList 市场浏览：全部走服务端分页 API（清单机制已废除，
+// 无参请求视为第一页默认页大小）。响应恒为分页形态 {packages,total,page,source}。
 func (d *Daemon) handleMarketList(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketListParams
 	if params != nil {
-		_ = json.Unmarshal(params, &p) // 参数解析失败按空参处理（兼容存量调用方）
+		_ = json.Unmarshal(params, &p) // 参数解析失败按空参处理
 	}
-	paged := p.Page > 0 || p.PageSize > 0 || p.Q != "" || p.Kind != "" || p.Sort != ""
 
-	var (
-		packages  []bundle.MarketPackage
-		source    string
-		warning   string
-		total     int
-		page      int
-		updatedAt string
-	)
-	if paged {
-		res, err := d.app.Market().ListPage(bundle.MarketQuery{
-			Page: p.Page, PageSize: p.PageSize, Kind: p.Kind, Q: p.Q, Sort: p.Sort,
-		})
-		if err != nil {
-			return nil, err
-		}
-		packages, source, warning, total, page = res.Packages, res.Source, res.Warning, res.Total, res.Page
-	} else {
-		res, err := d.app.Market().List()
-		if err != nil {
-			return nil, err
-		}
-		packages, source, warning = res.Manifest.Packages, res.Source, res.Warning
-		updatedAt = res.Manifest.UpdatedAt
+	res, err := d.app.Market().ListPage(bundle.MarketQuery{
+		Page: p.Page, PageSize: p.PageSize, Kind: p.Kind, Q: p.Q, Sort: p.Sort,
+	})
+	if err != nil {
+		return nil, err
 	}
+	packages := res.Packages
 	if packages == nil {
 		packages = []bundle.MarketPackage{}
 	}
@@ -283,18 +265,13 @@ func (d *Daemon) handleMarketList(_ context.Context, params json.RawMessage) (an
 			DownloadURL: p.DownloadURL,
 		})
 	}
-	resp := map[string]any{
+	return map[string]any{
 		"packages": dtos,
-		"source":   source,
-		"warning":  warning,
-	}
-	if paged {
-		resp["total"] = total
-		resp["page"] = page
-	} else {
-		resp["updated_at"] = updatedAt
-	}
-	return resp, nil
+		"total":    res.Total,
+		"page":     res.Page,
+		"source":   res.Source,
+		"warning":  "",
+	}, nil
 }
 
 // handleMarketPackageRead 读取市场技能包的 SKILL.md 原文（详情预览用，不安装不落库）。

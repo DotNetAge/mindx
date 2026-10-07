@@ -2,6 +2,9 @@ package bundle
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -255,53 +258,96 @@ func TestInstallRejectsZipSlip(t *testing.T) {
 	}
 }
 
-// TestMarketManifestRoundTrip 验收：市场清单缓存降级路径（远程失败 → 缓存命中）。
-func TestMarketManifestRoundTrip(t *testing.T) {
-	cacheDir := t.TempDir()
-	client := NewMarketClient("http://127.0.0.1:1/manifest.json", cacheDir) // 不可达端口
+// TestMarketListPageAPI 验收：货架浏览只走服务端分页 API——请求参数透传
+// （kind/q/page/page_size）、响应归一化（分类 slug → 规范中文）；
+// API 不可达直接报错，静态清单回退路径已废除。
+func TestMarketListPageAPI(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		if r.URL.Path != "/api/v1/packages" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"total": 2, "page": 1,
+			"packages": []map[string]any{
+				{"kind": "team", "name": "crew", "category": "3c",
+					"meta": map[string]any{"leader": "lead", "members": []string{"lead", "dev"}, "nick_name": "工队"}},
+				{"kind": "skill", "name": "slug-cat", "category": "dev"},
+			},
+		})
+	}))
+	defer srv.Close()
 
-	// 预置缓存：模拟"以前拉取成功过"（写实际缓存目录——内部按源哈希隔离）
-	pre := &MarketManifest{
-		Version:   1,
-		UpdatedAt: "2026-09-06T00:00:00Z",
-		Packages: []MarketPackage{{
-			Kind:        KindSkill,
-			Name:        "cached-skill",
-			Description: "缓存中的技能",
-			File:        "packages/cached-skill.mindpkg",
-			Sha256:      strings.Repeat("a", 64),
-		}},
-	}
-	if err := os.MkdirAll(client.cacheDir, 0755); err != nil {
-		t.Fatalf("创建缓存目录失败: %v", err)
-	}
-	data, _ := jsonMarshal(pre)
-	if err := os.WriteFile(filepath.Join(client.cacheDir, "manifest.json"), data, 0644); err != nil {
-		t.Fatalf("写缓存清单失败: %v", err)
-	}
-
-	res, err := client.List()
+	client := NewMarketClient(srv.URL+"/api/v1", "", t.TempDir())
+	page, err := client.ListPage(MarketQuery{Page: 1, PageSize: 30, Kind: "team", Q: "工"})
 	if err != nil {
-		t.Fatalf("清单降级失败: %v", err)
+		t.Fatalf("分页 API 浏览失败: %v", err)
 	}
-	if res.Source != "cache" {
-		t.Fatalf("应降级为缓存, 实际: %s", res.Source)
+	// 服务端参数透传断言：kind/q/page/page_size 必须原样到达服务端
+	for _, pair := range []string{"kind=team", "q=" + url.QueryEscape("工"), "page=1", "page_size=30"} {
+		if !strings.Contains(gotQuery, pair) {
+			t.Fatalf("查询参数缺失 %s, 实际: %s", pair, gotQuery)
+		}
 	}
-	if res.Warning == "" {
-		t.Fatalf("降级原因应随结果返回供前端提示")
+	if page.Source != "api" || page.Total != 2 || len(page.Packages) != 2 {
+		t.Fatalf("分页结果不符: %+v", page)
 	}
-	if len(res.Manifest.Packages) != 1 || res.Manifest.Packages[0].Name != "cached-skill" {
-		t.Fatalf("缓存清单内容不符: %+v", res.Manifest)
+	if page.Packages[0].Kind != KindTeam || page.Packages[0].Leader != "lead" ||
+		page.Packages[0].NickName != "工队" || len(page.Packages[0].Members) != 2 {
+		t.Fatalf("team 包 meta 嵌套解析不符: %+v", page.Packages[0])
+	}
+	if got := page.Packages[1].Category; got != "产品研发" {
+		t.Fatalf("API 分类应归一 slug, 实际: %q", got)
 	}
 
-	// 远程与缓存均不可用 → 错误冒泡（不静默）
-	if _, err := NewMarketClient("http://127.0.0.1:1/manifest.json", t.TempDir()).List(); err == nil {
-		t.Fatalf("无缓存可降级时应返回错误")
+	// API 不可达：直接报错，无清单回退
+	dead := NewMarketClient("http://127.0.0.1:1/api/v1", "", t.TempDir())
+	if _, err := dead.ListPage(MarketQuery{Page: 1, Kind: "team"}); err == nil {
+		t.Fatalf("API 不可达应报错（清单回退已废除）")
+	}
+}
+
+// TestMarketPackageByKindNameAPI 验收：单包定位只走服务端详情 API；
+// 404 报「不存在」，API 不可达直接报错（清单线性定位回退已废除）。
+func TestMarketPackageByKindNameAPI(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/packages/skill/api-design" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"kind": "skill", "name": "api-design", "description": "接口设计",
+			"download_url": "http://127.0.0.1:1/packages/skill/api-design.mindpkg",
+			"meta":         map[string]any{"version": "0.1.0"},
+			"versions": []map[string]any{
+				{"version": "0.1.0", "sha256": strings.Repeat("a", 64), "size": 12},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := NewMarketClient(srv.URL+"/api/v1", "", t.TempDir())
+	pkg, err := client.PackageByKindName("skill", "api-design")
+	if err != nil {
+		t.Fatalf("详情 API 失败: %v", err)
+	}
+	if pkg.Name != "api-design" || pkg.Sha256 != strings.Repeat("a", 64) {
+		t.Fatalf("详情内容不符: %+v", pkg)
+	}
+	if _, err := client.PackageByKindName("skill", "nope"); err == nil {
+		t.Fatalf("不存在的包应报错")
+	}
+
+	dead := NewMarketClient("http://127.0.0.1:1/api/v1", "", t.TempDir())
+	if _, err := dead.PackageByKindName("skill", "api-design"); err == nil {
+		t.Fatalf("API 不可达应报错（清单回退已废除）")
 	}
 }
 
 // TestNormalizeCategory 验收：非规范分类写法（slug / 旧译中文）在解析层统一归一为
-// 规范中文显示名，规范中文原样通过（展示口径与静态清单一致，前端 FIXED_DOMAINS 同词汇表）。
+// 规范中文显示名，规范中文原样通过（展示口径与服务端分类种子一致，前端 FIXED_DOMAINS 同词汇表）。
 func TestNormalizeCategory(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"3c", "智能硬件"},         // 线上 20 个 3c 类包直填 slug
@@ -316,29 +362,5 @@ func TestNormalizeCategory(t *testing.T) {
 		if got := normalizeCategory(c.in); got != c.want {
 			t.Fatalf("normalizeCategory(%q) = %q, want %q", c.in, got, c.want)
 		}
-	}
-
-	// 清单解析路径应用归一：fetchRemote 对缓存/在线清单统一生效
-	client := NewMarketClient("http://127.0.0.1:1/manifest.json", t.TempDir()) // 不可达端口
-	cacheDir := client.cacheDir
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
-		t.Fatalf("建缓存目录失败: %v", err)
-	}
-	pre := &MarketManifest{
-		Version: 1,
-		Packages: []MarketPackage{
-			{Kind: KindSkill, Name: "slug-cat", Category: "3c"},
-		},
-	}
-	data, _ := json.Marshal(pre)
-	if err := os.WriteFile(filepath.Join(cacheDir, "manifest.json"), data, 0644); err != nil {
-		t.Fatalf("写缓存清单失败: %v", err)
-	}
-	res, err := client.List()
-	if err != nil {
-		t.Fatalf("清单降级失败: %v", err)
-	}
-	if got := res.Manifest.Packages[0].Category; got != "智能硬件" {
-		t.Fatalf("缓存清单解析应归一 slug 分类, 实际: %q", got)
 	}
 }

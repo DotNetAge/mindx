@@ -20,11 +20,10 @@ func (d *Daemon) handleMarketSources(_ context.Context, _ json.RawMessage) (any,
 		idStr := strconv.FormatInt(s.ID, 10)
 		selected := cfg.MarketSourceID == idStr || (cfg.MarketSourceID == "" && s.ID == 1)
 		out = append(out, map[string]any{
-			"id":           idStr,
-			"name":         s.Name,
-			"tier":         s.Tier,
-			"manifest_url": s.ManifestURL,
-			"selected":     selected,
+			"id":       idStr,
+			"name":     s.Name,
+			"tier":     s.Tier,
+			"selected": selected,
 		})
 	}
 	return map[string]any{"sources": out}, nil

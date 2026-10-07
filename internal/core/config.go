@@ -66,9 +66,10 @@ type MindxConfig struct {
 	// 为空表示未启用手机连接，daemon 不与中继建立连接。
 	ChannelURL string `json:"channel_url,omitempty"`
 
-	// MarketManifestURL 是市场清单地址（market_source_id 的解析结果缓存，由
-	// SetMarketSource 写入；为空表示使用官方默认源）。不再作为用户配置项直接写入。
-	MarketManifestURL string `json:"market_manifest_url,omitempty"`
+	// MarketAPIBase 是市场服务端 API 基址（空 = 官方 DefaultMarketAPIBase；
+	// 本地调试/自托管经配置文件显式覆盖，UI 不暴露）。静态清单机制已废除，
+	// 市场消费唯一入口是分页 API。
+	MarketAPIBase string `json:"market_api_base,omitempty"`
 
 	// MarketSourceID 是选中的市场源 id（"default" 或空 = 官方公开源；商户源为
 	// 服务端 /api/v1/sources 下发的数字 id 字符串）。
