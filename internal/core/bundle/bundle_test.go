@@ -260,7 +260,7 @@ func TestMarketManifestRoundTrip(t *testing.T) {
 	cacheDir := t.TempDir()
 	client := NewMarketClient("http://127.0.0.1:1/manifest.json", cacheDir) // 不可达端口
 
-	// 预置缓存：模拟"以前拉取成功过"
+	// 预置缓存：模拟"以前拉取成功过"（写实际缓存目录——内部按源哈希隔离）
 	pre := &MarketManifest{
 		Version:   1,
 		UpdatedAt: "2026-09-06T00:00:00Z",
@@ -272,11 +272,11 @@ func TestMarketManifestRoundTrip(t *testing.T) {
 			Sha256:      strings.Repeat("a", 64),
 		}},
 	}
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(client.cacheDir, 0755); err != nil {
 		t.Fatalf("创建缓存目录失败: %v", err)
 	}
 	data, _ := jsonMarshal(pre)
-	if err := os.WriteFile(filepath.Join(cacheDir, "manifest.json"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(client.cacheDir, "manifest.json"), data, 0644); err != nil {
 		t.Fatalf("写缓存清单失败: %v", err)
 	}
 

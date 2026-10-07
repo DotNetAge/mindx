@@ -66,6 +66,10 @@ type MindxConfig struct {
 	// 为空表示未启用手机连接，daemon 不与中继建立连接。
 	ChannelURL string `json:"channel_url,omitempty"`
 
+	// MarketManifestURL 是市场清单地址（换源入口）。为空表示使用官方默认源
+	//（bundle.DefaultMarketManifestURL）；变更经 user.config 写入后重建市场客户端。
+	MarketManifestURL string `json:"market_manifest_url,omitempty"`
+
 	// AgentSkillChecksums stores SHA256 checksums of deployed agent and skill
 	// files, keyed by relative path from workspaceDir. Used by SyncRuntimeAssets
 	// to detect user modifications — if a file's on-disk hash differs from the

@@ -117,7 +117,8 @@ type MarketClient struct {
 // 是市场消费主入口，不能因清单在 COS 而把 API 请求也打到 COS）；显式配置其他清单地址
 // （测试/自托管）时 apiBase 由其同源推导（清单目录 + /api/v1），推导出的 API 路径不存在时
 // 由调用方快速回退清单路径，不产生长等待。
-// cacheDir 为清单与包文件的本地缓存目录。
+// cacheDir 为缓存根目录：内部按清单地址哈希开子目录（market-cache/<sha8>），
+// 多源切换时清单与包缓存互不串扰；旧源缓存随换源自然废弃。
 func NewMarketClient(manifestURL, cacheDir string) *MarketClient {
 	if strings.TrimSpace(manifestURL) == "" {
 		manifestURL = DefaultMarketManifestURL
@@ -128,6 +129,9 @@ func NewMarketClient(manifestURL, cacheDir string) *MarketClient {
 			apiBase = manifestURL[:i+1] + "api/v1"
 		}
 	}
+	// 缓存目录按源哈希隔离：同根目录下不同源各有清单/包缓存空间
+	sum := sha256.Sum256([]byte(manifestURL))
+	cacheDir = filepath.Join(cacheDir, hex.EncodeToString(sum[:])[:8])
 	return &MarketClient{
 		httpClient:  &http.Client{Timeout: httpTimeout},
 		manifestURL: manifestURL,

@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/DotNetAge/goharness/agents"
 	"github.com/DotNetAge/goharness/config"
@@ -99,9 +97,9 @@ type App struct {
 	// 轮次事件自动埋点 + 判定版本链 + 混杂登记，本地单文件 YAML，90 天滚动保留。
 	metricStore *metric.FileMetricStore
 
-	// market 是 COS 静态市场客户端（懒创建，见 Market()）
-	market     *bundle.MarketClient
-	marketOnce sync.Once
+	// market 是市场客户端（懒创建，可经 SetMarketSource 运行时换源重建，见 Market()）
+	marketMu sync.RWMutex
+	market   *bundle.MarketClient
 }
 
 func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
@@ -286,20 +284,6 @@ func (a *App) SetIconFS(fs fs.FS) {
 	a.iconFS = fs
 }
 
-const defaultDaemonAddr = ":1314"
-
-func (a *App) isDaemonRunning() bool {
-	conn, err := net.DialTimeout("tcp", "localhost"+defaultDaemonAddr, 2*time.Second)
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	if a.logger != nil {
-		a.logger.Info("daemon detected, local memory creation delegated to daemon via RPC")
-	}
-	return true
-}
-
 func (a *App) Config() *MindxConfig {
 	return a.mindxConfig
 }
@@ -403,13 +387,33 @@ func (a *App) Skills() *skillstore.Store {
 	return a.skills
 }
 
-// Market 返回 COS 静态市场客户端（懒创建；缓存目录位于数据目录 market-cache）。
+// Market 返回市场客户端（懒创建；缓存目录位于数据目录 market-cache 下按源哈希隔离）。
+// manifestURL 取配置 market_manifest_url，为空回退官方默认源。
 func (a *App) Market() *bundle.MarketClient {
-	a.marketOnce.Do(func() {
-		a.market = bundle.NewMarketClient(bundle.DefaultMarketManifestURL,
+	a.marketMu.RLock()
+	if a.market != nil {
+		defer a.marketMu.RUnlock()
+		return a.market
+	}
+	a.marketMu.RUnlock()
+
+	a.marketMu.Lock()
+	defer a.marketMu.Unlock()
+	if a.market == nil {
+		a.market = bundle.NewMarketClient(a.mindxConfig.MarketManifestURL,
 			filepath.Join(a.settings.DataDir(), "market-cache"))
-	})
+	}
 	return a.market
+}
+
+// SetMarketSource 运行时换源：以新清单地址重建市场客户端（缓存目录随源哈希隔离，
+// 旧源缓存自然废弃）。url 为空回退官方默认源。调用方（user.config 副作用）负责广播
+// market_changed 通知前端刷新货架。
+func (a *App) SetMarketSource(url string) {
+	a.marketMu.Lock()
+	defer a.marketMu.Unlock()
+	a.market = bundle.NewMarketClient(url,
+		filepath.Join(a.settings.DataDir(), "market-cache"))
 }
 
 // PromptBuilder 返回 mindx 侧基础系统提示词组装器（懒创建，App 生命周期内缓存；
