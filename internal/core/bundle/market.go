@@ -211,6 +211,7 @@ func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 	if err := json.Unmarshal(data, &body); err != nil {
 		return nil, fmt.Errorf("解析分页响应失败：%w", err)
 	}
+	normalizePackages(body.Packages)
 	return &MarketPage{Total: body.Total, Page: body.Page, Packages: body.Packages, Source: "api"}, nil
 }
 
@@ -275,7 +276,7 @@ func packageFromDetail(data []byte) (*MarketPackage, error) {
 	pkg := &MarketPackage{
 		Kind: PackageKind(body.Kind), Name: body.Name, Description: body.Description,
 		Icon: body.Meta.Icon, NickName: body.Meta.NickName, Role: body.Meta.Role,
-		Category: body.Category, Leader: body.Meta.Leader, Members: body.Meta.Members,
+		Category: normalizeCategory(body.Category), Leader: body.Meta.Leader, Members: body.Meta.Members,
 		Skills: body.Meta.Skills, SkillNames: body.Meta.SkillNames, SkillDescs: body.Meta.SkillDescs,
 		DownloadURL: body.DownloadURL,
 	}
@@ -287,6 +288,36 @@ func packageFromDetail(data []byte) (*MarketPackage, error) {
 		}
 	}
 	return pkg, nil
+}
+
+// categorySlugZh 分类 slug → 中文显示名归一表（与服务端 categories 种子同一词汇表）。
+// 部分历史包的清单 category 直填了发布目录 slug（线上 20 个 3c 类包），展示端统一
+// 归一为中文，与静态清单的中文 category 口径一致；中文值原样通过。
+var categorySlugZh = map[string]string{
+	"dev":        "产品研发",
+	"3c":         "智能硬件",
+	"data":       "数据分析",
+	"finance":    "商业研究",
+	"office":     "办公提效",
+	"marketing":  "市场营销",
+	"contents":   "内容创作",
+	"management": "经营管理",
+	"industry":   "工业",
+}
+
+// normalizeCategory 将 slug 形态的分类归一为中文显示名。
+func normalizeCategory(category string) string {
+	if zh, ok := categorySlugZh[strings.TrimSpace(category)]; ok {
+		return zh
+	}
+	return category
+}
+
+// normalizePackages 批量归一包分类（清单/API 解析后调用，展示口径统一）。
+func normalizePackages(packages []MarketPackage) {
+	for i := range packages {
+		packages[i].Category = normalizeCategory(packages[i].Category)
+	}
 }
 
 // filterPackages 全量清单的内存过滤（回退路径专用）。
@@ -365,6 +396,7 @@ func (m *MarketClient) fetchRemote() (*MarketManifest, error) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return nil, fmt.Errorf("解析清单失败：%w", err)
 	}
+	normalizePackages(manifest.Packages)
 	return &manifest, nil
 }
 
@@ -384,7 +416,7 @@ func (m *MarketClient) writeCache(manifest *MarketManifest) error {
 	return os.Rename(tmp, m.cacheManifestPath())
 }
 
-// readCache 读取本地缓存的清单。
+// readCache 读取本地缓存的清单（含旧格式缓存，分类归一与在线路径同口径）。
 func (m *MarketClient) readCache() (*MarketManifest, error) {
 	data, err := os.ReadFile(m.cacheManifestPath())
 	if err != nil {
@@ -394,6 +426,7 @@ func (m *MarketClient) readCache() (*MarketManifest, error) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return nil, fmt.Errorf("缓存清单损坏：%w", err)
 	}
+	normalizePackages(manifest.Packages)
 	return &manifest, nil
 }
 

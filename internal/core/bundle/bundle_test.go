@@ -1,6 +1,7 @@
 package bundle
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -296,5 +297,47 @@ func TestMarketManifestRoundTrip(t *testing.T) {
 	// 远程与缓存均不可用 → 错误冒泡（不静默）
 	if _, err := NewMarketClient("http://127.0.0.1:1/manifest.json", t.TempDir()).List(); err == nil {
 		t.Fatalf("无缓存可降级时应返回错误")
+	}
+}
+
+// TestNormalizeCategory 验收：slug 形态的历史分类数据在解析层统一归一为中文显示名，
+// 中文原文原样通过（展示口径与静态清单一致，前端 FIXED_DOMAINS 同词汇表）。
+func TestNormalizeCategory(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"3c", "智能硬件"},         // 线上 20 个 3c 类包直填 slug
+		{"dev", "产品研发"},        // slug 枚举
+		{"management", "经营管理"}, // 词汇表补齐后的新 slug
+		{"工业", "工业"},           // 中文原文原样通过
+		{"财务", "财务"},           // 词汇表外的中文原文不归并，原样透传
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := normalizeCategory(c.in); got != c.want {
+			t.Fatalf("normalizeCategory(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+
+	// 清单解析路径应用归一：fetchRemote 对缓存/在线清单统一生效
+	client := NewMarketClient("http://127.0.0.1:1/manifest.json", t.TempDir()) // 不可达端口
+	cacheDir := client.cacheDir
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		t.Fatalf("建缓存目录失败: %v", err)
+	}
+	pre := &MarketManifest{
+		Version: 1,
+		Packages: []MarketPackage{
+			{Kind: KindSkill, Name: "slug-cat", Category: "3c"},
+		},
+	}
+	data, _ := json.Marshal(pre)
+	if err := os.WriteFile(filepath.Join(cacheDir, "manifest.json"), data, 0644); err != nil {
+		t.Fatalf("写缓存清单失败: %v", err)
+	}
+	res, err := client.List()
+	if err != nil {
+		t.Fatalf("清单降级失败: %v", err)
+	}
+	if got := res.Manifest.Packages[0].Category; got != "智能硬件" {
+		t.Fatalf("缓存清单解析应归一 slug 分类, 实际: %q", got)
 	}
 }
