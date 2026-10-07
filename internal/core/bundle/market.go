@@ -104,12 +104,33 @@ type MarketPage struct {
 }
 
 // MarketClient 消费市场：分页 API 优先（服务端主入口），静态清单回退（过渡兼容）；
-// 分发包下载带 sha256 校验。
+// 分发包下载带 sha256 校验。pat 非空时所有出站请求携带 Authorization（商户源鉴权）。
 type MarketClient struct {
 	httpClient  *http.Client
 	manifestURL string
 	apiBase     string
 	cacheDir    string
+	// pat 商户访问令牌（用户在网页签发的 PAT，经设置粘贴；空 = 匿名）
+	pat string
+	// sourceID 从 manifestURL 的 ?source= 参数解析（商户源标识，fetchAPIPage 透传）
+	sourceID string
+}
+
+// SetPAT 设置商户访问令牌（换令牌后由调用方重建客户端或直接复用本实例均可）。
+func (m *MarketClient) SetPAT(pat string) {
+	m.pat = strings.TrimSpace(pat)
+}
+
+// authedGet 带凭证的 GET（pat 非空时附 Authorization 头）。
+func (m *MarketClient) authedGet(url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if m.pat != "" {
+		req.Header.Set("Authorization", "Bearer "+m.pat)
+	}
+	return m.httpClient.Do(req)
 }
 
 // NewMarketClient 创建市场客户端。
@@ -132,12 +153,67 @@ func NewMarketClient(manifestURL, cacheDir string) *MarketClient {
 	// 缓存目录按源哈希隔离：同根目录下不同源各有清单/包缓存空间
 	sum := sha256.Sum256([]byte(manifestURL))
 	cacheDir = filepath.Join(cacheDir, hex.EncodeToString(sum[:])[:8])
-	return &MarketClient{
+	c := &MarketClient{
 		httpClient:  &http.Client{Timeout: httpTimeout},
 		manifestURL: manifestURL,
 		apiBase:     apiBase,
 		cacheDir:    cacheDir,
 	}
+	// 商户源的 manifestURL 形如 .../manifest?source=<id>：解析出 source id，
+	// fetchAPIPage 请求货架时透传（服务端按源的 registry 过滤货架）
+	if u, perr := url.Parse(manifestURL); perr == nil && u.Query().Get("source") != "" {
+		c.sourceID = u.Query().Get("source")
+	}
+	return c
+}
+
+// MarketSource 市场源条目（服务端 GET /api/v1/sources 下发）。
+type MarketSource struct {
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Tier        string `json:"tier"`
+	ManifestURL string `json:"manifest_url"`
+}
+
+// Sources 拉取可用市场源清单（商户用户携带 PAT 可见商户源；default 为空 URL 语义）。
+func (m *MarketClient) Sources() ([]MarketSource, error) {
+	resp, err := m.authedGet(m.apiBase + "/sources")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("源列表响应状态 %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, manifestMaxSize))
+	if err != nil {
+		return nil, err
+	}
+	var body struct {
+		Sources []MarketSource `json:"sources"`
+	}
+	if err := json.Unmarshal(data, &body); err != nil {
+		return nil, fmt.Errorf("解析源列表失败：%w", err)
+	}
+	return body.Sources, nil
+}
+
+// ResolveSourceURL 按源 id 解析清单地址：default 或未知空 id 返回空串（走官方默认链路）；
+// 源列表拉取失败或 id 不在列表时返回错误（调用方回退默认源）。
+func (m *MarketClient) ResolveSourceURL(sourceID string) (string, error) {
+	if strings.TrimSpace(sourceID) == "" || sourceID == "default" {
+		return "", nil
+	}
+	sources, err := m.Sources()
+	if err != nil {
+		return "", err
+	}
+	for _, s := range sources {
+		if strconv.FormatInt(s.ID, 10) == sourceID {
+			return s.ManifestURL, nil
+		}
+	}
+	return "", fmt.Errorf("市场源 %s 不存在或不可用", sourceID)
 }
 
 // ListPage 分页浏览市场：优先分页 API（市场消费主入口）；API 不可达时回退
@@ -195,7 +271,11 @@ func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 			params.Set(k, v)
 		}
 	}
-	resp, err := m.httpClient.Get(m.apiBase + "/packages?" + params.Encode())
+	// 商户源货架：透传 source id（服务端按源的 registry 过滤）
+	if m.sourceID != "" {
+		params.Set("source", m.sourceID)
+	}
+	resp, err := m.authedGet(m.apiBase + "/packages?" + params.Encode())
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +302,7 @@ func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 // PackageByKindName 从服务端查单包详情（安装/预览的定位路径，替代「拉全量清单线性查找」）。
 // API 不可达时回退全量清单定位（过渡兼容）。
 func (m *MarketClient) PackageByKindName(kind, name string) (*MarketPackage, error) {
-	resp, err := m.httpClient.Get(m.apiBase + "/packages/" + kind + "/" + name)
+	resp, err := m.authedGet(m.apiBase + "/packages/" + kind + "/" + name)
 	if err == nil {
 		defer resp.Body.Close()
 		if resp.StatusCode == http.StatusOK {
@@ -385,7 +465,7 @@ func (m *MarketClient) List() (*MarketListResult, error) {
 
 // fetchRemote 在线拉取清单。
 func (m *MarketClient) fetchRemote() (*MarketManifest, error) {
-	resp, err := m.httpClient.Get(m.manifestURL)
+	resp, err := m.authedGet(m.manifestURL)
 	if err != nil {
 		return nil, err
 	}
@@ -491,7 +571,7 @@ func (m *MarketClient) Download(pkg MarketPackage) (string, error) {
 	if downloadURL == "" {
 		downloadURL = m.packageURL(pkg.File)
 	}
-	resp, err := m.httpClient.Get(downloadURL)
+	resp, err := m.authedGet(downloadURL)
 	if err != nil {
 		return "", fmt.Errorf("下载分发包失败：%w", err)
 	}

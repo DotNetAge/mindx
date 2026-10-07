@@ -73,6 +73,11 @@ func (c *Client) MarketList(params MarketListParams) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.list", params)
 }
 
+// MarketSources 拉取可用市场源清单（商户源可见性由 daemon 侧配置的访问令牌决定）。
+func (c *Client) MarketSources() (json.RawMessage, error) {
+	return c.CallWithTimeout("market.sources", map[string]any{})
+}
+
 func (c *Client) MarketInstall(kind, name string, overwrite, skipDeps, autoInstall bool) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.install", MarketInstallParams{Kind: kind, Name: name, Overwrite: overwrite, SkipDeps: skipDeps, AutoInstall: autoInstall})
 }

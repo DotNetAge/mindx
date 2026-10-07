@@ -57,9 +57,14 @@ var userConfigFieldSetters = map[string]func(cfg *core.MindxConfig, val any){
 			cfg.ChannelURL = s
 		}
 	},
-	"market_manifest_url": func(cfg *core.MindxConfig, v any) {
+	"market_source_id": func(cfg *core.MindxConfig, v any) {
 		if s, ok := v.(string); ok {
-			cfg.MarketManifestURL = strings.TrimSpace(s)
+			cfg.MarketSourceID = strings.TrimSpace(s)
+		}
+	},
+	"market_pat": func(cfg *core.MindxConfig, v any) {
+		if s, ok := v.(string); ok {
+			cfg.MarketPAT = strings.TrimSpace(s)
 		}
 	},
 }
@@ -89,7 +94,7 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 						if key == "channel_url" {
 							channelChanged = true
 						}
-						if key == "market_manifest_url" {
+						if key == "market_source_id" || key == "market_pat" {
 							marketChanged = true
 						}
 					}
@@ -111,25 +116,27 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 			if channelChanged {
 				d.onChannelURLChanged(cfg.ChannelURL)
 			}
-			// 市场源变更后重建市场客户端并广播，前端货架重置重拉（空值回退官方源）。
+			// 市场源/令牌变更后重建市场客户端并广播，前端货架重置重拉
+			//（源 id 经市场服务端解析为清单地址；失败回退官方默认源）。
 			if marketChanged {
-				d.app.SetMarketSource(cfg.MarketManifestURL)
-				d.broadcastUI("market_changed", map[string]any{"manifest_url": cfg.MarketManifestURL})
+				d.app.SetMarketSource(cfg.MarketSourceID, cfg.MarketPAT)
+				d.broadcastUI("market_changed", map[string]any{"source_id": cfg.MarketSourceID})
 			}
 		}
 	}
 
-	// 读：始终返回当前配置
+	// 读：始终返回当前配置（market_pat 只回是否已设置的布尔，明文严禁回读/落日志）
 	result := map[string]any{
-		"initialized":         cfg.Initialized,
-		"last_agent":          cfg.LastAgent,
-		"last_session_id":     cfg.LastSessionID,
-		"default_model":       cfg.DefaultModel,
-		"default_provider":    cfg.DefaultProvider,
-		"last_model":          cfg.LastModel,
-		"kb_addr":             cfg.KBAddr,
-		"channel_url":         cfg.ChannelURL,
-		"market_manifest_url": cfg.MarketManifestURL,
+		"initialized":      cfg.Initialized,
+		"last_agent":       cfg.LastAgent,
+		"last_session_id":  cfg.LastSessionID,
+		"default_model":    cfg.DefaultModel,
+		"default_provider": cfg.DefaultProvider,
+		"last_model":       cfg.LastModel,
+		"kb_addr":          cfg.KBAddr,
+		"channel_url":      cfg.ChannelURL,
+		"market_source_id": cfg.MarketSourceID,
+		"market_pat_set":   cfg.MarketPAT != "",
 	}
 	if cfg.PermissionRules != nil {
 		result["permission_rules"] = cfg.PermissionRules
@@ -167,8 +174,8 @@ func getConfigField(cfg *core.MindxConfig, key string) any {
 		return cfg.KBAddr
 	case "channel_url":
 		return cfg.ChannelURL
-	case "market_manifest_url":
-		return cfg.MarketManifestURL
+	case "market_source_id":
+		return cfg.MarketSourceID
 	}
 	return nil
 }

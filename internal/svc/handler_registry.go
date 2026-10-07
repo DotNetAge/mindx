@@ -76,6 +76,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"skill.prepare":                      r.daemon.handleSkillPrepare,
 		"skill.prepare.confirm_install":      r.daemon.handleSkillPrepareConfirmInstall,
 		"market.list":                        r.daemon.handleMarketList,
+		"market.sources":                     r.daemon.handleMarketSources,
 		"market.install":                     r.daemon.handleMarketInstall,
 		"market.package.read":                r.daemon.handleMarketPackageRead,
 		"message.cancel":                     r.daemon.handleMessageCancel,

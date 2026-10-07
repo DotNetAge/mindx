@@ -66,9 +66,18 @@ type MindxConfig struct {
 	// 为空表示未启用手机连接，daemon 不与中继建立连接。
 	ChannelURL string `json:"channel_url,omitempty"`
 
-	// MarketManifestURL 是市场清单地址（换源入口）。为空表示使用官方默认源
-	//（bundle.DefaultMarketManifestURL）；变更经 user.config 写入后重建市场客户端。
+	// MarketManifestURL 是市场清单地址（market_source_id 的解析结果缓存，由
+	// SetMarketSource 写入；为空表示使用官方默认源）。不再作为用户配置项直接写入。
 	MarketManifestURL string `json:"market_manifest_url,omitempty"`
+
+	// MarketSourceID 是选中的市场源 id（"default" 或空 = 官方公开源；商户源为
+	// 服务端 /api/v1/sources 下发的数字 id 字符串）。
+	MarketSourceID string `json:"market_source_id,omitempty"`
+
+	// MarketPAT 是商户访问令牌（用户在市场网页登录后签发的 PAT，经设置粘贴；
+	// 非空时 daemon 携带访问商户源）。明文落 mindx.json（与 provider API key 同级），
+	// 严禁回读与写日志。
+	MarketPAT string `json:"market_pat,omitempty"`
 
 	// AgentSkillChecksums stores SHA256 checksums of deployed agent and skill
 	// files, keyed by relative path from workspaceDir. Used by SyncRuntimeAssets

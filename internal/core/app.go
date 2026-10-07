@@ -388,7 +388,8 @@ func (a *App) Skills() *skillstore.Store {
 }
 
 // Market 返回市场客户端（懒创建；缓存目录位于数据目录 market-cache 下按源哈希隔离）。
-// manifestURL 取配置 market_manifest_url，为空回退官方默认源。
+// manifestURL 取配置 market_manifest_url（源 id 解析结果缓存，为空回退官方默认源），
+// 创建后按配置注入商户访问令牌。
 func (a *App) Market() *bundle.MarketClient {
 	a.marketMu.RLock()
 	if a.market != nil {
@@ -402,18 +403,30 @@ func (a *App) Market() *bundle.MarketClient {
 	if a.market == nil {
 		a.market = bundle.NewMarketClient(a.mindxConfig.MarketManifestURL,
 			filepath.Join(a.settings.DataDir(), "market-cache"))
+		a.market.SetPAT(a.mindxConfig.MarketPAT)
 	}
 	return a.market
 }
 
-// SetMarketSource 运行时换源：以新清单地址重建市场客户端（缓存目录随源哈希隔离，
-// 旧源缓存自然废弃）。url 为空回退官方默认源。调用方（user.config 副作用）负责广播
-// market_changed 通知前端刷新货架。
-func (a *App) SetMarketSource(url string) {
+// SetMarketSource 运行时换源/换令牌：按源 id 经市场服务端解析清单地址后重建客户端
+// （缓存目录随源哈希隔离）；sourceID 为空或解析失败回退默认官方源（日志 warn，不阻断）。
+// 调用方（user.config 副作用）负责广播 market_changed 通知前端刷新货架。
+func (a *App) SetMarketSource(sourceID, pat string) {
 	a.marketMu.Lock()
 	defer a.marketMu.Unlock()
-	a.market = bundle.NewMarketClient(url,
+
+	probe := bundle.NewMarketClient(a.mindxConfig.MarketManifestURL,
 		filepath.Join(a.settings.DataDir(), "market-cache"))
+	probe.SetPAT(pat)
+
+	url, err := probe.ResolveSourceURL(sourceID)
+	if err != nil {
+		a.logger.Warn("市场源解析失败，回退官方默认源", "source_id", sourceID, "error", err)
+		url = ""
+	}
+	a.mindxConfig.MarketManifestURL = url
+	a.market = bundle.NewMarketClient(url, filepath.Join(a.settings.DataDir(), "market-cache"))
+	a.market.SetPAT(pat)
 }
 
 // PromptBuilder 返回 mindx 侧基础系统提示词组装器（懒创建，App 生命周期内缓存；
