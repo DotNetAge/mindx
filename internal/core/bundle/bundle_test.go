@@ -300,15 +300,16 @@ func TestMarketManifestRoundTrip(t *testing.T) {
 	}
 }
 
-// TestNormalizeCategory 验收：slug 形态的历史分类数据在解析层统一归一为中文显示名，
-// 中文原文原样通过（展示口径与静态清单一致，前端 FIXED_DOMAINS 同词汇表）。
+// TestNormalizeCategory 验收：非规范分类写法（slug / 旧译中文）在解析层统一归一为
+// 规范中文显示名，规范中文原样通过（展示口径与静态清单一致，前端 FIXED_DOMAINS 同词汇表）。
 func TestNormalizeCategory(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"3c", "智能硬件"},         // 线上 20 个 3c 类包直填 slug
 		{"dev", "产品研发"},        // slug 枚举
+		{"finance", "财务"},      // slug 枚举（正名）
 		{"management", "经营管理"}, // 词汇表补齐后的新 slug
-		{"工业", "工业"},           // 中文原文原样通过
-		{"财务", "财务"},           // 词汇表外的中文原文不归并，原样透传
+		{"商业研究", "财务"},         // finance 旧译随正名归一
+		{"工业", "工业"},           // 规范中文原样通过
 		{"", ""},
 	}
 	for _, c := range cases {

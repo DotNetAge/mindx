@@ -290,24 +290,25 @@ func packageFromDetail(data []byte) (*MarketPackage, error) {
 	return pkg, nil
 }
 
-// categorySlugZh 分类 slug → 中文显示名归一表（与服务端 categories 种子同一词汇表）。
-// 部分历史包的清单 category 直填了发布目录 slug（线上 20 个 3c 类包），展示端统一
-// 归一为中文，与静态清单的中文 category 口径一致；中文值原样通过。
-var categorySlugZh = map[string]string{
+// categoryAliasZh 分类归一表：非规范写法（发布目录 slug / 旧译中文）→ 规范中文显示名
+// （与服务端 categories 种子同一词汇表）。部分历史包的清单 category 直填了发布目录
+// slug（线上 20 个 3c 类包），finance 旧译「商业研究」亦随正名归一；规范中文原样通过。
+var categoryAliasZh = map[string]string{
 	"dev":        "产品研发",
 	"3c":         "智能硬件",
 	"data":       "数据分析",
-	"finance":    "商业研究",
+	"finance":    "财务",
 	"office":     "办公提效",
 	"marketing":  "市场营销",
 	"contents":   "内容创作",
 	"management": "经营管理",
 	"industry":   "工业",
+	"商业研究":       "财务", // finance 旧译
 }
 
-// normalizeCategory 将 slug 形态的分类归一为中文显示名。
+// normalizeCategory 将非规范分类写法归一为规范中文显示名。
 func normalizeCategory(category string) string {
-	if zh, ok := categorySlugZh[strings.TrimSpace(category)]; ok {
+	if zh, ok := categoryAliasZh[strings.TrimSpace(category)]; ok {
 		return zh
 	}
 	return category
