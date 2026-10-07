@@ -113,17 +113,20 @@ type MarketClient struct {
 }
 
 // NewMarketClient 创建市场客户端。
-// manifestURL 为空时使用 DefaultMarketManifestURL；cacheDir 为清单与包文件的本地缓存目录。
-// apiBase 由 manifestURL 同源推导（清单目录 + /api/v1）：服务端清单形如
-// https://www.mindx.chat/manifest → https://www.mindx.chat/api/v1；COS/测试地址推导出的
-// API 路径不存在时由调用方快速回退清单路径，不产生长等待。
+// manifestURL 为空或为默认 COS 清单地址时，API 基址使用 DefaultMarketAPIBase（服务端分页 API
+// 是市场消费主入口，不能因清单在 COS 而把 API 请求也打到 COS）；显式配置其他清单地址
+// （测试/自托管）时 apiBase 由其同源推导（清单目录 + /api/v1），推导出的 API 路径不存在时
+// 由调用方快速回退清单路径，不产生长等待。
+// cacheDir 为清单与包文件的本地缓存目录。
 func NewMarketClient(manifestURL, cacheDir string) *MarketClient {
 	if strings.TrimSpace(manifestURL) == "" {
 		manifestURL = DefaultMarketManifestURL
 	}
 	apiBase := DefaultMarketAPIBase
-	if i := strings.LastIndex(manifestURL, "/"); i >= 0 {
-		apiBase = manifestURL[:i+1] + "api/v1"
+	if manifestURL != DefaultMarketManifestURL {
+		if i := strings.LastIndex(manifestURL, "/"); i >= 0 {
+			apiBase = manifestURL[:i+1] + "api/v1"
+		}
 	}
 	return &MarketClient{
 		httpClient:  &http.Client{Timeout: httpTimeout},
