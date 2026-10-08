@@ -1,0 +1,11 @@
+[
+  { "query": "我刚接手公司这套电商系统，代码有几个 G，帮我配一支团队负责后续开发", "should_trigger": true },
+  { "query": "这个项目以后归咱们智能体管了，先看看项目长什么样，然后把负责的人组建起来", "should_trigger": true },
+  { "query": "接手这个遗留项目，分析一下技术栈和模块结构，设计一套智能体编制方案给我确认", "should_trigger": true },
+  { "query": "打开这个目录，看看需要哪些岗位来负责它，把团队建起来", "should_trigger": true },
+  { "query": "帮我招一个懂 Laravel 的高级工程师", "should_trigger": false },
+  { "query": "这个项目的登录模块有个 bug，帮我修一下", "should_trigger": false },
+  { "query": "给我现有的代码审查员加一个检查 SQL 注入的技能", "should_trigger": false },
+  { "query": "团队上次交付的成果复盘一下，看看哪些岗位负载不均", "should_trigger": false },
+  { "query": "什么是智能体团队？团队和单个 Agent 有什么区别", "should_trigger": false }
+]

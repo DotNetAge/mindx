@@ -14,6 +14,7 @@ skills:
   - dashboard
   - generate-readme
   - agent-creator
+  - team-planner
   - mbti-g-user-profile
   - project-overview
 ---
