@@ -223,6 +223,10 @@ type marketPackageDTO struct {
 	Sha256      string            `json:"sha256"`
 	Size        int64             `json:"size,omitempty"`
 	DownloadURL string            `json:"downloadUrl,omitempty"`
+	// 插件元数据（kind=plugin；安装确认弹窗的信任呈现依据）
+	Author      string   `json:"author,omitempty"`
+	License     string   `json:"license,omitempty"`
+	Permissions []string `json:"permissions,omitempty"`
 }
 
 // handleMarketList 市场浏览：全部走服务端分页 API（清单机制已废除，
@@ -263,6 +267,9 @@ func (d *Daemon) handleMarketList(_ context.Context, params json.RawMessage) (an
 			Sha256:      p.Sha256,
 			Size:        p.Size,
 			DownloadURL: p.DownloadURL,
+			Author:      p.Author,
+			License:     p.License,
+			Permissions: p.Permissions,
 		})
 	}
 	return map[string]any{

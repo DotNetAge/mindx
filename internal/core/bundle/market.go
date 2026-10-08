@@ -62,6 +62,10 @@ type MarketPackage struct {
 	Sha256 string `json:"sha256"`
 	// Size 包文件字节数（列表展示用）。
 	Size int64 `json:"size,omitempty"`
+	// 插件元数据（kind=plugin；安装确认弹窗的信任呈现依据）。
+	Author      string   `json:"author,omitempty"`
+	License     string   `json:"license,omitempty"`
+	Permissions []string `json:"permissions,omitempty"`
 }
 
 // MarketQuery 是分页浏览市场的查询参数（契约 §2.2，全部可选）。
@@ -157,6 +161,7 @@ func (ap apiPackage) toMarketPackage() MarketPackage {
 		Category: normalizeCategory(ap.Category), Leader: ap.Meta.Leader, Members: ap.Meta.Members,
 		Skills: ap.Meta.Skills, SkillNames: ap.Meta.SkillNames, SkillDescs: ap.Meta.SkillDescs,
 		Version: version, DownloadURL: ap.DownloadURL, Sha256: ap.Sha256, Size: ap.Size,
+		Author: ap.Meta.Author, License: ap.Meta.License, Permissions: ap.Meta.Permissions,
 	}
 }
 
@@ -216,15 +221,18 @@ func (m *MarketClient) ListPage(q MarketQuery) (*MarketPage, error) {
 
 // apiPackageMeta 服务端包条目的嵌套元数据（meta 对象，列表/详情共用结构）。
 type apiPackageMeta struct {
-	Icon       string            `json:"icon"`
-	NickName   string            `json:"nick_name"`
-	Role       string            `json:"role"`
-	Leader     string            `json:"leader"`
-	Members    []string          `json:"members"`
-	Skills     []string          `json:"skills"`
-	SkillNames map[string]string `json:"skill_names"`
-	SkillDescs map[string]string `json:"skill_descs"`
-	Version    string            `json:"version"`
+	Icon        string            `json:"icon"`
+	NickName    string            `json:"nick_name"`
+	Role        string            `json:"role"`
+	Leader      string            `json:"leader"`
+	Members     []string          `json:"members"`
+	Skills      []string          `json:"skills"`
+	SkillNames  map[string]string `json:"skill_names"`
+	SkillDescs  map[string]string `json:"skill_descs"`
+	Version     string            `json:"version"`
+	Author      string            `json:"author"`
+	License     string            `json:"license"`
+	Permissions []string          `json:"permissions"`
 }
 
 // fetchAPIPage 走服务端分页 API（响应条目为顶层基础字段 + meta 嵌套元数据）。

@@ -81,8 +81,8 @@ Examples:
 		page, _ := cmd.Flags().GetInt("page")
 		pageSize, _ := cmd.Flags().GetInt("page-size")
 
-		if kind != "" && kind != "agent" && kind != "skill" && kind != "team" {
-			return fmt.Errorf("--kind 仅支持 agent、skill 或 team")
+		if kind != "" && kind != "agent" && kind != "skill" && kind != "team" && kind != "plugin" {
+			return fmt.Errorf("--kind 仅支持 agent、skill、team 或 plugin")
 		}
 		if sortBy != "" && sortBy != "likes" && sortBy != "newest" && sortBy != "downloads" {
 			return fmt.Errorf("--sort 仅支持 likes、newest 或 downloads")
@@ -165,6 +165,17 @@ type marketPackage struct {
 	Skills      []string `json:"skills"`
 	Version     string   `json:"version"`
 	Size        int64    `json:"size"`
+	// 完整透传字段（JSON 输出用；表格输出仅取子集）
+	NickName    string   `json:"nick_name"`
+	Icon        string   `json:"icon"`
+	Leader      string   `json:"leader"`
+	Members     []string `json:"members"`
+	File        string   `json:"file"`
+	Sha256      string   `json:"sha256"`
+	DownloadURL string   `json:"downloadUrl"`
+	Author      string   `json:"author"`
+	License     string   `json:"license"`
+	Permissions []string `json:"permissions"`
 }
 
 // ── market install：市场分发包安装（消费端，需 daemon） ────────
