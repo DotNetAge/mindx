@@ -82,6 +82,23 @@ type Manifest struct {
 	Leader string `json:"leader,omitempty"`
 	// Members 包内成员 Agent 名清单（kind=team，含负责人；安装器据此报告落位结果）。
 	Members []string `json:"members,omitempty"`
+	// Version 包版本（发布链路经覆盖项写入；本地导出不带版本语义，缺省）。
+	Version string `json:"version,omitempty"`
+	// License 许可证标识（发布链路经覆盖项写入；SPDX 简称，如 MIT、Apache-2.0）。
+	License string `json:"license,omitempty"`
+	// DerivedFrom 衍生谱系声明（§4；发布链路经覆盖项写入，原创发布留空）。
+	DerivedFrom *DerivedRef `json:"derived_from,omitempty"`
+}
+
+// DerivedRef 衍生谱系声明（市场生态 §4）：声明本包进化自哪个已发布的包。
+// 打包时经发布覆盖项写入清单，服务端发布管线据此落库并做防环校验。
+type DerivedRef struct {
+	// Kind 上游包类型（agent | skill | plugin | team；plugin 包由 CLI 构建，daemon 不产出但可指向上游）。
+	Kind string `json:"kind"`
+	// Name 上游包名。
+	Name string `json:"name"`
+	// Version 上游版本（可选：声明衍生自哪个版本；空 = 不区分版本）。
+	Version string `json:"version,omitempty"`
 }
 
 // SkillDependencies 是一个 skill 的全部外部依赖（三层模型）。

@@ -89,3 +89,44 @@ func TestMissingBins(t *testing.T) {
 	require.Equal(t, []string{"mindx-no-such-bin-xyz"}, missing)
 	require.Nil(t, MissingBins(nil))
 }
+
+// TestExtractRequires_EnvsObjectForm envs 对象形态 {name, prompt, url, sensitive}：
+// 对象条目进 Envs 且 name 并入 Env（MissingEnvs / verifyDependencies 出口兼容）；
+// 字符串条目只进 Env；name 缺失整条忽略（不产生半残声明）。
+func TestExtractRequires_EnvsObjectForm(t *testing.T) {
+	r := extractRequires(map[string]any{
+		"requires": map[string]any{
+			"envs": []any{
+				"LARK_APP_ID",
+				map[string]any{
+					"name":      "LARK_APP_SECRET",
+					"prompt":    "在飞书开放平台的应用凭证页获取",
+					"url":       "https://open.feishu.cn/app",
+					"sensitive": true,
+				},
+				map[string]any{"prompt": "缺少 name 的条目应整条忽略"},
+				map[string]any{"name": "  "},
+			},
+		},
+	})
+	require.NotNil(t, r)
+	require.Len(t, r.Envs, 1)
+	require.Equal(t, "LARK_APP_SECRET", r.Envs[0].Name)
+	require.Equal(t, "在飞书开放平台的应用凭证页获取", r.Envs[0].Prompt)
+	require.Equal(t, "https://open.feishu.cn/app", r.Envs[0].URL)
+	require.True(t, r.Envs[0].Sensitive)
+	// 双出口：字符串条目 + 对象条目 name 都并入 Env
+	require.Equal(t, []string{"LARK_APP_ID", "LARK_APP_SECRET"}, r.Env)
+}
+
+// TestExtractRequires_EnvsLegacyStringOnly 存量纯字符串名单解析后 Envs 为空（不影响既有调用方）。
+func TestExtractRequires_EnvsLegacyStringOnly(t *testing.T) {
+	r := extractRequires(map[string]any{
+		"requires": map[string]any{
+			"envs": []any{"MINDX_API_KEY"},
+		},
+	})
+	require.NotNil(t, r)
+	require.Equal(t, []string{"MINDX_API_KEY"}, r.Env)
+	require.Empty(t, r.Envs)
+}

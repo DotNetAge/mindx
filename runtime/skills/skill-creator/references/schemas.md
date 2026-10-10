@@ -77,7 +77,7 @@ metadata:
 | 字段      | 类型            | 说明                                                                                                                                                                                                                                                                                            |
 | --------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `bins`    | list of strings | PATH 中必须存在的可执行文件（如 `lark-cli`、`ffmpeg`）。加载时按三层查找链探测：进程 PATH → 用户 shell（`zsh -lic which`，覆盖 nvm/Homebrew 等用户级安装）→ 常见安装目录扫描。                                                                                                                  |
-| `envs`    | list of strings | 必须设置的环境变量。加载时检查非空。**定稿键为 `envs`**，兼容存量 `env` 写法（两者都收，`envs` 优先）。新技能一律写 `envs`。                                                                                                                                                                    |
+| `envs`    | list            | 必须设置的环境变量。**定稿键为 `envs`**，兼容存量 `env` 写法。条目两种形态：字符串（仅变量名）；对象 `{name, prompt, url, sensitive}`——`name` 必填（缺失整条忽略），`prompt` 为首用收集说明（缺失告警），`url` 为申请入口（可选），`sensitive: true` 表示掩码输入且正文禁明文赋值样例（告警）。缺失时首用触发收集，落库键 `<skill_name>:<env>`。 |
 | `runtime` | map             | 生态级运行时版本要求（跨 skill 共享的运行时，不要与 `bins` 重复声明）。key 为运行时名（`node` / `python` / `dotnet` / `go` / `rust` / `java`），value 为版本约束字符串，支持 `>=18`、`>18`、`^18`、`18.x`、`18`。检查时映射到对应二进制（`python` → `python3`，`rust` → `rustc`）读取版本比较。 |
 | `oauth`   | object          | 技能运行所需 OAuth 授权，含 `provider` 和 `env` 两个字段。`provider` 引用 client-provider.yml 注册表名；`env` 是授权成功后令牌落库的凭据名（存储键 `<skill_name>:<env>`）。缺失时触发授权准备流程。                                                                                             |
 
@@ -117,6 +117,10 @@ metadata:
   requires:
     envs:
       - DATABASE_URL
+      - name: DATABASE_PASSWORD
+        prompt: 在数据库控制台的凭证页获取
+        url: https://console.example.com/credentials
+        sensitive: true
   description_zh: 审查 SQL 查询的正确性、性能和安全性问题
 ---
 ```

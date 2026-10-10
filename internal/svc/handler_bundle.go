@@ -2,8 +2,11 @@ package svc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/DotNetAge/mindx/internal/core/bundle"
 	"github.com/DotNetAge/mindx/pkg/rpc"
@@ -14,7 +17,10 @@ import (
 //   - agent.export / skill.export：导出分发包（zip 容器，保真原则）；
 //   - agent.import / skill.import：本地安装（同名冲突默认拒绝，覆盖需显式确认）；
 //   - market.list：服务端分页 API 浏览（清单机制已废除，无回退）；
-//   - market.install：下载 → sha256 校验 → 复用本地安装展开逻辑。
+//   - market.install：下载 → sha256 校验 → 复用本地安装展开逻辑；
+//   - market.pack / market.publish：打包预览与发布新版本（市场生态 §3）；
+//   - market.submit / market.submissions.list / market.submissions.decide：
+//     进化版本投递与包主审核（市场生态 §4）。
 
 // handleAgentExport 导出 Agent 分发包到指定路径（out_path 来自前端保存对话框）。
 func (d *Daemon) handleAgentExport(_ context.Context, params json.RawMessage) (any, error) {
@@ -223,10 +229,20 @@ type marketPackageDTO struct {
 	Sha256      string            `json:"sha256"`
 	Size        int64             `json:"size,omitempty"`
 	DownloadURL string            `json:"downloadUrl,omitempty"`
-	// 插件元数据（kind=plugin；安装确认弹窗的信任呈现依据）
+	// 市场信号（§1/§2：下载计数与评分聚合，分页契约只增不破坏）
+	DownloadCnt int64   `json:"download_count,omitempty"`
+	RatingAvg   float64 `json:"rating_avg,omitempty"`
+	RatingCnt   int64   `json:"rating_count,omitempty"`
+	// 插件元数据（kind=plugin；安装确认弹窗与插件页卡片的信任呈现依据）
 	Author      string   `json:"author,omitempty"`
+	URL         string   `json:"url,omitempty"`
+	Repo        string   `json:"repo,omitempty"`
 	License     string   `json:"license,omitempty"`
 	Permissions []string `json:"permissions,omitempty"`
+	Fingerprint string   `json:"fingerprint,omitempty"`
+	PublishedAt string   `json:"publishedAt,omitempty"`
+	// 衍生谱系（§4）：卡片「进化自 XXX」小字（原创不透出）
+	DerivedFrom *bundle.DerivedRef `json:"derived_from,omitempty"`
 }
 
 // handleMarketList 市场浏览：全部走服务端分页 API（清单机制已废除，
@@ -267,9 +283,17 @@ func (d *Daemon) handleMarketList(_ context.Context, params json.RawMessage) (an
 			Sha256:      p.Sha256,
 			Size:        p.Size,
 			DownloadURL: p.DownloadURL,
+			DownloadCnt: p.DownloadCount,
+			RatingAvg:   p.RatingAvg,
+			RatingCnt:   p.RatingCount,
 			Author:      p.Author,
+			URL:         p.URL,
+			Repo:        p.Repo,
 			License:     p.License,
 			Permissions: p.Permissions,
+			Fingerprint: p.Fingerprint,
+			PublishedAt: p.PublishedAt,
+			DerivedFrom: p.DerivedFrom,
 		})
 	}
 	return map[string]any{
@@ -374,4 +398,198 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 		}
 	}
 	return installWithPrepare{InstallResult: *installed, Prepares: prepares}, nil
+}
+
+// ─── 发布与投递（市场生态 §3/§4）───
+
+// marketBuildOverrides 组装发布覆盖项（publish/submit 共用）：谱系三字段须成对出现
+// （derived_kind + derived_name），指向包自身的声明在打包校验中拒绝。
+func marketBuildOverrides(version, license, derivedKind, derivedName, derivedVersion string) (bundle.PublishOverrides, error) {
+	ov := bundle.PublishOverrides{Version: version, License: license}
+	dk, dn := strings.TrimSpace(derivedKind), strings.TrimSpace(derivedName)
+	if dk == "" && dn == "" {
+		return ov, nil
+	}
+	if dk == "" || dn == "" {
+		return ov, fmt.Errorf("衍生声明必须同时提供 derived_kind 与 derived_name")
+	}
+	ov.DerivedFrom = &bundle.DerivedRef{Kind: dk, Name: dn, Version: strings.TrimSpace(derivedVersion)}
+	return ov, nil
+}
+
+// marketBuildPackage 按类型打包分发包字节（pack/publish/submit 共用打包入口）。
+func (d *Daemon) marketBuildPackage(kind, name string, ov *bundle.PublishOverrides) ([]byte, *bundle.Manifest, []string, error) {
+	switch bundle.PackageKind(kind) {
+	case bundle.KindAgent:
+		agent := d.app.Agents().Get(name)
+		if agent == nil {
+			return nil, nil, nil, fmt.Errorf("智能体 %q 不存在", name)
+		}
+		return bundle.BuildAgentBytes(agent, d.app.Skills(), ov)
+	case bundle.KindTeam:
+		team := d.app.Teams().Get(name)
+		if team == nil {
+			return nil, nil, nil, fmt.Errorf("团队 %q 不存在", name)
+		}
+		return bundle.BuildTeamBytes(team, d.app.Agents(), d.app.Skills(), ov)
+	case bundle.KindSkill:
+		data, manifest, err := bundle.BuildSkillBytes(d.app.Skills(), name, ov)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return data, manifest, nil, nil
+	default:
+		return nil, nil, nil, fmt.Errorf("kind（agent/skill/team）非法")
+	}
+}
+
+// handleMarketPack 打包分发包（不入库）：返回清单摘要与包大小/内容摘要，
+// 供发布表单预填（包名、描述、分类、技能装配与默认体积）。
+func (d *Daemon) handleMarketPack(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketPackParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	data, manifest, _, err := d.marketBuildPackage(p.Kind, p.Name, nil)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(data)
+	resp := map[string]any{
+		"kind":        p.Kind,
+		"name":        manifest.Name,
+		"description": manifest.Description,
+		"category":    manifest.Category,
+		"skills":      manifest.Skills,
+		"members":     manifest.Members,
+		"size":        len(data),
+		"sha256":      hex.EncodeToString(sum[:]),
+	}
+	if manifest.Version != "" {
+		resp["version"] = manifest.Version
+	}
+	if len(manifest.SkillNames) > 0 {
+		resp["skill_names"] = manifest.SkillNames
+	}
+	return resp, nil
+}
+
+// handleMarketPublish 打包并发布为新版本（§3）：版本/许可/谱系声明写入包内清单后
+// 字节直传服务端（服务端复算 sha256 并做衍生谱系权威校验：存在性、不自指、防环）。
+func (d *Daemon) handleMarketPublish(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketPublishParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(p.Version) == "" {
+		return nil, fmt.Errorf("version 为必填")
+	}
+	ov, err := marketBuildOverrides(p.Version, p.License, p.DerivedKind, p.DerivedName, p.DerivedVersion)
+	if err != nil {
+		return nil, err
+	}
+	// 发布名覆盖（§4.2 衍生改名发布）：403 包名冲突后以新名再发布时携带；
+	// 包内清单 name 随覆盖值落盘（zip 内固定目录前缀不含包名，安装端按清单落位）
+	publishName := strings.TrimSpace(p.PublishName)
+	if publishName != "" {
+		ov.Name = publishName
+	}
+	data, _, warnings, err := d.marketBuildPackage(p.Kind, p.Name, &ov)
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range warnings {
+		d.logger.Warn("发布打包告警", "kind", p.Kind, "name", p.Name, "warning", w)
+	}
+	res, err := d.app.Market().Publish(p.Kind, p.Name, data, p.Version, publishName)
+	if err != nil {
+		return nil, err
+	}
+	d.logger.Info("分发包发布完成", "kind", p.Kind, "name", p.Name, "version", res.Version, "created", res.Created)
+	return map[string]any{
+		"package_id": res.PackageID,
+		"version":    res.Version,
+		"sha256":     res.Sha256,
+		"created":    res.Created,
+		"warnings":   warnings,
+	}, nil
+}
+
+// handleMarketSubmit 投递进化版本到包主收件箱（§4 回流路径）：投递目标 = 原包名，
+// 打包清单身份与目标天然一致；版本号必填（服务端校验），谱系声明可选透传。
+func (d *Daemon) handleMarketSubmit(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketSubmitParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(p.Version) == "" {
+		return nil, fmt.Errorf("version 为必填")
+	}
+	ov, err := marketBuildOverrides(p.Version, "", p.DerivedKind, p.DerivedName, p.DerivedVersion)
+	if err != nil {
+		return nil, err
+	}
+	// 投递 = 同名包的进化版：谱系指向投递目标自身无意义且服务端采纳时必拒，前置拦截
+	if ov.DerivedFrom != nil && ov.DerivedFrom.Kind == p.Kind && ov.DerivedFrom.Name == p.Name {
+		return nil, fmt.Errorf("投递清单的谱系声明不能指向投递目标自身")
+	}
+	data, _, warnings, err := d.marketBuildPackage(p.Kind, p.Name, &ov)
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range warnings {
+		d.logger.Warn("投递打包告警", "kind", p.Kind, "name", p.Name, "warning", w)
+	}
+	res, err := d.app.Market().Submit(p.Kind, p.Name, p.Note, p.Version, data)
+	if err != nil {
+		return nil, err
+	}
+	d.logger.Info("进化版本投递完成", "kind", p.Kind, "name", p.Name, "version", res.Version, "submission_id", res.SubmissionID)
+	return map[string]any{
+		"submission_id": res.SubmissionID,
+		"version":       res.Version,
+		"sha256":        res.Sha256,
+		"created":       res.Created,
+	}, nil
+}
+
+// handleMarketSubmissionsList 拉取名下包的投递收件箱（仅包主；服务端校验 owner）。
+func (d *Daemon) handleMarketSubmissionsList(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketSubmissionsListParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Kind == "" || p.Name == "" {
+		return nil, fmt.Errorf("kind 与 name 均为必填")
+	}
+	subs, err := d.app.Market().Submissions(p.Kind, p.Name)
+	if err != nil {
+		return nil, err
+	}
+	if subs == nil {
+		subs = []bundle.Submission{}
+	}
+	return map[string]any{"submissions": subs}, nil
+}
+
+// handleMarketSubmissionDecide 包主审核投递：采纳（服务端代转正式发布管线）或拒绝。
+// 重复决策由服务端以 409 invalid_state 拒绝，错误原样冒泡。
+func (d *Daemon) handleMarketSubmissionDecide(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketSubmissionDecideParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Kind == "" || p.Name == "" || p.ID <= 0 {
+		return nil, fmt.Errorf("kind、name 与 id 均为必填")
+	}
+	res, err := d.app.Market().DecideSubmission(p.Kind, p.Name, p.ID, p.Accept)
+	if err != nil {
+		return nil, err
+	}
+	if p.Accept {
+		d.logger.Info("投递已采纳并发布", "kind", p.Kind, "name", p.Name, "submission_id", p.ID, "version", res.Version)
+	} else {
+		d.logger.Info("投递已拒绝", "kind", p.Kind, "name", p.Name, "submission_id", p.ID)
+	}
+	return res, nil
 }

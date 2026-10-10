@@ -23,10 +23,11 @@ import (
 // install 命令块走「展示确认一次后自动执行」；都没有则报环境不满足。
 //
 // 状态机（单次调用只返回一个阻塞态，壳处理后重新调用推进）：
-//   ok            全部就绪
-//   oauth_started 授权流程已异步启动（outcome 经 oauth.flow_completed/failed 通知）
-//   needs_confirm 安装命令待确认（confirm 后经 skill.prepare.confirm_install 执行）
-//   blocked       环境不满足（无法自动修复的原因清单）
+//   ok              全部就绪
+//   oauth_started   授权流程已异步启动（outcome 经 oauth.flow_completed/failed 通知）
+//   collect_started 凭据收集请求已发出（壳弹收集框，提交经 skill.credential.set 推进）
+//   needs_confirm   安装命令待确认（confirm 后经 skill.prepare.confirm_install 执行）
+//   blocked         环境不满足（无法自动修复的原因清单）
 //
 // market.install / skill.import 安装完成后自动调用一次（handler_bundle.go）：
 // 授权直接启动，命令确认随安装响应带回壳侧裁决——满足「安装时触发准备流程」。
@@ -34,16 +35,27 @@ import (
 
 // skillPrepareResult 准备流程状态（RPC 响应与安装响应 prepares[] 条目共用形状）
 type skillPrepareResult struct {
-	Skill         string          `json:"skill"`
-	Status        string          `json:"status"`
-	Warnings      []string        `json:"warnings,omitempty"`
-	Provider      string          `json:"provider,omitempty"`
-	ProviderTitle string          `json:"provider_title,omitempty"`
-	Env           string          `json:"env,omitempty"`
-	Commands      []string        `json:"commands,omitempty"`
-	Platform      string          `json:"platform,omitempty"`
-	Message       string          `json:"message,omitempty"`
-	Results       []commandResult `json:"results,omitempty"`
+	Skill         string                `json:"skill"`
+	Status        string                `json:"status"`
+	Warnings      []string              `json:"warnings,omitempty"`
+	Provider      string                `json:"provider,omitempty"`
+	ProviderTitle string                `json:"provider_title,omitempty"`
+	Env           string                `json:"env,omitempty"`
+	Collect       []skillEnvCollectInfo `json:"collect,omitempty"`
+	Commands      []string              `json:"commands,omitempty"`
+	Platform      string                `json:"platform,omitempty"`
+	Message       string                `json:"message,omitempty"`
+	Results       []commandResult       `json:"results,omitempty"`
+}
+
+// skillEnvCollectInfo 单个待收集环境变量的展示信息（requires.envs 对象形态
+// 条目的响应投影）：收集框按 prompt 说明、url 申请入口、sensitive 掩码呈现。
+// 只承载展示字段，凭据值绝不进此结构。
+type skillEnvCollectInfo struct {
+	Name      string `json:"name"`
+	Prompt    string `json:"prompt,omitempty"`
+	URL       string `json:"url,omitempty"`
+	Sensitive bool   `json:"sensitive,omitempty"`
 }
 
 // commandResult 单条安装命令的执行结果
@@ -57,6 +69,7 @@ type commandResult struct {
 const (
 	prepareOK           = "ok"
 	prepareOAuthStarted = "oauth_started"
+	prepareCollectStart = "collect_started"
 	prepareNeedsConfirm = "needs_confirm"
 	prepareBlocked      = "blocked"
 )
@@ -153,14 +166,28 @@ func (d *Daemon) evaluatePreparation(name string, detail *skillstore.SkillDetail
 			}
 		}
 
-		// ② 其余环境变量（非 oauth 落点）：缺失无可修复动作 → 记为阻塞原因
+		// ② 其余环境变量（非 oauth 落点）：缺失时按声明形态分流——
+		//    对象形态条目（有收集说明）→ 收进收集请求返回 collect_started，
+		//    壳弹收集框、提交经 skill.credential.set 写库后重入推进；
+		//    纯字符串条目（无说明文案，无法引导收集）→ 记为阻塞原因。
+		var collect []skillEnvCollectInfo
 		for _, env := range detail.Requires.Env {
 			if oauth != nil && env == oauth.Env {
 				continue
 			}
 			if _, ok := core.ResolveSkillCredential(d.oauthCredStore, name, env); !ok {
+				if item, ok := envCollectInfo(detail.Requires.Envs, env); ok {
+					collect = append(collect, item)
+					continue
+				}
 				reasons = append(reasons, fmt.Sprintf("缺少环境变量 %s", env))
 			}
+		}
+		if len(collect) > 0 {
+			d.presentCredentialCollect(name, collect)
+			res.Status = prepareCollectStart
+			res.Collect = collect
+			return res // 收集请求已发出，其余检查待提交后重入推进
 		}
 	}
 
@@ -182,6 +209,71 @@ func (d *Daemon) evaluatePreparation(name string, detail *skillstore.SkillDetail
 		res.Message = strings.Join(reasons, "；")
 	}
 	return res
+}
+
+// envCollectInfo 按 env 名查找对象形态条目并转为收集请求信息（找不到返回 false）。
+func envCollectInfo(entries []skillstore.SkillEnvRequirement, env string) (skillEnvCollectInfo, bool) {
+	for _, e := range entries {
+		if e.Name == env {
+			return skillEnvCollectInfo{Name: e.Name, Prompt: e.Prompt, URL: e.URL, Sensitive: e.Sensitive}, true
+		}
+	}
+	return skillEnvCollectInfo{}, false
+}
+
+// presentCredentialCollect 凭据收集请求的统一出口：有客户端连接时经 broadcastUI
+// 推壳（壳弹收集框）；无客户端（CLI 直连 / 无壳场景）广播等于静默丢弃，降级为
+// 日志输出，保证 daemon 前台与日志中可见待收集的变量名（对齐 oauth presentOrLog
+// 模式）。只记变量名与说明，凭据值不经过此函数（也不应入日志）。
+func (d *Daemon) presentCredentialCollect(skill string, envs []skillEnvCollectInfo) {
+	if d.gw != nil && d.gw.ClientCount() > 0 {
+		d.broadcastUI("skill.credential_collect", map[string]any{"skill": skill, "envs": envs})
+		return
+	}
+	if d.logger == nil {
+		return
+	}
+	names := make([]string, 0, len(envs))
+	for _, e := range envs {
+		names = append(names, e.Name)
+	}
+	d.logger.Info("技能凭据待收集（无客户端连接，降级日志）",
+		"event", "skill.credential_collect", "skill", skill, "envs", strings.Join(names, "、"))
+}
+
+// handleSkillCredentialSet 处理 skill.credential.set：壳收集框提交的环境变量
+// 逐条写凭据库（键 <skill_name>:<env>，值不落日志）。收尾推进由壳重调
+// skill.prepare（与 oauth flow_completed 收尾联动同构），本响应只确认落库。
+func (d *Daemon) handleSkillCredentialSet(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		Name string `json:"name"`
+		Envs []struct {
+			Env   string `json:"env"`
+			Value string `json:"value"`
+		} `json:"envs"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil || strings.TrimSpace(p.Name) == "" {
+		return nil, fmt.Errorf("缺少 name 参数")
+	}
+	if len(p.Envs) == 0 {
+		return nil, fmt.Errorf("缺少 envs 参数")
+	}
+	if d.oauthCredStore == nil {
+		return nil, fmt.Errorf("凭据存储不可用")
+	}
+	for _, e := range p.Envs {
+		env := strings.TrimSpace(e.Env)
+		if env == "" {
+			return nil, fmt.Errorf("envs 中存在空的环境变量名")
+		}
+		if e.Value == "" {
+			return nil, fmt.Errorf("环境变量 %s 的值不能为空", env)
+		}
+		if err := d.oauthCredStore.Set(core.SkillCredentialKey(p.Name, env), e.Value); err != nil {
+			return nil, fmt.Errorf("环境变量 %s 保存失败：%w", env, err)
+		}
+	}
+	return map[string]any{"ok": true, "set": len(p.Envs)}, nil
 }
 
 // platformInstallCommands 取当前平台的安装命令块；未命中运行平台时回退 linux

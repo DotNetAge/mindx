@@ -8,6 +8,11 @@ Agent 生成插件的最高频路径：选场景 → 生成 → 按需修改，�
     python3 scaffold_plugin.py my-plugin --with detail            # 叠加：点侧栏自动打开 Detail
     python3 scaffold_plugin.py my-plugin --with settings services # 场景可任意叠加
 
+外部（market）插件模式（生成独立项目目录，不注册进壳，产物走 .mindpkg 分发）：
+    python3 scaffold_plugin.py com.acme.widget --market "Acme"    # 反向域 id + 作者名
+    缺省生成到项目 .agents/plugins/<id>/（官方可选件与 LLM 开发插件的统一权威源目录，见插件生命周期规范 §11）；
+    产物 = manifest.json + entry.mjs + README.md；打包/安装/发布闭环见生成的 README。
+
 场景（全部来自 demo 插件实证范式，细节读 references/examples.md）：
     basic     页面（Content + Sidebar + Pinia store），一切场景的地基
     detail    Detail tab 注册 + 页面挂载时自动打开（区间联动）
@@ -31,6 +36,9 @@ from pathlib import Path
 
 SCENARIOS = ("detail", "settings", "overlay", "services")
 
+# 反向域 id（在线插件身份，与 ui-shell PLUGIN_ID_RE / plugin-store ID_RE 同规则）
+MARKET_ID_RE = re.compile(r"^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$")
+
 # ---------- 名称推导：kebab-case → camel/Pascal ----------
 
 
@@ -43,8 +51,15 @@ def to_parts(name: str) -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="按场景生成 mindx-work 插件骨架")
-    parser.add_argument("name", help="插件名，kebab-case，如 my-plugin")
-    parser.add_argument("--target", default="plugins/src", help="插件模块目录（默认 plugins/src）")
+    parser.add_argument("name", help="内置插件：kebab-case（如 my-plugin）；--market 模式：反向域 id（如 com.acme.widget）")
+    parser.add_argument("--target", default=None, help="目录锚点（内置模式默认 plugins/src；--market 模式默认项目 .agents/plugins）")
+    parser.add_argument(
+        "--market",
+        dest="market_author",
+        metavar="AUTHOR",
+        default=None,
+        help="外部（market）插件模式：作者署名。生成独立项目目录（manifest.json + entry.mjs + README），不注册进壳",
+    )
     parser.add_argument(
         "--with",
         dest="with_scenarios",
@@ -56,6 +71,114 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # ---------- 外部（market）插件模式：独立项目目录，走 .mindpkg 分发 ----------
+    if args.market_author is not None:
+        plugin_id = args.name.strip()
+        if not MARKET_ID_RE.match(plugin_id):
+            raise SystemExit(f"插件 id 非法：{plugin_id!r}（需为至少两段的反向域小写 id，如 com.acme.widget）")
+        if args.with_scenarios:
+            raise SystemExit("外部插件模式不支持场景叠加（无 SFC/Pinia，界面用注入的 h 函数式组件直接写）")
+        # 缺省权威源目录：项目 .agents/plugins/（官方可选件与 LLM 开发插件统一放这，见插件生命周期规范 §11）
+        project = Path(args.target or ".agents/plugins").resolve() / plugin_id
+        if project.exists():
+            raise SystemExit(f"目标目录已存在，拒绝覆盖：{project}")
+        display_name = plugin_id.rsplit(".", 1)[-1].replace("-", " ").title()
+
+        manifest = {
+            "id": plugin_id,
+            "name": display_name,
+            "version": "1.0.0",
+            "description": f"{display_name}：一句话说明（市场卡片与安装确认正文）",
+            "author": args.market_author,
+            "license": "MIT",
+            "entry": "entry.mjs",
+            "permissions": [],
+            "mxApiVersion": "1",
+            # fingerprint 由 mw plugin pack 重算写入（sha256(canonical({author,id,version}))），勿手填
+        }
+        entry_mjs = f"""/**
+ * {plugin_id} 入口（外部/在线插件）：default export (app, mx) => void | (() => void)
+ * 动态插件无 npm import 通道：渲染工具（h / MxIcon）由第二参 mx 注入；
+ * 禁止 import 任何工程内模块。机制详见 mindx-work/docs/插件生命周期规范.md §7。
+ */
+export default function (app, mx) {{
+  const {{ h, MxIcon }} = mx
+
+  // Content 页：函数式组件（props = 壳传入的 ViewProps：active / compact）
+  const page = {{
+    props: {{ active: {{ type: Boolean, default: false }} }},
+    setup(props) {{
+      return () =>
+        h('div', {{ style: 'padding:16px;display:flex;flex-direction:column;gap:12px;' }}, [
+          h('div', {{ style: 'display:flex;align-items:center;gap:8px;font-weight:600;' }}, [
+            h(MxIcon, {{ name: 'lucide:puzzle', size: 16 }}),
+            h('span', '{display_name}'),
+          ]),
+          h('p', {{ style: 'margin:0;color:var(--mx-text-secondary);font-size:13px;' }},
+            props.active ? '页面处于激活态。' : '页面在后台。'),
+          h('p', {{ style: 'margin:0;color:var(--mx-text-tertiary);font-size:12px;' }},
+            '把这里替换成你的页面；样式走 mx-* 原语类与 --mx-* token，禁止自造色值。'),
+        ])
+    }},
+  }}
+
+  // 条目 id 带插件前缀（防跨插件撞 id）；order ≥ 1001（1–1000 为预置插件保留段）
+  const PAGE_ID = '{plugin_id}.page'
+  app.Sidebar.add({{
+    id: '{plugin_id}.nav',
+    order: 1001,
+    title: '{display_name}',
+    icon: 'lucide:puzzle',
+    component: page,
+    rows: [{{ id: PAGE_ID, label: '{display_name}', icon: 'lucide:puzzle' }}],
+  }})
+  app.Content.add({{ id: PAGE_ID, order: 1001, title: '{display_name}', component: page }})
+
+  // 停用/卸载/切版时壳调用：显式摘除全部注册席位（add 不返回摘除函数，remove 按 id）
+  return () => {{
+    app.Content.remove(PAGE_ID)
+    app.Sidebar.remove('{plugin_id}.nav')
+  }}
+}}
+"""
+        readme = f"""# {display_name}（{plugin_id}）
+
+mindx-work 外部（market）插件项目。规范全文：`mindx-work/docs/插件生命周期规范.md`。
+
+## 闭环命令
+
+```bash
+# 打包（manifest 结构校验 + fingerprint 重算写入 → {plugin_id}-1.0.0.mindpkg）
+mw plugin pack ./{plugin_id}
+
+# 本地直装验收（写入 userData/plugins，运行中的 MindX Work 即时感知激活）
+mw plugin install ./{plugin_id}-1.0.0.mindpkg
+mw plugin list --json
+
+# 发布到市场（kind=plugin；fingerprint 由服务端重算比对，版本字节终身绑定）
+MARKET_URL=https://www.mindx.chat MARKET_TOKEN=<PAT> npm run publish -- <产物目录>
+```
+
+## 纪律速记
+
+- entry 是普通 ESM：禁止 import 工程内模块与 npm 包；渲染件用注入的 `mx.h` / `mx.MxIcon`。
+- 条目 id 一律以 `{plugin_id}.` 前缀；order ≥ 1001。
+- 清理函数必须显式摘除全部注册席位（`app.<区>.remove(id)`）。
+- 版本升级 = manifest.version 递增后重新 pack；同 id 新版本安装即更新（旧代际保留可回滚）。
+- mxApiVersion 必须与目标壳的 MX_API_VERSION 一致（当前 "1"）。
+"""
+        project.mkdir(parents=True, exist_ok=True)
+        (project / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        (project / "entry.mjs").write_text(entry_mjs, encoding="utf-8")
+        (project / "README.md").write_text(readme, encoding="utf-8")
+        print(f"已生成外部插件项目：{project}")
+        for f in ("manifest.json", "entry.mjs", "README.md"):
+            print(f"  {project / f}")
+        print("下一步：编辑 entry.mjs 实现界面 → `mw plugin pack` 打包 → `mw plugin install` 验收 → 发布市场")
+        return
+
+    if args.target is None:
+        args.target = "plugins/src"
     parts = to_parts(args.name)
     kebab = "-".join(parts).lower()
     camel = parts[0].lower() + "".join(p.capitalize() for p in parts[1:])

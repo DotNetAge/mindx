@@ -1,11 +1,13 @@
 package bundle
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,9 +17,10 @@ import (
 	"time"
 )
 
-// DefaultMarketAPIBase 是市场服务端 API 的基址（市场消费唯一入口：分页货架、
-// 单包详情、源列表均出自此处；静态清单机制已废除，不再有任何清单回退路径）。
-const DefaultMarketAPIBase = "https://www.mindx.chat/api/v1"
+// DefaultMarketBase 是官方市场源的服务根地址（源语义：一个源 = 一个独立部署的服务根，
+// 其下约定目录 agents/、skills/、plugins/（包文件）与 /api/v1（浏览 API）；
+// 更换源即更换 base URL）。
+const DefaultMarketBase = "https://www.mindx.chat"
 
 // 市场交互的体积与超时上限。
 const (
@@ -62,10 +65,27 @@ type MarketPackage struct {
 	Sha256 string `json:"sha256"`
 	// Size 包文件字节数（列表展示用）。
 	Size int64 `json:"size,omitempty"`
-	// 插件元数据（kind=plugin；安装确认弹窗的信任呈现依据）。
+	// DownloadCount 累计下载次数（服务端下载经手即计数，§1 口径；卡片信息行展示）。
+	DownloadCount int64 `json:"download_count,omitempty"`
+	// RatingAvg 评分均值 0-5（rating_count=0 时为 0，卡片不显示星标）。
+	RatingAvg float64 `json:"rating_avg,omitempty"`
+	// RatingCount 评分条数。
+	RatingCount int64 `json:"rating_count,omitempty"`
+	// 插件元数据（kind=plugin；安装确认弹窗与插件页卡片的信任呈现依据）。
 	Author      string   `json:"author,omitempty"`
+	URL         string   `json:"url,omitempty"`
+	Repo        string   `json:"repo,omitempty"`
 	License     string   `json:"license,omitempty"`
 	Permissions []string `json:"permissions,omitempty"`
+	// Fingerprint 插件唯一指纹（sha256(canonical({author,id,version}))，服务端发布时校验，
+	// 版本代际身份标识；kind=plugin 必带）。
+	Fingerprint string `json:"fingerprint,omitempty"`
+	// PublishedAt 最新版本发布时间（RFC3339，服务端下发；插件卡片展示发布日期）。
+	PublishedAt string `json:"published_at,omitempty"`
+	// DerivedFrom 衍生谱系（§4）：本包声明进化自哪个包（服务端下发；原创为 nil）。
+	DerivedFrom *DerivedRef `json:"derived_from,omitempty"`
+	// DerivedCount 在架衍生包数（仅详情 API 下发；「衍生 N 个」展示用）。
+	DerivedCount int64 `json:"derived_count,omitempty"`
 }
 
 // MarketQuery 是分页浏览市场的查询参数（契约 §2.2，全部可选）。
@@ -86,16 +106,25 @@ type MarketPage struct {
 }
 
 // MarketClient 消费市场：全部数据走服务端分页 API（无清单回退）；
-// 分发包下载带 sha256 校验。pat 非空时所有出站请求携带 Authorization（商户源鉴权）。
+// 分发包下载带 sha256 校验。pat 非空时所有出站请求携带 Authorization（商户源鉴权）；
+// clientID/authToken 非空时出站请求附 X-Client-Id 与用户身份（评分/绑定等低价值写操作，
+// 服务端 RequireActor 双通道归一）。
 type MarketClient struct {
 	httpClient *http.Client
-	// apiBase 市场服务端 API 基址（默认官方；本地调试/自托管经配置覆盖）
-	apiBase string
-	// sourceID 商户源标识（空/default = 官方公开货架，请求不带 source 参数）
-	sourceID string
+	// base 源服务根地址（源语义：一个源 = 一个独立部署的服务根，换源 = 换此地址）
+	base string
+	// apiBase 派生的 API 基址（<base>/api/v1）
+	apiBase  string
 	cacheDir string
 	// pat 商户访问令牌（用户在网页签发的 PAT，经设置粘贴；空 = 匿名）
 	pat string
+	// authToken 用户登录令牌（市场账号绑定后录入；空 = 未绑定，评分走匿名设备通道）
+	authToken string
+	// clientID 设备身份 UUIDv4（daemon 首启生成并持久化进凭据存储；评分/绑定的
+	// X-Client-Id 通道；服务端校验 clients 表登记）
+	clientID string
+	// registered 标记设备身份是否已在当前源登记（懒登记：首个身份动作前幂等注册）
+	registered bool
 }
 
 // SetPAT 设置商户访问令牌（换令牌后由调用方重建客户端或直接复用本实例均可）。
@@ -103,34 +132,509 @@ func (m *MarketClient) SetPAT(pat string) {
 	m.pat = strings.TrimSpace(pat)
 }
 
-// authedGet 带凭证的 GET（pat 非空时附 Authorization 头）。
+// SetAuthToken 设置用户登录令牌（市场账号绑定/解绑后由调用方同步）。
+func (m *MarketClient) SetAuthToken(token string) {
+	m.authToken = strings.TrimSpace(token)
+	m.registered = false // 身份语义变化后重新登记（幂等）
+}
+
+// SetClientID 设置设备身份标识（daemon 首启生成；换源后同一身份在不同源各自登记）。
+func (m *MarketClient) SetClientID(id string) {
+	m.clientID = strings.TrimSpace(id)
+	m.registered = false
+}
+
+// authedGet 带凭证的 GET：Authorization 优先 authToken（用户身份）回退 pat（商户源）；
+// clientID 非空时附 X-Client-Id（RequireActor 匿名设备通道）。
 func (m *MarketClient) authedGet(url string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	if m.pat != "" {
-		req.Header.Set("Authorization", "Bearer "+m.pat)
-	}
+	m.attachIdentity(req)
 	return m.httpClient.Do(req)
 }
 
-// NewMarketClient 创建市场客户端。
-// apiBase 为市场服务端 API 基址（空 = 官方 DefaultMarketAPIBase；本地调试/自托管显式传入）；
-// sourceID 为选中市场源 id（空/default = 官方公开货架）。
-// cacheDir 为缓存根目录：内部按 apiBase+sourceID 哈希开子目录（market-cache/<sha8>），
-// 多源/多基址切换时包缓存互不串扰。
-func NewMarketClient(apiBase, sourceID, cacheDir string) *MarketClient {
-	apiBase = strings.TrimRight(strings.TrimSpace(apiBase), "/")
-	if apiBase == "" {
-		apiBase = DefaultMarketAPIBase
+// attachIdentity 为出站请求附加身份头。
+func (m *MarketClient) attachIdentity(req *http.Request) {
+	token := m.authToken
+	if token == "" {
+		token = m.pat
 	}
-	sum := sha256.Sum256([]byte(apiBase + "|" + sourceID))
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if m.clientID != "" {
+		req.Header.Set("X-Client-Id", m.clientID)
+	}
+}
+
+// ensureIdentity 身份动作（评分/绑定）前的懒登记：设备身份幂等注册到当前源，
+// 已登记过则跳过（内存标记；换源/SetClientID 后重置）。
+func (m *MarketClient) ensureIdentity() error {
+	if m.clientID == "" || m.registered {
+		return nil
+	}
+	if err := m.RegisterClient(m.clientID); err != nil {
+		return err
+	}
+	m.registered = true
+	return nil
+}
+
+// MarketUser 市场账号用户信息（服务端 GET /api/v1/me 响应）。
+type MarketUser struct {
+	ID        int64  `json:"id"`
+	Provider  string `json:"provider"`
+	Login     string `json:"login"`
+	NickName  string `json:"nick_name"`
+	AvatarURL string `json:"avatar_url"`
+	Points    int64  `json:"points"`
+	TOSAccept bool   `json:"tos_accepted"`
+}
+
+// RegisterClient 登记设备身份（服务端幂等：已存在不覆盖绑定状态）。
+func (m *MarketClient) RegisterClient(clientID string) error {
+	return m.postJSON(m.apiBase+"/clients", map[string]string{"client_id": clientID}, nil)
+}
+
+// Me 拉取当前登录用户信息（AuthToken 校验通道；401/无令牌返回 ErrMarketUnauthorized 语义错误）。
+func (m *MarketClient) Me() (*MarketUser, error) {
+	if m.authToken == "" {
+		return nil, fmt.Errorf("未录入市场登录令牌")
+	}
+	resp, err := m.authedGet(m.apiBase + "/me")
+	if err != nil {
+		return nil, fmt.Errorf("市场服务不可达：%w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("令牌校验失败（HTTP %d）", resp.StatusCode)
+	}
+	var u MarketUser
+	if err := json.Unmarshal(data, &u); err != nil {
+		return nil, fmt.Errorf("解析用户信息失败：%w", err)
+	}
+	return &u, nil
+}
+
+// Bind 将本设备绑定到 AuthToken 对应用户（服务端单事务：user_id 落值 + 匿名评分迁移）。
+// 幂等、单向；返回迁移的匿名评分条数。
+func (m *MarketClient) Bind() (int64, error) {
+	if m.authToken == "" {
+		return 0, fmt.Errorf("未录入市场登录令牌")
+	}
+	if err := m.ensureIdentity(); err != nil {
+		return 0, err
+	}
+	var out struct {
+		Bound    bool  `json:"bound"`
+		Migrated int64 `json:"migrated"`
+	}
+	if err := m.postJSON(m.apiBase+"/clients/bind", map[string]string{"client_id": m.clientID}, &out); err != nil {
+		return 0, err
+	}
+	return out.Migrated, nil
+}
+
+// Base 返回市场源服务根地址（设备登录确认页 URL 的拼接基址；与登录/绑定
+// 走同一 base，保证令牌签发源与校验源一致）。
+func (m *MarketClient) Base() string { return m.base }
+
+// DeviceLoginStart 设备授权登录发起结果（服务端 POST /auth/device/start 响应）。
+type DeviceLoginStart struct {
+	DeviceCode      string `json:"device_code"`
+	VerificationURL string `json:"verification_url"` // 确认页 URL（已带 code，客户端直接打开）
+	ExpiresIn       int    `json:"expires_in"`       // 会话有效期（秒）
+	Interval        int    `json:"interval"`         // 建议轮询间隔（秒）
+}
+
+// DeviceStart 发起设备授权登录（服务端创建 pending 会话）。
+func (m *MarketClient) DeviceStart() (*DeviceLoginStart, error) {
+	var out DeviceLoginStart
+	if err := m.postJSON(m.apiBase+"/auth/device/start", map[string]any{}, &out); err != nil {
+		return nil, err
+	}
+	if out.DeviceCode == "" || out.VerificationURL == "" {
+		return nil, fmt.Errorf("设备登录响应缺少 device_code/verification_url")
+	}
+	return &out, nil
+}
+
+// DevicePollResult 设备授权轮询响应形态。
+type DevicePollResult struct {
+	Status    string `json:"status"`     // pending | authorized
+	AuthToken string `json:"auth_token"` // authorized 时下发（明文仅此一次）
+}
+
+// DevicePoll 轮询设备授权状态。返回 status（pending/authorized）与签发的
+// AuthToken；会话不存在/过期（服务端 expired_token）返回错误，调用方应终止轮询。
+func (m *MarketClient) DevicePoll(deviceCode string) (*DevicePollResult, error) {
+	var out DevicePollResult
+	if err := m.postJSON(m.apiBase+"/auth/device/poll", map[string]string{"device_code": deviceCode}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RatingAggregate 包级评分聚合（评分响应回传）。
+type RatingAggregate struct {
+	Avg   float64 `json:"rating_avg"`
+	Count int64   `json:"rating_count"`
+}
+
+// UpdateProfile 更新当前用户显示名（PATCH /api/v1/me；昵称 ≤32 字符由服务端校验）。
+func (m *MarketClient) UpdateProfile(nickName string) (string, error) {
+	if m.authToken == "" {
+		return "", fmt.Errorf("未录入市场登录令牌")
+	}
+	body, err := json.Marshal(map[string]string{"nick_name": nickName})
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequest(http.MethodPatch, m.apiBase+"/me", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	m.attachIdentity(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("市场服务不可达：%w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("昵称更新失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	var out struct {
+		NickName string `json:"nick_name"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return "", fmt.Errorf("解析响应失败：%w", err)
+	}
+	return out.NickName, nil
+}
+
+// UploadAvatar 上传头像（POST /api/v1/me/avatar，multipart 字段 avatar）：
+// PNG/JPEG ≤1MB、≤1024×1024，服务端统一缩放 128×128，返回档案头像 URL。
+func (m *MarketClient) UploadAvatar(data []byte, filename string) (string, error) {
+	if m.authToken == "" {
+		return "", fmt.Errorf("未录入市场登录令牌")
+	}
+	if len(data) == 0 {
+		return "", fmt.Errorf("头像数据为空")
+	}
+	if len(data) > 1<<20 {
+		return "", fmt.Errorf("头像超过 1MB 上限")
+	}
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	fw, err := w.CreateFormFile("avatar", filename)
+	if err != nil {
+		return "", err
+	}
+	if _, fwErr := fw.Write(data); fwErr != nil {
+		return "", fwErr
+	}
+	if closeErr := w.Close(); closeErr != nil {
+		return "", closeErr
+	}
+	req, err := http.NewRequest(http.MethodPost, m.apiBase+"/me/avatar", &buf)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	m.attachIdentity(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("市场服务不可达：%w", err)
+	}
+	defer resp.Body.Close()
+	respData, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("头像上传失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(respData)))
+	}
+	var out struct {
+		AvatarURL string `json:"avatar_url"`
+	}
+	if err := json.Unmarshal(respData, &out); err != nil {
+		return "", fmt.Errorf("解析响应失败：%w", err)
+	}
+	return out.AvatarURL, nil
+}
+
+// ─── 发布与投递（市场生态 §3/§4）───
+
+// PublishResult 发布响应（服务端 POST .../versions）。
+type PublishResult struct {
+	PackageID int64  `json:"package_id"`
+	Version   string `json:"version"`
+	Sha256    string `json:"sha256"`
+	Created   bool   `json:"created"`
+}
+
+// postRaw 原始字节 POST（发布/投递共用传输形态：octet-stream + 附加头）。
+func (m *MarketClient) postRaw(u string, data []byte, headers map[string]string, out any) error {
+	req, err := http.NewRequest(http.MethodPost, u, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	m.attachIdentity(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("市场服务不可达：%w", err)
+	}
+	defer resp.Body.Close()
+	respData, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("请求失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(respData)))
+	}
+	if out != nil && len(respData) > 0 {
+		if err := json.Unmarshal(respData, out); err != nil {
+			return fmt.Errorf("解析响应失败：%w", err)
+		}
+	}
+	return nil
+}
+
+// Publish 发布分发包新版本（§3）：原始 mindpkg 字节直传 + sha256 完整性承诺，
+// 服务端复算校验；同 (kind,name,version) 同 sha256 幂等返回 created=false。
+// 版本号以包内清单 version 为权威（version 参数作为 X-Pkg-Version 头兜底，
+// 供清单未写版本的旧包使用）。publishName 非空 = 衍生改名发布（§4.2）：
+// URL 与清单身份一致使用新名（包内清单 name 已随打包覆盖）。
+func (m *MarketClient) Publish(kind, name string, data []byte, version, publishName string) (*PublishResult, error) {
+	if m.authToken == "" && m.pat == "" {
+		return nil, fmt.Errorf("发布需要市场身份：请先绑定市场账号或配置商户访问令牌")
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("分发包内容为空")
+	}
+	if pn := strings.TrimSpace(publishName); pn != "" {
+		name = pn
+	}
+	sum := sha256.Sum256(data)
+	headers := map[string]string{"X-Pkg-Sha256": hex.EncodeToString(sum[:])}
+	if v := strings.TrimSpace(version); v != "" {
+		headers["X-Pkg-Version"] = v
+	}
+	var out PublishResult
+	u := m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/versions"
+	if err := m.postRaw(u, data, headers, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Submission 投递记录（收件箱条目，服务端 GET .../submissions 响应）。
+type Submission struct {
+	ID         int64  `json:"id"`
+	FromUserID int64  `json:"from_user_id"`
+	FromLogin  string `json:"from_login"`
+	Version    string `json:"version"`
+	Sha256     string `json:"sha256"`
+	Note       string `json:"note"`
+	Status     string `json:"status"`
+	CreatedAt  string `json:"created_at"`
+}
+
+// SubmitResult 投递响应（服务端 POST .../submissions）。
+type SubmitResult struct {
+	SubmissionID int64  `json:"submission_id"`
+	Version      string `json:"version"`
+	Sha256       string `json:"sha256"`
+	Created      bool   `json:"created"`
+}
+
+// Submit 投递进化版本到包主私有收件箱（§4 回流路径：不经货架，owner 采纳后
+// 并入正式新版本）。version 为投递版本号（写入清单为主，头兜底）；
+// note 为给包主的附言（可选）。
+func (m *MarketClient) Submit(kind, name, note, version string, data []byte) (*SubmitResult, error) {
+	if m.authToken == "" && m.pat == "" {
+		return nil, fmt.Errorf("投递需要市场身份：请先绑定市场账号")
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("分发包内容为空")
+	}
+	sum := sha256.Sum256(data)
+	headers := map[string]string{"X-Pkg-Sha256": hex.EncodeToString(sum[:])}
+	if v := strings.TrimSpace(version); v != "" {
+		headers["X-Pkg-Version"] = v
+	}
+	u := m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/submissions"
+	if note = strings.TrimSpace(note); note != "" {
+		u += "?note=" + url.QueryEscape(note)
+	}
+	var out SubmitResult
+	if err := m.postRaw(u, data, headers, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Submissions 拉取名下包的投递收件箱（仅包主可见；服务端校验 owner 身份）。
+func (m *MarketClient) Submissions(kind, name string) ([]Submission, error) {
+	resp, err := m.authedGet(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/submissions")
+	if err != nil {
+		return nil, fmt.Errorf("市场服务不可达：%w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("拉取收件箱失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	var body struct {
+		Submissions []Submission `json:"submissions"`
+	}
+	if err := json.Unmarshal(data, &body); err != nil {
+		return nil, fmt.Errorf("解析收件箱失败：%w", err)
+	}
+	return body.Submissions, nil
+}
+
+// DecideResult 投递决策响应（accept 携带发布结果，reject 仅回状态）。
+type DecideResult struct {
+	SubmissionID int64  `json:"submission_id"`
+	PkgID        int64  `json:"pkg_id,omitempty"`
+	Version      string `json:"version,omitempty"`
+	Sha256       string `json:"sha256,omitempty"`
+	Created      bool   `json:"created,omitempty"`
+	Status       string `json:"status,omitempty"`
+}
+
+// DecideSubmission 包主审核投递（§4）：accept 采纳为正式新版本（服务端代转发布
+// 管线），reject 拒绝。重复决策由服务端以 409 invalid_state 拒绝。
+func (m *MarketClient) DecideSubmission(kind, name string, submissionID int64, accept bool) (*DecideResult, error) {
+	if m.authToken == "" && m.pat == "" {
+		return nil, fmt.Errorf("审核投递需要市场身份：请先绑定市场账号")
+	}
+	action := "reject"
+	if accept {
+		action = "accept"
+	}
+	u := m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name) +
+		"/submissions/" + strconv.FormatInt(submissionID, 10) + "/" + action
+	var out DecideResult
+	if err := m.postRaw(u, nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ErrRatingNotFound 查询自己评分时无记录（服务端 404 语义），调用方按未评分处理。
+var ErrRatingNotFound = fmt.Errorf("尚未评分")
+
+// Rate 对包（kind+name 包级，不区分版本）提交 1-5 星评分；返回重算后的聚合。
+func (m *MarketClient) Rate(kind, name string, score int64) (*RatingAggregate, error) {
+	if score < 1 || score > 5 {
+		return nil, fmt.Errorf("score 须为 1-5 整数")
+	}
+	if err := m.ensureIdentity(); err != nil {
+		return nil, err
+	}
+	var agg RatingAggregate
+	if err := m.postJSON(m.apiBase+"/packages/"+url.PathEscape(kind)+"/"+url.PathEscape(name)+"/rating",
+		map[string]int64{"score": score}, &agg); err != nil {
+		return nil, err
+	}
+	return &agg, nil
+}
+
+// MyRating 查询自己（当前身份通道）对包的评分；未评分返回 errRatingNotFound。
+func (m *MarketClient) MyRating(kind, name string) (int64, error) {
+	resp, err := m.authedGet(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/rating")
+	if err != nil {
+		return 0, fmt.Errorf("市场服务不可达：%w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return 0, ErrRatingNotFound
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return 0, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("查询评分失败（HTTP %d）", resp.StatusCode)
+	}
+	var body struct {
+		Score int64 `json:"score"`
+	}
+	if err := json.Unmarshal(data, &body); err != nil {
+		return 0, fmt.Errorf("解析评分失败：%w", err)
+	}
+	return body.Score, nil
+}
+
+// postJSON 通用 JSON POST：body 编码发出，out 非 nil 时解析响应；非 2xx 映射为含状态的错误。
+func (m *MarketClient) postJSON(url string, body any, out any) error {
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(buf))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	m.attachIdentity(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("市场服务不可达：%w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		msg := strings.TrimSpace(string(data))
+		return fmt.Errorf("请求失败（HTTP %d）：%s", resp.StatusCode, msg)
+	}
+	if out != nil && len(data) > 0 {
+		if err := json.Unmarshal(data, out); err != nil {
+			return fmt.Errorf("解析响应失败：%w", err)
+		}
+	}
+	return nil
+}
+
+// NewMarketClient 创建市场客户端。
+// baseURL 为市场源服务根地址（空 = 官方 DefaultMarketBase；本地调试/自托管/换源显式传入）；
+// 其下约定包目录 agents/、skills/、plugins/ 与 API /api/v1。
+// cacheDir 为缓存根目录：内部按 baseURL 哈希开子目录（market-cache/<sha8>），
+// 换源（= 换 base URL）时包缓存互不串扰。
+func NewMarketClient(baseURL, cacheDir string) *MarketClient {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if base == "" {
+		base = DefaultMarketBase
+	}
+	sum := sha256.Sum256([]byte(base))
 	cacheDir = filepath.Join(cacheDir, hex.EncodeToString(sum[:])[:8])
 	return &MarketClient{
 		httpClient: &http.Client{Timeout: httpTimeout},
-		apiBase:    apiBase,
-		sourceID:   sourceID,
+		base:       base,
+		apiBase:    base + "/api/v1",
 		cacheDir:   cacheDir,
 	}
 }
@@ -138,15 +642,21 @@ func NewMarketClient(apiBase, sourceID, cacheDir string) *MarketClient {
 // apiPackage 服务端包条目的原始响应结构（列表/详情一致）：基础字段在顶层，
 // 展示元数据（昵称/负责人/成员/技能装配）在嵌套 meta 对象中。
 type apiPackage struct {
-	Kind        string         `json:"kind"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Category    string         `json:"category"`
-	DownloadURL string         `json:"download_url"`
-	Sha256      string         `json:"sha256"`
-	Size        int64          `json:"size"`
-	Version     string         `json:"version"`
-	Meta        apiPackageMeta `json:"meta"`
+	Kind          string         `json:"kind"`
+	Name          string         `json:"name"`
+	Description   string         `json:"description"`
+	Category      string         `json:"category"`
+	DownloadURL   string         `json:"download_url"`
+	Sha256        string         `json:"sha256"`
+	Size          int64          `json:"size"`
+	DownloadCount int64          `json:"download_count"`
+	RatingAvg     float64        `json:"rating_avg"`
+	RatingCount   int64          `json:"rating_count"`
+	Version       string         `json:"version"`
+	PublishedAt   string         `json:"published_at"`
+	DerivedFrom   *DerivedRef    `json:"derived_from"`
+	DerivedCount  int64          `json:"derived_count"`
+	Meta          apiPackageMeta `json:"meta"`
 }
 
 // toMarketPackage 转为统一包条目（分类归一；版本优先取 meta.version，回退顶层）。
@@ -161,15 +671,21 @@ func (ap apiPackage) toMarketPackage() MarketPackage {
 		Category: normalizeCategory(ap.Category), Leader: ap.Meta.Leader, Members: ap.Meta.Members,
 		Skills: ap.Meta.Skills, SkillNames: ap.Meta.SkillNames, SkillDescs: ap.Meta.SkillDescs,
 		Version: version, DownloadURL: ap.DownloadURL, Sha256: ap.Sha256, Size: ap.Size,
-		Author: ap.Meta.Author, License: ap.Meta.License, Permissions: ap.Meta.Permissions,
+		DownloadCount: ap.DownloadCount, RatingAvg: ap.RatingAvg, RatingCount: ap.RatingCount,
+		PublishedAt: ap.PublishedAt,
+		Author:      ap.Meta.Author, URL: ap.Meta.URL, Repo: ap.Meta.Repo, License: ap.Meta.License,
+		Permissions: ap.Meta.Permissions, Fingerprint: ap.Meta.Fingerprint,
+		DerivedFrom: ap.DerivedFrom, DerivedCount: ap.DerivedCount,
 	}
 }
 
 // MarketSource 市场源条目（服务端 GET /api/v1/sources 下发）。
+// BaseURL 为源服务根地址（空 = 本服务，即下发该列表的服务本身）。
 type MarketSource struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
-	Tier string `json:"tier"`
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`
+	BaseURL string `json:"base_url"`
+	Tier    string `json:"tier"`
 }
 
 // Sources 拉取可用市场源清单（商户用户携带 PAT 可见商户源；default 为空 id 语义）。
@@ -195,22 +711,27 @@ func (m *MarketClient) Sources() ([]MarketSource, error) {
 	return body.Sources, nil
 }
 
-// ResolveSource 校验源 id 有效性：空或 "default" 视为官方公开源直接通过；
-// 其余 id 必须出现在源列表中（源列表拉取失败或 id 不在列表时报错，调用方回退官方源）。
-func (m *MarketClient) ResolveSource(sourceID string) error {
-	if strings.TrimSpace(sourceID) == "" || sourceID == "default" {
-		return nil
-	}
+// ResolveSourceBase 校验源 id 并返回其服务根地址：空或 "default" = 服务端声明的
+// 默认源（源列表首位，base 随服务端下发——自托管/镜像部署下即本服务地址，而非
+// 客户端硬编码的官方地址）；其余 id 必须出现在源列表中，返回该源 base_url
+// （源列表拉取失败或 id 不在列表时报错，调用方回退官方源）。
+func (m *MarketClient) ResolveSourceBase(sourceID string) (string, error) {
 	sources, err := m.Sources()
 	if err != nil {
-		return err
+		return "", err
+	}
+	if strings.TrimSpace(sourceID) == "" || sourceID == "default" {
+		if len(sources) > 0 {
+			return sources[0].BaseURL, nil
+		}
+		return "", nil
 	}
 	for _, s := range sources {
 		if strconv.FormatInt(s.ID, 10) == sourceID {
-			return nil
+			return s.BaseURL, nil
 		}
 	}
-	return fmt.Errorf("市场源 %s 不存在或不可用", sourceID)
+	return "", fmt.Errorf("市场源 %s 不存在或不可用", sourceID)
 }
 
 // ListPage 分页浏览市场（服务端 GET /api/v1/packages 唯一数据路径）；
@@ -231,8 +752,11 @@ type apiPackageMeta struct {
 	SkillDescs  map[string]string `json:"skill_descs"`
 	Version     string            `json:"version"`
 	Author      string            `json:"author"`
+	URL         string            `json:"url"`
+	Repo        string            `json:"repo"`
 	License     string            `json:"license"`
 	Permissions []string          `json:"permissions"`
+	Fingerprint string            `json:"fingerprint"`
 }
 
 // fetchAPIPage 走服务端分页 API（响应条目为顶层基础字段 + meta 嵌套元数据）。
@@ -246,10 +770,6 @@ func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 		if v != "" {
 			params.Set(k, v)
 		}
-	}
-	// 商户源货架：透传 source id（服务端按源的 registry 过滤）
-	if m.sourceID != "" && m.sourceID != "default" {
-		params.Set("source", m.sourceID)
 	}
 	resp, err := m.authedGet(m.apiBase + "/packages?" + params.Encode())
 	if err != nil {

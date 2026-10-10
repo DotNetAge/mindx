@@ -98,6 +98,9 @@ type Daemon struct {
 
 	// oauthFlows 进行中的授权流程登记（每 provider 至多一条）
 	oauthFlows *oauthFlowManager
+
+	// marketDevice 市场设备授权登录编排状态（device flow，单飞）
+	marketDevice marketDeviceLoginState
 }
 
 func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {

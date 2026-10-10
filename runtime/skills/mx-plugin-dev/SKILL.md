@@ -1,14 +1,23 @@
 ---
 name: mx-plugin-dev
-description: mindx-work 插件开发技能，覆盖规格收集到施工验证的全流程。当需要为 mindx-work 编写新插件、给现有插件添加新的界面或交互、或插件需求还没定需要先收规格时使用。
+description: mindx-work 插件开发技能，覆盖规格收集到施工验证的全流程。当需要为 mindx-work 编写新插件（内置插件或外部 market 在线插件）、开发可打包安装到本地的独立插件、给现有插件添加新的界面或交互、或插件需求还没定需要先收规格时使用。
 metadata:
   name_zh: MindX Work 插件开发
-  version: 0.1.0
+  version: "0.2.0"
+  requires:
+    bins:
+      - python3
+      - mw
+      - pnpm
+    runtime:
+      node: ">=18"
+      python: ">=3.10"
 ---
 
 ## 何时使用
 
 - 为 mindx-work 写新插件（`plugins/` 下新增插件模块）。
+- 为 mindx-work 写**外部（market）插件**（独立项目目录，产出 .mindpkg 走市场分发；见「外部插件闭环」节）。
 - 在现有插件里加页面、侧栏节、设置页、浮层、详情轨道、工具栏席位。
 - 规格未定的新插件（缺席位清单 / 交互编排 / order 布局 / 配置项任一）→ 先走下方「规格收集」阶段收规格，再施工。
 
@@ -44,7 +53,7 @@ metadata:
 | daemon RPC / 宿主桥数据通道（fs 形状坑、base64、dialog、pty 哨兵、mx-file 流）                  | `references/daemon.md`                                                      |
 | 大插件架构经验（engine 分层、单一渲染源、长任务三件套、状态上移、查看器装配套路、坐席选型决策） | `references/patterns.md`                                                    |
 | 跨插件响应/联动（另一插件对某动作或状态变化做出反应）                                           | `references/contract.md` §10（双形态选型 + 职责规则 + Detail 范式）         |
-| 在线插件（market）：包格式 / manifest 字段 / 版本代际 / mx-plugin:// 协议 / 市场安装            | `references/contract.md` §18                                                |
+| 在线插件（market）：包格式 / manifest 字段 / 版本代际 / mx-plugin:// 协议 / 市场安装            | `references/contract.md` §18（权威源：mindx-work/docs/插件生命周期规范.md） |
 | 样式与控件（token、原语、伪类、色彩/字体/布局三大规范）                                         | references/uikit.md（mx-UIKit 全量融入版，自包含）                          |
 | 工程装配（五包依赖、主题、mount；仓库内路径）                                                   | `docs/界面层选型.md`                                                        |
 
@@ -81,7 +90,26 @@ plugins/src/<name>/
 
 资产与路径军规：`import.meta.glob` 匹配路径**相对当前模块文件**解析，不匹配时静默返回空 map（调用方有兜底则双重隐身）——glob 路径以引用方文件为原点核对，验收断言资源渲染本体；dev 下小体积 SVG 经 `?url` 导入被 Vite 内联为 `data:` URI，按 src 路径关键字写的选择器在 dev 失配。
 
-项目级目录归属速记：壳与视图区层改 `ui-shell/src`（Vue 适配层 `ui-shell-vue/src`）；插件一律 `plugins/src/<name>/`；装配在 `app/src/main.ts`（CORE_PLUGINS 清单 + services provide）。详图读仓库 `docs/界面层选型.md`。
+项目级目录归属速记：壳与视图区层改 `ui-shell/src`（Vue 适配层 `ui-shell-vue/src`）；内置插件一律 `plugins/src/<name>/`；装配在 `app/src/main.ts`（createApp 清单 + services provide）。**外部插件源码（market 形态）一律放项目 `.agents/plugins/<id>/`**——官方可选件与 LLM 开发插件的统一权威源目录（见「外部插件闭环」节）。详图读仓库 `docs/界面层选型.md`。
+
+## 外部插件闭环（market 形态，独立项目 + .mindpkg 分发）
+
+外部插件与内置插件**运行契约完全一致**（八区注册 / 清理函数 / id 前缀 / order ≥ 1001），差异只在交付形态：独立项目目录（不进 `plugins/src/`、不注册进壳）、入口为纯 ESM `entry.mjs`（default export，无 npm import 通道，渲染工具由第二参 `mx` 注入）、以 .mindpkg 分发。权威规范：`mindx-work/docs/插件生命周期规范.md`（身份/版本/manifest 契约/校验分层/信任边界/市场分发的唯一事实源）；机制摘要读 `references/contract.md` §18。
+
+**权威源目录军规**：用户未指定开发目录时，LLM 开发的外部插件源码一律放项目 `.agents/plugins/<id>/`——与官方可选件（gitgraph / video-editor / svgboard）同一权威源目录；官方可选件由 `scripts/optional-plugins/build.mjs` 在发行构建期自动扫描该目录逐个产出 .mindpkg 搭载进发行版（可选件增多零脚本改动）。仅当用户明确指定了目录才用 `--target` 覆盖。
+
+```bash
+# 1. 脚手架生成独立项目（反向域 id + 作者署名；缺省落在项目 .agents/plugins/<id>/，不注册进壳）
+python3 .agents/skills/mx-plugin-dev/scripts/scaffold_plugin.py com.acme.widget --market "Acme"
+# 2. 开发 entry.mjs（函数式组件 + 注入的 mx.h / mx.MxIcon；清理函数显式 app.<区>.remove(id)）
+# 3. 打包（manifest 结构校验 + fingerprint 重算写入 → 源目录同级 <id>-<version>.mindpkg；路径必须与脚手架缺省输出一致）
+mw plugin pack .agents/plugins/com.acme.widget
+# 4. 本地直装验收（运行中的 MindX Work 即时感知激活；真机验收链路读 contract.md §18.8）
+mw plugin install .agents/plugins/com.acme.widget-1.0.0.mindpkg && mw plugin list --json
+# 5. 发布到市场（mindx-market 仓库；kind=plugin，发布纪律读规范 §10）
+```
+
+**安装根对齐军规**：mw CLI 缺省写入**发行版安装根**（`~/Library/Application Support/MindX Work/plugins`，由发行 productName 推导），而 dev 实例的安装根是 `…/@mindx-work/electron/plugins`（userData 随应用名不同根）——**dev 环境下 CLI 装的包 dev 实例看不到**。对齐方式：dev 验收时 CLI 侧显式 `MW_PLUGIN_ROOT="$HOME/Library/Application Support/@mindx-work/electron/plugins"`（主进程侧不读此 env，无需设置）；打包发行的 app 与 CLI 缺省根天然一致，无需任何设置。dev 验收四步循环读 contract.md §18.8。
 
 ## 开发流程
 

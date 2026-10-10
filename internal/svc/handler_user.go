@@ -62,11 +62,6 @@ var userConfigFieldSetters = map[string]func(cfg *core.MindxConfig, val any){
 			cfg.MarketSourceID = strings.TrimSpace(s)
 		}
 	},
-	"market_pat": func(cfg *core.MindxConfig, v any) {
-		if s, ok := v.(string); ok {
-			cfg.MarketPAT = strings.TrimSpace(s)
-		}
-	},
 }
 
 func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (any, error) {
@@ -80,6 +75,7 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 			kbChanged := false
 			channelChanged := false
 			marketChanged := false
+			oldMarketSourceID := cfg.MarketSourceID
 			for key, val := range updates {
 				if setter, ok := userConfigFieldSetters[key]; ok {
 					old := getConfigField(cfg, key)
@@ -94,10 +90,29 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 						if key == "channel_url" {
 							channelChanged = true
 						}
-						if key == "market_source_id" || key == "market_pat" {
+						if key == "market_source_id" {
 							marketChanged = true
 						}
 					}
+					continue
+				}
+				// 邀请码（market_pat）特判：写入密钥存储而非 mindx.json，
+				// 明文严禁回读与入日志，只记录 set/unset 状态
+				if key == "market_pat" {
+					pat, ok := val.(string)
+					if !ok {
+						continue
+					}
+					pat = strings.TrimSpace(pat)
+					if pat == d.app.MarketPAT() {
+						continue
+					}
+					if err := d.app.SetMarketPAT(pat); err != nil {
+						return nil, err
+					}
+					d.logger.Info("user.config: market_pat changed", "state", map[bool]string{true: "set", false: "unset"}[pat != ""])
+					changed = true
+					marketChanged = true
 				}
 			}
 			if changed {
@@ -116,16 +131,23 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 			if channelChanged {
 				d.onChannelURLChanged(cfg.ChannelURL)
 			}
-			// 市场源/令牌变更后重建市场客户端并广播，前端货架重置重拉
-			//（源 id 经市场服务端解析为清单地址；失败回退官方默认源）。
+			// 市场源/令牌变更后重建市场客户端并广播，前端货架重置重拉：
+			// 换源以「连通探测成功」为唯一判据，失败回滚 source_id 并把
+			// 错误透传前端（弹窗提示，不静默降级）。
 			if marketChanged {
-				d.app.SetMarketSource(cfg.MarketSourceID, cfg.MarketPAT)
+				if err := d.app.SetMarketSource(cfg.MarketSourceID); err != nil {
+					cfg.MarketSourceID = oldMarketSourceID
+					if saveErr := cfg.Save(); saveErr != nil {
+						d.logger.Error("user.config: rollback save failed", fmt.Errorf("%w", saveErr))
+					}
+					return nil, err
+				}
 				d.broadcastUI("market_changed", map[string]any{"source_id": cfg.MarketSourceID})
 			}
 		}
 	}
 
-	// 读：始终返回当前配置（market_pat 只回是否已设置的布尔，明文严禁回读/落日志）
+	// 读：始终返回当前配置（邀请码只回是否已设置的布尔，明文严禁回读/落日志）
 	result := map[string]any{
 		"initialized":      cfg.Initialized,
 		"last_agent":       cfg.LastAgent,
@@ -136,7 +158,7 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 		"kb_addr":          cfg.KBAddr,
 		"channel_url":      cfg.ChannelURL,
 		"market_source_id": cfg.MarketSourceID,
-		"market_pat_set":   cfg.MarketPAT != "",
+		"market_pat_set":   d.app.MarketPAT() != "",
 	}
 	if cfg.PermissionRules != nil {
 		result["permission_rules"] = cfg.PermissionRules

@@ -2,6 +2,7 @@ package bundle
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -100,6 +101,111 @@ func packAgentContent(zw *zip.Writer, agent *agentstore.Agent, skills *skillstor
 	return packed, skillNames, skillDescs, warnings, nil
 }
 
+// PublishOverrides 发布链路覆盖项：发布/投递打包时注入清单的声明字段
+// （本地导出传 nil，清单不带版本、许可与谱系语义）。
+type PublishOverrides struct {
+	// Version 包版本（服务端版本来源为包内清单 version 优先，故发布打包必填）。
+	Version string
+	// License 许可证标识（SPDX 简称，如 MIT、Apache-2.0；缺省不写入）。
+	License string
+	// Name 发布名覆盖（§4.2 衍生改名发布）：写入清单 name，与 zip 内固定目录
+	// 前缀（agent/、skills/<名>/ 等）无关，服务端身份以清单为准；空 = 沿用本地名。
+	Name string
+	// DerivedFrom 衍生谱系声明（§4；原创发布留空）。
+	DerivedFrom *DerivedRef
+}
+
+// apply 将覆盖项写入清单并做基础合法性校验（kind 枚举 + 非空 + 不自指；
+// 存在性与防环由服务端发布管线权威校验，客户端不重复猜测远端状态）。
+func (o *PublishOverrides) apply(m *Manifest) error {
+	if o == nil {
+		return nil
+	}
+	m.Version = strings.TrimSpace(o.Version)
+	m.License = strings.TrimSpace(o.License)
+	// 发布名覆盖先落清单（§4.2 改名发布）：后续谱系自指校验按覆盖后的身份判定
+	if n := strings.TrimSpace(o.Name); n != "" {
+		m.Name = n
+	}
+	if o.DerivedFrom == nil {
+		return nil
+	}
+	d := o.DerivedFrom
+	d.Kind = strings.TrimSpace(d.Kind)
+	d.Name = strings.TrimSpace(d.Name)
+	switch d.Kind {
+	case "agent", "skill", "plugin", "team":
+	default:
+		return fmt.Errorf("derived_from 声明非法：kind 须为 agent/skill/plugin/team")
+	}
+	if d.Name == "" {
+		return fmt.Errorf("derived_from 声明非法：缺少上游包名")
+	}
+	if string(m.Kind) == d.Kind && m.Name == d.Name {
+		return fmt.Errorf("derived_from 不能指向包自身（自指）")
+	}
+	m.DerivedFrom = d
+	return nil
+}
+
+// BuildAgentBytes 将 Agent 打包为内存中的分发包字节（发布/投递链路的打包核心：
+// 字节直传服务端，不落临时文件）。overrides 注入清单的版本、许可与谱系声明。
+// 返回包字节、清单与告警（引用技能缺失等，不阻断）。
+func BuildAgentBytes(agent *agentstore.Agent, skills *skillstore.Store, overrides *PublishOverrides) ([]byte, *Manifest, []string, error) {
+	if agent == nil {
+		return nil, nil, nil, fmt.Errorf("agent 不能为空")
+	}
+	if agent.Dir == "" {
+		return nil, nil, nil, fmt.Errorf("agent %q 缺少磁盘目录，无法导出", agent.Meta.Name)
+	}
+
+	manifest := &Manifest{
+		Format:      PackageFormat,
+		Kind:        KindAgent,
+		Name:        agent.Meta.Name,
+		Description: agent.Meta.Description,
+		Icon:        agent.Meta.Icon,
+		Role:        agent.Meta.Role,
+		Category:    agent.Meta.Category,
+	}
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	packed, skillNames, skillDescs, warnings, err := packAgentContent(zw, agent, skills, zipPrefixAgent)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	manifest.Skills = packed
+	manifest.SkillNames = skillNames
+	manifest.SkillDescs = skillDescs
+	// 清单最后写入（内容已定）
+	if err := overrides.apply(manifest); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := writeManifestEntry(zw, manifest); err != nil {
+		return nil, nil, nil, err
+	}
+	// 显式收尾：central directory 写入后包字节才完整（内存包无 defer 时机）
+	if err := zw.Close(); err != nil {
+		return nil, nil, nil, fmt.Errorf("收尾分发包失败：%w", err)
+	}
+	return buf.Bytes(), manifest, warnings, nil
+}
+
+// writePkgFile 将包字节落盘（导出路径父目录创建 + 文件写入）。
+func writePkgFile(outPath string, data []byte) error {
+	if strings.TrimSpace(outPath) == "" {
+		return fmt.Errorf("导出路径不能为空")
+	}
+	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+		return fmt.Errorf("创建导出目录失败：%w", err)
+	}
+	if err := os.WriteFile(outPath, data, 0644); err != nil {
+		return fmt.Errorf("写入分发包 %s 失败：%w", outPath, err)
+	}
+	return nil
+}
+
 // ExportAgent 将 Agent 导出为分发包（PR-PROMPTS 第四节"导出保真原则"）。
 //
 // 打包内容（保证分发包行为与本地运行时一致，"逻辑重写"不漂移）：
@@ -116,70 +222,29 @@ func ExportAgent(agent *agentstore.Agent, skills *skillstore.Store, outPath stri
 	if agent == nil {
 		return nil, nil, fmt.Errorf("agent 不能为空")
 	}
-	if strings.TrimSpace(outPath) == "" {
-		return nil, nil, fmt.Errorf("导出路径不能为空")
-	}
-	if agent.Dir == "" {
-		return nil, nil, fmt.Errorf("agent %q 缺少磁盘目录，无法导出", agent.Meta.Name)
-	}
-
-	manifest := &Manifest{
-		Format:      PackageFormat,
-		Kind:        KindAgent,
-		Name:        agent.Meta.Name,
-		Description: agent.Meta.Description,
-		Icon:        agent.Meta.Icon,
-		Role:        agent.Meta.Role,
-		Category:    agent.Meta.Category,
-	}
-
-	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-		return nil, nil, fmt.Errorf("创建导出目录失败：%w", err)
-	}
-	out, err := os.Create(outPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("创建分发包 %s 失败：%w", outPath, err)
-	}
-	defer out.Close()
-
-	zw := zip.NewWriter(out)
-	defer func() { _ = zw.Close() }()
-
-	packed, skillNames, skillDescs, warnings, err := packAgentContent(zw, agent, skills, zipPrefixAgent)
+	data, manifest, warnings, err := BuildAgentBytes(agent, skills, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	manifest.Skills = packed
-	manifest.SkillNames = skillNames
-	manifest.SkillDescs = skillDescs
-	// 清单最后写入（内容已定）
-	if err := writeManifestEntry(zw, manifest); err != nil {
+	if err := writePkgFile(outPath, data); err != nil {
 		return nil, nil, err
 	}
-
 	return manifest, warnings, nil
 }
 
-// ExportTeam 将团队整包导出为 Team 分发包（整队招聘：团队与成员一次装齐）。
-//
-// 打包内容：
-//   - team/TEAM.md：Team 实体本体（磁盘现状，frontmatter + Profile）；
-//   - agents/<n>/：负责人与全部成员 Agent 的实际生效内容（复用 Agent 包打包核心）。
-//
+// BuildTeamBytes 将团队整包打包为内存中的分发包字节（发布/投递链路的打包核心）。
+// 打包内容与 ExportTeam 一致：team/TEAM.md + 成员 Agent 实际生效内容。
 // 成员 Agent 在本地缺失时记入 warnings（引用降级语义，不阻断导出）；
 // 全部成员缺失的团队包无意义，返回错误。
-func ExportTeam(team *teamstore.Team, agents *agentstore.AgentStore, skills *skillstore.Store, outPath string) (*Manifest, []string, error) {
+func BuildTeamBytes(team *teamstore.Team, agents *agentstore.AgentStore, skills *skillstore.Store, overrides *PublishOverrides) ([]byte, *Manifest, []string, error) {
 	if team == nil {
-		return nil, nil, fmt.Errorf("team 不能为空")
+		return nil, nil, nil, fmt.Errorf("team 不能为空")
 	}
 	if agents == nil {
-		return nil, nil, fmt.Errorf("agent 注册表不能为空")
-	}
-	if strings.TrimSpace(outPath) == "" {
-		return nil, nil, fmt.Errorf("导出路径不能为空")
+		return nil, nil, nil, fmt.Errorf("agent 注册表不能为空")
 	}
 	if team.Dir == "" {
-		return nil, nil, fmt.Errorf("team %q 缺少磁盘目录，无法导出", team.Meta.Name)
+		return nil, nil, nil, fmt.Errorf("team %q 缺少磁盘目录，无法导出", team.Meta.Name)
 	}
 
 	// 成员清单 = 负责人 + 成员（去重排序，保证包内 agents/ 前缀稳定）
@@ -207,21 +272,12 @@ func ExportTeam(team *teamstore.Team, agents *agentstore.AgentStore, skills *ski
 	skillNames := make(map[string]string)
 	skillDescs := make(map[string]string)
 
-	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-		return nil, nil, fmt.Errorf("创建导出目录失败：%w", err)
-	}
-	out, err := os.Create(outPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("创建分发包 %s 失败：%w", outPath, err)
-	}
-	defer out.Close()
-
-	zw := zip.NewWriter(out)
-	defer func() { _ = zw.Close() }()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
 
 	// 团队本体（磁盘现状）
 	if err := zipFileEntry(zw, filepath.Join(team.Dir, teamDocFileName), zipPathTeamDoc); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// 成员 Agent 逐个打包（缺失告警不阻断，与全局技能引用缺失同语义）
@@ -234,7 +290,7 @@ func ExportTeam(team *teamstore.Team, agents *agentstore.AgentStore, skills *ski
 		prefix := zipPrefixAgents + name + "/"
 		packed, names, descs, warns, err := packAgentContent(zw, agent, skills, prefix)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		packedMembers = append(packedMembers, name)
 		packedSkills = append(packedSkills, packed...)
@@ -247,7 +303,7 @@ func ExportTeam(team *teamstore.Team, agents *agentstore.AgentStore, skills *ski
 		warnings = append(warnings, warns...)
 	}
 	if len(packedMembers) == 0 {
-		return nil, nil, fmt.Errorf("团队 %q 的成员智能体在本地全部缺失，无法导出", team.Meta.Name)
+		return nil, nil, nil, fmt.Errorf("团队 %q 的成员智能体在本地全部缺失，无法导出", team.Meta.Name)
 	}
 
 	sort.Strings(packedSkills)
@@ -256,27 +312,52 @@ func ExportTeam(team *teamstore.Team, agents *agentstore.AgentStore, skills *ski
 	manifest.SkillNames = skillNames
 	manifest.SkillDescs = skillDescs
 	// 清单最后写入（内容已定）
+	if err := overrides.apply(manifest); err != nil {
+		return nil, nil, nil, err
+	}
 	if err := writeManifestEntry(zw, manifest); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, nil, nil, fmt.Errorf("收尾分发包失败：%w", err)
+	}
+	return buf.Bytes(), manifest, warnings, nil
+}
+
+// ExportTeam 将团队整包导出为 Team 分发包（整队招聘：团队与成员一次装齐）。
+//
+// 打包内容：
+//   - team/TEAM.md：Team 实体本体（磁盘现状，frontmatter + Profile）；
+//   - agents/<n>/：负责人与全部成员 Agent 的实际生效内容（复用 Agent 包打包核心）。
+//
+// 成员 Agent 在本地缺失时记入 warnings（引用降级语义，不阻断导出）；
+// 全部成员缺失的团队包无意义，返回错误。
+func ExportTeam(team *teamstore.Team, agents *agentstore.AgentStore, skills *skillstore.Store, outPath string) (*Manifest, []string, error) {
+	if team == nil {
+		return nil, nil, fmt.Errorf("team 不能为空")
+	}
+	data, manifest, warnings, err := BuildTeamBytes(team, agents, skills, nil)
+	if err != nil {
 		return nil, nil, err
 	}
-
+	if err := writePkgFile(outPath, data); err != nil {
+		return nil, nil, err
+	}
 	return manifest, warnings, nil
 }
 
-// ExportSkill 将全局库中的单个技能导出为 Skill 分发包（Agent 包的子集）。
-func ExportSkill(skills *skillstore.Store, name, outPath string) (*Manifest, error) {
+// BuildSkillBytes 将全局库中的单个技能打包为内存中的分发包字节
+// （发布/投递链路的打包核心，Agent 包的子集）。
+func BuildSkillBytes(skills *skillstore.Store, name string, overrides *PublishOverrides) ([]byte, *Manifest, error) {
 	if strings.TrimSpace(name) == "" {
-		return nil, fmt.Errorf("技能名不能为空")
-	}
-	if strings.TrimSpace(outPath) == "" {
-		return nil, fmt.Errorf("导出路径不能为空")
+		return nil, nil, fmt.Errorf("技能名不能为空")
 	}
 	sk, err := skills.Global().GetSkill(name)
 	if err != nil {
-		return nil, fmt.Errorf("全局库中不存在技能 %q", name)
+		return nil, nil, fmt.Errorf("全局库中不存在技能 %q", name)
 	}
 	if sk.RootDir == "" {
-		return nil, fmt.Errorf("技能 %q 无磁盘目录，无法导出", name)
+		return nil, nil, fmt.Errorf("技能 %q 无磁盘目录，无法导出", name)
 	}
 
 	manifest := &Manifest{
@@ -295,22 +376,30 @@ func ExportSkill(skills *skillstore.Store, name, outPath string) (*Manifest, err
 		manifest.SkillDescs = map[string]string{sk.Name: desc}
 	}
 
-	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-		return nil, fmt.Errorf("创建导出目录失败：%w", err)
-	}
-	out, err := os.Create(outPath)
-	if err != nil {
-		return nil, fmt.Errorf("创建分发包 %s 失败：%w", outPath, err)
-	}
-	defer out.Close()
-
-	zw := zip.NewWriter(out)
-	defer func() { _ = zw.Close() }()
-
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
 	if err := zipDir(zw, sk.RootDir, zipPrefixSkills+sk.Name); err != nil {
-		return nil, fmt.Errorf("打包技能 %s 失败：%w", name, err)
+		return nil, nil, fmt.Errorf("打包技能 %s 失败：%w", name, err)
+	}
+	if err := overrides.apply(manifest); err != nil {
+		return nil, nil, err
 	}
 	if err := writeManifestEntry(zw, manifest); err != nil {
+		return nil, nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, nil, fmt.Errorf("收尾分发包失败：%w", err)
+	}
+	return buf.Bytes(), manifest, nil
+}
+
+// ExportSkill 将全局库中的单个技能导出为 Skill 分发包（Agent 包的子集）。
+func ExportSkill(skills *skillstore.Store, name, outPath string) (*Manifest, error) {
+	data, manifest, err := BuildSkillBytes(skills, name, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := writePkgFile(outPath, data); err != nil {
 		return nil, err
 	}
 	return manifest, nil

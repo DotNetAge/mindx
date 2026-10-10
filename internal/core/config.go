@@ -66,19 +66,19 @@ type MindxConfig struct {
 	// 为空表示未启用手机连接，daemon 不与中继建立连接。
 	ChannelURL string `json:"channel_url,omitempty"`
 
-	// MarketAPIBase 是市场服务端 API 基址（空 = 官方 DefaultMarketAPIBase；
-	// 本地调试/自托管经配置文件显式覆盖，UI 不暴露）。静态清单机制已废除，
-	// 市场消费唯一入口是分页 API。
+	// MarketAPIBase 是源目录引导基址：可用源清单恒从此处拉取（/api/v1/sources），
+	// 换源不改变此字段；空 = 官方 DefaultMarketBase。由部署/配置文件给定，不作为
+	// 用户手填项。
 	MarketAPIBase string `json:"market_api_base,omitempty"`
 
-	// MarketSourceID 是选中的市场源 id（"default" 或空 = 官方公开源；商户源为
-	// 服务端 /api/v1/sources 下发的数字 id 字符串）。
-	MarketSourceID string `json:"market_source_id,omitempty"`
+	// MarketActiveBase 是当前生效源的服务根地址（源语义：一个源 = 一个独立部署的
+	// 服务根，换源即换此地址；空 = 跟随 MarketAPIBase 引导基址）。由换源动作
+	// （SetMarketSource 解析源 id）写入维护。
+	MarketActiveBase string `json:"market_active_base,omitempty"`
 
-	// MarketPAT 是商户访问令牌（用户在市场网页登录后签发的 PAT，经设置粘贴；
-	// 非空时 daemon 携带访问商户源）。明文落 mindx.json（与 provider API key 同级），
-	// 严禁回读与写日志。
-	MarketPAT string `json:"market_pat,omitempty"`
+	// MarketSourceID 是选中的市场源 id（"default" 或空 = 目录声明的默认源；商户源为
+	// 源目录 /api/v1/sources 下发的数字 id 字符串）。
+	MarketSourceID string `json:"market_source_id,omitempty"`
 
 	// AgentSkillChecksums stores SHA256 checksums of deployed agent and skill
 	// files, keyed by relative path from workspaceDir. Used by SyncRuntimeAssets

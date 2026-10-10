@@ -85,12 +85,33 @@ type OAuthRequirement struct {
 	Env      string `yaml:"env"`
 }
 
+// SkillEnvRequirement 声明技能所需单个环境变量的收集信息
+// （requires.envs 对象形态条目 {name, prompt, url, sensitive}）。
+// name 缺失时整条忽略（对齐 oauth「字段不齐整条忽略并告警」纪律）；
+// 字符串形态条目只声明变量名，首用收集时无法给出说明文案。
+type SkillEnvRequirement struct {
+	// Name 环境变量名（如 LARK_APP_SECRET）。
+	Name string
+	// Prompt 首用收集时展示给用户的说明文案（去哪申请、贴什么值）。
+	Prompt string
+	// URL 凭据申请入口链接（可为空）。
+	URL string
+	// Sensitive 掩码输入标记：true 表示敏感凭据，收集界面掩码显示、
+	// 落库前不得出现在日志或通知中。
+	Sensitive bool
+}
+
 // Requires 声明技能的运行时依赖。
 type Requires struct {
 	// Bins 需要在 PATH 中找到的二进制名列表（如 lark-cli、ffmpeg）。
 	Bins []string `yaml:"bins"`
-	// Env 需要设置的环境变量名列表。定稿键为 envs，兼容存量 env 写法（两者都收）。
+	// Env 环境变量名名单。定稿键为 envs，兼容存量 env 写法（两者都收）；
+	// 字符串条目与对象条目的 name 都并入此名单（MissingEnvs / verifyDependencies 出口兼容）。
 	Env []string `yaml:"-"`
+	// Envs 对象形态条目（{name, prompt, url, sensitive}），与 Env 并存：
+	// 字符串条目只进 Env；对象条目进 Envs 且 name 同时并入 Env。
+	// 首用收集交互需要 prompt/url/sensitive 字段时读此列表。
+	Envs []SkillEnvRequirement `yaml:"-"`
 	// Runtime 生态级运行时版本要求（跨 skill 共享），如 node: ">=18"、python: ">=3.9"。
 	// key 是运行时名（node / python / dotnet / go / rust / java 等），
 	// value 是 semver 范围字符串（如 ">=18"、"^3.9"、"8.x"）。
@@ -272,11 +293,27 @@ func extractRequires(metadata map[string]any) *Requires {
 			}
 		}
 	}
-	// env 名单：envs（定稿）优先，env（存量兼容）兜底
-	if envs, ok := reqMap["envs"].([]any); ok {
-		r.Env = stringList(envs)
-	} else if envs, ok := reqMap["env"].([]any); ok {
-		r.Env = stringList(envs)
+	// env 名单：envs（定稿）优先，env（存量兼容）兜底；条目支持字符串或
+	// 对象 {name, prompt, url, sensitive} 两种形态——对象 name 缺失整条忽略
+	//（告警由 CheckQuality 的 quality-envs 检查兜底，不阻断装载）。
+	envsRaw, ok := reqMap["envs"].([]any)
+	if !ok {
+		envsRaw, ok = reqMap["env"].([]any)
+	}
+	if ok {
+		for _, item := range envsRaw {
+			switch v := item.(type) {
+			case string:
+				r.Env = append(r.Env, v)
+			case map[string]any:
+				e := parseSkillEnvRequirement(v)
+				if e == nil {
+					continue
+				}
+				r.Envs = append(r.Envs, *e)
+				r.Env = append(r.Env, e.Name)
+			}
+		}
 	}
 	if rt, ok := reqMap["runtime"].(map[string]any); ok {
 		r.Runtime = make(map[string]string, len(rt))
@@ -313,6 +350,32 @@ func stringList(raw []any) []string {
 		}
 	}
 	return out
+}
+
+// parseSkillEnvRequirement 把 YAML 反序列化出的对象条目收窄为 SkillEnvRequirement。
+// name 缺失（空/非字符串/空白）时返回 nil，调用方整条忽略。
+func parseSkillEnvRequirement(raw map[string]any) *SkillEnvRequirement {
+	name := strings.TrimSpace(stringField(raw, "name"))
+	if name == "" {
+		return nil
+	}
+	e := &SkillEnvRequirement{
+		Name:   name,
+		Prompt: strings.TrimSpace(stringField(raw, "prompt")),
+		URL:    strings.TrimSpace(stringField(raw, "url")),
+	}
+	if b, ok := raw["sensitive"].(bool); ok {
+		e.Sensitive = b
+	}
+	return e
+}
+
+// stringField 从 YAML 反序列化出的 map 中取字符串字段（类型不符返回空串）。
+func stringField(raw map[string]any, key string) string {
+	if v, ok := raw[key].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // extractInstallCommands 从 metadata 中提取 install 命令块（与 requires 平级）：

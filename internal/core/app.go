@@ -100,6 +100,15 @@ type App struct {
 	// market 是市场客户端（懒创建，可经 SetMarketSource 运行时换源重建，见 Market()）
 	marketMu sync.RWMutex
 	market   *bundle.MarketClient
+	// marketPAT 商户访问令牌（邀请码）：仅存密钥存储（CredentialStore）与内存，
+	// 严禁落盘明文或写日志
+	marketPAT string
+	// marketClientID 设备身份 UUIDv4（匿名期评分/绑定通道，§2.1）：首启生成后
+	// 持久化进凭据存储（键 market:client_id），不落明文配置
+	marketClientID string
+	// marketAuthToken 用户登录令牌（市场账号绑定后录入，键 market:auth_token），
+	// 与商户 PAT 是两类凭据，严禁混淆
+	marketAuthToken string
 }
 
 func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
@@ -193,6 +202,15 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 
 	credStore := NewCredentialStore(settings.UserPreferences())
 
+	// 商户访问令牌（邀请码）从密钥存储加载：macOS 钥匙串 / 加密文件，永不落 mindx.json
+	marketPAT := ResolveAPIKey(credStore, "market:pat")
+
+	// 设备身份（匿名期评分/绑定通道 §2.1）：已持久化的从凭据存储加载；
+	// 首启生成推迟到 Market() 懒创建时（避免测试构造 App 即写真实钥匙串）
+	marketClientID := ResolveAPIKey(credStore, "market:client_id")
+	// 用户登录令牌（市场账号绑定后录入；与商户 PAT 是两类凭据）
+	marketAuthToken := ResolveAPIKey(credStore, "market:auth_token")
+
 	// Create permission rule store (nil-safe: if mindxConfig is nil, returns no-op store)
 	permStore := NewMindxPermissionRuleStore(mindxConfig)
 
@@ -215,6 +233,9 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		tokenUsageStore:     mindxses.NewFileTokenUsageStore(settings.DataDir()),
 		metricStore:         metric.NewFileMetricStore(settings.DataDir()),
 		providerConfigs:     providers,
+		marketPAT:           marketPAT,
+		marketClientID:      marketClientID,
+		marketAuthToken:     marketAuthToken,
 	}, nil
 }
 
@@ -387,8 +408,17 @@ func (a *App) Skills() *skillstore.Store {
 	return a.skills
 }
 
+// marketBase 推导当前生效源 base：换源写入的 MarketActiveBase 优先，
+// 空则跟随源目录引导基址 MarketAPIBase（再空由客户端回退官方默认）。
+func (a *App) marketBase() string {
+	if base := strings.TrimSpace(a.mindxConfig.MarketActiveBase); base != "" {
+		return base
+	}
+	return a.mindxConfig.MarketAPIBase
+}
+
 // Market 返回市场客户端（懒创建；缓存目录位于数据目录 market-cache 下按
-// apiBase+sourceID 哈希隔离）。全部数据走服务端分页 API（清单机制已废除），
+// 源 base URL 哈希隔离）。全部数据走服务端分页 API（清单机制已废除），
 // 创建后按配置注入商户访问令牌。
 func (a *App) Market() *bundle.MarketClient {
 	a.marketMu.RLock()
@@ -401,32 +431,96 @@ func (a *App) Market() *bundle.MarketClient {
 	a.marketMu.Lock()
 	defer a.marketMu.Unlock()
 	if a.market == nil {
-		a.market = bundle.NewMarketClient(a.mindxConfig.MarketAPIBase, a.mindxConfig.MarketSourceID,
+		// 设备身份首启生成（懒）：仅在实际用到市场功能时生成并持久化，
+		// 持久化失败降级为本次运行临时使用（下次重试），不阻断市场浏览
+		if a.marketClientID == "" {
+			id, idErr := marketClientUUID()
+			if idErr != nil {
+				a.logger.Error("生成市场设备身份失败，本次运行以空身份运行", idErr)
+			} else {
+				// 测试模式仅内存身份：svc 测试会经 RPC 触发本懒创建，
+				// darwin 下 credStore 是真实钥匙串，测试禁止污染
+				if !a.settings.Test {
+					if setErr := a.credStore.Set("market:client_id", id); setErr != nil {
+						a.logger.Warn("市场设备身份持久化失败，本次运行临时使用", "error", setErr)
+					}
+				}
+				a.marketClientID = id
+			}
+		}
+		a.market = bundle.NewMarketClient(a.marketBase(),
 			filepath.Join(a.settings.DataDir(), "market-cache"))
-		a.market.SetPAT(a.mindxConfig.MarketPAT)
+		a.market.SetPAT(a.marketPAT)
+		a.market.SetClientID(a.marketClientID)
+		a.market.SetAuthToken(a.marketAuthToken)
 	}
 	return a.market
 }
 
-// SetMarketSource 运行时换源/换令牌：校验源 id 后重建客户端（缓存目录随
-// apiBase+sourceID 哈希隔离）；校验失败回退官方默认源（日志 warn，不阻断）。
+// MarketPAT 返回当前商户访问令牌（邀请码）。仅内存值，来自密钥存储加载或
+// SetMarketPAT 写入；严禁写日志。
+func (a *App) MarketPAT() string {
+	a.marketMu.RLock()
+	defer a.marketMu.RUnlock()
+	return a.marketPAT
+}
+
+// SetMarketPAT 更新商户访问令牌（邀请码）：写入密钥存储（持久）与内存（运行时），
+// 已建市场客户端立即生效。存取失败返回错误，由调用方决定提示。
+func (a *App) SetMarketPAT(pat string) error {
+	a.marketMu.Lock()
+	defer a.marketMu.Unlock()
+	if a.credStore != nil {
+		if err := a.credStore.Set("market:pat", pat); err != nil {
+			return fmt.Errorf("邀请码保存失败：%w", err)
+		}
+	}
+	a.marketPAT = pat
+	if a.market != nil {
+		a.market.SetPAT(pat)
+	}
+	return nil
+}
+
+// SetMarketSource 运行时换源：源 id 经源目录（MarketAPIBase 引导基址，恒定不随
+// 换源漂移）解析为服务根地址，并以当前令牌对该源做连通探测（拉一页包列表），
+// 探测成功才激活——「连接成功」是源切换与令牌生效的唯一判据，失败原样报错、
+// 现有源保持不变。激活后重建客户端（缓存目录随 base URL 哈希隔离）并落盘
+// MarketActiveBase/MarketSourceID，避免文件态与内存态漂移。
 // 调用方（user.config 副作用）负责广播 market_changed 通知前端刷新货架。
-func (a *App) SetMarketSource(sourceID, pat string) {
+func (a *App) SetMarketSource(sourceID string) error {
 	a.marketMu.Lock()
 	defer a.marketMu.Unlock()
 
-	probe := bundle.NewMarketClient(a.mindxConfig.MarketAPIBase, "",
+	probe := bundle.NewMarketClient(a.mindxConfig.MarketAPIBase,
 		filepath.Join(a.settings.DataDir(), "market-cache"))
-	probe.SetPAT(pat)
-	if err := probe.ResolveSource(sourceID); err != nil {
-		a.logger.Warn("市场源校验失败，回退官方默认源", "source_id", sourceID, "error", err)
-		sourceID = ""
+	probe.SetPAT(a.marketPAT)
+	probe.SetClientID(a.marketClientID)
+	probe.SetAuthToken(a.marketAuthToken)
+	base, err := probe.ResolveSourceBase(sourceID)
+	if err != nil {
+		return fmt.Errorf("市场源切换失败：%w", err)
 	}
-	a.mindxConfig.MarketSourceID = sourceID
-	a.mindxConfig.MarketPAT = pat
-	a.market = bundle.NewMarketClient(a.mindxConfig.MarketAPIBase, sourceID,
+	if base == "" {
+		base = a.mindxConfig.MarketAPIBase
+	}
+	// 连通探测：以目标源 base + 当前令牌建临时客户端拉一页包列表，
+	// 成功才算连接成功（该客户端即新激活客户端，缓存桶按新 base 哈希隔离）
+	target := bundle.NewMarketClient(base,
 		filepath.Join(a.settings.DataDir(), "market-cache"))
-	a.market.SetPAT(pat)
+	target.SetPAT(a.marketPAT)
+	target.SetClientID(a.marketClientID)
+	target.SetAuthToken(a.marketAuthToken)
+	if _, err := target.ListPage(bundle.MarketQuery{Page: 1, PageSize: 1}); err != nil {
+		return fmt.Errorf("市场源连接失败：%w", err)
+	}
+	a.mindxConfig.MarketSourceID = strings.TrimSpace(sourceID)
+	a.mindxConfig.MarketActiveBase = base
+	a.market = target
+	if err := a.mindxConfig.Save(); err != nil {
+		a.logger.Warn("市场源配置落盘失败", "error", err)
+	}
+	return nil
 }
 
 // PromptBuilder 返回 mindx 侧基础系统提示词组装器（懒创建，App 生命周期内缓存；
@@ -791,6 +885,11 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		// 系统提示词，经 mindx skills discovery 发现后按需加载；
 		// 执行期解析不触碰 system prompt，不影响 KV 缓存前缀）。
 		opts = append(opts, agents.WithProjectSkillResolver(a.skills.ResolveProject))
+		// 技能凭据注入 SPI：Bash 执行时按当前 Agent 挂载技能解析凭据库中的
+		// env 值（对象形态 requires.envs），叠加到子进程环境（对齐 MCP
+		// resolveCreds 语义）。declared 与提示词技能目录同源（frontmatter skills）。
+		opts = append(opts, agents.WithSubProcessEnv(
+			a.SkillSubProcessEnvResolver(agentName, agent.Meta.Skills)))
 	}
 
 	// 基础系统提示词由 mindx 侧组装（IDENTITY → SOUL → Skill 目录 → AGENTS.md → Env → 扩展规则），

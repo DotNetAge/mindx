@@ -69,7 +69,7 @@ agents/<name>/
 - [ ] 已与用户确认名称、角色、业务分类、工作范围
 - [ ] 已运行 `mindx agent list --all --json` —— 确认无重复或重叠的 Agent
 - [ ] 已运行 `mindx market list --kind agent --filter "<关键词>"` —— 确认市场无现成可复用的 Agent 包
-- [ ] 已运行 `mindx skill list --json` —— 已识别相关技能；本地缺失的技能已按 `find-skills` 技能查找并安装
+- [ ] 已运行 `mindx skill list --json` —— 已识别相关技能；本地缺失的技能已按 `skill-search` 技能查找并安装
 - [ ] `name` 为小写连字符格式，唯一，基于名词
 - [ ] `role` 为简洁中文头衔；`description` 为 1-2 句中文概览（负责什么/能干什么/什么时候用）
 - [ ] `category` 已确定为中文业务分类

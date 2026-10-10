@@ -14,17 +14,30 @@ metadata:
    - references/AGENTS_FOLDER_SCAFFOLD_SPEC.md（.agents脚手架目录规约）
 2. 所有产出文件与目录结构，**必须严格遵守两份参考文档定义**。
 
+## 更新模式（存量修订）
+触发：复盘产出的 AGENTS.md 修订提议（notes 中的缺口类记录）经用户授权，或用户直接要求更新已有 AGENTS.md。
+流程：先读现有 AGENTS.md 与修订提议，逐条评估——与现有结构冲突的提议先与用户协商；采纳项按 AAIF 规范落地（根/子目录归位、@片段拆分、token 纪律），增量修订不整文件重写；写前展示 diff 预览（沿用工作流第 5-6 步确认机制）。
+
 ## 工作流
-1. 仓库扫描：遍历目录树、package.json/构建脚本、测试命令、源码、README，识别技术栈、敏感文件、禁止修改文件清单、模块划分（monorepo）。
+1. 仓库扫描：并行侦察，不逐文件通读——
+   - 包清单与框架指纹：package.json/go.mod/Cargo.toml/pyproject.toml 等定位语言与依赖；next.config/vite.config/django 等定位框架；
+   - 入口点：main/index/app/server、cmd/、src/main/；
+   - 目录快照：顶层 2 级树，忽略 node_modules/vendor/dist/build/.git 等生成物；
+   - 配置与工具链：lint/format/tsconfig、Makefile/Dockerfile、CI 工作流、.env.example；
+   - 测试结构：tests/、*_test.go、*.spec.ts、pytest/jest/vitest 配置；
+   - 约定信号：文件命名风格、错误处理模式、近期提交信息风格（历史太浅则跳过并注明）。
+   最终判定：技术栈、敏感文件、禁止修改文件清单、模块划分（monorepo）。
 2. 脚手架规划阶段【新增】
    - 读取 `AGENTS_FOLDER_SCAFFOLD_SPEC.md`，确定需要创建的`.agents/`目录骨架；
+   - 环境适配：运行环境为 mindx（`~/.mindx` 存在）时，notes/memory/references 三个治理目录纳入按需规划（见 spec 的 mindx 扩展节）；非 mindx 环境只按社区 spec 规划；
    - 判断哪些目录是必选，哪些按需创建；**不创建空文件夹**，只有存在对应内容时才落地目录；
    - 规划规则片段拆分：把大块规则抽取为独立md片段，放到`.agents/rules/`；
    - 规划技能存放：如果后续需要新增skills，预留`.agents/skills/`路径。
 3. AGENTS.md 文件规划
    - 根AGENTS.md：默认merge全局模式；
    - 识别独立模块，按需生成子目录AGENTS.md，子目录可声明`Mode: override`；
-   - 在AGENTS.md中使用`@`语法引用`.agents/rules/`下拆分的规则片段。
+   - 在AGENTS.md中使用`@`语法引用`.agents/rules/`下拆分的规则片段；
+   - 平台别名（可选）：AGENTS.md 是唯一正典；当用户环境需要 CLAUDE.md（Claude Code 平台的指令入口文件）等别名时，生成内容仅为一行 `@AGENTS.md` 的指针文件，禁止复制正文——避免双正典漂移。
 4. 自检校验
    对照两份spec自检：目录结构合规、AGENTS.md作用域/继承逻辑、token体积、无冗余废话。
 5. 输出完整预览：
@@ -37,6 +50,7 @@ metadata:
 2. 禁止堆砌通用软件工程常识，只保留项目独有的约束、红线、可执行命令。
 3. 子目录AGENTS.md仅写差异化规则，默认复用父目录规则，遵循merge默认策略。
 4. 脚手架创建原则：**按需创建，不空建目录**；已有目录/文件不强制删除，只增量补充缺失项。
+5. 治理条款分层：notes/memory/references 使用规则、复盘路由等通用治理条款由用户全局 AGENTS.md 兜底，项目级 AGENTS.md 不复制，只写项目独有约束——防 token 冗余与双真理漂移。
 
 ## 注意事项
 - 不同Agent平台对嵌套AGENTS.md支持不一致，重要红线规则必须放置根目录兜底。

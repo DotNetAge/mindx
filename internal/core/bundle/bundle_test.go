@@ -280,7 +280,7 @@ func TestMarketListPageAPI(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewMarketClient(srv.URL+"/api/v1", "", t.TempDir())
+	client := NewMarketClient(srv.URL, t.TempDir())
 	page, err := client.ListPage(MarketQuery{Page: 1, PageSize: 30, Kind: "team", Q: "工"})
 	if err != nil {
 		t.Fatalf("分页 API 浏览失败: %v", err)
@@ -303,7 +303,7 @@ func TestMarketListPageAPI(t *testing.T) {
 	}
 
 	// API 不可达：直接报错，无清单回退
-	dead := NewMarketClient("http://127.0.0.1:1/api/v1", "", t.TempDir())
+	dead := NewMarketClient("http://127.0.0.1:1", t.TempDir())
 	if _, err := dead.ListPage(MarketQuery{Page: 1, Kind: "team"}); err == nil {
 		t.Fatalf("API 不可达应报错（清单回退已废除）")
 	}
@@ -328,7 +328,7 @@ func TestMarketPackageByKindNameAPI(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewMarketClient(srv.URL+"/api/v1", "", t.TempDir())
+	client := NewMarketClient(srv.URL, t.TempDir())
 	pkg, err := client.PackageByKindName("skill", "api-design")
 	if err != nil {
 		t.Fatalf("详情 API 失败: %v", err)
@@ -340,7 +340,7 @@ func TestMarketPackageByKindNameAPI(t *testing.T) {
 		t.Fatalf("不存在的包应报错")
 	}
 
-	dead := NewMarketClient("http://127.0.0.1:1/api/v1", "", t.TempDir())
+	dead := NewMarketClient("http://127.0.0.1:1", t.TempDir())
 	if _, err := dead.PackageByKindName("skill", "api-design"); err == nil {
 		t.Fatalf("API 不可达应报错（清单回退已废除）")
 	}

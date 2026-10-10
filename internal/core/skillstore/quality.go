@@ -80,14 +80,15 @@ func CheckQuality(dir string) (*QualityReport, error) {
 	rep.Stats.Lines = len(lines)
 
 	// 1. 结构解析（装载级硬错误）
-	sk, _, loadErr := LoadSkillFromDir(dir, "filesystem")
+	sd, _, loadErr := LoadSkillDetailFromDir(dir, "filesystem")
 	if loadErr != nil {
 		rep.Issues = append(rep.Issues, QualityIssue{
 			Severity: "error", Code: "frontmatter",
 			Message: fmt.Sprintf("frontmatter 解析失败: %v", loadErr),
 		})
 	}
-	if sk != nil {
+	if sd != nil {
+		sk := sd.Skill
 		if err := ValidateSkillName(sk.Name); err != nil {
 			rep.Issues = append(rep.Issues, QualityIssue{
 				Severity: "error", Code: "name", Message: err.Error(),
@@ -111,6 +112,26 @@ func CheckQuality(dir string) (*QualityReport, error) {
 				Severity: "warning", Code: "trigger-semantic",
 				Message: `description 未说明"何时使用/时调用/触发"（触发路由信号缺失）`,
 			})
+		}
+		// requires.envs 对象形态校验：prompt 缺失告警（首用收集时无法向用户
+		// 说明去哪申请、贴什么值）；sensitive 条目正文禁明文赋值样例。
+		if sd.Requires != nil {
+			for _, e := range sd.Requires.Envs {
+				if e.Prompt == "" {
+					rep.Issues = append(rep.Issues, QualityIssue{
+						Severity: "warning", Code: "quality-envs",
+						Message: fmt.Sprintf("requires.envs 对象条目 %q 缺少 prompt（首用收集时无法说明去哪申请、贴什么值）", e.Name),
+					})
+				}
+				if e.Sensitive {
+					if lineNo := sensitivePlaintextLine(lines, e.Name); lineNo > 0 {
+						rep.Issues = append(rep.Issues, QualityIssue{
+							Severity: "warning", Code: "quality-envs", Line: lineNo,
+							Message: fmt.Sprintf("sensitive 环境变量 %q 在正文出现疑似明文赋值样例（值会随 SKILL.md 进入提示词与检索，凭据不应落正文）", e.Name),
+						})
+					}
+				}
+			}
 		}
 	}
 
@@ -186,4 +207,27 @@ func countCode(issues []QualityIssue, code string) int {
 		}
 	}
 	return n
+}
+
+// sensitivePlaintextLine 逐行扫描正文，查找 sensitive 环境变量的疑似明文赋值样例。
+// 按变量名精确匹配 `VAR=值` / `export VAR=值` 赋值行（防其它变量误报）；三类豁免：
+// 占位符（<your-key>）、自引用透传（$VAR / ${VAR}）、空值。命中返回行号（1 起），
+// 未命中返回 0。
+func sensitivePlaintextLine(lines []string, name string) int {
+	re := regexp.MustCompile(`^\s*(?:export\s+)?` + regexp.QuoteMeta(name) + `\s*=\s*(\S+)`)
+	for i, line := range lines {
+		m := re.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		if strings.HasPrefix(m[1], "<") {
+			continue
+		}
+		val := strings.Trim(m[1], `"'`)
+		if val == "" || val == "$"+name || val == "${"+name+"}" {
+			continue
+		}
+		return i + 1
+	}
+	return 0
 }

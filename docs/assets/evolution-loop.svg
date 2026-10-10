@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 620" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <marker id="arrow-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#e11d48"/>
+    </marker>
+  </defs>
+
+  <rect width="860" height="620" fill="#ffffff"/>
+  <text x="430" y="46" text-anchor="middle" font-size="20" font-weight="700" fill="#1e293b">双系统闭环：记录 → 复盘 → 蒸馏 → 棘轮</text>
+
+  <!-- 记录（顶） -->
+  <rect x="330" y="90" width="200" height="76" rx="12" fill="#eef2ff" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="430" y="122" text-anchor="middle" font-size="16" font-weight="700" fill="#3730a3">记录</text>
+  <text x="430" y="146" text-anchor="middle" font-size="11" fill="#64748b">零判定随手记 · 压缩记忆自动落盘</text>
+
+  <!-- 复盘（右） -->
+  <rect x="590" y="250" width="200" height="76" rx="12" fill="#f0fdfa" stroke="#0d9488" stroke-width="1.5"/>
+  <text x="690" y="282" text-anchor="middle" font-size="16" font-weight="700" fill="#115e59">复盘</text>
+  <text x="690" y="306" text-anchor="middle" font-size="11" fill="#475569">聚类增量 · 归档 · 提炼</text>
+
+  <!-- 蒸馏（底） -->
+  <rect x="330" y="410" width="200" height="76" rx="12" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+  <text x="430" y="442" text-anchor="middle" font-size="16" font-weight="700" fill="#92400e">蒸馏</text>
+  <text x="430" y="466" text-anchor="middle" font-size="11" fill="#475569">质量门：确定性校验 + 评估 + 人工确认</text>
+
+  <!-- 棘轮（左） -->
+  <rect x="70" y="250" width="200" height="76" rx="12" fill="#f8fafc" stroke="#475569" stroke-width="1.5"/>
+  <text x="170" y="282" text-anchor="middle" font-size="16" font-weight="700" fill="#334155">棘轮</text>
+  <text x="170" y="306" text-anchor="middle" font-size="11" fill="#475569">单写者流程 · 追加履历</text>
+
+  <!-- 顺时针环 -->
+  <path d="M 540 140 Q 690 170 690 244" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow-slate)"/>
+  <path d="M 690 326 Q 690 448 536 448" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow-slate)"/>
+  <path d="M 324 448 Q 170 448 170 332" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow-slate)"/>
+  <path d="M 170 244 Q 170 128 324 128" fill="none" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow-slate)"/>
+
+  <text x="430" y="282" text-anchor="middle" font-size="15" font-weight="700" fill="#334155">路由表</text>
+  <text x="430" y="306" text-anchor="middle" font-size="15" font-weight="700" fill="#334155">只升不降</text>
+
+  <!-- 定量验收回路 -->
+  <path d="M 176 332 Q 164 544 224 544" fill="none" stroke="#e11d48" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrow-rose)"/>
+  <path d="M 636 544 Q 706 544 706 200 Q 706 128 536 128" fill="none" stroke="#e11d48" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrow-rose)"/>
+  <rect x="230" y="520" width="400" height="48" rx="10" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"/>
+  <text x="430" y="550" text-anchor="middle" font-size="14" font-weight="700" fill="#9f1239">决策系统：量表定量验收</text>
+  <text x="430" y="598" text-anchor="middle" font-size="12" fill="#94a3b8">开工比对基线（上轮修订兑现了吗）· 收尾存新基线（留给下轮验收）</text>
+</svg>
