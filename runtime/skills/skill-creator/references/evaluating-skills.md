@@ -1,3 +1,8 @@
+---
+source: https://github.com/anthropics/skills/tree/main/skills/skill-creator
+updated: 2026-10-11
+---
+
 # 评估技能输出质量
 
 通过评估驱动迭代验证技能是否可靠地产出好结果——跨不同措辞、跨边界情况、并且优于不用技能的基线。写完技能跑一次"看起来能用"不等于可靠。

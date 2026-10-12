@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/DotNetAge/gort/pkg/gateway"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
 func main() {
@@ -21,6 +22,13 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Fprintf(os.Stderr, "已连接到 %s\n", addr)
+
+	// 本机设备握手（daemon 侧设备接入强制闸要求；本机令牌直通）
+	if err := rpc.HandshakeLocal(ctx, c); err != nil {
+		fmt.Fprintf(os.Stderr, "本机设备握手失败: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "本机设备握手完成\n")
 
 	// Register handler for ALL known event types (goharness aligned)
 	types := []gateway.ResponseType{

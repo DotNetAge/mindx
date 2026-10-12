@@ -190,6 +190,13 @@ func CheckQuality(dir string) (*QualityReport, error) {
 		}
 	}
 
+	// 6. references/ 检查：frontmatter 更新日期强制（新鲜度检查的唯一依据，出处
+	// source 有外部出处才填、不强制）、≥300 行「## 目录」段（树状无序列表，
+	// 条目：- 标题 [L始行-L末行]）、每份文件在 SKILL.md 正文说明
+	// 何时加载。判据与 scripts/gen_reference_toc.py 及 best-practices.md「references
+	// 收纳」节一致；URL 可达性与内容陈旧判断不走本检查（离线快速 + LLM 审查职责）。
+	checkReferencesDir(rep, dir, text)
+
 	for _, iss := range rep.Issues {
 		if iss.Severity == "error" {
 			rep.OK = false
@@ -207,6 +214,129 @@ func countCode(issues []QualityIssue, code string) int {
 		}
 	}
 	return n
+}
+
+// tocHeading 是大文件目录段的段头，与 scripts/gen_reference_toc.py 约定一致。
+const tocHeading = "## 目录"
+
+// hasTocSection 判断文件正文（代码块围栏之外）是否存在「## 目录」段。
+// 示例代码块中出现的段头字符串是教学模板，不算真实目录，防自指误报。
+// 围栏跟踪按 CommonMark 语义：闭合围栏须 ≥ 开启围栏长度且行内无 info 串，
+// 使 ```` 示例块中嵌套的 ``` 与标题不致错位。
+func hasTocSection(lines []string) bool {
+	fence := 0
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		n := fenceRunLen(trimmed)
+		if fence > 0 {
+			if n >= fence && trimmed[n:] == "" {
+				fence = 0
+			}
+			continue
+		}
+		if n > 0 {
+			fence = n
+			continue
+		}
+		if trimmed == tocHeading {
+			return true
+		}
+	}
+	return false
+}
+
+// fenceRunLen 返回行首连续反引号数，≥3 视为围栏（```` 四反引号也是合法围栏），
+// 否则返回 0。
+func fenceRunLen(trimmed string) int {
+	n := 0
+	for n < len(trimmed) && trimmed[n] == '`' {
+		n++
+	}
+	if n >= 3 {
+		return n
+	}
+	return 0
+}
+
+// minRefLines 为需要「## 目录」段的最小正文行数，与 gen_reference_toc.py 的 MIN_LINES 一致。
+const minRefLines = 300
+
+// updatedDateRe 校验 frontmatter updated 的日期格式（YYYY-MM-DD）。
+var updatedDateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+// checkReferencesDir 扫描 references/ 下每份 md：正文关联（文件名须在 SKILL.md
+// 正文出现，即"何时加载"路由）、≥300 行目录段、frontmatter 的 updated 日期
+// （source 不强制——有外部出处的资料才写）。references 目录可选——目录不存在
+// 时静默通过。
+func checkReferencesDir(rep *QualityReport, dir, skillText string) {
+	entries, err := os.ReadDir(filepath.Join(dir, "references"))
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		if !strings.Contains(skillText, name) {
+			rep.Issues = append(rep.Issues, QualityIssue{
+				Severity: "warning", Code: "references-link",
+				Message: fmt.Sprintf("references/%s 未在 SKILL.md 正文中说明何时加载（正文须写清路由）", name),
+			})
+		}
+		data, err := os.ReadFile(filepath.Join(dir, "references", name))
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		if len(lines) >= minRefLines && !hasTocSection(lines) {
+			rep.Issues = append(rep.Issues, QualityIssue{
+				Severity: "warning", Code: "references-toc",
+				Message: fmt.Sprintf("references/%s 共 %d 行，缺「## 目录」段（用 scripts/gen_reference_toc.py 生成，条目格式：- 标题 [L始行-L末行]）", name, len(lines)),
+			})
+		}
+		fm, ok := frontmatterFields(lines)
+		if !ok {
+			rep.Issues = append(rep.Issues, QualityIssue{
+				Severity: "warning", Code: "references-frontmatter",
+				Message: fmt.Sprintf("references/%s 缺 YAML frontmatter（updated 更新日期是新鲜度检查的唯一依据）", name),
+			})
+			continue
+		}
+		if u := fm["updated"]; u == "" {
+			rep.Issues = append(rep.Issues, QualityIssue{
+				Severity: "warning", Code: "references-frontmatter",
+				Message: fmt.Sprintf("references/%s frontmatter 缺 updated（更新日期，超期复核的软信号）", name),
+			})
+		} else if !updatedDateRe.MatchString(u) {
+			rep.Issues = append(rep.Issues, QualityIssue{
+				Severity: "warning", Code: "references-frontmatter",
+				Message: fmt.Sprintf("references/%s frontmatter updated %q 非 YYYY-MM-DD 格式", name, u),
+			})
+		}
+	}
+}
+
+// frontmatterFields 解析 md 文件头部 YAML frontmatter 的一级键值（不解析嵌套结构，
+// references 元信息头只需 source/updated/scope 平铺键）。首行必须是 ---，次个 ---
+// 闭合；未闭合视为无 frontmatter。返回 (键值表, 是否存在完整 frontmatter)。
+func frontmatterFields(lines []string) (map[string]string, bool) {
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return nil, false
+	}
+	fields := map[string]string{}
+	for _, line := range lines[1:] {
+		if strings.TrimSpace(line) == "---" {
+			return fields, true
+		}
+		if k, v, ok := strings.Cut(line, ":"); ok {
+			key := strings.TrimSpace(k)
+			if key != "" && !strings.ContainsAny(key, " \t") {
+				fields[key] = strings.TrimSpace(v)
+			}
+		}
+	}
+	return nil, false
 }
 
 // sensitivePlaintextLine 逐行扫描正文，查找 sensitive 环境变量的疑似明文赋值样例。

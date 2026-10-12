@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// 市场账号 RPC 测试纪律：不触碰 credStore 写路径（darwin 下是真实钥匙串）。
+// MindX 账号 RPC 测试纪律：不触碰 credStore 写路径（darwin 下是真实钥匙串）。
 // 本组用例只覆盖参数校验与匿名形态；身份链路（懒登记/绑定/评分读写）由
 // core 与 bundle 包的 mock 服务端测试覆盖。
 

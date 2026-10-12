@@ -1,3 +1,8 @@
+---
+source: https://agentskills.io/
+updated: 2026-10-11
+---
+
 # SKILL规范
 
 > Agent Skills 的完整格式规范。

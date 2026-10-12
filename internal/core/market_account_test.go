@@ -56,3 +56,26 @@ func TestSetMarketAuthTokenKeychain(t *testing.T) {
 		t.Error("mindx.json 不应包含登录令牌明文")
 	}
 }
+
+// TestGenerateMarketCredentials 验证自动建号凭据满足服务端约束：用户名 ^[a-zA-Z][a-zA-Z0-9_-]{2,31}$、
+// 密码 ≥8 位、多次生成互不重复（随机性）。
+func TestGenerateMarketCredentials(t *testing.T) {
+	pattern := regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]{2,31}$`)
+	seen := make(map[string]bool)
+	for range 100 {
+		username, password, err := GenerateMarketCredentials()
+		if err != nil {
+			t.Fatalf("GenerateMarketCredentials() error = %v", err)
+		}
+		if !pattern.MatchString(username) {
+			t.Fatalf("用户名 %q 不满足服务端格式", username)
+		}
+		if len(password) < 8 {
+			t.Fatalf("密码长度 = %d, want ≥8", len(password))
+		}
+		if seen[username] {
+			t.Fatalf("用户名 %q 重复", username)
+		}
+		seen[username] = true
+	}
+}

@@ -59,12 +59,33 @@ func mustTeamTestStore(t *testing.T, profile string) *teamstore.Store {
 	return store
 }
 
+// mustHiredMembersStore 构造含已雇佣成员（lead/writer/coder 全部 hired）的
+// Agent 注册表，供负责人职责段的成员名单注入验证（名单按雇佣状态实时解析）。
+func mustHiredMembersStore(t *testing.T) *agentstore.AgentStore {
+	t.Helper()
+	store, _, err := agentstore.Load(t.TempDir())
+	if err != nil {
+		t.Fatalf("agentstore.Load() error = %v", err)
+	}
+	members := []agentstore.AgentMeta{
+		{Name: "lead", Role: "负责人", Description: "统筹团队工作与任务分派。", Hired: true},
+		{Name: "writer", Role: "文案", Description: "负责产品文案撰写与内容交付。", Hired: true},
+		{Name: "coder", Role: "工程师", Description: "负责功能实现与代码交付。", Hired: true},
+	}
+	for _, m := range members {
+		if err := store.Save(&agentstore.Agent{Meta: m}); err != nil {
+			t.Fatalf("Save %s 失败: %v", m.Name, err)
+		}
+	}
+	return store
+}
+
 // TestBuildTeamSection 单元验证负责人职责段的渲染规则（注入三重条件：
 // 会话绑定团队 + 团队存在 + 当前 Agent 是负责人）：
 // Profile 正文优先于兜底文案，成员名单与查询引导恒在段尾。
 func TestBuildTeamSection(t *testing.T) {
 	teams := mustTeamTestStore(t, "")
-	pb := NewPromptBuilder(nil, nil, func() *teamstore.Store { return teams }, "", "", nil)
+	pb := NewPromptBuilder(mustHiredMembersStore(t), nil, func() *teamstore.Store { return teams }, "", "", nil)
 	leader := &agentstore.Agent{Meta: agentstore.AgentMeta{Name: "lead", Role: "负责人"}}
 	teamSess := mustLeaderTestSession(t, "lead", "alpha")
 
@@ -76,8 +97,14 @@ func TestBuildTeamSection(t *testing.T) {
 	if !strings.Contains(sec, "你是「alpha」团队的负责人") {
 		t.Errorf("段落缺少 team 名:\n%s", sec)
 	}
-	if !strings.Contains(sec, "团队成员：lead、writer、coder") {
-		t.Errorf("段落缺少成员名单:\n%s", sec)
+	// 名单按雇佣状态实时解析：已雇佣成员列出「- 成员名（角色描述）」
+	for _, want := range []string{"- lead（统筹团队工作", "- writer（负责产品文案", "- coder（负责功能实现"} {
+		if !strings.Contains(sec, want) {
+			t.Errorf("段落缺少已雇佣成员条目 %q:\n%s", want, sec)
+		}
+	}
+	if strings.Contains(sec, "团队成员：lead、writer、coder") {
+		t.Errorf("成员名单应为逐条角色描述格式，不应为纯名字列表:\n%s", sec)
 	}
 	if !strings.Contains(sec, "mindx agents info") {
 		t.Errorf("段落缺少成员角色查询引导:\n%s", sec)
@@ -87,7 +114,7 @@ func TestBuildTeamSection(t *testing.T) {
 	// 标题由文件自身处理），成员名单与查询引导仍保留在段尾
 	profile := "## 产品研发团队\n\n本团队负责 mindx 的产品设计与研发交付，成员按专业分工接单。"
 	customTeams := mustTeamTestStore(t, profile)
-	pbWithTeams := NewPromptBuilder(nil, nil, func() *teamstore.Store { return customTeams }, "", "", nil)
+	pbWithTeams := NewPromptBuilder(mustHiredMembersStore(t), nil, func() *teamstore.Store { return customTeams }, "", "", nil)
 	sec3 := pbWithTeams.buildLeaderSection(leader, teamSess)
 	if !strings.Contains(sec3, "## 产品研发团队") {
 		t.Errorf("Team Profile 自定义内容应原样注入:\n%s", sec3)
@@ -95,10 +122,10 @@ func TestBuildTeamSection(t *testing.T) {
 	if strings.Contains(sec3, "你是「alpha」团队的负责人") {
 		t.Errorf("有自定义内容时不应再出现兜底文案:\n%s", sec3)
 	}
-	if !strings.Contains(sec3, "团队成员：lead、writer、coder") {
+	if !strings.Contains(sec3, "- writer（负责产品文案") {
 		t.Errorf("自定义内容下成员名单仍应保留在段尾:\n%s", sec3)
 	}
-	if strings.Index(sec3, "## 产品研发团队") > strings.Index(sec3, "团队成员：lead") {
+	if strings.Index(sec3, "## 产品研发团队") > strings.Index(sec3, "团队成员：") {
 		t.Errorf("自定义内容应插入在成员名单之前:\n%s", sec3)
 	}
 
@@ -113,6 +140,17 @@ func TestBuildTeamSection(t *testing.T) {
 	}
 	if got := pb.buildLeaderSection(nil, teamSess); got != "" {
 		t.Errorf("nil agent 应返回空串，got:\n%s", got)
+	}
+
+	// 成员注册表不可用（agents 未装配）：无任何就绪成员时降级为空缺文案，
+	// 不输出成员名单与查询引导
+	pbNoAgents := NewPromptBuilder(nil, nil, func() *teamstore.Store { return teams }, "", "", nil)
+	secEmpty := pbNoAgents.buildLeaderSection(leader, teamSess)
+	if !strings.Contains(secEmpty, "暂无已雇佣成员") {
+		t.Errorf("无就绪成员时应输出空缺文案:\n%s", secEmpty)
+	}
+	if strings.Contains(secEmpty, "mindx agents info") {
+		t.Errorf("无就绪成员时不应输出成员查询引导:\n%s", secEmpty)
 	}
 }
 
@@ -129,6 +167,7 @@ func TestPromptBuilderBuildWithLeader(t *testing.T) {
 		Name:        "lead",
 		Role:        "负责人",
 		Description: "带团队",
+		Hired:       true,
 	}}); err != nil {
 		t.Fatalf("Save lead 失败: %v", err)
 	}
@@ -148,8 +187,11 @@ func TestPromptBuilderBuildWithLeader(t *testing.T) {
 	if !strings.Contains(out, "## 团队负责人职责") {
 		t.Errorf("负责人的系统提示词应含职责段:\n%s", out)
 	}
-	if !strings.Contains(out, "团队成员：lead、writer、coder") {
-		t.Errorf("职责段应含成员名单:\n%s", out)
+	if !strings.Contains(out, "- lead（带团队）") {
+		t.Errorf("职责段应含已雇佣成员及其角色描述:\n%s", out)
+	}
+	if strings.Contains(out, "- writer") || strings.Contains(out, "- coder") {
+		t.Errorf("未注册成员不应出现在成员名单中:\n%s", out)
 	}
 
 	// 个人会话 + 负责人：不注入（未绑定团队）

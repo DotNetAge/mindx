@@ -118,7 +118,7 @@ type MarketClient struct {
 	cacheDir string
 	// pat 商户访问令牌（用户在网页签发的 PAT，经设置粘贴；空 = 匿名）
 	pat string
-	// authToken 用户登录令牌（市场账号绑定后录入；空 = 未绑定，评分走匿名设备通道）
+	// authToken 用户登录令牌（MindX 账号绑定后录入；空 = 未绑定，评分走匿名设备通道）
 	authToken string
 	// clientID 设备身份 UUIDv4（daemon 首启生成并持久化进凭据存储；评分/绑定的
 	// X-Client-Id 通道；服务端校验 clients 表登记）
@@ -132,7 +132,7 @@ func (m *MarketClient) SetPAT(pat string) {
 	m.pat = strings.TrimSpace(pat)
 }
 
-// SetAuthToken 设置用户登录令牌（市场账号绑定/解绑后由调用方同步）。
+// SetAuthToken 设置用户登录令牌（MindX 账号绑定/解绑后由调用方同步）。
 func (m *MarketClient) SetAuthToken(token string) {
 	m.authToken = strings.TrimSpace(token)
 	m.registered = false // 身份语义变化后重新登记（幂等）
@@ -182,7 +182,7 @@ func (m *MarketClient) ensureIdentity() error {
 	return nil
 }
 
-// MarketUser 市场账号用户信息（服务端 GET /api/v1/me 响应）。
+// MarketUser MindX 账号用户信息（服务端 GET /api/v1/me 响应）。
 type MarketUser struct {
 	ID        int64  `json:"id"`
 	Provider  string `json:"provider"`
@@ -191,6 +191,11 @@ type MarketUser struct {
 	AvatarURL string `json:"avatar_url"`
 	Points    int64  `json:"points"`
 	TOSAccept bool   `json:"tos_accepted"`
+	// 账号机制字段（用户名密码登录 + Profile 四字段）
+	Username string `json:"username"`
+	JobTitle string `json:"job_title"`
+	Phone    string `json:"phone"`
+	Github   string `json:"github"`
 }
 
 // RegisterClient 登记设备身份（服务端幂等：已存在不覆盖绑定状态）。
@@ -201,11 +206,11 @@ func (m *MarketClient) RegisterClient(clientID string) error {
 // Me 拉取当前登录用户信息（AuthToken 校验通道；401/无令牌返回 ErrMarketUnauthorized 语义错误）。
 func (m *MarketClient) Me() (*MarketUser, error) {
 	if m.authToken == "" {
-		return nil, fmt.Errorf("未录入市场登录令牌")
+		return nil, fmt.Errorf("尚未登录进化网络")
 	}
 	resp, err := m.authedGet(m.apiBase + "/me")
 	if err != nil {
-		return nil, fmt.Errorf("市场服务不可达：%w", err)
+		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -223,10 +228,10 @@ func (m *MarketClient) Me() (*MarketUser, error) {
 }
 
 // Bind 将本设备绑定到 AuthToken 对应用户（服务端单事务：user_id 落值 + 匿名评分迁移）。
-// 幂等、单向；返回迁移的匿名评分条数。
-func (m *MarketClient) Bind() (int64, error) {
+// deviceName/platform 为设备元数据上报（设备列表渲染用；空值不覆盖）。幂等、单向；返回迁移的匿名评分条数。
+func (m *MarketClient) Bind(deviceName, platform string) (int64, error) {
 	if m.authToken == "" {
-		return 0, fmt.Errorf("未录入市场登录令牌")
+		return 0, fmt.Errorf("尚未登录进化网络")
 	}
 	if err := m.ensureIdentity(); err != nil {
 		return 0, err
@@ -235,10 +240,126 @@ func (m *MarketClient) Bind() (int64, error) {
 		Bound    bool  `json:"bound"`
 		Migrated int64 `json:"migrated"`
 	}
-	if err := m.postJSON(m.apiBase+"/clients/bind", map[string]string{"client_id": m.clientID}, &out); err != nil {
+	body := map[string]string{"client_id": m.clientID, "device_name": deviceName, "platform": platform}
+	if err := m.postJSON(m.apiBase+"/clients/bind", body, &out); err != nil {
 		return 0, err
 	}
 	return out.Migrated, nil
+}
+
+// Register 用户名密码注册（账号机制定案 2026-10-10）：成功下发 AuthToken。
+func (m *MarketClient) Register(username, password, displayName string) (string, error) {
+	var out struct {
+		AuthToken string `json:"auth_token"`
+	}
+	body := map[string]string{"username": username, "password": password, "display_name": displayName}
+	if err := m.postJSON(m.apiBase+"/auth/register", body, &out); err != nil {
+		return "", err
+	}
+	if out.AuthToken == "" {
+		return "", fmt.Errorf("注册响应缺少令牌")
+	}
+	return out.AuthToken, nil
+}
+
+// Login 用户名密码登录：成功下发 AuthToken。
+func (m *MarketClient) Login(username, password string) (string, error) {
+	var out struct {
+		AuthToken string `json:"auth_token"`
+	}
+	if err := m.postJSON(m.apiBase+"/auth/login", map[string]string{"username": username, "password": password}, &out); err != nil {
+		return "", err
+	}
+	if out.AuthToken == "" {
+		return "", fmt.Errorf("登录响应缺少令牌")
+	}
+	return out.AuthToken, nil
+}
+
+// Logout 吊销当前 AuthToken（服务端令牌作废；本地凭据清除由调用方负责）。
+func (m *MarketClient) Logout() error {
+	if m.authToken == "" {
+		return nil
+	}
+	return m.postJSON(m.apiBase+"/auth/logout", map[string]any{}, nil)
+}
+
+// MarketDevice 用户名下设备条目（服务端 GET /api/v1/devices）。
+type MarketDevice struct {
+	ClientID   string `json:"client_id"`
+	DeviceName string `json:"device_name"`
+	Platform   string `json:"platform"`
+	BoundAt    string `json:"bound_at"`
+	LastSeenAt string `json:"last_seen_at"`
+}
+
+// Devices 拉取登录用户名下设备列表。
+func (m *MarketClient) Devices() ([]MarketDevice, error) {
+	if m.authToken == "" {
+		return nil, fmt.Errorf("尚未登录进化网络")
+	}
+	resp, err := m.authedGet(m.apiBase + "/devices")
+	if err != nil {
+		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("拉取设备列表失败（HTTP %d）", resp.StatusCode)
+	}
+	var out struct {
+		Devices []MarketDevice `json:"devices"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("解析设备列表失败：%w", err)
+	}
+	return out.Devices, nil
+}
+
+// UpdateProfileFields 更新 Profile 四字段（PATCH /api/v1/me；nil = 不更新）。
+func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone, github *string) (*MarketUser, error) {
+	if m.authToken == "" {
+		return nil, fmt.Errorf("尚未登录进化网络")
+	}
+	body := map[string]any{}
+	if nickName != nil {
+		body["nick_name"] = *nickName
+	}
+	if jobTitle != nil {
+		body["job_title"] = *jobTitle
+	}
+	if phone != nil {
+		body["phone"] = *phone
+	}
+	if github != nil {
+		body["github"] = *github
+	}
+	if len(body) == 0 {
+		return m.Me()
+	}
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPatch, m.apiBase+"/me", bytes.NewReader(buf))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	m.attachIdentity(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("Profile 更新失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	return m.Me()
 }
 
 // Base 返回市场源服务根地址（设备登录确认页 URL 的拼接基址；与登录/绑定
@@ -290,7 +411,7 @@ type RatingAggregate struct {
 // UpdateProfile 更新当前用户显示名（PATCH /api/v1/me；昵称 ≤32 字符由服务端校验）。
 func (m *MarketClient) UpdateProfile(nickName string) (string, error) {
 	if m.authToken == "" {
-		return "", fmt.Errorf("未录入市场登录令牌")
+		return "", fmt.Errorf("尚未登录进化网络")
 	}
 	body, err := json.Marshal(map[string]string{"nick_name": nickName})
 	if err != nil {
@@ -304,7 +425,7 @@ func (m *MarketClient) UpdateProfile(nickName string) (string, error) {
 	m.attachIdentity(req)
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("市场服务不可达：%w", err)
+		return "", fmt.Errorf("进化网络暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -327,7 +448,7 @@ func (m *MarketClient) UpdateProfile(nickName string) (string, error) {
 // PNG/JPEG ≤1MB、≤1024×1024，服务端统一缩放 128×128，返回档案头像 URL。
 func (m *MarketClient) UploadAvatar(data []byte, filename string) (string, error) {
 	if m.authToken == "" {
-		return "", fmt.Errorf("未录入市场登录令牌")
+		return "", fmt.Errorf("尚未登录进化网络")
 	}
 	if len(data) == 0 {
 		return "", fmt.Errorf("头像数据为空")
@@ -355,7 +476,7 @@ func (m *MarketClient) UploadAvatar(data []byte, filename string) (string, error
 	m.attachIdentity(req)
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("市场服务不可达：%w", err)
+		return "", fmt.Errorf("进化网络暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	respData, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -397,7 +518,7 @@ func (m *MarketClient) postRaw(u string, data []byte, headers map[string]string,
 	m.attachIdentity(req)
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("市场服务不可达：%w", err)
+		return fmt.Errorf("进化网络暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	respData, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -422,7 +543,7 @@ func (m *MarketClient) postRaw(u string, data []byte, headers map[string]string,
 // URL 与清单身份一致使用新名（包内清单 name 已随打包覆盖）。
 func (m *MarketClient) Publish(kind, name string, data []byte, version, publishName string) (*PublishResult, error) {
 	if m.authToken == "" && m.pat == "" {
-		return nil, fmt.Errorf("发布需要市场身份：请先绑定市场账号或配置商户访问令牌")
+		return nil, fmt.Errorf("发布前请先绑定 MindX 账号或配置商户授权")
 	}
 	if len(data) == 0 {
 		return nil, fmt.Errorf("分发包内容为空")
@@ -468,7 +589,7 @@ type SubmitResult struct {
 // note 为给包主的附言（可选）。
 func (m *MarketClient) Submit(kind, name, note, version string, data []byte) (*SubmitResult, error) {
 	if m.authToken == "" && m.pat == "" {
-		return nil, fmt.Errorf("投递需要市场身份：请先绑定市场账号")
+		return nil, fmt.Errorf("投递前请先绑定 MindX 账号")
 	}
 	if len(data) == 0 {
 		return nil, fmt.Errorf("分发包内容为空")
@@ -493,7 +614,7 @@ func (m *MarketClient) Submit(kind, name, note, version string, data []byte) (*S
 func (m *MarketClient) Submissions(kind, name string) ([]Submission, error) {
 	resp, err := m.authedGet(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/submissions")
 	if err != nil {
-		return nil, fmt.Errorf("市场服务不可达：%w", err)
+		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -526,7 +647,7 @@ type DecideResult struct {
 // 管线），reject 拒绝。重复决策由服务端以 409 invalid_state 拒绝。
 func (m *MarketClient) DecideSubmission(kind, name string, submissionID int64, accept bool) (*DecideResult, error) {
 	if m.authToken == "" && m.pat == "" {
-		return nil, fmt.Errorf("审核投递需要市场身份：请先绑定市场账号")
+		return nil, fmt.Errorf("审核投递前请先绑定 MindX 账号")
 	}
 	action := "reject"
 	if accept {
@@ -564,7 +685,7 @@ func (m *MarketClient) Rate(kind, name string, score int64) (*RatingAggregate, e
 func (m *MarketClient) MyRating(kind, name string) (int64, error) {
 	resp, err := m.authedGet(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/rating")
 	if err != nil {
-		return 0, fmt.Errorf("市场服务不可达：%w", err)
+		return 0, fmt.Errorf("进化网络暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
@@ -600,7 +721,7 @@ func (m *MarketClient) postJSON(url string, body any, out any) error {
 	m.attachIdentity(req)
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("市场服务不可达：%w", err)
+		return fmt.Errorf("进化网络暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -731,7 +852,7 @@ func (m *MarketClient) ResolveSourceBase(sourceID string) (string, error) {
 			return s.BaseURL, nil
 		}
 	}
-	return "", fmt.Errorf("市场源 %s 不存在或不可用", sourceID)
+	return "", fmt.Errorf("进化网络源 %s 不可用", sourceID)
 }
 
 // ListPage 分页浏览市场（服务端 GET /api/v1/packages 唯一数据路径）；
@@ -773,7 +894,7 @@ func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 	}
 	resp, err := m.authedGet(m.apiBase + "/packages?" + params.Encode())
 	if err != nil {
-		return nil, fmt.Errorf("市场服务不可达：%w", err)
+		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -804,11 +925,11 @@ func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 func (m *MarketClient) PackageByKindName(kind, name string) (*MarketPackage, error) {
 	resp, err := m.authedGet(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name))
 	if err != nil {
-		return nil, fmt.Errorf("市场服务不可达：%w", err)
+		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("市场中不存在 %s 类型包 %q", kind, name)
+		return nil, fmt.Errorf("进化网络中不存在 %s 类型的包 %q", kind, name)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("包详情 API 响应状态 %d", resp.StatusCode)

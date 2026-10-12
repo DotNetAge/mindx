@@ -1,3 +1,18 @@
+---
+source: https://github.com/anthropics/skills/tree/main/skills/skill-creator
+updated: 2026-10-11
+---
+## 目录
+
+- 一次性命令 [L22-L106]
+- 从 `SKILL.md` 引用脚本 [L107-L139]
+- 自包含脚本 [L140-L245]
+- 为智能体使用设计脚本 [L246-L320]
+  - 避免交互式提示 [L250-L266]
+  - 用 `--help` 说明用法 [L267-L287]
+  - 编写有用的错误信息 [L288-L296]
+  - 使用结构化输出 [L297-L311]
+  - 其他考虑 [L312-L320]
 # 在 skill 中使用脚本
 
 > 如何在你的 skill 中运行命令并打包可执行脚本。

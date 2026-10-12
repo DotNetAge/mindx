@@ -1,3 +1,7 @@
+---
+updated: 2026-10-11
+---
+
 # daemon RPC 数据通道（插件取数唯一通路）
 
 界面席位契约（contract.md）之外，插件的真实数据都来自 daemon RPC 与宿主桥。本文全部实证自插件真码（chatflow / video-editor / gitgraph / explorer / markdown），形状坑每条都是实踩教训。

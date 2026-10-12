@@ -1,13 +1,16 @@
-// Package discovery 提供 daemon 的局域网服务发现能力（mDNS/Bonjour 广播）。
+// Package discovery 提供 daemon 的局域网服务发现能力（mDNS/Bonjour 广播与浏览）。
 //
 // iOS App 通过 NetServiceBrowser 搜索 "_mindx._tcp" 服务即可自动发现本机
 // daemon 的 WebSocket 端口，实现同一 WiFi 下零配置直连。
 // 设计依据：researching/mindx-remote-example/ios-remote-control-design.md 第 5.7 节。
+// Browse 支持桌面端设备列表发现局域网内的其他 MindX 主机（Mac 间互连）。
 package discovery
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/grandcat/zeroconf"
 )
@@ -62,4 +65,51 @@ func (b *Broadcaster) Shutdown() {
 	}
 	b.server.Shutdown()
 	b.server = nil
+}
+
+// ServiceEntry 局域网内发现的一个 MindX 主机。
+type ServiceEntry struct {
+	Instance string // 服务实例名（如 "MindX@Ray-MacBook-Pro"）
+	Host     string // 主机 IPv4（空 = 未解析到地址）
+	Port     int    // daemon 监听端口
+}
+
+// Browse 局域网内搜索 MindX 主机（设备列表「发现的设备」数据源）。
+// timeout 到期即返回已收集条目（mDNS 是尽力而为协议，短超时漏报属正常，
+// 由调用方提示用户重试）；一条未发现且无错误时返回空切片。
+func Browse(timeout time.Duration) ([]ServiceEntry, error) {
+	resolver, err := zeroconf.NewResolver(nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建 mDNS 浏览器失败: %w", err)
+	}
+	entriesCh := make(chan *zeroconf.ServiceEntry, 64)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := resolver.Browse(ctx, ServiceType, Domain, entriesCh); err != nil {
+		return nil, fmt.Errorf("启动 mDNS 浏览失败: %w", err)
+	}
+
+	// 去重（同名实例可能多次通告）并等超时收集
+	seen := map[string]bool{}
+	entries := make([]ServiceEntry, 0, 8)
+	for {
+		select {
+		case entry := <-entriesCh:
+			if entry == nil || seen[entry.Instance] {
+				continue
+			}
+			seen[entry.Instance] = true
+			host := ""
+			if len(entry.AddrIPv4) > 0 {
+				host = entry.AddrIPv4[0].String()
+			}
+			entries = append(entries, ServiceEntry{
+				Instance: entry.Instance,
+				Host:     host,
+				Port:     entry.Port,
+			})
+		case <-ctx.Done():
+			return entries, nil
+		}
+	}
 }

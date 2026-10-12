@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/core/bundle"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
-// 市场账号与评分 RPC（市场生态 §2）：
+// MindX 账号与评分 RPC（市场生态 §2）：
 //
 //   - market.rate：包级评分（1-5 星，评分挂包不区分版本）；
 //   - market.rating.get：查询当前身份对包的评分（modal 回显）；
@@ -18,7 +19,7 @@ import (
 //     编排逻辑在 handler_market_device.go，绑定收口走本文件的 finishMarketBind）；
 //   - market.account.get：账号状态（匿名设备身份 / 已绑定用户信息）。
 
-// handleMarketRate 对市场包提交评分。评分开关（market.shareRatings）是 UI 层门槛，
+// handleMarketRate 对市场包提交评分。评分数据分享授权（metric.consent）是出网闸门，
 // daemon 与服务端不做二次校验（计划书 §2.2：开关管用户意愿表达，评分请求本身无害）。
 func (d *Daemon) handleMarketRate(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketRateParams
@@ -60,13 +61,13 @@ func (d *Daemon) handleMarketRatingGet(_ context.Context, params json.RawMessage
 	return map[string]any{"rated": true, "score": score}, nil
 }
 
-// finishMarketBind 市场登录收口（device flow 轮询拿到 AuthToken 后调用）：
+// finishMarketBind 市场登录收口（拿到 AuthToken 后调用）：
 // 先持久化并校验 AuthToken 归属（GET /me，失败回滚旧令牌），通过后执行
-// clients/bind 单事务（user_id 落值 + 匿名评分迁移）。幂等、单向。
+// clients/bind 单事务（user_id 落值 + 匿名评分迁移 + 设备元数据上报）。幂等、单向。
 func (d *Daemon) finishMarketBind(authToken string) (user *bundle.MarketUser, migrated int64, err error) {
 	// 先落库再校验：校验失败回滚旧令牌（credStore 与内存同通道恢复，不漂移）
 	oldToken := d.app.MarketAuthToken()
-	if err := d.app.SetMarketAuthToken(authToken); err != nil {
+	if err = d.app.SetMarketAuthToken(authToken); err != nil {
 		return nil, 0, err
 	}
 	user, err = d.app.Market().Me()
@@ -76,15 +77,178 @@ func (d *Daemon) finishMarketBind(authToken string) (user *bundle.MarketUser, mi
 		}
 		return nil, 0, fmt.Errorf("令牌校验失败：%w", err)
 	}
-	migrated, err = d.app.Market().Bind()
+	deviceName, platform := core.MarketDeviceMeta()
+	migrated, err = d.app.Market().Bind(deviceName, platform)
 	if err != nil {
 		return nil, 0, fmt.Errorf("设备绑定失败：%w", err)
 	}
-	d.logger.Info("市场账号绑定完成", "login", user.Login, "migrated", migrated)
+	d.logger.Info("MindX 账号绑定完成", "login", user.Login, "migrated", migrated)
 	return user, migrated, nil
 }
 
-// handleMarketUpdateProfile 更新市场账号显示名（§2.5 账户设置页：服务端白名单可编辑字段，
+// silentMarketRelogin 启动静默登录（账号机制定案 2026-10-10：新设备零输入即有账号）：
+//   - 无凭据 → 自动建号：生成随机凭据注册（称呼=设备名，可后续改），注册即登录并
+//     绑定设备（匿名评分迁移），凭据入密钥存储（重装恢复用）；仅注册成功才持久化，
+//     失败丢弃下次启动重试；
+//   - 有凭据 → 重装恢复路径：凭 username+password 换新 token 并绑定设备（last_seen
+//     即刷新）；已有有效令牌时不动作。
+//   - 全程静默（网络不可达等失败匿名态继续，只记日志），严禁凭据落日志。
+func (d *Daemon) silentMarketRelogin() {
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Warn("市场静默登录 panic", "recover", r)
+		}
+	}()
+	if !d.app.HasMarketCredentials() {
+		d.autoProvisionMarketAccount()
+		return
+	}
+	// 已有令牌且服务端校验通过 = 在线态，无需重登
+	if d.app.MarketAuthToken() != "" {
+		if _, err := d.app.Market().Me(); err == nil {
+			return
+		}
+	}
+	// Market() 懒创建在此触发（设备身份首启生成也在此收口）
+	token, err := d.app.Market().Login(d.app.MarketUsername(), d.app.MarketPassword())
+	if err != nil {
+		d.logger.Warn("市场静默重登失败（匿名态继续）", "error", err)
+		return
+	}
+	if _, _, err := d.finishMarketBind(token); err != nil {
+		d.logger.Warn("市场静默重登绑定失败（匿名态继续）", "error", err)
+		return
+	}
+	d.logger.Info("市场静默重登完成")
+}
+
+// autoProvisionMarketAccount 首次自动建号并登录（无凭据分支，见 silentMarketRelogin）。
+// 称呼取设备名（截断 32 字符，服务端上限），仅注册成功才持久化凭据。
+func (d *Daemon) autoProvisionMarketAccount() {
+	username, password, err := core.GenerateMarketCredentials()
+	if err != nil {
+		d.logger.Warn("市场自动建号凭据生成失败（匿名态继续）", "error", err)
+		return
+	}
+	deviceName, _ := core.MarketDeviceMeta()
+	if len(deviceName) > 32 {
+		deviceName = deviceName[:32]
+	}
+	token, err := d.app.Market().Register(username, password, deviceName)
+	if err != nil {
+		d.logger.Warn("MindX 账号自动创建失败（匿名态继续）", "error", err)
+		return
+	}
+	if credErr := d.app.SetMarketCredentials(username, password); credErr != nil {
+		d.logger.Warn("自动账号凭据持久化失败（本次会话内仍可用）", "error", credErr)
+	}
+	if _, _, err := d.finishMarketBind(token); err != nil {
+		d.logger.Warn("市场自动账号绑定失败（匿名态继续）", "error", err)
+		return
+	}
+	d.logger.Info("MindX 账号已自动创建并登录")
+}
+
+// handleMarketAccountRegister 用户名密码注册（账号机制定案 2026-10-10）：
+// 注册 → 收口绑定；凭据入密钥存储（重装恢复用）。昵称缺省由服务端取用户名。
+func (d *Daemon) handleMarketAccountRegister(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketAccountCredentialsParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Username == "" || p.Password == "" {
+		return nil, fmt.Errorf("username 与 password 均为必填")
+	}
+	token, err := d.app.Market().Register(p.Username, p.Password, p.DisplayName)
+	if err != nil {
+		return nil, err
+	}
+	if credErr := d.app.SetMarketCredentials(p.Username, p.Password); credErr != nil {
+		d.logger.Warn("登录凭据持久化失败（本次会话内仍可用）", "error", credErr)
+	}
+	user, migrated, err := d.finishMarketBind(token)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"user": user, "migrated": migrated}, nil
+}
+
+// handleMarketAccountLogin 用户名密码登录：登录 → 收口绑定；凭据入密钥存储。
+func (d *Daemon) handleMarketAccountLogin(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketAccountCredentialsParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Username == "" || p.Password == "" {
+		return nil, fmt.Errorf("username 与 password 均为必填")
+	}
+	token, err := d.app.Market().Login(p.Username, p.Password)
+	if err != nil {
+		return nil, err
+	}
+	if credErr := d.app.SetMarketCredentials(p.Username, p.Password); credErr != nil {
+		d.logger.Warn("登录凭据持久化失败（本次会话内仍可用）", "error", credErr)
+	}
+	user, migrated, err := d.finishMarketBind(token)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"user": user, "migrated": migrated}, nil
+}
+
+// handleMarketAccountLogout 退出登录：服务端吊销令牌 + 本地清除令牌与凭据。
+// 设备归属不变（clients 绑定单向），下次登录凭同一设备身份继续。
+func (d *Daemon) handleMarketAccountLogout(_ context.Context, _ json.RawMessage) (any, error) {
+	if err := d.app.Market().Logout(); err != nil {
+		// 服务端吊销失败不阻断本地登出（令牌留在服务端过期即可，本地清除更安全）
+		d.logger.Warn("服务端令牌吊销失败，仅本地登出", "error", err)
+	}
+	if err := d.app.SetMarketAuthToken(""); err != nil {
+		return nil, err
+	}
+	if err := d.app.SetMarketCredentials("", ""); err != nil {
+		return nil, err
+	}
+	d.logger.Info("MindX 账号已退出登录")
+	return map[string]any{"logged_out": true}, nil
+}
+
+// handleMarketAccountProfileSet Profile 四字段编辑（nil = 不更新，前端整表单提交）。
+func (d *Daemon) handleMarketAccountProfileSet(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketAccountProfileSetParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	user, err := d.app.Market().UpdateProfileFields(p.NickName, p.JobTitle, p.Phone, p.Github)
+	if err != nil {
+		return nil, err
+	}
+	d.logger.Info("MindX 账号 Profile 更新完成")
+	return map[string]any{"user": user}, nil
+}
+
+// handleMarketAccountDevices 用户名下设备列表（AccountSheet 设备分组渲染源）。
+func (d *Daemon) handleMarketAccountDevices(_ context.Context, _ json.RawMessage) (any, error) {
+	devices, err := d.app.Market().Devices()
+	if err != nil {
+		return nil, err
+	}
+	current := d.app.MarketClientID()
+	out := make([]map[string]any, 0, len(devices))
+	for _, dev := range devices {
+		out = append(out, map[string]any{
+			"client_id":    dev.ClientID,
+			"device_name":  dev.DeviceName,
+			"platform":     dev.Platform,
+			"bound_at":     dev.BoundAt,
+			"last_seen_at": dev.LastSeenAt,
+			"is_current":   dev.ClientID == current,
+		})
+	}
+	return map[string]any{"devices": out}, nil
+}
+
+// handleMarketUpdateProfile 更新MindX 账号显示名（§2.5 账户设置页：服务端白名单可编辑字段，
 // ≤32 字符校验在服务端；仅 AuthToken 用户可用）。
 func (d *Daemon) handleMarketUpdateProfile(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketUpdateProfileParams
@@ -102,7 +266,7 @@ func (d *Daemon) handleMarketUpdateProfile(_ context.Context, params json.RawMes
 	return map[string]any{"nick_name": nick}, nil
 }
 
-// handleMarketUploadAvatar 上传市场账号头像（base64 承载图片二进制；PNG/JPEG ≤1MB，
+// handleMarketUploadAvatar 上传MindX 账号头像（base64 承载图片二进制；PNG/JPEG ≤1MB，
 // 服务端统一缩放 128×128 并返回档案 URL）。
 func (d *Daemon) handleMarketUploadAvatar(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketUploadAvatarParams
@@ -125,7 +289,7 @@ func (d *Daemon) handleMarketUploadAvatar(_ context.Context, params json.RawMess
 	return map[string]any{"avatar_url": avatarURL}, nil
 }
 
-// handleMarketAccountGet 账号状态查询（市场账号 Sheet / 设置账户页的渲染依据）：
+// handleMarketAccountGet 账号状态查询（MindX 账号 Sheet / 设置账户页的渲染依据）：
 //   - user 非空 = 已绑定，展示用户档案；
 //   - has_token=true 且 user 空 = 令牌失效（token_error 带原因），引导重新录入；
 //   - has_token=false = 匿名期，展示设备身份（client_id 短码由前端截取）。

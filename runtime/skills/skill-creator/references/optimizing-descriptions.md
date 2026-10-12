@@ -1,3 +1,8 @@
+---
+source: https://github.com/anthropics/skills/tree/main/skills/skill-creator
+updated: 2026-10-11
+---
+
 # 优化 skill 描述
 
 > 如何改进 skill 的描述，让它在相关提示上稳定触发。

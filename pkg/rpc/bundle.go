@@ -186,17 +186,58 @@ func (c *Client) MarketDeviceStatus() (json.RawMessage, error) {
 	return c.CallWithTimeout("market.device.status", map[string]any{})
 }
 
-// MarketUpdateProfile 更新市场账号显示名。
+// MarketUpdateProfile 更新MindX 账号显示名。
 func (c *Client) MarketUpdateProfile(nickName string) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.updateProfile", MarketUpdateProfileParams{NickName: nickName})
 }
 
-// MarketUploadAvatar 上传市场账号头像（base64 承载）。
+// MarketUploadAvatar 上传MindX 账号头像（base64 承载）。
 func (c *Client) MarketUploadAvatar(dataBase64, filename string) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.uploadAvatar", MarketUploadAvatarParams{DataBase64: dataBase64, Filename: filename})
 }
 
-// MarketAccountGet 查询市场账号状态（匿名设备身份 / 已绑定用户信息）。
+// MarketAccountCredentialsParams 用户名密码注册/登录参数（账号机制定案 2026-10-10）。
+type MarketAccountCredentialsParams struct {
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	DisplayName string `json:"display_name,omitempty"` // 仅注册用（缺省取用户名）
+}
+
+// MarketAccountProfileSetParams Profile 四字段编辑参数（nil 指针语义在 handler 内
+// 以字符串指针表达；RPC JSON 层用空缺省判断——字段存在与否由 unmarshal 后的指针区分）。
+type MarketAccountProfileSetParams struct {
+	NickName *string `json:"nick_name,omitempty"`
+	JobTitle *string `json:"job_title,omitempty"`
+	Phone    *string `json:"phone,omitempty"`
+	Github   *string `json:"github,omitempty"`
+}
+
+// MarketAccountRegister 用户名密码注册（成功即登录并绑定设备）。
+func (c *Client) MarketAccountRegister(p MarketAccountCredentialsParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.account.register", p)
+}
+
+// MarketAccountLogin 用户名密码登录（成功即绑定设备）。
+func (c *Client) MarketAccountLogin(p MarketAccountCredentialsParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.account.login", p)
+}
+
+// MarketAccountLogout 退出登录（服务端吊销 + 本地清除）。
+func (c *Client) MarketAccountLogout() (json.RawMessage, error) {
+	return c.CallWithTimeout("market.account.logout", map[string]any{})
+}
+
+// MarketAccountProfileSet 编辑 Profile 四字段。
+func (c *Client) MarketAccountProfileSet(p MarketAccountProfileSetParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.account.profile.set", p)
+}
+
+// MarketAccountDevices 用户名下设备列表。
+func (c *Client) MarketAccountDevices() (json.RawMessage, error) {
+	return c.CallWithTimeout("market.account.devices", map[string]any{})
+}
+
+// MarketAccountGet 查询MindX 账号状态（匿名设备身份 / 已绑定用户信息）。
 func (c *Client) MarketAccountGet() (json.RawMessage, error) {
 	return c.CallWithTimeout("market.account.get", map[string]any{})
 }

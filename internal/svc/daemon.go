@@ -22,6 +22,7 @@ import (
 	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/channel"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/devgate"
 	"github.com/DotNetAge/mindx/internal/discovery"
 	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/internal/mcp"
@@ -89,6 +90,10 @@ type Daemon struct {
 	// chMgr 是 AgentHub 中继管理器（手机连接）：连接中继、配对同意闸、
 	// 网关桥接。在 gateway 启动成功后开启，停机时关闭。
 	chMgr *channel.Manager
+
+	// devGate 是设备接入闸（Mac 间互连）：允许接入开关、接入请求同意闸、
+	// 已授权设备表与已验证连接登记。RPC 注册层强制闸与其共用。
+	devGate *devgate.Manager
 
 	// oauthRegistry OAuth 客户端提供商注册表（client-provider.yml，启动期加载）
 	oauthRegistry *core.OAuthProviderRegistry
@@ -230,6 +235,10 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	d.oauthCredStore = core.NewCredentialStore(app.Settings().UserPreferences())
 	d.oauthFlows = newOAuthFlowManager()
 
+	// ── 设备接入闸（Mac 间互连）：凭据存储与本机令牌就绪即可装配 ──
+	// 通知回调内判 gw 判空（Notify 时点可能早于 gateway 启动）。
+	d.initDeviceGate()
+
 	// ── 自动升级 ──────────────────────────────────────────────
 	// 确保 config.InstalledVersion 不为空（首次启动时设置）
 	cfg := app.Config()
@@ -344,6 +353,11 @@ func (d *Daemon) Start(ctx context.Context) error {
 
 	// ── 自动升级检查（启动时 + 每日一次） ─────────────────
 	go d.autoUpdateLoop(ctx)
+
+	// ── MindX 账号静默登录（账号机制定案 2026-10-10） ─────────────
+	// 重装恢复：密钥存储存有 username+password 时静默重登换 token 并绑定设备；
+	// 失败只记日志不打扰（匿名态可用，下次启动再试）。全程无 UI。
+	go d.silentMarketRelogin()
 
 	// ── Hot-reload: watch agents/skills directories for file changes ──
 	// 注册表重装完成后经 gateway 广播 agents_changed/skills_changed 通知，
@@ -568,6 +582,10 @@ func (d *Daemon) initGateway() {
 			// 在途执行不会因此被取消。
 			d.clientCancels.Delete(clientID)
 			termMgr.cleanupClient(clientID)
+			// 设备接入验证登记随连接失效（重连需重新握手）。
+			if d.devGate != nil {
+				d.devGate.Unbind(clientID)
+			}
 		}),
 		gateway.WithConnectHandler(func(clientID string) {
 			// 断连恢复补发：客户端重连后，把在途会话中挂起的授权请求重新
@@ -611,6 +629,19 @@ func (d *Daemon) initGateway() {
 // ---------------------------------------------------------------------------
 
 func (d *Daemon) defaultHandler(msg *gateway.Message) {
+	// 设备接入强制闸（user.message 通道）：未完成接入验证的客户端一律拒绝。
+	// 与 RPC 注册层闸同源（deviceGateAuthorized），白名单方法仅 device.handshake。
+	if !d.deviceGateAuthorized(msg.ClientID) {
+		d.logger.Warn("拒绝未接入设备的消息", "client_id", msg.ClientID)
+		if d.gw != nil {
+			_ = d.gw.SendResponse(msg.ClientID, gateway.RespError,
+				"设备未接入", map[string]any{
+					"message": "这台设备还没有完成接入验证，请先在对方设备上完成连接。",
+				})
+		}
+		return
+	}
+
 	d.logger.Debug("defaultHandler: received message",
 		"client_id", msg.ClientID,
 		"session_id", msg.SessionID,
@@ -901,6 +932,12 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		var eventSubSessionID string
 		emitter := newClientAskHandlers(d, gw, clientID, sid, withAgent, s, func() string { return currentAgentName }, func() string { return eventSubSessionID })
 
+		// 轮次日志（日报事实流）：记录本轮起点快照与开始时间，Run() 返回后
+		// 把当轮「用户问题 + 最终回复」原文落盘到项目目录 .agents/logs/
+		//（详见 turnlog.go；旁路采集，失败不影响对话流程）。
+		turnLogLenBefore := len(s.All())
+		turnLogStart := time.Now()
+
 		builder := rt.Ask(resolvedAgentName, content, s).
 			WithImages(userImages).
 			WithContext(ctx).
@@ -970,6 +1007,10 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				"agent", resolvedAgentName,
 			)
 		}
+
+		// 轮次日志落盘：本轮结束后把用户问题与最终回复原文写入 .agents/logs/
+		//（mindx report collect 跨目录收割，daily-report 技能消费生成日报）。
+		d.appendTurnLog(s, resolvedAgentName, content, turnLogLenBefore, turnLogStart)
 
 		// 调度任务收尾：本消息带有任务标识（OnJobStart 前台执行链路），
 		// 对话结束后把结果写回调度存储并广播 completed / failed。

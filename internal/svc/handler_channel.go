@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -44,6 +45,7 @@ func (d *Daemon) initChannelManager() {
 }
 
 // dialGatewayForBridge 建桥自拨网关：显式携带握手 token（不依赖 loopback 豁免）。
+// 拨号成功后立即完成本机设备握手（设备接入强制闸要求）再交给桥使用。
 func (d *Daemon) dialGatewayForBridge() (*websocket.Conn, error) {
 	token, err := d.loadOrCreateDaemonToken()
 	if err != nil {
@@ -51,7 +53,56 @@ func (d *Daemon) dialGatewayForBridge() (*websocket.Conn, error) {
 	}
 	u := fmt.Sprintf("ws://localhost%s%s?token=%s", d.addr, d.wsPath, url.QueryEscape(token))
 	ws, _, err := websocket.DefaultDialer.Dial(u, nil)
-	return ws, err
+	if err != nil {
+		return nil, err
+	}
+	if err := d.handshakeLocalConn(ws, token); err != nil {
+		_ = ws.Close()
+		return nil, fmt.Errorf("桥接入闸握手失败: %w", err)
+	}
+	return ws, nil
+}
+
+// handshakeLocalConn 桥连接的本机设备握手：经新连接同步发一次
+// device.handshake（本机令牌直通）并等待响应，跳过途中可能收到的
+// 广播通知帧。失败即关连接返回错误（调用方重试）。
+func (d *Daemon) handshakeLocalConn(ws *websocket.Conn, token string) error {
+	req, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "device.handshake",
+		"params": map[string]any{
+			"device_id": "local-bridge",
+			"name":      "本机桥接",
+			"platform":  "daemon",
+			"token":     token,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	_ = ws.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if err := ws.WriteMessage(websocket.TextMessage, req); err != nil {
+		return err
+	}
+	_ = ws.SetReadDeadline(time.Now().Add(5 * time.Second))
+	for {
+		_, raw, err := ws.ReadMessage()
+		if err != nil {
+			return err
+		}
+		var resp struct {
+			ID    *int            `json:"id"`
+			Error *map[string]any `json:"error"`
+		}
+		if json.Unmarshal(raw, &resp) != nil || resp.ID == nil || *resp.ID != 1 {
+			continue // 广播通知等非本次请求响应帧，跳过
+		}
+		if resp.Error != nil {
+			return fmt.Errorf("握手被拒绝")
+		}
+		return nil
+	}
 }
 
 // onChannelURLChanged 中继地址变更入口（user.config 保存后调用）。
@@ -75,9 +126,13 @@ func (d *Daemon) handleChannelStatus(_ context.Context, _ json.RawMessage) (any,
 }
 
 // handleChannelBootstrap 处理 channel.bootstrap：手机端引导配对（同意闸入口）。
+// 「允许设备接入」总闸关闭时直接拒绝（手机与 Mac 同受总闸约束）。
 func (d *Daemon) handleChannelBootstrap(_ context.Context, params json.RawMessage) (any, error) {
 	if d.chMgr == nil {
 		return nil, fmt.Errorf("手机连接功能未启用")
+	}
+	if d.devGate != nil && !d.devGate.Allowed() {
+		return nil, fmt.Errorf("设备接入未开启，请先在本机「账户 - 设备」中开启允许设备接入")
 	}
 	var p struct {
 		DeviceHint string `json:"device_hint"`

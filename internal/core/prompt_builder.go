@@ -151,7 +151,9 @@ func buildIdentitySection(agent *agentstore.Agent) string {
 //
 // 内容优先级与 IDENTITY/SOUL 同模式：Team 实体 Profile 正文（teams/<team>/TEAM.md
 // 正文）原样拼接（标题由文件自身处理），缺失时走兜底文案（标题由本函数注入）。
-// 「团队成员」名单与成员角色查询引导为机械部分，两种形态下都保留在段尾。
+// 「团队成员」名单区为机械部分，两种形态下都保留在段尾：按注册表实时解析
+// 实际雇佣成员（存在且 hired）并附一句概览式角色描述，供 LLM 把正文以「角色」
+// 指代的成员对号到实际名单；无任何就绪成员时降级为空缺文案。
 func (b *PromptBuilder) buildLeaderSection(agent *agentstore.Agent, s *session.Session) string {
 	if agent == nil || s == nil {
 		return ""
@@ -182,9 +184,47 @@ func (b *PromptBuilder) buildLeaderSection(agent *agentstore.Agent, s *session.S
 			"需要成员配合时，把任务委托给对应的成员并跟进交付结果。")
 	}
 	sb.WriteString("\n\n")
-	fmt.Fprintf(&sb, "团队成员：%s\n\n", strings.Join(team.Meta.Members, "、"))
-	sb.WriteString("如果不了解成员的职责，可以运行 `mindx agents info <成员名...>` 查看成员的角色与职责，再决定委托对象。")
+	// 成员名单区：把 TEAM.md 正文中以「角色」指代的成员对号到实际雇佣名单——
+	// 仅列出注册表中存在且已雇佣的成员，附一句概览式角色描述；
+	// 未雇佣或未注册的成员不列入（负责人不能委托不在编制内的成员）。
+	lines := make([]string, 0, len(team.Meta.Members))
+	for _, name := range team.Meta.Members {
+		if line := b.memberRosterLine(name); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) == 0 {
+		sb.WriteString("团队成员：（暂无已雇佣成员，相关职责由你直接承担，并提示用户补充编制）\n")
+		return sb.String()
+	}
+	sb.WriteString("团队成员：\n")
+	sb.WriteString(strings.Join(lines, "\n"))
+	sb.WriteString("\n\n如果不了解成员的职责，可以运行 `mindx agents info <成员名...>` 查看成员的角色与职责，再决定委托对象。")
 	return sb.String()
+}
+
+// memberRosterLine 渲染成员名单中的一行：「- 成员名（一句话角色描述）」。
+// 成员未注册或未雇佣时返回空串（不列入名单）；角色描述取 description 概览，
+// 压缩空白（含换行）后截取第一句，超长截断到 60 字符，保证名单紧凑可扫读。
+func (b *PromptBuilder) memberRosterLine(name string) string {
+	if b.agents == nil || name == "" {
+		return ""
+	}
+	a := b.agents.Get(name)
+	if a == nil || !a.Meta.Hired {
+		return ""
+	}
+	desc := strings.Join(strings.Fields(a.Meta.Description), " ")
+	if idx := strings.IndexAny(desc, "。！？；；"); idx >= 0 {
+		desc = strings.TrimSpace(desc[:idx])
+	}
+	if runes := []rune(desc); len(runes) > 60 {
+		desc = string(runes[:60])
+	}
+	if desc == "" {
+		return fmt.Sprintf("- %s", name)
+	}
+	return fmt.Sprintf("- %s（%s）", name, desc)
 }
 
 // loadAgentsMD 读取用户目录下的 AGENTS.md（全体 Agent 公共行为准则）。

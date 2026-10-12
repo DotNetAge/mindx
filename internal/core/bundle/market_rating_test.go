@@ -189,7 +189,7 @@ func TestBindFlow(t *testing.T) {
 	m.SetClientID("99999999-8888-4777-8666-555555555555")
 
 	// 无 authToken：直接报错，不发请求
-	if _, err := m.Bind(); err == nil {
+	if _, err := m.Bind("", ""); err == nil {
 		t.Fatal("无 authToken 的 Bind 应报错")
 	}
 	if reqs := f.reqs(); len(reqs) != 0 {
@@ -197,7 +197,7 @@ func TestBindFlow(t *testing.T) {
 	}
 
 	m.SetAuthToken("aut_secret")
-	migrated, err := m.Bind()
+	migrated, err := m.Bind("测试设备", "darwin")
 	if err != nil {
 		t.Fatalf("Bind() error = %v", err)
 	}

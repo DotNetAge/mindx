@@ -9,6 +9,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -38,6 +41,8 @@ type Client struct {
 
 // Dial connects to the MindX daemon at the given WebSocket address.
 // If addr is empty, DefaultAddr is used.
+// 连接成功后自动完成本机设备握手（daemon 侧设备接入强制闸要求；
+// 本机令牌直通，无弹窗）。握手失败视同连接失败（闸未装配的旧 daemon 除外）。
 func Dial(addr string) (*Client, error) {
 	if addr == "" {
 		addr = DefaultAddr
@@ -48,7 +53,83 @@ func Dial(addr string) (*Client, error) {
 	if err := c.Connect(ctx); err != nil {
 		return nil, fmt.Errorf("cannot connect to daemon at %s: %w\nIs the daemon running? (mindx start)", addr, err)
 	}
+	if err := HandshakeLocal(ctx, c); err != nil {
+		_ = c.Close()
+		return nil, fmt.Errorf("cannot handshake with daemon at %s: %w\nIs the daemon up to date? (mindx upgrade)", addr, err)
+	}
 	return &Client{gw: c}, nil
+}
+
+// LocalToken 读取本机 daemon 握手令牌（与 daemon 侧 daemonTokenPath 同构：
+// 优先 <用户数据根>/data/daemon_token（运行期 dataDir），回落 <用户数据根>/daemon_token
+// （dataDir 未设时的路径）；只读不生成，两处均缺失即失败）。
+func LocalToken() (string, error) {
+	base := defaultUserPrefsDir()
+	for _, rel := range []string{"data/daemon_token", "daemon_token"} {
+		data, err := os.ReadFile(filepath.Join(base, filepath.FromSlash(rel)))
+		if err != nil {
+			continue
+		}
+		token := trimSpaceBytes(data)
+		if token != "" {
+			return token, nil
+		}
+	}
+	return "", fmt.Errorf("读取本机握手令牌失败: %s 与 %s 均不存在或为空",
+		filepath.Join(base, "data", "daemon_token"), filepath.Join(base, "daemon_token"))
+}
+
+// HandshakeLocal 在已建立的连接上完成本机设备握手（设备接入强制闸要求）。
+// 本机令牌直通（不受「允许设备接入」开关限制）；令牌缺失或校验失败返回错误。
+func HandshakeLocal(ctx context.Context, c gwCaller) error {
+	token, err := LocalToken()
+	if err != nil {
+		return err
+	}
+	raw, err := c.Call(ctx, "device.handshake", map[string]any{
+		"device_id": "local-cli",
+		"name":      "本机命令行",
+		"platform":  "cli",
+		"token":     token,
+	})
+	if err != nil {
+		return fmt.Errorf("本机设备握手失败: %w", err)
+	}
+	var result struct {
+		Status string `json:"status"`
+	}
+	if json.Unmarshal(raw, &result) != nil || (result.Status != "paired") {
+		return fmt.Errorf("本机设备握手未通过（状态: %s）", result.Status)
+	}
+	return nil
+}
+
+// defaultUserPrefsDir 返回用户数据根目录（与 daemon 侧 core.DefaultUserPrefsDir
+// 同语义；pkg/ 不得引用 internal/，故在此复刻最小实现）。
+func defaultUserPrefsDir() string {
+	if runtime.GOOS == "windows" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "mindx")
+		}
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".", ".mindx")
+	}
+	return filepath.Join(home, ".mindx")
+}
+
+// trimSpaceBytes 去除首尾空白（避免引入 strings 只为一处调用）。
+func trimSpaceBytes(b []byte) string {
+	s := string(b)
+	start, end := 0, len(s)
+	for start < end && (s[start] == ' ' || s[start] == '\n' || s[start] == '\r' || s[start] == '\t') {
+		start++
+	}
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\n' || s[end-1] == '\r' || s[end-1] == '\t') {
+		end--
+	}
+	return s[start:end]
 }
 
 // Close shuts down the client connection.

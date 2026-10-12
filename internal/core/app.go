@@ -106,9 +106,13 @@ type App struct {
 	// marketClientID 设备身份 UUIDv4（匿名期评分/绑定通道，§2.1）：首启生成后
 	// 持久化进凭据存储（键 market:client_id），不落明文配置
 	marketClientID string
-	// marketAuthToken 用户登录令牌（市场账号绑定后录入，键 market:auth_token），
+	// marketAuthToken 用户登录令牌（MindX 账号绑定后录入，键 market:auth_token），
 	// 与商户 PAT 是两类凭据，严禁混淆
 	marketAuthToken string
+	// marketUsername / marketPassword 登录凭据（账号机制定案 2026-10-10，键
+	// market:username / market:password）：仅存密钥存储与内存，重装后启动静默重登用
+	marketUsername string
+	marketPassword string
 }
 
 func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
@@ -208,8 +212,11 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 	// 设备身份（匿名期评分/绑定通道 §2.1）：已持久化的从凭据存储加载；
 	// 首启生成推迟到 Market() 懒创建时（避免测试构造 App 即写真实钥匙串）
 	marketClientID := ResolveAPIKey(credStore, "market:client_id")
-	// 用户登录令牌（市场账号绑定后录入；与商户 PAT 是两类凭据）
+	// 用户登录令牌（MindX 账号绑定后录入；与商户 PAT 是两类凭据）
 	marketAuthToken := ResolveAPIKey(credStore, "market:auth_token")
+	// 登录凭据（用户名密码通道；启动静默重登用）
+	marketUsername := ResolveAPIKey(credStore, "market:username")
+	marketPassword := ResolveAPIKey(credStore, "market:password")
 
 	// Create permission rule store (nil-safe: if mindxConfig is nil, returns no-op store)
 	permStore := NewMindxPermissionRuleStore(mindxConfig)
@@ -236,6 +243,8 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		marketPAT:           marketPAT,
 		marketClientID:      marketClientID,
 		marketAuthToken:     marketAuthToken,
+		marketUsername:      marketUsername,
+		marketPassword:      marketPassword,
 	}, nil
 }
 
@@ -499,7 +508,7 @@ func (a *App) SetMarketSource(sourceID string) error {
 	probe.SetAuthToken(a.marketAuthToken)
 	base, err := probe.ResolveSourceBase(sourceID)
 	if err != nil {
-		return fmt.Errorf("市场源切换失败：%w", err)
+		return fmt.Errorf("进化网络源切换失败：%w", err)
 	}
 	if base == "" {
 		base = a.mindxConfig.MarketAPIBase
@@ -512,7 +521,7 @@ func (a *App) SetMarketSource(sourceID string) error {
 	target.SetClientID(a.marketClientID)
 	target.SetAuthToken(a.marketAuthToken)
 	if _, err := target.ListPage(bundle.MarketQuery{Page: 1, PageSize: 1}); err != nil {
-		return fmt.Errorf("市场源连接失败：%w", err)
+		return fmt.Errorf("进化网络源连接失败：%w", err)
 	}
 	a.mindxConfig.MarketSourceID = strings.TrimSpace(sourceID)
 	a.mindxConfig.MarketActiveBase = base

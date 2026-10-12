@@ -1,6 +1,10 @@
 package svc
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+
 	"github.com/DotNetAge/gort/pkg/gateway"
 )
 
@@ -85,6 +89,11 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"market.device.login":                r.daemon.handleMarketDeviceLogin,
 		"market.device.status":               r.daemon.handleMarketDeviceStatus,
 		"market.account.get":                 r.daemon.handleMarketAccountGet,
+		"market.account.register":            r.daemon.handleMarketAccountRegister,
+		"market.account.login":               r.daemon.handleMarketAccountLogin,
+		"market.account.logout":              r.daemon.handleMarketAccountLogout,
+		"market.account.profile.set":         r.daemon.handleMarketAccountProfileSet,
+		"market.account.devices":             r.daemon.handleMarketAccountDevices,
 		"market.updateProfile":               r.daemon.handleMarketUpdateProfile,
 		"market.uploadAvatar":                r.daemon.handleMarketUploadAvatar,
 		"market.pack":                        r.daemon.handleMarketPack,
@@ -182,11 +191,46 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"oauth.provider.configure": r.daemon.handleOAuthConfigure,
 		"oauth.authorize.start":    r.daemon.handleOAuthAuthorizeStart,
 		"oauth.authorize.cancel":   r.daemon.handleOAuthAuthorizeCancel,
+
+		// 设备接入闸与 Mac 间互连（设备分组、接入批准、局域网发现）
+		"device.status":    r.daemon.handleDeviceStatus,
+		"device.allow.set": r.daemon.handleDeviceAllowSet,
+		"device.approve":   r.daemon.handleDeviceApprove,
+		"device.deny":      r.daemon.handleDeviceDeny,
+		"device.revoke":    r.daemon.handleDeviceRevoke,
+		"device.handshake": r.daemon.handleDeviceHandshake,
+		"device.scan":      r.daemon.handleDeviceScan,
 	}
+}
+
+// openMethods 免握手白名单：device.handshake 是接入入口（自带令牌/批准闸）；
+// server.version 供对方连前探测兼容；channel.bootstrap 与 channel.verify 是
+// 手机端引导入口（手机链路自带同意闸 + 本地短码双重把关）。
+var openMethods = map[string]bool{
+	"device.handshake":  true,
+	"server.version":    true,
+	"channel.bootstrap": true,
+	"channel.verify":    true,
 }
 
 func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	for method, handler := range r.handlers() {
-		gw.RegisterMethod(method, handler)
+		gw.RegisterMethod(method, r.guard(method, handler))
+	}
+}
+
+// guard 设备接入强制闸：客户端必须先经 device.handshake 完成接入验证
+// （本机令牌直通或已授权设备 token）才能调用其余方法；未验证客户端
+// 收到统一的人话错误。闸未装配（devgate 初始化失败降级）时放行。
+func (r *RPCHandlerRegistry) guard(method string, h gateway.MethodHandler) gateway.MethodHandler {
+	if openMethods[method] {
+		return h
+	}
+	return func(ctx context.Context, params json.RawMessage) (any, error) {
+		clientID := gateway.ClientIDFromContext(ctx)
+		if !r.daemon.deviceGateAuthorized(clientID) {
+			return nil, fmt.Errorf("这台设备还没有完成接入验证，请先在设备端完成连接后再操作")
+		}
+		return h(ctx, params)
 	}
 }

@@ -1,3 +1,7 @@
+---
+updated: 2026-10-11
+---
+
 # MindX Skill 数据模型
 
 本文档定义了 MindX skill 所使用的数据结构。

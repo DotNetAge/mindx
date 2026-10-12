@@ -14,6 +14,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/client/data"
 	clientmsg "github.com/DotNetAge/mindx/internal/client/msg"
 	"github.com/DotNetAge/mindx/internal/i18n"
+	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
 const (
@@ -56,6 +57,21 @@ func (m *rootModel) connectDaemon() {
 
 	m.rpc = &daemonRPCClient{client: c, connected: true}
 	m.rpcConnected = true
+
+	// 本机设备握手：daemon 侧设备接入强制闸要求（本机令牌直通，无弹窗）。
+	// 失败视为连接不可用（通常为 daemon 未更新），提示用户升级。
+	hsCtx, hsCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer hsCancel()
+	if err := rpc.HandshakeLocal(hsCtx, c); err != nil {
+		m.notifBar.Add(data.Notification{
+			Message: fmt.Sprintf(i18n.T("client.notify.rpc.connect.failed"), m.daemonAddr, err),
+			Level:   data.NotifWarning,
+		})
+		m.rpc = &daemonRPCClient{}
+		m.rpcConnected = false
+		return
+	}
+
 	m.registerNotificationHandlers()
 	m.registerBroadcastHandlers()
 }
