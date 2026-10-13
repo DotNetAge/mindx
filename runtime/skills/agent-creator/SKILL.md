@@ -55,7 +55,7 @@ metadata:
 - **(a) 名称**：小写连字符，基于名词，反映角色（`python-programmer`、`code-reviewer`）
 - **(b) 角色与描述**：role 为中文头衔；description 为 1-2 句中文**概览**——只写负责什么、能干什么、什么时候用，禁止路由指派与技术细节（详见 [agent-writing.md](references/agent-writing.md)）。可选昵称（nick_name，2-3 字展示主名）创建时经 `--nick_name` 一并设置
 - **(c) 业务分类**：中文 category，如"产品研发"、"办公提效"
-- **(d) 角色职责（SOUL）**：负责什么、怎么工作、不做什么——三段式（职责→方式→边界）+ 三要素规则 + 价值观排序 + 两层边界（编写规范见 [agent-writing.md](references/agent-writing.md)）
+- **(d) 角色职责（SOUL）**：负责什么、怎么工作、不做什么——三段式（职责→方式→边界）+ 三要素规则 + 价值观排序 + 两层边界（编写规范见 [agent-writing.md](references/agent-writing.md)）；面向用户的角色再做人设工程——身份张力、角色化底线、示例回复、浓度控制（见 [persona-engineering.md](references/persona-engineering.md)）
 - **(e) 所需技能**：`mindx skill list --json` 查看可用技能后预选；技能是 LLM 操作指令，保持精简
 - **(f) 排除的工具**：`exclude_tools` 按角色裁剪内置工具（决策树见工作流步骤 4）
 - **(g) MCP 白名单**：需要外部服务时列 `allows_tools`（`mcp:<server>`）；空 = 不注入
@@ -89,7 +89,7 @@ mindx market list --kind team --filter "<领域关键词>"
 
 ### 步骤 2：审查编写规范
 
-编写之前，阅读 [agent-schema.md](references/agent-schema.md)（字段与结构事实）与 [agent-writing.md](references/agent-writing.md)（description 与 SOUL 编写方法论）。市场清单输出自带同类 Agent 的 role/description/skills 组合，可参照目标 `category` 下的既有条目把握命名与描述风格。
+编写之前，阅读 [agent-schema.md](references/agent-schema.md)（字段与结构事实）与 [agent-writing.md](references/agent-writing.md)（description 与 SOUL 编写方法论）；目标是秘书、负责人、面向用户的专家或市场上架的 Agent 时，加读 [persona-engineering.md](references/persona-engineering.md)（人设工程），内部工具型跳过。市场清单输出自带同类 Agent 的 role/description/skills 组合，可参照目标 `category` 下的既有条目把握命名与描述风格。
 
 ### 步骤 3：配置技能（本地 → 市场 → Web 检索，三级找齐）
 
@@ -128,7 +128,7 @@ mindx agent add <agent-name> \
 ### 步骤 6：补全定义文件
 
 - **IDENTITY.md**：补充 `category`、`exclude_tools`、`allows_tools` 等字段；正文惯例留空
-- **SOUL.md**：按 [agent-writing.md](references/agent-writing.md) 编写角色职责（三段式、三要素、价值观排序、两层边界、按需退化行为与自检清单）
+- **SOUL.md**：按 [agent-writing.md](references/agent-writing.md) 编写角色职责（三段式、三要素、价值观排序、两层边界、按需退化行为与自检清单）；面向用户的角色按 [persona-engineering.md](references/persona-engineering.md) 长入人格要素并过人格质量门
 
 ### 步骤 7：概览选择验证（行为面验收）
 
