@@ -8,6 +8,7 @@
 * 禁止使用表情符号
 * 提示词规则（runtime/AGENTS.md、SKILL.md 等面向 LLM 消费的文本）不得引用 LLM 无法知晓出处的外部概念名（如论文名、第三方体系名）——规则必须自解释：每个术语随文给出判定语义，或删除术语只留语义本身（2026-10-06 用户纠正：AGENTS.md 写"EvoSkill 对齐"即缺陷，LLM 不知道 EvoSkill 是什么，外部引用只会分散注意力）
 * 生态进化决策先参考《决策路由》论文（2026-10-06 共同复盘定稿，定稿全文见仓库根 `.agents/notes/glm-决策-Agent决策路由三层模型与论文方向.md`）：凡涉及本生态工具集（goharness / mindx / mindx-work / mindx-desktop）演进方向的设计取舍——路由分层、技能体系、记忆体系、团队协作机制的改动——先对照论文论点与成熟度模型回答两个问题：该设计落在三层路由的哪一层（Team 职责路由 / Agent 领域路由 / Skill 方案路由）？如何被进化闭环（记录→复盘→蒸馏→棘轮）吸收？两问答不上来的设计默认不做；论文成文后引用路径更新为正式文档
+* 在 mindx 生态新建或修订技能必须通过 skill-creator 技能流程执行：创建前 `mindx skill list` 查重、读其 references/schemas.md 核对 frontmatter、validate 自检、建 evals/trigger_queries.json 触发评估查询集（约 20 条正负各半）、落位后 `mindx skill add` + `mindx reload skills`——直接手写 SKILL.md 即为缺陷（2026-10-13 用户纠正：plugin-planner 首建手写未走流程被要求返工）
 
 ## daemon 更新与 E2E 验证（2026-10-04 用户定稿）
 

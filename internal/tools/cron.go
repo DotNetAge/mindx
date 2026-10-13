@@ -33,7 +33,7 @@ func (t *Cron) Info() *tools.ToolInfo {
 
 操作：
 - **list**：列出所有定时任务及其状态和下次运行信息。
-- **create**：创建新的定时任务。需要 agent、content（要发送的提示词）和 cron_expr（6 字段 cron 表达式，支持秒级，如 "0 0 9 * * *" 表示每天 9 点）。
+- **create**：创建新的定时任务。需要 agent、content（要发送的提示词），以及执行计划二者之一：cron_expr（6 字段 cron 表达式，支持秒级，如 "0 0 9 * * *" 表示每天 9 点）或 scheduled_at（一次性任务时间点，到点执行一次后自动禁用）。
 - **update**：按 id 更新现有定时任务。只更新提供的字段。
 - **delete**：按 id 删除定时任务。`,
 		IsReadOnly: false,
@@ -66,7 +66,13 @@ func (t *Cron) Info() *tools.ToolInfo {
 			{
 				Name:        "cron_expr",
 				Type:        "string",
-				Description: "6 字段 cron 表达式，支持秒级（如 \"0 0 9 * * *\" 表示每天 9 点，\"0 */30 * * * *\" 表示每 30 分钟）。create 必需。",
+				Description: "6 字段 cron 表达式，支持秒级（如 \"0 0 9 * * *\" 表示每天 9 点，\"0 */30 * * * *\" 表示每 30 分钟）。与 scheduled_at 二选一。",
+				Required:    false,
+			},
+			{
+				Name:        "scheduled_at",
+				Type:        "string",
+				Description: "一次性任务的时间点，格式 YYYY-MM-DDTHH:mm:ss（本地时区）或 RFC3339。提供时任务只执行一次，到点后自动禁用，无需手动删除。与 cron_expr 二选一。",
 				Required:    false,
 			},
 			{
@@ -140,9 +146,46 @@ func (t *Cron) createEntry(ctx context.Context, params map[string]any) (any, err
 	if err != nil {
 		return nil, err
 	}
-	cronExpr, err := tools.ValidateRequiredString("Cron", params, "cron_expr")
-	if err != nil {
-		return nil, err
+
+	cronExpr := ""
+	if raw, ok := getParam(params, "cron_expr"); ok {
+		if s, ok := raw.(string); ok {
+			cronExpr = s
+		}
+	}
+	scheduledAt := ""
+	if raw, ok := getParam(params, "scheduled_at"); ok {
+		if s, ok := raw.(string); ok {
+			scheduledAt = s
+		}
+	}
+	if cronExpr == "" && scheduledAt == "" {
+		return nil, fmt.Errorf("%s", tools.BuildGuide(
+			"创建定时任务需要指定执行计划",
+			"cron_expr 与 scheduled_at 至少提供一个：循环任务用 cron_expr，一次性任务用 scheduled_at",
+			"先自查：确认任务是一次性还是循环，补齐对应参数后重新调用",
+		))
+	}
+
+	oneShot := false
+	if scheduledAt != "" {
+		expr, oneShotErr := scheduler.OneShotCron(scheduledAt, time.Now())
+		if oneShotErr != nil {
+			return nil, fmt.Errorf("%s", tools.BuildGuide(
+				"创建一次性定时任务失败",
+				tools.WithErrDetail(fmt.Sprintf("scheduled_at %q 无法生成一次性计划", scheduledAt), oneShotErr),
+				"先自查：scheduled_at 需为未来的时间，格式 YYYY-MM-DDTHH:mm:ss（如 2026-10-13T14:30:00）",
+			))
+		}
+		cronExpr = expr
+		oneShot = true
+	}
+	if validateErr := scheduler.ValidateCronExpr(cronExpr); validateErr != nil {
+		return nil, fmt.Errorf("%s", tools.BuildGuide(
+			fmt.Sprintf("创建定时任务被拒绝，cron_expr %q 非法", cronExpr),
+			tools.WithErrDetail("调度引擎为 6 字段秒级格式（秒 分 时 日 月 周）", validateErr),
+			"先自查：cron_expr 是否写成了 5 字段的常见格式？按 6 字段补齐后重新调用，如 0 0 9 * * * 表示每天 9 点",
+		))
 	}
 
 	idRaw, _ := getParam(params, "id")
@@ -169,6 +212,7 @@ func (t *Cron) createEntry(ctx context.Context, params map[string]any) (any, err
 		Content:    content,
 		CronExpr:   cronExpr,
 		Enabled:    enabled,
+		OneShot:    oneShot,
 		SessionID:  sessionID,
 		ProjectDir: projectDir,
 		CreatedAt:  time.Now(),

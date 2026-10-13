@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/DotNetAge/mindx/internal/client/render"
@@ -63,14 +64,17 @@ var marketListCmd = &cobra.Command{
 	Short: "List packages available in the online market (requires mindx start)",
 	Long: `Browse the market via the paged API (server-side filtering and pagination).
 
-Output includes kind (agent/skill/team), name, category, role, description and bundled skills.
+Output includes kind (agent/skill/team), name, category, role, description,
+bundled skills, download count and rating (avg with count; "—" means no ratings yet).
 Use --kind to filter by package type, --q for server-side keyword search
-(name/description), --page/--page-size for pagination.
+(name/description), --sort for server-side ordering (likes, newest or
+downloads), --page/--page-size for pagination.
 
 Examples:
   mindx market list
   mindx market list --kind agent
   mindx market list --kind skill --q "架构"
+  mindx market list --sort downloads
   mindx market list --page 2 --page-size 20
   mindx market list --json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -132,7 +136,7 @@ Examples:
 			return nil
 		}
 
-		table := render.NewTable([]string{"Kind", "Name", "Category", "Role", "Description", "Skills"}, 100)
+		table := render.NewTable([]string{"Kind", "Name", "Category", "Role", "Description", "Skills", "D/L", "Rating"}, 100)
 		for _, p := range res.Packages {
 			role := p.Role
 			if role == "" {
@@ -142,7 +146,12 @@ Examples:
 			if desc == "" {
 				desc = "—"
 			}
-			table.AddRow([]string{p.Kind, p.Name, p.Category, role, desc, strings.Join(p.Skills, ", ")})
+			rating := "—"
+			if p.RatingCount > 0 {
+				rating = fmt.Sprintf("%.1f (%d)", p.RatingAvg, p.RatingCount)
+			}
+			table.AddRow([]string{p.Kind, p.Name, p.Category, role, desc, strings.Join(p.Skills, ", "),
+				strconv.FormatInt(p.DownloadCount, 10), rating})
 		}
 		fmt.Println(table.Render())
 
@@ -165,6 +174,10 @@ type marketPackage struct {
 	Skills      []string `json:"skills"`
 	Version     string   `json:"version"`
 	Size        int64    `json:"size"`
+	// 市场质量信号（对齐 daemon DTO 的 snake_case 键；表格与 JSON 均透出）
+	DownloadCount int64   `json:"download_count"`
+	RatingAvg     float64 `json:"rating_avg"`
+	RatingCount   int64   `json:"rating_count"`
 	// 完整透传字段（JSON 输出用；表格输出仅取子集）
 	NickName    string   `json:"nick_name"`
 	Icon        string   `json:"icon"`

@@ -1,0 +1,21 @@
+[
+  { "query": "给工作台做个插件，能让我一眼看到所有智能体的实时状态", "should_trigger": true },
+  { "query": "想要个文件对比的界面想了三四回了，这次认真立项一个插件吧", "should_trigger": true },
+  { "query": "复盘一下最近的项目记忆，看看有没有反复出现的界面需求值得做成插件", "should_trigger": true },
+  { "query": "帮我评估一下这个需求该做成插件还是写成技能，别上来就动手", "should_trigger": true },
+  { "query": "给工作台加个插件，把团队的日报汇总成看板展示出来", "should_trigger": true },
+  { "query": "现在没有能看定时任务全貌的插件，我想立一个项，先帮我判断值不值得做", "should_trigger": true },
+  { "query": "复盘时把同类看板需求聚合一下，评估要不要提议做插件", "should_trigger": true },
+  { "query": "工作里反复要手动翻日志看服务状态，这值得立个插件吗", "should_trigger": true },
+  { "query": "为这个新看板需求走一遍插件立项判定", "should_trigger": true },
+  { "query": "积木君做插件之前应该先立项，帮我规划一下这个插件项目", "should_trigger": true },
+  { "query": "帮我写一个审查 Go 代码的技能，让智能体都能用上", "should_trigger": false },
+  { "query": "给现有的会话管理插件加一个导出按钮", "should_trigger": false },
+  { "query": "插件开发时 order 从多少开始写？席位怎么选？", "should_trigger": false },
+  { "query": "招募一个懂前端框架的智能体加入现有团队", "should_trigger": false },
+  { "query": "把这份分析报告生成一个网页", "should_trigger": false },
+  { "query": "什么是插件？插件和技能有什么区别", "should_trigger": false },
+  { "query": "帮我给插件市场写一份插件介绍文案", "should_trigger": false },
+  { "query": "mx-plugin-dev 的四轮问卷第二轮问什么", "should_trigger": false },
+  { "query": "帮我在应用设置页加一个深色模式开关", "should_trigger": false }
+]

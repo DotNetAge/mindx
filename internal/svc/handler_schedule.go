@@ -65,20 +65,20 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 		}
 	}
 
-	// 一次性任务：scheduled_at → 一次性 cron（秒 分 时 日 月 *），到点执行后自动禁用。
+	// 一次性任务：scheduled_at → 一次性 cron，到点执行后自动禁用。
 	oneShot := false
 	if p.ScheduledAt != "" {
-		oneShotTime, parseErr := parseOneShotTime(p.ScheduledAt)
-		if parseErr != nil {
-			return nil, fmt.Errorf("invalid scheduled_at %q: %w", p.ScheduledAt, parseErr)
+		cronExpr, cronErr := scheduler.OneShotCron(p.ScheduledAt, time.Now())
+		if cronErr != nil {
+			return nil, cronErr
 		}
-		if oneShotTime.Before(time.Now()) {
-			return nil, fmt.Errorf("scheduled_at 时间已过，请重新选择")
-		}
-		p.CronExpr = fmt.Sprintf("%d %d %d %d %d *",
-			oneShotTime.Second(), oneShotTime.Minute(), oneShotTime.Hour(),
-			oneShotTime.Day(), int(oneShotTime.Month()))
+		p.CronExpr = cronExpr
 		oneShot = true
+	}
+
+	// 表达式合法性校验：引擎为 6 字段秒级解析，5 字段写法会保存成功却永不触发。
+	if err := scheduler.ValidateCronExpr(p.CronExpr); err != nil {
+		return nil, err
 	}
 
 	// 前端创建调度任务时通常不传 session_id：回退到该智能体最近活动的会话，
@@ -168,13 +168,4 @@ func (d *Daemon) handleScheduleJobCancel(_ context.Context, params json.RawMessa
 	d.broadcastJobLifecycle("schedule.job_missed", info)
 
 	return map[string]string{"status": "cancelled"}, nil
-}
-
-// parseOneShotTime 解析前端单次任务时间：优先本地时区格式
-// "YYYY-MM-DDTHH:mm:ss"，其次 RFC3339；均失败则返回错误。
-func parseOneShotTime(s string) (time.Time, error) {
-	if t, err := time.ParseInLocation("2006-01-02T15:04:05", s, time.Local); err == nil {
-		return t, nil
-	}
-	return time.Parse(time.RFC3339, s)
 }

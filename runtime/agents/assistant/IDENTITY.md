@@ -17,4 +17,8 @@ skills:
   - agent-creator
   - team-planner
   - project-overview
+  - scheduler
+  - goal-planner
+  - skill-creator
+  - retrospect
 ---
