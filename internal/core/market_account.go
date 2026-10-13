@@ -42,7 +42,7 @@ func (a *App) SetMarketAuthToken(token string) error {
 	defer a.marketMu.Unlock()
 	if a.credStore != nil {
 		if err := a.credStore.Set("market:auth_token", token); err != nil {
-			return fmt.Errorf("进化网络登录凭据保存失败：%w", err)
+			return fmt.Errorf("社区登录凭据保存失败：%w", err)
 		}
 	}
 	a.marketAuthToken = token

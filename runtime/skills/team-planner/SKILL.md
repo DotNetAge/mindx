@@ -78,6 +78,11 @@ metadata:
 
 ## 团队职责（Profile 要点）
 [成员协作规则、验收口径、汇报链路。**正文角色化（写活）**：用「调研角色」「负责人」等岗位指代成员，禁止成员 Agent 名进正文——frontmatter 的 leader/members 才是名字锚点，运行时会注入实际雇佣成员的名单与角色描述，正文角色由 LLM 对号（多个高度相似候选无法决策时列候选与差异交用户决定）；引用成员能力时也写「审批流程」等能力维度，不写技能名]
+
+## 工作区约定
+| 产物 | 落点 | 责任岗位 |
+| ---- | ---- | -------- |
+[每类交接产物写明落点目录（docs/、data/、records/ 等）；团队工作目录（即本项目目录）根必建 AGENTS.md——目录地图、当前进度、更新规则，接手只读它就能续作，不靠考古历史会话]
 ```
 
 岗位编写规范（概览三问、共享/独享技能判据）按 agent-creator 技能的「编写方法论」执行。共享技能是全团队一致性的方法论（如代码审查、测试生成、根因调试），独享技能是岗位专有做法（如特定框架开发）——只装配该岗位需要的，每个技能都消耗上下文。
@@ -92,7 +97,7 @@ metadata:
 
 1. `mindx market list --kind agent --filter "<领域关键词>"` 检索现成 Agent 包——命中即 `mindx market install agent <name>`
 2. 无现成的，按 agent-creator 技能的工作流从零创建（考古结论此时就是它的领域上下文来源）
-3. 全部岗位就位后 `mindx team add <team> --leader <lead> --member ...`，蓝图「团队职责」节写入 Team Profile（`mindx team update <team> --profile`）
+3. 全部岗位就位后 `mindx team add <team> --leader <lead> --member ...`，蓝图「团队职责」与「工作区约定」节写入 Team Profile（`mindx team update <team> --profile`），并按约定在本项目根建好目录骨架与 AGENTS.md
 4. `mindx team hire <team>`
 
 ### 步骤 6：交接
@@ -113,7 +118,7 @@ metadata:
 - **一个岗位包整个项目** —— 与"能单不多"矛盾：真只需一个 Agent 时不要组建团队
 - **蓝图未确认就建制** —— 批量创建实体必须先过确认门
 - **全岗位配同一堆技能** —— 共享与独享不分，上下文被无关技能撑爆
-- **建完就散** —— 不写 Team Profile、不做交接汇报，用户不知道团队怎么用
+- **建完就散** —— 不写 Team Profile、不落工作区约定（产物落点 + 根目录 AGENTS.md）、不做交接汇报，用户不知道团队怎么用，会话一清团队就断档
 
 ## 重要说明
 

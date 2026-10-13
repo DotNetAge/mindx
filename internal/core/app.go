@@ -508,7 +508,7 @@ func (a *App) SetMarketSource(sourceID string) error {
 	probe.SetAuthToken(a.marketAuthToken)
 	base, err := probe.ResolveSourceBase(sourceID)
 	if err != nil {
-		return fmt.Errorf("进化网络源切换失败：%w", err)
+		return fmt.Errorf("社区源切换失败：%w", err)
 	}
 	if base == "" {
 		base = a.mindxConfig.MarketAPIBase
@@ -521,7 +521,7 @@ func (a *App) SetMarketSource(sourceID string) error {
 	target.SetClientID(a.marketClientID)
 	target.SetAuthToken(a.marketAuthToken)
 	if _, err := target.ListPage(bundle.MarketQuery{Page: 1, PageSize: 1}); err != nil {
-		return fmt.Errorf("进化网络源连接失败：%w", err)
+		return fmt.Errorf("社区源连接失败：%w", err)
 	}
 	a.mindxConfig.MarketSourceID = strings.TrimSpace(sourceID)
 	a.mindxConfig.MarketActiveBase = base

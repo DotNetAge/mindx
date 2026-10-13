@@ -159,7 +159,7 @@ mindx agent list --json
 
 1. **拆解领域**：与用户确认团队要覆盖的领域清单，每个领域对应一位成员——按编制规范检验互斥与覆盖后再动手
 2. **逐领域招募**：每位成员按「工作流」步骤 1-8 招募——先查本地与市场，能复用绝不新建
-3. **建队与雇佣**：`mindx team add <team> --leader <lead-agent> --member ...`，团队职责写 Team Profile，`mindx team hire` 后出现在会话选择器
+3. **建队与雇佣**：`mindx team add <team> --leader <lead-agent> --member ...`，团队职责写 Team Profile——必须含工作区约定：每类交接产物写明落点目录 + 工作目录根必建 AGENTS.md（编制规范第 10 条，见 [team-design.md](references/team-design.md)），`mindx team hire` 后出现在会话选择器
 4. **驱动与验收**：跨 Agent 的工作安排通过 Cron 定时驱动负责人主导——调度链保持"发起方 → 负责人 → 成员"，发起方不越过负责人直管成员
 
 整队进市场（`mindx team export` / `mindx market install team`）等细节见 [team-design.md](references/team-design.md)。
@@ -174,6 +174,7 @@ mindx agent list --json
 - **规则写成空泛口号** — 缺触发场景与理据的职责（"保证质量""输出专业"）不产生行为约束；SOUL 写成能力清单同理。
 - **通用智能体** — "我是一个有用的助手"毫无意义，每个智能体应有特定领域、视角和约束。
 - **技能够用却创建智能体** — 需要可重用指令就创建技能，需要硬边界角色才创建智能体。
+- **有产物链无产物落点** — 交接产物链只写「GDD → 美术资产 → 工程」而不写各自落在哪个目录，上下文一清团队就断档，接手全靠考古；Team Profile 必须含工作区约定（落点表 + AGENTS.md 必建）。
 
 ## 重要说明
 

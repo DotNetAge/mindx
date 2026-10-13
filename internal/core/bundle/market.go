@@ -206,11 +206,11 @@ func (m *MarketClient) RegisterClient(clientID string) error {
 // Me 拉取当前登录用户信息（AuthToken 校验通道；401/无令牌返回 ErrMarketUnauthorized 语义错误）。
 func (m *MarketClient) Me() (*MarketUser, error) {
 	if m.authToken == "" {
-		return nil, fmt.Errorf("尚未登录进化网络")
+		return nil, fmt.Errorf("尚未登录社区")
 	}
 	resp, err := m.authedGet(m.apiBase + "/me")
 	if err != nil {
-		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -231,7 +231,7 @@ func (m *MarketClient) Me() (*MarketUser, error) {
 // deviceName/platform 为设备元数据上报（设备列表渲染用；空值不覆盖）。幂等、单向；返回迁移的匿名评分条数。
 func (m *MarketClient) Bind(deviceName, platform string) (int64, error) {
 	if m.authToken == "" {
-		return 0, fmt.Errorf("尚未登录进化网络")
+		return 0, fmt.Errorf("尚未登录社区")
 	}
 	if err := m.ensureIdentity(); err != nil {
 		return 0, err
@@ -296,11 +296,11 @@ type MarketDevice struct {
 // Devices 拉取登录用户名下设备列表。
 func (m *MarketClient) Devices() ([]MarketDevice, error) {
 	if m.authToken == "" {
-		return nil, fmt.Errorf("尚未登录进化网络")
+		return nil, fmt.Errorf("尚未登录社区")
 	}
 	resp, err := m.authedGet(m.apiBase + "/devices")
 	if err != nil {
-		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -322,7 +322,7 @@ func (m *MarketClient) Devices() ([]MarketDevice, error) {
 // UpdateProfileFields 更新 Profile 四字段（PATCH /api/v1/me；nil = 不更新）。
 func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone, github *string) (*MarketUser, error) {
 	if m.authToken == "" {
-		return nil, fmt.Errorf("尚未登录进化网络")
+		return nil, fmt.Errorf("尚未登录社区")
 	}
 	body := map[string]any{}
 	if nickName != nil {
@@ -352,7 +352,7 @@ func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone, github *st
 	m.attachIdentity(req)
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -411,7 +411,7 @@ type RatingAggregate struct {
 // UpdateProfile 更新当前用户显示名（PATCH /api/v1/me；昵称 ≤32 字符由服务端校验）。
 func (m *MarketClient) UpdateProfile(nickName string) (string, error) {
 	if m.authToken == "" {
-		return "", fmt.Errorf("尚未登录进化网络")
+		return "", fmt.Errorf("尚未登录社区")
 	}
 	body, err := json.Marshal(map[string]string{"nick_name": nickName})
 	if err != nil {
@@ -425,7 +425,7 @@ func (m *MarketClient) UpdateProfile(nickName string) (string, error) {
 	m.attachIdentity(req)
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("进化网络暂时无法访问：%w", err)
+		return "", fmt.Errorf("社区暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -448,7 +448,7 @@ func (m *MarketClient) UpdateProfile(nickName string) (string, error) {
 // PNG/JPEG ≤1MB、≤1024×1024，服务端统一缩放 128×128，返回档案头像 URL。
 func (m *MarketClient) UploadAvatar(data []byte, filename string) (string, error) {
 	if m.authToken == "" {
-		return "", fmt.Errorf("尚未登录进化网络")
+		return "", fmt.Errorf("尚未登录社区")
 	}
 	if len(data) == 0 {
 		return "", fmt.Errorf("头像数据为空")
@@ -476,7 +476,7 @@ func (m *MarketClient) UploadAvatar(data []byte, filename string) (string, error
 	m.attachIdentity(req)
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("进化网络暂时无法访问：%w", err)
+		return "", fmt.Errorf("社区暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	respData, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -518,7 +518,7 @@ func (m *MarketClient) postRaw(u string, data []byte, headers map[string]string,
 	m.attachIdentity(req)
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("进化网络暂时无法访问：%w", err)
+		return fmt.Errorf("社区暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	respData, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -614,7 +614,7 @@ func (m *MarketClient) Submit(kind, name, note, version string, data []byte) (*S
 func (m *MarketClient) Submissions(kind, name string) ([]Submission, error) {
 	resp, err := m.authedGet(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/submissions")
 	if err != nil {
-		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -685,7 +685,7 @@ func (m *MarketClient) Rate(kind, name string, score int64) (*RatingAggregate, e
 func (m *MarketClient) MyRating(kind, name string) (int64, error) {
 	resp, err := m.authedGet(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/rating")
 	if err != nil {
-		return 0, fmt.Errorf("进化网络暂时无法访问：%w", err)
+		return 0, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
@@ -721,7 +721,7 @@ func (m *MarketClient) postJSON(url string, body any, out any) error {
 	m.attachIdentity(req)
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("进化网络暂时无法访问：%w", err)
+		return fmt.Errorf("社区暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
@@ -852,7 +852,7 @@ func (m *MarketClient) ResolveSourceBase(sourceID string) (string, error) {
 			return s.BaseURL, nil
 		}
 	}
-	return "", fmt.Errorf("进化网络源 %s 不可用", sourceID)
+	return "", fmt.Errorf("社区源 %s 不可用", sourceID)
 }
 
 // ListPage 分页浏览市场（服务端 GET /api/v1/packages 唯一数据路径）；
@@ -894,7 +894,7 @@ func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 	}
 	resp, err := m.authedGet(m.apiBase + "/packages?" + params.Encode())
 	if err != nil {
-		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -925,11 +925,11 @@ func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 func (m *MarketClient) PackageByKindName(kind, name string) (*MarketPackage, error) {
 	resp, err := m.authedGet(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name))
 	if err != nil {
-		return nil, fmt.Errorf("进化网络暂时无法访问：%w", err)
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("进化网络中不存在 %s 类型的包 %q", kind, name)
+		return nil, fmt.Errorf("社区中不存在 %s 类型的包 %q", kind, name)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("包详情 API 响应状态 %d", resp.StatusCode)
