@@ -36,8 +36,12 @@ Example:
 		workspaceDir := core.DefaultUserPrefsDir()
 		credStore := core.NewCredentialStore(filepath.Clean(workspaceDir))
 		value, err := credStore.Get(args[0])
-		if err != nil || value == "" {
+		if err != nil {
 			return fmt.Errorf("secret %q not found: %w", args[0], err)
+		}
+		if value == "" {
+			// 键不存在时存储层返回空值而非错误，这里分开报，避免 nil 混进 %w
+			return fmt.Errorf("secret %q not found", args[0])
 		}
 		// 只输出值本身（无前缀无换行附加说明），便于 $(...) 管道内联
 		fmt.Println(value)
