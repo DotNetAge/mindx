@@ -186,6 +186,16 @@ func (c *Client) MarketDeviceStatus() (json.RawMessage, error) {
 	return c.CallWithTimeout("market.device.status", map[string]any{})
 }
 
+// MarketExperienceList 经验库全量清单（Agent 经验库；q 为标题/摘要关键词）。
+func (c *Client) MarketExperienceList(q string) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.experience.list", map[string]any{"q": q})
+}
+
+// MarketExperienceGet 经验文章全文。
+func (c *Client) MarketExperienceGet(id int64) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.experience.get", map[string]any{"id": id})
+}
+
 // MarketUpdateProfile 更新MindX 账号显示名。
 func (c *Client) MarketUpdateProfile(nickName string) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.updateProfile", MarketUpdateProfileParams{NickName: nickName})

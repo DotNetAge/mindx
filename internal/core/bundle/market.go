@@ -319,6 +319,85 @@ func (m *MarketClient) Devices() ([]MarketDevice, error) {
 	return out.Devices, nil
 }
 
+// MarketExperience 经验库条目（Agent 经验库；GET /api/v1/experiences 清单项与全文共用，
+// 全文字段仅 GetExperience 返回）。
+type MarketExperience struct {
+	ID           int64  `json:"id"`
+	Title        string `json:"title"`
+	Summary      string `json:"summary,omitempty"`
+	Markdown     string `json:"markdown,omitempty"`
+	SkillName    string `json:"skill_name"`
+	AuthorName   string `json:"author_name,omitempty"`
+	AuthorAvatar string `json:"author_avatar,omitempty"`
+	CreatedAt    string `json:"created_at,omitempty"`
+	UpdatedAt    string `json:"updated_at,omitempty"`
+}
+
+// ListExperiences 拉取经验库全量清单（会员 Agent 消费视角；q 为标题/摘要关键词）。
+func (m *MarketClient) ListExperiences(q string) ([]MarketExperience, error) {
+	if m.authToken == "" {
+		return nil, fmt.Errorf("尚未登录社区")
+	}
+	u, err := url.Parse(m.apiBase + "/experiences")
+	if err != nil {
+		return nil, err
+	}
+	if q = strings.TrimSpace(q); q != "" {
+		u.RawQuery = "q=" + url.QueryEscape(q)
+	}
+	resp, err := m.authedGet(u.String())
+	if err != nil {
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("拉取经验列表失败（HTTP %d）", resp.StatusCode)
+	}
+	var out struct {
+		Experiences []MarketExperience `json:"experiences"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("解析经验列表失败：%w", err)
+	}
+	return out.Experiences, nil
+}
+
+// GetExperience 拉取一篇经验文章全文。
+func (m *MarketClient) GetExperience(id int64) (*MarketExperience, error) {
+	if m.authToken == "" {
+		return nil, fmt.Errorf("尚未登录社区")
+	}
+	resp, err := m.authedGet(fmt.Sprintf("%s/experiences/%d", m.apiBase, id))
+	if err != nil {
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("这篇文章不存在或已被删除")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("拉取经验文章失败（HTTP %d）", resp.StatusCode)
+	}
+	var out struct {
+		Experience *MarketExperience `json:"experience"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("解析经验文章失败：%w", err)
+	}
+	if out.Experience == nil {
+		return nil, fmt.Errorf("这篇文章不存在或已被删除")
+	}
+	return out.Experience, nil
+}
+
 // UpdateProfileFields 更新 Profile 四字段（PATCH /api/v1/me；nil = 不更新）。
 func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone, github *string) (*MarketUser, error) {
 	if m.authToken == "" {

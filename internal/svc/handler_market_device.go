@@ -6,15 +6,18 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/DotNetAge/mindx/internal/core/bundle"
 )
 
 // ---------------------------------------------------------------------------
 // market.device.* RPC —— MindX 账号设备授权登录（device flow，市场生态 §2.4）。
 //
 // 编排：login 受理即返回——调服务端 start 拿确认页 URL，经既有 link_open 广播
-// 通道下发客户端（mode=in_app 时新版客户端在应用内窗口打开，旧客户端走系统
-// 浏览器），后台 goroutine 按 interval 轮询；用户在官网确认页点「授权此设备」
-// 后 poll 下发 AuthToken，走 finishMarketBind 收口（校验归属 + 绑定迁移）。
+// 通道下发客户端（一律系统浏览器打开：支付宝/小米授权页对内嵌 WebView 有风控，
+// 系统浏览器还能复用用户既有社区会话免重复登录），后台 goroutine 按 interval
+// 轮询；用户在官网确认页点「授权此设备」后 poll 下发 AuthToken，走
+// finishMarketBind 收口（校验归属 + 绑定迁移）。
 // status 供前端定时查询渲染进度。全程无短码、无粘贴，用户只点一次确认。
 // ---------------------------------------------------------------------------
 
@@ -63,11 +66,11 @@ func (d *Daemon) handleMarketDeviceLogin(_ context.Context, _ json.RawMessage) (
 	}
 	d.marketDevice.set("pending", "")
 
-	// 复用既有 link_open 广播通道下发确认页 URL：mode=in_app 提示新版客户端
-	// 在应用内窗口打开；旧客户端忽略 mode 走系统浏览器（协议兼容）。
+	// 复用既有 link_open 广播通道下发确认页 URL：不带 mode（客户端默认走系统
+	// 浏览器）；不再发 mode=in_app——支付宝/小米授权页拒绝内嵌 WebView，系统
+	// 浏览器最稳且可复用用户既有社区会话。
 	d.broadcastUI("link_open", map[string]any{
-		"url":  start.VerificationURL,
-		"mode": "in_app",
+		"url": start.VerificationURL,
 	})
 	d.logger.Info("设备授权登录已发起", "url", start.VerificationURL)
 
@@ -118,4 +121,38 @@ func (d *Daemon) handleMarketDeviceStatus(_ context.Context, _ json.RawMessage) 
 		resp["error"] = errMsg
 	}
 	return resp, nil
+}
+
+// handleMarketExperienceList 经验库清单（Agent 经验库全量库，会员身份；q 为关键词）。
+// 前端不持有登录令牌：由 daemon 携带内置登录态代理访问市场 API。
+func (d *Daemon) handleMarketExperienceList(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		Q string `json:"q"`
+	}
+	if params != nil {
+		_ = json.Unmarshal(params, &p) // 参数解析失败按空参处理
+	}
+	items, err := d.app.Market().ListExperiences(p.Q)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []bundle.MarketExperience{}
+	}
+	return map[string]any{"experiences": items}, nil
+}
+
+// handleMarketExperienceGet 经验文章全文（会员身份）。
+func (d *Daemon) handleMarketExperienceGet(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil || p.ID <= 0 {
+		return nil, fmt.Errorf("缺少文章编号")
+	}
+	e, err := d.app.Market().GetExperience(p.ID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"experience": e}, nil
 }

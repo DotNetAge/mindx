@@ -88,6 +88,8 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"market.rating.get":                  r.daemon.handleMarketRatingGet,
 		"market.device.login":                r.daemon.handleMarketDeviceLogin,
 		"market.device.status":               r.daemon.handleMarketDeviceStatus,
+		"market.experience.list":             r.daemon.handleMarketExperienceList,
+		"market.experience.get":              r.daemon.handleMarketExperienceGet,
 		"market.account.get":                 r.daemon.handleMarketAccountGet,
 		"market.account.register":            r.daemon.handleMarketAccountRegister,
 		"market.account.login":               r.daemon.handleMarketAccountLogin,
