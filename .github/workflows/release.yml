@@ -684,12 +684,12 @@ jobs:
           cd pub/apt
           # 全量扫描 pool（Packages 含两架构条目，apt 客户端按 Architecture 自过滤）
           dpkg-scanpackages --multiversion pool/ /dev/null > Packages
-          gzip -9 -n -k Packages
+          gzip -9 -n -k -f Packages
 
           mkdir -p dists/stable/main/binary-amd64 dists/stable/main/binary-arm64
           for ARCH in amd64 arm64; do
             cp Packages "dists/stable/main/binary-${ARCH}/Packages"
-            gzip -9 -n -k "dists/stable/main/binary-${ARCH}/Packages"
+            gzip -9 -n -k -f "dists/stable/main/binary-${ARCH}/Packages"
           done
 
           # 生成 dists/stable/Release（apt 必需的元数据校验文件）
