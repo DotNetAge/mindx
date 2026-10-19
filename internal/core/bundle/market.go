@@ -1301,7 +1301,7 @@ func fileSha256(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 	h := sha256.New()
 	if _, err := io.Copy(h, in); err != nil {
 		return "", err

@@ -12,7 +12,7 @@ func buildZip(path string, files map[string][]byte) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	zw := zip.NewWriter(out)
 	for name, content := range files {
