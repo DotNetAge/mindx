@@ -78,13 +78,7 @@ jobs:
       # Note: vet runs with CGO_ENABLED=1 (set globally) so CGO-dependent
       # packages compile correctly.
       - name: Run go vet
-        run: |
-          PKGS=$(go list ./... | grep -v 'gort' || true)
-          if [ -z "$PKGS" ]; then
-            echo "No packages to vet"
-          else
-            echo "$PKGS" | xargs go vet
-          fi
+        run: go vet ./...
 
   # ==========================================================================
   # Stage 3: Security — vulnerability check
@@ -106,13 +100,7 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Run govulncheck
-        run: |
-          PKGS=$(go list ./... | grep -v 'gort' || true)
-          if [ -z "$PKGS" ]; then
-            echo "No packages to scan"
-          else
-            govulncheck $PKGS | tee govulncheck-output.txt
-          fi
+        run: govulncheck ./... | tee govulncheck-output.txt
 
   # ==========================================================================
   # Stage 4: Test — race detector + coverage (matrix: OS)
@@ -251,8 +239,8 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           # Set musl cross-compiler for Linux (Alpine Docker image uses musl)
-          # Note: cgo deps with C++ (e.g. go-tree-sitter) make Go link with CXX,
-          # so both CC and CXX must point at the cross toolchain for arm64.
+          # Note: if a cgo dep with C++ is ever added, Go links via CXX, so both
+          # CC and CXX must point at the cross toolchain for arm64.
           if [ "$GOOS" = "linux" ]; then
             if [ "$GOARCH" = "amd64" ]; then
               export CC=x86_64-linux-musl-gcc
