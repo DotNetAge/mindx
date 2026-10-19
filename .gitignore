@@ -11,9 +11,8 @@
 # Output of the go coverage tool
 *.out
 
-# ONNX models (except bundled embedder model)
+# ONNX models
 *.onnx
-!runtime/data/models/model.onnx
 
 # Dependency directories
 node_modules/
@@ -43,10 +42,10 @@ Thumbs.db
 logs/
 *.db
 
-# Workspace data (keep bundled assets)
+# Workspace data (embed placeholder must stay tracked for go:embed in CI)
 runtime/bin/
-runtime/data/
-!runtime/data/models/
+runtime/data/*
+!runtime/data/placeholder
 
 .dev/
 .test/

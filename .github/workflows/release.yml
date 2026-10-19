@@ -51,7 +51,7 @@ jobs:
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -134,7 +134,7 @@ jobs:
             ext: ''
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -210,7 +210,7 @@ jobs:
             "${{ env.BINARY_NAME }}"
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: package-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
@@ -226,10 +226,10 @@ jobs:
     needs: [prepare, build]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: package-*
           path: packages
@@ -275,7 +275,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -339,11 +339,11 @@ jobs:
       actions: read
     steps:
       - name: Checkout source (for formula template)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download darwin build artifacts (tag push)
         if: github.event_name != 'workflow_dispatch'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: package-darwin-*
           path: dist
@@ -482,10 +482,10 @@ jobs:
     needs: [prepare, build, release]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download Linux build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: package-linux-*
           path: packages
@@ -816,7 +816,7 @@ jobs:
     if: needs.prepare.outputs.is_prerelease == 'false'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Generate snapcraft.yaml from template
         run: |
@@ -861,7 +861,7 @@ jobs:
     if: needs.prepare.outputs.is_prerelease == 'false'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download Linux amd64 asset & get SHA256
         id: sha256
