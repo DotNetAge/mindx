@@ -100,8 +100,8 @@ type App struct {
 	// market 是市场客户端（懒创建，可经 SetMarketSource 运行时换源重建，见 Market()）
 	marketMu sync.RWMutex
 	market   *bundle.MarketClient
-	// marketPAT 商户访问令牌（邀请码）：仅存密钥存储（CredentialStore）与内存，
-	// 严禁落盘明文或写日志
+	// marketPAT 专用源访问令牌（AT，消费者语境称邀请码；字段名历史沿用）：仅存密钥
+	// 存储（CredentialStore）与内存，严禁落盘明文或写日志
 	marketPAT string
 	// marketClientID 设备身份 UUIDv4（匿名期评分/绑定通道，§2.1）：首启生成后
 	// 持久化进凭据存储（键 market:client_id），不落明文配置
@@ -206,7 +206,8 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 
 	credStore := NewCredentialStore(settings.UserPreferences())
 
-	// 商户访问令牌（邀请码）从密钥存储加载：macOS 钥匙串 / 加密文件，永不落 mindx.json
+	// 专用源访问令牌（AT，消费者语境称邀请码）从密钥存储加载：macOS 钥匙串 / 加密文件，
+	// 永不落 mindx.json
 	marketPAT := ResolveAPIKey(credStore, "market:pat")
 
 	// 设备身份（匿名期评分/绑定通道 §2.1）：已持久化的从凭据存储加载；
@@ -428,7 +429,7 @@ func (a *App) marketBase() string {
 
 // Market 返回市场客户端（懒创建；缓存目录位于数据目录 market-cache 下按
 // 源 base URL 哈希隔离）。全部数据走服务端分页 API（清单机制已废除），
-// 创建后按配置注入商户访问令牌。
+// 创建后按配置注入专用源访问令牌（AT）。
 func (a *App) Market() *bundle.MarketClient {
 	a.marketMu.RLock()
 	if a.market != nil {
@@ -466,16 +467,17 @@ func (a *App) Market() *bundle.MarketClient {
 	return a.market
 }
 
-// MarketPAT 返回当前商户访问令牌（邀请码）。仅内存值，来自密钥存储加载或
-// SetMarketPAT 写入；严禁写日志。
+// MarketPAT 返回当前专用源访问令牌（AT，消费者语境称邀请码；方法名历史沿用）。
+// 仅内存值，来自密钥存储加载或 SetMarketPAT 写入；严禁写日志。
 func (a *App) MarketPAT() string {
 	a.marketMu.RLock()
 	defer a.marketMu.RUnlock()
 	return a.marketPAT
 }
 
-// SetMarketPAT 更新商户访问令牌（邀请码）：写入密钥存储（持久）与内存（运行时），
-// 已建市场客户端立即生效。存取失败返回错误，由调用方决定提示。
+// SetMarketPAT 更新专用源访问令牌（AT，消费者语境称邀请码；方法名历史沿用）：
+// 写入密钥存储（持久）与内存（运行时），已建市场客户端立即生效。存取失败返回错误，
+// 由调用方决定提示。
 func (a *App) SetMarketPAT(pat string) error {
 	a.marketMu.Lock()
 	defer a.marketMu.Unlock()

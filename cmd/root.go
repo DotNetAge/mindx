@@ -64,6 +64,7 @@ func requireDaemon(cmd *cobra.Command, args []string) error {
 
 func init() {
 	rootCmd.AddCommand(daemonCmd)
+	rootCmd.AddCommand(mcpCmd)
 	rootCmd.PersistentFlags().StringVar(&daemonAddr, "daemon-addr", "", "Daemon WebSocket address (default: ws://localhost:1314/ws)")
 }
 

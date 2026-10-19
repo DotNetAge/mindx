@@ -403,6 +403,9 @@ func (d *Daemon) Start(ctx context.Context) error {
 	// ── mDNS 局域网广播：服务就绪后开启，iOS App 同一 WiFi 下零配置发现 daemon ──
 	d.startMDNS()
 
+	// ── 信件派发：地址上报 + 收件箱轮询（跨机器派工与汇报的直达/兜底通路） ──
+	d.startMailLoop(ctx)
+
 	// 监听 shutdown 或 restart 信号
 	var restart bool
 	select {
@@ -570,8 +573,13 @@ func (d *Daemon) initGateway() {
 		gateway.WithAddr(d.addr),
 		gateway.WithPath(d.wsPath),
 		gateway.WithHandler(d.defaultHandler),
-		// TODO 可行性验证通过后再启用握手鉴权（networkAuthenticator）
-		// gateway.WithAuthenticator(d.networkAuthenticator()),
+		// 握手层网络准入：私网放行；公网必须凭本机令牌、已授权设备令牌
+		// 或有效配对码（networkAuthenticator 三分支，见 handler_network.go）
+		gateway.WithAuthenticator(d.networkAuthenticator()),
+		// 首条消息认证（升级闸的通道内等价物）：公网连接未凭升级请求过闸时，
+		// 凭连接后首条消息 device.auth 过闸（浏览器端无法自定义请求头）；
+		// 认证通过前不进入常规消息分发，超时断连防连接洪泛
+		gateway.WithMessageAuthenticator(d.firstMessageAuthenticator(), 10*time.Second),
 		gateway.WithDisconnectHandler(func(clientID string) {
 			// 断连不再取消执行：对话循环在服务端继续运行，消息持续持久化，
 			// 客户端重连后通过会话重载接上（断连恢复机制）。

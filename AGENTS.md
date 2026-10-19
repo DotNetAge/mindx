@@ -25,6 +25,9 @@
 ## 必须禁止
 
 * 禁止凭上游摘要/注释/记忆复刻跨端共享的文件路径、协议细节——**编码前必须先读事实源当前实现**（2026-10-11 实锤：设备接入闸落地时凭摘要写 `~/.mindx/daemon_token`，真实路径是 `daemonTokenPath()` 的 `~/.mindx/data/daemon_token`（dataDir 运行期指向 data 子目录），GUI/CLI 读不到令牌全部握手失败，注册层强制闸把本机客户端一并挡死，用户"一起动就失去与任何 Daemon 的连接"；修复=LocalToken/readDaemonToken 两级查找 data/daemon_token 优先、根目录回落）
+* 禁止在注释/TODO 中引用未经核实的 API——被注释停用的代码不参与编译，引用了不存在的符号编译器不会报错，启用当天才爆炸（2026-10-17 实锤：daemon.go 的 TODO 注释引用 `gateway.WithAuthenticator`，而该选项在 gort gateway 中从未实现，启用公网鉴权钩子时才暴露，被迫当场在 gort 补实现）；启用任何长期停用的代码前，先确认其依赖的真实存在
+* 隔离 MINDX_HOME 起测试 daemon 做连接冒烟时，CLI 的本机握手读的是真实 `~/.mindx/daemon_token`（pkg/rpc 的 defaultUserPrefsDir 不认 MINDX_HOME，与 daemon 侧 core.DefaultUserPrefsDir 不同源）——须把真实 daemon_token 预置进隔离目录再起 daemon，否则 CLI 被强制闸判为外部设备卡 pending（2026-10-17 冒烟实证）
+* 启用任何新鉴权闸门（如握手层网络闸）时，必须重审既有 RPC 的可达性变化——闸门放行的每一类新连接（如配对码路径）都继承了该闸下所有 RPC 的暴露面：2026-10-17 审计实锤，配对码让"5 分钟窗口内的短码持有者"成为已验证连接，而既有 network.token.get 会向任何已验证连接下发本机 daemon_token（不可撤销、不受开关限制），组合成权限升级链；修复=本机专属凭据只对本机直通连接（devgate.LocalVerified）下发，外接设备一律用各自可撤销的设备令牌
 * 新增会拦截既有调用方的强制闸/中间件时，**上线前必须拿一条真实客户端链路实测**（如 `go run ./cmd/rpctest`：握手 + 一次受闸调用），只跑 daemon 单测不等于本机可用；同时过一遍"客户端握手失败后系统处于什么状态"——失败无重试会把瞬时故障放大成全灭
 * 禁止未经核实断言 runtime/ 下文件的"引用/生效"状态——embedding、初装释放、版本同步三层机制都要查证
 * 禁止删除 RPC handler / 功能代码时不同步清理对应测试段——`*_test.go` 与被删代码同包同编译单元，遗留段直接导致 `go vet` 编译失败（2026-10-06 实锤：阶段二删 handler_graph.go 漏删 handler_test.go 中 250 行 graph 测试段，阶段三 vet 才暴露）；删除后必须以 `go vet ./...`（而非仅 `go build`）作为完成门槛，测试代码才会进入编译检查
@@ -40,3 +43,4 @@
 
 * **kvStore 由 `NewDaemon` 构造函数直接初始化**（bbolt 打开并持锁，不是 Start 流程专属——initKVStore/mcp 装配/"Daemon initialization complete" 都在构造函数体内）。测试夹具 `newTestDaemon` 返回的 `d.kvStore` 已可用；**测试内禁止再调 `initKVStore`**——同进程二次打开同一 `kv.db` 会 flock 互斥，`bbolt.Open(Timeout:2s)` 随机超时（实锤：metric.consent 测试首版自调 initKVStore，DefaultDenied 偶过、SetAndRevoke 稳定 timeout，lsof 抓到本进程 fd 12u 持锁才定位）。需要 bbolt 的 handler 测试直接用 `d.kvStore`，需要独立文件时用全新路径自行 `bbolt.Open`
 * 测试超时类失败先怀疑**资源在测试进程内被重复持有**（用 lsof 指定测试进程 pid 抓本进程句柄），不要先怀疑环境/沙箱——本次 sandbox 与缓存假设全部排查一轮后才发现是自撞锁
+* **凭据存储类测试在已登录的 mac 开发机上必假失败**（2026-10-17 实锤，两次误判后才定位）：`TestHandleMarketAccountGet_Anonymous` 期望匿名 `has_token=false`，但 macOS 下 `NewCredentialStore` 返回 `macKeychainStore{service:"mindx"}`——service 名全局固定不随测试临时目录隔离，本机 daemon device flow 登录后令牌常驻真实钥匙串，测试进程读到登录态即 FAIL（`has_token = true, want false`）。`go test ./...` 见此一条失败先核对本机登录态，勿再误归因「既有未提交改动」；治本需给 credStore 注入测试替身（未做，待用户裁决）

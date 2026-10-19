@@ -197,6 +197,12 @@ func CheckQuality(dir string) (*QualityReport, error) {
 	// 收纳」节一致；URL 可达性与内容陈旧判断不走本检查（离线快速 + LLM 审查职责）。
 	checkReferencesDir(rep, dir, text)
 
+	// 7. 确定性操作脚本化检查：正文代码块出现网络/远程执行命令（curl/ssh 等）
+	// 而 scripts/ 缺失或未路由——确定性操作疑似留给执行方临场拼命令。判据与
+	// skill-creator「动作面脚本化判定」一致；命令示例也可能是背景原理说明，
+	// 故为 warning 级，由审查流程人工确认。
+	checkDeterminism(rep, dir, lines)
+
 	for _, iss := range rep.Issues {
 		if iss.Severity == "error" {
 			rep.OK = false
@@ -360,4 +366,57 @@ func sensitivePlaintextLine(lines []string, name string) int {
 		return i + 1
 	}
 	return 0
+}
+
+// netCmdRe 匹配代码块内的网络/远程执行命令行——带鉴权调用与协议细节的高发区，
+// 是「确定性操作必须脚本化」规则的首要检测对象。行内代码已在围栏检测前剥离。
+var netCmdRe = regexp.MustCompile(`^\s*(?:sudo\s+)?(?:curl|wget|ssh|scp|rsync)\s`)
+
+// checkDeterminism 检查确定性操作是否已脚本化并正确路由：
+// 正文代码块出现 netCmdRe 命令时——scripts/ 缺失或为空 → determinism 告警
+// （确定性操作疑似未脚本化）；scripts/ 存在但正文未引用任何脚本文件名 →
+// scripts-unrouted 告警（执行路由缺失，执行方仍会临场拼命令）。围栏跟踪与
+// hasTocSection 同语义（闭合围栏 ≥ 开启长度），命令示例属背景说明的场景由
+// 审查流程确认，故为 warning。
+func checkDeterminism(rep *QualityReport, dir string, lines []string) {
+	hits := []int{}
+	fence := 0
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		n := fenceRunLen(trimmed)
+		if fence > 0 {
+			if n >= fence && trimmed[n:] == "" {
+				fence = 0
+				continue
+			}
+			if netCmdRe.MatchString(trimmed) {
+				hits = append(hits, i+1)
+			}
+			continue
+		}
+		if n > 0 {
+			fence = n
+		}
+	}
+	if len(hits) == 0 {
+		return
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, "scripts"))
+	if err != nil || len(entries) == 0 {
+		rep.Issues = append(rep.Issues, QualityIssue{
+			Severity: "warning", Code: "determinism", Line: hits[0],
+			Message: fmt.Sprintf("正文 %d 处网络/远程执行命令而 scripts/ 缺失——确定性操作疑似留给执行方临场拼命令，按动作面判定补脚本；命令仅作背景原理说明时在正文显式声明", len(hits)),
+		})
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.Contains(strings.Join(lines, "\n"), e.Name()) {
+			continue
+		}
+		return
+	}
+	rep.Issues = append(rep.Issues, QualityIssue{
+		Severity: "warning", Code: "scripts-unrouted",
+		Message: "scripts/ 存在但 SKILL.md 正文未引用任何脚本——执行路由缺失，执行方仍会临场拼命令",
+	})
 }

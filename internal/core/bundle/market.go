@@ -116,7 +116,7 @@ type MarketClient struct {
 	// apiBase 派生的 API 基址（<base>/api/v1）
 	apiBase  string
 	cacheDir string
-	// pat 商户访问令牌（用户在网页签发的 PAT，经设置粘贴；空 = 匿名）
+	// pat 专用源访问令牌（AT，网页签发经设置粘贴；空 = 匿名。字段名 pat 历史沿用）
 	pat string
 	// authToken 用户登录令牌（MindX 账号绑定后录入；空 = 未绑定，评分走匿名设备通道）
 	authToken string
@@ -127,7 +127,8 @@ type MarketClient struct {
 	registered bool
 }
 
-// SetPAT 设置商户访问令牌（换令牌后由调用方重建客户端或直接复用本实例均可）。
+// SetPAT 设置专用源访问令牌（AT；换令牌后由调用方重建客户端或直接复用本实例均可）。
+// 方法名 pat 历史沿用（其本义是 market 访问令牌/AT，非对端认证 PAT）。
 func (m *MarketClient) SetPAT(pat string) {
 	m.pat = strings.TrimSpace(pat)
 }
@@ -335,10 +336,20 @@ type MarketExperience struct {
 
 // ListExperiences 拉取经验库全量清单（会员 Agent 消费视角；q 为标题/摘要关键词）。
 func (m *MarketClient) ListExperiences(q string) ([]MarketExperience, error) {
+	return m.listExperiencesAt("/experiences", q)
+}
+
+// ListExperiencesInOrg 拉取组织经验清单（M8 组织回路；仅本人在册组织可见）。
+func (m *MarketClient) ListExperiencesInOrg(orgSlug, q string) ([]MarketExperience, error) {
+	return m.listExperiencesAt("/orgs/"+url.PathEscape(orgSlug)+"/experiences", q)
+}
+
+// listExperiencesAt 经验清单共用取数（prefix 区分公共 /orgs/{slug} 回路）。
+func (m *MarketClient) listExperiencesAt(prefix, q string) ([]MarketExperience, error) {
 	if m.authToken == "" {
 		return nil, fmt.Errorf("尚未登录社区")
 	}
-	u, err := url.Parse(m.apiBase + "/experiences")
+	u, err := url.Parse(m.apiBase + prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -368,10 +379,20 @@ func (m *MarketClient) ListExperiences(q string) ([]MarketExperience, error) {
 
 // GetExperience 拉取一篇经验文章全文。
 func (m *MarketClient) GetExperience(id int64) (*MarketExperience, error) {
+	return m.getExperienceAt("/experiences", id)
+}
+
+// GetExperienceInOrg 拉取组织经验全文（M8 组织回路；归属不符 404）。
+func (m *MarketClient) GetExperienceInOrg(orgSlug string, id int64) (*MarketExperience, error) {
+	return m.getExperienceAt("/orgs/"+url.PathEscape(orgSlug)+"/experiences", id)
+}
+
+// getExperienceAt 经验全文共用取数（prefix 区分公共 /orgs/{slug} 回路）。
+func (m *MarketClient) getExperienceAt(prefix string, id int64) (*MarketExperience, error) {
 	if m.authToken == "" {
 		return nil, fmt.Errorf("尚未登录社区")
 	}
-	resp, err := m.authedGet(fmt.Sprintf("%s/experiences/%d", m.apiBase, id))
+	resp, err := m.authedGet(fmt.Sprintf("%s%s/%d", m.apiBase, prefix, id))
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
@@ -621,6 +642,19 @@ func (m *MarketClient) postRaw(u string, data []byte, headers map[string]string,
 // 供清单未写版本的旧包使用）。publishName 非空 = 衍生改名发布（§4.2）：
 // URL 与清单身份一致使用新名（包内清单 name 已随打包覆盖）。
 func (m *MarketClient) Publish(kind, name string, data []byte, version, publishName string) (*PublishResult, error) {
+	return m.publishTo(m.apiBase+"/packages", kind, name, data, version, publishName)
+}
+
+// PublishToOrg 发布分发包新版本至组织源（M7 组织化协作最后一环）：
+// 与 Publish 全链路同语义（sha256 承诺、版本不可变、幂等），仅目标端点不同——
+// 服务端校验本人在册成员身份，产物落组织专属源（orgs/{org_id}/），对公共货架不可见。
+// orgSlug 为组织别名（发布弹窗目标选择的数据源来自 MeOrgs）。
+func (m *MarketClient) PublishToOrg(orgSlug, kind, name string, data []byte, version, publishName string) (*PublishResult, error) {
+	return m.publishTo(m.apiBase+"/orgs/"+url.PathEscape(orgSlug)+"/packages", kind, name, data, version, publishName)
+}
+
+// publishTo 发布共用传输（公共货架与组织源仅 URL 前缀不同）。
+func (m *MarketClient) publishTo(prefix, kind, name string, data []byte, version, publishName string) (*PublishResult, error) {
 	if m.authToken == "" && m.pat == "" {
 		return nil, fmt.Errorf("发布前请先绑定 MindX 账号或配置商户授权")
 	}
@@ -636,7 +670,7 @@ func (m *MarketClient) Publish(kind, name string, data []byte, version, publishN
 		headers["X-Pkg-Version"] = v
 	}
 	var out PublishResult
-	u := m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/versions"
+	u := prefix + "/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/versions"
 	if err := m.postRaw(u, data, headers, &out); err != nil {
 		return nil, err
 	}
@@ -746,6 +780,16 @@ var ErrRatingNotFound = fmt.Errorf("尚未评分")
 
 // Rate 对包（kind+name 包级，不区分版本）提交 1-5 星评分；返回重算后的聚合。
 func (m *MarketClient) Rate(kind, name string, score int64) (*RatingAggregate, error) {
+	return m.rateAt("/packages", kind, name, score)
+}
+
+// RateInOrg 对组织包提交评分（M8 组织回路；企业内实名口径，仅本人在册组织）。
+func (m *MarketClient) RateInOrg(orgSlug, kind, name string, score int64) (*RatingAggregate, error) {
+	return m.rateAt("/orgs/"+url.PathEscape(orgSlug)+"/packages", kind, name, score)
+}
+
+// rateAt 评分共用提交（prefix 区分公共 /orgs/{slug} 回路）。
+func (m *MarketClient) rateAt(prefix, kind, name string, score int64) (*RatingAggregate, error) {
 	if score < 1 || score > 5 {
 		return nil, fmt.Errorf("score 须为 1-5 整数")
 	}
@@ -753,7 +797,7 @@ func (m *MarketClient) Rate(kind, name string, score int64) (*RatingAggregate, e
 		return nil, err
 	}
 	var agg RatingAggregate
-	if err := m.postJSON(m.apiBase+"/packages/"+url.PathEscape(kind)+"/"+url.PathEscape(name)+"/rating",
+	if err := m.postJSON(m.apiBase+prefix+"/"+url.PathEscape(kind)+"/"+url.PathEscape(name)+"/rating",
 		map[string]int64{"score": score}, &agg); err != nil {
 		return nil, err
 	}
@@ -762,7 +806,17 @@ func (m *MarketClient) Rate(kind, name string, score int64) (*RatingAggregate, e
 
 // MyRating 查询自己（当前身份通道）对包的评分；未评分返回 errRatingNotFound。
 func (m *MarketClient) MyRating(kind, name string) (int64, error) {
-	resp, err := m.authedGet(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/rating")
+	return m.myRatingAt("/packages", kind, name)
+}
+
+// MyRatingInOrg 查询自己对组织包的评分（M8 组织回路）。
+func (m *MarketClient) MyRatingInOrg(orgSlug, kind, name string) (int64, error) {
+	return m.myRatingAt("/orgs/"+url.PathEscape(orgSlug)+"/packages", kind, name)
+}
+
+// myRatingAt 我的评分共用查询（prefix 区分公共 /orgs/{slug} 回路）。
+func (m *MarketClient) myRatingAt(prefix, kind, name string) (int64, error) {
+	resp, err := m.authedGet(m.apiBase + prefix + "/" + url.PathEscape(kind) + "/" + url.PathEscape(name) + "/rating")
 	if err != nil {
 		return 0, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
@@ -961,6 +1015,17 @@ type apiPackageMeta struct {
 
 // fetchAPIPage 走服务端分页 API（响应条目为顶层基础字段 + meta 嵌套元数据）。
 func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
+	return m.fetchPageAt(m.apiBase+"/packages", q)
+}
+
+// ListOrgPackages 浏览组织源货架（M7）：仅本人在册组织可见，响应形态与公共货架
+// 一致；download_url 由服务端下发为组织下载端点（Download 无需感知组织差异）。
+func (m *MarketClient) ListOrgPackages(orgSlug string, q MarketQuery) (*MarketPage, error) {
+	return m.fetchPageAt(m.apiBase+"/orgs/"+url.PathEscape(orgSlug)+"/packages", q)
+}
+
+// fetchPageAt 分页浏览共用实现（公共货架与组织源仅 URL 前缀不同）。
+func (m *MarketClient) fetchPageAt(prefix string, q MarketQuery) (*MarketPage, error) {
 	params := url.Values{}
 	params.Set("page", strconv.Itoa(maxInt(q.Page, 1)))
 	if q.PageSize > 0 {
@@ -971,7 +1036,7 @@ func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 			params.Set(k, v)
 		}
 	}
-	resp, err := m.authedGet(m.apiBase + "/packages?" + params.Encode())
+	resp, err := m.authedGet(prefix + "?" + params.Encode())
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
@@ -1002,7 +1067,18 @@ func (m *MarketClient) fetchAPIPage(q MarketQuery) (*MarketPage, error) {
 // PackageByKindName 从服务端查单包详情（安装/预览的定位路径）；
 // API 不可达直接报错——静态清单机制已废除，不再有全量清单线性定位回退。
 func (m *MarketClient) PackageByKindName(kind, name string) (*MarketPackage, error) {
-	resp, err := m.authedGet(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name))
+	return m.packageAt(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name), kind, name)
+}
+
+// OrgPackageByKindName 从组织源查单包详情（M7）：仅命中本人在册组织的包；
+// 包不存在或归属他组织服务端一律 404（不泄露跨组织信息）。
+func (m *MarketClient) OrgPackageByKindName(orgSlug, kind, name string) (*MarketPackage, error) {
+	return m.packageAt(m.apiBase+"/orgs/"+url.PathEscape(orgSlug)+"/packages/"+url.PathEscape(kind)+"/"+url.PathEscape(name), kind, name)
+}
+
+// packageAt 单包详情共用实现（公共货架与组织源仅 URL 不同）。
+func (m *MarketClient) packageAt(u, kind, name string) (*MarketPackage, error) {
+	resp, err := m.authedGet(u)
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
@@ -1045,6 +1121,49 @@ func packageFromDetail(data []byte) (*MarketPackage, error) {
 		}
 	}
 	return &pkg, nil
+}
+
+// ─── 组织源（M7 组织化协作最后一环）───
+
+// MarketOrg 我的组织条目（GET /api/v1/me/orgs 响应行；发布弹窗目标选择数据源）。
+type MarketOrg struct {
+	OrgID    int64  `json:"org_id"`
+	Slug     string `json:"slug"`
+	Name     string `json:"name"`
+	LogoURL  string `json:"logo_url"`
+	Role     string `json:"org_role"` // owner / admin / member
+	Status   string `json:"status"`   // active / frozen（冻结组织客户端置灰）
+	JoinedAt string `json:"joined_at"`
+}
+
+// MeOrgs 拉取本人在册的全部组织（登录态必需；从未加入组织返回空列表）。
+// 冻结组织同样返回（带 status），由界面置灰；向冻结组织发布服务端会拒绝。
+func (m *MarketClient) MeOrgs() ([]MarketOrg, error) {
+	if m.authToken == "" {
+		return nil, fmt.Errorf("获取组织列表前请先绑定 MindX 账号")
+	}
+	resp, err := m.authedGet(m.apiBase + "/me/orgs")
+	if err != nil {
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf("登录状态已失效，请重新绑定账号")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("组织列表 API 响应状态 %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return nil, err
+	}
+	var body struct {
+		Orgs []MarketOrg `json:"orgs"`
+	}
+	if err := json.Unmarshal(data, &body); err != nil {
+		return nil, fmt.Errorf("解析组织列表失败：%w", err)
+	}
+	return body.Orgs, nil
 }
 
 // categoryAliasZh 分类归一表：非规范写法（发布目录 slug / 旧译中文）→ 规范中文显示名

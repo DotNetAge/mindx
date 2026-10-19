@@ -48,6 +48,20 @@ type ServerDiscoverParams struct {
 	Name string `json:"name"`
 }
 
+// ToolCallParams is the parameter for mcp.tool.call.
+type ToolCallParams struct {
+	Server string         `json:"server"`
+	Tool   string         `json:"tool"`
+	Args   map[string]any `json:"args,omitempty"`
+}
+
+// ToolCallResult is the result of mcp.tool.call.
+type ToolCallResult struct {
+	Server string `json:"server"`
+	Tool   string `json:"tool"`
+	Result string `json:"result"`
+}
+
 // DiscoveredTool represents a tool returned by mcp.server.discover.
 type DiscoveredTool struct {
 	Name        string         `json:"name"`
@@ -102,6 +116,8 @@ func (h *RPCHandler) Handle(ctx context.Context, method string, params json.RawM
 		return h.handleServerTest(ctx, params)
 	case "mcp.server.discover":
 		return h.handleServerDiscover(ctx, params)
+	case "mcp.tool.call":
+		return h.handleToolCall(ctx, params)
 	case "mcp.sync":
 		return h.handleSync(ctx)
 	default:
@@ -125,6 +141,15 @@ func (h *RPCHandler) handleServerAdd(ctx context.Context, raw json.RawMessage) (
 		Headers:     p.Headers,
 		Env:         p.Env,
 		IdleTTLSecs: p.IdleTTLSecs,
+	}
+	// CLI 场景允许不传 type，按 command/url 推断（与 LoadServers 同规则）
+	if cfg.Type == "" {
+		switch {
+		case cfg.Command != "":
+			cfg.Type = ServerTypeStdio
+		case cfg.URL != "":
+			cfg.Type = classifyRemoteURL(cfg.URL)
+		}
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -294,4 +319,31 @@ func (h *RPCHandler) handleServerDiscover(ctx context.Context, raw json.RawMessa
 
 func (h *RPCHandler) handleSync(ctx context.Context) (any, error) {
 	return h.mgr.Sync(ctx), nil
+}
+
+// handleToolCall 调用一个已启用 server 的工具（mcp.tool.call）。
+// pool.Call 只认 enabled server（disabled 不进 pool 索引），故先做前置校验，
+// 用报错文案引导 CLI 用户走 add / enable 流程。
+func (h *RPCHandler) handleToolCall(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p ToolCallParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.Server == "" || p.Tool == "" {
+		return nil, fmt.Errorf("server 与 tool 均不能为空")
+	}
+
+	cfg, err := h.mgr.lookupConfig(p.Server)
+	if err != nil {
+		return nil, fmt.Errorf("%q 不在 mcp.json 中，请先 mindx mcp add", p.Server)
+	}
+	if !cfg.Enabled {
+		return nil, fmt.Errorf("%q 未启用，请先 mindx mcp enable %s", p.Server, p.Server)
+	}
+
+	result, err := h.mgr.pool.Call(ctx, p.Server, p.Tool, p.Args)
+	if err != nil {
+		return nil, err
+	}
+	return ToolCallResult{Server: p.Server, Tool: p.Tool, Result: result}, nil
 }

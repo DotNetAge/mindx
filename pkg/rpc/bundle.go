@@ -34,6 +34,8 @@ type MarketListParams struct {
 	Kind     string `json:"kind,omitempty"`      // agent | skill | team
 	Q        string `json:"q,omitempty"`         // 对 name/description 查找
 	Sort     string `json:"sort,omitempty"`      // likes | newest | downloads
+	// OrgSlug 组织源 slug（空 = 公共资源社区；非空 = 浏览该组织的专用源）。
+	OrgSlug string `json:"org_slug,omitempty"`
 }
 
 // MarketInstallParams are the params for market.install（下载市场分发包并安装）。
@@ -46,6 +48,8 @@ type MarketInstallParams struct {
 	SkipDeps bool `json:"skip_deps,omitempty"`
 	// AutoInstall 自动执行缺失依赖的安装脚本。
 	AutoInstall bool `json:"auto_install,omitempty"`
+	// OrgSlug 组织源 slug（空 = 公共资源社区；非空 = 从该组织的专用源下载安装）。
+	OrgSlug string `json:"org_slug,omitempty"`
 }
 
 // MarketPackageReadParams are the params for market.package.read（市场技能包 SKILL.md 预览，不安装）。
@@ -58,12 +62,17 @@ type MarketRateParams struct {
 	Kind  string `json:"kind"`
 	Name  string `json:"name"`
 	Score int64  `json:"score"` // 1-5
+	// OrgSlug 组织源 slug（空 = 公共资源社区包；非空 = 评该组织专属空间的包，
+	// 企业内实名口径）。
+	OrgSlug string `json:"org_slug,omitempty"`
 }
 
 // MarketRatingGetParams are the params for market.rating.get（查询自己对该包的评分）。
 type MarketRatingGetParams struct {
 	Kind string `json:"kind"`
 	Name string `json:"name"`
+	// OrgSlug 组织源 slug（空 = 公共资源社区包；非空 = 查该组织专属空间的包）。
+	OrgSlug string `json:"org_slug,omitempty"`
 }
 
 // MarketUpdateProfileParams are the params for market.updateProfile（更新显示名，§2.5）。
@@ -101,6 +110,8 @@ type MarketPublishParams struct {
 	DerivedKind    string `json:"derived_kind,omitempty"`
 	DerivedName    string `json:"derived_name,omitempty"`
 	DerivedVersion string `json:"derived_version,omitempty"`
+	// OrgSlug 组织源 slug（空 = 发布到公共资源社区；非空 = 发布到该组织的专用源）。
+	OrgSlug string `json:"org_slug,omitempty"`
 }
 
 // MarketSubmitParams are the params for market.submit（投递进化版本到包主收件箱，§4）。
@@ -156,6 +167,14 @@ func (c *Client) MarketList(params MarketListParams) (json.RawMessage, error) {
 // MarketSources 拉取可用市场源清单（商户源可见性由 daemon 侧配置的访问令牌决定）。
 func (c *Client) MarketSources() (json.RawMessage, error) {
 	return c.CallWithTimeout("market.sources", map[string]any{})
+}
+
+// MarketOrgsListParams are the params for market.org.list（当前账号所在组织清单，空参）。
+type MarketOrgsListParams struct{}
+
+// MarketOrgs 拉取当前账号所在的组织清单（发布/浏览组织源的货架切换数据源）。
+func (c *Client) MarketOrgs() (json.RawMessage, error) {
+	return c.CallWithTimeout("market.org.list", MarketOrgsListParams{})
 }
 
 func (c *Client) MarketInstall(kind, name string, overwrite, skipDeps, autoInstall bool) (json.RawMessage, error) {

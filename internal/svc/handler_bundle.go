@@ -247,15 +247,22 @@ type marketPackageDTO struct {
 
 // handleMarketList 市场浏览：全部走服务端分页 API（清单机制已废除，
 // 无参请求视为第一页默认页大小）。响应恒为分页形态 {packages,total,page,source}。
+// org_slug 非空时浏览该组织的专用源（仅本人在册组织，服务端权限闸门校验）。
 func (d *Daemon) handleMarketList(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketListParams
 	if params != nil {
 		_ = json.Unmarshal(params, &p) // 参数解析失败按空参处理
 	}
 
-	res, err := d.app.Market().ListPage(bundle.MarketQuery{
-		Page: p.Page, PageSize: p.PageSize, Kind: p.Kind, Q: p.Q, Sort: p.Sort,
-	})
+	q := bundle.MarketQuery{Page: p.Page, PageSize: p.PageSize, Kind: p.Kind, Q: p.Q, Sort: p.Sort}
+	orgSlug := strings.TrimSpace(p.OrgSlug)
+	var res *bundle.MarketPage
+	var err error
+	if orgSlug != "" {
+		res, err = d.app.Market().ListOrgPackages(orgSlug, q)
+	} else {
+		res, err = d.app.Market().ListPage(q)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -301,8 +308,22 @@ func (d *Daemon) handleMarketList(_ context.Context, params json.RawMessage) (an
 		"total":    res.Total,
 		"page":     res.Page,
 		"source":   res.Source,
+		"org_slug": orgSlug,
 		"warning":  "",
 	}, nil
+}
+
+// handleMarketOrgs 当前账号所在组织清单（M7 组织源）：发布目标选择与货架切换的数据源。
+// 未绑定账号报错提示先绑定；已在册组织含冻结态（前端置灰不可选）。
+func (d *Daemon) handleMarketOrgs(_ context.Context, _ json.RawMessage) (any, error) {
+	orgs, err := d.app.Market().MeOrgs()
+	if err != nil {
+		return nil, err
+	}
+	if orgs == nil {
+		orgs = []bundle.MarketOrg{}
+	}
+	return map[string]any{"orgs": orgs}, nil
 }
 
 // handleMarketPackageRead 读取市场技能包的 SKILL.md 原文（详情预览用，不安装不落库）。
@@ -345,8 +366,16 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 		return nil, fmt.Errorf("kind（agent/skill/team）与 name 均为必填")
 	}
 
-	// 单包定位：服务端详情 API 优先（download_url 直连），全量清单回退（过渡兼容）
-	target, err := d.app.Market().PackageByKindName(p.Kind, p.Name)
+	// 单包定位：服务端详情 API 优先（download_url 直连），全量清单回退（过渡兼容）；
+	// org_slug 非空时定位该组织专用源中的包（仅本人在册组织可见）
+	orgSlug := strings.TrimSpace(p.OrgSlug)
+	var target *bundle.MarketPackage
+	var err error
+	if orgSlug != "" {
+		target, err = d.app.Market().OrgPackageByKindName(orgSlug, p.Kind, p.Name)
+	} else {
+		target, err = d.app.Market().PackageByKindName(p.Kind, p.Name)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -476,6 +505,7 @@ func (d *Daemon) handleMarketPack(_ context.Context, params json.RawMessage) (an
 
 // handleMarketPublish 打包并发布为新版本（§3）：版本/许可/谱系声明写入包内清单后
 // 字节直传服务端（服务端复算 sha256 并做衍生谱系权威校验：存在性、不自指、防环）。
+// org_slug 非空时发布至该组织的专用源（仅本人在册组织，全体成员可发布）。
 func (d *Daemon) handleMarketPublish(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketPublishParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -501,11 +531,18 @@ func (d *Daemon) handleMarketPublish(_ context.Context, params json.RawMessage) 
 	for _, w := range warnings {
 		d.logger.Warn("发布打包告警", "kind", p.Kind, "name", p.Name, "warning", w)
 	}
-	res, err := d.app.Market().Publish(p.Kind, p.Name, data, p.Version, publishName)
+	// 目标源分派：org_slug 非空 = 组织专用源；空 = 公共资源社区（存量行为不变）
+	orgSlug := strings.TrimSpace(p.OrgSlug)
+	var res *bundle.PublishResult
+	if orgSlug != "" {
+		res, err = d.app.Market().PublishToOrg(orgSlug, p.Kind, p.Name, data, p.Version, publishName)
+	} else {
+		res, err = d.app.Market().Publish(p.Kind, p.Name, data, p.Version, publishName)
+	}
 	if err != nil {
 		return nil, err
 	}
-	d.logger.Info("分发包发布完成", "kind", p.Kind, "name", p.Name, "version", res.Version, "created", res.Created)
+	d.logger.Info("分发包发布完成", "kind", p.Kind, "name", p.Name, "version", res.Version, "created", res.Created, "org", orgSlug)
 	return map[string]any{
 		"package_id": res.PackageID,
 		"version":    res.Version,

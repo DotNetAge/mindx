@@ -3,6 +3,7 @@ package svc
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/core"
 )
 
@@ -71,13 +73,18 @@ func (d *Daemon) loadOrCreateDaemonToken() (string, error) {
 	return token, nil
 }
 
-// networkAuthenticator 生成 WebSocket 握手鉴权钩子：
-// 私网来源直接放行；公网来源必须携带与本地 token 一致的 ?token= 参数。
+// networkAuthenticator 生成 WebSocket 握手鉴权钩子（initGateway 挂载）：
+// 私网/环回来源直接放行（家庭网络与 mDNS 广播同级风险）；公网来源必须
+// 凭以下之一放行，否则一律拒绝（陌生公网连接零准入）：
+//  1. 对端认证令牌 = 本机握手令牌（本机经公网地址回连）
+//  2. 对端认证令牌 = 已授权设备令牌（内网弹窗/短码配对过的设备跨网回连——
+//     公网连入必须先在内网建立过信任）
+//  3. ?pair_code= 有效配对码（headless 主机与云服务器的首连引导）
 //
-// TODO 公网直连可行性验证通过后，在 initGateway 中重新启用
-// （gateway.WithAuthenticator(d.networkAuthenticator())），当前验证阶段停用。
-//
-//nolint:unused // 验证阶段临时停用，保留待启用
+// 凭证传输（OWASP WebSocket 反模式修正）：Authorization: Bearer 头优先；
+// URL ?token= 会泄漏进访问日志/代理日志/Referer，仅为旧客户端保留过渡
+// 兼容，客户端全部升级后废除。配对码一次性短码（5 分钟时效、消费即废）
+// 暂留 URL，泄漏窗口极小。
 func (d *Daemon) networkAuthenticator() func(*http.Request) error {
 	return func(r *http.Request) error {
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -87,21 +94,73 @@ func (d *Daemon) networkAuthenticator() func(*http.Request) error {
 		if isPrivateIPHost(host) {
 			return nil
 		}
-		token, err := d.loadOrCreateDaemonToken()
-		if err != nil {
-			return fmt.Errorf("服务端 token 不可用: %w", err)
+		token := bearerToken(r)
+		if token == "" {
+			token = r.URL.Query().Get("token")
 		}
-		if r.URL.Query().Get("token") != token {
-			return fmt.Errorf("缺少或错误的握手 token")
+		return d.authenticateCredentials(token, r.URL.Query().Get("pair_code"))
+	}
+}
+
+// authenticateCredentials 公网准入凭证三分支校验（升级闸与首条消息认证共用）：
+// 本机令牌 / 已授权设备令牌 / 一次性配对码，任一有效即放行。
+func (d *Daemon) authenticateCredentials(token, pairCode string) error {
+	if token != "" {
+		if local, err := d.loadOrCreateDaemonToken(); err == nil && constantTimeEqual(token, local) {
+			return nil
 		}
+		if d.devGate != nil && d.devGate.DeviceTokenExists(token) {
+			return nil
+		}
+	}
+	if pairCode != "" && d.devGate != nil && d.devGate.ValidPairCode(pairCode) {
 		return nil
 	}
+	return fmt.Errorf("这台设备还没有建立信任，请先在局域网内连接一次或使用配对码")
+}
+
+// firstMessageAuthenticator 首条消息认证钩子（gort gateway 挂载）：
+// 浏览器端（壳渲染进程）的 WebSocket 无法自定义升级请求头，公网回连的
+// 凭证改由连接后的首条消息携带（device.auth）——这是升级闸的通道内等价物，
+// 通过前连接处于待认证态（gort 保证认证前不进入常规消息分发，超时断连）。
+// 私网/环回连接在升级闸已放行，不经过本钩子。
+func (d *Daemon) firstMessageAuthenticator() func(string, []byte) error {
+	return func(_ string, raw []byte) error {
+		var req struct {
+			Method string `json:"method"`
+			Params struct {
+				Token    string `json:"token"`
+				PairCode string `json:"pair_code"`
+			} `json:"params"`
+		}
+		if err := json.Unmarshal(raw, &req); err != nil || req.Method != "device.auth" {
+			return fmt.Errorf("请先完成设备认证再使用其他功能")
+		}
+		return d.authenticateCredentials(req.Params.Token, req.Params.PairCode)
+	}
+}
+
+// bearerToken 提取升级请求的 Authorization: Bearer 凭证（scheme 大小写不敏感）。
+func bearerToken(r *http.Request) string {
+	auth := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if len(auth) > len(prefix) && strings.EqualFold(auth[:len(prefix)], prefix) {
+		return strings.TrimSpace(auth[len(prefix):])
+	}
+	return ""
+}
+
+// constantTimeEqual 常量时间比较（防时序侧信道逐字节猜测凭证）。
+// 空值直接判不等：空凭证永不匹配任何本机凭证。
+func constantTimeEqual(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
 // isPrivateIPHost 判断主机地址是否属于私网/环回/链路本地。
 // IsPrivate 同时覆盖 IPv4 RFC1918 与 IPv6 ULA（fc00::/7）。
-//
-//nolint:unused // 随 networkAuthenticator 一并临时停用
 func isPrivateIPHost(host string) bool {
 	ip := net.ParseIP(host)
 	if ip == nil {
@@ -203,8 +262,15 @@ func (d *Daemon) handleNetworkPublicInfo(_ context.Context, _ json.RawMessage) (
 	}, nil
 }
 
-// handleNetworkTokenGet 处理 network.token.get：下发握手 token（仅内网连接可达）。
-func (d *Daemon) handleNetworkTokenGet(_ context.Context, _ json.RawMessage) (any, error) {
+// handleNetworkTokenGet 处理 network.token.get：下发本机握手 token
+// （仅限本机直通连接调用——外接设备即使配对成功也不可得，防止换取
+// 不可撤销的本机身份；外接设备跨网回连一律使用各自的设备令牌）。
+func (d *Daemon) handleNetworkTokenGet(ctx context.Context, _ json.RawMessage) (any, error) {
+	if d.devGate != nil {
+		if clientID := gateway.ClientIDFromContext(ctx); !d.devGate.LocalVerified(clientID) {
+			return nil, fmt.Errorf("这个凭据只提供给本机使用")
+		}
+	}
 	token, err := d.loadOrCreateDaemonToken()
 	if err != nil {
 		return nil, err

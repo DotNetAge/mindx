@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
+	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -44,15 +44,18 @@ func (d *Daemon) initChannelManager() {
 	d.chMgr = mgr
 }
 
-// dialGatewayForBridge 建桥自拨网关：显式携带握手 token（不依赖 loopback 豁免）。
-// 拨号成功后立即完成本机设备握手（设备接入强制闸要求）再交给桥使用。
+// dialGatewayForBridge 建桥自拨网关：凭证走 Authorization Bearer 头
+// （OWASP 反模式修正——token 不进 URL，避免泄漏进日志），不依赖 loopback
+// 豁免。拨号成功后立即完成本机设备握手（设备接入强制闸要求）再交给桥使用。
 func (d *Daemon) dialGatewayForBridge() (*websocket.Conn, error) {
 	token, err := d.loadOrCreateDaemonToken()
 	if err != nil {
 		return nil, fmt.Errorf("读取握手 token 失败: %w", err)
 	}
-	u := fmt.Sprintf("ws://localhost%s%s?token=%s", d.addr, d.wsPath, url.QueryEscape(token))
-	ws, _, err := websocket.DefaultDialer.Dial(u, nil)
+	u := fmt.Sprintf("ws://localhost%s%s", d.addr, d.wsPath)
+	ws, _, err := websocket.DefaultDialer.Dial(u, http.Header{
+		"Authorization": []string{"Bearer " + token},
+	})
 	if err != nil {
 		return nil, err
 	}

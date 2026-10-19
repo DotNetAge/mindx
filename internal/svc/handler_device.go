@@ -33,6 +33,13 @@ func (d *Daemon) initDeviceGate() {
 				d.gw.BroadcastNotification(method, params)
 			}
 		},
+		// 吊销即断连：设备被解除/拉黑或总闸关闭时，强制关闭其在线连接
+		// （连接级认证下，不断连则在线设备感知不到吊销）
+		Disconnect: func(clientID string) {
+			if d.gw != nil {
+				d.gw.DisconnectClient(clientID)
+			}
+		},
 	})
 	if err != nil {
 		d.logger.Warn("devgate: 设备接入闸初始化失败，闸已停用", "error", err.Error())
@@ -91,15 +98,44 @@ func (d *Daemon) handleDeviceApprove(_ context.Context, params json.RawMessage) 
 }
 
 // handleDeviceDeny 处理 device.deny：拒绝设备接入请求。
+// block=true 时同时拉黑该设备（「拒绝且不再询问」：后续握手静默拒绝，
+// 直到主人在设备列表解除）。
 func (d *Daemon) handleDeviceDeny(_ context.Context, params json.RawMessage) (any, error) {
-	requestID, err := deviceRequestID(params)
-	if err != nil {
-		return nil, err
+	var p struct {
+		RequestID string `json:"request_id"`
+		Block     bool   `json:"block"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil || p.RequestID == "" {
+		return nil, fmt.Errorf("缺少 request_id 参数")
 	}
 	if d.devGate == nil {
 		return nil, fmt.Errorf("设备接入功能未启用")
 	}
-	if err := d.devGate.Deny(requestID); err != nil {
+	var err error
+	if p.Block {
+		err = d.devGate.DenyAndBlock(p.RequestID)
+	} else {
+		err = d.devGate.Deny(p.RequestID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"ok": true}, nil
+}
+
+// handleDeviceUnblock 处理 device.unblock：解除设备拉黑，
+// 该设备恢复「申请 → 弹窗审批」的正常流程。
+func (d *Daemon) handleDeviceUnblock(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		DeviceID string `json:"device_id"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil || p.DeviceID == "" {
+		return nil, fmt.Errorf("缺少 device_id 参数")
+	}
+	if d.devGate == nil {
+		return nil, fmt.Errorf("设备接入功能未启用")
+	}
+	if err := d.devGate.Unblock(p.DeviceID); err != nil {
 		return nil, err
 	}
 	return map[string]any{"ok": true}, nil
@@ -122,6 +158,23 @@ func (d *Daemon) handleDeviceRevoke(_ context.Context, params json.RawMessage) (
 	return map[string]any{"ok": true}, nil
 }
 
+// handleDevicePairCode 处理 device.pair.code：生成一次性配对码
+// （仅本机连接可调——强制闸保证外部设备无法拿到本机批量的码）。
+func (d *Daemon) handleDevicePairCode(_ context.Context, _ json.RawMessage) (any, error) {
+	if d.devGate == nil {
+		return nil, fmt.Errorf("设备接入功能未启用")
+	}
+	code, expiresAt, err := d.devGate.GeneratePairCode()
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"code":        code,
+		"expires_at":  expiresAt.Format(time.RFC3339),
+		"ttl_seconds": int(time.Until(expiresAt).Seconds()),
+	}, nil
+}
+
 // handleDeviceHandshake 处理 device.handshake：设备接入握手（强制闸唯一对外开口）。
 func (d *Daemon) handleDeviceHandshake(ctx context.Context, params json.RawMessage) (any, error) {
 	if d.devGate == nil {
@@ -132,6 +185,7 @@ func (d *Daemon) handleDeviceHandshake(ctx context.Context, params json.RawMessa
 		Name     string `json:"name"`
 		Platform string `json:"platform"`
 		Token    string `json:"token"`
+		PairCode string `json:"pair_code"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, fmt.Errorf("参数解析失败")
@@ -140,7 +194,7 @@ func (d *Daemon) handleDeviceHandshake(ctx context.Context, params json.RawMessa
 	if clientID == "" {
 		return nil, fmt.Errorf("连接身份缺失，请重新连接后重试")
 	}
-	return d.devGate.Handshake(clientID, p.DeviceID, p.Name, p.Platform, p.Token), nil
+	return d.devGate.Handshake(clientID, p.DeviceID, p.Name, p.Platform, p.Token, p.PairCode), nil
 }
 
 // handleDeviceScan 处理 device.scan：局域网 mDNS 浏览，返回可连接的 MindX 主机

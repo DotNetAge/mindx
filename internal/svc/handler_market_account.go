@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/core/bundle"
@@ -29,11 +30,18 @@ func (d *Daemon) handleMarketRate(_ context.Context, params json.RawMessage) (an
 	if p.Kind == "" || p.Name == "" {
 		return nil, fmt.Errorf("kind 与 name 均为必填")
 	}
-	agg, err := d.app.Market().Rate(p.Kind, p.Name, p.Score)
+	// 回路分派：org_slug 非空 = 评组织包（M8；企业内实名口径）；空 = 公共货架包
+	var agg *bundle.RatingAggregate
+	var err error
+	if orgSlug := strings.TrimSpace(p.OrgSlug); orgSlug != "" {
+		agg, err = d.app.Market().RateInOrg(orgSlug, p.Kind, p.Name, p.Score)
+	} else {
+		agg, err = d.app.Market().Rate(p.Kind, p.Name, p.Score)
+	}
 	if err != nil {
 		return nil, err
 	}
-	d.logger.Info("市场评分提交完成", "kind", p.Kind, "name", p.Name, "score", p.Score)
+	d.logger.Info("市场评分提交完成", "kind", p.Kind, "name", p.Name, "score", p.Score, "org", p.OrgSlug)
 	return map[string]any{
 		"score":        p.Score,
 		"rating_avg":   agg.Avg,
@@ -51,7 +59,14 @@ func (d *Daemon) handleMarketRatingGet(_ context.Context, params json.RawMessage
 	if p.Kind == "" || p.Name == "" {
 		return nil, fmt.Errorf("kind 与 name 均为必填")
 	}
-	score, err := d.app.Market().MyRating(p.Kind, p.Name)
+	// 回路分派：org_slug 非空 = 查组织包的我的评分（M8）；空 = 公共货架包
+	var score int64
+	var err error
+	if orgSlug := strings.TrimSpace(p.OrgSlug); orgSlug != "" {
+		score, err = d.app.Market().MyRatingInOrg(orgSlug, p.Kind, p.Name)
+	} else {
+		score, err = d.app.Market().MyRating(p.Kind, p.Name)
+	}
 	if err == bundle.ErrRatingNotFound {
 		return map[string]any{"rated": false, "score": 0}, nil
 	}

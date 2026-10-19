@@ -61,6 +61,13 @@ func (d *Daemon) handleMCPServerDiscover(ctx context.Context, params json.RawMes
 	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.server.discover", params)
 }
 
+func (d *Daemon) handleMCPToolCall(ctx context.Context, params json.RawMessage) (any, error) {
+	if d.mcpMgr == nil {
+		return nil, errMCPServiceUnavailable
+	}
+	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.tool.call", params)
+}
+
 var errMCPServiceUnavailable = &jsonError{code: -32000, message: "MCP service unavailable (kvstore not initialized)"}
 
 type jsonError struct {

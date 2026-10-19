@@ -169,3 +169,43 @@ func (d *Daemon) handleScheduleJobCancel(_ context.Context, params json.RawMessa
 
 	return map[string]string{"status": "cancelled"}, nil
 }
+
+// enqueueOneJob 给指定智能体立即排一个一次性开工任务（约 10 秒后拉起）。
+// 复用调度器：Save 一条 OneShot 条目，watchLoop（5 秒重载）随即拉起执行。
+// 来信叫醒等「马上开始」的场景走这里，与手工定时任务同一执行通路。
+func (d *Daemon) enqueueOneJob(agent, content string) error {
+	if d.schedulerDB == nil {
+		return fmt.Errorf("本机调度器未就绪，无法叫醒智能体")
+	}
+	// 雇佣校验与 schedule.add 同口径：未雇佣的 Agent 不拉起
+	if agents := d.app.Agents(); agents != nil {
+		cfg := agents.Get(agent)
+		if cfg == nil {
+			return fmt.Errorf("未找到智能体 %q，请确认名称是否正确", agent)
+		}
+		if !core.AgentIsHired(cfg) {
+			return fmt.Errorf("智能体 %q 尚未雇佣，无法开工", agent)
+		}
+	}
+	// 10 秒后到点：watchLoop 重载间隔 5 秒，留一倍余量避免恰好在重载间隙被跳过
+	scheduledAt := time.Now().Add(10 * time.Second).Format(time.RFC3339)
+	cronExpr, err := scheduler.OneShotCron(scheduledAt, time.Now())
+	if err != nil {
+		return err
+	}
+	if err := scheduler.ValidateCronExpr(cronExpr); err != nil {
+		return err
+	}
+	entry := &scheduler.ScheduleEntry{
+		ID:        uuid.NewString()[:8],
+		Agent:     agent,
+		SessionID: d.resolveLatestSessionForAgent(agent),
+		Content:   content,
+		CronExpr:  cronExpr,
+		Enabled:   true,
+		OneShot:   true,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	return d.schedulerDB.Save(context.Background(), entry)
+}

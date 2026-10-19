@@ -96,7 +96,8 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 					}
 					continue
 				}
-				// 邀请码（market_pat）特判：写入密钥存储而非 mindx.json，
+				// 专用源邀请码特判（user.config 键名 market_pat 历史沿用，其本义是
+				// market 访问令牌/AT）：写入密钥存储而非 mindx.json，
 				// 明文严禁回读与入日志，只记录 set/unset 状态
 				if key == "market_pat" {
 					pat, ok := val.(string)
