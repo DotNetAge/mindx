@@ -142,48 +142,14 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Install musl cross-compiler
-        if: matrix.goos == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools musl-dev
-          # For arm64: install zig as cross-compiler fallback (musl.cc often unreachable from CI)
-          if [ "${{ matrix.goarch }}" = "arm64" ]; then
-            if ! command -v aarch64-linux-musl-gcc &>/dev/null; then
-              echo "aarch64-linux-musl-gcc not found, installing zig..."
-              ZIG_VER="0.13.0"
-              wget -q "https://ziglang.org/download/${ZIG_VER}/zig-linux-x86_64-${ZIG_VER}.tar.xz" -O /tmp/zig.tar.xz
-              sudo tar xf /tmp/zig.tar.xz -C /usr/local
-              sudo ln -sf /usr/local/zig-linux-x86_64-${ZIG_VER}/zig /usr/local/bin/zig
-              rm /tmp/zig.tar.xz
-              zig version
-            fi
-          fi
-
       - name: Build
         shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 1
+          # 纯 Go 项目：静态编译不依赖任何 C 工具链，产物完全静态（Alpine 兼容）
+          CGO_ENABLED: 0
         run: |
-          # Set musl cross-compiler for Linux (Alpine Docker image uses musl)
-          # Note: if a cgo dep with C++ is ever added, Go links via CXX, so both
-          # CC and CXX must point at the cross toolchain for arm64.
-          if [ "$GOOS" = "linux" ]; then
-            if [ "$GOARCH" = "amd64" ]; then
-              export CC=x86_64-linux-musl-gcc
-            elif [ "$GOARCH" = "arm64" ]; then
-              # Use native musl-gcc if available, otherwise fall back to zig
-              if command -v aarch64-linux-musl-gcc &>/dev/null; then
-                export CC=aarch64-linux-musl-gcc
-                export CXX=aarch64-linux-musl-g++
-              else
-                export CC="zig cc -target aarch64-linux-musl"
-                export CXX="zig c++ -target aarch64-linux-musl"
-              fi
-            fi
-          fi
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
           COMMIT=$(git rev-parse --short HEAD)
           BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -387,6 +353,7 @@ jobs:
           SHA_AMD64="${{ steps.sha256.outputs.sha256_amd64 }}"
           SHA_ARM64="${{ steps.sha256.outputs.sha256_arm64 }}"
 
+          mkdir -p dist
           sed \
             -e "s|__GITHUB_REPO__|${{ env.GITHUB_REPO }}|g" \
             -e "s|__VERSION__|${VERSION_NUM}|g" \

@@ -213,7 +213,7 @@ func (m *MarketClient) Me() (*MarketUser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return nil, err
@@ -303,7 +303,7 @@ func (m *MarketClient) Devices() ([]MarketDevice, error) {
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return nil, err
@@ -360,7 +360,7 @@ func (m *MarketClient) listExperiencesAt(prefix, q string) ([]MarketExperience, 
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return nil, err
@@ -396,7 +396,7 @@ func (m *MarketClient) getExperienceAt(prefix string, id int64) (*MarketExperien
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return nil, err
@@ -454,10 +454,10 @@ func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone, github *st
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("Profile 更新失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return nil, fmt.Errorf("更新 Profile 失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(data)))
 	}
 	return m.Me()
 }
@@ -527,7 +527,7 @@ func (m *MarketClient) UpdateProfile(nickName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return "", err
@@ -578,7 +578,7 @@ func (m *MarketClient) UploadAvatar(data []byte, filename string) (string, error
 	if err != nil {
 		return "", fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	respData, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return "", err
@@ -620,7 +620,7 @@ func (m *MarketClient) postRaw(u string, data []byte, headers map[string]string,
 	if err != nil {
 		return fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	respData, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return err
@@ -729,7 +729,7 @@ func (m *MarketClient) Submissions(kind, name string) ([]Submission, error) {
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return nil, err
@@ -820,7 +820,7 @@ func (m *MarketClient) myRatingAt(prefix, kind, name string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {
 		return 0, ErrRatingNotFound
 	}
@@ -856,7 +856,7 @@ func (m *MarketClient) postJSON(url string, body any, out any) error {
 	if err != nil {
 		return fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return err
@@ -948,7 +948,7 @@ func (m *MarketClient) Sources() ([]MarketSource, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("源列表响应状态 %d", resp.StatusCode)
 	}
@@ -1040,7 +1040,7 @@ func (m *MarketClient) fetchPageAt(prefix string, q MarketQuery) (*MarketPage, e
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("分页 API 响应状态 %d", resp.StatusCode)
 	}
@@ -1082,7 +1082,7 @@ func (m *MarketClient) packageAt(u, kind, name string) (*MarketPackage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("社区中不存在 %s 类型的包 %q", kind, name)
 	}
@@ -1112,7 +1112,7 @@ func packageFromDetail(data []byte) (*MarketPackage, error) {
 	if err := json.Unmarshal(data, &body); err != nil {
 		return nil, fmt.Errorf("解析包详情失败：%w", err)
 	}
-	pkg := body.apiPackage.toMarketPackage()
+	pkg := body.toMarketPackage()
 	for _, v := range body.Versions {
 		if !v.Deleted {
 			// 最新未删除版本：与安装校验链对齐
@@ -1146,7 +1146,7 @@ func (m *MarketClient) MeOrgs() ([]MarketOrg, error) {
 	if err != nil {
 		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, fmt.Errorf("登录状态已失效，请重新绑定账号")
 	}
@@ -1247,7 +1247,7 @@ func (m *MarketClient) Download(pkg MarketPackage) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("下载分发包失败：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("下载分发包失败：响应状态 %d", resp.StatusCode)
 	}

@@ -34,7 +34,7 @@ func ValidateSkillName(name string) error {
 		return fmt.Errorf("技能名称不能包含连续的连字符：%q", name)
 	}
 	for _, r := range name {
-		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-') {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
 			return fmt.Errorf("技能名称只能包含小写字母、数字和连字符：%q", name)
 		}
 	}
@@ -153,10 +153,10 @@ func LoadSkillDetailFromDir(dir, source string) (*SkillDetail, []string, error) 
 		return nil, nil, err
 	}
 	if fm.Name == "" {
-		return nil, nil, fmt.Errorf("SKILL.md 缺少前置元数据中必需的 'name' 字段")
+		return nil, nil, fmt.Errorf("前置元数据缺少必需的 'name' 字段（SKILL.md 头部）")
 	}
 	if fm.Description == "" {
-		return nil, nil, fmt.Errorf("SKILL.md 缺少前置元数据中必需的 'description' 字段")
+		return nil, nil, fmt.Errorf("前置元数据缺少必需的 'description' 字段（SKILL.md 头部）")
 	}
 
 	name := fm.Name
@@ -258,12 +258,12 @@ func parseFrontmatter(content string) (skillFrontmatter, string, error) {
 
 	content = strings.TrimLeft(content, "\n\r")
 	if !strings.HasPrefix(content, "---") {
-		return fm, content, fmt.Errorf("SKILL.md 必须以 YAML 前置元数据（---）开头")
+		return fm, content, fmt.Errorf("文件必须以 YAML 前置元数据（---）开头")
 	}
 	rest := content[len("---"):]
 	closeIdx := strings.Index(rest, "\n---")
 	if closeIdx < 0 {
-		return fm, content, fmt.Errorf("SKILL.md 的 YAML 前置元数据未闭合（缺少结尾的 ---）")
+		return fm, content, fmt.Errorf("YAML 前置元数据未闭合（缺少结尾的 ---）")
 	}
 	yamlBlock := rest[:closeIdx]
 	body := rest[closeIdx+len("---")+1:]

@@ -45,7 +45,7 @@ func LatestRelease(httpClient *http.Client) (*ReleaseInfo, error) {
 	if resp.StatusCode != http.StatusOK {
 		// Read body for rate limit info
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GitHub API returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("请求 GitHub API 失败：%d %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var rel ReleaseInfo

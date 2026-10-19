@@ -46,7 +46,7 @@ func Write(iconFS fs.FS, destPath string) error {
 //	// → creates /Applications/Mindx.app/Contents/...
 func CreateAppBundle(iconFS fs.FS, outputDir, binaryPath string) (string, error) {
 	if runtime.GOOS != "darwin" {
-		return "", fmt.Errorf("CreateAppBundle only supported on macOS")
+		return "", fmt.Errorf("仅 macOS 支持 CreateAppBundle")
 	}
 
 	binAbs, err := filepath.Abs(binaryPath)

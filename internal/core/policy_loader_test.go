@@ -149,7 +149,7 @@ func TestApplyPolicyOverrides_AllowedDirs_ExtendsBoundary(t *testing.T) {
 	sb, err := sandbox.NewSandbox(&base, testPolicyLogger())
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile("/tmp/mx-policy-loader-selftest.txt", []byte("x"), 0644))
-	defer os.Remove("/tmp/mx-policy-loader-selftest.txt")
+	defer func() { _ = os.Remove("/tmp/mx-policy-loader-selftest.txt") }()
 
 	dec := sb.CheckFile("/tmp/mx-policy-loader-selftest.txt", filepath.Join(home, "some-project"))
 	assert.Equal(t, sandbox.DecisionAllow, dec.Decision,

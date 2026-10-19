@@ -96,7 +96,7 @@ func (d *Daemon) handleProviderFetchSiliconFlowModels(_ context.Context, params 
 	if err != nil {
 		return nil, fmt.Errorf("无法连接硅基流动服务: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// base_url 为用户可配置项，LimitReader 防止故障/恶意端点返回超大响应耗尽内存（上限 10MB）
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
@@ -203,7 +203,7 @@ func fetchSiliconFlowPricing() map[string]siliconFlowPrice {
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil
 	}
@@ -344,7 +344,7 @@ func (d *Daemon) handleProviderFetchOpenRouterModels(_ context.Context, params j
 	if err != nil {
 		return nil, fmt.Errorf("无法连接 OpenRouter 服务: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// base_url 为用户可配置项，LimitReader 防止故障/恶意端点返回超大响应耗尽内存（上限 10MB）
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
@@ -352,7 +352,7 @@ func (d *Daemon) handleProviderFetchOpenRouterModels(_ context.Context, params j
 		return nil, fmt.Errorf("读取 OpenRouter 响应失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("OpenRouter 返回错误 (HTTP %d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("调用 OpenRouter 失败（HTTP %d）：%s", resp.StatusCode, string(body))
 	}
 
 	var orResp struct {
@@ -469,7 +469,7 @@ func (d *Daemon) handleProviderFetchDashScopeModels(_ context.Context, params js
 	if err != nil {
 		return nil, fmt.Errorf("无法连接阿里云百炼服务: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// base_url 为用户可配置项，LimitReader 防止故障/恶意端点返回超大响应耗尽内存（上限 10MB）
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
@@ -609,7 +609,7 @@ func (d *Daemon) handleProviderFetchBigModelModels(_ context.Context, params jso
 	if err != nil {
 		return nil, fmt.Errorf("无法连接智谱服务: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// base_url 为用户可配置项，LimitReader 防止故障/恶意端点返回超大响应耗尽内存（上限 10MB）
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
@@ -691,7 +691,7 @@ func (d *Daemon) handleProviderFetchTencentModels(_ context.Context, params json
 	if err != nil {
 		return nil, fmt.Errorf("无法连接腾讯云 TokenHub 服务: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// base_url 为用户可配置项，LimitReader 防止故障/恶意端点返回超大响应耗尽内存（上限 10MB）
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
@@ -770,7 +770,7 @@ func (d *Daemon) handleProviderFetchKimiModels(_ context.Context, params json.Ra
 	if err != nil {
 		return nil, fmt.Errorf("无法连接 Kimi 服务: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// base_url 为用户可配置项，LimitReader 防止故障/恶意端点返回超大响应耗尽内存（上限 10MB）
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
@@ -778,7 +778,7 @@ func (d *Daemon) handleProviderFetchKimiModels(_ context.Context, params json.Ra
 		return nil, fmt.Errorf("读取 Kimi 响应失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Kimi 返回错误 (HTTP %d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("调用 Kimi 失败（HTTP %d）：%s", resp.StatusCode, string(body))
 	}
 
 	var kmResp struct {
@@ -853,7 +853,7 @@ func (d *Daemon) handleProviderFetchMiniMaxModels(_ context.Context, params json
 	if err != nil {
 		return nil, fmt.Errorf("无法连接 MiniMax 服务: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// base_url 为用户可配置项，LimitReader 防止故障/恶意端点返回超大响应耗尽内存（上限 10MB）
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
@@ -861,7 +861,7 @@ func (d *Daemon) handleProviderFetchMiniMaxModels(_ context.Context, params json
 		return nil, fmt.Errorf("读取 MiniMax 响应失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("MiniMax 返回错误 (HTTP %d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("调用 MiniMax 失败（HTTP %d）：%s", resp.StatusCode, string(body))
 	}
 
 	var mmResp struct {
@@ -946,7 +946,7 @@ func fetchRateERAPI(client *http.Client) float64 {
 	if err != nil {
 		return 0
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return 0
 	}
@@ -973,7 +973,7 @@ func fetchRateFrankfurter(client *http.Client) float64 {
 	if err != nil {
 		return 0
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return 0
 	}

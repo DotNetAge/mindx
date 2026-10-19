@@ -211,7 +211,7 @@ func (t *LSPro) tryKnowledgeBase(ctx context.Context, targetDir string) (string,
 		// 服务未启动，返回空字符串触发回退
 		return "", nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

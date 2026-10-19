@@ -227,7 +227,7 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 			"先启动 mrag serve 服务并确认端口与地址配置正确后重试；若服务持续不可用，应告知用户",
 		), err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

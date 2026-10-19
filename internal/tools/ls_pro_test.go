@@ -254,7 +254,7 @@ func TestLSPro_Execute_TildePath_Resolved(t *testing.T) {
 		gotDir = r.URL.Query().Get("dir")
 		w.Header().Set("Content-Type", "application/json")
 		// 返回非空目录树，确保 Execute 走知识库分支
-		fmt.Fprintf(w, `{"success":true,"data":{"name":"sparrow","path":"%s","size":0,"is_dir":true,"chunks":null,"children":[{"name":"docs","path":"%s/docs","size":0,"is_dir":true,"summary":"测试摘要","chunks":null,"children":null}]}}`, gotDir, gotDir)
+		_, _ = fmt.Fprintf(w, `{"success":true,"data":{"name":"sparrow","path":"%s","size":0,"is_dir":true,"chunks":null,"children":[{"name":"docs","path":"%s/docs","size":0,"is_dir":true,"summary":"测试摘要","chunks":null,"children":null}]}}`, gotDir, gotDir)
 	}))
 	defer server.Close()
 

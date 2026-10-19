@@ -167,7 +167,7 @@ func countLinesAtLeast(path string, max int) int {
 	if err != nil {
 		return 0
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	scanner := bufio.NewScanner(f)
 	// 扩大缓冲区上限，兼容超长行（如压缩后的单行 JSON）
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
@@ -224,7 +224,7 @@ func (p *ReadPro) readRange(resolvedPath string, params map[string]any) (any, er
 	if err != nil {
 		return nil, fmt.Errorf("%s", tools.GuideReadIO(resolvedPath, err))
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// 扩大 Scanner 缓冲区上限，兼容超长行（如压缩后的单行 JSON）
 	scanner := bufio.NewScanner(f)
@@ -343,7 +343,7 @@ func (p *ReadPro) fetchFileChunks(ctx context.Context, resolvedPath string) ([]c
 			return nil, false
 		}
 		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if readErr != nil {
 			return nil, false
 		}

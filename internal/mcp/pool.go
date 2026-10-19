@@ -103,7 +103,7 @@ func (p *ConnectionPool) RemoveServer(name string) {
 	defer p.mu.Unlock()
 
 	if mc, ok := p.connections[name]; ok {
-		mc.client.Close()
+		_ = mc.client.Close()
 		delete(p.connections, name)
 		p.log.Debug("mcp: pool disconnected removed server", "server", name)
 	}
@@ -143,7 +143,7 @@ func (p *ConnectionPool) Connect(ctx context.Context, name string) error {
 	}
 
 	if err := client.Connect(ctx); err != nil {
-		client.Close()
+		_ = client.Close()
 		p.log.Error("mcp: connection failed", err, "server", name)
 		return fmt.Errorf("connect to %s: %w", name, err)
 	}
@@ -156,7 +156,7 @@ func (p *ConnectionPool) Connect(ctx context.Context, name string) error {
 	p.mu.Lock()
 	// Close existing connection if any
 	if mc, ok := p.connections[name]; ok {
-		mc.client.Close()
+		_ = mc.client.Close()
 	}
 	p.connections[name] = &managedConn{
 		client:   client,
@@ -208,7 +208,7 @@ func (p *ConnectionPool) Disconnect(name string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if mc, ok := p.connections[name]; ok {
-		mc.client.Close()
+		_ = mc.client.Close()
 		delete(p.connections, name)
 		p.log.Info("mcp: disconnected", "server", name)
 	}
@@ -221,7 +221,7 @@ func (p *ConnectionPool) CloseAll() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for name, mc := range p.connections {
-		mc.client.Close()
+		_ = mc.client.Close()
 		delete(p.connections, name)
 	}
 	p.log.Info("mcp: all connections closed")
@@ -254,7 +254,7 @@ func (p *ConnectionPool) reap() {
 		idle := time.Since(mc.lastUsed)
 		mc.mu.Unlock()
 		if idle > mc.ttl {
-			mc.client.Close()
+			_ = mc.client.Close()
 			delete(p.connections, name)
 			p.log.Info("mcp: connection reaped (idle timeout)", "server", name, "idle", idle.Round(time.Second))
 		}

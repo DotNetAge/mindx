@@ -45,7 +45,7 @@ func zipFileEntry(zw *zip.Writer, srcPath, zipPath string) error {
 	if err != nil {
 		return fmt.Errorf("读取 %s 失败：%w", srcPath, err)
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	if _, err := io.Copy(w, in); err != nil {
 		return fmt.Errorf("写入包内条目 %s 失败：%w", zipPath, err)
@@ -66,7 +66,7 @@ func readPackageEntries(pkgPath string) ([]zipEntry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("打开分发包 %s 失败：%w", pkgPath, err)
 	}
-	defer zr.Close()
+	defer func() { _ = zr.Close() }()
 
 	var (
 		entries []zipEntry

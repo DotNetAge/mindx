@@ -294,7 +294,7 @@ func (d *Daemon) handleProviderFetchOllamaModels(_ context.Context, params json.
 	if err != nil {
 		return nil, fmt.Errorf("无法连接 Ollama 服务: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -302,7 +302,7 @@ func (d *Daemon) handleProviderFetchOllamaModels(_ context.Context, params json.
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Ollama 返回错误 (HTTP %d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("调用 Ollama 失败（HTTP %d）：%s", resp.StatusCode, string(body))
 	}
 
 	var ollamaResp struct {
@@ -343,14 +343,14 @@ func (d *Daemon) handleProviderFetchOllamaModelDetail(_ context.Context, params 
 	if err != nil {
 		return nil, fmt.Errorf("无法连接 Ollama 服务: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("读取 Ollama 响应失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Ollama 返回错误 (HTTP %d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("调用 Ollama 失败（HTTP %d）：%s", resp.StatusCode, string(body))
 	}
 
 	var showResp struct {

@@ -1044,7 +1044,8 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if msg.Index == permission.PermissionAllow || msg.Index == permission.PermissionAllowSession {
+		switch msg.Index {
+		case permission.PermissionAllow, permission.PermissionAllowSession:
 			magicWord := "PermissionAllow"
 			if msg.Index == permission.PermissionAllowSession {
 				magicWord = "PermissionAllowSession"
@@ -1056,7 +1057,7 @@ func (m *rootModel) Update(e tea.Msg) (tea.Model, tea.Cmd) {
 				magicWord += ": " + pendingSessionID
 			}
 			m.rpcSendMagicWord(magicWord)
-		} else if msg.Index == permission.PermissionDeny {
+		case permission.PermissionDeny:
 			// 拒绝同样需要送达：主会话自身授权 → 合成拒绝结果并继续循环；
 			// 子会话授权冒泡 → 路由拒绝让子会话换路执行，而非挂到 10 分钟超时。
 			magicWord := "PermissionDeny"

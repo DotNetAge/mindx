@@ -1244,7 +1244,7 @@ func (a *App) EnsureSession() (string, error) {
 	a.logger.Info("未找到匹配会话，创建新会话", "cwd", cwd)
 	newSession, createErr := a.CreateSession(agentName, cwd)
 	if createErr != nil {
-		return "", fmt.Errorf("CreateSession failed for agent=%q cwd=%q: %w", agentName, cwd, createErr)
+		return "", fmt.Errorf("创建会话失败 agent=%q cwd=%q：%w", agentName, cwd, createErr)
 	}
 	a.currentSessionMeta = newSession
 	a.mindxConfig.LastSessionID = newSession.SessionID

@@ -67,7 +67,7 @@ func newFakeRelay(t *testing.T) *fakeRelay {
 		_ = ws.WriteJSON(map[string]any{"type": "code", "code": f.code, "expires_in": 60})
 
 		go func() {
-			defer ws.Close()
+			defer func() { _ = ws.Close() }()
 			for {
 				mt, data, err := ws.ReadMessage()
 				if err != nil {
@@ -129,7 +129,7 @@ func newFakeGateway(t *testing.T) *httptest.Server {
 		if err != nil {
 			return
 		}
-		defer ws.Close()
+		defer func() { _ = ws.Close() }()
 		for {
 			mt, data, err := ws.ReadMessage()
 			if err != nil {

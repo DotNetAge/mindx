@@ -78,14 +78,14 @@ func (d *Daemon) handleOAuthConfigure(_ context.Context, params json.RawMessage)
 		return nil, fmt.Errorf("未知的 OAuth 提供商 %q", p.Name)
 	}
 	if strings.TrimSpace(p.ClientID) == "" {
-		return nil, fmt.Errorf("Client ID 不能为空")
+		return nil, fmt.Errorf("缺少 Client ID")
 	}
 	if err := d.oauthCredStore.Set(p.Name+":client_id", strings.TrimSpace(p.ClientID)); err != nil {
-		return nil, fmt.Errorf("Client ID 保存失败：%w", err)
+		return nil, fmt.Errorf("保存 Client ID 失败：%w", err)
 	}
 	if strings.TrimSpace(p.ClientSecret) != "" {
 		if err := d.oauthCredStore.Set(p.Name+":client_secret", strings.TrimSpace(p.ClientSecret)); err != nil {
-			return nil, fmt.Errorf("Client Secret 保存失败：%w", err)
+			return nil, fmt.Errorf("保存 Client Secret 失败：%w", err)
 		}
 	}
 	return map[string]any{"ok": true}, nil

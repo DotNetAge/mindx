@@ -297,7 +297,7 @@ func rotationCapable(dir string) bool {
 		return false
 	}
 	probePath := probe.Name()
-	defer os.Remove(probePath)
+	defer func() { _ = os.Remove(probePath) }()
 
 	if _, err := probe.WriteString("probe"); err != nil {
 		_ = probe.Close()
@@ -308,7 +308,7 @@ func rotationCapable(dir string) bool {
 	}
 
 	renamed := probePath + ".renamed"
-	defer os.Remove(renamed)
+	defer func() { _ = os.Remove(renamed) }()
 	return os.Rename(probePath, renamed) == nil
 }
 

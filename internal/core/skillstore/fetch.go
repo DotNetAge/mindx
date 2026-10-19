@@ -93,7 +93,7 @@ func (s *Store) Fetch(o FetchOptions) error {
 		if _, nerr := os.Stat(filepath.Join(to, "notes")); nerr == nil {
 			legacyNotes = filepath.Join(tmpRoot, "legacy-notes")
 			if rErr := os.Rename(filepath.Join(to, "notes"), legacyNotes); rErr != nil {
-				os.RemoveAll(tmpRoot)
+				_ = os.RemoveAll(tmpRoot)
 				return fmt.Errorf("保护进化记录失败：%w", rErr)
 			}
 		}
@@ -103,7 +103,7 @@ func (s *Store) Fetch(o FetchOptions) error {
 	}
 
 	if cErr := copyDir(from, staged); cErr != nil {
-		os.RemoveAll(tmpRoot)
+		_ = os.RemoveAll(tmpRoot)
 		if legacyNotes != "" {
 			return fmt.Errorf("复制技能目录失败：%w（旧进化记录暂存于 %s，未删除）", cErr, legacyNotes)
 		}
@@ -112,7 +112,7 @@ func (s *Store) Fetch(o FetchOptions) error {
 
 	// 原子切换：Rename 同盘瞬时完成，项目库不会出现残缺技能
 	if rErr := os.Rename(staged, to); rErr != nil {
-		os.RemoveAll(tmpRoot)
+		_ = os.RemoveAll(tmpRoot)
 		if legacyNotes != "" {
 			return fmt.Errorf("技能切换失败：%w（旧进化记录暂存于 %s，未删除）", rErr, legacyNotes)
 		}

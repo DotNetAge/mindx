@@ -249,7 +249,7 @@ func (c *stdioClient) closeUnlocked() error {
 	c.alive = false
 	c.tracker.cancelAll()
 	if c.stdin != nil {
-		c.stdin.Close()
+		_ = c.stdin.Close()
 	}
 	if c.cmd.Process != nil {
 		_ = c.cmd.Process.Kill()
@@ -328,7 +328,7 @@ func (c *sseClient) Connect(ctx context.Context) error {
 		return fmt.Errorf("connect SSE: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		cancel()
 		return fmt.Errorf("connect SSE: 服务端返回 %d", resp.StatusCode)
 	}
@@ -353,7 +353,7 @@ func (c *sseClient) Connect(ctx context.Context) error {
 	}
 
 	if !gotEndpoint {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		cancel()
 		return fmt.Errorf("failed to receive endpoint from SSE server")
 	}
@@ -375,7 +375,7 @@ func (c *sseClient) Connect(ctx context.Context) error {
 	defer hsCancel()
 	if err := c.handshake(hsCtx); err != nil {
 		cancel()
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return fmt.Errorf("initialize handshake: %w", err)
 	}
 
@@ -401,7 +401,7 @@ func (c *sseClient) handshake(ctx context.Context) error {
 }
 
 func (c *sseClient) readSSE(ctx context.Context, scanner *bufio.Scanner, body io.ReadCloser) {
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	// 流结束（服务端断开/网络异常）后标记失活，pool.Call 的自动重连据此重建连接
 	defer func() {
 		c.mu.Lock()
@@ -451,12 +451,12 @@ func (c *sseClient) postJSON(ctx context.Context, payload []byte) error {
 
 	httpResp, err := c.postHTTP.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("POST request: %w", err)
+		return fmt.Errorf("创建 POST 请求失败：%w", err)
 	}
-	defer httpResp.Body.Close()
+	defer func() { _ = httpResp.Body.Close() }()
 	// 官方实现对 notification 返回 202 Accepted；非 2x 视为失败
 	if httpResp.StatusCode >= 300 {
-		return fmt.Errorf("POST 请求被拒绝: %d", httpResp.StatusCode)
+		return fmt.Errorf("请求被拒绝（POST）：HTTP %d", httpResp.StatusCode)
 	}
 	_, _ = io.Copy(io.Discard, httpResp.Body)
 	return nil
@@ -616,7 +616,7 @@ func (c *httpClient) sendRequest(ctx context.Context, method string, params any)
 	if err != nil {
 		return nil, fmt.Errorf("request: %w", err)
 	}
-	defer httpResp.Body.Close()
+	defer func() { _ = httpResp.Body.Close() }()
 
 	// 捕获服务端下发的 session id
 	if sid := httpResp.Header.Get("Mcp-Session-Id"); sid != "" {
@@ -699,7 +699,7 @@ func (c *httpClient) Notify(ctx context.Context, method string, params any) erro
 	if err != nil {
 		return fmt.Errorf("request: %w", err)
 	}
-	defer httpResp.Body.Close()
+	defer func() { _ = httpResp.Body.Close() }()
 	if httpResp.StatusCode >= 300 {
 		return fmt.Errorf("通知被拒绝: %d", httpResp.StatusCode)
 	}

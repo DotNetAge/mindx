@@ -74,13 +74,13 @@ var mcpListCmd = &cobra.Command{
 			return nil
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "NAME\tTYPE\tENABLED\tTITLE")
+		_, _ = fmt.Fprintln(w, "NAME\tTYPE\tENABLED\tTITLE")
 		for _, e := range entries {
 			enabled := "no"
 			if e.Enabled {
 				enabled = "yes"
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Name, e.Type, enabled, e.Title)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Name, e.Type, enabled, e.Title)
 		}
 		return w.Flush()
 	},
@@ -200,9 +200,9 @@ var mcpToolsCmd = &cobra.Command{
 			return nil
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "NAME\tDESCRIPTION")
+		_, _ = fmt.Fprintln(w, "NAME\tDESCRIPTION")
 		for _, t := range tools {
-			fmt.Fprintf(w, "%s\t%s\n", t.Name, firstLine(t.Description))
+			_, _ = fmt.Fprintf(w, "%s\t%s\n", t.Name, firstLine(t.Description))
 		}
 		return w.Flush()
 	},

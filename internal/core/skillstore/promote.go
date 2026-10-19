@@ -155,7 +155,7 @@ func (s *Store) levelDir(level SkillLevel, agentName, projectDir string) (string
 	case LevelAgent:
 		dir := s.AgentSkillDir(agentName)
 		if dir == "" {
-			return "", fmt.Errorf("Agent 级库需要指定 Agent 名称")
+			return "", fmt.Errorf("未指定 Agent 级库所需的 Agent 名称")
 		}
 		return dir, nil
 	case LevelProject:
@@ -198,7 +198,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return err
@@ -207,7 +207,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	if _, err := io.Copy(out, in); err != nil {
 		return err

@@ -199,7 +199,7 @@ func detectPublicIP() (string, error) {
 
 // readBodyString 读取响应体并限制最大长度，防止异常响应撑爆内存。
 func readBodyString(resp *http.Response, maxBytes int64) (string, error) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("%s 返回状态码 %d", resp.Request.URL, resp.StatusCode)
 	}

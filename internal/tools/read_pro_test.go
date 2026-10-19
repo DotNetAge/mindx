@@ -164,7 +164,7 @@ func TestReadPro_LargeFile_ChunkTree(t *testing.T) {
 			t.Errorf("filter 参数=%q，期望=%q", got, path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":3,"items":[
+		_, _ = fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":3,"items":[
 			{"id":"c1","parent_id":"","title":"开头说明","summary":"日志格式简介","start_line":1,"end_line":2000,"start_pos":0,"end_pos":200000},
 			{"id":"c2","parent_id":"","title":"业务实现","summary":"核心逻辑所在","start_line":2001,"end_line":3500,"start_pos":200001,"end_pos":350000},
 			{"id":"c2-1","parent_id":"c2","title":"子块A","summary":"子块细节","start_line":2100,"end_line":2200,"start_pos":210001,"end_pos":220000}
@@ -234,7 +234,7 @@ func TestReadPro_MediumFile_ChunkTree(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":2,"items":[
+		_, _ = fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":2,"items":[
 			{"id":"m1","parent_id":"","title":"类型定义","summary":"主要类型","start_line":1,"end_line":600,"start_pos":0,"end_pos":24000},
 			{"id":"m2","parent_id":"","title":"核心逻辑","summary":"处理流程","start_line":601,"end_line":1200,"start_pos":24001,"end_pos":48000}
 		]}}`)
@@ -291,7 +291,7 @@ func TestReadPro_MediumFile_KBUnavailable(t *testing.T) {
 func emptyChunksServer() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":0,"items":[]}}`)
+		_, _ = fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":0,"items":[]}}`)
 	}))
 }
 
@@ -455,9 +455,9 @@ func TestReadPro_LargeFile_Pagination(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		page := r.URL.Query().Get("page")
 		if page == "2" {
-			fmt.Fprint(w, page2)
+			_, _ = fmt.Fprint(w, page2)
 		} else {
-			fmt.Fprint(w, page1)
+			_, _ = fmt.Fprint(w, page1)
 		}
 	}))
 	defer server.Close()
@@ -509,7 +509,7 @@ func kbIndexed(t *testing.T, target string) bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return false
@@ -544,7 +544,7 @@ func TestReadPro_Execute_WithRealKnowledgeBase(t *testing.T) {
 	if err != nil {
 		t.Skip("知识库服务未运行，跳过集成验证")
 	}
-	probe.Body.Close()
+	_ = probe.Body.Close()
 	if probe.StatusCode != http.StatusOK {
 		t.Skipf("知识库服务响应异常（HTTP %d），跳过集成验证", probe.StatusCode)
 	}
@@ -642,7 +642,7 @@ func TestReadPro_NoPreview_NoKBQuery(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&requests, 1)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":1,"items":[
+		_, _ = fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":1,"items":[
 			{"id":"c1","parent_id":"","title":"分块","summary":"摘要","start_line":1,"end_line":100,"start_pos":0,"end_pos":1000}
 		]}}`)
 	}))
@@ -682,7 +682,7 @@ func TestReadPro_Preview_SmallFile(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&requests, 1)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":1,"items":[
+		_, _ = fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":1,"items":[
 			{"id":"s1","parent_id":"","title":"小文件分块","summary":"完整内容","start_line":1,"end_line":5,"start_pos":0,"end_pos":100}
 		]}}`)
 	}))
@@ -728,7 +728,7 @@ func TestReadPro_Preview_ThirtyLinesBoundary(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&requests, 1)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":1,"items":[
+		_, _ = fmt.Fprintf(w, `{"success":true,"data":{"page":1,"size":200,"total":1,"items":[
 			{"id":"b1","parent_id":"","title":"分块","summary":"摘要","start_line":1,"end_line":30,"start_pos":0,"end_pos":1000}
 		]}}`)
 	}))

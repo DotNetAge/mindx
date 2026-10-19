@@ -67,7 +67,7 @@ func BuildNodes(items []Item, state *BuildState, isFinal bool) []TreeNode {
 		if buffer != nil {
 			if flushed := buffer.flush(); flushed != nil {
 				if g, ok := flushed.(*GroupNode); ok && !inLastRound {
-					g.NodeBase.FoldDefault = false
+					g.FoldDefault = false
 				}
 				nodes = append(nodes, flushed)
 			}
@@ -129,7 +129,7 @@ func BuildNodes(items []Item, state *BuildState, isFinal bool) []TreeNode {
 			}
 			if !inLastRound {
 				// 旧轮次：工具默认展开（对齐旧 ToolsFolded 窗口边界语义）
-				tool.NodeBase.FoldDefault = false
+				tool.FoldDefault = false
 			}
 			if desc.GroupKey == nil {
 				flushBefore(inLastRound)
@@ -139,7 +139,7 @@ func BuildNodes(items []Item, state *BuildState, isFinal bool) []TreeNode {
 				flushed, buffer = buffer.push(tool, *desc.GroupKey)
 				if flushed != nil {
 					if g, ok := flushed.(*GroupNode); ok && !inLastRound {
-						g.NodeBase.FoldDefault = false
+						g.FoldDefault = false
 					}
 					nodes = append(nodes, flushed)
 				}
@@ -582,7 +582,7 @@ func buildCollectNode(state *BuildState, it Item, offset time.Duration) *Collect
 
 		// 关联回填 subagent 卡片完成态（对齐 Desktop）
 		if sn, ok := state.subagentNodes[sid]; ok {
-			sn.NodeBase.Status = ternary(success, NodeSuccess, NodeFailed)
+			sn.Status = ternary(success, NodeSuccess, NodeFailed)
 			sn.ResultDigest = truncate(digest, 200)
 		}
 	}

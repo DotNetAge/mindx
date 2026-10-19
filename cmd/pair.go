@@ -35,7 +35,7 @@ func runPair(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	raw, err := client.CallWithTimeout("device.pair.code", map[string]any{})
 	if err != nil {

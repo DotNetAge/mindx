@@ -378,7 +378,7 @@ func runMarketPackAgents(cmd *cobra.Command, args []string) error {
 	for _, s := range sources {
 		key := strings.ToLower(s.base)
 		if prev, dup := seen[key]; dup {
-			return fmt.Errorf("Agent 重名：%s 与 %s（分类 %s / %s），货架以名称为唯一键，请先改名",
+			return fmt.Errorf("重名的 Agent：%s 与 %s（分类 %s / %s），货架以名称为唯一键，请先改名",
 				s.path, prev.path, s.category, prev.category)
 		}
 		seen[key] = s
@@ -389,7 +389,7 @@ func runMarketPackAgents(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("创建暂存目录失败: %w", err)
 	}
-	defer os.RemoveAll(staging)
+	defer func() { _ = os.RemoveAll(staging) }()
 
 	for _, s := range sources {
 		if s.isDir {
@@ -440,13 +440,13 @@ func runMarketPackAgents(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("创建验证目录失败: %w", err)
 	}
-	defer os.RemoveAll(verifyRoot)
+	defer func() { _ = os.RemoveAll(verifyRoot) }()
 
 	agents := store.List()
 	packed, failed := 0, 0
 	for _, a := range agents {
 		if _, ok := seen[strings.ToLower(a.Meta.Name)]; !ok {
-			return fmt.Errorf("Agent %s 未找到源文件映射", a.Meta.Name)
+			return fmt.Errorf("未找到 Agent %s 的源文件映射", a.Meta.Name)
 		}
 		pkgPath := filepath.Join(outDir, a.Meta.Name+".mindpkg")
 		manifest, warnings, err := bundle.ExportAgent(a, skillStore, pkgPath)

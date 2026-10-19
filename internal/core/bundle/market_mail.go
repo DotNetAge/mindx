@@ -73,7 +73,7 @@ func (m *MarketClient) TakeOrgMailInbox(orgSlug string) ([]*OrgMail, error) {
 	if err != nil {
 		return nil, fmt.Errorf("收件箱暂时打不开：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return nil, err
@@ -96,7 +96,7 @@ func (m *MarketClient) ListOrgMailSent(orgSlug string) ([]*OrgMail, error) {
 	if err != nil {
 		return nil, fmt.Errorf("发件清单暂时打不开：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return nil, err
@@ -127,7 +127,7 @@ func (m *MarketClient) ListOrgMemberCards(orgSlug string) ([]OrgMemberCard, erro
 	if err != nil {
 		return nil, fmt.Errorf("成员名单暂时打不开：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return nil, err
@@ -178,7 +178,7 @@ func (m *MarketClient) OrgMemberEndpoint(orgSlug string, personaID int64) (*Peer
 	if err != nil {
 		return nil, fmt.Errorf("寻址暂时不可用：%w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
 	if err != nil {
 		return nil, err

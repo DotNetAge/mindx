@@ -359,12 +359,13 @@ func renderSubagentNode(s *Stream, n *SubagentNode, width int) string {
 	b.WriteString(status.IconStyle.Render("🚀"))
 	b.WriteString(" ")
 
-	if n.Status == NodeExecuting {
+	switch n.Status {
+	case NodeExecuting:
 		b.WriteString(renderShimmeredText(s, n.Base().ID, "正在执行子任务", status.VerbStyle))
-	} else if n.Status == NodeSuccess {
+	case NodeSuccess:
 		b.WriteString(style.GrayStyle.Render("✓"))
 		b.WriteString(" ")
-	} else {
+	default:
 		b.WriteString(status.VerbStyle.Render("子任务"))
 		b.WriteString(" ")
 	}
@@ -485,10 +486,7 @@ func classifyNodeStatus(node TreeNode) NodeStatusClass {
 	}
 
 	// success：静态 attention 类型 + 慢节点黄灯
-	isAttention := false
-	if pres.Attention {
-		isAttention = true
-	}
+	isAttention := pres.Attention
 	if b.Duration > 30*time.Second {
 		isAttention = true
 	}

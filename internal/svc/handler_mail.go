@@ -282,4 +282,3 @@ func (d *Daemon) handleMailMembers(_ context.Context, params json.RawMessage) (a
 	}
 	return map[string]any{"org_slug": orgSlug, "members": cards, "me_persona": mePersona}, nil
 }
-
