@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	bbolt "go.etcd.io/bbolt"
 
-	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/core/bundle"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 )
@@ -21,9 +19,7 @@ import (
 // 信箱是松散载体：信内是工作安排、请求帮忙还是知会事项，daemon 不解析不理会——
 // 收信后叫醒本机智能体读信，由它分辨处置（自己干 / 转告人类伙伴 / 仅知会）。
 //
-// 两条投递路径：
-//   直连（优先）——对方智能主机私网可达时，出站连接器携发信方访问令牌直投 mail.deliver；
-//   信箱（兜底）——直连不通，信留在服务端信箱，收方 daemon 轮询拉取。
+// 收发单一通道：信一律落服务端组织信箱，收方 daemon 轮询拉取（已送达落档去重）。
 // 收方核验（不信任来自客户端的任何声明）：持本机登录态调服务端内省，
 // 确认发信人确实是自己的直属上级/下级后才收信落档。
 // ---------------------------------------------------------------------------
@@ -117,61 +113,6 @@ func (d *Daemon) mailFind(uid string) *LocalMail {
 	return nil
 }
 
-// ackMailAsync 直连收信回执（异步尽力而为）：服务端把信标已投递，寄件人的
-// 发件对账即时准确；失败不影响收信（对方轮询拉取路径仍会兜底标记）。
-func (d *Daemon) ackMailAsync(orgSlug, uid string) {
-	go func() {
-		if err := d.app.Market().AckOrgMail(orgSlug, uid); err != nil {
-			d.logger.Debug("mail: 收信回执未完成（不影响收信，轮询会兜底）", "uid", uid, "error", err.Error())
-		}
-	}()
-}
-
-// handleMailDeliver 处理 mail.deliver：跨机器直连投递的入站口（openMethods 白名单）。
-// 防滥用依据：方法本身只做「核验 + 落档 + 叫醒」，核验必须凭发信方访问令牌经
-// 服务端内省通过（组织信任替代设备握手闸），伪造者无法出示有效上级/下级令牌。
-func (d *Daemon) handleMailDeliver(_ context.Context, params json.RawMessage) (any, error) {
-	var p rpc.MailDeliverParams
-	if err := unmarshalParams(params, &p); err != nil {
-		return nil, err
-	}
-	if p.OrgSlug == "" || p.Token == "" || p.UID == "" || p.Body == "" {
-		return nil, fmt.Errorf("信件不完整（缺少组织、凭证或正文）")
-	}
-	myToken := d.app.MarketAuthToken()
-	if myToken == "" {
-		return nil, fmt.Errorf("本机还没有登录资源社区，无法核验来信身份；请先登录后再收组织来信")
-	}
-	intro, err := d.app.Market().IntrospectOrg(p.OrgSlug, p.Token)
-	if err != nil {
-		return nil, fmt.Errorf("来信身份核验暂时不可用，请稍后再试：%w", err)
-	}
-	// 方向校验：down（上级发给我）要求发信人是我的直属上级；up（下级回给我）要求是我的直属下级
-	want := "parent"
-	if p.Direction != "down" {
-		want = "subordinate"
-	}
-	if !intro.Active || intro.Relation != want {
-		return nil, fmt.Errorf("这封信没有通过身份核验：只有你的直属上级寄来的信、或直属下级的回信才会接收")
-	}
-	if d.mailSeen(p.UID) {
-		// 直连重复投递：上次可能收下了但回执没送达，补一次回执（服务端幂等）
-		d.ackMailAsync(p.OrgSlug, p.UID)
-		return map[string]any{"ok": true, "duplicate": true}, nil
-	}
-	if err := d.mailSave(&LocalMail{
-		UID: p.UID, OrgSlug: p.OrgSlug, FromPersona: intro.PersonaID,
-		FromName: intro.DisplayName, Subject: p.Subject, Body: p.Body,
-		InReplyTo: p.InReplyTo, ReceivedAt: time.Now().Format(time.RFC3339),
-	}); err != nil {
-		return nil, err
-	}
-	// 直连已送达：立即回执服务端，寄件人的发件对账即刻显示「对方已取」
-	d.ackMailAsync(p.OrgSlug, p.UID)
-	d.wakeForMail(intro.DisplayName, p.Subject, p.Body, p.UID, p.InReplyTo)
-	return map[string]any{"ok": true}, nil
-}
-
 // defaultHiredAgent 本机默认负责人（第一个已雇佣的智能体；来信处置与自动开工的执行者）。
 func (d *Daemon) defaultHiredAgent() string {
 	if agents := d.app.Agents(); agents != nil {
@@ -234,8 +175,8 @@ func findMemberCard(cards []bundle.OrgMemberCard, name string) *bundle.OrgMember
 	return nil
 }
 
-// handleMailSend 处理 mail.send：发信 = 入服务端信箱（拿全局信件编号、留底）→
-// 直连投递接力（对方机器私网可达时秒达；不通则留信箱等对方上线拉取）。
+// handleMailSend 处理 mail.send：发信 = 入服务端信箱（拿全局信件编号、留底），
+// 对方上线轮询自取（收发单一通道）。
 func (d *Daemon) handleMailSend(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MailSendParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -266,14 +207,13 @@ func (d *Daemon) handleMailSend(_ context.Context, params json.RawMessage) (any,
 	if err != nil {
 		return nil, err
 	}
-	delivered := d.deliverMailDirectly(orgSlug, card.PersonaID, mail.UID, p.Subject, p.Body, p.InReplyTo, "down")
+	// 信已落服务端信箱（收发单一通道）：对方上线轮询自取，对账视图看「对方已取」。
 	return map[string]any{
 		"uid": mail.UID, "org_slug": orgSlug, "to": card.DisplayName,
-		"delivered_directly": delivered,
 	}, nil
 }
 
-// handleMailReply 处理 mail.reply：按原信编号回给寄件人（回信也是一封信，同样先入信箱再接力直连）。
+// handleMailReply 处理 mail.reply：按原信编号回给寄件人（回信也是一封信，先入服务端信箱）。
 func (d *Daemon) handleMailReply(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MailReplyParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -291,10 +231,8 @@ func (d *Daemon) handleMailReply(_ context.Context, params json.RawMessage) (any
 	if err != nil {
 		return nil, err
 	}
-	delivered := d.deliverMailDirectly(origin.OrgSlug, origin.FromPersona, mail.UID,
-		mail.Subject, strings.TrimSpace(p.Body), origin.UID, "up")
 	return map[string]any{
-		"uid": mail.UID, "in_reply_to": origin.UID, "delivered_directly": delivered,
+		"uid": mail.UID, "in_reply_to": origin.UID,
 	}, nil
 }
 
@@ -345,44 +283,3 @@ func (d *Daemon) handleMailMembers(_ context.Context, params json.RawMessage) (a
 	return map[string]any{"org_slug": orgSlug, "members": cards, "me_persona": mePersona}, nil
 }
 
-// gatewayCaller 直连投递所需的最小 WS 客户端接口（便于测试替身）。
-type gatewayCaller interface {
-	Call(ctx context.Context, method string, params any) (json.RawMessage, error)
-	Close() error
-}
-
-// dialPeer 直连对方智能主机的拨号函数（变量化便于测试替换）。
-var dialPeer = func(addr string) (gatewayCaller, error) {
-	c := gateway.NewClient(addr)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := c.Connect(ctx); err != nil {
-		return nil, err
-	}
-	return c, nil
-}
-
-// deliverMailDirectly 直连投递接力（私网直连优先）：查对方可达地址 →
-// 裸 WS 连对方智能主机调 mail.deliver（出示发信方访问令牌）→ 不通静默放弃（信已在服务端信箱，对方上线自会拉取）。
-func (d *Daemon) deliverMailDirectly(orgSlug string, toPersona int64, uid, subject, body, inReplyTo, direction string) bool {
-	ep, err := d.app.Market().OrgMemberEndpoint(orgSlug, toPersona)
-	if err != nil || !ep.Reachable {
-		return false
-	}
-	myToken := d.app.MarketAuthToken()
-	if myToken == "" {
-		return false
-	}
-	c, err := dialPeer(fmt.Sprintf("ws://%s:%d%s", ep.Addr, ep.Port, d.WSPath()))
-	if err != nil {
-		return false
-	}
-	defer func() { _ = c.Close() }()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, err = c.Call(ctx, "mail.deliver", rpc.MailDeliverParams{
-		OrgSlug: orgSlug, Token: myToken, UID: uid, Subject: subject, Body: body,
-		InReplyTo: inReplyTo, Direction: direction,
-	})
-	return err == nil
-}

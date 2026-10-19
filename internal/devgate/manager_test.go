@@ -296,7 +296,9 @@ func TestScopeOfLegacyDeviceDefaultsToAsk(t *testing.T) {
 		ID: "dev-legacy", Name: "旧设备", Platform: "macos", Token: token, ApprovedAt: time.Now(),
 	}}
 	data, _ := json.Marshal(legacy)
-	mgr.cfg.Store.Set(keyDevices, string(data))
+	if err := mgr.cfg.Store.Set(keyDevices, string(data)); err != nil {
+		t.Fatalf("写入旧版持久化数据失败：%v", err)
+	}
 	mgr.mu.Unlock()
 	mgr2, err := NewManager(Config{
 		Store:      mgr.cfg.Store,

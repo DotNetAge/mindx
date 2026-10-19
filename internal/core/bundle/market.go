@@ -1067,7 +1067,7 @@ func (m *MarketClient) fetchPageAt(prefix string, q MarketQuery) (*MarketPage, e
 // PackageByKindName 从服务端查单包详情（安装/预览的定位路径）；
 // API 不可达直接报错——静态清单机制已废除，不再有全量清单线性定位回退。
 func (m *MarketClient) PackageByKindName(kind, name string) (*MarketPackage, error) {
-	return m.packageAt(m.apiBase + "/packages/" + url.PathEscape(kind) + "/" + url.PathEscape(name), kind, name)
+	return m.packageAt(m.apiBase+"/packages/"+url.PathEscape(kind)+"/"+url.PathEscape(name), kind, name)
 }
 
 // OrgPackageByKindName 从组织源查单包详情（M7）：仅命中本人在册组织的包；

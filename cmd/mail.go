@@ -94,21 +94,16 @@ Body sources: command-line words, --body-file <path>, or piped stdin.`,
 			return err
 		}
 		var res struct {
-			UID               string `json:"uid"`
-			OrgSlug           string `json:"org_slug"`
-			To                string `json:"to"`
-			DeliveredDirectly bool   `json:"delivered_directly"`
+			UID     string `json:"uid"`
+			OrgSlug string `json:"org_slug"`
+			To      string `json:"to"`
 		}
 		if err := json.Unmarshal(result, &res); err != nil {
 			fmt.Println(string(result))
 			return nil
 		}
 		fmt.Printf("已寄出给 %s（信件编号 %s）。\n", res.To, res.UID)
-		if res.DeliveredDirectly {
-			fmt.Println("信已直送对方智能主机，对方很快会看到。")
-		} else {
-			fmt.Println("对方智能主机暂不可达，信已留在对方信箱，对方上线后会自动收取。")
-		}
+		fmt.Println("信已留在对方信箱，对方智能主机上线后会自动收取。")
 		fmt.Printf("寄件回执可在 `mindx mail sent` 里对账；对方回信会进入 `mindx mail inbox`。\n")
 		return nil
 	},
@@ -143,20 +138,15 @@ Body sources: command-line words, --body-file <path>, or piped stdin.`,
 			return err
 		}
 		var res struct {
-			UID               string `json:"uid"`
-			InReplyTo         string `json:"in_reply_to"`
-			DeliveredDirectly bool   `json:"delivered_directly"`
+			UID       string `json:"uid"`
+			InReplyTo string `json:"in_reply_to"`
 		}
 		if err := json.Unmarshal(result, &res); err != nil {
 			fmt.Println(string(result))
 			return nil
 		}
 		fmt.Printf("已回信（信件编号 %s，回复原信 %s）。\n", res.UID, res.InReplyTo)
-		if res.DeliveredDirectly {
-			fmt.Println("信已直送对方智能主机，对方很快会看到。")
-		} else {
-			fmt.Println("对方智能主机暂不可达，信已留在对方信箱，对方上线后会自动收取。")
-		}
+		fmt.Println("信已留在对方信箱，对方智能主机上线后会自动收取。")
 		return nil
 	},
 }
