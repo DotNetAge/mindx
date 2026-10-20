@@ -35,15 +35,30 @@ func TestMarketDeviceLoginState_SetClearsUser(t *testing.T) {
 	s.mu.Unlock()
 
 	// 非 done 状态切换应清空 user 快照与授权页 URL
-	s.set("error", "超时", "")
-	phase, errMsg, authURL, user := s.snapshot()
+	s.set("error", "超时", "", "")
+	phase, errMsg, authURL, _, user := s.snapshot()
 	if phase != "error" || errMsg != "超时" || authURL != "" || user != nil {
 		t.Errorf("set 后状态异常：phase=%q err=%q url=%q user=%v", phase, errMsg, authURL, user)
 	}
 
-	// pending 状态携带授权页 URL（重复点「重新打开」时重新广播）
-	s.set("pending", "", "https://community.example/auth/login/github")
-	if _, _, authURL, _ := s.snapshot(); authURL == "" {
+	// pending 状态携带授权页 URL 与登录方式（重复点「重新打开」时重新广播）
+	s.set("pending", "", "https://community.example/auth/login/github", "github")
+	phase, _, authURL, provider, _ := s.snapshot()
+	if authURL == "" {
 		t.Error("pending 状态应缓存授权页 URL")
+	}
+	if provider != "github" {
+		t.Errorf("pending 状态应记录登录方式，实际 %q", provider)
+	}
+
+	// 换登录方式发起时旧流程作废：stale 对号判定
+	s.mu.Lock()
+	s.gen = 7
+	s.mu.Unlock()
+	if s.stale(7) {
+		t.Error("同代次不应判 stale")
+	}
+	if !s.stale(6) || !s.stale(8) {
+		t.Error("不同代次应判 stale（防旧流程覆盖新状态）")
 	}
 }
