@@ -601,6 +601,17 @@ func (a *App) BuildRulesSection() string {
 func (a *App) SetTestDir(tmpDir string) error {
 	a.settings.Test = true
 	a.settings.testDir = tmpDir
+
+	// 凭据存储同步重定向：darwin 下 DefaultApp 构造时用的是真实钥匙串（全局），
+	// 且内存三件套（token/username/password）已从真实钥匙串 resolve——本机处于
+	// 登录态时测试 daemon 会带着真实令牌，「匿名形态」类断言随本机状态漂移
+	// （2026-10-20 爆雷：本机登录 user 1 后 TestHandleMarketAccountGet_Anonymous 必红）。
+	// 改落测试目录文件并清空内存值，测试从干净的匿名态起步；写路径也落 tmp，不碰钥匙串。
+	a.credStore = &encryptedFileStore{path: filepath.Join(tmpDir, "settings", ".credentials")}
+	a.marketMu.Lock()
+	a.marketAuthToken, a.marketUsername, a.marketPassword = "", "", ""
+	a.marketMu.Unlock()
+
 	// 测试路由器：清单文件隔离在测试目录内，会话实体按 project_dir 落
 	// <project_dir>/.sessions（测试中 project_dir 用 t.TempDir，随测试清理）。
 	sessDB, err := mindxses.NewRoutedSessionStore(filepath.Join(tmpDir, "data", "session_dirs.json"))

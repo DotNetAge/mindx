@@ -151,6 +151,47 @@ func (d *Daemon) kvDeleteInternal(key string) error {
 	})
 }
 
+// kvSetInternal 写入一个字符串值（内部标记用，无 TTL；kvstore 未就绪时报错不落档）。
+func (d *Daemon) kvSetInternal(key, value string) error {
+	if d.kvStore == nil {
+		return fmt.Errorf("kvstore not available")
+	}
+	itemData, _ := json.Marshal(kvItem{Key: key, Value: value, CreatedAt: time.Now().Unix()})
+	return d.kvStore.Update(func(tx *bbolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(kvStoreBucket))
+		if err != nil {
+			return err
+		}
+		return b.Put([]byte(key), itemData)
+	})
+}
+
+// kvGetStringInternal 读取一个字符串值（不存在或非字符串返回空串；尽力而为不报错）。
+func (d *Daemon) kvGetStringInternal(key string) string {
+	if d.kvStore == nil {
+		return ""
+	}
+	var out string
+	_ = d.kvStore.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(kvStoreBucket))
+		if b == nil {
+			return nil
+		}
+		v := b.Get([]byte(key))
+		if v == nil {
+			return nil
+		}
+		var item kvItem
+		if json.Unmarshal(v, &item) == nil {
+			if s, ok := item.Value.(string); ok {
+				out = s
+			}
+		}
+		return nil
+	})
+	return out
+}
+
 func (d *Daemon) handleKVList(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.KVListParams
 	if err := unmarshalParams(params, &p); err != nil {

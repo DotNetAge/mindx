@@ -232,13 +232,12 @@ type MarketAccountCredentialsParams struct {
 	DisplayName string `json:"display_name,omitempty"` // 仅注册用（缺省取用户名）
 }
 
-// MarketAccountProfileSetParams Profile 四字段编辑参数（nil 指针语义在 handler 内
-// 以字符串指针表达；RPC JSON 层用空缺省判断——字段存在与否由 unmarshal 后的指针区分）。
+// MarketAccountProfileSetParams Profile 三字段编辑参数（2026-10-20 定案：github 移出
+// 手填白名单，由 GitHub 身份绑定自动获取；nil 指针语义在 handler 内以字符串指针表达）。
 type MarketAccountProfileSetParams struct {
 	NickName *string `json:"nick_name,omitempty"`
 	JobTitle *string `json:"job_title,omitempty"`
 	Phone    *string `json:"phone,omitempty"`
-	Github   *string `json:"github,omitempty"`
 }
 
 // MarketAccountRegister 用户名密码注册（成功即登录并绑定设备）。

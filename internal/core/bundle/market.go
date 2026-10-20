@@ -183,6 +183,16 @@ func (m *MarketClient) ensureIdentity() error {
 	return nil
 }
 
+// MarketUserIdentity 账号绑定的社区登录身份（GET /me identities 行；社区账号分组渲染源）。
+type MarketUserIdentity struct {
+	Provider  string `json:"provider"`
+	Login     string `json:"login"`
+	NickName  string `json:"nick_name"`
+	AvatarURL string `json:"avatar_url"`
+	IsPrimary bool   `json:"is_primary"`
+	CreatedAt string `json:"created_at"`
+}
+
 // MarketUser MindX 账号用户信息（服务端 GET /api/v1/me 响应）。
 type MarketUser struct {
 	ID        int64  `json:"id"`
@@ -192,11 +202,14 @@ type MarketUser struct {
 	AvatarURL string `json:"avatar_url"`
 	Points    int64  `json:"points"`
 	TOSAccept bool   `json:"tos_accepted"`
-	// 账号机制字段（用户名密码登录 + Profile 四字段）
+	// 账号机制字段（用户名密码登录 + Profile 三字段）
 	Username string `json:"username"`
 	JobTitle string `json:"job_title"`
 	Phone    string `json:"phone"`
 	Github   string `json:"github"`
+	// 多社区身份（2026-10-20 定案）：绑定身份全表 + 服务端可用提供商清单
+	Identities         []MarketUserIdentity `json:"identities"`
+	AvailableProviders []string             `json:"available_providers"`
 }
 
 // RegisterClient 登记设备身份（服务端幂等：已存在不覆盖绑定状态）。
@@ -419,8 +432,102 @@ func (m *MarketClient) getExperienceAt(prefix string, id int64) (*MarketExperien
 	return out.Experience, nil
 }
 
-// UpdateProfileFields 更新 Profile 四字段（PATCH /api/v1/me；nil = 不更新）。
-func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone, github *string) (*MarketUser, error) {
+// IdentityLinkStart 发起社区账号绑定（POST /api/v1/me/identities/link）：
+// 服务端暂存绑定请求并返回一次性授权入口 URL（由 daemon 经 link_open 广播开浏览器）。
+func (m *MarketClient) IdentityLinkStart(provider string) (linkID, authURL string, err error) {
+	if m.authToken == "" {
+		return "", "", fmt.Errorf("尚未登录社区")
+	}
+	var out struct {
+		LinkID  string `json:"link_id"`
+		AuthURL string `json:"auth_url"`
+	}
+	if err := m.postJSON(m.apiBase+"/me/identities/link", map[string]string{"provider": provider}, &out); err != nil {
+		return "", "", err
+	}
+	if out.LinkID == "" || out.AuthURL == "" {
+		return "", "", fmt.Errorf("绑定发起响应缺少授权地址")
+	}
+	return out.LinkID, out.AuthURL, nil
+}
+
+// IdentityLinkStatus 查询绑定进度（GET /api/v1/me/identities/link/{id}/status）：
+// pending | done | failed（failed 时 errMsg 带原因）。
+func (m *MarketClient) IdentityLinkStatus(linkID string) (status, errMsg string, err error) {
+	if m.authToken == "" {
+		return "", "", fmt.Errorf("尚未登录社区")
+	}
+	resp, err := m.authedGet(m.apiBase + "/me/identities/link/" + url.PathEscape(linkID) + "/status")
+	if err != nil {
+		return "", "", fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return "", "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("查询绑定进度失败（HTTP %d）", resp.StatusCode)
+	}
+	var out struct {
+		Status string `json:"status"`
+		Error  string `json:"error"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return "", "", fmt.Errorf("解析绑定进度失败：%w", err)
+	}
+	return out.Status, out.Error, nil
+}
+
+// IdentityUnlink 解绑社区账号（DELETE /api/v1/me/identities/{provider}；
+// 主身份与最后一条身份由服务端拒绝）。
+func (m *MarketClient) IdentityUnlink(provider string) error {
+	if m.authToken == "" {
+		return fmt.Errorf("尚未登录社区")
+	}
+	req, err := http.NewRequest(http.MethodDelete, m.apiBase+"/me/identities/"+url.PathEscape(provider), nil)
+	if err != nil {
+		return err
+	}
+	m.attachIdentity(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	var e struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(data, &e) == nil && e.Error.Message != "" {
+		return fmt.Errorf("%s", e.Error.Message)
+	}
+	return fmt.Errorf("解绑失败（HTTP %d）", resp.StatusCode)
+}
+
+// OrgCreate 创建组织（POST /api/v1/orgs：仅需名称与别名，创建者即所有者）。
+func (m *MarketClient) OrgCreate(name, slug string) (orgID int64, err error) {
+	if m.authToken == "" {
+		return 0, fmt.Errorf("尚未登录社区")
+	}
+	var out struct {
+		OrgID int64  `json:"org_id"`
+		Slug  string `json:"slug"`
+	}
+	if err := m.postJSON(m.apiBase+"/orgs", map[string]string{"name": name, "slug": slug}, &out); err != nil {
+		return 0, err
+	}
+	return out.OrgID, nil
+}
+
+// UpdateProfileFields 更新 Profile 三字段（PATCH /api/v1/me；nil = 不更新。
+// 2026-10-20 定案：github 移出手填白名单，由 GitHub 身份绑定自动获取）。
+func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone *string) (*MarketUser, error) {
 	if m.authToken == "" {
 		return nil, fmt.Errorf("尚未登录社区")
 	}
@@ -433,9 +540,6 @@ func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone, github *st
 	}
 	if phone != nil {
 		body["phone"] = *phone
-	}
-	if github != nil {
-		body["github"] = *github
 	}
 	if len(body) == 0 {
 		return m.Me()
@@ -469,21 +573,52 @@ func (m *MarketClient) Base() string { return m.base }
 // DeviceLoginStart 设备授权登录发起结果（服务端 POST /auth/device/start 响应）。
 type DeviceLoginStart struct {
 	DeviceCode      string `json:"device_code"`
-	VerificationURL string `json:"verification_url"` // 确认页 URL（已带 code，客户端直接打开）
-	ExpiresIn       int    `json:"expires_in"`       // 会话有效期（秒）
-	Interval        int    `json:"interval"`         // 建议轮询间隔（秒）
+	VerificationURL string `json:"verification_url"`    // 确认页 URL（已带 code，客户端直接打开）
+	LoginURL        string `json:"login_url,omitempty"` // 直达授权 URL（带 provider 时下发；回调后自动完成设备授权）
+	ExpiresIn       int    `json:"expires_in"`          // 会话有效期（秒）
+	Interval        int    `json:"interval"`            // 建议轮询间隔（秒）
 }
 
-// DeviceStart 发起设备授权登录（服务端创建 pending 会话）。
-func (m *MarketClient) DeviceStart() (*DeviceLoginStart, error) {
+// DeviceStart 发起设备授权登录（服务端创建 pending 会话）。provider 非空时
+// 服务端额外下发直达该提供商授权页的 LoginURL（直通链路，免确认页点击）。
+func (m *MarketClient) DeviceStart(provider string) (*DeviceLoginStart, error) {
+	body := map[string]any{}
+	if provider = strings.TrimSpace(provider); provider != "" {
+		body["provider"] = provider
+	}
 	var out DeviceLoginStart
-	if err := m.postJSON(m.apiBase+"/auth/device/start", map[string]any{}, &out); err != nil {
+	if err := m.postJSON(m.apiBase+"/auth/device/start", body, &out); err != nil {
 		return nil, err
 	}
 	if out.DeviceCode == "" || out.VerificationURL == "" {
 		return nil, fmt.Errorf("设备登录响应缺少 device_code/verification_url")
 	}
 	return &out, nil
+}
+
+// LoginProviders 当前部署已配置的登录方式清单（GET /auth/providers，匿名），
+// 供客户端登录页渲染第三方登录按钮（未登录场景拿不到 /me）。
+func (m *MarketClient) LoginProviders() ([]string, error) {
+	req, err := http.NewRequest(http.MethodGet, m.apiBase+"/auth/providers", nil)
+	if err != nil {
+		return nil, err
+	}
+	m.attachIdentity(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("获取登录方式失败（HTTP %d）", resp.StatusCode)
+	}
+	var out struct {
+		Providers []string `json:"providers"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, apiMaxSize)).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out.Providers, nil
 }
 
 // DevicePollResult 设备授权轮询响应形态。

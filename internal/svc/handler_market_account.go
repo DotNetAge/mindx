@@ -78,7 +78,9 @@ func (d *Daemon) handleMarketRatingGet(_ context.Context, params json.RawMessage
 
 // finishMarketBind 市场登录收口（拿到 AuthToken 后调用）：
 // 先持久化并校验 AuthToken 归属（GET /me，失败回滚旧令牌），通过后执行
-// clients/bind 单事务（user_id 落值 + 匿名评分迁移 + 设备元数据上报）。幂等、单向。
+// clients/bind 单事务（user_id 落值 + 匿名评分迁移 + 设备元数据上报）。
+// 幂等、支持改绑（服务端 2026-10-20 定案：换号登录即改绑）。
+// 收口成功即写持久化登录史标记（孤儿账号守门的判据，见 autoProvisionMarketAccount）。
 func (d *Daemon) finishMarketBind(authToken string) (user *bundle.MarketUser, migrated int64, err error) {
 	// 先落库再校验：校验失败回滚旧令牌（credStore 与内存同通道恢复，不漂移）
 	oldToken := d.app.MarketAuthToken()
@@ -97,6 +99,9 @@ func (d *Daemon) finishMarketBind(authToken string) (user *bundle.MarketUser, mi
 	if err != nil {
 		return nil, 0, fmt.Errorf("设备绑定失败：%w", err)
 	}
+	if kvErr := d.kvSetInternal("market_ever_logged_in", "1"); kvErr != nil {
+		d.logger.Warn("登录史标记写入失败（不影响本次登录）", "error", kvErr)
+	}
 	d.logger.Info("MindX 账号绑定完成", "login", user.Login, "migrated", migrated)
 	return user, migrated, nil
 }
@@ -114,6 +119,11 @@ func (d *Daemon) silentMarketRelogin() {
 			d.logger.Warn("市场静默登录 panic", "recover", r)
 		}
 	}()
+	// 用户本会话已主动退出：整个静默通道静默（含自动建号），重启后才恢复
+	if d.marketLoggedOut {
+		d.logger.Info("用户已主动退出，本次运行期不再静默登录")
+		return
+	}
 	if !d.app.HasMarketCredentials() {
 		d.autoProvisionMarketAccount()
 		return
@@ -140,6 +150,13 @@ func (d *Daemon) silentMarketRelogin() {
 // autoProvisionMarketAccount 首次自动建号并登录（无凭据分支，见 silentMarketRelogin）。
 // 称呼取设备名（截断 32 字符，服务端上限），仅注册成功才持久化凭据。
 func (d *Daemon) autoProvisionMarketAccount() {
+	// 孤儿账号守门（2026-10-20 定案）：曾登录过的设备不再自动建号。OAuth 账号
+	// 退出后本地无凭据，若无此守门，每次「退出 + 重启」都会静默生成一个新账号
+	// 并把设备从原账号改绑走（用户今早「注销后变 iMac 账号」的根源）。
+	if d.kvGetStringInternal("market_ever_logged_in") == "1" {
+		d.logger.Info("本设备曾登录过社区账号，保持匿名等待手动登录")
+		return
+	}
 	username, password, err := core.GenerateMarketCredentials()
 	if err != nil {
 		d.logger.Warn("市场自动建号凭据生成失败（匿名态继续）", "error", err)
@@ -185,6 +202,7 @@ func (d *Daemon) handleMarketAccountRegister(_ context.Context, params json.RawM
 	if err != nil {
 		return nil, err
 	}
+	d.marketLoggedOut = false // 主动登录成功即解除退出标记
 	return map[string]any{"user": user, "migrated": migrated}, nil
 }
 
@@ -208,11 +226,13 @@ func (d *Daemon) handleMarketAccountLogin(_ context.Context, params json.RawMess
 	if err != nil {
 		return nil, err
 	}
+	d.marketLoggedOut = false // 主动登录成功即解除退出标记
 	return map[string]any{"user": user, "migrated": migrated}, nil
 }
 
 // handleMarketAccountLogout 退出登录：服务端吊销令牌 + 本地清除令牌与凭据。
-// 设备归属不变（clients 绑定单向），下次登录凭同一设备身份继续。
+// 设备归属不变（服务端支持改绑，下次登录凭同一设备身份继续）；本会话内置
+// 主动退出标记，静默登录通道（含自动建号）不再动作，重启后恢复自动登录。
 func (d *Daemon) handleMarketAccountLogout(_ context.Context, _ json.RawMessage) (any, error) {
 	if err := d.app.Market().Logout(); err != nil {
 		// 服务端吊销失败不阻断本地登出（令牌留在服务端过期即可，本地清除更安全）
@@ -224,17 +244,19 @@ func (d *Daemon) handleMarketAccountLogout(_ context.Context, _ json.RawMessage)
 	if err := d.app.SetMarketCredentials("", ""); err != nil {
 		return nil, err
 	}
-	d.logger.Info("MindX 账号已退出登录")
+	d.marketLoggedOut = true
+	d.logger.Info("MindX 账号已退出登录，本次运行期不再自动登录")
 	return map[string]any{"logged_out": true}, nil
 }
 
-// handleMarketAccountProfileSet Profile 四字段编辑（nil = 不更新，前端整表单提交）。
+// handleMarketAccountProfileSet Profile 三字段编辑（nil = 不更新，前端整表单提交；
+// 2026-10-20 定案：github 由 GitHub 身份绑定自动获取，移出手填通道）。
 func (d *Daemon) handleMarketAccountProfileSet(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketAccountProfileSetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
-	user, err := d.app.Market().UpdateProfileFields(p.NickName, p.JobTitle, p.Phone, p.Github)
+	user, err := d.app.Market().UpdateProfileFields(p.NickName, p.JobTitle, p.Phone)
 	if err != nil {
 		return nil, err
 	}

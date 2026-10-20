@@ -34,10 +34,16 @@ func TestMarketDeviceLoginState_SetClearsUser(t *testing.T) {
 	s.phase, s.user = "done", "octo"
 	s.mu.Unlock()
 
-	// 非 done 状态切换应清空 user 快照
-	s.set("error", "超时")
-	phase, errMsg, user := s.snapshot()
-	if phase != "error" || errMsg != "超时" || user != nil {
-		t.Errorf("set 后状态异常：phase=%q err=%q user=%v", phase, errMsg, user)
+	// 非 done 状态切换应清空 user 快照与授权页 URL
+	s.set("error", "超时", "")
+	phase, errMsg, authURL, user := s.snapshot()
+	if phase != "error" || errMsg != "超时" || authURL != "" || user != nil {
+		t.Errorf("set 后状态异常：phase=%q err=%q url=%q user=%v", phase, errMsg, authURL, user)
+	}
+
+	// pending 状态携带授权页 URL（重复点「重新打开」时重新广播）
+	s.set("pending", "", "https://community.example/auth/login/github")
+	if _, _, authURL, _ := s.snapshot(); authURL == "" {
+		t.Error("pending 状态应缓存授权页 URL")
 	}
 }

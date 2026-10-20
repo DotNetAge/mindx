@@ -106,6 +106,13 @@ type Daemon struct {
 
 	// marketDevice 市场设备授权登录编排状态（device flow，单飞）
 	marketDevice marketDeviceLoginState
+
+	// marketLoggedOut 用户已主动退出标记（内存态，重启即失效）：退出后本次
+	// 运行期静默登录通道整体静默，重新登录成功即解除（2026-10-20 退出语义定案）
+	marketLoggedOut bool
+
+	// marketIdentity 社区账号绑定编排状态（单飞；2026-10-20 多社区身份定案）
+	marketIdentity marketIdentityLinkState
 }
 
 func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
