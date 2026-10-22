@@ -25,14 +25,15 @@ type JobLifecycleInfo struct {
 }
 
 // LifecycleCallback is called when a scheduled job starts, completes, or fails.
-// started 由到点触发（Daemon 据此决定离线跳过或广播 OnJobStart）；
-// completed / failed 由执行链路通过 ReportResult 在对话结束后触发。
+// started 由到点触发（Daemon 据此直接拉起 Runtime 在后台执行，不依赖客户端在线）；
+// completed / failed / missed 由执行链路通过 ReportResult 收尾时触发。
 type LifecycleCallback func(info JobLifecycleInfo)
 
 type Scheduler struct {
 	cron        *cron.Cron
 	store       *FileSchedulerStore
 	entries     map[string]cron.EntryID
+	cronExprs   map[string]string // 任务 ID → 注册时的 cron 表达式，reload 时比对变更
 	mu          sync.RWMutex
 	logger      logging.Logger
 	lifecycleCb LifecycleCallback
@@ -47,10 +48,11 @@ func NewScheduler(store *FileSchedulerStore, logger logging.Logger) *Scheduler {
 		cron.WithLogger(cron.VerbosePrintfLogger(log.New(log.Writer(), "[scheduler] ", log.LstdFlags))),
 	)
 	return &Scheduler{
-		cron:    c,
-		store:   store,
-		entries: make(map[string]cron.EntryID),
-		logger:  logger,
+		cron:      c,
+		store:     store,
+		entries:   make(map[string]cron.EntryID),
+		cronExprs: make(map[string]string),
+		logger:    logger,
 	}
 }
 
@@ -87,6 +89,15 @@ func (s *Scheduler) reloadAll() error {
 		if !entry.Enabled {
 			s.removeJob(entry.ID)
 			continue
+		}
+		// 任务已注册但 cron 表达式被编辑过：先移除旧注册再按新表达式重建，
+		// 否则 addJob 对已存在 ID 直接跳过，修改后的触发时刻永不生效
+		s.mu.RLock()
+		registeredExpr, exists := s.cronExprs[entry.ID]
+		s.mu.RUnlock()
+		if exists && registeredExpr != entry.CronExpr {
+			s.logger.Info("schedule job cron changed, re-registering", "id", entry.ID, "old", registeredExpr, "new", entry.CronExpr)
+			s.removeJob(entry.ID)
 		}
 		if err := s.addJob(&entry); err != nil {
 			s.logger.Warn("failed to add schedule job", "id", entry.ID, "error", err)
@@ -137,6 +148,7 @@ func (s *Scheduler) addJob(entry *ScheduleEntry) error {
 	}
 
 	s.entries[entry.ID] = id
+	s.cronExprs[entry.ID] = e.CronExpr
 	s.logger.Info("added schedule job", "id", entry.ID, "agent", entry.Agent, "cron", entry.CronExpr)
 	return nil
 }
@@ -152,12 +164,13 @@ func (s *Scheduler) removeJob(id string) {
 
 	s.cron.Remove(entryID)
 	delete(s.entries, id)
+	delete(s.cronExprs, id)
 	s.logger.Info("removed schedule job", "id", id)
 }
 
 // executeJob 在到点时刻被调用。它不做任何具体执行，只生成 run_id 并通过
-// started 生命周期事件交给上层（Daemon）决策：有在线客户端则广播 OnJobStart
-// 交由前端前台执行；离线则直接标记 missed。
+// started 生命周期事件交给上层（Daemon）拉起 Runtime 在后台执行——
+// 执行主体在 daemon 侧，不依赖客户端在线。
 func (s *Scheduler) executeJob(entry *ScheduleEntry) {
 	runID := uuid.New().String()[:8]
 	s.logger.Info("schedule job fired", "id", entry.ID, "agent", entry.Agent, "run_id", runID)

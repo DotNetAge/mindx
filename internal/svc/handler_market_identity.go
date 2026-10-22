@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/DotNetAge/mindx/internal/core/bundle"
 )
 
 // ---------------------------------------------------------------------------
@@ -157,4 +159,66 @@ func (d *Daemon) handleMarketOrgCreate(_ context.Context, params json.RawMessage
 	}
 	d.logger.Info("组织创建完成", "name", name, "slug", slug)
 	return map[string]any{"org_id": orgID, "slug": slug, "name": name}, nil
+}
+
+// handleMarketOrgDelete 删除组织（DELETE /orgs/{slug}；仅所有者，组织须为空：
+// 无其他成员且无已发布包，服务端把关并在拒绝时给出人话原因）。
+func (d *Daemon) handleMarketOrgDelete(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		Slug string `json:"slug"`
+	}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	slug := strings.TrimSpace(p.Slug)
+	if slug == "" {
+		return nil, fmt.Errorf("组织别名为必填")
+	}
+	if err := d.app.Market().OrgDelete(slug); err != nil {
+		return nil, err
+	}
+	d.logger.Info("组织已删除", "slug", slug)
+	return map[string]any{"deleted": true, "slug": slug}, nil
+}
+
+// handleMarketOrgMembers 组织成员名片清单（GET /orgs/{slug}/members；组织中心详情用）。
+func (d *Daemon) handleMarketOrgMembers(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		Slug string `json:"slug"`
+	}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	slug := strings.TrimSpace(p.Slug)
+	if slug == "" {
+		return nil, fmt.Errorf("组织别名为必填")
+	}
+	members, err := d.app.Market().ListOrgMemberCards(slug)
+	if err != nil {
+		return nil, err
+	}
+	if members == nil {
+		members = []bundle.OrgMemberCard{}
+	}
+	return map[string]any{"members": members}, nil
+}
+
+// handleMarketOrgSubscription 组织订阅状态（GET /orgs/{slug}/subscription）。
+// 免费开放期 status = none，组织中心渲染「免费开放中」；收费期渲染订阅明细。
+func (d *Daemon) handleMarketOrgSubscription(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		Slug string `json:"slug"`
+	}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	slug := strings.TrimSpace(p.Slug)
+	if slug == "" {
+		return nil, fmt.Errorf("组织别名为必填")
+	}
+	sub, err := d.app.Market().OrgSubscription(slug)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"subscription": sub}, nil
 }

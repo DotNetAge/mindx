@@ -46,6 +46,7 @@ type OrgMail struct {
 	Subject     string `json:"subject"`
 	Body        string `json:"body"`
 	InReplyTo   string `json:"in_reply_to"`
+	DeadLine    string `json:"dead_line"`
 	Status      string `json:"status"`
 	CreatedAt   string `json:"created_at"`
 	DeliveredAt string `json:"delivered_at"`
@@ -53,13 +54,13 @@ type OrgMail struct {
 }
 
 // SendOrgMail 发信入组织信箱（拿全局信件 ID 并留底；直连投递由 daemon 层接力加速）。
-func (m *MarketClient) SendOrgMail(orgSlug string, toPersona int64, subject, body, inReplyTo string) (*OrgMail, error) {
+func (m *MarketClient) SendOrgMail(orgSlug string, toPersona int64, subject, body, inReplyTo, deadLine string) (*OrgMail, error) {
 	if err := m.ensureIdentity(); err != nil {
 		return nil, err
 	}
 	var out OrgMail
 	err := m.postJSON(m.apiBase+"/orgs/"+url.PathEscape(orgSlug)+"/mails", map[string]any{
-		"to_persona": toPersona, "subject": subject, "body": body, "in_reply_to": inReplyTo,
+		"to_persona": toPersona, "subject": subject, "body": body, "in_reply_to": inReplyTo, "dead_line": deadLine,
 	}, &out)
 	if err != nil {
 		return nil, err

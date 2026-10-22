@@ -164,31 +164,24 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		// Inject scheduler store into App for Cron tool registration.
 		app.SetSchedulerStore(schedulerDB)
 
-		// 生命周期回调：started 由 Scheduler 到点触发，Daemon 据此决定
-		// 离线跳过（标记 missed）或广播 OnJobStart 交前端前台执行；
-		// completed / failed 由对话结束后的 ReportResult 触发并广播。
+		// 生命周期回调：started 由 Scheduler 到点触发，Daemon 直接拉起 Runtime
+		// 在后台执行（2026-10-21 定案回归，不依赖客户端在线，离线照常执行）；
+		// completed / failed / missed 由 ReportResult 触发并广播，前端仅作通知。
 		d.scheduler.OnLifecycle(func(info scheduler.JobLifecycleInfo) {
 			if d.gw == nil {
 				return
 			}
 			switch info.Status {
 			case "started":
-				if d.gw.ClientCount() == 0 {
-					// 离线到点：无客户端可接收，跳过并标记 missed。
-					if d.schedulerDB != nil {
-						if err := d.schedulerDB.MarkMissed(info.EntryID); err != nil {
-							d.logger.Warn("failed to mark job missed", "id", info.EntryID, "error", err)
-						}
-					}
-					d.broadcastJobLifecycle("schedule.job_missed", info)
-					return
-				}
 				if d.schedulerDB != nil {
 					if err := d.schedulerDB.MarkStarted(info.EntryID, info.RunID); err != nil {
 						d.logger.Warn("failed to mark job started", "id", info.EntryID, "error", err)
 					}
 				}
 				d.broadcastJobLifecycle("schedule.job_started", info)
+				// 后台执行：goroutine 中拉起 Runtime Ask，不阻塞 cron goroutine；
+				// panic 与终态回写均由 runScheduledJob 收敛。
+				go d.runScheduledJob(info)
 			default:
 				d.broadcastJobLifecycle("schedule.job_"+info.Status, info)
 			}
@@ -664,11 +657,9 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	)
 
 	var payload struct {
-		Text       string `json:"text"`
-		SessionID  string `json:"session_id,omitempty"`
-		JobEntryID string `json:"job_entry_id,omitempty"`
-		JobRunID   string `json:"job_run_id,omitempty"`
-		Images     []struct {
+		Text      string `json:"text"`
+		SessionID string `json:"session_id,omitempty"`
+		Images    []struct {
 			Path      string `json:"path"`
 			MediaType string `json:"media_type"`
 		} `json:"images,omitempty"`
@@ -695,11 +686,6 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		msg.SessionID = payload.SessionID
 	}
 	text := payload.Text
-
-	// 调度任务前台执行：客户端把 OnJobStart 携带的 entry_id/run_id 随消息透传，
-	// 本轮对话结束后据此标记任务成功/失败（scheduler.ReportResult）。
-	jobEntryID := payload.JobEntryID
-	jobRunID := payload.JobRunID
 
 	d.logger.Info("defaultHandler: parsing agent target",
 		"client_id", msg.ClientID,
@@ -776,55 +762,9 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	gw := d.gw
 	currentAgentName := resolvedAgentName
 
-	// 子智能体授权冒泡旁路：子会话（spawn 的子 Agent 执行循环）触发授权请求时，
-	// 不依赖父 exec EventBus 的存活（父 exec 结束/被取消后订阅销毁，原 parentEmit
-	// 转发链路会静默丢事件），而是经此发送器将授权请求直接广播到所有客户端。
-	// 授权请求的 envelope 结构（session_id / meta.agent_name / title / data / type）
-	// 与 wireAskEvents 中 emitter.PermissionPending 发送的一致，前端解析无差异；
-	// data.session_id 为发起授权的子会话 ID，前端据此精确反查并渲染到对应子任务卡片。
-	// 主会话自身的授权请求不走旁路（b.permissionCh == nil），仍经原 EventBus 转发链路。
-	ctx = agents.WithPermissionSink(ctx, func(data events.PermissionPendingData) {
-		if d.gw == nil {
-			return
-		}
-		d.gw.BroadcastNotification(string(gateway.RespPermissionRequest), map[string]any{
-			"session_id": sid,
-			"meta":       map[string]any{"agent_name": currentAgentName},
-			"title":      i18n.T("svc.event.permission.request"),
-			"data": map[string]any{
-				"tool_name":      data.ToolName,
-				"reason":         data.Reason,
-				"security_level": data.SecurityLevel,
-				"params":         data.Params,
-				"session_id":     data.SessionID,
-			},
-			"type": gateway.RespPermissionRequest,
-		})
-	})
-
-	// 子智能体提问冒泡旁路：镜像授权旁路。子会话（spawn 的子 Agent 执行循环）
-	// 调用 AskUser 提问时，经此发送器把提问直达前端——父 exec 结束/被取消后
-	// 其 EventBus 订阅已销毁，parentEmit 转发链路会静默丢事件，前端收不到
-	// 提问、子会话只能干等到超时。envelope 结构（session_id / meta.agent_name /
-	// title / data / type）与授权旁路一致；data.session_id 为发起提问的子会话
-	// ID，前端作答时携带该 ID 发送普通消息，daemon 据此精确路由到挂起的子 exec。
-	// 主会话自身的提问不走旁路（b.askCh == nil），仍经原 EventBus 转发链路。
-	ctx = agents.WithAskSink(ctx, func(data events.AskUserPendingData) {
-		if d.gw == nil {
-			return
-		}
-		askType := gateway.ResponseType(events.AskUserRequest)
-		d.gw.BroadcastNotification(string(askType), map[string]any{
-			"session_id": sid,
-			"meta":       map[string]any{"agent_name": currentAgentName},
-			"title":      i18n.T("svc.event.ask.user"),
-			"data": map[string]any{
-				"questions":  data.Questions,
-				"session_id": data.SessionID,
-			},
-			"type": askType,
-		})
-	})
+	// 子智能体授权/提问冒泡旁路：注入到 exec ctx（前台与后台执行共用实现，
+	// 详见 scheduled_exec.go 的 withAskBypassSinks）。
+	ctx = d.withAskBypassSinks(ctx, sessionID, func() string { return currentAgentName })
 
 	// withAgent returns a ResponseOption that includes the current agent_name in meta.
 	// Updated by OnEvent handler when sub-agent events are forwarded to the parent.
@@ -859,11 +799,6 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		if ctx.Err() != nil {
 			d.logger.Info("request skipped: cancelled while queued",
 				"client_id", clientID, "session_id", sid)
-			// 调度任务收尾：跳过执行同样要标记失败，避免任务永久停留在 started
-			// （前端待执行队列已出队，后端必须给出终态才能收到 completed/failed 事件）。
-			if jobEntryID != "" && jobRunID != "" && d.scheduler != nil {
-				d.scheduler.ReportResult(jobEntryID, jobRunID, ctx.Err())
-			}
 			return
 		}
 
@@ -1026,13 +961,6 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		// 轮次日志落盘：本轮结束后把用户问题与最终回复原文写入 .agents/logs/
 		//（mindx report collect 跨目录收割，daily-report 技能消费生成日报）。
 		d.appendTurnLog(s, resolvedAgentName, content, turnLogLenBefore, turnLogStart)
-
-		// 调度任务收尾：本消息带有任务标识（OnJobStart 前台执行链路），
-		// 对话结束后把结果写回调度存储并广播 completed / failed。
-		// 每个入队闭包各自捕获自己的 job 标识，与会话队列的 FIFO 顺序天然一致。
-		if jobEntryID != "" && jobRunID != "" && d.scheduler != nil {
-			d.scheduler.ReportResult(jobEntryID, jobRunID, err)
-		}
 
 		// Broadcast current context window usage after each LLM request.
 		// This allows the UI to update the context usage indicator in real time.

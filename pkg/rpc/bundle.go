@@ -185,9 +185,9 @@ func (c *Client) MarketPackageRead(name string) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.package.read", MarketPackageReadParams{Name: name})
 }
 
-// MarketRate 提交包级评分。
-func (c *Client) MarketRate(kind, name string, score int64) (json.RawMessage, error) {
-	return c.CallWithTimeout("market.rate", MarketRateParams{Kind: kind, Name: name, Score: score})
+// MarketRate 提交包级评分（org_slug 非空时评该组织专属空间的包）。
+func (c *Client) MarketRate(p MarketRateParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.rate", p)
 }
 
 // MarketRatingGet 查询自己对该包的评分。

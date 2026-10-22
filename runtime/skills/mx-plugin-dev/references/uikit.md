@@ -107,7 +107,7 @@ updated: 2026-10-11
 
 全部位于仓库 `ui-shell-vue/src/styles/controls.css`，各节头部注释就是用法说明。清单：
 
-按钮 `.mx-btn`（`--primary` 变体）、图标按钮 `.mx-icon-btn`、输入框 `.mx-input`、徽标 `.mx-badge`、卡片 `.mx-card`、下拉 chip `.mx-pill`、首选项行 `.mx-pref-row`/`-title`/`-desc`、开关 `.mx-switch`+`-thumb`（`role="switch"` + `aria-checked`）、复选框 `.mx-checkbox`、菜单卡 `.mx-menu`+`.mx-menu-item`（宿主 `position:relative`）、工具提示 `.mx-tooltip`（fixed 定位由使用方算）、状态点 `.mx-dot[data-state]`（颜色 = `color`）、标签 `.mx-tag[data-tone=outline|solid|neutral|quiet|success|info|warning|danger]`、分段页签 `.mx-tabs`+`.mx-tabs-indicator`+`.mx-tab[aria-selected]`（指示器位移经 JS 写 `transform`）、展开行 `.mx-disclosure` 系列（双图标交叉淡切）、轻提示 `.mx-toast`+`-icon`+`-action`（停留时长传 `--mx-toast-hold`）、连接指示 `.mx-indicator[data-tone]`+`-icon`+`-dots`（三点省略动画）、微光文本 `.mx-shimmer`（必传 `--mx-text-shimmer-spread`）、悬停卡 `.mx-hovercard-host`+`.mx-hovercard`、步进数字框（范式见仓库 `plugins/src/demo/prefs/FontSizeRow.vue`：36 高 / radius 18 / 箭头 hover 显现用 `opacity`）、24 栏栅格 `.mx-row`+`.mx-col-N`+`.mx-col-offset-N`（断点变体与组合语义见上方「布局规范」）。
+按钮 `.mx-btn`（`--primary` 变体）、图标按钮 `.mx-icon-btn`、输入框 `.mx-input`、徽标 `.mx-badge`、卡片 `.mx-card`、下拉 chip `.mx-pill`、首选项行 `.mx-pref-row`/`-title`/`-desc`、开关 `.mx-switch`+`-thumb`（`role="switch"` + `aria-checked`）、复选框 `.mx-checkbox`、菜单卡 `.mx-menu`+`.mx-menu-item`（宿主 `position:relative`）、工具提示 `.mx-tooltip`（fixed 定位由使用方算）、状态点 `.mx-dot[data-state]`（颜色 = `color`）、标签 `.mx-tag[data-tone=outline|solid|neutral|quiet|success|info|warning|danger]`、分段页签 `.mx-tabs`+`.mx-tabs-indicator`+`.mx-tab[aria-selected]`（指示器位移经 JS 写 `transform`）、展开行 `.mx-disclosure` 系列（双图标交叉淡切）、轻提示 `.mx-toast`+`-icon`+`-action`（停留时长传 `--mx-toast-hold`）、连接指示 `.mx-indicator[data-tone]`+`-icon`+`-dots`（三点省略动画）、微光文本 `.mx-shimmer`（必传 `--mx-text-shimmer-spread`）、悬停卡 `.mx-hovercard-host`+`.mx-hovercard`、弹窗分区 `.mx-modal-body`（Overlay 卡片内滚动内容区，占满余高超高内部滚动）+`.mx-modal-footer`（钉底按钮区：顶部分隔线、按钮靠右、主按钮在最后——Overlay modal 内容弹窗一律用这对拆区，卡片可被用户拖拽调宽高，自造按钮行会随内容滚走）、步进数字框（范式见仓库 `plugins/src/demo/prefs/FontSizeRow.vue`：36 高 / radius 18 / 箭头 hover 显现用 `opacity`）、24 栏栅格 `.mx-row`+`.mx-col-N`+`.mx-col-offset-N`（断点变体与组合语义见上方「布局规范」）。
 
 ## 布局范式（仓库内 demo 路径，供 clone 仓库者查阅）
 
@@ -130,6 +130,7 @@ updated: 2026-10-11
 ## 高频错误
 
 - 浮层漏 `backdrop-filter`：遮罩层与浮层本体是两层模糊，都要写。
+- Overlay modal 内容弹窗自造 `.actions` 按钮行：按钮随内容滚走且卡片拉矮被裁剪——内容套 `mx-modal-body`、按钮套 `mx-modal-footer` 钉底（原语清单「弹窗分区」）。
 - fixed 气泡未写 `width: max-content` + `max-width` 上限，右缘会提前换行；不可断 token 另配 `overflow-wrap: break-word`。
 - 阴影/颜色自造 color-mix 手拼：用四档 shadow token 与语义色 token。
 - hover 才出现的按钮用 `opacity` 不用 `visibility`（保键盘 focus-within 可达）。

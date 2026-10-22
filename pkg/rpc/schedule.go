@@ -21,6 +21,20 @@ type ScheduleDeleteParams struct {
 	ID string `json:"id"`
 }
 
+// ScheduleUpdateParams are the params for schedule.update.
+// 编辑既有任务：覆盖可变字段（内容/时刻/启停），保留 ID、创建时间、
+// 执行统计与留痕。CronExpr 与 ScheduledAt 二选一，语义与创建一致。
+type ScheduleUpdateParams struct {
+	ID          string `json:"id"`
+	Agent       string `json:"agent"`
+	SessionID   string `json:"session_id,omitempty"`
+	ProjectDir  string `json:"project_dir,omitempty"`
+	Content     string `json:"content"`
+	CronExpr    string `json:"cron_expr"`
+	Enabled     bool   `json:"enabled"`
+	ScheduledAt string `json:"scheduled_at,omitempty"`
+}
+
 // ScheduleJobCancelParams are the params for schedule.job_cancel.
 // 前端取消一次已触发但尚未执行（status=started）的任务运行。
 type ScheduleJobCancelParams struct {

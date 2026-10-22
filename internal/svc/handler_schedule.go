@@ -107,6 +107,81 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 	return entry, nil
 }
 
+// handleScheduleUpdate 编辑既有任务：覆盖可变字段（内容/时刻/启停），
+// 保留 ID、创建时间、执行统计与留痕。调度器 watchLoop（5 秒）感知
+// cron 变更后自动按新表达式重建注册。
+func (d *Daemon) handleScheduleUpdate(_ context.Context, params json.RawMessage) (any, error) {
+	if d.schedulerDB == nil {
+		return nil, fmt.Errorf("scheduler not available")
+	}
+
+	var p rpc.ScheduleUpdateParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.ID == "" {
+		return nil, fmt.Errorf("schedule id is required")
+	}
+	p.Agent = strings.TrimPrefix(p.Agent, "@")
+	if p.Agent == "" {
+		return nil, fmt.Errorf("agent is required")
+	}
+	if p.Content == "" {
+		return nil, fmt.Errorf("content is required")
+	}
+	if p.CronExpr == "" && p.ScheduledAt == "" {
+		return nil, fmt.Errorf("cron_expr or scheduled_at is required")
+	}
+
+	entry, err := d.schedulerDB.Load(context.Background(), p.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load schedule entry failed: %w", err)
+	}
+
+	// 雇佣校验与创建同口径：改绑的智能体必须已雇佣
+	if agents := d.app.Agents(); agents != nil {
+		cfg := agents.Get(p.Agent)
+		if cfg == nil {
+			return nil, fmt.Errorf("未找到智能体 %q，请确认名称是否正确", p.Agent)
+		}
+		if !core.AgentIsHired(cfg) {
+			return nil, fmt.Errorf("智能体 %q 尚未雇佣，无法绑定定时任务（可执行 mindx agent hire %s 启用）", p.Agent, p.Agent)
+		}
+	}
+
+	oneShot := false
+	if p.ScheduledAt != "" {
+		cronExpr, cronErr := scheduler.OneShotCron(p.ScheduledAt, time.Now())
+		if cronErr != nil {
+			return nil, cronErr
+		}
+		p.CronExpr = cronExpr
+		oneShot = true
+	}
+	if err := scheduler.ValidateCronExpr(p.CronExpr); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		p.SessionID = d.resolveLatestSessionForAgent(p.Agent)
+	}
+
+	entry.Agent = p.Agent
+	entry.SessionID = p.SessionID
+	entry.ProjectDir = p.ProjectDir
+	entry.Content = p.Content
+	entry.CronExpr = p.CronExpr
+	entry.Enabled = p.Enabled
+	entry.UpdatedAt = time.Now()
+	if oneShot {
+		entry.OneShot = true
+	}
+
+	if err := d.schedulerDB.Save(context.Background(), entry); err != nil {
+		return nil, fmt.Errorf("save schedule failed: %w", err)
+	}
+	return entry, nil
+}
+
 func (d *Daemon) handleScheduleDelete(_ context.Context, params json.RawMessage) (any, error) {
 	if d.schedulerDB == nil {
 		return nil, fmt.Errorf("scheduler not available")
@@ -174,6 +249,13 @@ func (d *Daemon) handleScheduleJobCancel(_ context.Context, params json.RawMessa
 // 复用调度器：Save 一条 OneShot 条目，watchLoop（5 秒重载）随即拉起执行。
 // 来信叫醒等「马上开始」的场景走这里，与手工定时任务同一执行通路。
 func (d *Daemon) enqueueOneJob(agent, content string) error {
+	return d.enqueueOneJobAt(agent, content, time.Time{})
+}
+
+// enqueueOneJobAt 统一入队口：at 为零值 ≈ 10 秒后开工（普通信/即时场景），
+// 非零 = 指定时刻开工（任务信按截止时刻排期）。调度器是唯一的执行主体：
+// 雇佣校验、一次性条目生成、后台拉起、留痕全走既有 Scheduler 通路。
+func (d *Daemon) enqueueOneJobAt(agent, content string, at time.Time) error {
 	if d.schedulerDB == nil {
 		return fmt.Errorf("本机调度器未就绪，无法叫醒智能体")
 	}
@@ -187,8 +269,11 @@ func (d *Daemon) enqueueOneJob(agent, content string) error {
 			return fmt.Errorf("智能体 %q 尚未雇佣，无法开工", agent)
 		}
 	}
-	// 10 秒后到点：watchLoop 重载间隔 5 秒，留一倍余量避免恰好在重载间隙被跳过
-	scheduledAt := time.Now().Add(10 * time.Second).Format(time.RFC3339)
+	// 即时场景给 10 秒余量：watchLoop 重载间隔 5 秒，留一倍余量避免恰好在重载间隙被跳过
+	if at.IsZero() {
+		at = time.Now().Add(10 * time.Second)
+	}
+	scheduledAt := at.Format(time.RFC3339)
 	cronExpr, err := scheduler.OneShotCron(scheduledAt, time.Now())
 	if err != nil {
 		return err

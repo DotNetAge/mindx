@@ -21,13 +21,23 @@ import (
 var marketCmd = &cobra.Command{
 	Use:   "market",
 	Short: "Market commands: search & install packages, plus packaging toolchain",
-	Long: `Market commands in two groups:
+	Long: `Market commands in three groups:
 
 Consumer commands (requires mindx start) — browse the online market and
 install agent/skill packages with sha256 verification:
 
   mindx market list [--kind agent|skill|team] [--q <keyword>] [--page N] [--json]
   mindx market install <agent|skill> <name> [--overwrite]
+
+Evolution loop commands (requires mindx start + a signed-in community
+account) — publish packages, submit evolved versions to package owners,
+review submissions and rate packages:
+
+  mindx market publish <agent|skill|team> <name> --version <v> [--license SPDX] [--org slug]
+  mindx market submit <agent|skill|team> <name> --version <v> [--note "..."]
+  mindx market submissions list <agent|skill|team> <name>
+  mindx market submissions decide <agent|skill|team> <name> <id> --decision accept|reject
+  mindx market rate <agent|skill|team> <name> <1-5>
 
 Packaging toolchain (no daemon required) — build .mindpkg bundles for the
 COS static market:
@@ -52,8 +62,29 @@ func init() {
 	marketInstallCmd.Flags().Bool("overwrite", false, "Overwrite existing target (agent dir or skill with the same name)")
 	marketInstallCmd.Flags().Bool("auto", false, "Auto-install missing dependencies without prompting")
 	marketInstallCmd.Flags().Bool("skip-deps", false, "Skip dependency checking and installation")
+	marketPublishCmd.Flags().String("version", "", "发布版本号（必填，写入包内清单）")
+	marketPublishCmd.Flags().String("license", "", "许可证标识（SPDX 简称，写入包内清单）")
+	marketPublishCmd.Flags().String("publish-name", "", "发布名覆盖（衍生改名发布时用；缺省 = 本地包名）")
+	marketPublishCmd.Flags().String("derived-kind", "", "衍生谱系：来源包类型（与 --derived-name 成对给出）")
+	marketPublishCmd.Flags().String("derived-name", "", "衍生谱系：来源包名（与 --derived-kind 成对给出）")
+	marketPublishCmd.Flags().String("derived-version", "", "衍生谱系：来源包版本（可选）")
+	marketPublishCmd.Flags().String("org", "", "组织源 slug（空 = 公共资源社区）")
+	marketPublishCmd.Flags().Bool("json", false, "Output structured JSON")
+	marketSubmitCmd.Flags().String("version", "", "投递版本号（必填，写入包内清单）")
+	marketSubmitCmd.Flags().String("note", "", "给包主的附言（可选）")
+	marketSubmitCmd.Flags().String("derived-kind", "", "衍生谱系：来源包类型（与 --derived-name 成对给出）")
+	marketSubmitCmd.Flags().String("derived-name", "", "衍生谱系：来源包名（与 --derived-kind 成对给出）")
+	marketSubmitCmd.Flags().String("derived-version", "", "衍生谱系：来源包版本（可选）")
+	marketSubmitCmd.Flags().Bool("json", false, "Output structured JSON")
+	marketSubmissionsListCmd.Flags().Bool("json", false, "Output structured JSON")
+	marketSubmissionsDecideCmd.Flags().String("decision", "", "审核决定：accept（采纳为正式新版本）或 reject（拒绝）")
+	marketSubmissionsDecideCmd.Flags().Bool("json", false, "Output structured JSON")
+	marketRateCmd.Flags().String("org", "", "组织源 slug（空 = 公共资源社区）")
+	marketRateCmd.Flags().Bool("json", false, "Output structured JSON")
 
-	marketCmd.AddCommand(marketListCmd, marketInstallCmd, marketCanonicalizeAgentsCmd, marketPackAgentsCmd)
+	marketCmd.AddCommand(marketListCmd, marketInstallCmd, marketCanonicalizeAgentsCmd, marketPackAgentsCmd,
+		marketPublishCmd, marketSubmitCmd, marketSubmissionsCmd, marketRateCmd)
+	marketSubmissionsCmd.AddCommand(marketSubmissionsListCmd, marketSubmissionsDecideCmd)
 	rootCmd.AddCommand(marketCmd)
 }
 
@@ -243,6 +274,337 @@ Examples:
 		if kind == "team" {
 			fmt.Printf("提示：已安装团队与成员默认未雇佣，执行 `mindx agent hire <成员>` 与 `mindx team hire %s` 后即可发起团队会话。\n", name)
 		}
+		return nil
+	},
+}
+
+// ── 发布侧命令组：publish / submit / submissions / rate（需 daemon + 已登录社区账号） ──
+
+// marketKindArgs 校验首个参数为合法包类型并返回。
+func marketKindArgs(args []string) (string, error) {
+	kind := args[0]
+	if kind != "agent" && kind != "skill" && kind != "team" {
+		return "", fmt.Errorf("kind 必须为 agent、skill 或 team")
+	}
+	return kind, nil
+}
+
+// printMarketJSON 以 --json 模式输出原始 RPC 结果（格式化）。
+func printMarketJSON(result json.RawMessage) {
+	formatted, _ := json.MarshalIndent(json.RawMessage(result), "", "  ")
+	fmt.Println(string(formatted))
+}
+
+// shortSha 取内容指纹前 12 位用于人读输出。
+func shortSha(s string) string {
+	if len(s) > 12 {
+		return s[:12]
+	}
+	return s
+}
+
+// marketPublishCmd 打包本地包并发布为资源社区新版本。
+var marketPublishCmd = &cobra.Command{
+	Use:   "publish <agent|skill|team> <name>",
+	Short: "Publish a local package as a new market version (requires mindx start)",
+	Long: `打包本地包并发布到资源社区作为新版本（需要 mindx start 运行且已登录社区账号）。
+
+版本号必填；许可与衍生谱系声明写入包内清单，服务端做衍生权威校验
+（存在性、不自指、防环）。--org 非空时发布到该组织的专用源。
+
+Examples:
+  mindx market publish agent architect --version 1.0.0
+  mindx market publish skill api-design --version 1.1.0 --license MIT
+  mindx market publish agent my-architect --version 1.0.0 --derived-kind agent --derived-name architect`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		kind, err := marketKindArgs(args)
+		if err != nil {
+			return err
+		}
+		name := args[1]
+		version, _ := cmd.Flags().GetString("version")
+		version = strings.TrimSpace(version)
+		if version == "" {
+			return fmt.Errorf("必须通过 --version 指定发布版本号")
+		}
+		derivedKind, _ := cmd.Flags().GetString("derived-kind")
+		derivedName, _ := cmd.Flags().GetString("derived-name")
+		derivedVersion, _ := cmd.Flags().GetString("derived-version")
+		// 谱系声明成对校验：kind 与 name 必须同时给出（原创发布则均留空）
+		if (derivedKind != "") != (derivedName != "") {
+			return fmt.Errorf("衍生谱系声明需同时给出 --derived-kind 与 --derived-name")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("无法连接守护进程: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		useJSON, _ := cmd.Flags().GetBool("json")
+		publishName, _ := cmd.Flags().GetString("publish-name")
+		license, _ := cmd.Flags().GetString("license")
+		orgSlug, _ := cmd.Flags().GetString("org")
+		result, err := cl.MarketPublish(rpc.MarketPublishParams{
+			Kind: kind, Name: name, PublishName: publishName, Version: version,
+			License: license, DerivedKind: derivedKind, DerivedName: derivedName,
+			DerivedVersion: derivedVersion, OrgSlug: orgSlug,
+		})
+		if err != nil {
+			return err
+		}
+		if useJSON {
+			printMarketJSON(result)
+			return nil
+		}
+		var m map[string]any
+		if err := json.Unmarshal(result, &m); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+		fmt.Printf("发布成功: %s/%s 版本 %v（包 ID %v）\n", kind, name, m["version"], m["package_id"])
+		if sha, ok := m["sha256"].(string); ok && sha != "" {
+			fmt.Printf("内容指纹: %s…\n", shortSha(sha))
+		}
+		if warnings, ok := m["warnings"].([]any); ok && len(warnings) > 0 {
+			fmt.Printf("打包警告 %d 条（详情见守护进程日志）\n", len(warnings))
+		}
+		return nil
+	},
+}
+
+// marketSubmitCmd 投递本地进化版本到包主收件箱。
+var marketSubmitCmd = &cobra.Command{
+	Use:   "submit <agent|skill|team> <name>",
+	Short: "Submit your evolved version to the package owner's inbox (requires mindx start)",
+	Long: `把自己本地演化的同名包投递到包主收件箱（进化回流路径，需要 mindx start 运行且已登录社区账号）。
+
+投递目标 = 原包名，本地清单身份须与目标一致；版本号必填，附言可选。
+包主采纳后并入正式新版本，拒绝则仅留在收件箱。
+
+Examples:
+  mindx market submit agent architect --version 1.1.0 --note "补充了错误处理"`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		kind, err := marketKindArgs(args)
+		if err != nil {
+			return err
+		}
+		name := args[1]
+		version, _ := cmd.Flags().GetString("version")
+		version = strings.TrimSpace(version)
+		if version == "" {
+			return fmt.Errorf("必须通过 --version 指定投递版本号")
+		}
+		derivedKind, _ := cmd.Flags().GetString("derived-kind")
+		derivedName, _ := cmd.Flags().GetString("derived-name")
+		derivedVersion, _ := cmd.Flags().GetString("derived-version")
+		if (derivedKind != "") != (derivedName != "") {
+			return fmt.Errorf("衍生谱系声明需同时给出 --derived-kind 与 --derived-name")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("无法连接守护进程: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		useJSON, _ := cmd.Flags().GetBool("json")
+		note, _ := cmd.Flags().GetString("note")
+		result, err := cl.MarketSubmit(rpc.MarketSubmitParams{
+			Kind: kind, Name: name, Version: version, Note: note,
+			DerivedKind: derivedKind, DerivedName: derivedName, DerivedVersion: derivedVersion,
+		})
+		if err != nil {
+			return err
+		}
+		if useJSON {
+			printMarketJSON(result)
+			return nil
+		}
+		var m map[string]any
+		if err := json.Unmarshal(result, &m); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+		fmt.Printf("投递成功: %s/%s 版本 %v（投递单号 %v），等待包主审核\n", kind, name, m["version"], m["submission_id"])
+		return nil
+	},
+}
+
+// marketSubmissionEntry 是投递收件箱条目的 CLI 视图（对齐服务端 Submission DTO）。
+type marketSubmissionEntry struct {
+	ID        int64  `json:"id"`
+	FromLogin string `json:"from_login"`
+	Version   string `json:"version"`
+	Sha256    string `json:"sha256"`
+	Note      string `json:"note"`
+	Status    string `json:"status"`
+	CreatedAt string `json:"created_at"`
+}
+
+// marketSubmissionsCmd 包主投递收件箱命令组。
+var marketSubmissionsCmd = &cobra.Command{
+	Use:   "submissions",
+	Short: "Package-owner inbox commands: list & decide submissions (requires mindx start)",
+	Long: `包主投递收件箱：查看名下包收到的进化版本投递，并逐条采纳或拒绝。
+
+Examples:
+  mindx market submissions list agent architect
+  mindx market submissions decide agent architect 12 --decision accept`,
+}
+
+// marketSubmissionsListCmd 列出收件箱投递。
+var marketSubmissionsListCmd = &cobra.Command{
+	Use:   "list <agent|skill|team> <name>",
+	Short: "List submissions in your package inbox (requires mindx start)",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		kind, err := marketKindArgs(args)
+		if err != nil {
+			return err
+		}
+		name := args[1]
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("无法连接守护进程: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.MarketSubmissionsList(kind, name)
+		if err != nil {
+			return err
+		}
+		var res struct {
+			Submissions []marketSubmissionEntry `json:"submissions"`
+		}
+		if err := json.Unmarshal(result, &res); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+		useJSON, _ := cmd.Flags().GetBool("json")
+		if useJSON {
+			printMarketJSON(result)
+			return nil
+		}
+		if len(res.Submissions) == 0 {
+			fmt.Printf("「%s」还没有收到任何投递。\n", name)
+			return nil
+		}
+		table := render.NewTable([]string{"ID", "From", "Version", "Status", "Note", "Submitted"}, 60)
+		for _, s := range res.Submissions {
+			note := s.Note
+			if note == "" {
+				note = "—"
+			}
+			table.AddRow([]string{strconv.FormatInt(s.ID, 10), s.FromLogin, s.Version, s.Status, note, s.CreatedAt})
+		}
+		fmt.Println(table.Render())
+		fmt.Printf("\n共 %d 条投递；用 `mindx market submissions decide %s %s <id> --decision accept|reject` 处理。\n",
+			len(res.Submissions), kind, name)
+		return nil
+	},
+}
+
+// marketSubmissionsDecideCmd 采纳或拒绝一条投递。
+var marketSubmissionsDecideCmd = &cobra.Command{
+	Use:   "decide <agent|skill|team> <name> <id>",
+	Short: "Accept or reject a submission (requires mindx start)",
+	Long: `包主审核一条投递：--decision accept 采纳为正式新版本（服务端代转发布管线），
+--decision reject 拒绝。重复决策会被拒绝（状态已定）。
+
+Examples:
+  mindx market submissions decide agent architect 12 --decision accept
+  mindx market submissions decide agent architect 13 --decision reject`,
+	Args: cobra.ExactArgs(3),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		kind, err := marketKindArgs(args)
+		if err != nil {
+			return err
+		}
+		name := args[1]
+		id, err := strconv.ParseInt(args[2], 10, 64)
+		if err != nil || id <= 0 {
+			return fmt.Errorf("投递单号必须是正整数")
+		}
+		decision, _ := cmd.Flags().GetString("decision")
+		if decision != "accept" && decision != "reject" {
+			return fmt.Errorf("--decision 必须为 accept 或 reject")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("无法连接守护进程: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		useJSON, _ := cmd.Flags().GetBool("json")
+		result, err := cl.MarketSubmissionDecide(kind, name, id, decision == "accept")
+		if err != nil {
+			return err
+		}
+		if useJSON {
+			printMarketJSON(result)
+			return nil
+		}
+		var m map[string]any
+		if err := json.Unmarshal(result, &m); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+		if decision == "accept" {
+			if v, ok := m["version"].(string); ok && v != "" {
+				fmt.Printf("已采纳: 投递 #%d 并入 %s/%s 版本 %s\n", id, kind, name, v)
+			} else {
+				fmt.Printf("已采纳: 投递 #%d 并入 %s/%s\n", id, kind, name)
+			}
+		} else {
+			fmt.Printf("已拒绝: 投递 #%d（%s/%s）\n", id, kind, name)
+		}
+		return nil
+	},
+}
+
+// marketRateCmd 提交包级评分。
+var marketRateCmd = &cobra.Command{
+	Use:   "rate <agent|skill|team> <name> <1-5>",
+	Short: "Rate a market package from 1 to 5 stars (requires mindx start)",
+	Args:  cobra.ExactArgs(3),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		kind, err := marketKindArgs(args)
+		if err != nil {
+			return err
+		}
+		name := args[1]
+		score, err := strconv.ParseInt(args[2], 10, 64)
+		if err != nil || score < 1 || score > 5 {
+			return fmt.Errorf("评分必须是 1 到 5 的整数")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("无法连接守护进程: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		orgSlug, _ := cmd.Flags().GetString("org")
+		result, err := cl.MarketRate(rpc.MarketRateParams{Kind: kind, Name: name, Score: score, OrgSlug: orgSlug})
+		if err != nil {
+			return err
+		}
+		useJSON, _ := cmd.Flags().GetBool("json")
+		if useJSON {
+			printMarketJSON(result)
+			return nil
+		}
+		var m map[string]any
+		if err := json.Unmarshal(result, &m); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+		fmt.Printf("评分成功: %s/%s 得 %v 星（当前均分 %v，共 %v 人评分）\n", kind, name, m["score"], m["rating_avg"], m["rating_count"])
 		return nil
 	},
 }

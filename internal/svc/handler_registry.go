@@ -103,6 +103,9 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"market.account.identity.status":     r.daemon.handleMarketIdentityStatus,
 		"market.account.identity.unlink":     r.daemon.handleMarketIdentityUnlink,
 		"market.org.create":                  r.daemon.handleMarketOrgCreate,
+		"market.org.delete":                  r.daemon.handleMarketOrgDelete,
+		"market.org.members":                 r.daemon.handleMarketOrgMembers,
+		"market.org.subscription":            r.daemon.handleMarketOrgSubscription,
 		"market.updateProfile":               r.daemon.handleMarketUpdateProfile,
 		"market.uploadAvatar":                r.daemon.handleMarketUploadAvatar,
 		"market.pack":                        r.daemon.handleMarketPack,
@@ -156,11 +159,13 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"schedule.list":                      r.daemon.handleScheduleList,
 		"schedule.add":                       r.daemon.handleScheduleAdd,
 		"schedule.create":                    r.daemon.handleScheduleAdd, // 前端 ScheduleView 使用的别名
+		"schedule.update":                    r.daemon.handleScheduleUpdate,
 		"schedule.del":                       r.daemon.handleScheduleDelete,
 		"schedule.job_cancel":                r.daemon.handleScheduleJobCancel,
 
 		// 组织信箱（M9 跨机器派工与汇报；mail.deliver 是入站口，见 openMethods 白名单）
 		"mail.send":         r.daemon.handleMailSend,
+		"mail.deliver":      r.daemon.handleMailDeliver,
 		"mail.reply":        r.daemon.handleMailReply,
 		"mail.inbox":        r.daemon.handleMailInbox,
 		"mail.list":         r.daemon.handleMailSent,

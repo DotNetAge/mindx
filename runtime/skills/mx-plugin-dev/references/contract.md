@@ -181,24 +181,28 @@ interface OverlayViewApi<C> {
 
 - `kind` 非法值抛错。
 - **modal 互斥**：已存在 modal 条目时再 add modal 直接抛错（不是静默覆盖）。编排惯例：重复打开同 id 时先 `has(id)` 守卫再 `remove`（`remove` 对不存在条目同样抛错，直接裸 remove 首开即炸）。
+- **modal 卡片壳是用户可调的**：卡片（OverlayPane `.modalCard`）默认自适应内容，右下角手柄可拖拽调宽高（宽上限 960、高不超视口），卡片自身不滚动。内容弹窗必须拆两区：滚动内容套 `mx-modal-body`，按钮区套 `mx-modal-footer`（钉底、顶部分隔线、按钮靠右）——自造 `.actions` 行会随内容滚走。确认类小弹窗可不拆（块级堆叠自动兼容）。样式细节见 `uikit.md` 控件原语清单。
 - banner 顶部可堆叠，用自增序列号区分 id。
 
 ## 6.1 Sheet — 全屏抽层
 
-由下向上滑入覆盖整个界面的浮层级视图（抽屉语义），与 Overlay / Settings 同为壳级公共能力。头部是壳固有 chrome：注册者提供的 Title 居中呈现，尾端固有关闭钮（关闭 = 移除条目）；本体为注册者组件，填充头部以下全部空间。
+由下向上滑入覆盖整个界面的浮层级视图（抽屉语义），与 Overlay / Settings 同为壳级公共能力。**栈式抽层（2026-10-20 用户定案）**：新 Sheet 盖在旧 Sheet 之上，壳只渲染栈顶（最后注册的条目），关闭/Esc 逐层退出露出下层；头部是壳固有 chrome：注册者提供的 Title 居中呈现，尾端固有关闭钮（关闭 = 移除条目）；本体为注册者组件，填充头部以下全部空间；可选尾区工具栏（Sheet Trail）钉底固定。
 
 ```ts
 interface SheetViewApi<C> {
-  add(entry: Entry<C> & { title: string }): void  // title 由壳渲染于头部居中；缺失抛错
-  remove(id: string): void   // 关闭 = 移除
-  has(id: string): boolean
-  readonly entries: readonly SheetEntry<C>[]
+  add(entry: Entry<C> & { title: string; trail?: C }): void  // title 由壳渲染于头部居中，缺失抛错；trail 可选
+  remove(id: string): void   // 关闭 = 移除（栈中任意层可按 id 精确移除）
+  has(id: string): boolean   // 含被上层盖住的在册层
+  readonly entries: readonly SheetEntry<C>[]  // 栈序 = 注册先后（末位即栈顶）
 }
 ```
 
-- **sheet 互斥**：同时至多一个，已有条目时再 add 直接抛错（对齐 modal 互斥）。
-- 关闭通道三处：右上角固有关闭钮、Esc（modal 在场时 Esc 先关 modal）、注册者自行 `remove`。
+- **栈式多开**：允许无限拉起新 Sheet 盖旧的；重复 add **同 id** 仍抛错（registry id 唯一）。防重开惯例 `has → remove → add` 依旧成立（同 id 顶替）。
+- 栈序即注册先后：Sheet 条目的 `order` 字段不被消费（add 时壳强制抹掉），注册者无需也不应传。
+- 关闭通道三处：右上角固有关闭钮（关栈顶）、Esc（modal 在场时 Esc 先关 modal；否则关栈顶一层）、注册者自行 `remove`（可按 id 精确关任意层）。
 - 条目 component 只写本体内容排版；头部（Title + 关闭钮）由壳容器提供，禁止自绘头部。
+- **trail 尾区工具栏**（可选）：注册者提供第二个组件时渲染在本体之下钉底固定（顶部 0.5px 分隔线、壳管内边距），本体超高滚动不挤压尾区——适合文档/编辑类抽层的动作条（保存、导出等）；不提供则本体占满全高。trail 只放动作控件（mx-btn / mx-icon-btn），禁止塞正文内容。
+- **状态不保真**：被上层盖住的 Sheet 组件会被卸载（Pane 只渲染栈顶），弹出上层后下层重挂载（播入场动画）——需要跨层保留状态的抽层自带外部 store，勿依赖组件内 state。
 
 ## 6.2 Floater — 可拖动浮窗
 
@@ -516,7 +520,7 @@ interface ChangeHub {
 
 八区契约对动态插件**完全适用**：入口签名、注册 API、样式军规、id 前缀、清理函数一视同仁。在线插件（market）与预置插件（core）的唯一差异是**可删除性**——机制零分叉。order 取值一条必须遵守：在线插件注册条目 order 一律 ≥ 1001（1–1000 为壳内置与预置插件保留段，§2）。
 
-**权威源目录**（结论，细则读规范 §11.1）：外部插件源码（官方可选件与 LLM 开发插件）一律放项目 `.agents/plugins/<id>/`；官方可选件由发行构建期 `scripts/optional-plugins/build.mjs` 扫描该目录构建搭载，用户在向导「安装」步与设置插件页「官方可选件」区选择式释放安装（origin=core-optional，卸载后可重装）。
+**权威源目录**（结论，细则读规范 §11.1）：外部插件源码（官方可选件与 LLM 开发插件）一律放项目 `.agents/plugins/<id>/`；构建期 `scripts/optional-plugins/build.mjs` 扫描该目录逐个产出 .mindpkg，**按 `distribution` 字段分流**（2026-10-22 定案）：缺省 = 官方可选件搭载（dist-optional/ → electron-builder extraResources → 向导「安装」步与设置插件页「官方可选件」区选择式释放安装，origin=core-optional）；`"distribution": "market"` = 市场分发（dist-market/ → 展开落 mindx-market/contents/plugins/<id>/ → build-market.mjs 上架资源社区，按需安装）。
 
 ### 18.1 入口签名与 SDK 注入
 
@@ -539,7 +543,11 @@ zip 包 = `manifest.json` + `entry`（.mjs）+ 静态资源（.json / .css / .sv
   "name": "示例插件",            // 展示名
   "version": "1.0.0",           // semver 三段，强制
   "description": "一句话说明",   // 必填非空白
-  "author": "作者名",            // 必填
+  "author": "MindX",            // 必填：作者显示昵称（署名用）
+  "author_name": "mindx",       // 2026-10-21 定案必填：作者用户名（不显示，标识资源社区账号）
+  "title": "Git 图",            // 2026-10-21 定案必填：展示标题（市场卡片/安装确认/已装列表）
+  "icon": "assets/icon.svg",    // 2026-10-21 定案必填：包内相对图片路径（.svg/.png，随包携带）
+  "distribution": "market",     // 可选：市场分发（输出 dist-market/ 落 contents/plugins 上架，不搭载发行）；缺省 = 官方可选件搭载
   "url": "https://…",           // 可选，网站
   "repo": "https://…",          // 可选，源码库
   "license": "MIT",             // 必填（SPDX 标识）
@@ -550,8 +558,8 @@ zip 包 = `manifest.json` + `entry`（.mjs）+ 静态资源（.json / .css / .sv
 }
 ```
 
-- manifest 语义校验唯一家 = `ui-shell` 导出的 `manifestIssues(value): string[]`（收集全部问题一次性返回）；安装与加载前都调用它。
-- 主进程只做**机械校验**（id/version 字符格式、entry 存在、zip 内路径不越界、后缀白名单）防路径穿越——§17 边界分工：渲染侧管语义，主进程管机械，两层各自完整，不互代。
+- manifest 语义校验唯一家 = `ui-shell` 导出的校验函数，**两层口径**（2026-10-22 契约迁移定案）：`manifestIssues(value)` 全量（核心 + 扩展字段，新安装/新发布强校验，electron plugin-store 为执行点）；`manifestCoreIssues(value)` 仅核心（**加载路径用**——已安装的旧代际包是旧契约下的合法包，不被新必填字段回溯拒绝，缺省字段展示层回退 title||name、首字母头像）。
+- 主进程只做**机械校验**（id/version 字符格式、title/icon/author_name 非空与 icon 文件存在、entry 存在、zip 内路径不越界、后缀白名单）防路径穿越——§17 边界分工：渲染侧管语义，主进程管机械，两层各自完整，不互代。
 
 ### 18.3 版本代际与安装目录
 

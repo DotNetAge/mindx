@@ -32,12 +32,14 @@ Commands:
 
 Examples:
   mindx mail send 积木君 "季度对账求助" 帮忙查一下 9 月的对账单，明早要
+  mindx mail send 积木君 "月度盘点" 盘点仓库库存并出清单 --due 2026-10-25T18:00:00+08:00
   cat report.md | mindx mail reply a1b2c3d4
   mindx mail inbox`,
 }
 
 func init() {
 	mailSendCmd.Flags().String("body-file", "", "从文件读取正文（指定后忽略命令行正文参数）")
+	mailSendCmd.Flags().String("due", "", "截止时刻（RFC3339，如 2026-10-25T18:00:00+08:00）：写明截止时刻的信是任务信，收方管家到点才开工，并排进对方日历")
 	mailSentCmd.Flags().String("org", "", "目标组织（缺省取在册的第一个正常组织）")
 	mailCmd.AddCommand(mailSendCmd, mailReplyCmd, mailInboxCmd, mailSentCmd)
 	rootCmd.AddCommand(mailCmd)
@@ -89,7 +91,8 @@ Body sources: command-line words, --body-file <path>, or piped stdin.`,
 		}
 		defer func() { _ = cl.Close() }()
 
-		result, err := cl.MailSend(rpc.MailSendParams{To: to, Subject: subject, Body: body})
+		due, _ := cmd.Flags().GetString("due")
+		result, err := cl.MailSend(rpc.MailSendParams{To: to, Subject: subject, Body: body, DeadLine: strings.TrimSpace(due)})
 		if err != nil {
 			return err
 		}

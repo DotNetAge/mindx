@@ -2,6 +2,8 @@ package scheduler
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -406,5 +408,83 @@ func TestFileSchedulerStore_Concurrency(t *testing.T) {
 	}
 	if len(list) != 2 {
 		t.Errorf("List returned %d items after concurrent saves, want 2", len(list))
+	}
+}
+
+func TestFileSchedulerStore_RunHistory(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+
+	store, err := NewFileSchedulerStore(tmpDir)
+	if err != nil {
+		t.Fatalf("NewFileSchedulerStore failed: %v", err)
+	}
+
+	entry := &ScheduleEntry{ID: "job-hist", Agent: "a", Content: "c", CronExpr: "* * * * * *"}
+	if err := store.Save(ctx, entry); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	// MarkStarted 追加 started 留痕；终态回写按 runID 结算
+	if err := store.MarkStarted("job-hist", "run-1"); err != nil {
+		t.Fatalf("MarkStarted failed: %v", err)
+	}
+	if err := store.UpdateLastRun("job-hist", "run-1", nil); err != nil {
+		t.Fatalf("UpdateLastRun failed: %v", err)
+	}
+	loaded, _ := store.Load(ctx, "job-hist")
+	if len(loaded.RunHistory) != 1 || loaded.RunHistory[0].Status != "success" {
+		t.Fatalf("RunHistory after success = %+v, want 1 settled success record", loaded.RunHistory)
+	}
+
+	// failed 留痕携带错误信息
+	if err := store.MarkStarted("job-hist", "run-2"); err != nil {
+		t.Fatalf("MarkStarted failed: %v", err)
+	}
+	if err := store.UpdateLastRun("job-hist", "run-2", errors.New("boom")); err != nil {
+		t.Fatalf("UpdateLastRun failed: %v", err)
+	}
+	loaded, _ = store.Load(ctx, "job-hist")
+	if len(loaded.RunHistory) != 2 || loaded.RunHistory[1].Status != "failed" || loaded.RunHistory[1].Error != "boom" {
+		t.Fatalf("RunHistory after failure = %+v, want failed record with error", loaded.RunHistory)
+	}
+
+	// CancelRun 留痕结算为 missed
+	if err := store.MarkStarted("job-hist", "run-3"); err != nil {
+		t.Fatalf("MarkStarted failed: %v", err)
+	}
+	if err := store.CancelRun("job-hist", "run-3"); err != nil {
+		t.Fatalf("CancelRun failed: %v", err)
+	}
+	loaded, _ = store.Load(ctx, "job-hist")
+	if loaded.RunHistory[2].Status != "missed" {
+		t.Fatalf("RunHistory after cancel = %q, want missed", loaded.RunHistory[2].Status)
+	}
+
+	// 未知 runID 的终态回写不得混入历史（防御脏数据）
+	if err := store.UpdateLastRun("job-hist", "run-ghost", nil); err != nil {
+		t.Fatalf("UpdateLastRun ghost failed: %v", err)
+	}
+	loaded, _ = store.Load(ctx, "job-hist")
+	if len(loaded.RunHistory) != 3 {
+		t.Fatalf("RunHistory after ghost settle = %d records, want 3 (ghost must not append)", len(loaded.RunHistory))
+	}
+
+	// cap 截断：超过 runHistoryCap 条后丢弃最旧的
+	for i := 0; i < runHistoryCap+5; i++ {
+		runID := fmt.Sprintf("run-bulk-%d", i)
+		if err := store.MarkStarted("job-hist", runID); err != nil {
+			t.Fatalf("MarkStarted bulk failed: %v", err)
+		}
+		if err := store.UpdateLastRun("job-hist", runID, nil); err != nil {
+			t.Fatalf("UpdateLastRun bulk failed: %v", err)
+		}
+	}
+	loaded, _ = store.Load(ctx, "job-hist")
+	if len(loaded.RunHistory) != runHistoryCap {
+		t.Fatalf("RunHistory length = %d, want capped %d", len(loaded.RunHistory), runHistoryCap)
+	}
+	if loaded.RunHistory[0].RunID == "run-bulk-0" {
+		t.Errorf("oldest record should have been dropped")
 	}
 }

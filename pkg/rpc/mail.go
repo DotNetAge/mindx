@@ -5,15 +5,20 @@ import "encoding/json"
 // M9 组织运行面：组织信箱 RPC 参数（CLI 与前端共用冻结协议）。
 // 信箱是松散载体：参数只有信封级字段，信体由收方智能体自行解读。
 
-// MailSendParams 发信参数（mail.send：信落服务端组织信箱，对方上线自取）。
+// MailSendParams 发信参数（mail.send：信落服务端信箱，对方上线自取）。
 type MailSendParams struct {
 	// OrgSlug 目标组织（空 = 自动取我在册的第一个正常组织）
 	OrgSlug string `json:"org_slug,omitempty"`
 	// To 收件成员显示名（组织成员名单精确匹配）
-	To        string `json:"to"`
-	Subject   string `json:"subject"`
-	Body      string `json:"body"`
+	To string `json:"to"`
+	// Subject 信件主题；Body 信体正文
+	Subject string `json:"subject"`
+	Body    string `json:"body"`
+	// InReplyTo 回信引用的原信编号（普通信留空）
 	InReplyTo string `json:"in_reply_to,omitempty"`
+	// DeadLine 截止时刻（RFC3339，可选）：写了截止时刻的信是任务信，
+	// 收方管家把它排进本机调度器，到截止时刻才开工；空 = 普通信收信即办。
+	DeadLine string `json:"dead_line,omitempty"`
 }
 
 // MailReplyParams 回信参数（mail.reply：按原信编号回给来信人）。

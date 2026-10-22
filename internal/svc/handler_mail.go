@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	bbolt "go.etcd.io/bbolt"
 
@@ -39,6 +40,7 @@ type LocalMail struct {
 	Subject     string `json:"subject"`
 	Body        string `json:"body"`
 	InReplyTo   string `json:"in_reply_to"`
+	DeadLine    string `json:"dead_line"` // 截止时刻（RFC3339；空 = 普通信）
 	ReceivedAt  string `json:"received_at"`
 }
 
@@ -123,9 +125,12 @@ func (d *Daemon) defaultHiredAgent() string {
 	return ""
 }
 
-// wakeForMail 来信叫醒：把信渲染为本机智能体的开工内容并即刻入队。
+// wakeForMail 来信处置入队：把信渲染为本机智能体的开工内容，交 Scheduler 排期。
 // 智能体是信的第一读者，由它判断来信意图并处置；信件编号贯穿回信对账。
-func (d *Daemon) wakeForMail(fromName, subject, body, uid, inReplyTo string) {
+// 两路语义（2026-10-21 定案：Mailer 只管通信，执行主体收敛到 Scheduler）：
+//   - 任务信（deadLine 非空）：排到截止时刻开工，日历可见——What=信体、Who=管家、When=dead_line
+//   - 普通信（告知/问候/对账）：收信即办，约 10 秒后拉起
+func (d *Daemon) wakeForMail(fromName, subject, body, uid, inReplyTo, deadLine string) {
 	agent := d.defaultHiredAgent()
 	if agent == "" {
 		d.logger.Warn("收到组织来信但本机没有已雇佣的智能体，暂存待读", "uid", uid)
@@ -137,15 +142,64 @@ func (d *Daemon) wakeForMail(fromName, subject, body, uid, inReplyTo string) {
 	if inReplyTo != "" {
 		fmt.Fprintf(&sb, "这是对信件 %s 的回信。\n", inReplyTo)
 	}
+	if deadLine != "" {
+		fmt.Fprintf(&sb, "截止时刻：%s（寄件人要求在此之前办结）\n", deadLine)
+	}
 	sb.WriteString("\n正文：\n")
 	sb.WriteString(body)
 	sb.WriteString("\n\n请判断这封信要你做什么：需要动手的事，现在着手做；需要本机主人知晓或裁决的，清楚转告并等指示；")
 	fmt.Fprintf(&sb, "事情办完后务必回信汇报（命令：mindx mail reply %s \"汇报内容\"），让寄件人知道结果。", uid)
-	if err := d.enqueueOneJob(agent, sb.String()); err != nil {
+
+	// 截止时刻解析失败或已过期（信在信箱躺过了期限）按普通信处理：
+	// 立即开工总好过生成一条永不触发的死任务
+	var at time.Time
+	if deadLine != "" {
+		if t, err := time.Parse(time.RFC3339, deadLine); err == nil && t.After(time.Now()) {
+			at = t
+		}
+	}
+	if err := d.enqueueOneJobAt(agent, sb.String(), at); err != nil {
 		d.logger.Warn("来信开工入队失败", "uid", uid, "error", err.Error())
 	} else {
-		d.logger.Info("来信已叫醒智能体处置", "uid", uid, "agent", agent)
+		if deadLine != "" && !at.IsZero() {
+			d.logger.Info("任务信已按截止时刻排期", "uid", uid, "agent", agent, "dead_line", deadLine)
+		} else {
+			d.logger.Info("来信已叫醒智能体处置", "uid", uid, "agent", agent)
+		}
 	}
+}
+
+// handleMailDeliver 直连投递入站（mail.deliver，免握手白名单）：
+// 寄件方机器把信封直接推到本机。去重（与轮询共档）→ 落档 → 同一套 Scheduler 处置。
+func (d *Daemon) handleMailDeliver(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		OrgSlug     string `json:"org_slug"`
+		UID         string `json:"uid"`
+		FromPersona int64  `json:"from_persona"`
+		Subject     string `json:"subject"`
+		Body        string `json:"body"`
+		InReplyTo   string `json:"in_reply_to"`
+		DeadLine    string `json:"dead_line"`
+	}
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.UID == "" || strings.TrimSpace(p.Body) == "" {
+		return nil, fmt.Errorf("信封不完整：缺少信件编号或正文")
+	}
+	if d.mailSeen(p.UID) {
+		return map[string]string{"status": "ok", "dedup": "1"}, nil
+	}
+	fromName := d.memberNameOf(p.OrgSlug, p.FromPersona)
+	if err := d.mailSave(&LocalMail{
+		UID: p.UID, OrgSlug: p.OrgSlug, FromPersona: p.FromPersona, FromName: fromName,
+		Subject: p.Subject, Body: p.Body, InReplyTo: p.InReplyTo, DeadLine: p.DeadLine,
+		ReceivedAt: time.Now().Format(time.RFC3339),
+	}); err != nil {
+		return nil, fmt.Errorf("信件留档失败: %w", err)
+	}
+	d.wakeForMail(fromName, p.Subject, p.Body, p.UID, p.InReplyTo, p.DeadLine)
+	return map[string]string{"status": "ok"}, nil
 }
 
 // resolveOrgSlug 发信组织解析：显式指定优先；缺省取在册的第一个正常组织。
@@ -191,6 +245,13 @@ func (d *Daemon) handleMailSend(_ context.Context, params json.RawMessage) (any,
 	if strings.TrimSpace(p.Body) == "" {
 		return nil, fmt.Errorf("信不能没有正文")
 	}
+	// dead_line 截止时刻（可选）：给了就必须是合法 RFC3339，收方按它排期开工
+	p.DeadLine = strings.TrimSpace(p.DeadLine)
+	if p.DeadLine != "" {
+		if _, err := time.Parse(time.RFC3339, p.DeadLine); err != nil {
+			return nil, fmt.Errorf("截止时刻格式不正确，请使用如 2026-10-23T18:00:00+08:00 的写法")
+		}
+	}
 	orgSlug, err := d.resolveOrgSlug(p.OrgSlug)
 	if err != nil {
 		return nil, err
@@ -203,7 +264,7 @@ func (d *Daemon) handleMailSend(_ context.Context, params json.RawMessage) (any,
 	if card == nil {
 		return nil, fmt.Errorf("组织里没有叫 %q 的成员，请核对名字", strings.TrimSpace(p.To))
 	}
-	mail, err := d.app.Market().SendOrgMail(orgSlug, card.PersonaID, p.Subject, p.Body, p.InReplyTo)
+	mail, err := d.app.Market().SendOrgMail(orgSlug, card.PersonaID, p.Subject, p.Body, p.InReplyTo, p.DeadLine)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +288,7 @@ func (d *Daemon) handleMailReply(_ context.Context, params json.RawMessage) (any
 		return nil, fmt.Errorf("本地没有编号为 %s 的来信，无法回信（先 mindx mail inbox 看看收件箱）", strings.TrimSpace(p.UID))
 	}
 	mail, err := d.app.Market().SendOrgMail(origin.OrgSlug, origin.FromPersona,
-		"Re: "+origin.Subject, strings.TrimSpace(p.Body), origin.UID)
+		"Re: "+origin.Subject, strings.TrimSpace(p.Body), origin.UID, "")
 	if err != nil {
 		return nil, err
 	}

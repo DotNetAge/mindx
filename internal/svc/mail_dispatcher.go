@@ -104,13 +104,13 @@ func (d *Daemon) receivePolledMail(orgSlug string, m *bundle.OrgMail) {
 	fromName := d.memberNameOf(orgSlug, m.FromPersona)
 	if err := d.mailSave(&LocalMail{
 		UID: m.UID, OrgSlug: orgSlug, FromPersona: m.FromPersona, FromName: fromName,
-		Subject: m.Subject, Body: m.Body, InReplyTo: m.InReplyTo,
+		Subject: m.Subject, Body: m.Body, InReplyTo: m.InReplyTo, DeadLine: m.DeadLine,
 		ReceivedAt: time.Now().Format(time.RFC3339),
 	}); err != nil {
 		d.logger.Warn("mail: 信件留档失败", "uid", m.UID, "error", err.Error())
 		return
 	}
-	d.wakeForMail(fromName, m.Subject, m.Body, m.UID, m.InReplyTo)
+	d.wakeForMail(fromName, m.Subject, m.Body, m.UID, m.InReplyTo, m.DeadLine)
 }
 
 // memberNameOf 按编号反查成员显示名（寄件人名字展示用；查不到回退编号写法）。

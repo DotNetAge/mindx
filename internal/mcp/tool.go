@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/DotNetAge/goharness/tools"
@@ -13,8 +14,10 @@ import (
 // 每个 toolDef 变成一个 DynamicTool，info 来自 MCP inputSchema，
 // execute 闭包通过 pool.Call 路由到对应的 MCP server。
 //
-// 工具命名规则：mcp:<server>:<toolName>
+// 工具命名规则：mcp_<server>_<toolName>，片段经 sanitizeToolName 清洗。
 // 这样即使多个 server 暴露同名工具也不会在 ToolRegistry 里冲突。
+// 注意不能用冒号拼接：OpenAI 兼容 API 要求工具名匹配 ^[a-zA-Z0-9_-]+$，
+// 冒号/点号/中文等会直接 400（2026-10-21 修复）。
 //
 // Schema 透传策略：
 //   - RawSchema: 放完整 MCP inputSchema（嵌套 / 联合类型 / $ref 全保留），
@@ -22,8 +25,16 @@ import (
 //   - Parameters: 仍保留扁平 []Parameter 版本，供 UI 展示 / fallback
 func BuildTools(defs []toolDef, pool *ConnectionPool) []tools.FuncTool {
 	out := make([]tools.FuncTool, 0, len(defs))
+	used := make(map[string]bool, len(defs))
 	for _, d := range defs {
-		goharnessName := fmt.Sprintf("mcp:%s:%s", d.server, d.Name)
+		base := fmt.Sprintf("mcp_%s_%s", sanitizeToolName(d.server), sanitizeToolName(d.Name))
+		// 清洗后可能碰撞（如 a.b 与 a-b 同名同 server），追加序号兜底
+		name := base
+		for i := 2; used[name]; i++ {
+			name = fmt.Sprintf("%s_%d", base, i)
+		}
+		used[name] = true
+		goharnessName := name
 
 		info := &tools.ToolInfo{
 			Name:        goharnessName,
@@ -44,6 +55,22 @@ func BuildTools(defs []toolDef, pool *ConnectionPool) []tools.FuncTool {
 		}))
 	}
 	return out
+}
+
+// sanitizeToolName 把工具名片段清洗为 LLM API 合法字符（^[a-zA-Z0-9_-]+$）：
+// 其余字符（冒号、点号、中文等）一律替换为下划线。
+func sanitizeToolName(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
 }
 
 // normalizeInputSchema 处理 MCP inputSchema 给 RawSchema 用：

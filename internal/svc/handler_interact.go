@@ -35,6 +35,13 @@ func (d *Daemon) handleMessageCancel(ctx context.Context, params json.RawMessage
 					cancelled = set.CancelSession(req.SessionID)
 				}
 			}
+			// 后台执行的调度任务不属于任何客户端（登记在虚拟键集合），
+			// 按会话停止时一并取消，保证停止能力对后台执行同样生效。
+			if v, ok := d.clientCancels.Load(scheduledCancelClientID); ok {
+				if set, ok := v.(*clientCancelSet); ok {
+					cancelled += set.CancelSession(req.SessionID)
+				}
+			}
 			subStopped := d.cancelSubAgents(req.SessionID)
 			d.logger.Info("message.cancel called for session",
 				"client_id", clientID, "session_id", req.SessionID,

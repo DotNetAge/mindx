@@ -98,7 +98,7 @@ plugins/src/<name>/
 
 外部插件与内置插件**运行契约完全一致**（八区注册 / 清理函数 / id 前缀 / order ≥ 1001），差异只在交付形态：独立项目目录（不进 `plugins/src/`、不注册进壳）、入口为纯 ESM `entry.mjs`（default export，无 npm import 通道，渲染工具由第二参 `mx` 注入）、以 .mindpkg 分发。权威规范：`mindx-work/docs/插件生命周期规范.md`（身份/版本/manifest 契约/校验分层/信任边界/市场分发的唯一事实源）；机制摘要读 `references/contract.md` §18。
 
-**权威源目录军规**：用户未指定开发目录时，LLM 开发的外部插件源码一律放项目 `.agents/plugins/<id>/`——与官方可选件（gitgraph / video-editor / svgboard）同一权威源目录；官方可选件由 `scripts/optional-plugins/build.mjs` 在发行构建期自动扫描该目录逐个产出 .mindpkg 搭载进发行版（可选件增多零脚本改动）。仅当用户明确指定了目录才用 `--target` 覆盖。
+**权威源目录军规**：用户未指定开发目录时，LLM 开发的外部插件源码一律放项目 `.agents/plugins/<id>/`——与官方插件（gitgraph / svgboard / video-editor / mailbox）同一权威源目录；`scripts/optional-plugins/build.mjs` 构建期自动扫描该目录逐个产出 .mindpkg（插件增多零脚本改动），按 plugin.json 的 `distribution` 字段分流：缺省 = 搭载进发行版（官方可选件）；`"market"` = 落 mindx-market/contents/plugins 上架资源社区（2026-10-22 起 gitgraph / svgboard / video-editor / mailbox 均为市场分发，按需安装）。仅当用户明确指定了目录才用 `--target` 覆盖。
 
 ```bash
 # 1. 脚手架生成独立项目（反向域 id + 作者署名；缺省落在项目 .agents/plugins/<id>/，不注册进壳）

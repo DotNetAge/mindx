@@ -28,6 +28,43 @@ type ScheduleEntry struct {
 	LastError  string    `json:"last_error,omitempty"`
 	SuccessCnt int       `json:"success_count"`
 	FailureCnt int       `json:"failure_count"`
+	// RunHistory 是近几次执行的留痕：At 记录真实触发时刻，供前端把日历上的
+	// 「历史执行」与「理论排期」区分开（月视图过去日期只渲染真执行）。
+	RunHistory []RunRecord `json:"run_history,omitempty"`
+}
+
+// RunRecord 是一次运行的留痕。At 为到点触发时刻（MarkStarted 写入），
+// Status 终态为 success / failed / missed（排队或取消），由终态回写时按
+// RunID 更新；一次运行只有一条记录，先 started 后终态。
+type RunRecord struct {
+	RunID  string    `json:"run_id"`
+	At     time.Time `json:"at"`
+	Status string    `json:"status"`
+	Error  string    `json:"error,omitempty"`
+}
+
+// runHistoryCap 限制每条任务保留的留痕条数：足够月视图逐日标注真实执行，
+// 同时防止长期高频任务的 JSON 无限膨胀；超出时丢弃最旧的。
+const runHistoryCap = 20
+
+// appendRunRecord 追加一条留痕并按 cap 截断。
+func appendRunRecord(entry *ScheduleEntry, rec RunRecord) {
+	entry.RunHistory = append(entry.RunHistory, rec)
+	if len(entry.RunHistory) > runHistoryCap {
+		entry.RunHistory = entry.RunHistory[len(entry.RunHistory)-runHistoryCap:]
+	}
+}
+
+// settleRunRecord 把指定 run 的留痕从 started 结算为终态；找不到匹配的
+// started 记录时不写入（防御：避免脏数据混入历史）。
+func settleRunRecord(entry *ScheduleEntry, runID, status, errMsg string) {
+	for i := len(entry.RunHistory) - 1; i >= 0; i-- {
+		if entry.RunHistory[i].RunID == runID && entry.RunHistory[i].Status == "started" {
+			entry.RunHistory[i].Status = status
+			entry.RunHistory[i].Error = errMsg
+			return
+		}
+	}
 }
 
 type FileSchedulerStore struct {
@@ -146,23 +183,27 @@ func (s *FileSchedulerStore) UpdateLastRun(id string, runID string, err error) e
 			entry.LastStatus = "failed"
 			entry.LastError = err.Error()
 			entry.FailureCnt++
+			settleRunRecord(entry, runID, "failed", err.Error())
 		} else {
 			entry.LastStatus = "success"
 			entry.LastError = ""
 			entry.SuccessCnt++
+			settleRunRecord(entry, runID, "success", "")
 		}
 		return true
 	})
 }
 
-// MarkStarted 记录任务已触发：写入本次运行时间与 run_id，状态置为 started。
-// 由 Daemon 在到点广播 OnJobStart 前调用，供任务管理与生命周期记录展示。
+// MarkStarted 记录任务已触发：写入本次运行时间与 run_id，状态置为 started，
+// 并追加一条执行留痕（At 为真实触发时刻，终态回写时按 runID 结算）。
 func (s *FileSchedulerStore) MarkStarted(id string, runID string) error {
 	return s.updateRunStatus(id, func(entry *ScheduleEntry) bool {
-		entry.LastRunAt = time.Now()
+		now := time.Now()
+		entry.LastRunAt = now
 		entry.LastRunID = runID
 		entry.LastStatus = "started"
 		entry.LastError = ""
+		appendRunRecord(entry, RunRecord{RunID: runID, At: now, Status: "started"})
 		return true
 	})
 }
@@ -174,6 +215,7 @@ func (s *FileSchedulerStore) MarkMissed(id string) error {
 		entry.LastStatus = "missed"
 		entry.LastError = "客户端离线，任务被跳过"
 		entry.FailureCnt++
+		settleRunRecord(entry, entry.LastRunID, "missed", "客户端离线，任务被跳过")
 		return true
 	})
 }
@@ -188,6 +230,7 @@ func (s *FileSchedulerStore) CancelRun(id string, runID string) error {
 		entry.LastStatus = "missed"
 		entry.LastError = "用户取消"
 		entry.FailureCnt++
+		settleRunRecord(entry, runID, "missed", "用户取消")
 		return true
 	})
 }

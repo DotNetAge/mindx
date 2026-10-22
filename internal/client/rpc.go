@@ -798,7 +798,7 @@ func (m *rootModel) rpcSendMessage(text string) {
 		return
 	}
 
-	if err := m.sendUserMessage(text, "", ""); err != nil {
+	if err := m.sendUserMessage(text); err != nil {
 		m.notifBar.Add(data.Notification{
 			Message: fmt.Sprintf(i18n.T("client.notify.rpc.send.failed"), err),
 			Level:   data.NotifError,
@@ -813,18 +813,10 @@ func (m *rootModel) rpcSendMessage(text string) {
 }
 
 // sendUserMessage 通过 user.message 通知发送用户消息。
-// jobEntryID/jobRunID 非空时随消息透传调度任务标识（前台执行链路：
-// 本轮对话结束后服务端据此 ReportResult 并广播 completed/failed）。
-func (m *rootModel) sendUserMessage(text, jobEntryID, jobRunID string) error {
+func (m *rootModel) sendUserMessage(text string) error {
 	payload := map[string]string{"text": text}
 	if m.currentSessionID != "" {
 		payload["session_id"] = m.currentSessionID
-	}
-	if jobEntryID != "" {
-		payload["job_entry_id"] = jobEntryID
-	}
-	if jobRunID != "" {
-		payload["job_run_id"] = jobRunID
 	}
 	return m.rpc.client.Notify("user.message", payload)
 }

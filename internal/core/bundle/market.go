@@ -525,6 +525,76 @@ func (m *MarketClient) OrgCreate(name, slug string) (orgID int64, err error) {
 	return out.OrgID, nil
 }
 
+// OrgDelete 删除组织（DELETE /api/v1/orgs/{slug}；仅所有者，且组织须为空：
+// 无其他成员且无已发布包，否则服务端 409 报原因）。
+func (m *MarketClient) OrgDelete(slug string) error {
+	if m.authToken == "" {
+		return fmt.Errorf("尚未登录社区")
+	}
+	req, err := http.NewRequest(http.MethodDelete, m.apiBase+"/orgs/"+url.PathEscape(slug), nil)
+	if err != nil {
+		return err
+	}
+	m.attachIdentity(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	var e struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(data, &e) == nil && e.Error.Message != "" {
+		return fmt.Errorf("%s", e.Error.Message)
+	}
+	return fmt.Errorf("删除组织失败（HTTP %d）", resp.StatusCode)
+}
+
+// OrgSubscription 组织订阅状态（GET /api/v1/orgs/{slug}/subscription；owner/admin）。
+// 免费开放期 status = none；组织中心据 status 渲染「免费开放中」或订阅明细。
+type OrgSubscription struct {
+	Status      string `json:"status"`
+	SeatCount   int64  `json:"seat_count"`
+	TotalAmount int64  `json:"total_amount"`
+	PeriodStart string `json:"period_start"`
+	PeriodEnd   string `json:"period_end"`
+	Seats       struct {
+		Total    int `json:"total"`
+		Occupied int `json:"occupied"`
+		Open     int `json:"open"`
+	} `json:"seats"`
+}
+
+// OrgSubscription 拉取组织订阅状态（免费开放期返回 status=none，不报错）。
+func (m *MarketClient) OrgSubscription(orgSlug string) (*OrgSubscription, error) {
+	if m.authToken == "" {
+		return nil, fmt.Errorf("尚未登录社区")
+	}
+	resp, err := m.authedGet(m.apiBase + "/orgs/" + url.PathEscape(orgSlug) + "/subscription")
+	if err != nil {
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("读取订阅状态失败（HTTP %d）", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return nil, err
+	}
+	var out OrgSubscription
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("解析订阅状态失败：%w", err)
+	}
+	return &out, nil
+}
+
 // UpdateProfileFields 更新 Profile 三字段（PATCH /api/v1/me；nil = 不更新。
 // 2026-10-20 定案：github 移出手填白名单，由 GitHub 身份绑定自动获取）。
 func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone *string) (*MarketUser, error) {
