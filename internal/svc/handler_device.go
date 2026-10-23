@@ -176,16 +176,20 @@ func (d *Daemon) handleDevicePairCode(_ context.Context, _ json.RawMessage) (any
 }
 
 // handleDeviceHandshake 处理 device.handshake：设备接入握手（强制闸唯一对外开口）。
+// account_trust 非空时走同账号互信路径（跨端连接第二步，DEVICE-TRUST.md 定案一）：
+// 凭被连方自己的 AuthToken 向社区服务端核验对端凭据——同账号且凭据签发设备与
+// 对端自报身份一致才放行互信，否则置空回落既有弹窗/配对码流程。
 func (d *Daemon) handleDeviceHandshake(ctx context.Context, params json.RawMessage) (any, error) {
 	if d.devGate == nil {
 		return nil, fmt.Errorf("设备接入功能未启用")
 	}
 	var p struct {
-		DeviceID string `json:"device_id"`
-		Name     string `json:"name"`
-		Platform string `json:"platform"`
-		Token    string `json:"token"`
-		PairCode string `json:"pair_code"`
+		DeviceID     string                `json:"device_id"`
+		Name         string                `json:"name"`
+		Platform     string                `json:"platform"`
+		Token        string                `json:"token"`
+		PairCode     string                `json:"pair_code"`
+		AccountTrust *devgate.AccountTrust `json:"account_trust"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, fmt.Errorf("参数解析失败")
@@ -194,7 +198,57 @@ func (d *Daemon) handleDeviceHandshake(ctx context.Context, params json.RawMessa
 	if clientID == "" {
 		return nil, fmt.Errorf("连接身份缺失，请重新连接后重试")
 	}
-	return d.devGate.Handshake(clientID, p.DeviceID, p.Name, p.Platform, p.Token, p.PairCode), nil
+	return d.devGate.Handshake(clientID, p.DeviceID, p.Name, p.Platform, p.Token, p.PairCode, d.resolveAccountTrust(p.AccountTrust, p.DeviceID)), nil
+}
+
+// resolveAccountTrust 核验对端出示的同账号互信凭据，返回可放行的凭据或 nil（回落）：
+//   - 本机未登录社区 → 无法核验，回落（同账号互信以双方都登录为前提）；
+//   - 凭据核验失败（服务端不可达/凭据过期）→ 回落弹窗流程，绝不在核验不可用时放行；
+//   - 非同账号 → 回落弹窗流程（互信只服务同账号）；
+//   - 凭据签发设备与对端自报身份不一致 → 视为凭据挪用，回落弹窗流程。
+func (d *Daemon) resolveAccountTrust(trust *devgate.AccountTrust, deviceID string) *devgate.AccountTrust {
+	if trust == nil || trust.Nonce == "" || trust.ClientID == "" || deviceID == "" {
+		return nil
+	}
+	if d.app == nil || d.app.MarketAuthToken() == "" {
+		return nil
+	}
+	verdict, err := d.app.Market().DeviceTrustConfirm(trust.Nonce)
+	if err != nil {
+		d.logger.Warn("devgate: 同账号互信凭据核验失败，回落弹窗流程", "error", err.Error())
+		return nil
+	}
+	if !verdict.SameAccount() {
+		d.logger.Info("devgate: 互信凭据非同账号，回落弹窗流程")
+		return nil
+	}
+	if verdict.IssuerClientID != trust.ClientID {
+		d.logger.Warn("devgate: 互信凭据签发设备与对端自报身份不一致，回落弹窗流程")
+		return nil
+	}
+	return trust
+}
+
+// handleDeviceTrustTicket 处理 device.trust.ticket：本机领取同账号互信凭据
+// （跨端连接第二步）。仅本机直通连接可调——凭据绑定本机登记设备身份，
+// 外接设备不得代领（防止凭连接权换取其他设备的互信凭据）。
+func (d *Daemon) handleDeviceTrustTicket(ctx context.Context, _ json.RawMessage) (any, error) {
+	if d.devGate == nil || !d.devGate.LocalVerified(gateway.ClientIDFromContext(ctx)) {
+		return nil, fmt.Errorf("仅本机可领取互信凭据")
+	}
+	if d.app == nil || d.app.MarketAuthToken() == "" {
+		return nil, fmt.Errorf("尚未登录社区，无法领取互信凭据")
+	}
+	ticket, err := d.app.Market().DeviceTrustStart()
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"nonce":      ticket.Nonce,
+		"client_id":  ticket.ClientID,
+		"user_id":    ticket.UserID,
+		"expires_in": ticket.ExpiresIn,
+	}, nil
 }
 
 // handleDeviceScan 处理 device.scan：局域网 mDNS 浏览，返回可连接的 MindX 主机

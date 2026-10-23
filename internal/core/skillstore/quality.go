@@ -61,7 +61,7 @@ func stripInlineCode(line string) string {
 
 const (
 	maxDescChars = 1024
-	maxBodyLines = 150
+	maxBodyLines = 300
 )
 
 // CheckQuality 对任意技能目录（全局库或项目级 .agents/skills/<name>）执行

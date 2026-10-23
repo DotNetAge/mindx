@@ -2,6 +2,8 @@
 name: project-overview
 description: 收集全部项目概况。当用户问"所有项目情况怎么样了"、"盘点一下我的项目"、"各项目进展如何"，想一次性了解各项目进展时使用。
 metadata:
+  version: 1.0.0
+  author: Ray
   name_zh: 项目概况收集
 ---
 

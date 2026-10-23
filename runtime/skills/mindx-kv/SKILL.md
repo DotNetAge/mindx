@@ -7,6 +7,8 @@ description: >
 allowed-tools:
   - Bash(mindx kv *)
 metadata:
+  version: 1.0.0
+  author: Ray
   name_zh: MindX 键值存储
   name_zh-tw: MindX 鍵值存儲
   description_zh: daemon 持久键值存储：状态、缓存与配置的精确读写

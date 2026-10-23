@@ -3,6 +3,8 @@ name: generate-agents-md
 description: 扫描仓库，生成/更新AGENTS.md、子目录AGENTS.md、.agents规则片段，产出物严格遵循AAIF AGENTS.md社区规范。当用户要求生成、新建、重构、更新项目的 AGENTS.md 或重建 .agents 目录脚手架时使用。
 tags: agents-md, scaffolding, meta-skill
 metadata:
+  version: 1.0.0
+  author: Ray
   name_zh: 生成AGENTS.md
 ---
 ## 何时用

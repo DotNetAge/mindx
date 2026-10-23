@@ -6,6 +6,8 @@ description: >
 allowed-tools:
   - Bash(mindx mail *)
 metadata:
+  version: 1.0.0
+  author: Ray
   name_zh: 寄信
   name_zh-tw: 寄信
   description_zh: 给组织里的同事写信（安排、求助、汇报、知会）

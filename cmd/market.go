@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/core/skillstore"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // ── market parent ─────────────────────────────────────────────
@@ -81,10 +83,21 @@ func init() {
 	marketSubmissionsDecideCmd.Flags().Bool("json", false, "Output structured JSON")
 	marketRateCmd.Flags().String("org", "", "组织源 slug（空 = 公共资源社区）")
 	marketRateCmd.Flags().Bool("json", false, "Output structured JSON")
+	marketWhoamiCmd.Flags().Bool("json", false, "Output structured JSON")
+	marketArticlePublishCmd.Flags().Int64("org", 0, "发布到指定组织节点（仅组织所有者；缺省发布到个人节点）")
+	marketArticlePublishCmd.Flags().Bool("json", false, "Output structured JSON")
+	marketArticleReadCmd.Flags().Bool("json", false, "Output structured JSON")
+	marketArticleListCmd.Flags().Bool("site", false, "查看官网公开文章（无需登录社区账号）")
+	marketArticleListCmd.Flags().Int64("org", 0, "查看指定组织节点的文章（组织成员）")
+	marketArticleListCmd.Flags().String("query", "", "按关键词搜索（服务端匹配标题/摘要）")
+	marketArticleListCmd.Flags().Bool("json", false, "Output structured JSON")
+	marketArticleDeleteCmd.Flags().Int64("org", 0, "删除指定组织节点的文章（缺省删除个人节点文章）")
+	marketArticleDeleteCmd.Flags().Bool("yes", false, "跳过删除确认（脚本场景用）")
 
 	marketCmd.AddCommand(marketListCmd, marketInstallCmd, marketCanonicalizeAgentsCmd, marketPackAgentsCmd,
-		marketPublishCmd, marketSubmitCmd, marketSubmissionsCmd, marketRateCmd)
+		marketPublishCmd, marketSubmitCmd, marketSubmissionsCmd, marketRateCmd, marketWhoamiCmd, marketArticleCmd)
 	marketSubmissionsCmd.AddCommand(marketSubmissionsListCmd, marketSubmissionsDecideCmd)
+	marketArticleCmd.AddCommand(marketArticlePublishCmd, marketArticleReadCmd, marketArticleListCmd, marketArticleDeleteCmd)
 	rootCmd.AddCommand(marketCmd)
 }
 
@@ -605,6 +618,434 @@ var marketRateCmd = &cobra.Command{
 			return nil
 		}
 		fmt.Printf("评分成功: %s/%s 得 %v 星（当前均分 %v，共 %v 人评分）\n", kind, name, m["score"], m["rating_avg"], m["rating_count"])
+		return nil
+	},
+}
+
+// marketWhoamiCmd 查询本机与 MindX 社区的账号绑定状态。
+var marketWhoamiCmd = &cobra.Command{
+	Use:   "whoami",
+	Short: "Show MindX community account binding status (requires mindx start)",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("无法连接守护进程: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.MarketAccountGet()
+		if err != nil {
+			return err
+		}
+		useJSON, _ := cmd.Flags().GetBool("json")
+		if useJSON {
+			printMarketJSON(result)
+			return nil
+		}
+		var m map[string]any
+		if err := json.Unmarshal(result, &m); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+		if v, _ := m["has_token"].(bool); !v {
+			fmt.Println("未绑定社区账号（匿名设备身份）。请在 MindX 账户页登录，或浏览器打开 https://www.mindx.chat 注册/登录后重试。")
+			return nil
+		}
+		if e, ok := m["token_error"].(string); ok && e != "" {
+			return fmt.Errorf("社区账号令牌校验失败: %s", e)
+		}
+		user, _ := m["user"].(map[string]any)
+		name, provider := "", ""
+		if user != nil {
+			name, _ = user["nick_name"].(string)
+			if name == "" {
+				name, _ = user["login"].(string)
+			}
+			provider, _ = user["provider"].(string)
+		}
+		if provider != "" {
+			fmt.Printf("已绑定社区账号: %s（%s 登录）\n", name, provider)
+		} else {
+			fmt.Printf("已绑定社区账号: %s\n", name)
+		}
+		return nil
+	},
+}
+
+// ── article 子命令组：用户文章发布 / 清单 / 删除（需 daemon + 已登录社区账号） ──
+
+// marketArticleCmd 用户文章命令组：发布 / 阅读 / 清单搜索 / 删除。
+// 发布：个人节点需登录，组织节点仅组织所有者；读侧：官网公开文章匿名可读，
+// 个人文章仅作者、组织文章仅组织成员。
+var marketArticleCmd = &cobra.Command{
+	Use:   "article",
+	Short: "Publish, read, search & delete articles on the community (requires mindx start)",
+	Long: `用户文章：把 Markdown 文章发布到你在 MindX 社区的个人节点（需要 mindx start
+运行且已登录社区账号）。组织节点仅组织所有者可发布（--org）。
+
+也可以读文章：官网公开文章无需登录即可搜索和阅读；个人文章仅作者本人可见，
+组织文章仅组织成员可见。
+
+Examples:
+  mindx market article publish ~/blog/my-post.md
+  mindx market article publish my-post.md --org 3
+  mindx market article read my-post
+  mindx market article list                # 我的文章
+  mindx market article list --site         # 官网公开文章（可匿名）
+  mindx market article list --org 3        # 组织文章（成员）
+  mindx market article delete my-post --yes`,
+}
+
+// articleFrontmatter 文章元数据（YAML frontmatter；slug 缺省可从文件名推导）。
+type articleFrontmatter struct {
+	Slug    string
+	Title   string
+	Summary string
+	Tags    []string
+}
+
+// parseArticleFile 解析文章 markdown 文件：首行 --- 到其后第一个 --- 行为
+// YAML frontmatter（宽松解析，仅取 slug/title/summary/tags 四个字段），其后
+// 为正文原样。无 frontmatter 时整篇按正文处理（title 缺失由调用方报错）。
+func parseArticleFile(path string) (articleFrontmatter, string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return articleFrontmatter{}, "", fmt.Errorf("读取文章文件失败: %w", err)
+	}
+	lines := strings.Split(string(data), "\n")
+	fm := articleFrontmatter{}
+	body := strings.Join(lines, "\n")
+	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
+		for i := 1; i < len(lines); i++ {
+			if strings.TrimSpace(lines[i]) != "---" {
+				continue
+			}
+			var raw map[string]any
+			if err := yaml.Unmarshal([]byte(strings.Join(lines[1:i], "\n")), &raw); err != nil {
+				return fm, "", fmt.Errorf("解析 frontmatter 失败: %w", err)
+			}
+			fm.Slug, _ = raw["slug"].(string)
+			fm.Title, _ = raw["title"].(string)
+			fm.Summary, _ = raw["summary"].(string)
+			fm.Tags = articleTagsFrom(raw["tags"])
+			body = strings.Join(lines[i+1:], "\n")
+			break
+		}
+	}
+	return fm, strings.TrimSpace(body), nil
+}
+
+// articleTagsFrom 宽松解析 tags 字段：支持 YAML 列表与逗号分隔字符串两种写法。
+func articleTagsFrom(v any) []string {
+	switch t := v.(type) {
+	case []any:
+		var tags []string
+		for _, item := range t {
+			if s, ok := item.(string); ok {
+				if s = strings.TrimSpace(s); s != "" {
+					tags = append(tags, s)
+				}
+			}
+		}
+		return tags
+	case string:
+		var tags []string
+		for _, s := range strings.Split(t, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				tags = append(tags, s)
+			}
+		}
+		return tags
+	}
+	return nil
+}
+
+// deriveArticleSlug 从文件名推导文章 slug：小写、非字母数字连续段折叠为连字符、
+// 去首尾连字符、截断 80 字符（对齐 slug 规范 ^[a-z0-9][a-z0-9-]{0,79}$）；
+// 推导结果为空（如纯中文文件名）时返回空串，由调用方要求用户写明 slug。
+func deriveArticleSlug(filename string) string {
+	base := strings.ToLower(strings.TrimSuffix(filename, filepath.Ext(filename)))
+	var b strings.Builder
+	lastDash := true // 首部连字符不留
+	for _, r := range base {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+		} else if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	s := strings.Trim(b.String(), "-")
+	if len(s) > 80 {
+		s = strings.Trim(s[:80], "-")
+	}
+	return s
+}
+
+// marketArticlePublishCmd 发布 Markdown 文章到社区节点。
+var marketArticlePublishCmd = &cobra.Command{
+	Use:   "publish <markdown文件>",
+	Short: "Publish a markdown article to your community node (requires mindx start)",
+	Long: `发布 Markdown 文章到你在 MindX 社区的节点（需要 mindx start 运行且已登录社区账号）。
+
+文章文件 = YAML frontmatter（slug/title/summary/tags）+ Markdown 正文：
+  ---
+  slug: my-first-post
+  title: 我的第一篇文章
+  summary: 一句话摘要
+  tags: [观点, 复盘]
+  ---
+  正文……
+
+slug 缺省从文件名推导（小写连字符化）；--org 发布到指定组织节点（仅组织所有者，
+非所有者会被拒绝并提示原因）。
+
+Examples:
+  mindx market article publish ~/blog/my-post.md
+  mindx market article publish my-post.md --org 3 --json`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fm, body, err := parseArticleFile(args[0])
+		if err != nil {
+			return err
+		}
+		slug := strings.TrimSpace(fm.Slug)
+		if slug == "" {
+			slug = deriveArticleSlug(filepath.Base(args[0]))
+		}
+		if slug == "" {
+			return fmt.Errorf("无法从文件名推导出文章标识（slug），请在文章开头的 frontmatter 中写明 slug（小写字母、数字与连字符）")
+		}
+		if strings.TrimSpace(fm.Title) == "" {
+			return fmt.Errorf("文章缺少标题（title），请在 frontmatter 中补上标题")
+		}
+		if body == "" {
+			return fmt.Errorf("文章正文为空，请写入 Markdown 正文后再发布")
+		}
+		orgID, _ := cmd.Flags().GetInt64("org")
+		useJSON, _ := cmd.Flags().GetBool("json")
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("无法连接守护进程: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.ArticlePublish(rpc.ArticlePublishParams{
+			Slug: slug, Title: fm.Title, Summary: fm.Summary, Markdown: body, Tags: fm.Tags, OrgID: orgID,
+		})
+		if err != nil {
+			return err
+		}
+		if useJSON {
+			printMarketJSON(result)
+			return nil
+		}
+		var m map[string]any
+		if err := json.Unmarshal(result, &m); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+		if orgID > 0 {
+			fmt.Printf("已发布到组织节点 %d：%v（%v）\n", orgID, m["slug"], m["date"])
+		} else {
+			fmt.Printf("已发布到个人节点：%v（%v）\n", m["slug"], m["date"])
+		}
+		return nil
+	},
+}
+
+// marketArticleReadCmd 按 slug 读一篇文章全文（官网文章匿名可读）。
+var marketArticleReadCmd = &cobra.Command{
+	Use:   "read <slug>",
+	Short: "Read one article by slug (site articles are public; requires mindx start)",
+	Long: `按标识（slug）读一篇文章的全文（需要 mindx start 运行）。
+
+官网公开文章无需登录即可阅读；个人文章仅作者本人可见，组织文章仅组织成员
+可见——无权或不存在时会提示「文章不存在或无权查看」。
+
+Examples:
+  mindx market article read my-post
+  mindx market article read my-post --json`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("无法连接守护进程: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.ArticleRead(rpc.ArticleReadParams{Slug: args[0]})
+		if err != nil {
+			return err
+		}
+		useJSON, _ := cmd.Flags().GetBool("json")
+		if useJSON {
+			printMarketJSON(result)
+			return nil
+		}
+		var a bundle.ArticleDetail
+		if err := json.Unmarshal(result, &a); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+		node := "个人"
+		if a.Scope == "site" {
+			node = "官网"
+		} else if a.OrgID > 0 {
+			node = fmt.Sprintf("组织 #%d", a.OrgID)
+		}
+		fmt.Printf("标题：%s\n", a.Title)
+		fmt.Printf("节点：%s\n", node)
+		if a.Date != "" {
+			fmt.Printf("日期：%s\n", a.Date)
+		}
+		if len(a.Tags) > 0 {
+			fmt.Printf("标签：%s\n", strings.Join(a.Tags, ", "))
+		}
+		if strings.TrimSpace(a.Summary) != "" {
+			fmt.Printf("摘要：%s\n", a.Summary)
+		}
+		fmt.Println()
+		fmt.Println(a.Markdown)
+		return nil
+	},
+}
+
+// truncateText 按字符数截断文本（超出部分以省略号收尾），用于表格摘要列。
+func truncateText(s string, n int) string {
+	s = strings.TrimSpace(s)
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[:n]) + "…"
+}
+
+// marketArticleListCmd 文章清单/搜索：--site 官网公开（可匿名）、--org 组织
+// （成员）、缺省我的；--query 关键词搜索。
+var marketArticleListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Search & list articles: site (public), org (member) or mine (requires mindx start)",
+	Args:  cobra.NoArgs,
+	Long: `文章清单与搜索（需要 mindx start 运行）。
+
+缺省列出你在社区发布的文章（需登录）；--site 搜索官网公开文章（无需登录）；
+--org <id> 查看指定组织节点的文章（组织成员）。--query 按关键词搜索。
+
+Examples:
+  mindx market article list
+  mindx market article list --site
+  mindx market article list --site --query 复盘
+  mindx market article list --org 3
+  mindx market article list --json`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		site, _ := cmd.Flags().GetBool("site")
+		orgID, _ := cmd.Flags().GetInt64("org")
+		query, _ := cmd.Flags().GetString("query")
+		if site && orgID > 0 {
+			return fmt.Errorf("--site 与 --org 只能二选一：--site 看官网公开文章，--org 看指定组织的文章")
+		}
+		scope := "mine"
+		if site {
+			scope = "site"
+		} else if orgID > 0 {
+			scope = "org"
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("无法连接守护进程: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.ArticleList(rpc.ArticleListParams{Scope: scope, Query: query, OrgID: orgID})
+		if err != nil {
+			return err
+		}
+		useJSON, _ := cmd.Flags().GetBool("json")
+		if useJSON {
+			printMarketJSON(result)
+			return nil
+		}
+		var res struct {
+			Articles []bundle.MarketArticle `json:"articles"`
+		}
+		if err := json.Unmarshal(result, &res); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+		if len(res.Articles) == 0 {
+			switch scope {
+			case "site":
+				fmt.Println("官网还没有匹配的公开文章。")
+			case "org":
+				fmt.Printf("组织节点 %d 还没有匹配的文章。\n", orgID)
+			default:
+				fmt.Println("你还没有发布过文章。用 `mindx market article publish <markdown文件>` 发布第一篇。")
+			}
+			return nil
+		}
+		table := render.NewTable([]string{"标题", "摘要", "标签", "Slug"}, 80)
+		for _, a := range res.Articles {
+			summary := truncateText(a.Summary, 30)
+			if summary == "" {
+				summary = "—"
+			}
+			tags := strings.Join(a.Tags, ", ")
+			if tags == "" {
+				tags = "—"
+			}
+			table.AddRow([]string{a.Title, summary, tags, a.Slug})
+		}
+		fmt.Println(table.Render())
+		fmt.Printf("\n共 %d 篇文章。\n", len(res.Articles))
+		return nil
+	},
+}
+
+// marketArticleDeleteCmd 删除我的文章（仅作者；删除前确认，--yes 跳过）。
+var marketArticleDeleteCmd = &cobra.Command{
+	Use:   "delete <slug>",
+	Short: "Delete one of your articles (requires mindx start)",
+	Long: `删除你在社区发布的文章（仅作者本人可删；需要 mindx start 运行且已登录社区账号）。
+
+删除不可恢复，命令会先要求确认；--yes 跳过确认（脚本场景用）。
+
+Examples:
+  mindx market article delete my-post
+  mindx market article delete my-post --org 3 --yes`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		slug := args[0]
+		orgID, _ := cmd.Flags().GetInt64("org")
+		yes, _ := cmd.Flags().GetBool("yes")
+		if !yes {
+			fmt.Printf("确认删除文章「%s」？删除后无法恢复。输入 y 确认，其他任意内容取消：", slug)
+			answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			answer = strings.ToLower(strings.TrimSpace(answer))
+			if answer != "y" && answer != "yes" {
+				fmt.Println("已取消删除。")
+				return nil
+			}
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("无法连接守护进程: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		if _, err := cl.ArticleDelete(rpc.ArticleDeleteParams{Slug: slug, OrgID: orgID}); err != nil {
+			return err
+		}
+		if orgID > 0 {
+			fmt.Printf("已删除组织节点 %d 的文章：%s\n", orgID, slug)
+		} else {
+			fmt.Printf("已删除文章：%s\n", slug)
+		}
 		return nil
 	},
 }

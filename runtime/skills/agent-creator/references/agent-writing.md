@@ -1,3 +1,6 @@
+---
+updated: 2026-10-13
+---
 # Agent 编写方法论 — 概览与角色职责
 
 > description 与 SOUL.md 的编写规范：概览怎么写让 LLM 一眼选对，SOUL 怎么写才有行为约束力。

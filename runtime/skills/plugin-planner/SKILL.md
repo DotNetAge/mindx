@@ -4,6 +4,7 @@ description: >
   为 mindx-work 预判并立项应用插件。当用户要求开发插件、复盘产出插件立项提议、
   或工作总结后需要开展行为分析与功能预判时使用。
 metadata:
+  author: Ray
   name_zh: 插件规划师
   version: "0.2.6"
 ---

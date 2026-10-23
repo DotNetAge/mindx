@@ -113,6 +113,10 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"market.submit":                      r.daemon.handleMarketSubmit,
 		"market.submissions.list":            r.daemon.handleMarketSubmissionsList,
 		"market.submissions.decide":          r.daemon.handleMarketSubmissionDecide,
+		"market.article.publish":             r.daemon.handleArticlePublish,
+		"market.article.read":                r.daemon.handleArticleRead,
+		"market.article.list":                r.daemon.handleArticleList,
+		"market.article.delete":              r.daemon.handleArticleDelete,
 		"message.cancel":                     r.daemon.handleMessageCancel,
 		"fs.list":                            r.daemon.handleFSList,
 		"fs.find":                            r.daemon.handleFSFind,
@@ -215,15 +219,16 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"oauth.authorize.cancel":   r.daemon.handleOAuthAuthorizeCancel,
 
 		// 设备接入闸与 Mac 间互连（设备分组、接入批准、局域网发现、配对码）
-		"device.status":    r.daemon.handleDeviceStatus,
-		"device.allow.set": r.daemon.handleDeviceAllowSet,
-		"device.approve":   r.daemon.handleDeviceApprove,
-		"device.deny":      r.daemon.handleDeviceDeny,
-		"device.unblock":   r.daemon.handleDeviceUnblock,
-		"device.revoke":    r.daemon.handleDeviceRevoke,
-		"device.handshake": r.daemon.handleDeviceHandshake,
-		"device.pair.code": r.daemon.handleDevicePairCode,
-		"device.scan":      r.daemon.handleDeviceScan,
+		"device.status":       r.daemon.handleDeviceStatus,
+		"device.allow.set":    r.daemon.handleDeviceAllowSet,
+		"device.approve":      r.daemon.handleDeviceApprove,
+		"device.deny":         r.daemon.handleDeviceDeny,
+		"device.unblock":      r.daemon.handleDeviceUnblock,
+		"device.revoke":       r.daemon.handleDeviceRevoke,
+		"device.handshake":    r.daemon.handleDeviceHandshake,
+		"device.pair.code":    r.daemon.handleDevicePairCode,
+		"device.scan":         r.daemon.handleDeviceScan,
+		"device.trust.ticket": r.daemon.handleDeviceTrustTicket,
 	}
 }
 
@@ -246,12 +251,13 @@ var openMethods = map[string]bool{
 // 技能驱动）对远程设备（作用域 ask）开放。
 var managerMethods = map[string]bool{
 	// 设备管理：接入名单与配对只有本机主人能改
-	"device.allow.set": true,
-	"device.approve":   true,
-	"device.deny":      true,
-	"device.unblock":   true,
-	"device.revoke":    true,
-	"device.pair.code": true,
+	"device.allow.set":    true,
+	"device.approve":      true,
+	"device.deny":         true,
+	"device.unblock":      true,
+	"device.revoke":       true,
+	"device.pair.code":    true,
+	"device.trust.ticket": true, // 同账号互信凭据：绑定本机设备身份，仅本机直通可领
 	// 本机凭据：不下发给外接设备（防换取不可撤销的本机身份）
 	"network.token.get": true,
 	// 系统操作

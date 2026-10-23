@@ -2,6 +2,8 @@
 name: img2svg
 description: 将位图/内嵌位图的 SVG（logo、图标）转为矢量 SVG。当用户要求"位图转矢量/矢量化、去锯齿、生成黑白/纯白版本图标、提取 SVG 内嵌图片重绘"时使用。脚本化流程：分析 → 遮罩 → potrace 描摹 → 包装 → IoU 验证，调用 scripts/ 下脚本即可，无需现场写代码。
 metadata:
+  version: 1.0.0
+  author: Ray
   name_zh: 位图转矢量 SVG
 ---
 

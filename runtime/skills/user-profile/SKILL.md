@@ -5,6 +5,7 @@ description: >
   用户新偏好、或任务因画像缺信息拿不准用户喜好时使用。USER.md 是所有 Agent
   了解用户的共同入口：设计、选型、写文案等与个人喜好相关性大的决策，先读它再动手。
 metadata:
+  author: Ray
   name_zh: 用户画像建档
   version: 0.1.0
 ---

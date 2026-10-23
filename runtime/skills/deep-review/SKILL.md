@@ -3,6 +3,8 @@ name: deep-review
 version: 3.0
 description: 项目复盘：从长期记忆中读取信息，产出公共规则建议、技能沉淀、技能优化、招募提议、插件立项提议与日报。当用户要求"复盘项目、总结经验、沉淀规则"时使用。
 metadata:
+  version: 1.0.0
+  author: Ray
   name_zh: 项目复盘总结
 ---
 

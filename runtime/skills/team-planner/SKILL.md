@@ -4,6 +4,7 @@ description: >
   为已有项目规划并组建智能体团队。当接手一个尚无团队负责的大型项目，需要先理解项目现状、
   设计岗位编制、再从市场复用或新建 Agent 来建成团队时使用。
 metadata:
+  author: Ray
   name_zh: 团队规划师
   version: "0.1.0"
 ---

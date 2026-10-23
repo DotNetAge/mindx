@@ -6,6 +6,8 @@ description: >
 allowed-tools:
   - Bash(mindx mail *)
 metadata:
+  version: 1.0.0
+  author: Ray
   name_zh: 收信处置
   name_zh-tw: 收信處置
   description_zh: 处置组织来信：自己干、转告主人或仅知会

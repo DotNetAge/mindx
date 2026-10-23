@@ -92,7 +92,7 @@ func TestHandshakePairCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("生成失败: %v", err)
 	}
-	res := mgr.Handshake("conn-1", "dev-A", "积木君的 MacBook", "macos", "", code)
+	res := mgr.Handshake("conn-1", "dev-A", "积木君的 MacBook", "macos", "", code, nil)
 	if res.Status != "paired" || res.Token == "" {
 		t.Fatalf("短码握手应 paired 并下发 token，得到 %+v", res)
 	}
@@ -105,12 +105,12 @@ func TestHandshakePairCode(t *testing.T) {
 	if mgr.DeviceTokenExists("deadbeef") || mgr.DeviceTokenExists("") {
 		t.Fatal("未知/空 token 不应命中设备表")
 	}
-	res2 := mgr.Handshake("conn-2", "dev-B", "另一台", "macos", "", code)
+	res2 := mgr.Handshake("conn-2", "dev-B", "另一台", "macos", "", code, nil)
 	if res2.Status != "denied" || res2.Message == "" {
 		t.Fatalf("配对码应一次性消费，得到 %+v", res2)
 	}
 	// 设备重连凭 token 免配对
-	res3 := mgr.Handshake("conn-3", "dev-A", "积木君的 MacBook", "macos", res.Token, "")
+	res3 := mgr.Handshake("conn-3", "dev-A", "积木君的 MacBook", "macos", res.Token, "", nil)
 	if res3.Status != "paired" {
 		t.Fatalf("设备令牌重连应免配对，得到 %+v", res3)
 	}
@@ -126,7 +126,7 @@ func TestHandshakePairCodeExpired(t *testing.T) {
 	mgr.mu.Lock()
 	mgr.pairCode.expiresAt = time.Now().Add(-time.Second)
 	mgr.mu.Unlock()
-	res := mgr.Handshake("conn-1", "dev-A", "积木君的 MacBook", "macos", "", code)
+	res := mgr.Handshake("conn-1", "dev-A", "积木君的 MacBook", "macos", "", code, nil)
 	if res.Status != "denied" || res.Message == "" {
 		t.Fatalf("过期码应 denied 并带提示，得到 %+v", res)
 	}
@@ -142,7 +142,7 @@ func TestHandshakePairCodeClosed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("生成失败: %v", err)
 	}
-	res := mgr.Handshake("conn-1", "dev-A", "积木君的 MacBook", "macos", "", code)
+	res := mgr.Handshake("conn-1", "dev-A", "积木君的 MacBook", "macos", "", code, nil)
 	if res.Status != "closed" {
 		t.Fatalf("总闸关闭时短码握手应 closed，得到 %+v", res)
 	}
@@ -154,7 +154,7 @@ func TestHandshakeLocalTokenBypass(t *testing.T) {
 	if err := mgr.SetAllowed(false); err != nil {
 		t.Fatalf("关闭开关失败: %v", err)
 	}
-	res := mgr.Handshake("conn-local", "cli", "本机命令行", "cli", "local-secret", "")
+	res := mgr.Handshake("conn-local", "cli", "本机命令行", "cli", "local-secret", "", nil)
 	if res.Status != "paired" {
 		t.Fatalf("本机令牌应直通，得到 %+v", res)
 	}
@@ -168,13 +168,13 @@ func TestLocalVerified(t *testing.T) {
 	if err != nil {
 		t.Fatalf("生成失败: %v", err)
 	}
-	if res := mgr.Handshake("conn-ext", "dev-A", "积木君的 MacBook", "macos", "", code); res.Status != "paired" {
+	if res := mgr.Handshake("conn-ext", "dev-A", "积木君的 MacBook", "macos", "", code, nil); res.Status != "paired" {
 		t.Fatalf("短码握手应 paired，得到 %+v", res)
 	}
 	if mgr.LocalVerified("conn-ext") {
 		t.Fatal("外接设备（配对码路径）不应被视为本机直通")
 	}
-	if res := mgr.Handshake("conn-local", "cli", "本机命令行", "cli", "local-secret", ""); res.Status != "paired" {
+	if res := mgr.Handshake("conn-local", "cli", "本机命令行", "cli", "local-secret", "", nil); res.Status != "paired" {
 		t.Fatalf("本机令牌应直通，得到 %+v", res)
 	}
 	if !mgr.LocalVerified("conn-local") {
@@ -198,7 +198,7 @@ func TestDenyAndBlock(t *testing.T) {
 		t.Fatalf("创建管理器失败: %v", err)
 	}
 	// A 君首次申请 → pending 弹窗
-	res := mgr.Handshake("conn-a", "dev-rude", "A 君的电脑", "macos", "", "")
+	res := mgr.Handshake("conn-a", "dev-rude", "A 君的电脑", "macos", "", "", nil)
 	if res.Status != "pending" || res.RequestID == "" {
 		t.Fatalf("首次申请应 pending 并广播弹窗，得到 %+v", res)
 	}
@@ -207,7 +207,7 @@ func TestDenyAndBlock(t *testing.T) {
 		t.Fatalf("拒绝并拉黑失败: %v", err)
 	}
 	// A 君重试：静默 denied，不新建请求
-	res2 := mgr.Handshake("conn-a2", "dev-rude", "A 君的电脑", "macos", "", "")
+	res2 := mgr.Handshake("conn-a2", "dev-rude", "A 君的电脑", "macos", "", "", nil)
 	if res2.Status != "denied" || res2.Message == "" || res2.RequestID != "" {
 		t.Fatalf("拉黑后重试应静默 denied，得到 %+v", res2)
 	}
@@ -226,14 +226,14 @@ func TestDenyAndBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("重建管理器失败: %v", err)
 	}
-	if res3 := mgr2.Handshake("conn-a3", "dev-rude", "A 君的电脑", "macos", "", ""); res3.Status != "denied" {
+	if res3 := mgr2.Handshake("conn-a3", "dev-rude", "A 君的电脑", "macos", "", "", nil); res3.Status != "denied" {
 		t.Fatalf("重启后拉黑应仍生效，得到 %+v", res3)
 	}
 	// B 小姐解除 → 恢复正常申请流程
 	if err := mgr2.Unblock("dev-rude"); err != nil {
 		t.Fatalf("解除拉黑失败: %v", err)
 	}
-	if res4 := mgr2.Handshake("conn-a4", "dev-rude", "A 君的电脑", "macos", "", ""); res4.Status != "pending" {
+	if res4 := mgr2.Handshake("conn-a4", "dev-rude", "A 君的电脑", "macos", "", "", nil); res4.Status != "pending" {
 		t.Fatalf("解除后应恢复 pending 申请，得到 %+v", res4)
 	}
 }
@@ -242,7 +242,7 @@ func TestDenyAndBlock(t *testing.T) {
 // 返回签发的设备令牌。
 func pairDevice(t *testing.T, mgr *Manager, clientID, deviceID string) string {
 	t.Helper()
-	if res := mgr.Handshake(clientID, deviceID, "测试设备", "macos", "", ""); res.Status != "pending" {
+	if res := mgr.Handshake(clientID, deviceID, "测试设备", "macos", "", "", nil); res.Status != "pending" {
 		t.Fatalf("首次握手应 pending，得到 %+v", res)
 	}
 	// 从登记请求里取 requestID（单活跃请求）
@@ -262,11 +262,11 @@ func pairDevice(t *testing.T, mgr *Manager, clientID, deviceID string) string {
 	}
 	// 批准后设备在同一条连接上轮询领 token（真实链路如此），随后
 	// 凭 token 重连完成正式登记
-	res := mgr.Handshake(clientID, deviceID, "测试设备", "macos", "", "")
+	res := mgr.Handshake(clientID, deviceID, "测试设备", "macos", "", "", nil)
 	if res.Status != "paired" || res.Token == "" {
 		t.Fatalf("批准后应 paired 并下发 token，得到 %+v", res)
 	}
-	if res := mgr.Handshake(clientID, deviceID, "测试设备", "macos", res.Token, ""); res.Status != "paired" {
+	if res := mgr.Handshake(clientID, deviceID, "测试设备", "macos", res.Token, "", nil); res.Status != "paired" {
 		t.Fatalf("凭 token 重连应 paired，得到 %+v", res)
 	}
 	return res.Token
@@ -280,7 +280,7 @@ func TestScopeOfLegacyDeviceDefaultsToAsk(t *testing.T) {
 	if got := mgr.ScopeOf("conn-ext"); got != ScopeAsk {
 		t.Fatalf("新配对设备作用域应为 ask，得到 %q", got)
 	}
-	if res := mgr.Handshake("conn-local", "cli", "本机命令行", "cli", "local-secret", ""); res.Status != "paired" {
+	if res := mgr.Handshake("conn-local", "cli", "本机命令行", "cli", "local-secret", "", nil); res.Status != "paired" {
 		t.Fatalf("本机令牌应直通，得到 %+v", res)
 	}
 	if got := mgr.ScopeOf("conn-local"); got != ScopeLocal {
@@ -308,7 +308,7 @@ func TestScopeOfLegacyDeviceDefaultsToAsk(t *testing.T) {
 	if err != nil {
 		t.Fatalf("重启加载失败: %v", err)
 	}
-	if res := mgr2.Handshake("conn-old", "dev-legacy", "旧设备", "macos", token, ""); res.Status != "paired" {
+	if res := mgr2.Handshake("conn-old", "dev-legacy", "旧设备", "macos", token, "", nil); res.Status != "paired" {
 		t.Fatalf("旧设备凭 token 应能重连，得到 %+v", res)
 	}
 	if got := mgr2.ScopeOf("conn-old"); got != ScopeAsk {
@@ -355,7 +355,7 @@ func TestSetAllowedFalseDisconnects(t *testing.T) {
 		t.Fatalf("创建管理器失败: %v", err)
 	}
 	pairDevice(t, mgr, "conn-ext", "dev-x")
-	if res := mgr.Handshake("conn-local", "cli", "本机命令行", "cli", "local-secret", ""); res.Status != "paired" {
+	if res := mgr.Handshake("conn-local", "cli", "本机命令行", "cli", "local-secret", "", nil); res.Status != "paired" {
 		t.Fatalf("本机令牌应直通，得到 %+v", res)
 	}
 	if err := mgr.SetAllowed(false); err != nil {
@@ -366,5 +366,71 @@ func TestSetAllowedFalseDisconnects(t *testing.T) {
 	}
 	if !mgr.LocalVerified("conn-local") {
 		t.Fatal("关闸不应影响本机直通连接")
+	}
+}
+
+// TestHandshakeAccountTrust 同账号互信路径（跨端连接第二步）：凭据已由
+// 握手层向社区服务端核验通过后才传入——到闸里免弹窗直接登记签发令牌，
+// 作用域仍为 ask（定案二），设备列表标注来源 account，重连凭令牌免互信。
+func TestHandshakeAccountTrust(t *testing.T) {
+	mgr := newTestManager(t)
+	trust := &AccountTrust{Nonce: "nonce-x", ClientID: "client-a"}
+	res := mgr.Handshake("conn-a", "dev-self", "我自己的另一台 Mac", "macos", "", "", trust)
+	if res.Status != "paired" || res.Token == "" {
+		t.Fatalf("同账号互信应直接 paired 并下发令牌，得到 %+v", res)
+	}
+	if got := mgr.ScopeOf("conn-a"); got != ScopeAsk {
+		t.Fatalf("互信设备作用域应为 ask（定案二），得到 %q", got)
+	}
+	// 设备列表标注来源
+	var source string
+	for _, dev := range mgr.Status()["devices"].([]map[string]any) {
+		if dev["id"] == "dev-self" {
+			source, _ = dev["trust_source"].(string)
+		}
+	}
+	if source != TrustAccount {
+		t.Fatalf("设备来源应标注 %q，得到 %q", TrustAccount, source)
+	}
+	// 重连凭令牌免互信（trust 传 nil 也应 paired）
+	if res2 := mgr.Handshake("conn-a2", "dev-self", "我自己的另一台 Mac", "macos", res.Token, "", nil); res2.Status != "paired" {
+		t.Fatalf("互信设备凭令牌重连应 paired，得到 %+v", res2)
+	}
+	// 互信不等于本机全权
+	if mgr.LocalVerified("conn-a") {
+		t.Fatal("互信设备不应获得本机直通身份")
+	}
+}
+
+// TestHandshakeAccountTrustRespectsGates 同账号互信受既有防线约束：
+// 总闸关闭 → closed；设备被拉黑 → 静默 denied（拉黑优先于自动互信）。
+func TestHandshakeAccountTrustRespectsGates(t *testing.T) {
+	mgr := newTestManager(t)
+	trust := &AccountTrust{Nonce: "nonce-x", ClientID: "client-a"}
+	// 先制造一条拉黑记录
+	if res := mgr.Handshake("conn-1", "dev-bad", "捣蛋机", "macos", "", "", nil); res.Status != "pending" {
+		t.Fatalf("应先 pending，得到 %+v", res)
+	}
+	mgr.mu.Lock()
+	var requestID string
+	for id, req := range mgr.requests {
+		if req.DeviceID == "dev-bad" && req.status == reqPending {
+			requestID = id
+		}
+	}
+	mgr.mu.Unlock()
+	if err := mgr.DenyAndBlock(requestID); err != nil {
+		t.Fatalf("拉黑失败: %v", err)
+	}
+	// 拉黑设备即使出示同账号凭据也静默拒绝
+	if res := mgr.Handshake("conn-2", "dev-bad", "捣蛋机", "macos", "", "", trust); res.Status != "denied" {
+		t.Fatalf("拉黑优先于互信，应 denied，得到 %+v", res)
+	}
+	// 总闸关闭：互信一律拒绝（总闸是紧急全断）
+	if err := mgr.SetAllowed(false); err != nil {
+		t.Fatalf("关闸失败: %v", err)
+	}
+	if res := mgr.Handshake("conn-3", "dev-self", "我自己的另一台 Mac", "macos", "", "", trust); res.Status != "closed" {
+		t.Fatalf("总闸关闭时互信应 closed，得到 %+v", res)
 	}
 }

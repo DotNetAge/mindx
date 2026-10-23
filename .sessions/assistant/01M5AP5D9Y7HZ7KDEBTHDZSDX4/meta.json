@@ -1,0 +1,12 @@
+{
+  "session_id": "01M5AP5D9Y7HZ7KDEBTHDZSDX4",
+  "agent_name": "assistant",
+  "title": "后台执行链路测试：请只回复一句话，说明你收到了定时��...",
+  "created_at": "2026-10-20T02:18:14.718253+08:00",
+  "updated_at": "2026-10-21T23:28:45.257435+08:00",
+  "last_activity_at": "2026-10-21T23:28:45.257435+08:00",
+  "project_dir": "/Users/ray/workspaces/ai-ecosystem/mindx",
+  "session_dir": "/Users/ray/workspaces/ai-ecosystem/mindx/.sessions/assistant/01M5AP5D9Y7HZ7KDEBTHDZSDX4",
+  "message_count": 22,
+  "cursor": 0
+}

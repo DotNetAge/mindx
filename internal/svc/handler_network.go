@@ -80,11 +80,15 @@ func (d *Daemon) loadOrCreateDaemonToken() (string, error) {
 //  2. 对端认证令牌 = 已授权设备令牌（内网弹窗/短码配对过的设备跨网回连——
 //     公网连入必须先在内网建立过信任）
 //  3. ?pair_code= 有效配对码（headless 主机与云服务器的首连引导）
+//  4. ?trust_nonce= 同账号互信凭据（跨端连接第二步：社区服务端签发的
+//     一次性凭据，凭被连方自己的 AuthToken 向服务端核验同账号后放行；
+//     过闸后仍须 device.handshake 完成登记才有作用域，闸不等于授权）
 //
 // 凭证传输（OWASP WebSocket 反模式修正）：Authorization: Bearer 头优先；
 // URL ?token= 会泄漏进访问日志/代理日志/Referer，仅为旧客户端保留过渡
-// 兼容，客户端全部升级后废除。配对码一次性短码（5 分钟时效、消费即废）
-// 暂留 URL，泄漏窗口极小。
+// 兼容，客户端全部升级后废除。配对码与互信凭据均短时效（5 分钟、互信
+// 凭据仅证明签发方账号，判定与登记都在被连方本地完成），泄漏窗口与
+// 可利用面极小。
 func (d *Daemon) networkAuthenticator() func(*http.Request) error {
 	return func(r *http.Request) error {
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -98,13 +102,13 @@ func (d *Daemon) networkAuthenticator() func(*http.Request) error {
 		if token == "" {
 			token = r.URL.Query().Get("token")
 		}
-		return d.authenticateCredentials(token, r.URL.Query().Get("pair_code"))
+		return d.authenticateCredentials(token, r.URL.Query().Get("pair_code"), r.URL.Query().Get("trust_nonce"))
 	}
 }
 
-// authenticateCredentials 公网准入凭证三分支校验（升级闸与首条消息认证共用）：
-// 本机令牌 / 已授权设备令牌 / 一次性配对码，任一有效即放行。
-func (d *Daemon) authenticateCredentials(token, pairCode string) error {
+// authenticateCredentials 公网准入凭证四分支校验（升级闸与首条消息认证共用）：
+// 本机令牌 / 已授权设备令牌 / 一次性配对码 / 同账号互信凭据，任一有效即放行。
+func (d *Daemon) authenticateCredentials(token, pairCode, trustNonce string) error {
 	if token != "" {
 		if local, err := d.loadOrCreateDaemonToken(); err == nil && constantTimeEqual(token, local) {
 			return nil
@@ -116,7 +120,37 @@ func (d *Daemon) authenticateCredentials(token, pairCode string) error {
 	if pairCode != "" && d.devGate != nil && d.devGate.ValidPairCode(pairCode) {
 		return nil
 	}
+	if trustNonce != "" && d.verifyTrustNonce(trustNonce) {
+		return nil
+	}
 	return fmt.Errorf("这台设备还没有建立信任，请先在局域网内连接一次或使用配对码")
+}
+
+// verifyTrustNonce 核验公网准入用的同账号互信凭据（升级闸/首条消息通道）：
+// 凭被连方自己的 AuthToken 向社区服务端 confirm，同账号即放行。此处不做
+// 设备身份核对（闸阶段没有自报身份可对），完整核对在 device.handshake
+// 层完成——闸放行只表示「允许建立连接」，授权仍以握手登记为准。
+// 先做格式预检（64 位 hex）：垃圾 nonce 不出站即拒，防消耗市场侧限流配额。
+// 核验失败（服务端不可达/凭据过期/非同账号）一律不放行，回落其他分支。
+func (d *Daemon) verifyTrustNonce(nonce string) bool {
+	if len(nonce) != 64 || !isHex(nonce) {
+		return false
+	}
+	if d.app == nil || d.app.MarketAuthToken() == "" {
+		return false
+	}
+	verdict, err := d.app.Market().DeviceTrustConfirm(nonce)
+	return err == nil && verdict != nil && verdict.SameAccount()
+}
+
+// isHex 判断字符串是否全为小写十六进制字符（服务端签发 nonce 为 hex 编码）。
+func isHex(s string) bool {
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // firstMessageAuthenticator 首条消息认证钩子（gort gateway 挂载）：
@@ -129,14 +163,15 @@ func (d *Daemon) firstMessageAuthenticator() func(string, []byte) error {
 		var req struct {
 			Method string `json:"method"`
 			Params struct {
-				Token    string `json:"token"`
-				PairCode string `json:"pair_code"`
+				Token      string `json:"token"`
+				PairCode   string `json:"pair_code"`
+				TrustNonce string `json:"trust_nonce"`
 			} `json:"params"`
 		}
 		if err := json.Unmarshal(raw, &req); err != nil || req.Method != "device.auth" {
 			return fmt.Errorf("请先完成设备认证再使用其他功能")
 		}
-		return d.authenticateCredentials(req.Params.Token, req.Params.PairCode)
+		return d.authenticateCredentials(req.Params.Token, req.Params.PairCode, req.Params.TrustNonce)
 	}
 }
 

@@ -307,6 +307,83 @@ type MarketDevice struct {
 	LastSeenAt string `json:"last_seen_at"`
 }
 
+// TrustTicket 同账号互信凭据（服务端 POST /devices/trust/start 下发）：
+// nonce 绑定本机登记设备身份（client_id）与账号（user_id），5 分钟内幂等可核验。
+type TrustTicket struct {
+	Nonce     string `json:"nonce"`
+	ClientID  string `json:"client_id"`
+	UserID    int64  `json:"user_id"`
+	ExpiresIn int    `json:"expires_in"`
+}
+
+// DeviceTrustStart 领取同账号互信凭据（跨端连接第二步）：凭 AuthToken 签发，
+// 绑定本机登记设备身份（client_id）；未登录或设备未绑定账号时服务端拒绝。
+func (m *MarketClient) DeviceTrustStart() (*TrustTicket, error) {
+	if m.authToken == "" {
+		return nil, fmt.Errorf("尚未登录社区")
+	}
+	if m.clientID == "" {
+		return nil, fmt.Errorf("设备身份未初始化")
+	}
+	var out TrustTicket
+	if err := m.postJSON(m.apiBase+"/devices/trust/start", map[string]string{"client_id": m.clientID}, &out); err != nil {
+		return nil, err
+	}
+	if out.Nonce == "" {
+		return nil, fmt.Errorf("互信凭据响应缺少 nonce")
+	}
+	return &out, nil
+}
+
+// TrustVerdict 互信凭据核验结论材料：同账号判定在本地完成
+// （IssuerUserID == CallerUserID 即同账号；IssuerClientID 须与对端自报身份一致）。
+type TrustVerdict struct {
+	IssuerUserID   int64  `json:"issuer_user_id"`
+	IssuerClientID string `json:"issuer_client_id"`
+	CallerUserID   int64  `json:"caller_user_id"`
+}
+
+// SameAccount 本地判定：凭据签发方与调用方是否同一账号（服务端背书双方身份）。
+func (v *TrustVerdict) SameAccount() bool {
+	return v.IssuerUserID != 0 && v.IssuerUserID == v.CallerUserID
+}
+
+// DeviceTrustConfirm 核验对端出示的互信凭据，换回签发方与调用方双方身份：
+// 同账号判定（SameAccount）与设备身份核对由调用方本地完成。
+// 凭据不存在或已过期时返回错误（错误文本注明），调用方回落既有配对流程。
+func (m *MarketClient) DeviceTrustConfirm(nonce string) (*TrustVerdict, error) {
+	if m.authToken == "" {
+		return nil, fmt.Errorf("尚未登录社区")
+	}
+	body, err := json.Marshal(map[string]string{"nonce": nonce})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, m.apiBase+"/devices/trust/confirm", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	m.attachIdentity(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("互信凭据无效或已过期")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+		return nil, fmt.Errorf("核验互信凭据失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	var out TrustVerdict
+	if err := json.NewDecoder(io.LimitReader(resp.Body, apiMaxSize)).Decode(&out); err != nil {
+		return nil, fmt.Errorf("解析互信凭据响应失败：%w", err)
+	}
+	return &out, nil
+}
+
 // Devices 拉取登录用户名下设备列表。
 func (m *MarketClient) Devices() ([]MarketDevice, error) {
 	if m.authToken == "" {

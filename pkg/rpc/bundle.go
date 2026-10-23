@@ -294,3 +294,56 @@ func (c *Client) MarketSubmissionsList(kind, name string) (json.RawMessage, erro
 func (c *Client) MarketSubmissionDecide(kind, name string, id int64, accept bool) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.submissions.decide", MarketSubmissionDecideParams{Kind: kind, Name: name, ID: id, Accept: accept})
 }
+
+// ArticlePublishParams are the params for market.article.publish（用户文章发布）。
+type ArticlePublishParams struct {
+	Slug     string   `json:"slug"`
+	Title    string   `json:"title"`
+	Summary  string   `json:"summary,omitempty"`
+	Markdown string   `json:"markdown"`
+	Tags     []string `json:"tags,omitempty"`
+	// OrgID 组织节点 ID（>0 = 发布到该组织节点，仅组织所有者；0 = 个人节点）。
+	OrgID int64 `json:"org_id,omitempty"`
+}
+
+// ArticleReadParams are the params for market.article.read（文章详情统一入口）。
+type ArticleReadParams struct {
+	Slug string `json:"slug"`
+}
+
+// ArticleListParams are the params for market.article.list（文章清单/搜索）。
+type ArticleListParams struct {
+	// Scope 清单范围：site（官网公开，匿名可搜）| mine（我的，缺省）| org（组织，成员可读）。
+	Scope string `json:"scope,omitempty"`
+	// Query 关键词搜索（服务端匹配标题/摘要等）。
+	Query string `json:"query,omitempty"`
+	// OrgID 组织节点 ID（scope=org 时必填）。
+	OrgID int64 `json:"org_id,omitempty"`
+}
+
+// ArticleDeleteParams are the params for market.article.delete（仅作者可删）。
+type ArticleDeleteParams struct {
+	Slug string `json:"slug"`
+	// OrgID 组织节点 ID（>0 = 删除该组织节点的文章；0 = 个人节点）。
+	OrgID int64 `json:"org_id,omitempty"`
+}
+
+// ArticlePublish 发布文章到社区个人节点（org_id>0 时发布到组织节点）。
+func (c *Client) ArticlePublish(p ArticlePublishParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.article.publish", p)
+}
+
+// ArticleRead 读取文章详情（官网文章匿名可读；个人仅作者、组织仅成员）。
+func (c *Client) ArticleRead(p ArticleReadParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.article.read", p)
+}
+
+// ArticleList 拉取文章清单/搜索（scope：site 官网公开 | mine 我的（缺省）| org 组织）。
+func (c *Client) ArticleList(p ArticleListParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.article.list", p)
+}
+
+// ArticleDelete 删除我的文章（仅作者）。
+func (c *Client) ArticleDelete(p ArticleDeleteParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.article.delete", p)
+}

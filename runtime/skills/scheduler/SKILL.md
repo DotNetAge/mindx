@@ -6,6 +6,8 @@ description: >
 allowed-tools:
   - Cron
 metadata:
+  version: 1.0.0
+  author: Ray
   name_zh: 派工
   name_zh-tw: 派工
   description_zh: 安排各负责人的定时与即时工作

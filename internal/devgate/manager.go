@@ -72,15 +72,32 @@ type Store interface {
 	Set(key, value string) error
 }
 
+// 设备接入来源（TrustSource）：弹窗批准 / 配对码 / 同账号互信（设备列表标注用）
+const (
+	TrustPopup    = "popup"    // 主人弹窗批准（旧记录缺省）
+	TrustPairCode = "paircode" // headless 配对码首连
+	TrustAccount  = "account"  // 同账号互信（跨端连接第二步，免弹窗）
+)
+
 // Device 已授权接入的设备（token 长期有效，重连免配对）。
 // Scope 为该设备令牌的作用域（PAT 分层授权），旧记录缺省归一为 ScopeAsk。
 type Device struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	Platform   string    `json:"platform"`
-	Token      string    `json:"token"`
-	Scope      string    `json:"scope"`
-	ApprovedAt time.Time `json:"approved_at"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Platform    string    `json:"platform"`
+	Token       string    `json:"token"`
+	Scope       string    `json:"scope"`
+	TrustSource string    `json:"trust_source,omitempty"` // 接入来源（旧记录缺省 popup）
+	ApprovedAt  time.Time `json:"approved_at"`
+}
+
+// AccountTrust 连接方出示的同账号互信凭据（跨端连接第二步，DEVICE-TRUST.md 定案一）：
+// nonce 由社区服务端签发（绑定连接方登记设备身份与账号），握手层凭被连方自己的
+// AuthToken 向服务端核验通过后才传到这里——同账号判定与设备身份核对都在
+// 握手层完成，管理器只负责「已核实即免弹窗登记」。作用域仍为 ask（定案二）。
+type AccountTrust struct {
+	Nonce    string `json:"nonce"`
+	ClientID string `json:"client_id"`
 }
 
 // PairRequest 待审批接入请求（序列化给桌面端弹窗）
@@ -177,6 +194,10 @@ func NewManager(cfg Config) (*Manager, error) {
 					dev.Scope = ScopeAsk
 					devices[id] = dev
 				}
+				if dev.TrustSource == "" {
+					dev.TrustSource = TrustPopup
+					devices[id] = dev
+				}
 			}
 			mgr.devices = devices
 		} else {
@@ -228,9 +249,10 @@ func (m *Manager) SetAllowed(allowed bool) error {
 }
 
 // Handshake 处理设备接入握手（RPC 注册层唯一对外开口）：
-// 本机令牌 → 直通；已授权 token → 免配对；配对码 → 一次性消费视同批准；
-// 待批准请求 → 轮询推进；其余 → 登记请求并广播桌面端弹窗。
-func (m *Manager) Handshake(clientID, deviceID, name, platform, token, pairCode string) HandshakeResult {
+// 本机令牌 → 直通；已授权 token → 免配对；同账号互信凭据 → 免弹窗登记；
+// 配对码 → 一次性消费视同批准；待批准请求 → 轮询推进；其余 → 登记请求并
+// 广播桌面端弹窗。
+func (m *Manager) Handshake(clientID, deviceID, name, platform, token, pairCode string, trust *AccountTrust) HandshakeResult {
 	if clientID == "" {
 		return HandshakeResult{Status: "denied"}
 	}
@@ -264,6 +286,28 @@ func (m *Manager) Handshake(clientID, deviceID, name, platform, token, pairCode 
 			m.sessions[clientID] = deviceID
 			return HandshakeResult{Status: "paired"}
 		}
+	}
+
+	// 同账号互信（跨端连接第二步，定案一）：凭据已由握手层向社区服务端
+	// 核验通过（同账号 + 设备身份一致），免弹窗直接登记签发长期令牌。
+	// 作用域仍为 ask（定案二：远程设备永不开放本机级全权）。
+	if trust != nil {
+		dev := Device{
+			ID:          deviceID,
+			Name:        name,
+			Platform:    platform,
+			Token:       newToken(),
+			Scope:       ScopeAsk,
+			TrustSource: TrustAccount,
+			ApprovedAt:  time.Now(),
+		}
+		m.devices[deviceID] = dev
+		if err := m.persistLocked(); err != nil {
+			return HandshakeResult{Status: "denied", Message: "保存设备记录失败"}
+		}
+		m.sessions[clientID] = deviceID
+		m.notifyDevicesChanged()
+		return HandshakeResult{Status: "paired", Token: dev.Token}
 	}
 
 	// 配对码路径（headless 主机与云服务器首连）：码有效即视同批准，
@@ -334,12 +378,13 @@ func (m *Manager) Approve(requestID string) error {
 	req.status = reqApproved
 	req.decidedAt = time.Now()
 	m.devices[req.DeviceID] = Device{
-		ID:         req.DeviceID,
-		Name:       req.Name,
-		Platform:   req.Platform,
-		Token:      newToken(),
-		Scope:      ScopeAsk,
-		ApprovedAt: time.Now(),
+		ID:          req.DeviceID,
+		Name:        req.Name,
+		Platform:    req.Platform,
+		Token:       newToken(),
+		Scope:       ScopeAsk,
+		TrustSource: TrustPopup,
+		ApprovedAt:  time.Now(),
 	}
 	if err := m.persistLocked(); err != nil {
 		return err
@@ -486,11 +531,12 @@ func (m *Manager) Status() map[string]any {
 	devices := make([]map[string]any, 0, len(m.devices))
 	for _, dev := range m.devices {
 		devices = append(devices, map[string]any{
-			"id":          dev.ID,
-			"name":        dev.Name,
-			"platform":    dev.Platform,
-			"scope":       dev.Scope,
-			"approved_at": dev.ApprovedAt,
+			"id":           dev.ID,
+			"name":         dev.Name,
+			"platform":     dev.Platform,
+			"scope":        dev.Scope,
+			"trust_source": dev.TrustSource,
+			"approved_at":  dev.ApprovedAt,
 		})
 	}
 	sort.Slice(devices, func(i, j int) bool { return devices[i]["id"].(string) < devices[j]["id"].(string) })
@@ -612,12 +658,13 @@ func (m *Manager) consumePairCodeLocked(code, deviceID, name, platform string) (
 	}
 	m.pairCode = nil // 一次性消费
 	dev := Device{
-		ID:         deviceID,
-		Name:       name,
-		Platform:   platform,
-		Token:      newToken(),
-		Scope:      ScopeAsk,
-		ApprovedAt: time.Now(),
+		ID:          deviceID,
+		Name:        name,
+		Platform:    platform,
+		Token:       newToken(),
+		Scope:       ScopeAsk,
+		TrustSource: TrustPairCode,
+		ApprovedAt:  time.Now(),
 	}
 	m.devices[deviceID] = dev
 	if err := m.persistLocked(); err != nil {

@@ -1,3 +1,6 @@
+---
+updated: 2026-09-27
+---
 # AAIF AGENTS.md 社区规范参考文档
 > 来源：Agentic AI Foundation（Linux基金会）轻约定标准，无强制Schema，约定如下：
 

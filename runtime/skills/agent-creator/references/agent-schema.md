@@ -1,3 +1,6 @@
+---
+updated: 2026-10-10
+---
 # Agent 定义 Schema 与字段规范
 
 > Agent 定义的结构事实：文件布局、frontmatter 字段、工具控制、样式规则。

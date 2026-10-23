@@ -3,6 +3,8 @@ name: daily-report
 version: 1.1
 description: 生成 Agent 工作日报/复盘报告。当用户要求"写日报、工作汇报、复盘报告"，或 deep-review 大复盘收尾需要落报告时使用。
 metadata:
+  version: 1.0.0
+  author: Ray
   name_zh: 生成工作日报
 ---
 

@@ -5,6 +5,7 @@ description: >
   或需要把项目进度、OKR、需求池、任务看板、团队人力、缺陷、架构拓扑等
   数据可视化为面板时使用，也支持任意自定义领域。
 metadata:
+  author: Ray
   name_zh: 构建仪表板
   version: 0.2.0
 ---
