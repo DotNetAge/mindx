@@ -112,7 +112,7 @@ mw plugin install .agents/plugins/com.acme.widget-1.0.0.mindpkg && mw plugin lis
 # 5. 发布到市场（mindx-market 仓库；kind=plugin，发布纪律读规范 §10）
 ```
 
-**安装根对齐军规**：mw CLI 缺省写入**发行版安装根**（`~/Library/Application Support/MindX Work/plugins`，由发行 productName 推导），而 dev 实例的安装根是 `…/@mindx-work/electron/plugins`（userData 随应用名不同根）——**dev 环境下 CLI 装的包 dev 实例看不到**。对齐方式：dev 验收时 CLI 侧显式 `MW_PLUGIN_ROOT="$HOME/Library/Application Support/@mindx-work/electron/plugins"`（主进程侧不读此 env，无需设置）；打包发行的 app 与 CLI 缺省根天然一致，无需任何设置。dev 验收四步循环读 contract.md §18.8。
+**安装根军规**：一切已安装的可执行插件构建物必须落 **`~/.mindx/plugins`**（机器级唯一根——App 主进程与 mw CLI 缺省根一致，dev 与打包发行无差异；**禁入 userData**）。插件**源码**归项目 `.agents/plugins/<id>/`，pack 出的 .mindpkg 安装展开后进 `~/.mindx/plugins`。`MW_PLUGIN_ROOT` env 仅诊断覆盖（多实例/验收隔离），常规链路无需设置。dev 验收四步循环读 contract.md §18.8。
 
 ## 开发流程
 
@@ -133,7 +133,7 @@ mw plugin install .agents/plugins/com.acme.widget-1.0.0.mindpkg && mw plugin lis
    - `wait_for_selector` 默认 `state='visible'`；被遮挡元素 visible 仍为 True（遮挡不影响几何判定），文本"存在但没渲染"要用 DOM count 而非可见性断言。
 
    **electron / CDP 实例军规**（实踩）：
-   - 常驻 electron 验证实例必须用工具的 `run_in_background` 启动——`&` / nohup / disown 都会被命令结束的进程组清理杀掉（连杀三次的教训）。
+   - 常驻 electron 验证实例必须用工具的 `run_in_background` 启动——`&` / nohup / disown 都会被命令结束的进程组清理杀掉（实踩）。
    - CDP 调试必须带 `--remote-allow-origins='*'`（否则 WebSocket 403）与三禁节流开关 `--disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding`（否则后台窗口 rAF 假死：动画/播放循环停摆、事件延迟，误判功能坏）。
    - disabled 元素 `.click()` 是空操作；合成 PointerEvent/KeyboardEvent 对 Vue handler 常不响应——可靠路径是 CDP `Input.dispatchMouseEvent` / `Input.dispatchKeyEvent`。
    - Pinia store Proxy 经 CDP returnByValue 序列化不稳定（字段回读 undefined 但操作已生效）——表达式内先取基本类型字段组 plain object 再返回，禁止直接返回 store 引用。

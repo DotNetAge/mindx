@@ -151,7 +151,7 @@ mindx-work 外部（market）插件项目。规范全文：`mindx-work/docs/插�
 # 打包（manifest 结构校验 + fingerprint 重算写入 → {plugin_id}-1.0.0.mindpkg）
 mw plugin pack ./{plugin_id}
 
-# 本地直装验收（写入 userData/plugins，运行中的 MindX Work 即时感知激活）
+# 本地直装验收（写入 ~/.mindx/plugins 机器级唯一根，运行中的 MindX 即时感知激活）
 mw plugin install ./{plugin_id}-1.0.0.mindpkg
 mw plugin list --json
 

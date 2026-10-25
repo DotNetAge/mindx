@@ -79,4 +79,4 @@ updated: 2026-10-11
 
 **为什么**：坐席错位是插件观感差的最大来源——小工具占 Content 会把主工作区挤掉，重表单塞浮窗施展不开；先定形态再选区，一次到位。
 
-**证据**：主清单为用户定稿的选型决策（2026-10-03），非跨插件归纳；其中两条硬约束来自壳实证——Content 激活唯一通道 = Sidebar 行（views.ts `activate` 壳唯一写注释）、Sheet 全屏互斥单开（views.ts SheetViewApi 定义）；Floater 调尺寸为配套壳能力（FloaterPane 右下角手柄）；弹层分界佐证 notes「shell-floater-window」（z-index 层级表 banner 65 < modal 70）；Content+Detail 联动为实装收敛（contract §5 owner 字段）。
+**证据**：主清单为既定选型决策，非跨插件归纳；其中两条硬约束来自壳实证——Content 激活唯一通道 = Sidebar 行（views.ts `activate` 壳唯一写注释）、Sheet 全屏互斥单开（views.ts SheetViewApi 定义）；Floater 调尺寸为配套壳能力（FloaterPane 右下角手柄）；弹层分界佐证 notes「shell-floater-window」（z-index 层级表 banner 65 < modal 70）；Content+Detail 联动为实装收敛（contract §5 owner 字段）。

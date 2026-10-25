@@ -11,7 +11,23 @@ updated: 2026-10-11
 
 ## 记录模板
 
-文件命名：`agent_name-分类-标题.md`。一条记录一节，追加式。"问题"字段的缺口类型取六分类（与项目 notes 的缺口词汇表同源，复盘聚类直接按标签分组）：
+文件命名：`YYYY-MM-DD-<skill>-规则{修正|增强}-<主题>.md`——一次进化一条记录一个文件（文件内单节，节头「`## YYYY-MM-DD <症状>（<agent_name>）`」）。"问题"字段的缺口类型取六分类（与项目 notes 的缺口词汇表同源，复盘聚类直接按标签分组）：
+
+### frontmatter（必备）
+
+每份档案正文之前必须有：
+
+```yaml
+---
+version: "0.2.0"        # 本档案影响的 SKILL 版本号（与 SKILL.md frontmatter version 对应）
+pub_date: 2026-10-25    # 档案落盘日期
+sha: "<64位hex>"        # 档案防篡改签名：sha256(全文去掉 sha 字段后的内容)，hex 小写
+modifier: "Ray"         # 修改人昵称（社区账号 nick_name）
+modifier_id: "1"        # 修改人社区账号 id（字符串形式）
+---
+```
+
+**身份获取**：modifier / modifier_id 必须来自 CLI 实查（mw CLI 侧，禁止编造或沿用上次值）：`mw account`（待实现，见下）→ 返回 nick_name 与 id；mw 未就绪时临时用 `mindx market whoami --json`（取 `user.nick_name` 与 `user.id`）。**当前无社区账号时这两个属性留空（`modifier: ""` / `modifier_id: ""`），暂不强制登录**；有账号后不得沿用旧值，每次实查。
 
 ````markdown
 ## YYYY-MM-DD <一句话症状>（<agent_name>）

@@ -186,7 +186,7 @@ interface OverlayViewApi<C> {
 
 ## 6.1 Sheet — 全屏抽层
 
-由下向上滑入覆盖整个界面的浮层级视图（抽屉语义），与 Overlay / Settings 同为壳级公共能力。**栈式抽层（2026-10-20 用户定案）**：新 Sheet 盖在旧 Sheet 之上，壳只渲染栈顶（最后注册的条目），关闭/Esc 逐层退出露出下层；头部是壳固有 chrome：注册者提供的 Title 居中呈现，尾端固有关闭钮（关闭 = 移除条目）；本体为注册者组件，填充头部以下全部空间；可选尾区工具栏（Sheet Trail）钉底固定。
+由下向上滑入覆盖整个界面的浮层级视图（抽屉语义），与 Overlay / Settings 同为壳级公共能力。**栈式抽层**：新 Sheet 盖在旧 Sheet 之上，壳只渲染栈顶（最后注册的条目），关闭/Esc 逐层退出露出下层；头部是壳固有 chrome：注册者提供的 Title 居中呈现，尾端固有关闭钮（关闭 = 移除条目）；本体为注册者组件，填充头部以下全部空间；可选尾区工具栏（Sheet Trail）钉底固定。
 
 ```ts
 interface SheetViewApi<C> {
@@ -550,7 +550,7 @@ zip 包 = `manifest.json` + `entry`（.mjs）+ 静态资源（.json / .css / .sv
   "distribution": "market",     // 可选：市场分发（输出 dist-market/ 落 contents/plugins 上架，不搭载发行）；缺省 = 官方可选件搭载
   "url": "https://…",           // 可选，网站
   "repo": "https://…",          // 可选，源码库
-  "license": "MIT",             // 必填（SPDX 标识）
+  "license": "MIT",             // 可选（SPDX 标识；缺失合法——安装确认不显示该行；scaffold 默认 MIT，改其它协议须用户明示）
   "entry": "entry.mjs",
   "permissions": ["…"],         // 权限告知（给用户看，不构成授权）
   "mxApiVersion": "1",          // 必须等于 ui-shell 导出的 MX_API_VERSION
@@ -564,7 +564,7 @@ zip 包 = `manifest.json` + `entry`（.mjs）+ 静态资源（.json / .css / .sv
 ### 18.3 版本代际与安装目录
 
 - **id 是身份，version 是不可变代际，activeVersion 是激活指针**。更新 = 落新代际目录 + 指针迁移；回滚 = 切回旧指针（旧代际原样保留）；卸载才删该 id 全部版本目录。
-- 安装目录 `userData/plugins/<id>/<version>/`（两层缺一不可：一层装不下多代际并存）；状态文件 `installed.json`（`schemaVersion: 1`；`plugins: [{ id, name, enabled, activeVersion, versions: [{ version, sha256, installedAt }] }]`）。
+- 安装目录 `~/.mindx/plugins/<id>/<version>/`（机器级唯一根；两层缺一不可：一层装不下多代际并存）；状态文件 `installed.json`（`schemaVersion: 1`；`plugins: [{ id, name, enabled, activeVersion, versions: [{ version, sha256, installedAt }] }]`）。
 - `installed.json` 是状态文件，受持久化代际纪律约束（未知 `schemaVersion` 拒绝，不猜测兼容）；版本目录属程序资源，同版本重装允许覆盖。
 - 协议 URL `mx-plugin://<id>/<version>/<file>` 锁定具体代际，指针切换后重新拉取即加载新代际。
 - **多代际的安装入口**：市场卡在"该插件还有未安装版本"时保持可装（文案"安装此版本"），全部版本已装才禁用——否则多代际永远只有安装日的那一个，切版 UI 无从呈现。确认安装前必须先 `runtime.deactivate(id)`：activate 对已激活插件幂等返回，直接装新代际再 activate 会因幂等跳过而继续跑旧代际（实证坑）。
@@ -587,12 +587,12 @@ zip 包 = `manifest.json` + `entry`（.mjs）+ 静态资源（.json / .css / .sv
 ### 18.6 市场服务端（API 时代）与信任模型
 
 - 市场服务器形态 = **mindx-market 服务端 API**（`/api/v1/packages` 分页 + `/api/v1/sources` 源目录 + `/packages/{kind}/{name}.mindpkg` 下载；kind 集含 plugin）：客户端 `market.list kind=plugin` 拉货架、`download_url` + `sha256` 直连安装管线。早期的静态 `index.json` 托管已废除（无清单回退，API 不可达即报错）。发布侧纪律（发布源目录纯净 / 版本字节终身绑定 / fingerprint 服务端重算比对）读规范 §10。
-- 信任模型 = **显式安装即信任**（对齐 DSH"面板手势免审批"分级）：安装确认 UI 必须完整呈现 author / url / repo / license / permissions / versions，用户确认后落盘；安装时 sha256 校验完整性。放弃了 node:vm 沙箱隔离：桌面端安装即本机手势，与 core 插件同权。本地验收信任开关 = `MX_MARKET_DEV` env（显式置值才允许 127.0.0.1 市场源）。
+- 信任模型 = **显式安装即信任**（对齐 DSH"面板手势免审批"分级）：安装确认 UI 必须完整呈现 author / url / repo / license（缺失则不显示该行）/ permissions / versions，用户确认后落盘；安装时 sha256 校验完整性。放弃了 node:vm 沙箱隔离：桌面端安装即本机手势，与 core 插件同权。本地验收信任开关 = `MX_MARKET_DEV` env（显式置值才允许 127.0.0.1 市场源）。
 
 ### 18.7 mw CLI — 打包与 Agent 安装回路（自扩展闭环）
 
 - 动机：把插件能力**传导给 Agent**——Agent 在终端调 `mw plugin …` 打包/安装/管理插件，app 即时感知激活，Agent「自己扩展自己」。CLI 与 UI 是同一安装管线的两个入口（electron/src/plugin-store.ts 纯 Node 工厂 + cli.ts / plugins.ts 两个薄壳）。
-- 运行形态：`ELECTRON_RUN_AS_NODE=1 <Electron二进制> <dist/cli.js> …`（node-pty 同机制）；`mw install-cli` 把 wrapper 写进 **`~/.mindx/bin`**（mindx 同款路径——其安装器已在 shell rc 导入该目录，规避 /usr/local/bin 系统权限；rc 全无导入行时 CLI 补写 .zshrc 并提示 source）。存储根按平台 userData 约定推导（productName「MindX Work」，勿改），`MW_PLUGIN_ROOT` env 可覆盖（多实例/验收）。
+- 运行形态：`ELECTRON_RUN_AS_NODE=1 <Electron二进制> <dist/cli.js> …`（node-pty 同机制）；`mw install-cli` 把 wrapper 写进 **`~/.mindx/bin`**（mindx 同款路径——其安装器已在 shell rc 导入该目录，规避 /usr/local/bin 系统权限；rc 全无导入行时 CLI 补写 .zshrc 并提示 source）。存储根 = `~/.mindx/plugins`（机器级唯一根，与 App 主进程同根，勿改），`MW_PLUGIN_ROOT` env 可覆盖（多实例/验收）。
 - **打包**（外部插件项目 → .mindpkg）：`mw plugin pack <目录> [输出.mindpkg]`——manifest 结构校验（manifestIssues 的 node 侧镜像）+ entry 存在检查 + fingerprint 重算写入（缺失补算 / 已填须与身份三元组一致）+ 体积上限预检；产物回执含 id/version/fingerprint/sha256。
 - Agent 工作回路（写完插件包后）：
 
@@ -603,7 +603,7 @@ mw plugin list --json                    # 机器可读回执：{ ok, data }；�
 mw plugin use <id> <version>             # 切版回滚；enable / disable / uninstall / export 同套
 ```
 
-- 安装根（双根事实）：CLI 缺省根 = 发行版 userData（productName「MindX Work」），dev 实例根 = `…/@mindx-work/electron/plugins`（userData 随应用名）——**dev 环境下 CLI 装的包 dev 实例看不到**；dev 验收时 CLI 侧显式 `MW_PLUGIN_ROOT` 指向实例根对齐（主进程不读此 env），打包发行的 app 与 CLI 缺省根天然一致。
+- 安装根（已统一，2026-10-25 定案）：App 主进程与 mw CLI 缺省根同为 **`~/.mindx/plugins`**——dev 与打包发行无差异，dev 环境下 CLI 装的包 dev 实例**同样可见**（旧「双根分裂」问题已随 userData 根废弃而根治）；`MW_PLUGIN_ROOT` 仅诊断覆盖用。
 
 - 即时生效链：CLI 原子写 installed.json → 主进程 watch 安装根目录（防抖 300ms；**watch 目录而非文件**——原子替换走 rename，文件句柄失效）→ 广播 `plugins:changed` → market store 差分激活（新装且启用 → activate；停用 → deactivate；切版 → 先停再激活；首刷只建快照防误激活）。
 - Agent 写包验收注意：manifest 全量校验仍由渲染侧 manifestIssues 执行（§18.5）——CLI 安装只过机械校验，包合法但契约违规会在激活期失败并回滚；用 `mw plugin list` 确认落盘状态 + 设置 → 插件页确认激活状态。
@@ -621,9 +621,8 @@ pkill -f "remote-debugging-port=9223"; sleep 2
 ps aux | grep "[9]223" | awk '{print $2}' | xargs kill -9 2>/dev/null
 
 # 3. 启动（市场源与产物目录均为 env 注入；默认域是占位符，本地验收必须覆盖。
-#    注意：本实例安装根 = dev userData（@mindx-work/electron/plugins），与 mw CLI
-#    缺省根（MindX Work/plugins）不同根——CLI 侧装包/打包必须显式 MW_PLUGIN_ROOT 指向
-#    本实例根（见 §18.7 双根事实），否则实例感知不到 CLI 装的包）
+#    安装根 = ~/.mindx/plugins 机器级唯一根（2026-10-25 定案）：dev 实例与 mw CLI
+#    缺省根天然一致，CLI 装包实例直接感知，无需 MW_PLUGIN_ROOT（仅多实例隔离时用））
 cd mindx-work/electron && \
   MX_MARKET_INDEX_URL="http://127.0.0.1:8899/index.json" \
   MX_PROD_DIST="/<仓库绝对路径>/mindx-work/app/dist" \
