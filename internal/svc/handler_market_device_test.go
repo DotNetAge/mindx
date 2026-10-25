@@ -43,7 +43,7 @@ func TestMarketDeviceLoginState_SetClearsUser(t *testing.T) {
 
 	// pending 状态携带授权页 URL 与登录方式（重复点「重新打开」时重新广播）
 	s.set("pending", "", "https://community.example/auth/login/github", "github")
-	phase, _, authURL, provider, _ := s.snapshot()
+	_, _, authURL, provider, _ := s.snapshot()
 	if authURL == "" {
 		t.Error("pending 状态应缓存授权页 URL")
 	}

@@ -35,6 +35,9 @@ type MarketPackage struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description,omitempty"`
 	Icon        string      `json:"icon,omitempty"`
+	// Title 展示标题（kind=plugin；服务端 meta 快照透出。卡片主名用标题，
+	// name 是反向域 id（com.mindxwork.gitgraph）不宜直接示人）。
+	Title string `json:"title,omitempty"`
 	// NickName 昵称（kind=agent，2-3 字外号，展示主名；统一显示规则 = 昵称 + Role 小字）。
 	NickName string `json:"nick_name,omitempty"`
 	// Role 岗位头衔（kind=agent，包内清单透传；市场卡片大标题）。
@@ -202,11 +205,13 @@ type MarketUser struct {
 	AvatarURL string `json:"avatar_url"`
 	Points    int64  `json:"points"`
 	TOSAccept bool   `json:"tos_accepted"`
-	// 账号机制字段（用户名密码登录 + Profile 三字段）
+	// 账号机制字段（用户名密码登录 + Profile 四字段）
 	Username string `json:"username"`
 	JobTitle string `json:"job_title"`
 	Phone    string `json:"phone"`
 	Github   string `json:"github"`
+	// Email 邮箱（2026-10-24 定案：第三方授权带回即同步，Profile 可编辑）
+	Email string `json:"email"`
 	// 多社区身份（2026-10-20 定案）：绑定身份全表 + 服务端可用提供商清单
 	Identities         []MarketUserIdentity `json:"identities"`
 	AvailableProviders []string             `json:"available_providers"`
@@ -587,6 +592,38 @@ func (m *MarketClient) IdentityUnlink(provider string) error {
 	return fmt.Errorf("解绑失败（HTTP %d）", resp.StatusCode)
 }
 
+// DeleteVersion 作者下架自己包的某版本（DELETE /api/v1/packages/{kind}/{name}/versions/{version}；
+// 服务端软删：清单不再列出，文件与审计保留；仅包主可操作）。管理员整包下架走
+// 服务端 admin 通道（X-Admin-Token），不进本客户端——daemon 以用户身份运行，不持有管理凭据。
+func (m *MarketClient) DeleteVersion(kind, name, version string) error {
+	if m.authToken == "" {
+		return fmt.Errorf("尚未登录社区")
+	}
+	req, err := http.NewRequest(http.MethodDelete, m.apiBase+"/packages/"+url.PathEscape(kind)+"/"+url.PathEscape(name)+"/versions/"+url.PathEscape(version), nil)
+	if err != nil {
+		return err
+	}
+	m.attachIdentity(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	var e struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(data, &e) == nil && e.Error.Message != "" {
+		return fmt.Errorf("%s", e.Error.Message)
+	}
+	return fmt.Errorf("下架失败（HTTP %d）", resp.StatusCode)
+}
+
 // OrgCreate 创建组织（POST /api/v1/orgs：仅需名称与别名，创建者即所有者）。
 func (m *MarketClient) OrgCreate(name, slug string) (orgID int64, err error) {
 	if m.authToken == "" {
@@ -672,9 +709,10 @@ func (m *MarketClient) OrgSubscription(orgSlug string) (*OrgSubscription, error)
 	return &out, nil
 }
 
-// UpdateProfileFields 更新 Profile 三字段（PATCH /api/v1/me；nil = 不更新。
-// 2026-10-20 定案：github 移出手填白名单，由 GitHub 身份绑定自动获取）。
-func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone *string) (*MarketUser, error) {
+// UpdateProfileFields 更新 Profile 字段（PATCH /api/v1/me；nil = 不更新。
+// 2026-10-20 定案：github 移出手填白名单，由 GitHub 身份绑定自动获取；
+// 2026-10-24 定案：email 加入白名单，第三方授权带回即同步 + 用户可自改自清）。
+func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone, email *string) (*MarketUser, error) {
 	if m.authToken == "" {
 		return nil, fmt.Errorf("尚未登录社区")
 	}
@@ -687,6 +725,9 @@ func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone *string) (*
 	}
 	if phone != nil {
 		body["phone"] = *phone
+	}
+	if email != nil {
+		body["email"] = *email
 	}
 	if len(body) == 0 {
 		return m.Me()
@@ -1203,7 +1244,7 @@ func (ap apiPackage) toMarketPackage() MarketPackage {
 	}
 	return MarketPackage{
 		Kind: PackageKind(ap.Kind), Name: ap.Name, Description: ap.Description,
-		Icon: ap.Meta.Icon, NickName: ap.Meta.NickName, Role: ap.Meta.Role,
+		Icon: ap.Meta.Icon, Title: ap.Meta.Title, NickName: ap.Meta.NickName, Role: ap.Meta.Role,
 		Category: normalizeCategory(ap.Category), Leader: ap.Meta.Leader, Members: ap.Meta.Members,
 		Skills: ap.Meta.Skills, SkillNames: ap.Meta.SkillNames, SkillDescs: ap.Meta.SkillDescs,
 		Version: version, DownloadURL: ap.DownloadURL, Sha256: ap.Sha256, Size: ap.Size,
@@ -1279,6 +1320,7 @@ func (m *MarketClient) ListPage(q MarketQuery) (*MarketPage, error) {
 // apiPackageMeta 服务端包条目的嵌套元数据（meta 对象，列表/详情共用结构）。
 type apiPackageMeta struct {
 	Icon        string            `json:"icon"`
+	Title       string            `json:"title"`
 	NickName    string            `json:"nick_name"`
 	Role        string            `json:"role"`
 	Leader      string            `json:"leader"`

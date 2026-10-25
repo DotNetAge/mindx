@@ -212,8 +212,11 @@ func (d *Daemon) handleTeamImport(_ context.Context, params json.RawMessage) (an
 // JSON tag 为 snake_case（对齐 COS 清单格式），而前端契约（MarketPackageInfo）
 // 为 camelCase，此处逐字段转换对齐（skillNames 等映射字段的前端读取键）。
 type marketPackageDTO struct {
-	Kind        string            `json:"kind"`
-	Name        string            `json:"name"`
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	// Title 展示标题（kind=plugin；服务端 meta 快照透出。货架卡片主名用标题，
+	// name 是反向域 id（com.mindxwork.gitgraph）不宜直接示人，前端按 title 优先回退 name）
+	Title       string            `json:"title,omitempty"`
 	Description string            `json:"description,omitempty"`
 	Icon        string            `json:"icon,omitempty"`
 	NickName    string            `json:"nick_name,omitempty"`
@@ -275,6 +278,7 @@ func (d *Daemon) handleMarketList(_ context.Context, params json.RawMessage) (an
 		dtos = append(dtos, marketPackageDTO{
 			Kind:        string(p.Kind),
 			Name:        p.Name,
+			Title:       p.Title,
 			Description: p.Description,
 			Icon:        p.Icon,
 			NickName:    p.NickName,
@@ -550,6 +554,26 @@ func (d *Daemon) handleMarketPublish(_ context.Context, params json.RawMessage) 
 		"created":    res.Created,
 		"warnings":   warnings,
 	}, nil
+}
+
+// handleMarketUnpublish 作者下架自己包的某版本（服务端软删，仅包主可操作）。
+// kind/name/version 三要素必填；组织源版本下架服务端暂无端点，不支持 org 维度。
+func (d *Daemon) handleMarketUnpublish(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketUnpublishParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(p.Kind) == "" || strings.TrimSpace(p.Name) == "" {
+		return nil, fmt.Errorf("kind 与 name 为必填")
+	}
+	if strings.TrimSpace(p.Version) == "" {
+		return nil, fmt.Errorf("version 为必填")
+	}
+	if err := d.app.Market().DeleteVersion(p.Kind, p.Name, p.Version); err != nil {
+		return nil, err
+	}
+	d.logger.Info("分发包版本下架完成", "kind", p.Kind, "name", p.Name, "version", p.Version)
+	return map[string]any{"deleted": p.Version}, nil
 }
 
 // handleMarketSubmit 投递进化版本到包主收件箱（§4 回流路径）：投递目标 = 原包名，

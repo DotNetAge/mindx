@@ -37,7 +37,7 @@ providers:
   - name: siliconflow
     title: 硅基流动
     base_url: https://api.siliconflow.cn
-    api_key: siliconflow
+    api_key: SILICONFLOW_API_KEY
     auth_token: ""
     is_local: false
   - name: openrouter

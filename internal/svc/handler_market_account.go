@@ -249,14 +249,15 @@ func (d *Daemon) handleMarketAccountLogout(_ context.Context, _ json.RawMessage)
 	return map[string]any{"logged_out": true}, nil
 }
 
-// handleMarketAccountProfileSet Profile 三字段编辑（nil = 不更新，前端整表单提交；
-// 2026-10-20 定案：github 由 GitHub 身份绑定自动获取，移出手填通道）。
+// handleMarketAccountProfileSet Profile 字段编辑（nil = 不更新，前端整表单提交；
+// 2026-10-20 定案：github 由 GitHub 身份绑定自动获取，移出手填通道；
+// 2026-10-24 定案：email 加入编辑白名单）。
 func (d *Daemon) handleMarketAccountProfileSet(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketAccountProfileSetParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
-	user, err := d.app.Market().UpdateProfileFields(p.NickName, p.JobTitle, p.Phone)
+	user, err := d.app.Market().UpdateProfileFields(p.NickName, p.JobTitle, p.Phone, p.Email)
 	if err != nil {
 		return nil, err
 	}

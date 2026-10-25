@@ -93,10 +93,12 @@ func init() {
 	marketArticleListCmd.Flags().Bool("json", false, "Output structured JSON")
 	marketArticleDeleteCmd.Flags().Int64("org", 0, "删除指定组织节点的文章（缺省删除个人节点文章）")
 	marketArticleDeleteCmd.Flags().Bool("yes", false, "跳过删除确认（脚本场景用）")
+	marketUnpublishCmd.Flags().Bool("yes", false, "跳过下架确认（脚本场景用）")
 
 	marketCmd.AddCommand(marketListCmd, marketInstallCmd, marketCanonicalizeAgentsCmd, marketPackAgentsCmd,
 		marketPublishCmd, marketSubmitCmd, marketSubmissionsCmd, marketRateCmd, marketWhoamiCmd, marketArticleCmd)
 	marketSubmissionsCmd.AddCommand(marketSubmissionsListCmd, marketSubmissionsDecideCmd)
+	marketCmd.AddCommand(marketUnpublishCmd)
 	marketArticleCmd.AddCommand(marketArticlePublishCmd, marketArticleReadCmd, marketArticleListCmd, marketArticleDeleteCmd)
 	rootCmd.AddCommand(marketCmd)
 }
@@ -210,8 +212,10 @@ Examples:
 
 // marketPackage 是 market.list 响应中包条目的 CLI 视图（camelCase 对齐 daemon DTO）。
 type marketPackage struct {
-	Kind        string   `json:"kind"`
-	Name        string   `json:"name"`
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	// Title 展示标题（kind=plugin；daemon DTO 透传，货架卡片主名 = 标题回退 name）
+	Title       string   `json:"title,omitempty"`
 	Description string   `json:"description"`
 	Role        string   `json:"role"`
 	Category    string   `json:"category"`
@@ -1006,7 +1010,47 @@ Examples:
 	},
 }
 
-// marketArticleDeleteCmd 删除我的文章（仅作者；删除前确认，--yes 跳过）。
+// marketUnpublishCmd 下架我的分发包版本（仅包主；下架前确认，--yes 跳过）。
+var marketUnpublishCmd = &cobra.Command{
+	Use:   "unpublish <agent|skill|team|plugin> <name> <version>",
+	Short: "Unpublish one version of your own package (requires mindx start)",
+	Long: `下架你在社区发布的分发包版本（仅包主本人可操作；需要 mindx start 运行且已登录社区账号）。
+
+服务端为软删：清单不再列出该版本，文件与审计记录保留；包名进入保留池不可被他人注册。
+
+下架不可恢复，命令会先要求确认；--yes 跳过确认（脚本场景用）。
+
+Examples:
+  mindx market unpublish plugin com.mindxwork.demo 1.0.0
+  mindx market unpublish skill my-skill 0.2.1 --yes`,
+	Args: cobra.ExactArgs(3),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		kind, name, version := args[0], args[1], args[2]
+		yes, _ := cmd.Flags().GetBool("yes")
+		if !yes {
+			fmt.Printf("确认下架 %s/%s 的版本 %s？下架后该版本不再出现在货架。输入 y 确认，其他任意内容取消：", name, kind, version)
+			answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			answer = strings.ToLower(strings.TrimSpace(answer))
+			if answer != "y" && answer != "yes" {
+				fmt.Println("已取消下架。")
+				return nil
+			}
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("无法连接守护进程: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		if _, err := cl.MarketUnpublish(rpc.MarketUnpublishParams{Kind: kind, Name: name, Version: version}); err != nil {
+			return err
+		}
+		fmt.Printf("已下架：%s/%s 版本 %s\n", kind, name, version)
+		return nil
+	},
+}
+
 var marketArticleDeleteCmd = &cobra.Command{
 	Use:   "delete <slug>",
 	Short: "Delete one of your articles (requires mindx start)",

@@ -200,6 +200,22 @@ func runAllChecks() []Check {
 		})
 	}
 
+	// 4a. Node.js runtime（技能执行标配，与 Python 同级；2026-10-24 用户定案）
+	if ver := setup.DetectNode(); ver != "" {
+		checks = append(checks, Check{
+			Name:    "Node.js Runtime",
+			Status:  "✅",
+			Message: fmt.Sprintf("Found (%s)", ver),
+		})
+	} else {
+		checks = append(checks, Check{
+			Name:    "Node.js Runtime",
+			Status:  "⚠️",
+			Message: "No Node.js found — some skills may not work",
+			Fix:     func() error { return setup.InstallNode() },
+		})
+	}
+
 	// 5. Workspace directory permissions
 	if info, err := os.Stat(workspaceDir); err == nil {
 		if info.Mode().Perm()&0200 == 0 {

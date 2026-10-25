@@ -643,8 +643,8 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		d.logger.Warn("拒绝未接入设备的消息", "client_id", msg.ClientID)
 		if d.gw != nil {
 			_ = d.gw.SendResponse(msg.ClientID, gateway.RespError,
-				"设备未接入", map[string]any{
-					"message": "这台设备还没有完成接入验证，请先在对方设备上完成连接。",
+				"对方还没有就绪", map[string]any{
+					"message": "对方设备还没有连接就绪，暂时联系不上。请对方打开 MindX 后再试。",
 				})
 		}
 		return

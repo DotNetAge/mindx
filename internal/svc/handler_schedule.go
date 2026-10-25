@@ -245,13 +245,6 @@ func (d *Daemon) handleScheduleJobCancel(_ context.Context, params json.RawMessa
 	return map[string]string{"status": "cancelled"}, nil
 }
 
-// enqueueOneJob 给指定智能体立即排一个一次性开工任务（约 10 秒后拉起）。
-// 复用调度器：Save 一条 OneShot 条目，watchLoop（5 秒重载）随即拉起执行。
-// 来信叫醒等「马上开始」的场景走这里，与手工定时任务同一执行通路。
-func (d *Daemon) enqueueOneJob(agent, content string) error {
-	return d.enqueueOneJobAt(agent, content, time.Time{})
-}
-
 // enqueueOneJobAt 统一入队口：at 为零值 ≈ 10 秒后开工（普通信/即时场景），
 // 非零 = 指定时刻开工（任务信按截止时刻排期）。调度器是唯一的执行主体：
 // 雇佣校验、一次性条目生成、后台拉起、留痕全走既有 Scheduler 通路。

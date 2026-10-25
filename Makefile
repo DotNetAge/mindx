@@ -959,18 +959,30 @@ clear:
 ## clear-creds: 清空密钥存储中所有 provider API Key（macOS Keychain 或 Linux 加密文件）
 clear-creds:
 	@echo "$(YELLOW)🔑 Clearing provider credentials...$(NC)"
-	@_PROVIDER_KEYS="DASHSCOPE_API_KEY DEEPSEEK_API_KEY ZHIPU_API_KEY MOONSHOT_API_KEY MINIMAX_API_KEY ARK_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY"; \
-	if [ "$$(uname -s)" = "Darwin" ]; then \
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
 		echo "$(CYAN)   Platform: macOS (Keychain)$(NC)"; \
-		for _key in $$_PROVIDER_KEYS; do \
-			if security find-generic-password -s mindx -a "$$_key" -w >/dev/null 2>&1; then \
-				security delete-generic-password -s mindx -a "$$_key" >/dev/null 2>&1 && \
-					echo "     $(GREEN)✓ Deleted: $$_key$(NC)" || \
-					echo "     $(YELLOW)⚠ Failed to delete: $$_key$(NC)"; \
-			else \
-				echo "     - Skipped (not found): $$_key"; \
-			fi; \
-		done; \
+		_accts=""; \
+		if [ -f "$${HOME}/.mindx/settings/providers.yml" ]; then \
+			_accts=$$(sed -n 's/^[[:space:]]*- name: //p' "$${HOME}/.mindx/settings/providers.yml"); \
+		fi; \
+		if [ -z "$$_accts" ]; then \
+			echo "$(CYAN)   Provider config not found, enumerating keychain entries...$(NC)"; \
+			_accts=$$(security dump-keychain 2>/dev/null | awk 'BEGIN{f=0;a=""} /class: "/{f=0; a=""} /"acct"<blob>="/{a=$$0; sub(/.*"acct"<blob>="/,"",a); sub(/".*/,"",a); if(f){print a; a=""}} /"svce"<blob>="mindx"/{f=1; if(a!=""){print a; a=""}}' | sort -u | grep -v ':'); \
+		fi; \
+		if [ -z "$$_accts" ]; then \
+			echo "     - No provider credentials found"; \
+		else \
+			for _acct in $$_accts; do \
+				if security find-generic-password -s mindx -a "$$_acct" >/dev/null 2>&1; then \
+					security delete-generic-password -s mindx -a "$$_acct" >/dev/null 2>&1 && \
+						echo "     $(GREEN)✓ Deleted: $$_acct$(NC)" || \
+						echo "     $(YELLOW)⚠ Failed to delete: $$_acct$(NC)"; \
+				else \
+					echo "     - Skipped (not found): $$_acct"; \
+				fi; \
+			done; \
+			echo "     $(CYAN)   Note: market:/skill: entries (login/skill tokens) are kept — clear them via the app if needed.$(NC)"; \
+		fi; \
 	else \
 		echo "$(CYAN)   Platform: Linux (encrypted file)$(NC)"; \
 		_CRED_FILE="$${HOME}/.mindx/settings/.credentials"; \

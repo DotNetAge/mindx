@@ -37,8 +37,9 @@ func RunWizard(modelsPath, providersPath, clientProvidersPath, agentsDir, worksp
 		}
 	}
 
-	// 将所有从环境变量预解析的非空 Provider Key 写入 Credential Store
-	for providerName, key := range result.ResolvedKeys {
+	// 将用户在确认清单中勾选的供应商 Key 写入 Credential Store（2026-10-24 定案：
+	// 静默收编废止——只落库用户知情勾选项；已存储条目勾选 = 用环境变量新值覆盖）
+	for providerName, key := range result.ConfirmedKeys {
 		if key != "" && providerName != result.SelectedProvider {
 			if err := credStore.Set(providerName, key); err != nil {
 				fmt.Printf("⚠️  "+i18n.T("setup.store.apikey.provider.failed")+"\n", providerName, err)

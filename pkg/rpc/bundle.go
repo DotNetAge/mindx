@@ -114,6 +114,15 @@ type MarketPublishParams struct {
 	OrgSlug string `json:"org_slug,omitempty"`
 }
 
+// MarketUnpublishParams are the params for market.unpublish（作者下架自己包的某版本）。
+// 服务端为软删（清单不再列出，文件与审计保留）；仅包主可操作，权限由服务端校验。
+// 组织源版本删除服务端暂无对应端点，故不含 org 维度。
+type MarketUnpublishParams struct {
+	Kind    string `json:"kind"` // agent | skill | team | plugin
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
 // MarketSubmitParams are the params for market.submit（投递进化版本到包主收件箱，§4）。
 type MarketSubmitParams struct {
 	Kind string `json:"kind"` // agent | skill | team
@@ -232,12 +241,14 @@ type MarketAccountCredentialsParams struct {
 	DisplayName string `json:"display_name,omitempty"` // 仅注册用（缺省取用户名）
 }
 
-// MarketAccountProfileSetParams Profile 三字段编辑参数（2026-10-20 定案：github 移出
-// 手填白名单，由 GitHub 身份绑定自动获取；nil 指针语义在 handler 内以字符串指针表达）。
+// MarketAccountProfileSetParams Profile 字段编辑参数（2026-10-20 定案：github 移出
+// 手填白名单，由 GitHub 身份绑定自动获取；2026-10-24 定案：email 加入白名单；
+// nil 指针语义在 handler 内以字符串指针表达）。
 type MarketAccountProfileSetParams struct {
 	NickName *string `json:"nick_name,omitempty"`
 	JobTitle *string `json:"job_title,omitempty"`
 	Phone    *string `json:"phone,omitempty"`
+	Email    *string `json:"email,omitempty"`
 }
 
 // MarketAccountRegister 用户名密码注册（成功即登录并绑定设备）。
@@ -278,6 +289,11 @@ func (c *Client) MarketPack(kind, name string) (json.RawMessage, error) {
 // MarketPublish 打包并发布为新版本（§3）。
 func (c *Client) MarketPublish(p MarketPublishParams) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.publish", p)
+}
+
+// MarketUnpublish 作者下架自己包的某版本（软删；需要 mindx start 且已登录社区账号）。
+func (c *Client) MarketUnpublish(p MarketUnpublishParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.unpublish", p)
 }
 
 // MarketSubmit 投递进化版本到包主收件箱（§4）。

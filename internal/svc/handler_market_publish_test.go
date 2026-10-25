@@ -93,6 +93,30 @@ func TestMarketPublishValidation(t *testing.T) {
 	}
 }
 
+// TestMarketUnpublishValidation 验收：market.unpublish 的参数校验在网络调用前完成。
+func TestMarketUnpublishValidation(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	// kind/name 必填
+	if _, err := d.handleMarketUnpublish(context.Background(), mustJSON(t, rpc.MarketUnpublishParams{
+		Name: "some-pkg", Version: "1.0.0",
+	})); err == nil {
+		t.Fatal("缺 kind 应报错")
+	}
+	if _, err := d.handleMarketUnpublish(context.Background(), mustJSON(t, rpc.MarketUnpublishParams{
+		Kind: "skill", Version: "1.0.0",
+	})); err == nil {
+		t.Fatal("缺 name 应报错")
+	}
+	// version 必填
+	if _, err := d.handleMarketUnpublish(context.Background(), mustJSON(t, rpc.MarketUnpublishParams{
+		Kind: "skill", Name: "some-pkg",
+	})); err == nil {
+		t.Fatal("缺 version 应报错")
+	}
+}
+
 // TestMarketSubmitValidation 验收：market.submit 的版本必填与自指拦截。
 func TestMarketSubmitValidation(t *testing.T) {
 	done := make(chan struct{})

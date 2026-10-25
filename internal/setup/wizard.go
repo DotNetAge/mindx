@@ -109,12 +109,20 @@ type firstRunModel struct {
 
 	preResolvedKeys map[string]string
 
+	// Step 3 前置：环境变量发现的供应商 Key 确认清单（2026-10-24 定案：
+	// 静默收编改知情勾选——勾选=保存/覆盖，不勾=不动钥匙串）
+	discovered       []discoveredKey
+	discoveredCursor int
+
 	modelConfigured  bool
 	apiKeyConfigured bool
 
-	// Step 3: 自动安装进度
+	// Step 4: 自动安装进度
 	autoTasks     []*setupTask
 	autoSetupDone bool
+
+	// confirmedKeys 确认清单回车时落定的勾选项（结果组装时取用）
+	confirmedKeys map[string]string
 
 	// 通用状态
 	err      error
@@ -131,12 +139,25 @@ type firstRunModel struct {
 	renderer *glamour.TermRenderer
 }
 
+// discoveredKey 确认清单条目：环境变量中发现的供应商 Key。
+// Stored = 凭据库已有该供应商的 Key（覆盖语义：勾选即用环境变量新值覆盖）。
+type discoveredKey struct {
+	Name    string
+	Title   string
+	Value   string
+	Stored  bool
+	Checked bool
+}
+
 type firstRunResult struct {
 	SelectedProvider string
 	SelectedModel    string
 	APIKey           string
 	ResolvedKeys     map[string]string
-	Err              error
+	// ConfirmedKeys 用户在确认清单中勾选的供应商 Key（name→value，2026-10-24
+	// 定案：静默收编改知情勾选——落库只认用户确认项，ResolvedKeys 仅供 UI 内部使用）。
+	ConfirmedKeys map[string]string
+	Err           error
 
 	// 自动安装结果（由 wizard 内部执行，不再询问用户）
 	DaemonOK   bool
@@ -328,6 +349,7 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		SelectedModel:    fm.selectedModel.Name,
 		APIKey:           fm.apiKeyInput.Value(),
 		ResolvedKeys:     fm.preResolvedKeys,
+		ConfirmedKeys:    fm.confirmedKeys,
 	}
 	if len(fm.autoTasks) > 0 {
 		result.DaemonOK = fm.autoTasks[0].Status == taskDone
@@ -487,8 +509,10 @@ func (m *firstRunModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case 2:
 		return m.updateModelSelect(msg)
 	case 3:
-		return m.updateAutoSetup(msg)
+		return m.updateDiscovered(msg)
 	case 4:
+		return m.updateAutoSetup(msg)
+	case 5:
 		return m.updateComplete(msg)
 	}
 	return m, nil
@@ -600,10 +624,7 @@ func (m *firstRunModel) updateModelSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if item := m.modelList.SelectedItem(); item != nil {
 				if mi, ok := item.(modelItem); ok {
 					m.selectedModel = mi
-					m.initAutoSetupTasks()
-					autoCmd := m.startAutoSetup()
-					m.step = 3
-					return m, autoCmd
+					return m.enterDiscoveredOrAutoSetup()
 				}
 			}
 		case "s", "S":
@@ -611,10 +632,7 @@ func (m *firstRunModel) updateModelSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if item := m.modelList.SelectedItem(); item != nil {
 					if mi, ok := item.(modelItem); ok {
 						m.selectedModel = mi
-						m.initAutoSetupTasks()
-						autoCmd := m.startAutoSetup()
-						m.step = 3
-						return m, autoCmd
+						return m.enterDiscoveredOrAutoSetup()
 					}
 				}
 			}
@@ -627,7 +645,128 @@ func (m *firstRunModel) updateModelSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// ── Step 3: Auto Setup Progress ───────────────────────────────────────────
+// buildDiscoveredKeys 从预解析结果构建确认清单（排除当前选中供应商——主 Key
+// 走 KEY 输入步通道）。Stored = 钥匙串已有该供应商 Key：默认不勾（不动现有值，
+// 勾选即用环境变量新值覆盖=重新导入）；未存储的默认勾选（首次导入为主流程期望）。
+func (m *firstRunModel) buildDiscoveredKeys() {
+	m.discovered = nil
+	m.discoveredCursor = 0
+	credStore := core.NewCredentialStore(m.workspaceDir)
+	for _, p := range m.providers {
+		if p.Name == m.selectedProvider.Name {
+			continue
+		}
+		v := m.preResolvedKeys[p.Name]
+		if v == "" {
+			continue
+		}
+		stored := false
+		if credStore != nil {
+			if old, err := credStore.Get(p.Name); err == nil && old != "" {
+				stored = true
+			}
+		}
+		m.discovered = append(m.discovered, discoveredKey{
+			Name: p.Name, Title: p.Title(), Value: v, Stored: stored, Checked: !stored,
+		})
+	}
+}
+
+// confirmedDiscoveredKeys 收集勾选项（enter 确认时调用）。
+func (m *firstRunModel) confirmedDiscoveredKeys() map[string]string {
+	if len(m.discovered) == 0 {
+		return nil
+	}
+	confirmed := make(map[string]string)
+	for _, dk := range m.discovered {
+		if dk.Checked {
+			confirmed[dk.Name] = dk.Value
+		}
+	}
+	if len(confirmed) == 0 {
+		return nil
+	}
+	return confirmed
+}
+
+// enterDiscoveredOrAutoSetup 模型步推进的统一入口：有环境变量发现的 Key 则先进
+// 确认清单步（知情勾选），否则直接进自动安装。
+func (m *firstRunModel) enterDiscoveredOrAutoSetup() (tea.Model, tea.Cmd) {
+	m.buildDiscoveredKeys()
+	if len(m.discovered) > 0 {
+		m.step = 3
+		return m, nil
+	}
+	m.initAutoSetupTasks()
+	autoCmd := m.startAutoSetup()
+	m.step = 4
+	return m, autoCmd
+}
+
+// ── Step 3: Discovered keys confirmation ──────────────────────────────────
+
+// updateDiscovered 确认清单交互：上下移动、空格勾选、回车确认（收勾选项进
+// ConfirmedKeys 后进自动安装步）。
+func (m *firstRunModel) updateDiscovered(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "q", "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+		case "esc":
+			// 返回模型选择步（清单勾选态随重建重置）
+			m.step = 2
+			return m, nil
+		case "up", "k":
+			if m.discoveredCursor > 0 {
+				m.discoveredCursor--
+			}
+		case "down", "j":
+			if m.discoveredCursor < len(m.discovered)-1 {
+				m.discoveredCursor++
+			}
+		case " ", "space":
+			if m.discoveredCursor < len(m.discovered) {
+				m.discovered[m.discoveredCursor].Checked = !m.discovered[m.discoveredCursor].Checked
+			}
+		case "enter":
+			m.confirmedKeys = m.confirmedDiscoveredKeys()
+			m.initAutoSetupTasks()
+			autoCmd := m.startAutoSetup()
+			m.step = 4
+			return m, autoCmd
+		}
+	}
+	return m, nil
+}
+
+// renderDiscovered 确认清单步渲染：勾选框清单 + 「已存储」角标（勾选=用环境变量
+// 新值覆盖）+ 操作提示。值永不显示（密码掩码语义，与 KEY 输入步一致）。
+func (m *firstRunModel) renderDiscovered() string {
+	var b strings.Builder
+	b.WriteString("## " + i18n.T("wizard.step.discovered.title") + "\n\n")
+	b.WriteString(i18n.T("wizard.step.discovered.desc") + "\n\n")
+	for i, dk := range m.discovered {
+		box := "[ ]"
+		if dk.Checked {
+			box = "[x]"
+		}
+		mark := ""
+		if dk.Stored {
+			mark = " · " + i18n.T("wizard.step.discovered.stored")
+		}
+		cursor := "  "
+		if i == m.discoveredCursor {
+			cursor = "> "
+		}
+		fmt.Fprintf(&b, "%s%s %s（%s）%s\n", cursor, box, dk.Title, dk.Name, mark)
+	}
+	b.WriteString("\n" + i18n.T("wizard.step.discovered.hint"))
+	return m.paddedView(borderStyle.Render(m.renderMarkdown(b.String())))
+}
+
+// ── Step 4: Auto Setup Progress ───────────────────────────────────────────
 
 // initAutoSetupTasks 初始化自动安装任务列表。
 func (m *firstRunModel) initAutoSetupTasks() {
@@ -761,7 +900,7 @@ func (m *firstRunModel) updateAutoSetup(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case autoSetupDoneMsg:
 		m.autoSetupDone = true
-		m.step = 4
+		m.step = 5
 		return m, nil
 	}
 
@@ -947,8 +1086,10 @@ func (m *firstRunModel) View() tea.View {
 	case 2:
 		content = m.renderModelSelect()
 	case 3:
-		content = m.renderAutoSetup()
+		content = m.renderDiscovered()
 	case 4:
+		content = m.renderAutoSetup()
+	case 5:
 		content = m.renderComplete()
 	}
 	return tea.View{

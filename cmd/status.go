@@ -99,6 +99,13 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		fmt.Printf("🐍 Python:   ⚠️  no venv (run 'mindx doctor')\n")
 	}
 
+	// Node.js runtime（技能执行标配，与 Python 同级；2026-10-24 用户定案）
+	if nodeVer := setup.DetectNode(); nodeVer != "" {
+		fmt.Printf("🟢 Node.js:  ✅ %s\n", nodeVer)
+	} else {
+		fmt.Printf("🟢 Node.js:  ⚠️  not installed (run 'mindx doctor --fix')\n")
+	}
+
 	// Platform info
 	fmt.Printf("\n💻 Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 

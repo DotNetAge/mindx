@@ -110,6 +110,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"market.uploadAvatar":                r.daemon.handleMarketUploadAvatar,
 		"market.pack":                        r.daemon.handleMarketPack,
 		"market.publish":                     r.daemon.handleMarketPublish,
+		"market.unpublish":                   r.daemon.handleMarketUnpublish,
 		"market.submit":                      r.daemon.handleMarketSubmit,
 		"market.submissions.list":            r.daemon.handleMarketSubmissionsList,
 		"market.submissions.decide":          r.daemon.handleMarketSubmissionDecide,
@@ -305,7 +306,9 @@ func (r *RPCHandlerRegistry) guard(method string, h gateway.MethodHandler) gatew
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		clientID := gateway.ClientIDFromContext(ctx)
 		if !r.daemon.deviceGateAuthorized(clientID) {
-			return nil, fmt.Errorf("这台设备还没有完成接入验证，请先在设备端完成连接后再操作")
+			// 本机 App 场景用户不该看到此错（连接建立即自动静默握手）；出现即内部
+			// 状态错乱，给出重启自救 + 可反馈的出口，绝不说「接入验证」这类黑话
+			return nil, fmt.Errorf("MindX 内部服务还没有就绪，请重启 MindX 后再试；若反复出现，请把诊断信息复制给我们。")
 		}
 		if managerMethods[method] && r.daemon.devGate != nil && r.daemon.devGate.ScopeOf(clientID) != devgate.ScopeLocal {
 			return nil, fmt.Errorf("这项操作涉及本机管理，请直接在主机上操作")

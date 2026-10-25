@@ -46,6 +46,14 @@ func (d *Daemon) initDeviceGate() {
 		return
 	}
 	d.devGate = mgr
+
+	// 启动即把本机握手令牌落盘（loadOrCreate 懒生成会在「客户端永远读不到文件、
+	// 因此永远发不出非空 token、daemon 因此永远不触发生成」间形成死锁——
+	// 2026-10-23 事故实证：环境重置后 App 读空令牌被闸全拦）。闸装配成功即生成，
+	// 保证 App/CLI 任何时刻启动都能读到有效令牌。
+	if _, err := d.loadOrCreateDaemonToken(); err != nil {
+		d.logger.Warn("devgate: 本机握手令牌生成失败，本机直通将不可用", "error", err.Error())
+	}
 }
 
 // deviceGateAuthorized 连接是否已完成设备接入验证（RPC 闸与 user.message 闸共用）。

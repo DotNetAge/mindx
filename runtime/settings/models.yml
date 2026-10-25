@@ -23,6 +23,31 @@ models:
     temperature: 0.7
     repetition_penalty: 0
     enabled: true
+  - name: qwen3.8-flash
+    title: Qwen3.8 Flash
+    description: >
+      千问新推的多模态大模型，原生支持百万级上下文窗口，一次处理超长文档、
+      代码仓库级和复杂对话。理解与生成能力强、响应速度快，兼容 OpenAI 与
+      Anthropic 主流协议（可直接接入 Claude Code、Codex 等开发者工具），
+      支持自主修复代码、操作桌面应用、分析图表与长视频，适合开发者与企业
+      高频 AI 应用场景，推理成本优势明显。官方免费额度可用。
+    provider: dashscope
+    cost_per_1m_in: 0.8
+    cost_per_1m_in_cache: 0.1
+    cost_per_1m_out: 2.7
+    context_length: 1000000
+    is_local: false
+    func_calling: true
+    structuring: true
+    web_searching: true
+    visioning: true
+    prefix_con: true
+    context_cache: true
+    top_p: 0
+    top_k: 0
+    temperature: 0.7
+    repetition_penalty: 0
+    enabled: true
   - name: qwen3.7-max
     title: Qwen3.7 Max
     description: >
