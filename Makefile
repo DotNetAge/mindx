@@ -180,6 +180,7 @@ uninstall:
 		if [ -f "$$rc" ]; then \
 			grep -v '^# MindX$$' "$$rc" | grep -v '^export PATH=".*\.mindx/bin' > "$$rc.tmp" && \
 				mv "$$rc.tmp" "$$rc" && echo "     cleaned $$(basename $$rc)" || true; \
+		fi; \
 		done
 	@echo ""
 	@echo "$(GREEN)✅ Uninstall complete!$(NC)"
