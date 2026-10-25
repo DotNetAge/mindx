@@ -182,6 +182,79 @@ func (t *TerminalRun) Execute(ctx context.Context, params map[string]any) (any, 
 	return map[string]any{"accepted": true, "command": command, "cwd": cwd, "note": "已受理，命令将提交到用户可见终端执行"}, nil
 }
 
+// Notify 请求客户端弹出界面通知（对应事件 user_notify）。
+type Notify struct {
+	Broadcast UIBroadcast
+}
+
+// NewNotify 创建 Notify 工具（broadcast 为空时执行报错，防静默失效）。
+func NewNotify(broadcast UIBroadcast) tools.FuncTool {
+	return &Notify{Broadcast: broadcast}
+}
+
+func (t *Notify) Info() *tools.ToolInfo {
+	return &tools.ToolInfo{
+		Name:        "Notify",
+		Description: "向用户客户端发送界面通知（右上角通知卡片，非阻塞，不打断当前工作）。",
+		Prompt: `在用户界面右上角弹出一张通知卡片（标题 + 内容），用户自行决定何时处理，
+不阻塞当前会话。level 表达紧急程度：high 需用户立即决策（红色卡片）、
+medium 尽快关注（黄色）、low 仅知会（绿色）、normal 紧急程度不明（普通）。
+仅在确有必要让用户知道的时候使用，不要滥用。`,
+		IsReadOnly: true,
+		Parameters: []tools.Parameter{
+			{
+				Name:        "title",
+				Type:        "string",
+				Description: "通知标题：几个字的概括（如「来信待决」「任务办结」）。",
+				Required:    true,
+			},
+			{
+				Name:        "message",
+				Type:        "string",
+				Description: "通知内容：一句完整的话，说清发生了什么、需要用户做什么。",
+				Required:    true,
+			},
+			{
+				Name:        "level",
+				Type:        "string",
+				Description: "紧急程度：high（红，立即处理）/ medium（黄，尽快处理）/ low（绿，仅知会）/ normal（普通，默认）。",
+				Required:    false,
+			},
+		},
+	}
+}
+
+func (t *Notify) Execute(ctx context.Context, params map[string]any) (any, error) {
+	title, err := tools.ValidateRequiredString("Notify", params, "title")
+	if err != nil {
+		return nil, err
+	}
+	message, err := tools.ValidateRequiredString("Notify", params, "message")
+	if err != nil {
+		return nil, err
+	}
+	level := ""
+	if raw, _ := params["level"].(string); raw != "" {
+		level = strings.TrimSpace(raw)
+	}
+	switch level {
+	case "high", "medium", "low":
+	case "", "normal":
+		level = "normal"
+	default:
+		return nil, fmt.Errorf("%s", tools.BuildGuide(
+			fmt.Sprintf("level=%q 不是合法的紧急程度", level),
+			"level 仅支持 high / medium / low / normal",
+			"按事项实际紧急程度选择一级，或留空使用普通",
+		))
+	}
+	if t.Broadcast == nil {
+		return nil, fmt.Errorf("%s", tools.GuideMissingContext("Notify", "可用的 UI 广播通道（daemon 未装配）"))
+	}
+	t.Broadcast("user_notify", map[string]any{"title": title, "message": message, "level": level})
+	return map[string]any{"accepted": true, "level": level, "note": "已受理，通知将呈现在用户客户端"}, nil
+}
+
 // resolveSessionWorkspacePath 参数闸：path 解析为绝对路径后必须落在会话项目
 // 目录内（工具版工作区闸；CLI 版闸在 CLI 进程 cwd，见 cmd/ui.go）。
 func resolveSessionWorkspacePath(ctx context.Context, raw string) (string, error) {

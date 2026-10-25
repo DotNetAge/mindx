@@ -21,8 +21,8 @@ import (
 // 收信后叫醒本机智能体读信，由它分辨处置（自己干 / 转告人类伙伴 / 仅知会）。
 //
 // 收发单一通道：信一律落服务端组织信箱，收方 daemon 轮询拉取（已送达落档去重）。
-// 收方核验（不信任来自客户端的任何声明）：持本机登录态调服务端内省，
-// 确认发信人确实是自己的直属上级/下级后才收信落档。
+// 直连投递口 mail.deliver 一期停用（原实现无身份核验，注释所声称的核验未落地）；
+// 二期重接线时必须带发信方令牌经服务端内省核验直属上下级。
 // ---------------------------------------------------------------------------
 
 // mailInboxBucket 本地信件留档桶（kvstore bbolt 内独立 bucket；key=信件编号）。
@@ -115,62 +115,45 @@ func (d *Daemon) mailFind(uid string) *LocalMail {
 	return nil
 }
 
-// defaultHiredAgent 本机默认负责人（第一个已雇佣的智能体；来信处置与自动开工的执行者）。
-func (d *Daemon) defaultHiredAgent() string {
-	if agents := d.app.Agents(); agents != nil {
-		if hired := agents.Hired(); len(hired) > 0 {
-			return hired[0].Meta.Name
+// mailboxKeeper 信箱负责人（大秘）：固定默认名 assistant，注册表验证存在性；
+// 注册表里没有 assistant 时回退取注册表首员代为收信。daemon 只把通知送到人，
+// 不再隐式挑「第一个已雇佣」——收信职责落在谁头上是明确的、可从注册表追溯的。
+func (d *Daemon) mailboxKeeper() string {
+	agents := d.app.Agents()
+	if agents == nil {
+		return ""
+	}
+	list := agents.List()
+	if len(list) == 0 {
+		return ""
+	}
+	for _, a := range list {
+		if a.Meta.Name == "assistant" {
+			return "assistant"
 		}
 	}
-	return ""
+	return list[0].Meta.Name
 }
 
-// wakeForMail 来信处置入队：把信渲染为本机智能体的开工内容，交 Scheduler 排期。
-// 智能体是信的第一读者，由它判断来信意图并处置；信件编号贯穿回信对账。
-// 两路语义（2026-10-21 定案：Mailer 只管通信，执行主体收敛到 Scheduler）：
-//   - 任务信（deadLine 非空）：排到截止时刻开工，日历可见——What=信体、Who=管家、When=dead_line
-//   - 普通信（告知/问候/对账）：收信即办，约 10 秒后拉起
-func (d *Daemon) wakeForMail(fromName, subject, body, uid, inReplyTo, deadLine string) {
-	agent := d.defaultHiredAgent()
+// wakeForMail 来信通知入队：信落本机档后只做一件事——给信箱负责人追加一条
+// 下一秒执行的通知任务（固定模板，不含信件语义）。谁收、何时办、怎么办由
+// 负责人读信后自行判断（组织架构、用户职责、个性化规则都在它的会话侧），
+// 机制不预判处置方式；截止时刻等信封字段原样留档，由负责人读信自查。
+func (d *Daemon) wakeForMail(uid string) {
+	agent := d.mailboxKeeper()
 	if agent == "" {
-		d.logger.Warn("收到组织来信但本机没有已雇佣的智能体，暂存待读", "uid", uid)
+		d.logger.Warn("收到组织来信但智能体注册表为空，暂存待读", "uid", uid)
 		return
 	}
-	var sb strings.Builder
-	sb.WriteString("【组织来信】\n")
-	fmt.Fprintf(&sb, "寄件人：%s\n主题：%s\n信件编号：%s\n", fromName, subject, uid)
-	if inReplyTo != "" {
-		fmt.Fprintf(&sb, "这是对信件 %s 的回信。\n", inReplyTo)
-	}
-	if deadLine != "" {
-		fmt.Fprintf(&sb, "截止时刻：%s（寄件人要求在此之前办结）\n", deadLine)
-	}
-	sb.WriteString("\n正文：\n")
-	sb.WriteString(body)
-	sb.WriteString("\n\n请判断这封信要你做什么：需要动手的事，现在着手做；需要本机主人知晓或裁决的，清楚转告并等指示；")
-	fmt.Fprintf(&sb, "事情办完后务必回信汇报（命令：mindx mail reply %s \"汇报内容\"），让寄件人知道结果。", uid)
-
-	// 截止时刻解析失败或已过期（信在信箱躺过了期限）按普通信处理：
-	// 立即开工总好过生成一条永不触发的死任务
-	var at time.Time
-	if deadLine != "" {
-		if t, err := time.Parse(time.RFC3339, deadLine); err == nil && t.After(time.Now()) {
-			at = t
-		}
-	}
-	if err := d.enqueueOneJobAt(agent, sb.String(), at); err != nil {
-		d.logger.Warn("来信开工入队失败", "uid", uid, "error", err.Error())
+	if err := d.enqueueOneJobNow(agent, fmt.Sprintf("你有新的企业来信，id 为：%s，请查收。", uid)); err != nil {
+		d.logger.Warn("来信通知入队失败", "uid", uid, "agent", agent, "error", err.Error())
 	} else {
-		if deadLine != "" && !at.IsZero() {
-			d.logger.Info("任务信已按截止时刻排期", "uid", uid, "agent", agent, "dead_line", deadLine)
-		} else {
-			d.logger.Info("来信已叫醒智能体处置", "uid", uid, "agent", agent)
-		}
+		d.logger.Info("来信已通知信箱负责人", "uid", uid, "agent", agent)
 	}
 }
 
-// handleMailDeliver 直连投递入站（mail.deliver，免握手白名单）：
-// 寄件方机器把信封直接推到本机。去重（与轮询共档）→ 落档 → 同一套 Scheduler 处置。
+// handleMailDeliver 直连投递入站（mail.deliver）：一期停用（已移出免握手白名单，
+// 且原实现无发信方身份核验）。handler 与落档逻辑保留，待二期带令牌核验重接线。
 func (d *Daemon) handleMailDeliver(_ context.Context, params json.RawMessage) (any, error) {
 	var p struct {
 		OrgSlug     string `json:"org_slug"`
@@ -198,7 +181,7 @@ func (d *Daemon) handleMailDeliver(_ context.Context, params json.RawMessage) (a
 	}); err != nil {
 		return nil, fmt.Errorf("信件留档失败: %w", err)
 	}
-	d.wakeForMail(fromName, p.Subject, p.Body, p.UID, p.InReplyTo, p.DeadLine)
+	d.wakeForMail(p.UID)
 	return map[string]string{"status": "ok"}, nil
 }
 

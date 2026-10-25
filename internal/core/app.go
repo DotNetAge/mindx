@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -1028,23 +1027,15 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		}
 	}
 
-	// Register SendMessage tool (macOS only).
-	if runtime.GOOS == "darwin" {
-		msgTool := mindxtools.NewSendMessage()
-		if err := rt.RegisterTool(msgTool); err != nil {
-			a.logger.Warn("createRuntime: 注册 SendMessage 失败", "agent", agentName, "error", err)
-		} else {
-			a.logger.Info("createRuntime: SendMessage 注册成功", "agent", agentName)
-		}
-	}
-
-	// Register UI 呈现三工具（Agent-Driven UI 命令通道）：广播回调由 Daemon 注入，
+	// Register UI 呈现工具组（Agent-Driven UI 命令通道）：广播回调由 Daemon 注入，
 	// 未注入（TUI 等无 daemon 场景）不注册，避免 Agent 调用无人执行的命令。
+	// Notify（界面通知）与 Open/Visit/TerminalRun 共用同一广播通道。
 	if a.uiBroadcast != nil {
 		uiTools := []tools.FuncTool{
 			mindxtools.NewOpen(a.uiBroadcast),
 			mindxtools.NewVisit(a.uiBroadcast),
 			mindxtools.NewTerminalRun(a.uiBroadcast),
+			mindxtools.NewNotify(a.uiBroadcast),
 		}
 		for _, t := range uiTools {
 			if err := rt.RegisterTool(t); err != nil {

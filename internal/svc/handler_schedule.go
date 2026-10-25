@@ -245,10 +245,9 @@ func (d *Daemon) handleScheduleJobCancel(_ context.Context, params json.RawMessa
 	return map[string]string{"status": "cancelled"}, nil
 }
 
-// enqueueOneJobAt 统一入队口：at 为零值 ≈ 10 秒后开工（普通信/即时场景），
-// 非零 = 指定时刻开工（任务信按截止时刻排期）。调度器是唯一的执行主体：
-// 雇佣校验、一次性条目生成、后台拉起、留痕全走既有 Scheduler 通路。
-func (d *Daemon) enqueueOneJobAt(agent, content string, at time.Time) error {
+// enqueueOneJobNow 统一入队口：追加一条下一秒级执行的一次性任务。调度器是
+// 唯一的执行主体：雇佣校验、一次性条目生成、后台拉起、留痕全走既有 Scheduler 通路。
+func (d *Daemon) enqueueOneJobNow(agent, content string) error {
 	if d.schedulerDB == nil {
 		return fmt.Errorf("本机调度器未就绪，无法叫醒智能体")
 	}
@@ -262,10 +261,9 @@ func (d *Daemon) enqueueOneJobAt(agent, content string, at time.Time) error {
 			return fmt.Errorf("智能体 %q 尚未雇佣，无法开工", agent)
 		}
 	}
-	// 即时场景给 10 秒余量：watchLoop 重载间隔 5 秒，留一倍余量避免恰好在重载间隙被跳过
-	if at.IsZero() {
-		at = time.Now().Add(10 * time.Second)
-	}
+	// 下一秒执行，通知时效优先。watchLoop 重载间隔 5 秒，恰逢重载间隙是否
+	// 会跳过 OneShot 条目属实现期验证点（重载即重读任务库，理论上不丢）。
+	at := time.Now().Add(1 * time.Second)
 	scheduledAt := at.Format(time.RFC3339)
 	cronExpr, err := scheduler.OneShotCron(scheduledAt, time.Now())
 	if err != nil {

@@ -13,16 +13,12 @@ import (
 // ---------------------------------------------------------------------------
 // M9 组织运行面：信件派发器（daemon 运行期后台循环）。
 //
-// 两项职责：
-//  1. 地址上报：周期性向各组织登记本机私网可达地址，供直属上级/下级直连投递
-//     （秒达路径）；掉线后地址由服务端按更新时间判定过期，信件自然走信箱兜底。
-//  2. 收件箱轮询：周期性拉取服务端信箱里的信（兜底路径），去重落档后叫醒
-//     本机智能体处置。直连已送达的信在本地留档去重，不会重复叫醒。
-//
-// 入站直投口 mail.deliver 与出站投递接力在 handler_mail.go；本文件只管后台节奏。
+// 职责：收件箱轮询——周期性拉取服务端信箱里的信，去重落档后通知信箱负责人。
+// 直连秒达路径（地址上报 + mail.deliver 直投口）一期停用；二期重接线时恢复
+// 地址上报，并给直投口补发信方令牌经服务端内省核验直属上下级。
 // ---------------------------------------------------------------------------
 
-// mailPollInterval 收件箱轮询间隔（服务端压力与时效的折衷；直连投递不依赖本循环）。
+// mailPollInterval 收件箱轮询间隔（服务端压力与时效的折衷；收信唯一通道）。
 const mailPollInterval = 60 * time.Second
 
 // subscriptionWarned 已提示过「组织服务未开通」的组织（每进程一次，避免轮询刷屏）。
@@ -51,10 +47,10 @@ func (d *Daemon) startMailLoop(ctx context.Context) {
 	}()
 }
 
-// mailLoopOnce 一轮派发：逐个正常组织上报地址、拉取收件箱并分发。
+// mailLoopOnce 一轮派发：逐个正常组织拉取收件箱并分发。
 func (d *Daemon) mailLoopOnce() {
 	if d.app == nil || d.app.MarketAuthToken() == "" {
-		return // 未登录资源社区：无信可拉，也无地址可报
+		return // 未登录资源社区：无信可拉
 	}
 	orgs, err := d.app.Market().MeOrgs()
 	if err != nil {
@@ -64,10 +60,6 @@ func (d *Daemon) mailLoopOnce() {
 	for _, org := range orgs {
 		if org.Status != "active" {
 			continue
-		}
-		// 地址上报（幂等覆盖）：供上级/下级直连投递前寻址
-		if err := d.app.Market().ReportOrgEndpoint(org.Slug, detectLANIP(), d.daemonPort()); err != nil {
-			d.warnOrgBlocked(org.Slug, "地址上报", err)
 		}
 		// 收件箱轮询（取走即回执：服务端标记已投递）
 		mails, err := d.app.Market().TakeOrgMailInbox(org.Slug)
@@ -96,7 +88,7 @@ func (d *Daemon) warnOrgBlocked(orgSlug, action string, err error) {
 	d.logger.Debug("mail: "+action+"未完成", "org", orgSlug, "error", err.Error())
 }
 
-// receivePolledMail 接收一封轮询拉到的信：去重（直连已收）→ 落档 → 叫醒智能体。
+// receivePolledMail 接收一封轮询拉到的信：去重 → 落档 → 通知信箱负责人。
 func (d *Daemon) receivePolledMail(orgSlug string, m *bundle.OrgMail) {
 	if m == nil || d.mailSeen(m.UID) {
 		return
@@ -110,7 +102,7 @@ func (d *Daemon) receivePolledMail(orgSlug string, m *bundle.OrgMail) {
 		d.logger.Warn("mail: 信件留档失败", "uid", m.UID, "error", err.Error())
 		return
 	}
-	d.wakeForMail(fromName, m.Subject, m.Body, m.UID, m.InReplyTo, m.DeadLine)
+	d.wakeForMail(m.UID)
 }
 
 // memberNameOf 按编号反查成员显示名（寄件人名字展示用；查不到回退编号写法）。

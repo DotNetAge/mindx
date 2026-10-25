@@ -168,7 +168,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"schedule.del":                       r.daemon.handleScheduleDelete,
 		"schedule.job_cancel":                r.daemon.handleScheduleJobCancel,
 
-		// 组织信箱（M9 跨机器派工与汇报；mail.deliver 是入站口，见 openMethods 白名单）
+		// 组织信箱（M9 跨机器派工与汇报；mail.deliver 直投口一期停用，handler 保留待二期重接线）
 		"mail.send":         r.daemon.handleMailSend,
 		"mail.deliver":      r.daemon.handleMailDeliver,
 		"mail.reply":        r.daemon.handleMailReply,
@@ -235,15 +235,14 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 
 // openMethods 免握手白名单：device.handshake 是接入入口（自带令牌/批准闸）；
 // server.version 供对方连前探测兼容；channel.bootstrap 与 channel.verify 是
-// 手机端引导入口（手机链路自带同意闸 + 本地短码双重把关）；mail.deliver 是
-// 组织来信的直投口——防滥用依据：方法内部必须凭发信方访问令牌经服务端内省
-// 核验「直属上级/下级」关系才落档，伪造者拿不出有效令牌，且收信仅入本地留档。
+// 手机端引导入口（手机链路自带同意闸 + 本地短码双重把关）。mail.deliver
+// 直投口一期停用（原实现无身份核验）：已移出本白名单，须握手后才能调用；
+// 二期重接线时补发信方令牌经服务端内省核验后再回白名单。
 var openMethods = map[string]bool{
 	"device.handshake":  true,
 	"server.version":    true,
 	"channel.bootstrap": true,
 	"channel.verify":    true,
-	"mail.deliver":      true,
 }
 
 // managerMethods 管理面方法（PAT 作用域分层：远程设备禁调，仅本机直通可用）。

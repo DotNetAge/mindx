@@ -68,8 +68,8 @@ var ToolDescriptors = map[string]ToolDescriptor{
 	"TeamList":     {NodeType: "tool.team_ops", GroupKey: ptr(GroupTeamQuery)},
 	"TeamGetTasks": {NodeType: "tool.team_ops", GroupKey: ptr(GroupTeamQuery)},
 	// 定时/通知
-	"Cron":        {NodeType: "tool.cron", GroupKey: ptr(GroupSys)},
-	"SendMessage": {NodeType: "tool.notify", GroupKey: ptr(GroupSys)},
+	"Cron":   {NodeType: "tool.cron", GroupKey: ptr(GroupSys)},
+	"Notify": {NodeType: "tool.notify", GroupKey: ptr(GroupSys)},
 }
 
 // TaskUpsertTools TaskCreate/Update 按 taskId 实体幂等 upsert（归一规则 3），不落工具节点。
