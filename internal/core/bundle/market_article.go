@@ -115,15 +115,8 @@ func (m *MarketClient) articleJSONOpen(method, path string, body any, out any) e
 			}
 			return fmt.Errorf("当前社区版本尚未开放文章功能，请稍后再试")
 		}
-		var e struct {
-			Error struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-		if json.Unmarshal(data, &e) == nil && e.Error.Message != "" {
-			return fmt.Errorf("%s", e.Error.Message)
-		}
-		return fmt.Errorf("请求失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(data)))
+		// 非 404 错误：透出服务端人话 message（回落见 apiErrorMessage）。
+		return apiErrorMessage(data, resp.StatusCode)
 	}
 	if out != nil && len(data) > 0 {
 		if err := json.Unmarshal(data, out); err != nil {

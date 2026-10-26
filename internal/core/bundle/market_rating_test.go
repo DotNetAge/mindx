@@ -59,7 +59,7 @@ func newRatingFixture(t *testing.T, ratingStatus int, bindMigrated int64) *ratin
 	})
 	mux.HandleFunc("/api/v1/me", func(w http.ResponseWriter, r *http.Request) {
 		record(w, r, http.StatusOK,
-			`{"id":1,"provider":"github","login":"octo","nick_name":"Octo","points":0,"tos_accepted":true}`)
+			`{"id":"058f7dda-654d-4725-880c-91206b27460c","provider":"github","login":"octo","nick_name":"Octo","points":0,"tos_accepted":true}`)
 	})
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
@@ -237,7 +237,7 @@ func TestMeAndBindValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Me() error = %v", err)
 	}
-	if u.Login != "octo" || u.Provider != "github" || u.ID != 1 {
-		t.Errorf("用户信息 = %+v, want octo/github/1", u)
+	if u.Login != "octo" || u.Provider != "github" || u.ID != "058f7dda-654d-4725-880c-91206b27460c" {
+		t.Errorf("用户信息 = %+v, want octo/github/uuid", u)
 	}
 }

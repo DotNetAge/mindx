@@ -1,6 +1,7 @@
 package bundle
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,7 +28,8 @@ type InstallOptions struct {
 //   - Skill 包：skills/<name>/ → 全局库；
 //   - Team 包：team/ → teams/<name>/；包内 agents/<n>/ 逐成员按 Agent 包规则落位
 //     （整队招聘：团队与成员一次装齐，落地后恢复纯引用）；
-//   - 同名冲突默认拒绝（返回错误），由界面确认后带 Overwrite 重试。
+//   - 同名冲突默认拒绝（返回错误），由界面确认后带 Overwrite 重试；
+//     但包内容与盘上逐字节一致（未修改的重复安装）时静默放行，不要求确认。
 //
 // 全量条目先读入内存并完成冲突预检后才写盘，避免"写一半失败"的中间态。
 // 调用方负责安装后的注册表重载（ReloadAgents / ReloadTeams / ReloadSkills）与运行时失效。
@@ -69,21 +71,22 @@ func installAgent(entries []zipEntry, manifest *Manifest, opts InstallOptions) (
 	agentDir := filepath.Join(opts.AgentsDir, strings.ToLower(manifest.Name))
 	overwritten := false
 
+	// 全局库名集合（决定包内技能落全局还是 Agent 级）
+	globalNames, err := dirNames(opts.GlobalDir)
+	if err != nil {
+		return nil, err
+	}
+
 	// 冲突预检：目标 Agent 已存在时默认拒绝（包内技能无冲突——同名落 Agent 级、
-	// 不同名进全局库，规则本身消除了技能层的同名写入冲突）
+	// 不同名进全局库，规则本身消除了技能层的同名写入冲突）；
+	// 盘上内容与包逐字节一致（未修改的重复安装）时静默放行
 	if _, err := os.Stat(agentDir); err == nil {
-		if !opts.Overwrite {
+		if !opts.Overwrite && !agentPrefixContentIdentical(entries, zipPrefixAgent, agentDir, opts.GlobalDir, globalNames) {
 			return nil, fmt.Errorf("已存在同名智能体 %q，如需覆盖请在界面中确认后重试", manifest.Name)
 		}
 		overwritten = true
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("检查智能体目录失败：%w", err)
-	}
-
-	// 全局库名集合（决定包内技能落全局还是 Agent 级）
-	globalNames, err := dirNames(opts.GlobalDir)
-	if err != nil {
-		return nil, err
 	}
 
 	result := &InstallResult{Kind: KindAgent, Name: manifest.Name, Overwritten: overwritten}
@@ -101,7 +104,8 @@ func installAgent(entries []zipEntry, manifest *Manifest, opts InstallOptions) (
 
 // installTeam 展开 Team 分发包（整队招聘）：team/TEAM.md → teams/<name>/，
 // 包内 agents/<n>/ 逐成员按 Agent 包规则落位（本体直落、技能按全局库同名分流）。
-// 冲突预检：团队目录或任一成员 Agent 目录已存在 → 默认拒绝（一次预检全部条目）。
+// 冲突预检：团队目录或任一成员 Agent 目录已存在 → 默认拒绝（一次预检全部条目）；
+// 团队与全部成员的盘上内容与包逐字节一致（未修改的重复招募）时静默放行。
 func installTeam(entries []zipEntry, manifest *Manifest, opts InstallOptions) (*InstallResult, error) {
 	if strings.TrimSpace(opts.TeamsDir) == "" {
 		return nil, fmt.Errorf("安装 Team 分发包需要指定 teams 目录")
@@ -126,28 +130,44 @@ func installTeam(entries []zipEntry, manifest *Manifest, opts InstallOptions) (*
 		return nil, fmt.Errorf("团队包清单的负责人 %q 不在包内成员中，包不完整", manifest.Leader)
 	}
 
-	// 冲突预检：团队目录与全部成员 Agent 目录一次检完（避免写一半才发现冲突）
+	// 冲突预检：团队目录与全部成员 Agent 目录一次检完（避免写一半才发现冲突）。
+	// 盘上内容与包逐字节一致（未修改的重复招募）时静默放行，不要求确认
 	teamDir := filepath.Join(opts.TeamsDir, strings.ToLower(manifest.Name))
 	overwritten := false
 	conflict := func(existing, label string) error {
 		return fmt.Errorf("已存在同名%s %q，如需覆盖请在界面中确认后重试", label, existing)
 	}
+	teamExists := false
 	if _, err := os.Stat(teamDir); err == nil {
-		if !opts.Overwrite {
-			return nil, conflict("团队", manifest.Name)
-		}
-		overwritten = true
+		teamExists = true
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("检查团队目录失败：%w", err)
 	}
+	memberExists := make(map[string]bool)
+	anyMemberExists := false
 	for _, name := range sortedNames(packedAgents) {
-		if _, err := os.Stat(filepath.Join(opts.AgentsDir, strings.ToLower(name))); err == nil {
-			if !opts.Overwrite {
-				return nil, conflict("智能体", name)
-			}
-			overwritten = true
-		} else if !os.IsNotExist(err) {
+		switch _, err := os.Stat(filepath.Join(opts.AgentsDir, strings.ToLower(name))); {
+		case err == nil:
+			memberExists[name] = true
+			anyMemberExists = true
+		case !os.IsNotExist(err):
 			return nil, fmt.Errorf("检查智能体目录失败：%w", err)
+		}
+	}
+	if teamExists || anyMemberExists {
+		if opts.Overwrite {
+			overwritten = true
+		} else if teamExists && anyMemberExists && teamUnmodified(entries, teamDir, packedAgents, opts) {
+			overwritten = true
+		} else {
+			if teamExists {
+				return nil, conflict("团队", manifest.Name)
+			}
+			for _, name := range sortedNames(packedAgents) {
+				if memberExists[name] {
+					return nil, conflict("智能体", name)
+				}
+			}
 		}
 	}
 
@@ -229,6 +249,75 @@ func installAgentDir(entries []zipEntry, prefix, agentDir, globalDir string, glo
 		}
 	}
 	return nil
+}
+
+// teamUnmodified 判断团队包与盘上现状是否完全一致（本地未修改过的同一份包）：
+// TEAM.md 与全部成员 Agent 内容（本体文件 + 技能按落点分流后的最终文件）逐字节比对。
+// 任一文件缺失或不一致 → 视为已修改，走正常冲突确认路径。
+func teamUnmodified(entries []zipEntry, teamDir string, packedAgents map[string]bool, opts InstallOptions) bool {
+	globalNames, err := dirNames(opts.GlobalDir)
+	if err != nil {
+		return false
+	}
+	docSeen := false
+	for _, e := range entries {
+		if e.Name == zipPathTeamDoc {
+			if !fileMatches(filepath.Join(teamDir, teamDocFileName), e.Content) {
+				return false
+			}
+			docSeen = true
+			break
+		}
+	}
+	if !docSeen {
+		return false // 包不完整，走正常冲突路径
+	}
+	for _, name := range sortedNames(packedAgents) {
+		agentDir := filepath.Join(opts.AgentsDir, strings.ToLower(name))
+		if !agentPrefixContentIdentical(entries, zipPrefixAgents+name+"/", agentDir, opts.GlobalDir, globalNames) {
+			return false
+		}
+	}
+	return true
+}
+
+// agentPrefixContentIdentical 判断 zip 前缀 prefix 之下、installAgentDir 将写入的
+// 每个文件与盘上现有内容是否逐字节一致（与 installAgentDir 同一套落点分流规则：
+// 本体文件直落 agentDir，技能按全局库同名落 agentDir/skills 或全局库）。
+// 盘上多出的文件不参与判断（install 不会删除它们）。
+func agentPrefixContentIdentical(entries []zipEntry, prefix, agentDir, globalDir string, globalNames map[string]bool) bool {
+	skillLevel := prefix + zipPrefixSkills
+	for _, e := range entries {
+		switch {
+		case e.Name == prefix+identityFileName || e.Name == prefix+soulFileName:
+			rel := strings.TrimPrefix(e.Name, prefix)
+			if !fileMatches(filepath.Join(agentDir, filepath.FromSlash(rel)), e.Content) {
+				return false
+			}
+		case strings.HasPrefix(e.Name, skillLevel):
+			rest := strings.TrimPrefix(e.Name, skillLevel)
+			skillName, rel, ok := strings.Cut(rest, "/")
+			if !ok || skillName == "" || rel == "" {
+				continue // 技能目录级条目，跳过
+			}
+			var dest string
+			if globalNames[skillName] {
+				dest = filepath.Join(agentDir, "skills", skillName, filepath.FromSlash(rel))
+			} else {
+				dest = filepath.Join(globalDir, skillName, filepath.FromSlash(rel))
+			}
+			if !fileMatches(dest, e.Content) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// fileMatches 盘上文件存在且内容与期望逐字节一致。
+func fileMatches(path string, content []byte) bool {
+	existing, err := os.ReadFile(path)
+	return err == nil && bytes.Equal(existing, content)
 }
 
 // installSkill 展开 Skill 分发包（直接进全局库）。

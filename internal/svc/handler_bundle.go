@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/DotNetAge/mindx/internal/core/bundle"
 	"github.com/DotNetAge/mindx/pkg/rpc"
@@ -209,8 +210,9 @@ func (d *Daemon) handleTeamImport(_ context.Context, params json.RawMessage) (an
 }
 
 // marketPackageDTO 是 market.list 响应的包条目投影：bundle.MarketPackage 的
-// JSON tag 为 snake_case（对齐 COS 清单格式），而前端契约（MarketPackageInfo）
-// 为 camelCase，此处逐字段转换对齐（skillNames 等映射字段的前端读取键）。
+// JSON tag 为 snake_case（对齐 COS 清单格式），现役消费方为 mindx-work 市场
+// 插件（MarketPkg，snake_case），字段键与之逐一对齐（skillNames 例外——
+// 两个前端的历史读取键同为 camelCase，保持不变）。
 type marketPackageDTO struct {
 	Kind string `json:"kind"`
 	Name string `json:"name"`
@@ -231,7 +233,7 @@ type marketPackageDTO struct {
 	File        string            `json:"file"`
 	Sha256      string            `json:"sha256"`
 	Size        int64             `json:"size,omitempty"`
-	DownloadURL string            `json:"downloadUrl,omitempty"`
+	DownloadURL string            `json:"download_url,omitempty"`
 	// 市场信号（§1/§2：下载计数与评分聚合，分页契约只增不破坏）
 	DownloadCnt int64   `json:"download_count,omitempty"`
 	RatingAvg   float64 `json:"rating_avg,omitempty"`
@@ -243,7 +245,7 @@ type marketPackageDTO struct {
 	License     string   `json:"license,omitempty"`
 	Permissions []string `json:"permissions,omitempty"`
 	Fingerprint string   `json:"fingerprint,omitempty"`
-	PublishedAt string   `json:"publishedAt,omitempty"`
+	PublishedAt string   `json:"published_at,omitempty"`
 	// 衍生谱系（§4）：卡片「进化自 XXX」小字（原创不透出）
 	DerivedFrom *bundle.DerivedRef `json:"derived_from,omitempty"`
 }
@@ -369,6 +371,7 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 	if p.Name == "" || (p.Kind != "agent" && p.Kind != "skill" && p.Kind != "team") {
 		return nil, fmt.Errorf("kind（agent/skill/team）与 name 均为必填")
 	}
+	t0 := time.Now()
 
 	// 单包定位：服务端详情 API 优先（download_url 直连），全量清单回退（过渡兼容）；
 	// org_slug 非空时定位该组织专用源中的包（仅本人在册组织可见）
@@ -383,11 +386,13 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 	if err != nil {
 		return nil, err
 	}
+	tDetail := time.Since(t0)
 
 	pkgPath, err := d.app.Market().Download(*target)
 	if err != nil {
 		return nil, err
 	}
+	tDownload := time.Since(t0)
 
 	installOpts := bundle.InstallOptions{
 		GlobalDir: d.app.Skills().GlobalDir(),
@@ -402,6 +407,7 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 	if err != nil {
 		return nil, err
 	}
+	tInstall := time.Since(t0)
 
 	// 重载与失效逻辑与本地导入一致
 	if installed.Kind == bundle.KindAgent || installed.Kind == bundle.KindTeam {
@@ -419,7 +425,14 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 	}
 	d.app.InvalidateRuntimes()
 
-	d.logger.Info("市场分发包安装完成", "kind", p.Kind, "name", p.Name)
+	d.logger.Info("市场分发包安装完成",
+		"kind", p.Kind, "name", p.Name,
+		"耗时", map[string]any{
+			"定位":   tDetail.String(),
+			"下载":   (tDownload - tDetail).String(),
+			"解包安装": (tInstall - tDownload).String(),
+			"重载失效": (time.Since(t0) - tInstall).String(),
+		})
 	// 安装即触发准备流程（agent 包携带的技能也落入全局库，一并准备）；
 	// skip_deps 显式跳过准备；auto_install 时安装命令免确认直接执行（CLI --auto 契约）
 	var prepares []skillPrepareResult

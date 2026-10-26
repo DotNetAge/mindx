@@ -352,7 +352,7 @@ func (d *Daemon) handleProviderFetchOpenRouterModels(_ context.Context, params j
 		return nil, fmt.Errorf("读取 OpenRouter 响应失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("调用 OpenRouter 失败（HTTP %d）：%s", resp.StatusCode, string(body))
+		return nil, upstreamErrorText("OpenRouter", resp.StatusCode, body)
 	}
 
 	var orResp struct {
@@ -778,7 +778,7 @@ func (d *Daemon) handleProviderFetchKimiModels(_ context.Context, params json.Ra
 		return nil, fmt.Errorf("读取 Kimi 响应失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("调用 Kimi 失败（HTTP %d）：%s", resp.StatusCode, string(body))
+		return nil, upstreamErrorText("Kimi", resp.StatusCode, body)
 	}
 
 	var kmResp struct {
@@ -861,7 +861,7 @@ func (d *Daemon) handleProviderFetchMiniMaxModels(_ context.Context, params json
 		return nil, fmt.Errorf("读取 MiniMax 响应失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("调用 MiniMax 失败（HTTP %d）：%s", resp.StatusCode, string(body))
+		return nil, upstreamErrorText("MiniMax", resp.StatusCode, body)
 	}
 
 	var mmResp struct {

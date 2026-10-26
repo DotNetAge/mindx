@@ -147,6 +147,44 @@ func TestInstallTeamConflict(t *testing.T) {
 	}
 }
 
+// TestInstallTeamReinstallUnmodified 未修改的重复招募静默放行；修改过的内容仍默认拒绝。
+func TestInstallTeamReinstallUnmodified(t *testing.T) {
+	_, agents, skills := newTestStores(t)
+	mustSaveAgent(t, agents, "lead-agent", "职责", nil)
+	team := mustWriteTeamDoc(t, filepath.Join(t.TempDir(), "teams"), "alpha", "lead-agent",
+		[]string{"lead-agent"}, "正文")
+	outPath := filepath.Join(t.TempDir(), "alpha.mindpkg")
+	if _, _, err := ExportTeam(team, agents, skills, outPath); err != nil {
+		t.Fatalf("导出失败: %v", err)
+	}
+
+	dstRoot := t.TempDir()
+	opts := InstallOptions{
+		AgentsDir: filepath.Join(dstRoot, "agents"),
+		TeamsDir:  filepath.Join(dstRoot, "teams"),
+		GlobalDir: filepath.Join(dstRoot, "skills"),
+	}
+	if _, err := Install(outPath, opts); err != nil {
+		t.Fatalf("首次安装失败: %v", err)
+	}
+	// 同一包重复招募：盘上内容未修改 → 静默放行
+	res, err := Install(outPath, opts)
+	if err != nil {
+		t.Fatalf("未修改的重复招募应静默放行: %v", err)
+	}
+	if !res.Overwritten {
+		t.Fatal("重复招募应标记 Overwritten")
+	}
+	// 修改盘上 TEAM.md（用户改过团队）→ 默认拒绝，仍走确认路径
+	doc := filepath.Join(opts.TeamsDir, "alpha", "TEAM.md")
+	if err := os.WriteFile(doc, []byte("modified"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Install(outPath, opts); err == nil {
+		t.Fatal("修改过的团队应默认拒绝")
+	}
+}
+
 // TestExportTeamMissingMembers 成员在本地缺失时告警不阻断；全部缺失时报错。
 func TestExportTeamMissingMembers(t *testing.T) {
 	_, agents, skills := newTestStores(t)

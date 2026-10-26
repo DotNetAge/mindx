@@ -198,7 +198,8 @@ type MarketUserIdentity struct {
 
 // MarketUser MindX 账号用户信息（服务端 GET /api/v1/me 响应）。
 type MarketUser struct {
-	ID        int64  `json:"id"`
+	// ID 用户唯一标识（TEXT UUID；2026-10-26 用户 ID 全链换 UUID 防枚举）
+	ID        string `json:"id"`
 	Provider  string `json:"provider"`
 	Login     string `json:"login"`
 	NickName  string `json:"nick_name"`
@@ -381,7 +382,7 @@ func (m *MarketClient) DeviceTrustConfirm(nonce string) (*TrustVerdict, error) {
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
-		return nil, fmt.Errorf("核验互信凭据失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return nil, apiErrorMessage(data, resp.StatusCode)
 	}
 	var out TrustVerdict
 	if err := json.NewDecoder(io.LimitReader(resp.Body, apiMaxSize)).Decode(&out); err != nil {
@@ -428,10 +429,10 @@ type MarketExperience struct {
 	AuthorAvatar string `json:"author_avatar,omitempty"`
 	// ParentID/Position 树状挂载（文章即节点）：ParentID 空 = 该空间树根层级，
 	// 前端按二者组树；清单服务端已透出，客户端随响应透传。
-	ParentID   *int64 `json:"parent_id,omitempty"`
-	Position   int64  `json:"position"`
-	CreatedAt  string `json:"created_at,omitempty"`
-	UpdatedAt  string `json:"updated_at,omitempty"`
+	ParentID  *int64 `json:"parent_id,omitempty"`
+	Position  int64  `json:"position"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
 }
 
 // ListExperiences 拉取经验库全量清单（会员 Agent 消费视角；q 为标题/摘要关键词）。
@@ -764,7 +765,7 @@ func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone, email *str
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("更新 Profile 失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return nil, apiErrorMessage(data, resp.StatusCode)
 	}
 	return m.Me()
 }
@@ -871,7 +872,7 @@ func (m *MarketClient) UpdateProfile(nickName string) (string, error) {
 		return "", err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("昵称更新失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return "", apiErrorMessage(data, resp.StatusCode)
 	}
 	var out struct {
 		NickName string `json:"nick_name"`
@@ -922,7 +923,7 @@ func (m *MarketClient) UploadAvatar(data []byte, filename string) (string, error
 		return "", err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("头像上传失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(respData)))
+		return "", apiErrorMessage(respData, resp.StatusCode)
 	}
 	var out struct {
 		AvatarURL string `json:"avatar_url"`
@@ -964,7 +965,7 @@ func (m *MarketClient) postRaw(u string, data []byte, headers map[string]string,
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fmt.Errorf("请求失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(respData)))
+		return apiErrorMessage(respData, resp.StatusCode)
 	}
 	if out != nil && len(respData) > 0 {
 		if err := json.Unmarshal(respData, out); err != nil {
@@ -1074,7 +1075,7 @@ func (m *MarketClient) Submissions(kind, name string) ([]Submission, error) {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("拉取收件箱失败（HTTP %d）：%s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return nil, apiErrorMessage(data, resp.StatusCode)
 	}
 	var body struct {
 		Submissions []Submission `json:"submissions"`
@@ -1201,8 +1202,7 @@ func (m *MarketClient) postJSON(url string, body any, out any) error {
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		msg := strings.TrimSpace(string(data))
-		return fmt.Errorf("请求失败（HTTP %d）：%s", resp.StatusCode, msg)
+		return apiErrorMessage(data, resp.StatusCode)
 	}
 	if out != nil && len(data) > 0 {
 		if err := json.Unmarshal(data, out); err != nil {
@@ -1234,8 +1234,7 @@ func (m *MarketClient) patchJSON(url string, body any, out any) error {
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		msg := strings.TrimSpace(string(data))
-		return fmt.Errorf("请求失败（HTTP %d）：%s", resp.StatusCode, msg)
+		return apiErrorMessage(data, resp.StatusCode)
 	}
 	if out != nil && len(data) > 0 {
 		if err := json.Unmarshal(data, out); err != nil {
@@ -1623,6 +1622,11 @@ func (m *MarketClient) Download(pkg MarketPackage) (string, error) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("下载分发包失败：响应状态 %d", resp.StatusCode)
+	}
+	// 官网把未知路径 fallback 成 200 的 index.html（如服务端缺下载路由），
+	// 提前识破给人话，避免落进大小比对报出不知所云的字节数
+	if ct := resp.Header.Get("Content-Type"); strings.Contains(ct, "text/html") {
+		return "", fmt.Errorf("服务端的安装包文件缺失，请稍后重试")
 	}
 
 	tmp, err := os.CreateTemp(filepath.Dir(dest), ".download-*")

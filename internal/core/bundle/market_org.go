@@ -54,7 +54,8 @@ func apiErrorMessage(data []byte, status int) error {
 	if err := json.Unmarshal(data, &body); err == nil && body.Error.Message != "" {
 		return fmt.Errorf("%s", body.Error.Message)
 	}
-	return fmt.Errorf("请求失败（HTTP %d）：%s", status, strings.TrimSpace(string(data)))
+	// 非 JSON 响应（网关/代理层错误页等）不透出原文，界面只给人话。
+	return fmt.Errorf("请求没有成功（HTTP %d），请稍后重试", status)
 }
 
 // OrgArchitectureGet 取组织架构树 XML 原文（GET /orgs/{slug}/architecture；

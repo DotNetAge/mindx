@@ -16,6 +16,28 @@ import (
 	"github.com/DotNetAge/mindx/pkg/rpc"
 )
 
+// upstreamErrorText 把上游模型服务（OpenRouter/Kimi/MiniMax/Ollama 等）的错误响应
+// 压成人话：优先取 JSON 的 error.message（OpenAI 风格）或 error 字符串（Ollama 风格），
+// 避免把原始 JSON 透出到界面（UI 文案军规）；解析不出时给人话回落，不透原文。
+func upstreamErrorText(provider string, status int, body []byte) error {
+	var probe struct {
+		Error json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(body, &probe); err == nil && len(probe.Error) > 0 {
+		var withMsg struct {
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(probe.Error, &withMsg) == nil && withMsg.Message != "" {
+			return fmt.Errorf("%s", withMsg.Message)
+		}
+		var asText string
+		if json.Unmarshal(probe.Error, &asText) == nil && asText != "" {
+			return fmt.Errorf("%s", asText)
+		}
+	}
+	return fmt.Errorf("调用%s失败（HTTP %d），请检查服务配置或稍后重试", provider, status)
+}
+
 func (d *Daemon) handleModelList(_ context.Context, _ json.RawMessage) (any, error) {
 	models := d.app.Models()
 	if models == nil {
@@ -302,7 +324,7 @@ func (d *Daemon) handleProviderFetchOllamaModels(_ context.Context, params json.
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("调用 Ollama 失败（HTTP %d）：%s", resp.StatusCode, string(body))
+		return nil, upstreamErrorText("Ollama", resp.StatusCode, body)
 	}
 
 	var ollamaResp struct {
@@ -350,7 +372,7 @@ func (d *Daemon) handleProviderFetchOllamaModelDetail(_ context.Context, params 
 		return nil, fmt.Errorf("读取 Ollama 响应失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("调用 Ollama 失败（HTTP %d）：%s", resp.StatusCode, string(body))
+		return nil, upstreamErrorText("Ollama", resp.StatusCode, body)
 	}
 
 	var showResp struct {

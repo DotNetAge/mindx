@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DotNetAge/goharness/skill"
@@ -426,20 +427,62 @@ func MissingBins(r *Requires) []string {
 	return missing
 }
 
+// 依赖探测结果缓存（进程级）：resolveBin / checkRuntimeVersion 的结果按名称缓存。
+// GUI 进程 PATH 阉割时二层探测会起 zsh 登录 shell（1-3 秒/次），全库重扫
+// （安装/装载技能）对同类依赖反复探测曾把一次安装拖到 20+ 秒；缓存后同类
+// 依赖一个进程只探一次。探测结果是环境属性，进程生命周期内不变，无失效问题。
+var depCache sync.Map // key: string, value: cachedDepResult
+
+type cachedDepResult struct {
+	path  string
+	verr  error // resolveBin 的错误
+	rtErr error // checkRuntimeVersion 的错误
+}
+
 // verifyDependencies 检查声明的运行时依赖是否满足。
 // 返回值为告警列表：依赖缺失 / 版本不满足时收集详细告警，不阻断技能注册。
-// r 为 nil 或全部满足时返回 nil。
+// r 为 nil 或全部满足时返回 nil。bins 与 runtime 探测并行执行（zsh 登录
+// shell 探测单次可达秒级，串行累加曾拖慢全库重扫），告警仍按声明顺序返回。
 func verifyDependencies(r *Requires) []string {
 	if r == nil {
 		return nil
 	}
-	var warnings []string
+	bins := make([]string, 0, len(r.Bins))
 	for _, bin := range r.Bins {
 		bin = strings.TrimSpace(bin)
-		if bin == "" {
-			continue
+		if bin != "" {
+			bins = append(bins, bin)
 		}
-		if _, err := resolveBin(bin); err != nil {
+	}
+
+	// 并行探测（顺序无关；告警按声明顺序回填）
+	binResults := make([]error, len(bins))
+	var wg sync.WaitGroup
+	for i, bin := range bins {
+		wg.Add(1)
+		go func(i int, bin string) {
+			defer wg.Done()
+			_, err := resolveBinCached(bin)
+			binResults[i] = err
+		}(i, bin)
+	}
+	rtResults := make([]error, len(r.Runtime))
+	keys := make([]string, 0, len(r.Runtime))
+	for runtime := range r.Runtime {
+		keys = append(keys, runtime)
+	}
+	for i := range keys {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			rtResults[i] = checkRuntimeVersionCached(keys[i], r.Runtime[keys[i]])
+		}(i)
+	}
+	wg.Wait()
+
+	var warnings []string
+	for i, bin := range bins {
+		if binResults[i] != nil {
 			warnings = append(warnings, fmt.Sprintf("必需的二进制文件 %q 未找到", bin))
 		}
 	}
@@ -452,12 +495,35 @@ func verifyDependencies(r *Requires) []string {
 			warnings = append(warnings, fmt.Sprintf("必需的环境变量 %q 未设置", key))
 		}
 	}
-	for runtime, constraint := range r.Runtime {
-		if err := checkRuntimeVersion(runtime, constraint); err != nil {
-			warnings = append(warnings, err.Error())
+	for i := range keys {
+		if rtResults[i] != nil {
+			warnings = append(warnings, rtResults[i].Error())
 		}
 	}
 	return warnings
+}
+
+// resolveBinCached 带进程级缓存的 resolveBin。
+func resolveBinCached(name string) (string, error) {
+	key := "bin:" + name
+	if v, ok := depCache.Load(key); ok {
+		c := v.(cachedDepResult)
+		return c.path, c.verr
+	}
+	path, err := resolveBin(name)
+	depCache.Store(key, cachedDepResult{path: path, verr: err})
+	return path, err
+}
+
+// checkRuntimeVersionCached 带进程级缓存的 checkRuntimeVersion（按运行时+约束缓存）。
+func checkRuntimeVersionCached(runtime, constraint string) error {
+	key := "rt:" + runtime + ":" + constraint
+	if v, ok := depCache.Load(key); ok {
+		return v.(cachedDepResult).rtErr
+	}
+	err := checkRuntimeVersion(runtime, constraint)
+	depCache.Store(key, cachedDepResult{rtErr: err})
+	return err
 }
 
 // resolveBin 三层查找链解析二进制真实路径。
@@ -642,7 +708,13 @@ func readRuntimeVersion(bin string) (string, error) {
 		args = []string{"--version"}
 	}
 
-	out, err := exec.Command(bin, args...).CombinedOutput()
+	// 超时保护：个别运行时（如 dotnet 首次冷启动）可能挂起数秒，拖死依赖检查
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, bin, args...).CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", fmt.Errorf("执行 %q 超时", bin)
+	}
 	if err != nil {
 		// 有些工具即使返回非零但版本信息已输出
 		if len(out) == 0 {
