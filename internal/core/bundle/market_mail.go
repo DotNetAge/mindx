@@ -114,8 +114,9 @@ func (m *MarketClient) ListOrgMailSent(orgSlug string) ([]*OrgMail, error) {
 	return body.Mails, nil
 }
 
-// OrgMemberCard 组织成员名片（写信收件人选择与成员名解析的数据源）。
+// OrgMemberCard 组织成员名片（写信收件人选择与成员名解析的数据源；member_id 供移除成员用）。
 type OrgMemberCard struct {
+	MemberID    int64  `json:"member_id"`
 	PersonaID   int64  `json:"persona_id"`
 	DisplayName string `json:"display_name"`
 	JobTitle    string `json:"job_title"`

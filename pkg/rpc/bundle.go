@@ -186,6 +186,66 @@ func (c *Client) MarketOrgs() (json.RawMessage, error) {
 	return c.CallWithTimeout("market.org.list", MarketOrgsListParams{})
 }
 
+// OrgMembers 在册成员名片清单（Slug 缺省 = 本机在册的第一个正常组织）。
+func (c *Client) OrgMembers(slug string) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.org.members", map[string]string{"slug": slug})
+}
+
+// OrgCreateParams 创建组织参数（名称 + 别名；创建者即所有者）。
+type OrgCreateParams struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+// OrgCreate 创建组织（POST /api/v1/orgs；创建者即所有者）。
+func (c *Client) OrgCreate(p OrgCreateParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.org.create", p)
+}
+
+// OrgArchGetParams 组织架构树读取参数（OrgSlug 缺省 = 本机在册的第一个正常组织）。
+type OrgArchGetParams struct {
+	OrgSlug string `json:"org_slug,omitempty"`
+}
+
+// OrgArchPublishParams 组织架构树发布参数（XML 为整树原文，服务端校验后整树替换）。
+type OrgArchPublishParams struct {
+	OrgSlug string `json:"org_slug,omitempty"`
+	XML     string `json:"xml"`
+}
+
+// OrgInviteParams 组织定向邀请参数（账号 = 可寻址账号：用户名/手机号/GitHub 名）。
+type OrgInviteParams struct {
+	OrgSlug  string `json:"org_slug,omitempty"`
+	Account  string `json:"account"`
+	JobTitle string `json:"job_title,omitempty"`
+}
+
+// OrgMemberRemoveParams 组织成员移除参数（软删 + 坐席解绑空出）。
+type OrgMemberRemoveParams struct {
+	OrgSlug  string `json:"org_slug,omitempty"`
+	MemberID int64  `json:"member_id"`
+}
+
+// OrgArchitectureGet 取组织架构树 XML 原文（大秘「构建组织」技能的数据源）。
+func (c *Client) OrgArchitectureGet(p OrgArchGetParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.org.architecture.get", p)
+}
+
+// OrgArchitecturePublish 发布/覆盖组织架构树 XML（整树替换，仅 owner/admin）。
+func (c *Client) OrgArchitecturePublish(p OrgArchPublishParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.org.architecture.publish", p)
+}
+
+// OrgInvite 按可寻址账号发定向邀请（员工随后 onboard 核销占座）。
+func (c *Client) OrgInvite(p OrgInviteParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.org.invite", p)
+}
+
+// OrgMemberRemove 移除单个在册成员。
+func (c *Client) OrgMemberRemove(p OrgMemberRemoveParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.org.member.remove", p)
+}
+
 func (c *Client) MarketInstall(kind, name string, overwrite, skipDeps, autoInstall bool) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.install", MarketInstallParams{Kind: kind, Name: name, Overwrite: overwrite, SkipDeps: skipDeps, AutoInstall: autoInstall})
 }

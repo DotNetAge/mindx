@@ -1,3 +1,11 @@
+---
+version: "1.1.0"
+pub_date: 2026-10-23
+sha: "10f926343b87d1fcf61ce8a415bcb1fda6f70a1d8349466bc51fb0624fb4988a"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # 2026-10-23 retrospect 规则增强-article 出口与知识三分流
 
 ## 定案

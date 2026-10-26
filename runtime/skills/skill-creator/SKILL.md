@@ -3,7 +3,7 @@ name: skill-creator
 description: 创建、审查和改进 MindX 技能。当用户要「创建技能、新增技能、写一个技能、优化技能、改进技能描述、审查技能质量、技能体检、重构 SKILL.md、技能进化、沉淀经验为技能」时使用；用户提到技能仓库、技能校验、渐进式披露或技能打包时也应主动使用。
 metadata:
   name_zh: 技能铸造师
-  version: 1.9.0
+  version: 1.10.0
   author: Ray
 ---
 
@@ -157,6 +157,7 @@ scope: <版本/平台限定>      # 版本敏感的资料必须填，其余可�
 - frontmatter 按「创建技能速查」模板写；description 用触发场景 + 触发词，禁功能介绍体。
 - 正文按骨架三段写：何时使用 = 触发场景清单；核心决策路由 = if/else 式、每条落到具体动作；纪律边界 = 禁令 + 失败模式三段式。
 - 权威资料全文进 references（frontmatter 规范见速查）；重活按脚本要点进 scripts。
+- 新建文件名一律英文 kebab-case（notes/ 履历除外）。
 
 ### 步骤 4：验证循环
 
@@ -201,7 +202,7 @@ mindx skill add <技能目录绝对路径> && mindx skill list
 
 **B. 机器校验**：逐个跑 `mindx skill validate --path`，全部结果分三类归档——硬错误（error 级全修）、依赖问题（引用断链用 `mindx/runtime/skills/retrospect/scripts/refcheck.py` 核查）、质量问题（size 超限、软化词、frontmatter 缺失逐条列）。**软化词告警逐条人工核对再动作**：词面匹配有误报（名词`建议`≠软化句式），误报判定的依据是语义而非词形。
 
-**C. 正文人工对照**：三层完整度、决策路由完整性（正常/失败/输入不全三路径都有路由）、references 关联（正文提到的文件实存）、scripts 路由（正文提到的脚本实存且可执行）、正文自足率（高频内容是否被错误下沉）。
+**C. 正文人工对照**：三层完整度、决策路由完整性（正常/失败/输入不全三路径都有路由）、references 关联（正文提到的文件实存）、scripts 路由（正文提到的脚本实存且可执行）、正文自足率（高频内容是否被错误下沉）、文件名语言（references/scripts/assets 英文 kebab-case，notes 履历除外）。
 
 **D. 报告分级输出**：硬错误/依赖问题/质量问题的分级清单，每条给出依据和修改方案；机械低风险项（如补 frontmatter）用户确认后直接修复，结构性手术（拆分下沉）需用户拍板。「同一规则被连续忽略时硬化」只适用于真规则被真忽略，不适用于词面误报。
 
@@ -219,6 +220,8 @@ mindx skill add <技能目录绝对路径> && mindx skill list
 └── notes/                # 进化履历：每次规则修正/增强一条
     └── YYYY-MM-DD-<skill>-规则{修正|增强}-<主题>.md
 ```
+
+- **文件名语言**：正文引用与工具消费的文件（references/、scripts/、assets/、evals/）文件名一律英文 kebab-case；中文文件名仅用于 notes/ 履历（其命名约定自带中文）。validate 不机检文件名语言，建文件时自查。
 
 ## 技能位置与进化
 

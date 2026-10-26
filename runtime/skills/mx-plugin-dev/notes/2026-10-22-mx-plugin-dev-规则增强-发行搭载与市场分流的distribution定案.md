@@ -1,3 +1,11 @@
+---
+version: "0.2.0"
+pub_date: 2026-10-22
+sha: "f9fd7200f00df2b9e4e37c69df43a1f9e4d5306baf7b3fd2f58fd05c7a7d57f0"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # 发行搭载与市场分流的 distribution 定案（glm）
 
 ## 2026-10-22 官方插件发行搭载与市场分流无标记字段（glm）

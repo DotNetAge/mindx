@@ -1,3 +1,11 @@
+---
+version: "1.4.4"
+pub_date: 2026-10-11
+sha: "70600cc80ab26d29b8b1236f58f6535dc007de47f0f047d96a17df29b93b9a40"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 ## 2026-10-11 references 元信息头改为 frontmatter 强制（doubao）
 
 - 问题：规则缺失——原「references 元信息头」是 markdown 引用行（`> 核验日期：... ｜ 来源：...`），无法作为机器可读的更新检查依据；用户要求"一切的引文都应该在 frontmatter 上加上出处(url)、更新日期"。

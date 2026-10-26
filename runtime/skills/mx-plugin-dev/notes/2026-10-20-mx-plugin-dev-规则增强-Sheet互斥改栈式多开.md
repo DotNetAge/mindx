@@ -1,3 +1,11 @@
+---
+version: "0.2.0"
+pub_date: 2026-10-20
+sha: "153d0d7be71f085c571346b0a2cbb4225724f133fc7ed3f28e789ea6abc081c7"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # Sheet 互斥单开改栈式多开（glm）
 
 ## 2026-10-20 Sheet 互斥单开不满足逐层返回（glm）

@@ -313,11 +313,11 @@ type MarketDevice struct {
 }
 
 // TrustTicket 同账号互信凭据（服务端 POST /devices/trust/start 下发）：
-// nonce 绑定本机登记设备身份（client_id）与账号（user_id），5 分钟内幂等可核验。
+// nonce 绑定本机登记设备身份（client_id）与账号（user_id，TEXT UUID），5 分钟内幂等可核验。
 type TrustTicket struct {
 	Nonce     string `json:"nonce"`
 	ClientID  string `json:"client_id"`
-	UserID    int64  `json:"user_id"`
+	UserID    string `json:"user_id"`
 	ExpiresIn int    `json:"expires_in"`
 }
 
@@ -342,15 +342,16 @@ func (m *MarketClient) DeviceTrustStart() (*TrustTicket, error) {
 
 // TrustVerdict 互信凭据核验结论材料：同账号判定在本地完成
 // （IssuerUserID == CallerUserID 即同账号；IssuerClientID 须与对端自报身份一致）。
+// 用户 ID 为 TEXT UUID（空串 = 未绑定）。
 type TrustVerdict struct {
-	IssuerUserID   int64  `json:"issuer_user_id"`
+	IssuerUserID   string `json:"issuer_user_id"`
 	IssuerClientID string `json:"issuer_client_id"`
-	CallerUserID   int64  `json:"caller_user_id"`
+	CallerUserID   string `json:"caller_user_id"`
 }
 
 // SameAccount 本地判定：凭据签发方与调用方是否同一账号（服务端背书双方身份）。
 func (v *TrustVerdict) SameAccount() bool {
-	return v.IssuerUserID != 0 && v.IssuerUserID == v.CallerUserID
+	return v.IssuerUserID != "" && v.IssuerUserID == v.CallerUserID
 }
 
 // DeviceTrustConfirm 核验对端出示的互信凭据，换回签发方与调用方双方身份：
@@ -425,8 +426,12 @@ type MarketExperience struct {
 	SkillName    string `json:"skill_name"`
 	AuthorName   string `json:"author_name,omitempty"`
 	AuthorAvatar string `json:"author_avatar,omitempty"`
-	CreatedAt    string `json:"created_at,omitempty"`
-	UpdatedAt    string `json:"updated_at,omitempty"`
+	// ParentID/Position 树状挂载（文章即节点）：ParentID 空 = 该空间树根层级，
+	// 前端按二者组树；清单服务端已透出，客户端随响应透传。
+	ParentID   *int64 `json:"parent_id,omitempty"`
+	Position   int64  `json:"position"`
+	CreatedAt  string `json:"created_at,omitempty"`
+	UpdatedAt  string `json:"updated_at,omitempty"`
 }
 
 // ListExperiences 拉取经验库全量清单（会员 Agent 消费视角；q 为标题/摘要关键词）。
@@ -512,6 +517,16 @@ func (m *MarketClient) getExperienceAt(prefix string, id int64) (*MarketExperien
 		return nil, fmt.Errorf("这篇文章不存在或已被删除")
 	}
 	return out.Experience, nil
+}
+
+// MoveExperience 挪挂载点 + 兄弟重排（PATCH /api/v1/experiences/{id}/position）：
+// parentID 空 = 挂回该空间根层级；siblings 为挪动完成后目标层级的完整有序 ID 列表
+// （含被挪文自身）。权限与防环由服务端裁决：组织树限文章作者本人或组织管理员，
+// 公共树会员一律拒绝（官方走管理通道）；挂载点不合法/兄弟清单不符返回 422，
+// 错误消息透传服务端的人话说明。
+func (m *MarketClient) MoveExperience(id int64, parentID *int64, siblings []int64) error {
+	body := map[string]any{"parent_id": parentID, "siblings": siblings}
+	return m.patchJSON(fmt.Sprintf("%s/experiences/%d/position", m.apiBase, id), body, nil)
 }
 
 // IdentityLinkStart 发起社区账号绑定（POST /api/v1/me/identities/link）：
@@ -1001,9 +1016,10 @@ func (m *MarketClient) publishTo(prefix, kind, name string, data []byte, version
 }
 
 // Submission 投递记录（收件箱条目，服务端 GET .../submissions 响应）。
+// FromUserID 为投递者用户 UUID（TEXT）。
 type Submission struct {
 	ID         int64  `json:"id"`
-	FromUserID int64  `json:"from_user_id"`
+	FromUserID string `json:"from_user_id"`
 	FromLogin  string `json:"from_login"`
 	Version    string `json:"version"`
 	Sha256     string `json:"sha256"`
@@ -1170,6 +1186,39 @@ func (m *MarketClient) postJSON(url string, body any, out any) error {
 		return err
 	}
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(buf))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	m.attachIdentity(req)
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		msg := strings.TrimSpace(string(data))
+		return fmt.Errorf("请求失败（HTTP %d）：%s", resp.StatusCode, msg)
+	}
+	if out != nil && len(data) > 0 {
+		if err := json.Unmarshal(data, out); err != nil {
+			return fmt.Errorf("解析响应失败：%w", err)
+		}
+	}
+	return nil
+}
+
+// patchJSON 通用 JSON PATCH（与 postJSON 同构：编码发出、非 2xx 映射为含状态的错误）。
+func (m *MarketClient) patchJSON(url string, body any, out any) error {
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}

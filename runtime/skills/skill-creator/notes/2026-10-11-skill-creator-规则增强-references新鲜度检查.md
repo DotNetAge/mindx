@@ -1,3 +1,11 @@
+---
+version: "1.4.2"
+pub_date: 2026-10-11
+sha: "7a3ae40ccccbb9650135efca0c0c8c2958ad07791b8385bfa2611aa5dabae257"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 ## 2026-10-11 新增「references 新鲜度检查」（skill-creator）
 
 - 问题：规则缺失——技能进化审查（步骤 C）覆盖引文断裂（refcheck 只查"引用是否存在"），但没有 references 内容新鲜度检查；领域知识持续变化（引擎 CLI/API/包名/标准），陈旧 references 会让技能持续"腐烂"，且"本地优先"策略使过时更难暴露（LLM 默认读本地旧资料不触发警告）。用户指出这是关键治理缺口。

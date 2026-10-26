@@ -1,3 +1,11 @@
+---
+version: "0.2.0"
+pub_date: 2026-10-25
+sha: "e98f8f19a69e6daae58f5f633792f5f28cba0c505540417a5502e650b0dfd484"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # 插件安装根双根分裂统一根迁移（glm）
 
 ## 2026-10-25 插件安装根双根分裂致 CLI 装包实例不可见（glm）

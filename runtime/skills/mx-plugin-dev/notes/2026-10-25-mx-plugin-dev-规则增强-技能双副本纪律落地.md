@@ -1,3 +1,11 @@
+---
+version: "0.2.0"
+pub_date: 2026-10-25
+sha: "ddb1e260d476ae00db1da7bcb33087c8d6ba780843f4c05e8546559d35af3de0"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # 技能双副本纪律落地（glm）
 
 ## 2026-10-25 规范 §12 双副本纪律空转（glm）

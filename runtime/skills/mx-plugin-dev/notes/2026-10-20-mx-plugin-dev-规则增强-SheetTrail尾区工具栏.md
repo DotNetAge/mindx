@@ -1,3 +1,11 @@
+---
+version: "0.2.0"
+pub_date: 2026-10-20
+sha: "42ccf5182e5bc45bce4a8f06fb28a6366dc82784ca217ae1cf4d37126a9b102c"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # Sheet 抽层尾区工具栏（glm）
 
 ## 2026-10-20 Sheet 抽层无尾区动作条（glm）

@@ -1,3 +1,11 @@
+---
+version: "0.2.0"
+pub_date: 2026-10-08
+sha: "76095196b41b10c881be33d6044c1fdf949cc466fcb4c4981b4f04be7451e0db"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # 外部插件闭环路径与安装根对齐（glm）
 
 ## 2026-10-08 按 SKILL 逐字执行外部插件闭环在第 3 步卡死（glm）

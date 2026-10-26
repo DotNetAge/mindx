@@ -60,7 +60,7 @@ func newPublishFixture(t *testing.T) *publishFixture {
 	})
 	mux.HandleFunc("/api/v1/packages/skill/demo/submissions", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			record(w, r, `{"submissions":[{"id":7,"from_user_id":2,"from_login":"dev-b","version":"0.3.0","sha256":"def","note":"修了个 bug","status":"pending","created_at":"2026-10-08T00:00:00Z"}]}`)
+			record(w, r, `{"submissions":[{"id":7,"from_user_id":"0a3f5b1e-6c2d-4a8b-9e1f-2b3c4d5e6f70","from_login":"dev-b","version":"0.3.0","sha256":"def","note":"修了个 bug","status":"pending","created_at":"2026-10-08T00:00:00Z"}]}`)
 			return
 		}
 		record(w, r, `{"submission_id":7,"version":"0.3.0","sha256":"def","created":true}`)

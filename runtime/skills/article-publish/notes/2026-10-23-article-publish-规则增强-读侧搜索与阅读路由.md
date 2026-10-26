@@ -1,3 +1,11 @@
+---
+version: "2.1.0"
+pub_date: 2026-10-23
+sha: "588dab76e812a77cc1ceb3913ae0de3548cee19c4e902b38bea61785c234fc9c"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 ## 2026-10-23 文章读侧（搜索/阅读）能力上线，技能只覆盖发布侧（glm）
 
 - 问题：规则缺失——服务端文章读侧上线（GET 统一详情入口、官网公开搜索、我的/组织搜索），本技能工作流只有发布链路；执行者被问到「搜文章/读文章」时无路由可走，会误判为不适用或绕道其他命令。CLI 同步新增 `market article read <slug>` 与 `market article list` 的 `--site/--org/--query` 三范围搜索。

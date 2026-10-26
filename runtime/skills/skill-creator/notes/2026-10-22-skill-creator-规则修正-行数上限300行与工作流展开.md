@@ -1,3 +1,11 @@
+---
+version: "1.10.0"
+pub_date: 2026-10-22
+sha: "119fc73748049fd5eb5685e8cb18e565d68e48a0fb2876fb0624ac3160819d48"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # 2026-10-22 skill-creator 规则修正：行数上限放宽至 300 行与创建工作流展开
 
 ## 触发

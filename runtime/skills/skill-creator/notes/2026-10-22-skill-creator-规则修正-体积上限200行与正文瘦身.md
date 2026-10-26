@@ -1,3 +1,11 @@
+---
+version: "1.7.0"
+pub_date: 2026-10-22
+sha: "8e30a43b6de23cb569cb99e2765084bf09b29039b43fb4888c3b0dc0ada67bf0"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # 2026-10-22 skill-creator 规则修正：体积上限 150→200 行 + 正文瘦身 596→121
 
 ## 触发

@@ -1,3 +1,11 @@
+---
+version: "0.2.0"
+pub_date: 2026-10-25
+sha: "75cdabc1f827b55d9d0b946adab687014f9334bbc88e4dd757ca3682ca7b41ce"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # 严格复扫误报归零（glm）
 
 ## 2026-10-25 严格复扫自报「归零」仍有遗漏（glm）

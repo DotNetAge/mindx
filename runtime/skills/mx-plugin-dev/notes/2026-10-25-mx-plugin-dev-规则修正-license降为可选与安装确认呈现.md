@@ -1,3 +1,11 @@
+---
+version: "0.2.0"
+pub_date: 2026-10-25
+sha: "94642c14d0c5e4b10235d19c703d2254fe7f265a6f9387050d8fae49154d0e6c"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # license 降为可选与安装确认呈现（glm）
 
 ## 2026-10-25 market-hello 加载被拒「license 不能为空」（glm）

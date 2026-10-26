@@ -1,3 +1,11 @@
+---
+version: "0.2.0"
+pub_date: 2026-10-20
+sha: "11a5637fc7c4286705c29427d3e7df66cc228e84b755db2b9bf73c3a07afea87"
+modifier: "Ray"
+modifier_id: "1"
+---
+
 # Overlay 弹窗分区与可调卡片（glm）
 
 ## 2026-10-20 Overlay 弹窗卡片可调但 references 未同步（glm）

@@ -27,7 +27,7 @@ modifier_id: "1"        # 修改人社区账号 id（字符串形式）
 ---
 ```
 
-**身份获取**：modifier / modifier_id 必须来自 CLI 实查（mw CLI 侧，禁止编造或沿用上次值）：`mw account`（待实现，见下）→ 返回 nick_name 与 id；mw 未就绪时临时用 `mindx market whoami --json`（取 `user.nick_name` 与 `user.id`）。**当前无社区账号时这两个属性留空（`modifier: ""` / `modifier_id: ""`），暂不强制登录**；有账号后不得沿用旧值，每次实查。
+**身份获取**：modifier / modifier_id 必须来自 CLI 实查（mw CLI 侧，禁止编造或沿用上次值）：`mw account --json` → `data.nick_name` 与 `data.id`（id 为字符串形式，直接可填 modifier_id）；mw 未就绪时临时用 `mindx market whoami --json`（取 `user.nick_name` 与 `user.id`，id 需转字符串）。**当前无社区账号时这两个属性留空（`modifier: ""` / `modifier_id: ""`），暂不强制登录**；有账号后不得沿用旧值，每次实查。
 
 ````markdown
 ## YYYY-MM-DD <一句话症状>（<agent_name>）

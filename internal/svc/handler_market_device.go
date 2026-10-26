@@ -239,3 +239,21 @@ func (d *Daemon) handleMarketExperienceGet(_ context.Context, params json.RawMes
 	}
 	return map[string]any{"experience": e}, nil
 }
+
+// handleMarketExperienceMove 挪挂载点 + 兄弟重排（树状挂载写通道；组织树限文章作者
+// 本人或组织管理员，公共树会员不可挪——权限与防环由市场服务端裁决）。
+// siblings 为挪动完成后目标层级的完整有序文章 ID 列表（含被挪文自身）。
+func (d *Daemon) handleMarketExperienceMove(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		ID       int64   `json:"id"`
+		ParentID *int64  `json:"parent_id"`
+		Siblings []int64 `json:"siblings"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil || p.ID <= 0 {
+		return nil, fmt.Errorf("缺少文章编号")
+	}
+	if err := d.app.Market().MoveExperience(p.ID, p.ParentID, p.Siblings); err != nil {
+		return nil, err
+	}
+	return map[string]any{"id": p.ID, "parent_id": p.ParentID}, nil
+}
