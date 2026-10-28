@@ -906,8 +906,8 @@ Examples:
 		if a.Date != "" {
 			fmt.Printf("日期：%s\n", a.Date)
 		}
-		if len(a.Tags) > 0 {
-			fmt.Printf("标签：%s\n", strings.Join(a.Tags, ", "))
+		if a.Tags != "" {
+			fmt.Printf("标签：%s\n", a.Tags)
 		}
 		if strings.TrimSpace(a.Summary) != "" {
 			fmt.Printf("摘要：%s\n", a.Summary)
@@ -998,7 +998,7 @@ Examples:
 			if summary == "" {
 				summary = "—"
 			}
-			tags := strings.Join(a.Tags, ", ")
+			tags := a.Tags
 			if tags == "" {
 				tags = "—"
 			}

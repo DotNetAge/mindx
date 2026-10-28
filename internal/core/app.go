@@ -114,7 +114,24 @@ type App struct {
 	marketPassword string
 }
 
-func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
+// AppOption DefaultApp 构造选项。
+type AppOption func(*appOptions)
+
+type appOptions struct {
+	consoleLog bool
+}
+
+// WithConsoleLog 控制是否向终端（stderr）输出日志。daemon 前台运行需要保留；
+// TUI 必须关闭：zap stderr 输出会穿透 bubbletea 备用屏，日志直接印在界面上。
+func WithConsoleLog(enabled bool) AppOption {
+	return func(o *appOptions) { o.consoleLog = enabled }
+}
+
+func DefaultApp(mindxConfig *MindxConfig, opts ...AppOption) (*App, error) {
+	o := appOptions{consoleLog: true}
+	for _, opt := range opts {
+		opt(&o)
+	}
 	settings := &Settings{}
 
 	logDir := settings.LogsDir()
@@ -128,7 +145,7 @@ func DefaultApp(mindxConfig *MindxConfig) (*App, error) {
 		MaxBackups: 7,
 		MaxAge:     30,
 		Compress:   true,
-		Console:    true,
+		Console:    o.consoleLog,
 	})
 
 	var err error

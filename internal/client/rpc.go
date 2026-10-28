@@ -799,8 +799,11 @@ func (m *rootModel) rpcSendMessage(text string) {
 	}
 
 	if err := m.sendUserMessage(text); err != nil {
+		if l := m.getLogger(); l != nil {
+			l.Error("send user message failed", err, "session", m.currentSessionID)
+		}
 		m.notifBar.Add(data.Notification{
-			Message: fmt.Sprintf(i18n.T("client.notify.rpc.send.failed"), err),
+			Message: i18n.T("client.notify.rpc.send.failed"),
 			Level:   data.NotifError,
 		})
 		return

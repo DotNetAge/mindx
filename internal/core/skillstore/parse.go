@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/DotNetAge/goharness/skill"
@@ -563,8 +564,15 @@ func resolveBinViaShell(name string) (string, error) {
 	defer cancel()
 
 	// -l: login shell，自动 source ~/.zprofile
+	// -i: interactive，额外 source ~/.zshrc 拿到用户手动 export 的 PATH
 	// -c: 执行命令
-	out, err := exec.CommandContext(ctx, "zsh", "-lic", "which "+name).CombinedOutput()
+	// Setsid: 脱离控制终端。交互式 zsh 会主动打开 /dev/tty 并开启作业控制
+	// （tcsetpgrp 把自己设为前台进程组），把父进程（TUI）永久挤到后台，
+	// 导致后续 bubbletea 进入 raw mode 时触发 SIGTTOU 被挂起。
+	// 新会话中没有控制终端，zsh 便不会开启作业控制，PATH 补全能力不受影响。
+	cmd := exec.CommandContext(ctx, "zsh", "-lic", "which "+name)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("zsh which 失败: %w", err)
 	}

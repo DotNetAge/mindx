@@ -147,6 +147,13 @@ func BuildNodes(items []Item, state *BuildState, isFinal bool) []TreeNode {
 
 		case itemQuestion:
 			flushBefore(inLastRound)
+			// 用户消息：对齐 WebUI chatflow 的 role=user 轮次头，渲染为用户卡
+			// （旧实现误 build 成 ask_user，导致用户每条消息都显示"等待你的回答"）
+			nodes = append(nodes, buildUserMessageNode(it, offset))
+
+		case itemAskUser:
+			flushBefore(inLastRound)
+			// AskUser：模型向用户发起的提问（真正阻塞等答案的场景）
 			nodes = append(nodes, buildAskUserNode(it, offset))
 
 		case itemNotice:
@@ -611,8 +618,23 @@ func buildCollectNode(state *BuildState, it Item, offset time.Duration) *Collect
 
 // ── 阻塞/系统节点 ──
 
+// buildUserMessageNode 用户消息卡：显示用户输入的原文（旧实现此处文本被丢弃）。
+func buildUserMessageNode(it Item, offset time.Duration) *UserMessageNode {
+	return &UserMessageNode{
+		NodeBase: NodeBase{
+			ID:          fmt.Sprintf("user_%d", offset.Milliseconds()),
+			Kind:        "user_message",
+			Status:      NodeSuccess,
+			Offset:      offset,
+			FoldDefault: true,
+		},
+		Text: it.Text,
+	}
+}
+
+// buildAskUserNode AskUser 提问卡；问题文本回填 Questions，供名片 Object 展示。
 func buildAskUserNode(it Item, offset time.Duration) *AskUserNode {
-	return &AskUserNode{
+	node := &AskUserNode{
 		NodeBase: NodeBase{
 			ID:          fmt.Sprintf("ask_user_%d", offset.Milliseconds()),
 			Kind:        "ask_user",
@@ -621,6 +643,10 @@ func buildAskUserNode(it Item, offset time.Duration) *AskUserNode {
 			FoldDefault: true,
 		},
 	}
+	if it.Text != "" {
+		node.Questions = []AskUserQuestion{{Question: it.Text}}
+	}
+	return node
 }
 
 func buildErrorNode(it Item, offset time.Duration) *ErrorNode {

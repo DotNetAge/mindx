@@ -44,3 +44,8 @@
 * **kvStore 由 `NewDaemon` 构造函数直接初始化**（bbolt 打开并持锁，不是 Start 流程专属——initKVStore/mcp 装配/"Daemon initialization complete" 都在构造函数体内）。测试夹具 `newTestDaemon` 返回的 `d.kvStore` 已可用；**测试内禁止再调 `initKVStore`**——同进程二次打开同一 `kv.db` 会 flock 互斥，`bbolt.Open(Timeout:2s)` 随机超时（实锤：metric.consent 测试首版自调 initKVStore，DefaultDenied 偶过、SetAndRevoke 稳定 timeout，lsof 抓到本进程 fd 12u 持锁才定位）。需要 bbolt 的 handler 测试直接用 `d.kvStore`，需要独立文件时用全新路径自行 `bbolt.Open`
 * 测试超时类失败先怀疑**资源在测试进程内被重复持有**（用 lsof 指定测试进程 pid 抓本进程句柄），不要先怀疑环境/沙箱——本次 sandbox 与缓存假设全部排查一轮后才发现是自撞锁
 * **凭据存储类测试在已登录的 mac 开发机上曾必假失败（2026-10-20 已治本）**：`TestHandleMarketAccountGet_Anonymous` 期望匿名 `has_token=false`，但 macOS 下 `NewCredentialStore` 返回 `macKeychainStore{service:"mindx"}`——service 名全局固定不随测试临时目录隔离，本机 daemon 登录后令牌常驻真实钥匙串，测试进程读到登录态即 FAIL（2026-10-17 两次误判实锤）。治本已落地：`SetTestDir` 将 credStore 重定向到测试目录 `encryptedFileStore` 并清空内存三件套（token/username/password 在 DefaultApp 构造期已从真实钥匙串 resolve，只换 store 不清内存不够）。新测试若需凭据态，显式 `SetMarketCredentials/SetMarketAuthToken` 落 tmp 文件存储
+
+## 子进程与终端前台（2026-10-28 实锤）
+
+* 任何 `exec.Command` 拉起可能交互化的 shell（`zsh -i`/`-lic` 等）必须加 `SysProcAttr{Setsid: true}` 脱离控制终端——交互式 zsh 会主动 open /dev/tty 并开启作业控制 tcsetpgrp 抢占前台，把宿主 TUI 挤到后台，后续 bubbletea 进入 raw mode 时触发 SIGTTOU 挂起（实锤：skillstore resolveBinViaShell 的 `zsh -lic` 致 TUI 启动即 suspended）。注意断 stdin 无效：`exec.Cmd` Stdin 默认已是 /dev/null，zsh 抢前台靠的是自己打开控制终端，唯有 Setsid 可断
+* 排障信号：报 "error entering raw mode" 或被 zsh 报 `suspended (tty output)`，先 `ps -o pgid,tpgid` 对比自身 pgid 与 tty 前台 tpgid，再 `ps -t <tty>` 抓占前台的子进程名，禁止盲猜环境问题

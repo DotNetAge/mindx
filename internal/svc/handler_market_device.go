@@ -4,11 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
-
-	"github.com/DotNetAge/mindx/internal/core/bundle"
 )
 
 // ---------------------------------------------------------------------------
@@ -189,55 +186,6 @@ func (d *Daemon) handleMarketDeviceProviders(_ context.Context, _ json.RawMessag
 		providers = []string{}
 	}
 	return map[string]any{"providers": providers}, nil
-}
-
-// handleMarketExperienceList 经验库清单（会员身份；q 为关键词；org_slug 非空 = 该组织
-// 的经验清单，仅本人在册组织）。前端不持有登录令牌：由 daemon 携带内置登录态代理访问市场 API。
-func (d *Daemon) handleMarketExperienceList(_ context.Context, params json.RawMessage) (any, error) {
-	var p struct {
-		Q       string `json:"q"`
-		OrgSlug string `json:"org_slug"`
-	}
-	if params != nil {
-		_ = json.Unmarshal(params, &p) // 参数解析失败按空参处理
-	}
-	// 回路分派：org_slug 非空 = 组织经验（M8 内容自由原则的回路选项）；空 = 公共经验库
-	var items []bundle.MarketExperience
-	var err error
-	if orgSlug := strings.TrimSpace(p.OrgSlug); orgSlug != "" {
-		items, err = d.app.Market().ListExperiencesInOrg(orgSlug, p.Q)
-	} else {
-		items, err = d.app.Market().ListExperiences(p.Q)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if items == nil {
-		items = []bundle.MarketExperience{}
-	}
-	return map[string]any{"experiences": items}, nil
-}
-
-// handleMarketExperienceGet 经验文章全文（会员身份；org_slug 非空 = 组织经验）。
-func (d *Daemon) handleMarketExperienceGet(_ context.Context, params json.RawMessage) (any, error) {
-	var p struct {
-		ID      int64  `json:"id"`
-		OrgSlug string `json:"org_slug"`
-	}
-	if err := json.Unmarshal(params, &p); err != nil || p.ID <= 0 {
-		return nil, fmt.Errorf("缺少文章编号")
-	}
-	var e *bundle.MarketExperience
-	var err error
-	if orgSlug := strings.TrimSpace(p.OrgSlug); orgSlug != "" {
-		e, err = d.app.Market().GetExperienceInOrg(orgSlug, p.ID)
-	} else {
-		e, err = d.app.Market().GetExperience(p.ID)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"experience": e}, nil
 }
 
 // handleMarketExperienceMove 挪挂载点 + 兄弟重排（树状挂载写通道；组织树限文章作者

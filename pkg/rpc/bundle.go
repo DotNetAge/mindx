@@ -274,16 +274,6 @@ func (c *Client) MarketDeviceStatus() (json.RawMessage, error) {
 	return c.CallWithTimeout("market.device.status", map[string]any{})
 }
 
-// MarketExperienceList 经验库全量清单（Agent 经验库；q 为标题/摘要关键词）。
-func (c *Client) MarketExperienceList(q string) (json.RawMessage, error) {
-	return c.CallWithTimeout("market.experience.list", map[string]any{"q": q})
-}
-
-// MarketExperienceGet 经验文章全文。
-func (c *Client) MarketExperienceGet(id int64) (json.RawMessage, error) {
-	return c.CallWithTimeout("market.experience.get", map[string]any{"id": id})
-}
-
 // MarketUpdateProfile 更新MindX 账号显示名。
 func (c *Client) MarketUpdateProfile(nickName string) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.updateProfile", MarketUpdateProfileParams{NickName: nickName})
@@ -384,17 +374,25 @@ type ArticlePublishParams struct {
 
 // ArticleReadParams are the params for market.article.read（文章详情统一入口）。
 type ArticleReadParams struct {
-	Slug string `json:"slug"`
+	// Slug 文章标识（官网/个人/组织文章按 slug 定位；与 ID 二选一，Slug 优先）。
+	Slug string `json:"slug,omitempty"`
+	// ID 经验文章主键（经验文章按 id 定位；Slug 为空时必填）。
+	ID int64 `json:"id,omitempty"`
+	// OrgSlug 组织别名（经验文章走组织回路时必填；slug 文章通道不用）。
+	OrgSlug string `json:"org_slug,omitempty"`
 }
 
 // ArticleListParams are the params for market.article.list（文章清单/搜索）。
 type ArticleListParams struct {
-	// Scope 清单范围：site（官网公开，匿名可搜）| mine（我的，缺省）| org（组织，成员可读）。
+	// Scope 清单范围：site（官网公开，匿名可搜）| mine（我的，缺省）|
+	// org（组织）| community（公共经验清单，会员）。
 	Scope string `json:"scope,omitempty"`
 	// Query 关键词搜索（服务端匹配标题/摘要等）。
 	Query string `json:"query,omitempty"`
-	// OrgID 组织节点 ID（scope=org 时必填）。
+	// OrgID 组织节点 ID（scope=org 的文章通道必填）。
 	OrgID int64 `json:"org_id,omitempty"`
+	// OrgSlug 组织别名（scope=org 的经验回路用 slug 寻址；与 OrgID 二选一）。
+	OrgSlug string `json:"org_slug,omitempty"`
 }
 
 // ArticleDeleteParams are the params for market.article.delete（仅作者可删）。

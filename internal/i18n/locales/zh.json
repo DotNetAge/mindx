@@ -61,7 +61,7 @@
   "client.notify.message.processing": "已有消息正在处理",
   "client.notify.rpc.disconnected": "后台服务未连接，无法发送消息",
   "client.notify.rpc.connect.failed": "无法连接到后台服务 (%s): %v",
-  "client.notify.rpc.send.failed": "发送消息失败: %v",
+  "client.notify.rpc.send.failed": "发送消息失败：无法连接本地服务，请重启 mindx 后重试",
   "client.notify.runtime.unavailable": "runtime不可用: %v",
   "client.notify.session.create.failed": "会话创建失败",
   "client.notify.context.compacted": "上下文窗口已压缩",

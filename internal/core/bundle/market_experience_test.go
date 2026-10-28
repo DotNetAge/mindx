@@ -61,36 +61,37 @@ func TestMoveExperience(t *testing.T) {
 	}
 }
 
-// TestListExperiencesTreePassthrough 清单树字段透传：服务端卡片带 parent_id/position，
-// 客户端解析后原样保留（前端按二者组树）。
-func TestListExperiencesTreePassthrough(t *testing.T) {
+// TestListCommunityExperiences 统一回路清单映射：服务端经验卡片 → MarketArticle
+// 归一形状（source/id/author/date 截取），树挂载字段留在服务端不透传客户端。
+func TestListCommunityExperiences(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/experiences" {
+			t.Errorf("路径 = %s， want /api/v1/experiences", r.URL.Path)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"experiences":[
-			{"id":1,"title":"根文章","skill_name":"demo","parent_id":null,"position":2},
-			{"id":2,"title":"子文章","skill_name":"demo","parent_id":1,"position":1}]}`))
+			{"id":1,"title":"社区经验","summary":"摘要","skill_name":"demo",
+			 "author_name":"张三","created_at":"2026-10-27T10:00:00Z","parent_id":null,"position":2}]}`))
 	}))
 	defer srv.Close()
 
 	m := NewMarketClient(srv.URL, t.TempDir())
 	m.SetAuthToken("tok")
-	items, err := m.ListExperiences("")
+	items, err := m.ListCommunityExperiences("")
 	if err != nil {
-		t.Fatalf("ListExperiences 失败：%v", err)
+		t.Fatalf("ListCommunityExperiences 失败：%v", err)
 	}
-	if len(items) != 2 {
-		t.Fatalf("条目数 = %d， want 2", len(items))
+	if len(items) != 1 {
+		t.Fatalf("条目数 = %d， want 1", len(items))
 	}
-	if items[0].ParentID != nil {
-		t.Errorf("根文章 parent_id = %v， want nil", items[0].ParentID)
+	a := items[0]
+	if a.Source != "experience" || a.ID != 1 || a.Title != "社区经验" || a.SkillName != "demo" {
+		t.Errorf("归一条目不符：%+v", a)
 	}
-	if items[0].Position != 2 {
-		t.Errorf("根文章 position = %d， want 2", items[0].Position)
+	if a.AuthorName != "张三" {
+		t.Errorf("作者 = %q， want 张三", a.AuthorName)
 	}
-	if items[1].ParentID == nil || *items[1].ParentID != 1 {
-		t.Errorf("子文章 parent_id = %v， want 1", items[1].ParentID)
-	}
-	if items[1].Position != 1 {
-		t.Errorf("子文章 position = %d， want 1", items[1].Position)
+	if a.Date != "2026-10-27" {
+		t.Errorf("日期截取 = %q， want 2026-10-27", a.Date)
 	}
 }

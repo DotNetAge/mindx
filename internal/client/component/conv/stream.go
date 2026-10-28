@@ -32,12 +32,13 @@ const tickInterval = 250 * time.Millisecond
 type itemKind int
 
 const (
-	itemQuestion itemKind = iota // 用户提问 / AskUser 问题
+	itemQuestion itemKind = iota // 用户消息（对齐 WebUI chatflow 的 role=user 轮次）
 	itemThinking                 // 思想流
 	itemAction                   // 工具调用
 	itemOutput                   // Content（markdown）
 	itemError                    // 错误组件
 	itemNotice                   // 提示框（max turns / cancelled / timeout / 子任务）
+	itemAskUser                  // AskUser：模型向用户发起的提问（与用户消息严格区分）
 )
 
 // Item 是时间线上的一个条目。按 Kind 只使用对应字段组。
@@ -541,15 +542,16 @@ func (l *StreamList) AppendUserMessage(sessionID, agentName, question string) {
 }
 
 // AppendQuestion 向指定会话的最后一条流追加 AskUser 问题条目；
-// 会话流不存在时创建。用于把 AskUser 事件内联渲染到对话中。
+// 会话流不存在时创建空流再追加（问题文本不是用户消息，禁止混用）。
 func (l *StreamList) AppendQuestion(sessionID, question string) {
 	for i := len(l.Streams) - 1; i >= 0; i-- {
 		if l.Streams[i].SessionID == sessionID {
-			l.Streams[i].append(Item{Kind: itemQuestion, Text: question})
+			l.Streams[i].append(Item{Kind: itemAskUser, Text: question})
 			return
 		}
 	}
-	l.AppendUserMessage(sessionID, "", question)
+	l.Streams = append(l.Streams, NewStream(sessionID, "", ""))
+	l.AppendQuestion(sessionID, question)
 }
 
 // getSessionID 提取事件的会话归属。

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/DotNetAge/mindx/internal/core"
@@ -396,7 +397,9 @@ func runInstallCommand(ctx context.Context, command string) commandResult {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "darwin" {
 		// -l 登录 shell 注入用户 PATH（Homebrew 等），-i 交互 rc 覆盖 nvm 类工具
+		// Setsid 脱离控制终端：交互式 zsh 会开作业控制抢占宿主终端前台（同 skillstore/parse.go）
 		cmd = exec.CommandContext(runCtx, "zsh", "-lic", command)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	} else {
 		cmd = exec.CommandContext(runCtx, "sh", "-c", command)
 	}

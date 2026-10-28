@@ -50,26 +50,26 @@ func (d *Daemon) handleArticlePublish(_ context.Context, params json.RawMessage)
 	}, nil
 }
 
-// handleArticleRead 文章详情（GET 统一详情入口：官网文章匿名可读；个人文章
-// 仅作者、组织文章仅成员，无权/不存在由服务端 404，错误消息原样透传）。
+// handleArticleRead 文章详情（统一详情入口）：slug 通道读官网文章（匿名可读）/
+// 个人文章（仅作者）/组织文章（仅成员），无权/不存在由服务端 404，错误消息原样
+// 透传；id 通道读经验文章（org_slug 非空走组织回路），会员登录态。
 func (d *Daemon) handleArticleRead(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.ArticleReadParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
-	slug := strings.TrimSpace(p.Slug)
-	if slug == "" {
-		return nil, fmt.Errorf("slug 为必填")
+	if slug := strings.TrimSpace(p.Slug); slug != "" {
+		return d.app.Market().ReadArticle(slug)
 	}
-	detail, err := d.app.Market().ReadArticle(slug)
-	if err != nil {
-		return nil, err
+	if p.ID > 0 {
+		return d.app.Market().ReadExperience(p.ID, strings.TrimSpace(p.OrgSlug))
 	}
-	return detail, nil
+	return nil, fmt.Errorf("缺少文章标识（slug 或 id）")
 }
 
-// handleArticleList 文章清单/搜索（scope：site 官网公开 | mine 我的（缺省）|
-// org 组织成员；q 为服务端关键词搜索）。
+// handleArticleList 文章清单/搜索（大统一读回路，scope 四选一）：
+// site 官网公开（匿名可搜）| mine 我的个人与组织节点文章（缺省）|
+// org 组织节点（org_id 文章通道 / org_slug 经验回路，二选一）| community 公共经验（会员）。
 func (d *Daemon) handleArticleList(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.ArticleListParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -86,13 +86,18 @@ func (d *Daemon) handleArticleList(_ context.Context, params json.RawMessage) (a
 		articles, err = d.app.Market().ListSiteArticles(p.Query)
 	case "mine":
 		articles, err = d.app.Market().ListMyArticles(p.Query)
+	case "community":
+		articles, err = d.app.Market().ListCommunityExperiences(p.Query)
 	case "org":
-		if p.OrgID <= 0 {
-			return nil, fmt.Errorf("查看组织文章需要提供组织节点 ID（org_id）")
+		if slug := strings.TrimSpace(p.OrgSlug); slug != "" {
+			articles, err = d.app.Market().ListOrgExperiences(slug, p.Query)
+		} else if p.OrgID > 0 {
+			articles, err = d.app.Market().ListOrgArticles(p.OrgID, p.Query)
+		} else {
+			return nil, fmt.Errorf("查看组织资料需要提供组织（org_id 或 org_slug）")
 		}
-		articles, err = d.app.Market().ListOrgArticles(p.OrgID, p.Query)
 	default:
-		return nil, fmt.Errorf("文章清单范围仅支持 site（官网）、mine（我的）或 org（组织）")
+		return nil, fmt.Errorf("资料范围仅支持 site（官网）、mine（我的）、community（社区经验）或 org（组织）")
 	}
 	if err != nil {
 		return nil, err

@@ -197,6 +197,15 @@ type AskUserNode struct {
 
 func (n *AskUserNode) Base() NodeBase { return n.NodeBase }
 
+// UserMessageNode 用户消息卡（对齐 WebUI chatflow 的 role=user 轮次头）。
+// 与 AskUserNode 严格区分：这是用户说的话，不是模型发起的提问。
+type UserMessageNode struct {
+	NodeBase
+	Text string
+}
+
+func (n *UserMessageNode) Base() NodeBase { return n.NodeBase }
+
 // ErrorNode 错误卡（对齐 Desktop ErrorNode）。
 // Source 归一 402 欠费 / 超时路径 / 其余运行时错误。
 type ErrorNode struct {
@@ -353,20 +362,21 @@ func IsToolNode(n TreeNode) bool {
 // TreeNodeTypes 全量节点类型名（与 Desktop TreeNodeType 联合派生的枚举对齐）。
 // 用于断言构建器不私加未登记类型。
 var TreeNodeTypes = map[string]bool{
-	"content":    true,
-	"thinking":   true,
-	"group":      true,
-	"task":       true,
-	"team":       true,
-	"subagent":   true,
-	"collect":    true,
-	"permission": true,
-	"ask_user":   true,
-	"error":      true,
-	"compaction": true,
-	"max_turns":  true,
-	"llm_retry":  true,
-	"cancelled":  true,
+	"content":      true,
+	"thinking":     true,
+	"group":        true,
+	"task":         true,
+	"team":         true,
+	"subagent":     true,
+	"collect":      true,
+	"permission":   true,
+	"ask_user":     true,
+	"user_message": true,
+	"error":        true,
+	"compaction":   true,
+	"max_turns":    true,
+	"llm_retry":    true,
+	"cancelled":    true,
 	// 工具 18 种
 	"tool.read":          true,
 	"tool.write":         true,

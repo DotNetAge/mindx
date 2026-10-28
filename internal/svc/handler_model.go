@@ -1,15 +1,18 @@
 package svc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	goharnessconfig "github.com/DotNetAge/goharness/config"
 	"github.com/DotNetAge/mindx/internal/core"
@@ -283,6 +286,174 @@ func (d *Daemon) handleProviderDelete(_ context.Context, params json.RawMessage)
 		"name":    p.Name,
 		"message": fmt.Sprintf("Provider %q deleted", p.Name),
 	}, nil
+}
+
+// --- Provider 连通性验证 ---
+
+// handleProviderVerify 处理 provider.verify：用该供应商下价格最低的模型发一次
+// 最小对话请求，验证 API Key 是否真实可用。验证结果以 ok/message 数据形式返回
+// （不走 RPC error 通道），前端把 message 原样讲给用户听——message 必须解释
+// 状态码含义并给出下一步动作，禁止只回一个裸状态码（UI 文案军规）。
+func (d *Daemon) handleProviderVerify(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.ProviderVerifyParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+
+	provider, err := resolveProviderConfig(d, p.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	// 与 provider.list 的「已配置」判定同一口径：只认凭据库解析结果。
+	// 不用 resolveProviderAPIKey（其 YAML 回退会把 providers.yml 的引用名
+	// 如 MOONSHOT_API_KEY 当成 Key，让未配置供应商被误判为已配置）。
+	credStore := core.NewCredentialStore(d.app.Settings().UserPreferences())
+	apiKey := core.ResolveAPIKey(credStore, provider.Name)
+	if apiKey == "" {
+		return map[string]any{
+			"ok":      false,
+			"message": "该供应商还没有配置 API Key，先填写 Key 再验证。",
+		}, nil
+	}
+
+	base := ensureV1Suffix(provider.BaseURL)
+	if base == "" {
+		return map[string]any{
+			"ok":      false,
+			"message": "该供应商还没有配置接口地址，先补全接口地址再验证。",
+		}, nil
+	}
+
+	candidates := make([]*goharnessconfig.ModelConfig, 0, len(d.app.Models().List()))
+	for _, m := range d.app.Models().List() {
+		if m != nil && m.Provider == p.Name && m.Name != "" {
+			candidates = append(candidates, m)
+		}
+	}
+	if len(candidates) == 0 {
+		return map[string]any{
+			"ok":      false,
+			"message": "该供应商下还没有模型，先添加一个模型再验证。",
+		}, nil
+	}
+	// 探针优先选未停用的模型；全部停用时退回全量候选（验证的是 Key，不是模型可用性）
+	probe := cheapestModel(candidates, true)
+	if probe == nil {
+		probe = cheapestModel(candidates, false)
+	}
+
+	// 最小对话请求：max_tokens=16 防止个别供应商拒绝过小的取值，成本可忽略
+	payload, _ := json.Marshal(map[string]any{
+		"model":      probe.Name,
+		"messages":   []map[string]string{{"role": "user", "content": "hi"}},
+		"max_tokens": 16,
+		"stream":     false,
+	})
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest(http.MethodPost, base+"/chat/completions", bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("构造验证请求失败: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return map[string]any{
+			"ok":      false,
+			"message": "连不上供应商服务：请检查电脑网络，或核对供应商的接口地址是否正确。",
+			"model":   probe.Name,
+		}, nil
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// 响应体只用于解读错误，LimitReader 防故障端点耗尽内存
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("读取验证响应失败: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		return map[string]any{
+			"ok":      true,
+			"message": fmt.Sprintf("验证通过：已用模型 %s 实际调用成功，这个 Key 可以正常使用。", probe.Name),
+			"model":   probe.Name,
+		}, nil
+	}
+	return map[string]any{
+		"ok":      false,
+		"message": verifyFailureText(p.Name, resp.StatusCode, body),
+		"model":   probe.Name,
+		"status":  resp.StatusCode,
+	}, nil
+}
+
+// cheapestModel 从候选中选验证探针：按输入+输出单价之和最小者；未标价的模型
+// 视为最贵（排最后），把验证的真实计费压到最低。全部未标价时保持清单原序取第一个。
+func cheapestModel(models []*goharnessconfig.ModelConfig, enabledOnly bool) *goharnessconfig.ModelConfig {
+	var best *goharnessconfig.ModelConfig
+	bestCost := math.MaxFloat64
+	for _, m := range models {
+		if enabledOnly && !m.Enabled {
+			continue
+		}
+		cost := m.CostPer1MIn + m.CostPer1MOut
+		if cost < bestCost {
+			best, bestCost = m, cost
+		}
+	}
+	return best
+}
+
+// verifyFailureText 把验证失败的 HTTP 状态码翻译成人话：先说明这个码代表什么、
+// 该做什么，再附供应商返回的原始说明（若有），绝不只回一个裸状态码。
+func verifyFailureText(provider string, status int, body []byte) string {
+	var detail string
+	var probe struct {
+		Error json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(body, &probe); err == nil && len(probe.Error) > 0 {
+		var withMsg struct {
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(probe.Error, &withMsg) == nil && withMsg.Message != "" {
+			detail = withMsg.Message
+		} else {
+			var asText string
+			if json.Unmarshal(probe.Error, &asText) == nil && asText != "" {
+				detail = asText
+			}
+		}
+	}
+
+	var meaning string
+	switch status {
+	case http.StatusBadRequest:
+		meaning = "代码 400 表示请求本身不被接受：一般是接口地址写错了，或这个模型不支持对话调用"
+	case http.StatusUnauthorized:
+		meaning = "代码 401 表示身份验证失败：API Key 无效、已过期或已被删除，请重新填写正确的 Key"
+	case http.StatusPaymentRequired:
+		meaning = "代码 402 表示账户余额不足：请到供应商平台充值后再试"
+	case http.StatusForbidden:
+		meaning = "代码 403 表示 Key 有效但没有权限：你的账号可能还没开通这个模型的调用权限"
+	case http.StatusNotFound:
+		meaning = "代码 404 表示找不到这个模型或接口：请核对模型名与接口地址是否配套"
+	case http.StatusRequestTimeout:
+		meaning = "代码 408 表示请求超时：供应商响应太慢，请稍后再试"
+	case http.StatusTooManyRequests:
+		meaning = "代码 429 表示请求太频繁或额度已用尽：请稍后再试，或检查账户的用量限制"
+	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		meaning = fmt.Sprintf("代码 %d 表示供应商服务暂时故障：不是你的配置问题，请稍后再试", status)
+	default:
+		meaning = fmt.Sprintf("代码 %d 表示验证被供应商拒绝，具体原因见下方说明", status)
+	}
+
+	text := fmt.Sprintf("%s 验证未通过（%s）。", provider, meaning)
+	if detail != "" {
+		text += " 供应商返回的说明：" + detail
+	}
+	return text
 }
 
 // ollamaBaseURL 从 OpenAI 兼容地址（如 http://localhost:11434/v1）中提取

@@ -44,12 +44,6 @@ func (w *WelcomePanel) View() string {
 		b.WriteByte('\n')
 	}
 
-	if w.Data.SessionID != "" {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("white")).Render("Session: "))
-		b.WriteString(style.WhiteStyle.Render(w.Data.SessionID))
-		b.WriteByte('\n')
-	}
-
 	return lipgloss.NewStyle().
 		Padding(0, 1).
 		Width(w.Width).

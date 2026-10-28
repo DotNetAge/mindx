@@ -53,6 +53,17 @@ func ViewTree(s *Stream, width int) string {
 	var b strings.Builder
 	var prevEnd time.Duration
 
+	// writeBlock 输出一个渲染块；块与块之间强制一个空行间隔。
+	writeBlock := func(block string) {
+		if block == "" {
+			return
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(block)
+	}
+
 	for i, node := range s.Nodes {
 		offset := node.Base().Offset
 		duration := node.Base().Duration
@@ -69,7 +80,7 @@ func ViewTree(s *Stream, width int) string {
 						b.WriteString(renderGap(offset - prevEnd))
 						b.WriteByte('\n')
 					}
-					b.WriteString(summary)
+					writeBlock(summary)
 					prevEnd = offset + duration
 				}
 			} else {
@@ -78,7 +89,7 @@ func ViewTree(s *Stream, width int) string {
 					b.WriteString(renderGap(offset - prevEnd))
 					b.WriteByte('\n')
 				}
-				b.WriteString(renderCard(s, node, width))
+				writeBlock(renderCard(s, node, width))
 				prevEnd = offset + duration
 			}
 			continue
@@ -91,19 +102,20 @@ func ViewTree(s *Stream, width int) string {
 		}
 
 		if pres.Standalone {
-			b.WriteString(renderStandalone(s, node, width))
+			writeBlock(renderStandalone(s, node, width))
 		} else if IsGroupNode(node) {
-			b.WriteString(renderGroup(s, node.(*GroupNode), width))
+			writeBlock(renderGroup(s, node.(*GroupNode), width))
 		} else {
-			b.WriteString(renderCard(s, node, width))
+			writeBlock(renderCard(s, node, width))
 		}
 
 		prevEnd = offset + duration
 	}
 
-	// 树尾 pending 行（对齐 Desktop §3.4）
-	if isRoundExecuting(s) && !hasExecutingNode(s.Nodes) {
-		b.WriteString(renderPendingRow(s))
+	// 树尾 pending 行（对齐 Desktop §3.4）；错误收尾时不渲染 pending，
+	// 避免错误横幅与「正在规划下一步」同时出现。
+	if isRoundExecuting(s) && !hasExecutingNode(s.Nodes) && !endsWithErrorNode(s.Nodes) {
+		writeBlock(renderPendingRow(s))
 	}
 
 	return b.String()
@@ -274,11 +286,21 @@ func renderStandalone(s *Stream, node TreeNode, width int) string {
 		return renderContentNode(s, n, width)
 	case *ThinkingNode:
 		return renderThinkingNode(s, n, width)
+	case *UserMessageNode:
+		return renderUserMessageNode(n)
 	case *SubagentNode:
 		return renderSubagentNode(s, n, width)
 	default:
 		return renderCard(s, node, width)
 	}
+}
+
+// renderUserMessageNode 用户消息：仅紫色原文，无图标无前缀（与助手内容以颜色区分）。
+func renderUserMessageNode(n *UserMessageNode) string {
+	if n.Text == "" {
+		return ""
+	}
+	return style.PurpleStyle.Render(n.Text) + "\n"
 }
 
 func renderContentNode(s *Stream, n *ContentNode, width int) string {
@@ -310,44 +332,32 @@ func renderContentNode(s *Stream, n *ContentNode, width int) string {
 	return b.String()
 }
 
+// renderThinkingNode 思考流：正文直接逐行输出，无标签行无图标。
+// 执行中流式展开；完成态默认折叠（isExpanded 控制回看）。
 func renderThinkingNode(s *Stream, n *ThinkingNode, width int) string {
-	if n.Text == "" && n.Status != NodeExecuting {
+	if n.Text == "" {
 		return ""
 	}
+	if n.Status != NodeExecuting && !isExpanded(s, n) {
+		return ""
+	}
+	st := style.DimStyle
+	if n.Status != NodeExecuting {
+		st = style.DarkStyle
+	}
+	w := width - 4
+	if w < 8 {
+		w = 8
+	}
 	var b strings.Builder
-
-	// icon + 状态文案
-	icon := style.PurpleStyle.Render("💭")
-	b.WriteString("  ")
-	b.WriteString(icon)
-	b.WriteString(" ")
-
-	if n.Status == NodeExecuting {
-		b.WriteString(renderShimmeredText(s, n.Base().ID, "思考中", style.PurpleStyle))
-	} else {
-		b.WriteString(style.PurpleStyle.Render("思考"))
-	}
-
-	if n.Duration > 0 {
-		b.WriteString(" ")
-		b.WriteString(style.DimStyle.Render("(" + formatDuration(n.Duration) + ")"))
-	}
-	b.WriteByte('\n')
-
-	// 思考内容（折叠默认开启，执行中展开）
-	if isExpanded(s, n) || n.Status == NodeExecuting {
-		text := n.Text
-		if n.Status != NodeExecuting {
-			// 完成态用斜体暗色
-			b.WriteString("  ")
-			b.WriteString(style.DarkStyle.Render(truncate(text, width-4)))
-		} else {
-			b.WriteString("  ")
-			b.WriteString(style.DimStyle.Render(truncate(text, width-4)))
+	for _, line := range strings.Split(n.Text, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
 		}
+		b.WriteString("  ")
+		b.WriteString(st.Render(truncate(line, w)))
 		b.WriteByte('\n')
 	}
-
 	return b.String()
 }
 
@@ -409,7 +419,8 @@ func renderPendingRow(s *Stream) string {
 		sh = NewShimmer(text)
 		s.Shimmers["__pending__"] = sh
 	}
-	return "  " + sh.Render() + "\n"
+	// 左对齐：树尾 pending 行顶格输出，不缩进
+	return sh.Render() + "\n"
 }
 
 // ── 展开态详情 ──
@@ -531,6 +542,15 @@ func hasExecutingNode(nodes []TreeNode) bool {
 		}
 	}
 	return false
+}
+
+// endsWithErrorNode 流末尾是错误节点时视为该轮已异常收尾。
+func endsWithErrorNode(nodes []TreeNode) bool {
+	if len(nodes) == 0 {
+		return false
+	}
+	_, ok := nodes[len(nodes)-1].(*ErrorNode)
+	return ok
 }
 
 // renderShimmeredText 渲染流光文字。优先用 Stream.Shimmer 中已有的状态；

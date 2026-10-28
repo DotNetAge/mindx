@@ -148,7 +148,7 @@ func NewProgram(cfg *appcore.MindxConfig) error {
 	m.taskTracker = newTaskTracker()
 
 	var err error
-	m.app, err = appcore.DefaultApp(cfg)
+	m.app, err = appcore.DefaultApp(cfg, appcore.WithConsoleLog(false))
 	if err != nil {
 		m.notifBar.Add(data.Notification{Message: fmt.Sprintf(i18n.T("client.notify.init.failed"), err), Level: data.NotifError})
 	} else {
@@ -413,8 +413,13 @@ func (m *rootModel) populateWelcome() {
 	}
 
 	agentName := m.app.CurrentAgentName()
-	m.welcome.Data.AgentName = agentName
-	m.statusBar.AgentName = agentName
+	// 展示主名 = Agent 昵称（IDENTITY.md nick_name），未配置时回退内部名
+	displayAgent := agentName
+	if ag := m.app.Agents().Get(agentName); ag != nil && ag.Meta.NickName != "" {
+		displayAgent = ag.Meta.NickName
+	}
+	m.welcome.Data.AgentName = displayAgent
+	m.statusBar.AgentName = displayAgent
 
 	// Get model info from config
 	if cfg := m.app.Config(); cfg != nil && cfg.LastModel != "" {
@@ -655,8 +660,11 @@ func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, cust
 			// 子代理提问冒泡：答案精确送达发起提问的子会话，daemon 据此
 			// 注入挂起等待的子 exec（askCh）恢复其执行循环。
 			if err := m.sendUserMessageTo(targetSession, answer); err != nil {
+				if l := m.getLogger(); l != nil {
+					l.Error("send user message to sub-session failed", err, "session", targetSession)
+				}
 				m.notifBar.Add(data.Notification{
-					Message: fmt.Sprintf(i18n.T("client.notify.rpc.send.failed"), err),
+					Message: i18n.T("client.notify.rpc.send.failed"),
 					Level:   data.NotifError,
 				})
 			}

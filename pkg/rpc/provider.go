@@ -27,6 +27,11 @@ type ProviderDeleteParams struct {
 	Name string `json:"name"`
 }
 
+// ProviderVerifyParams are the params for provider.verify.
+type ProviderVerifyParams struct {
+	Name string `json:"name"`
+}
+
 // FetchOllamaModelsParams are the params for provider.fetch_ollama_models.
 type FetchOllamaModelsParams struct {
 	BaseURL string `json:"base_url"`
