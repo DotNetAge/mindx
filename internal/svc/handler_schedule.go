@@ -82,10 +82,13 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 	}
 
 	// 前端创建调度任务时通常不传 session_id：回退到该智能体最近活动的会话，
-	// 否则任务触发时无会话可用（load session 会因空 ID 失败）。
-	if p.SessionID == "" {
-		p.SessionID = d.resolveLatestSessionForAgent(p.Agent)
+	// 仍无则新建（project_dir 随 meta 落库）；CLI 的 "new" 哨兵同走此兜底。
+	// 杜绝空绑定条目——否则任务到点因 load session 空 ID 失败、一次机会直接作废。
+	sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir)
+	if err != nil {
+		return nil, fmt.Errorf("落实调度任务会话失败: %w", err)
 	}
+	p.SessionID = sid
 
 	entry := &scheduler.ScheduleEntry{
 		ID:         uuid.NewString()[:8],
@@ -103,6 +106,7 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 	if err := d.schedulerDB.Save(context.Background(), entry); err != nil {
 		return nil, fmt.Errorf("save schedule failed: %w", err)
 	}
+	d.broadcastScheduleChanged()
 
 	return entry, nil
 }
@@ -161,9 +165,12 @@ func (d *Daemon) handleScheduleUpdate(_ context.Context, params json.RawMessage)
 	if err := scheduler.ValidateCronExpr(p.CronExpr); err != nil {
 		return nil, err
 	}
-	if p.SessionID == "" {
-		p.SessionID = d.resolveLatestSessionForAgent(p.Agent)
+	// 改绑会话同创建口径：空 ID 与 "new" 哨兵都落实为可执行会话（回退最近或新建）
+	sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir)
+	if err != nil {
+		return nil, fmt.Errorf("落实调度任务会话失败: %w", err)
 	}
+	p.SessionID = sid
 
 	entry.Agent = p.Agent
 	entry.SessionID = p.SessionID
@@ -179,6 +186,7 @@ func (d *Daemon) handleScheduleUpdate(_ context.Context, params json.RawMessage)
 	if err := d.schedulerDB.Save(context.Background(), entry); err != nil {
 		return nil, fmt.Errorf("save schedule failed: %w", err)
 	}
+	d.broadcastScheduleChanged()
 	return entry, nil
 }
 
@@ -199,6 +207,7 @@ func (d *Daemon) handleScheduleDelete(_ context.Context, params json.RawMessage)
 	if err := d.schedulerDB.Delete(context.Background(), p.ID); err != nil {
 		return nil, fmt.Errorf("delete schedule failed: %w", err)
 	}
+	d.broadcastScheduleChanged()
 
 	return map[string]string{"status": "deleted", "id": p.ID}, nil
 }
@@ -272,10 +281,15 @@ func (d *Daemon) enqueueOneJobNow(agent, content string) error {
 	if err := scheduler.ValidateCronExpr(cronExpr); err != nil {
 		return err
 	}
+	// 会话落实与 schedule.add 同兜底：回退最近会话或新建，杜绝空绑定条目
+	sid, serr := d.ensureScheduleSession(agent, "", "")
+	if serr != nil {
+		return fmt.Errorf("落实叫醒会话失败: %w", serr)
+	}
 	entry := &scheduler.ScheduleEntry{
 		ID:        uuid.NewString()[:8],
 		Agent:     agent,
-		SessionID: d.resolveLatestSessionForAgent(agent),
+		SessionID: sid,
 		Content:   content,
 		CronExpr:  cronExpr,
 		Enabled:   true,

@@ -150,3 +150,72 @@ func (d *Daemon) clientCancelSetFor(clientID string) *clientCancelSet {
 	v, _ := d.clientCancels.LoadOrStore(clientID, &clientCancelSet{})
 	return v.(*clientCancelSet)
 }
+
+// ── 挂起等待登记（蜂群侧栏气球数据源）───────────────────────────────────────
+//
+// 主会话因 AskUser 提问 / 工具授权挂起时，本轮执行已结束（不在 sessionQueues
+// 的 running 集合），运行态轮询感知不到，需单独登记。子会话挂起统一登记到
+// 父会话（侧栏列表只呈现主会话行），并经 subBlockParents 留下回答反查线索。
+
+// markSessionBlock 登记会话挂起等待用户输入：kind 为 "ask"（AskUser 提问）或
+// "permission"（工具授权）。调用点为挂起事件 emit 处（ask_handler.go 两套事件
+// 链 + scheduled_exec.go 旁路 sink）。
+func (d *Daemon) markSessionBlock(sessionID, kind string) {
+	if sessionID == "" || kind == "" {
+		return
+	}
+	d.sessionBlocks.Store(sessionID, kind)
+}
+
+// markSubBlockParent 记录子会话挂起归属（subID → parentID），供回答送达时反查。
+func (d *Daemon) markSubBlockParent(subID, parentID string) {
+	if subID == "" || parentID == "" || subID == parentID {
+		return
+	}
+	d.subBlockParents.Store(subID, parentID)
+}
+
+// clearSessionBlock 解除会话挂起登记，并顺带清理以该会话为父的反查条目。
+// 调用点：新执行任务开工（用户回应即挂起消费点）、message.cancel 实际取消、
+// session.delete。
+func (d *Daemon) clearSessionBlock(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	d.sessionBlocks.Delete(sessionID)
+	d.subBlockParents.Range(func(key, value any) bool {
+		if value.(string) == sessionID {
+			d.subBlockParents.Delete(key)
+		}
+		return true
+	})
+}
+
+// resolveSubBlockAnswer 子会话提问的回答已送达（dispatchAskAnswer 命中）：
+// 反查归属父会话并清除其 ask 挂起登记。仅清 ask——父会话可能同时持有自身的
+// permission 挂起，不可误清。返回是否命中反查。
+func (d *Daemon) resolveSubBlockAnswer(subID string) bool {
+	if subID == "" {
+		return false
+	}
+	v, ok := d.subBlockParents.Load(subID)
+	if !ok {
+		return false
+	}
+	parent, _ := v.(string)
+	d.subBlockParents.Delete(subID)
+	if cur, ok := d.sessionBlocks.Load(parent); ok && cur.(string) == "ask" {
+		d.sessionBlocks.Delete(parent)
+	}
+	return parent != ""
+}
+
+// sessionBlockOf 读取会话挂起登记（空串 = 未挂起）。
+func (d *Daemon) sessionBlockOf(sessionID string) string {
+	v, ok := d.sessionBlocks.Load(sessionID)
+	if !ok {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
+}

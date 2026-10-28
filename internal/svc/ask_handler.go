@@ -305,6 +305,12 @@ func newClientAskHandlers(
 			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 		},
 		AskUserPending: func(data goharnessevents.AskUserPendingData) {
+			// 挂起登记（蜂群侧栏气球）：主会话提问挂起在本会话；子会话提问冒泡
+			// 时 data.SessionID 为子会话 ID，统一登记到父会话并留下回答反查线索。
+			d.markSessionBlock(sid, "ask")
+			if data.SessionID != "" && data.SessionID != sid {
+				d.markSubBlockParent(data.SessionID, sid)
+			}
 			// 子会话 AskUser 阻塞同样经 effectiveEventSession 路由到子会话 ID：
 			// 前端把 form 事件写入子会话自己的消息流（单一数据源），
 			// SubAgentView 观察窗据此闪动提示，用户在子会话 Tab 以普通消息回答。
@@ -313,6 +319,12 @@ func newClientAskHandlers(
 			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 		},
 		PermissionPending: func(data goharnessevents.PermissionPendingData) {
+			// 挂起登记（蜂群侧栏气球）：语义与 AskUserPending 同（子会话授权
+			// 经魔法词于父会话新一轮解析，任务开工点统一解除）。
+			d.markSessionBlock(sid, "permission")
+			if data.SessionID != "" && data.SessionID != sid {
+				d.markSubBlockParent(data.SessionID, sid)
+			}
 			_ = gw.SendResponse(clientID, gateway.RespPermissionRequest, i18n.T("svc.event.permission.request"), map[string]any{
 				"tool_name":      data.ToolName,
 				"reason":         data.Reason,
@@ -362,7 +374,9 @@ func broadcastEvent(gw *gateway.Server, sessionID string, respType gateway.Respo
 // 客户端（2026-10-21 定案回归：调度任务由 daemon 后台执行，事件广播仅作
 // 前端通知呈现，执行不依赖客户端在线）。前端与 TUI 按同一套信封解析，
 // 与定向版无差异。getAgentName/getSubSessionID 的懒取语义与 client 版一致。
+// d 供挂起登记（蜂群侧栏气球）使用，与 gw 同为必传。
 func newBroadcastAskHandlers(
+	d *Daemon,
 	gw *gateway.Server,
 	sid string,
 	withAgent func() gateway.ResponseOption,
@@ -513,11 +527,21 @@ func newBroadcastAskHandlers(
 			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 		},
 		AskUserPending: func(data goharnessevents.AskUserPendingData) {
+			// 挂起登记（蜂群侧栏气球）：与 client 版同语义（子会话提问统一登记到父会话）。
+			d.markSessionBlock(sid, "ask")
+			if data.SessionID != "" && data.SessionID != sid {
+				d.markSubBlockParent(data.SessionID, sid)
+			}
 			broadcastResp(gw, gateway.RespForm, i18n.T("svc.event.ask.user"), map[string]any{
 				"questions": data.Questions,
 			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 		},
 		PermissionPending: func(data goharnessevents.PermissionPendingData) {
+			// 挂起登记（蜂群侧栏气球）：与 client 版同语义。
+			d.markSessionBlock(sid, "permission")
+			if data.SessionID != "" && data.SessionID != sid {
+				d.markSubBlockParent(data.SessionID, sid)
+			}
 			broadcastResp(gw, gateway.RespPermissionRequest, i18n.T("svc.event.permission.request"), map[string]any{
 				"tool_name":      data.ToolName,
 				"reason":         data.Reason,

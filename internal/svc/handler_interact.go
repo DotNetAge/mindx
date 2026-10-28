@@ -43,6 +43,12 @@ func (d *Daemon) handleMessageCancel(ctx context.Context, params json.RawMessage
 				}
 			}
 			subStopped := d.cancelSubAgents(req.SessionID)
+			// 执行树被实际取消/强停：挂起等待随执行消亡，解除挂起登记（气球熄灭）。
+			// 仅在实际发生取消时清除——对未在执行、仅挂起等待的会话，停止指令
+			// 无可取消对象，挂起登记保持（Agent 仍在等待用户回应）。
+			if cancelled > 0 || subStopped > 0 {
+				d.clearSessionBlock(req.SessionID)
+			}
 			d.logger.Info("message.cancel called for session",
 				"client_id", clientID, "session_id", req.SessionID,
 				"cancelled", cancelled, "sub_agents_stopped", subStopped)
@@ -57,6 +63,8 @@ func (d *Daemon) handleMessageCancel(ctx context.Context, params json.RawMessage
 	d.clientCancels.Range(func(key, value any) bool {
 		if set, ok := value.(*clientCancelSet); ok {
 			for _, sid := range set.CancelAll() {
+				// 执行树被强停：解除挂起登记（与按会话取消同语义）
+				d.clearSessionBlock(sid)
 				if n := d.cancelSubAgents(sid); n > 0 {
 					d.logger.Info("级联强停子代理", "session_id", sid, "count", n)
 				}

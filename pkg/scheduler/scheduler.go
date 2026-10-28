@@ -29,6 +29,10 @@ type JobLifecycleInfo struct {
 // completed / failed / missed 由执行链路通过 ReportResult 收尾时触发。
 type LifecycleCallback func(info JobLifecycleInfo)
 
+// EntriesChangedCallback 在任务库增删改被 watchLoop 感知后回调（注册集或
+// 表达式集合发生变化时触发一次），供上层广播前端刷新（角标/列表）。
+type EntriesChangedCallback func()
+
 type Scheduler struct {
 	cron        *cron.Cron
 	store       *FileSchedulerStore
@@ -37,6 +41,7 @@ type Scheduler struct {
 	mu          sync.RWMutex
 	logger      logging.Logger
 	lifecycleCb LifecycleCallback
+	entriesCb   EntriesChangedCallback
 }
 
 func NewScheduler(store *FileSchedulerStore, logger logging.Logger) *Scheduler {
@@ -61,6 +66,12 @@ func (s *Scheduler) OnLifecycle(cb LifecycleCallback) {
 	s.lifecycleCb = cb
 }
 
+// OnEntriesChanged sets a callback that fires when watchLoop detects the
+// registered entry set (ids or cron expressions) changed.
+func (s *Scheduler) OnEntriesChanged(cb EntriesChangedCallback) {
+	s.entriesCb = cb
+}
+
 func (s *Scheduler) Start(ctx context.Context) error {
 	if err := s.reloadAll(); err != nil {
 		return err
@@ -78,6 +89,15 @@ func (s *Scheduler) Stop() {
 }
 
 func (s *Scheduler) reloadAll() error {
+	// 注册集快照：reload 结束后对比，判定是否需要通知上层（前端角标/列表刷新）
+	s.mu.RLock()
+	prevCount := len(s.entries)
+	prevExprs := make(map[string]string, len(s.cronExprs))
+	for id, expr := range s.cronExprs {
+		prevExprs[id] = expr
+	}
+	s.mu.RUnlock()
+
 	entries, err := s.store.List(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to load schedules from store: %w", err)
@@ -111,6 +131,23 @@ func (s *Scheduler) reloadAll() error {
 		}
 	}
 	s.mu.Unlock()
+
+	s.mu.RLock()
+	changed := len(s.entries) != prevCount
+	if !changed {
+		for id, expr := range s.cronExprs {
+			prev, ok := prevExprs[id]
+			if !ok || prev != expr {
+				changed = true
+				break
+			}
+		}
+	}
+	cb := s.entriesCb
+	s.mu.RUnlock()
+	if changed && cb != nil {
+		cb()
+	}
 	return nil
 }
 

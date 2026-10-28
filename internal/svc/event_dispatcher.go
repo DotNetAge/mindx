@@ -34,6 +34,16 @@ func (d *Daemon) broadcastJobLifecycle(method string, info scheduler.JobLifecycl
 	})
 }
 
+// broadcastScheduleChanged 任务库增删改后广播（handler 保存后即时发，
+// watchLoop 感知手写/CLI 落盘变更后兜底发）。payload 空体，前端收到即重拉
+// schedule.list 刷新角标与列表；重复广播无害（拉取幂等）。
+func (d *Daemon) broadcastScheduleChanged() {
+	if d.gw == nil {
+		return
+	}
+	d.gw.BroadcastNotification("schedule.entries_changed", map[string]any{})
+}
+
 func (d *Daemon) sendExecutionSummary(clientID, sessionID string, summary goharnessevents.ExecutionSummaryData, agentName string) {
 	if d.gw == nil {
 		return

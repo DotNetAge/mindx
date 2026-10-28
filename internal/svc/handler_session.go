@@ -66,30 +66,41 @@ func (d *Daemon) handleSessionList(_ context.Context, params json.RawMessage) (a
 	return sessions, nil
 }
 
-// SessionRunStatus 单个会话的运行态条目：kind 区分主会话执行与子代理执行。
+// SessionRunStatus 单个会话的运行态条目：kind 区分主会话执行与子代理执行；
+// running 表示会话串行队列执行中（子代理恒为 true）；blocked 非空表示该会话
+// 挂起等待用户输入（"ask" = AskUser 提问，"permission" = 工具授权）——主会话
+// 自身挂起时执行已结束（running=false），子代理挂起时父队列仍在轮询
+// （running=true），前端据此区分绕行描边与气球的呈现组合。
 type SessionRunStatus struct {
 	SessionID string `json:"session_id"`
-	Kind      string `json:"kind"` // "main"（会话串行队列执行中）| "sub"（运行中子代理会话）
+	Kind      string `json:"kind"` // "main"（会话串行队列）| "sub"（运行中子代理会话）
+	Running   bool   `json:"running"`
+	Blocked   string `json:"blocked,omitempty"`
 }
 
-// handleSessionStatuses 返回 daemon 内全部运行中会话的清单（跨客户端可见）。
+// handleSessionStatuses 返回 daemon 内全部运行中 / 挂起等待用户输入的会话清单
+// （跨客户端可见）。
 //
 // 运行态不落库、只在进程内存：主会话取会话串行队列（sessionQueues）的
-// running 标志，子代理取各 Runtime 的强停登记表（sponsored）。
+// running 标志，子代理取各 Runtime 的强停登记表（sponsored）；挂起态取
+// sessionBlocks 登记（emit 点登记，用户回应 / 取消 / 删除时解除）。
 // 事件按发起客户端单播，其它端接入后收不到在途执行的事件——前端据此
-// RPC 轮询对齐会话列表的运行状态（侧栏头像呼吸、ChatInput 停止态）。
+// RPC 轮询对齐会话列表的运行状态（侧栏头像绕行描边、挂起气球、ChatInput
+// 停止态）。
 func (d *Daemon) handleSessionStatuses(_ context.Context, _ json.RawMessage) (any, error) {
 	statuses := make([]SessionRunStatus, 0, 4)
 
-	// 主会话：遍历会话串行队列，仅暴露 running 中的（队列对象在任务结束后
-	// 仍留在 map，但 running=false，跳过即可）。
+	// 主会话：遍历会话串行队列，运行中的直接呈现；已挂起（执行结束等待用户
+	// 输入）的会话不在 running 集合，凭 blocked 登记单独呈现——侧栏气球依赖。
 	d.sessionQueues.Range(func(key, value any) bool {
+		sid := key.(string)
 		q := value.(*sessionQueue)
 		q.mu.Lock()
 		running := q.running
 		q.mu.Unlock()
-		if running {
-			statuses = append(statuses, SessionRunStatus{SessionID: key.(string), Kind: "main"})
+		blocked := d.sessionBlockOf(sid)
+		if running || blocked != "" {
+			statuses = append(statuses, SessionRunStatus{SessionID: sid, Kind: "main", Running: running, Blocked: blocked})
 		}
 		return true
 	})
@@ -98,7 +109,7 @@ func (d *Daemon) handleSessionStatuses(_ context.Context, _ json.RawMessage) (an
 	if d.app != nil {
 		d.app.ForEachRuntime(func(rt *agents.Runtime) {
 			for _, id := range rt.RunningSubAgentSessions() {
-				statuses = append(statuses, SessionRunStatus{SessionID: id, Kind: "sub"})
+				statuses = append(statuses, SessionRunStatus{SessionID: id, Kind: "sub", Running: true})
 			}
 		})
 	}
@@ -334,6 +345,9 @@ func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) 
 	if sessDB == nil {
 		return nil, fmt.Errorf("session store not available")
 	}
+
+	// 会话删除即解除其挂起登记（若挂起中），避免侧栏气球指向已不存在的会话
+	d.clearSessionBlock(p.SessionID)
 
 	if err := goharnesssession.DeleteSession(context.Background(), sessDB, p.SessionID); err != nil {
 		return nil, fmt.Errorf("delete session %q failed: %w", p.SessionID, err)

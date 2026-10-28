@@ -78,6 +78,12 @@ func handleJobAdd(ctx *gateway.CommandContext) (any, error) {
 		return nil, fmt.Errorf(i18n.T("cmd.scheduler.invalid.cron"), err)
 	}
 
+	// "new" 仅为输入侧「自动建会话」哨兵：落库一律为空（触发时由 daemon 回退
+	// 最近会话或新建），绝不把 "new" 作为 session_id 存盘。
+	if sessionID == "new" {
+		sessionID = ""
+	}
+
 	entry := &scheduler.ScheduleEntry{
 		ID:         generateID(),
 		Agent:      agent,

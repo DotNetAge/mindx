@@ -54,6 +54,19 @@ type Daemon struct {
 	// 取代「新消息取消旧执行」的粗粒度取消机制（详见 session_queue.go）。
 	sessionQueues sync.Map
 
+	// sessionBlocks 按 sessionID 登记挂起等待用户输入的会话（值 = "ask" |
+	// "permission"）。蜂群侧栏气球数据源：主会话挂起时本轮执行已结束（不在
+	// sessionQueues 的 running 集合），运行态轮询单独感知不到；登记点为 ask /
+	// permission 事件 emit 处与子代理旁路 sink，解除点见 clearSessionBlock。
+	// 进程内存态，重启即清——挂起登记本身已持久化在会话目录，重启后气球缺失
+	// 属已知限制（打开会话仍可见挂起现场）。
+	sessionBlocks sync.Map
+
+	// subBlockParents 记录子会话挂起归属的父会话（子会话 ID → 父会话 ID）：
+	// 子代理提问的回答经 dispatchAskAnswer 按子会话 ID 送达，需据此反查清除
+	// 父会话的挂起登记（气球呈现在父会话行，子会话不进侧栏列表）。
+	subBlockParents sync.Map
+
 	// activeSessions tracks live sessions by sessionID for FileModifyHook
 	// to look up the session's TrackModify function.
 	activeSessions sync.Map
@@ -163,6 +176,12 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 
 		// Inject scheduler store into App for Cron tool registration.
 		app.SetSchedulerStore(schedulerDB)
+
+		// 任务库增删改回调：watchLoop 感知注册集变化后广播前端刷新（派工/删改
+		// 即时可见，不必等任务到点触发才有动静）。
+		d.scheduler.OnEntriesChanged(func() {
+			d.broadcastScheduleChanged()
+		})
 
 		// 生命周期回调：started 由 Scheduler 到点触发，Daemon 直接拉起 Runtime
 		// 在后台执行（2026-10-21 定案回归，不依赖客户端在线，离线照常执行）；
@@ -810,6 +829,12 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				}, gateway.WithSessionID(sessionID), withAgent())
 		}
 
+		// 新任务开工即解除挂起登记：用户回应（回答提问 / 授权魔法词 / 普通消息）
+		// 是挂起状态的消费点，本轮 Ask 开始时挂起登记随之消化（loop 内
+		// TakePendingAskUser / resolvePermissionMagicWord）。若本轮再次挂起，
+		// emit 点会在其之后重新登记，时序安全。
+		d.clearSessionBlock(sid)
+
 		// Load existing session from persistent store (verifies it exists).
 		//
 		// 必须在队列内执行：Session 懒加载后 Append 只更新各自实例的内存，
@@ -1009,6 +1034,8 @@ func (d *Daemon) cancelClientExecution(clientID string) {
 		sessionIDs := v.(*clientCancelSet).CancelAll()
 		d.clientCancels.Delete(clientID)
 		for _, sid := range sessionIDs {
+			// 执行树被强停：挂起等待随执行消亡，解除挂起登记（气球熄灭）
+			d.clearSessionBlock(sid)
 			if n := d.cancelSubAgents(sid); n > 0 {
 				d.logger.Info("断连级联强停子代理", "session_id", sid, "count", n)
 			}
@@ -1062,6 +1089,10 @@ func (d *Daemon) dispatchAskAnswer(target, answer string) bool {
 		}
 		dispatched = rt.DispatchAskAnswer(target, answer)
 	})
+	if dispatched {
+		// 子会话提问已回答：反查归属父会话并解除其挂起登记（气球熄灭）
+		d.resolveSubBlockAnswer(target)
+	}
 	return dispatched
 }
 
@@ -1135,6 +1166,32 @@ func (d *Daemon) resolveLatestSessionForAgent(agent string) string {
 		return best.SessionID
 	}
 	return ""
+}
+
+// ensureScheduleSession 为调度条目落实可执行的绑定会话：空 ID 与 CLI 约定的
+// "new" 哨兵都视为未绑定——先回退该智能体最近活动的会话，仍无则新建
+// （project_dir 非空随 meta 落库，文件记忆随之落到项目目录）。返回绑定后的
+// 会话 ID；调用方决定是否回写调度存储。
+func (d *Daemon) ensureScheduleSession(agent, sessionID, projectDir string) (string, error) {
+	if sessionID != "" && sessionID != "new" {
+		return sessionID, nil
+	}
+	if d.app == nil || d.app.SessDB() == nil {
+		return "", fmt.Errorf("session store not available")
+	}
+	if sid := d.resolveLatestSessionForAgent(agent); sid != "" {
+		return sid, nil
+	}
+	var opts []goharnesssession.SessionOption
+	if projectDir != "" {
+		opts = append(opts, goharnesssession.WithProjectDirOption(projectDir))
+	}
+	info, err := goharnesssession.CreateSession(context.Background(), d.app.SessDB(), agent, opts...)
+	if err != nil {
+		return "", fmt.Errorf("create schedule session failed: %w", err)
+	}
+	d.logger.Info("schedule entry: session created", "agent", agent, "session_id", info.SessionID, "project_dir", projectDir)
+	return info.SessionID, nil
 }
 
 // ---------------------------------------------------------------------------

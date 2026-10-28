@@ -40,6 +40,12 @@ const scheduledCancelClientID = "__scheduled__"
 // （子会话事件会更新它）。
 func (d *Daemon) withAskBypassSinks(ctx context.Context, sid string, agentName func() string) context.Context {
 	ctx = agents.WithPermissionSink(ctx, func(data events.PermissionPendingData) {
+		// 挂起登记（蜂群侧栏气球）：子会话授权冒泡时统一登记到父会话，
+		// 留下回答反查线索（魔法词于父会话新一轮解析）。
+		d.markSessionBlock(sid, "permission")
+		if data.SessionID != "" && data.SessionID != sid {
+			d.markSubBlockParent(data.SessionID, sid)
+		}
 		if d.gw == nil {
 			return
 		}
@@ -59,6 +65,11 @@ func (d *Daemon) withAskBypassSinks(ctx context.Context, sid string, agentName f
 	})
 
 	ctx = agents.WithAskSink(ctx, func(data events.AskUserPendingData) {
+		// 挂起登记（蜂群侧栏气球）：与 PermissionSink 同语义。
+		d.markSessionBlock(sid, "ask")
+		if data.SessionID != "" && data.SessionID != sid {
+			d.markSubBlockParent(data.SessionID, sid)
+		}
 		if d.gw == nil {
 			return
 		}
@@ -99,12 +110,19 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 		d.scheduler.ReportResult(info.EntryID, info.RunID, err)
 		return
 	}
-	// 会话缺失：无法定位执行落点，标记失败并广播（错误写明原因与补救）。
+	// 会话未绑定（空 ID）：现场落实——回退该智能体最近会话或新建。
+	// "new" 哨兵在 add/update 入口已解析为真实会话 ID，绝不落库，此处不认；
+	// 仅内存态生效，不回写存储（避免与调度器一次性禁用/执行统计落盘竞态）；
+	// 落实失败才按失败回写，任务状态不留悬空 started。
 	if entry.SessionID == "" {
-		err := errors.New("任务未绑定会话，无法执行（删除后重建该任务即可）")
-		d.logger.Error("scheduled job: entry has no session", err, "entry_id", info.EntryID)
-		d.scheduler.ReportResult(info.EntryID, info.RunID, err)
-		return
+		sid, serr := d.ensureScheduleSession(entry.Agent, entry.SessionID, entry.ProjectDir)
+		if serr != nil {
+			serr = fmt.Errorf("任务未绑定会话且自动落实失败: %w", serr)
+			d.logger.Error("scheduled job: resolve session failed", serr, "entry_id", info.EntryID, "agent", entry.Agent)
+			d.scheduler.ReportResult(info.EntryID, info.RunID, serr)
+			return
+		}
+		entry.SessionID = sid
 	}
 	rt, err := d.app.ResolveRuntime(entry.Agent)
 	if err != nil {
@@ -158,6 +176,10 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 			return
 		}
 
+		// 新任务开工即解除挂起登记：用户回应 / 上一轮挂起重启是挂起消费点
+		//（与 defaultHandler 同语义，详见 session_queue.go clearSessionBlock 注）。
+		d.clearSessionBlock(sid)
+
 		// 会话装配与 defaultHandler 同源：Runtime 统一注入压缩/沙箱配置，
 		// 动态窗口 resolver，文件记忆 SummarySink 落到会话项目目录。
 		var sessOpts []goharnesssession.SessionConfig
@@ -194,7 +216,7 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 		})
 
 		// 广播版事件链：事件以与定向版同构的信封广播到所有在线客户端。
-		emitter := newBroadcastAskHandlers(gw, sid, withAgent, s, getAgentName, getSubSessionID)
+		emitter := newBroadcastAskHandlers(d, gw, sid, withAgent, s, getAgentName, getSubSessionID)
 
 		// 轮次日志：与前台同源采集（mindx report collect / daily-report 消费）。
 		turnLogLenBefore := len(s.All())
