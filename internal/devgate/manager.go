@@ -42,7 +42,7 @@ const (
 )
 
 // 设备令牌作用域（PAT 族分层授权）：
-//   - ScopeLocal 本机全权：本机壳/CLI/桥凭 daemon_token 直通（等价持本机凭证）
+//   - ScopeLocal 本机全权：本机壳/CLI/桥凭 ~/.mindx/.token 直通（等价持本机凭证）
 //   - ScopeAsk   远程设备默认：对话/文件/市场等工作面可用，
 //     管理面（设备管理、本机凭据下发、系统与全局配置变更）一律拒绝
 const (
@@ -486,7 +486,7 @@ func (m *Manager) Authorized(clientID string) bool {
 }
 
 // LocalVerified 查询连接是否凭本机信任令牌直通（区别于外接设备）。
-// 本机专属凭据（如 daemon_token）只下发给这类连接——外接设备一律使用
+// 本机专属凭据（~/.mindx/.token）只下发给这类连接——外接设备一律使用
 // 各自的设备令牌（可撤销、绑设备），防止配对成功的设备换取不可撤销的
 // 本机直通身份。
 func (m *Manager) LocalVerified(clientID string) bool {

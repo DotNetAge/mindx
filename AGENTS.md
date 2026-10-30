@@ -45,7 +45,7 @@
 
 * 禁止凭上游摘要/注释/记忆复刻跨端共享的文件路径、协议细节——**编码前必须先读事实源当前实现**（2026-10-11 实锤：设备接入闸落地时凭摘要写 `~/.mindx/daemon_token`，真实路径是 `daemonTokenPath()` 的 `~/.mindx/data/daemon_token`（dataDir 运行期指向 data 子目录），GUI/CLI 读不到令牌全部握手失败，注册层强制闸把本机客户端一并挡死，用户"一起动就失去与任何 Daemon 的连接"；修复=LocalToken/readDaemonToken 两级查找 data/daemon_token 优先、根目录回落。**2026-10-30 用户否定了当时的修复方向**：事故后未归一数据源、反而以兼容层迁就偏离位置，正是数据源混乱的源头；同日落点已定案为 `~/.mindx/.token`，见「~/.mindx 数据落点军规」）
 * 禁止在注释/TODO 中引用未经核实的 API——被注释停用的代码不参与编译，引用了不存在的符号编译器不会报错，启用当天才爆炸（2026-10-17 实锤：daemon.go 的 TODO 注释引用 `gateway.WithAuthenticator`，而该选项在 gort gateway 中从未实现，启用公网鉴权钩子时才暴露，被迫当场在 gort 补实现）；启用任何长期停用的代码前，先确认其依赖的真实存在
-* 隔离 MINDX_HOME 起测试 daemon 做连接冒烟时，CLI 的本机握手读的是真实 `~/.mindx/daemon_token`（pkg/rpc 的 defaultUserPrefsDir 不认 MINDX_HOME，与 daemon 侧 core.DefaultUserPrefsDir 不同源）——须把真实 daemon_token 预置进隔离目录再起 daemon，否则 CLI 被强制闸判为外部设备卡 pending（2026-10-17 冒烟实证）
+* 隔离 MINDX_HOME 起测试 daemon 做连接冒烟时，CLI 的本机握手读的是真实用户根令牌（现为 `~/.mindx/.token`；pkg/rpc 的 defaultUserPrefsDir 不认 MINDX_HOME，与 daemon 侧 core.DefaultUserPrefsDir 不同源）——须把真实 .token 预置进隔离目录再起 daemon，否则 CLI 被强制闸判为外部设备卡 pending（2026-10-17 冒烟实证）
 * 启用任何新鉴权闸门（如握手层网络闸）时，必须重审既有 RPC 的可达性变化——闸门放行的每一类新连接（如配对码路径）都继承了该闸下所有 RPC 的暴露面：2026-10-17 审计实锤，配对码让"5 分钟窗口内的短码持有者"成为已验证连接，而既有 network.token.get 会向任何已验证连接下发本机 daemon_token（不可撤销、不受开关限制），组合成权限升级链；修复=本机专属凭据只对本机直通连接（devgate.LocalVerified）下发，外接设备一律用各自可撤销的设备令牌
 * 新增会拦截既有调用方的强制闸/中间件时，**上线前必须拿一条真实客户端链路实测**（如 `go run ./cmd/rpctest`：握手 + 一次受闸调用），只跑 daemon 单测不等于本机可用；同时过一遍"客户端握手失败后系统处于什么状态"——失败无重试会把瞬时故障放大成全灭
 * 禁止未经核实断言 runtime/ 下文件的"引用/生效"状态——embedding、初装释放、版本同步三层机制都要查证
