@@ -22,9 +22,28 @@
 * 用户可编辑的根级配置文件（如 `policy.json`）必须加入 `SyncRuntimeAssets` 的 `checkFiles` 保护列表（checksum 未变才随版本更新），防止版本升级覆盖用户改动
 * 判断 runtime/ 文件的引用关系时，检索范围必须包含 `embed.go` 清单、`ExtractWorkspace`/`SyncRuntimeAssets` 的 WalkDir 逻辑与 `internal/setup` 的同步调用点，缺一处即结论无效
 
+## ~/.mindx 数据落点军规（2026-10-30 用户定案）
+
+* mindx 用户数据根唯一且永远是 `~/.mindx`。下表为全部合法落点清单，**禁止未经用户明确授权新建任何目录或文件落点**——新落点必须先经用户批准入清单，再写代码：
+
+| 落点 | 用途 | 唯一写方 |
+| --- | --- | --- |
+| `mindx.json` | 根级配置 | mindx |
+| `policy.json` | 用户可编辑策略（SyncRuntimeAssets 保护） | mindx 初装 / 用户 |
+| `AGENTS.md` | 根级 Agent 规则 | runtime 种子 / 用户 |
+| `bin/` | mindx 主二进制 | make restart / mindx upgrade |
+| `.venv/` | Python 运行环境 | mindx doctor --fix |
+| `logs/` | 日志 | mindx |
+| `settings/` | providers.yml、models.yml、mcp.json、client-provider.yml | mindx |
+| `agents/` `teams/` `skills/` `plugins/` | 生态实体 | runtime 种子 / 市场安装 / mindx |
+| `data/` | 运行数据（kv.db、schedules、studio） | mindx；令牌不在此（历史遗留待清除） |
+| `.token` | 本机握手令牌，唯一落点 | 仅 daemon（核） |
+
+* 核壳同源、禁止双写（2026-10-30 用户定案）：**任何令牌只写入 `~/.mindx/.token`，唯一写方是 daemon；壳（App）、CLI、桥一律只读**——禁止读方自造令牌、补种兜底、多候选查找、双写。历史遗留 `data/daemon_token` 与 `~/.mindx/daemon_token` 由 daemon 启动时单点迁移到 `.token` 后作废，读方不得保留兼容分支。
+
 ## 必须禁止
 
-* 禁止凭上游摘要/注释/记忆复刻跨端共享的文件路径、协议细节——**编码前必须先读事实源当前实现**（2026-10-11 实锤：设备接入闸落地时凭摘要写 `~/.mindx/daemon_token`，真实路径是 `daemonTokenPath()` 的 `~/.mindx/data/daemon_token`（dataDir 运行期指向 data 子目录），GUI/CLI 读不到令牌全部握手失败，注册层强制闸把本机客户端一并挡死，用户"一起动就失去与任何 Daemon 的连接"；修复=LocalToken/readDaemonToken 两级查找 data/daemon_token 优先、根目录回落）
+* 禁止凭上游摘要/注释/记忆复刻跨端共享的文件路径、协议细节——**编码前必须先读事实源当前实现**（2026-10-11 实锤：设备接入闸落地时凭摘要写 `~/.mindx/daemon_token`，真实路径是 `daemonTokenPath()` 的 `~/.mindx/data/daemon_token`（dataDir 运行期指向 data 子目录），GUI/CLI 读不到令牌全部握手失败，注册层强制闸把本机客户端一并挡死，用户"一起动就失去与任何 Daemon 的连接"；修复=LocalToken/readDaemonToken 两级查找 data/daemon_token 优先、根目录回落。**2026-10-30 用户否定了当时的修复方向**：事故后未归一数据源、反而以兼容层迁就偏离位置，正是数据源混乱的源头；同日落点已定案为 `~/.mindx/.token`，见「~/.mindx 数据落点军规」）
 * 禁止在注释/TODO 中引用未经核实的 API——被注释停用的代码不参与编译，引用了不存在的符号编译器不会报错，启用当天才爆炸（2026-10-17 实锤：daemon.go 的 TODO 注释引用 `gateway.WithAuthenticator`，而该选项在 gort gateway 中从未实现，启用公网鉴权钩子时才暴露，被迫当场在 gort 补实现）；启用任何长期停用的代码前，先确认其依赖的真实存在
 * 隔离 MINDX_HOME 起测试 daemon 做连接冒烟时，CLI 的本机握手读的是真实 `~/.mindx/daemon_token`（pkg/rpc 的 defaultUserPrefsDir 不认 MINDX_HOME，与 daemon 侧 core.DefaultUserPrefsDir 不同源）——须把真实 daemon_token 预置进隔离目录再起 daemon，否则 CLI 被强制闸判为外部设备卡 pending（2026-10-17 冒烟实证）
 * 启用任何新鉴权闸门（如握手层网络闸）时，必须重审既有 RPC 的可达性变化——闸门放行的每一类新连接（如配对码路径）都继承了该闸下所有 RPC 的暴露面：2026-10-17 审计实锤，配对码让"5 分钟窗口内的短码持有者"成为已验证连接，而既有 network.token.get 会向任何已验证连接下发本机 daemon_token（不可撤销、不受开关限制），组合成权限升级链；修复=本机专属凭据只对本机直通连接（devgate.LocalVerified）下发，外接设备一律用各自可撤销的设备令牌

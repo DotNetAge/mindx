@@ -7,9 +7,9 @@
 //   - 已验证连接登记（clientID → deviceID），供 RPC 注册层强制闸查询
 //
 // 安全模型：局域网信任（与 mDNS 广播同级风险）。本机客户端凭 daemon
-// 握手令牌（~/.mindx/daemon_token，0600）直通且不受开关限制；外部设备
-// 必须经弹窗批准。批准后 token 按请求的 deviceID 下发给下一个握手的
-// 轮询者——批准即视同设备在场，此后连接均须凭 token。
+// 握手令牌（唯一落点 ~/.mindx/.token，0600，仅 daemon 写入）直通且不受
+// 开关限制；外部设备必须经弹窗批准。批准后 token 按请求的 deviceID
+// 下发给下一个握手的轮询者——批准即视同设备在场，此后连接均须凭 token。
 package devgate
 
 import (

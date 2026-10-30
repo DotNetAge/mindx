@@ -22,6 +22,20 @@ func newTestDaemon(t *testing.T) (*Daemon, func()) {
 	t.Helper()
 	tmpDir := t.TempDir()
 
+	// 令牌落点 ~/.mindx/.token 跟随真实用户根（DefaultUserPrefsDir 不认
+	// MINDX_HOME/config 根）——NewDaemon 构造期即会读写令牌，必须隔离 HOME
+	// 到临时目录，禁止测试触碰真实 ~/.mindx
+	t.Setenv("HOME", tmpDir)
+
+	// DefaultApp 构造期（先于 SetTestDir）按 HOME/.mindx 结构读取配置，
+	// 须预置同构最小文件，否则测试要么失败、要么蹭真实 ~/.mindx 的配置
+	prefsHome := filepath.Join(tmpDir, ".mindx")
+	_ = os.MkdirAll(filepath.Join(prefsHome, "settings"), 0755)
+	_ = os.MkdirAll(filepath.Join(prefsHome, "agents"), 0755)
+	_ = os.MkdirAll(filepath.Join(prefsHome, "teams"), 0755)
+	_ = os.WriteFile(filepath.Join(prefsHome, "settings", "models.yml"), []byte{}, 0644)
+	_ = os.WriteFile(filepath.Join(prefsHome, "settings", "rules.yml"), []byte{}, 0644)
+
 	sessionsDir := filepath.Join(tmpDir, "sessions")
 	dataDir := filepath.Join(tmpDir, "data")
 	prefsDir := filepath.Join(tmpDir, "prefs")

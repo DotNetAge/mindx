@@ -60,23 +60,20 @@ func Dial(addr string) (*Client, error) {
 	return &Client{gw: c}, nil
 }
 
-// LocalToken 读取本机 daemon 握手令牌（与 daemon 侧 daemonTokenPath 同构：
-// 优先 <用户数据根>/data/daemon_token（运行期 dataDir），回落 <用户数据根>/daemon_token
-// （dataDir 未设时的路径）；只读不生成，两处均缺失即失败）。
+// LocalToken 读取本机 daemon 握手令牌：唯一落点 ~/.mindx/.token（AGENTS.md
+// 数据落点军规：唯一写方是 daemon，CLI 只读不生成，缺失即失败；历史遗留的
+// data/daemon_token 由 daemon 启动时单点迁移，CLI 不保留兼容分支）。
 func LocalToken() (string, error) {
-	base := defaultUserPrefsDir()
-	for _, rel := range []string{"data/daemon_token", "daemon_token"} {
-		data, err := os.ReadFile(filepath.Join(base, filepath.FromSlash(rel)))
-		if err != nil {
-			continue
-		}
-		token := trimSpaceBytes(data)
-		if token != "" {
-			return token, nil
-		}
+	path := filepath.Join(defaultUserPrefsDir(), ".token")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("读取本机握手令牌失败: %w（请确认本机 daemon 已启动）", err)
 	}
-	return "", fmt.Errorf("读取本机握手令牌失败: %s 与 %s 均不存在或为空",
-		filepath.Join(base, "data", "daemon_token"), filepath.Join(base, "daemon_token"))
+	token := trimSpaceBytes(data)
+	if token == "" {
+		return "", fmt.Errorf("本机握手令牌为空: %s", path)
+	}
+	return token, nil
 }
 
 // HandshakeLocal 在已建立的连接上完成本机设备握手（设备接入强制闸要求）。

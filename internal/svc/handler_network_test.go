@@ -7,11 +7,12 @@ import (
 )
 
 // newAuthTestDaemon 最小认证测试装置：networkAuthenticator 只依赖
-// dataDir（daemon_token 文件）与 devGate（此处 nil，设备令牌分支由
-// devgate 包自测覆盖）。
+// 本机令牌落点（~/.mindx/.token，随 HOME 隔离到临时目录）与 devGate
+// （此处 nil，设备令牌分支由 devgate 包自测覆盖）。
 func newAuthTestDaemon(t *testing.T) *Daemon {
 	t.Helper()
-	return &Daemon{dataDir: t.TempDir()}
+	t.Setenv("HOME", t.TempDir()) // 令牌唯一落点跟随真实用户根，必须隔离 HOME
+	return &Daemon{}
 }
 
 // publicReq 构造公网来源的升级请求（authenticator 的私网分支直接放行，

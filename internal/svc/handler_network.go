@@ -41,16 +41,26 @@ var publicIPProbes = []string{
 	"https://icanhazip.com",
 }
 
-// daemonTokenPath 返回握手 token 文件路径（~/.mindx/daemon_token）。
+// daemonTokenPath 返回握手 token 文件路径：唯一落点 ~/.mindx/.token
+// （AGENTS.md 数据落点军规：凭据类文件只落根目录，唯一写方是 daemon，
+// CLI/壳一律只读，核壳同源禁止双写）。
 func (d *Daemon) daemonTokenPath() string {
-	base := d.dataDir
-	if base == "" {
-		base = core.DefaultUserPrefsDir()
+	return filepath.Join(core.DefaultUserPrefsDir(), ".token")
+}
+
+// legacyTokenPaths 历史遗留落点（dataDir 偏离产物与早期根目录落点）。
+// 仅在启动迁移窗口读取一次，旧值迁入 .token 后即删除，不留双源。
+func legacyTokenPaths() []string {
+	home := core.DefaultUserPrefsDir()
+	return []string{
+		filepath.Join(home, "data", "daemon_token"),
+		filepath.Join(home, "daemon_token"),
 	}
-	return filepath.Join(base, "daemon_token")
 }
 
 // loadOrCreateDaemonToken 读取（无则生成）32 字节 hex 握手 token。
+// .token 缺失时为单点迁移窗口：历史落点有旧值则复用（写入 .token 并删除
+// 旧文件完成数据源收敛），全部缺失才生成新值。
 func (d *Daemon) loadOrCreateDaemonToken() (string, error) {
 	path := d.daemonTokenPath()
 	if data, err := os.ReadFile(path); err == nil {
@@ -58,6 +68,24 @@ func (d *Daemon) loadOrCreateDaemonToken() (string, error) {
 		if token != "" {
 			return token, nil
 		}
+	}
+	for _, oldPath := range legacyTokenPaths() {
+		data, err := os.ReadFile(oldPath)
+		if err != nil {
+			continue
+		}
+		token := strings.TrimSpace(string(data))
+		if token == "" {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return "", fmt.Errorf("创建配置目录失败: %w", err)
+		}
+		if err := os.WriteFile(path, []byte(token), 0o600); err != nil {
+			return "", fmt.Errorf("写入握手 token 失败: %w", err)
+		}
+		_ = os.Remove(oldPath) // 迁移完成即作废旧落点；删除失败不影响本次握手，下次启动重试
+		return token, nil
 	}
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
