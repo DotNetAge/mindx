@@ -41,6 +41,8 @@
 
 * 核壳同源、禁止双写（2026-10-30 用户定案）：**任何令牌只写入 `~/.mindx/.token`，唯一写方是 daemon；壳（App）、CLI、桥一律只读**——禁止读方自造令牌、补种兜底、多候选查找、双写。历史遗留 `data/daemon_token` 与 `~/.mindx/daemon_token` 由 daemon 启动时单点迁移到 `.token` 后作废，读方不得保留兼容分支。
 
+* 「Gitee 主源、GitHub 兜底」军规仅适用于**存在 Gitee 同步镜像的仓库**（如 mindx-app）；无 Gitee 镜像的仓库（实证 2026-10-30：DotNetAge/mindx 在 Gitee 无仓库）GitHub 即唯一事实源，其下载/升级链路走纯 GitHub **不构成违反**——引用军规前必须先查证目标仓库是否真有 Gitee 镜像，禁止凭军规字面机械套用（2026-10-30 实锤：升级源审查时未查证就断言 mindx upgrade「违反军规」，被用户纠正）
+
 ## 必须禁止
 
 * 禁止凭上游摘要/注释/记忆复刻跨端共享的文件路径、协议细节——**编码前必须先读事实源当前实现**（2026-10-11 实锤：设备接入闸落地时凭摘要写 `~/.mindx/daemon_token`，真实路径是 `daemonTokenPath()` 的 `~/.mindx/data/daemon_token`（dataDir 运行期指向 data 子目录），GUI/CLI 读不到令牌全部握手失败，注册层强制闸把本机客户端一并挡死，用户"一起动就失去与任何 Daemon 的连接"；修复=LocalToken/readDaemonToken 两级查找 data/daemon_token 优先、根目录回落。**2026-10-30 用户否定了当时的修复方向**：事故后未归一数据源、反而以兼容层迁就偏离位置，正是数据源混乱的源头；同日落点已定案为 `~/.mindx/.token`，见「~/.mindx 数据落点军规」）
