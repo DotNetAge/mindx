@@ -156,7 +156,14 @@ func (s *encryptedFileStore) readEncrypted() (string, error) {
 
 	plaintext, err := s.decrypt(data)
 	if err != nil {
-		return string(data), nil
+		// 解密失败（换机/密钥漂移/文件损坏）不可把密文当明文继续解析——
+		// 那等于凭据静默全丢且无任何痕迹。备份坏文件（仅首次，保留诊断
+		// 线索）后返回空：调用方走重新授权流程，下次 Set 以新内容重建。
+		backup := s.path + ".corrupt"
+		if _, statErr := os.Stat(backup); os.IsNotExist(statErr) {
+			_ = os.WriteFile(backup, data, 0600)
+		}
+		return "", nil
 	}
 	return string(plaintext), nil
 }

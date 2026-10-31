@@ -54,7 +54,10 @@ func newTestDaemon(t *testing.T) (*Daemon, func()) {
 
 	_ = app.SetTestDir(tmpDir)
 
-	d := NewDaemon(app, ":0", "/ws", nil)
+	d, err := NewDaemon(app, ":0", "/ws", nil)
+	if err != nil {
+		t.Fatalf("NewDaemon() error = %v", err)
+	}
 
 	cleanup := func() {
 		d.stopBackgroundServices()

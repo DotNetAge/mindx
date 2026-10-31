@@ -128,7 +128,7 @@ type Daemon struct {
 	marketIdentity marketIdentityLinkState
 }
 
-func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
+func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) (*Daemon, error) {
 	logDir := logging.ResolveLogDir()
 	logger := logging.DefaultZapLogger(&logging.ZapConfig{
 		Filename:   filepath.Join(logDir, "mindx.log"),
@@ -208,10 +208,26 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 	}
 
 	// Initialize global KV store (bbolt)
-	kvDB, kvErr := initKVStore(app.Settings().DataDir())
+	// 打不开不继续跑：kvStore 为 nil 时 13 处依赖点全部失效（会话持久化、
+	// 设备闸外的各类存储 RPC 全部残废），带病运行比退出更糟。常见原因是
+	// flock 被另一个 daemon 进程占用（双开/手动 mindx run 残留）——重试
+	// 覆盖瞬时占用，仍失败则退出交由 launchd 重启（持有方退出后即恢复）。
+	var kvDB *bbolt.DB
+	var kvErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		kvDB, kvErr = initKVStore(app.Settings().DataDir())
+		if kvErr == nil {
+			break
+		}
+		logger.Warn("failed to initialize kvstore, retrying",
+			"attempt", attempt, "error", kvErr)
+		time.Sleep(2 * time.Second)
+	}
 	if kvErr != nil {
-		logger.Warn("failed to initialize kvstore", "error", kvErr)
-	} else {
+		logger.Error("kvstore unavailable after retries, exiting", kvErr)
+		return nil, fmt.Errorf("初始化 kv 存储失败（可能被另一个进程占用）: %w", kvErr)
+	}
+	{
 		d.kvStore = kvDB
 		logger.Info("kvstore initialized",
 			"path", filepath.Join(app.Settings().DataDir(), "kv.db"),
@@ -283,7 +299,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) *Daemon {
 		"has_kvstore", d.kvStore != nil,
 	)
 
-	return d
+	return d, nil
 }
 
 // sessionProjectDir 查询会话的项目目录（用于记忆文件落盘定位）。

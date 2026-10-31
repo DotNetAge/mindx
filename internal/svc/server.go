@@ -27,7 +27,10 @@ func NewServer(addr, wsPath string, iconFS, runtimeFS fs.FS) (*Server, error) {
 		app.SetIconFS(iconFS)
 	}
 
-	daemon := NewDaemon(app, addr, wsPath, runtimeFS)
+	daemon, err := NewDaemon(app, addr, wsPath, runtimeFS)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Server{
 		app:    app,

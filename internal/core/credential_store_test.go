@@ -123,13 +123,17 @@ func TestEncryptedFileStore_DecryptInvalid(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	// readEncrypted 当解密失败时会返回原始数据（容错）
+	// 解密失败返回空（不把密文当明文解析——那等于凭据静默全丢），坏文件
+	// 备份为 .corrupt 保留诊断线索，Get 不报错（调用方走重新授权流程）
 	val, err := store.Get("not-encrypted")
 	if err != nil {
 		t.Fatalf("Get on corrupt file failed: %v", err)
 	}
-	if val != "some-value" {
-		t.Errorf("got %q, want %q", val, "some-value")
+	if val != "" {
+		t.Errorf("got %q, want empty on corrupt file", val)
+	}
+	if _, statErr := os.Stat(store.path + ".corrupt"); statErr != nil {
+		t.Errorf("corrupt file not backed up as .corrupt: %v", statErr)
 	}
 }
 
