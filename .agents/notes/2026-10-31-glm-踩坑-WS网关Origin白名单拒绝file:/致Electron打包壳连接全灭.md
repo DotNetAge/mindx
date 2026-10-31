@@ -27,11 +27,22 @@ WebSocket 恒发 `Origin: file://` → 403。mindx 2.6.7 起 gort 升级带上
 3. curl 带与不带 `Origin: file://` 对比 → 不带 101、带 403，daemon 日志
    打出白名单原文 → 根因石锤
 
-## 修复
+## 修复（已废弃）
 
-mindx daemon.go initGateway 经 `gateway.WithWSConfig` 整体覆盖白名单 =
-gort 默认列表 + `file://`。gort 未导出 defaultWSConfig，列表手抄，
-升级 gort 时必须对齐漂移（注释已标）。
+初版修复：daemon.go initGateway 经 `gateway.WithWSConfig` 整体覆盖白名单 =
+gort 默认列表 + `file://`。该方案治标不治本（壳页面直连导致 daemon 网关
+策略一变全壳全灭，且白名单需手抄 gort 私有默认列表，升级即漂移）。
+
+## 终局（2026-11-01，架构手术）
+
+- mindx 侧：删除 WithWSConfig 覆盖块（19c407f），完全回退 gort 默认白名单
+  （空 Origin 放行、localhost 放行、file:// 拒绝）。Token 鉴权是唯一安全边界。
+- mindx-work 侧：壳内一切 daemon WebSocket 连接改由主进程 Node ws 客户端
+  建立（与 CLI 完全同机制，无 Origin 头），渲染层经 IPC 哑管道收发帧。
+  渲染层 Origin 从根源消失，daemon 网关策略不再牵连壳。
+- 验证矩阵（隔离 HOME=/tmp/mx-lab + 端口 1319）：no-origin 通 / file:// 拒
+  403 / localhost:5173 通 / evil 拒 403；真机冒烟 lsof 证实连接由 Electron
+  主进程持有，CDP 页内探针 device.handshake 返回 paired。
 
 ## 教训
 
