@@ -201,7 +201,16 @@ func NewManager(cfg Config) (*Manager, error) {
 			}
 			mgr.devices = devices
 		} else {
-			mgr.logger.Warn("devgate: 已授权设备表损坏，忽略", "error", err.Error())
+			// 损坏即自愈：重置空表并立即回写覆盖坏值（本机令牌直通不受影响，
+			// 外接设备需重新配对——可接受的降级）。坏值若不清理，此后每次
+			// 启动都重复报损坏且授权表永远不可用（hex 残留事故实证：
+			// 冒烟工具曾以 hex 编码 JSON 写入，读侧解析 7 后遇 b 炸）。
+			mgr.logger.Warn("devgate: 已授权设备表损坏，已重置为空表",
+				"error", err.Error(), "corrupt_head", truncateForLog(v))
+			mgr.devices = map[string]Device{}
+			if setErr := cfg.Store.Set(keyDevices, "{}"); setErr != nil {
+				mgr.logger.Warn("devgate: 损坏设备表回写失败，下次启动将再次重置", "error", setErr.Error())
+			}
 		}
 	}
 	if v, err := cfg.Store.Get(keyBlocked); err == nil && v != "" {
@@ -209,10 +218,24 @@ func NewManager(cfg Config) (*Manager, error) {
 		if err := json.Unmarshal([]byte(v), &blocked); err == nil {
 			mgr.blocked = blocked
 		} else {
-			mgr.logger.Warn("devgate: 拉黑名单损坏，忽略", "error", err.Error())
+			mgr.logger.Warn("devgate: 拉黑名单损坏，已重置为空表",
+				"error", err.Error(), "corrupt_head", truncateForLog(v))
+			mgr.blocked = map[string]BlockedEntry{}
+			if setErr := cfg.Store.Set(keyBlocked, "{}"); setErr != nil {
+				mgr.logger.Warn("devgate: 损坏黑名单回写失败，下次启动将再次重置", "error", setErr.Error())
+			}
 		}
 	}
 	return mgr, nil
+}
+
+// truncateForLog 损坏值头部摘录（≤120 字节），仅留诊断线索，不整段落日志
+func truncateForLog(v string) string {
+	r := []rune(v)
+	if len(r) > 120 {
+		return string(r[:120]) + "…"
+	}
+	return v
 }
 
 // Allowed 返回「允许设备接入」开关状态。
