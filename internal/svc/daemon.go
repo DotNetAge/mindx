@@ -608,42 +608,6 @@ func (d *Daemon) initGateway() {
 		gateway.WithAddr(d.addr),
 		gateway.WithPath(d.wsPath),
 		gateway.WithHandler(d.defaultHandler),
-		// Origin 白名单 = gort 默认列表 + file://（Electron 打包壳从 file://
-		// 加载页面，其 WebSocket Origin 恒为 file://）。升级 gort 版本时
-		// 需与 defaultWSConfig 对齐。
-		gateway.WithWSConfig(&gateway.WSConfig{
-			AllowedOrigins: []string{
-				"http://localhost:*",
-				"http://127.0.0.1:*",
-				"ws://localhost:*",
-				"ws://127.0.0.1:*",
-				// Wails 壳（mindx-app）的 WebView 页面 origin：dev 带端口、生产无端口
-				"wails://wails.localhost:*",
-				"wails://wails.localhost",
-				// Electron 打包壳（mindx-work）：file:// 页面发起的 WebSocket
-				"file://",
-				// LAN subnets
-				"http://192.168.*:*", "ws://192.168.*:*",
-				"http://10.*:*", "ws://10.*:*",
-				"http://172.16.*:*", "ws://172.16.*:*",
-				"http://172.17.*:*", "ws://172.17.*:*",
-				"http://172.18.*:*", "ws://172.18.*:*",
-				"http://172.19.*:*", "ws://172.19.*:*",
-				"http://172.20.*:*", "ws://172.20.*:*",
-				"http://172.21.*:*", "ws://172.21.*:*",
-				"http://172.22.*:*", "ws://172.22.*:*",
-				"http://172.23.*:*", "ws://172.23.*:*",
-				"http://172.24.*:*", "ws://172.24.*:*",
-				"http://172.25.*:*", "ws://172.25.*:*",
-				"http://172.26.*:*", "ws://172.26.*:*",
-				"http://172.27.*:*", "ws://172.27.*:*",
-				"http://172.28.*:*", "ws://172.28.*:*",
-				"http://172.29.*:*", "ws://172.29.*:*",
-				"http://172.30.*:*", "ws://172.30.*:*",
-				"http://172.31.*:*", "ws://172.31.*:*",
-			},
-			AllowAllInDev: true,
-		}),
 		// 握手层网络准入：私网放行；公网必须凭本机令牌、已授权设备令牌
 		// 或有效配对码（networkAuthenticator 三分支，见 handler_network.go）
 		gateway.WithAuthenticator(d.networkAuthenticator()),
