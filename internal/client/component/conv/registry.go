@@ -662,7 +662,7 @@ func groupHeaderOf(g *GroupNode) string {
 
 // truncate 单行截断（对齐 Desktop singleLine）。
 // max 为可用宽度，调用方常传 width-4 之类的表达式；AskUser 等窄布局下
-// width 可能为 0，导致 max 为负，切片 runes[:max] 会 panic（[:-4] 实锤）。
+// width 可能为 0，导致 max 为负，切片 runes[:max] 会 panic。
 func truncate(s string, max int) string {
 	if s == "" || max <= 0 {
 		return ""

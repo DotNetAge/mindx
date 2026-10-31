@@ -48,8 +48,8 @@ func (d *Daemon) initDeviceGate() {
 	d.devGate = mgr
 
 	// 启动即把本机握手令牌落盘（loadOrCreate 懒生成会在「客户端永远读不到文件、
-	// 因此永远发不出非空 token、daemon 因此永远不触发生成」间形成死锁——
-	// 2026-10-23 事故实证：环境重置后 App 读空令牌被闸全拦）。闸装配成功即生成，
+	// 因此永远发不出非空 token、daemon 因此永远不触发生成」间形成死锁）。
+	// 闸装配成功即生成，
 	// 保证 App/CLI 任何时刻启动都能读到有效令牌。
 	if _, err := d.loadOrCreateDaemonToken(); err != nil {
 		d.logger.Warn("devgate: 本机握手令牌生成失败，本机直通将不可用", "error", err.Error())
@@ -184,7 +184,7 @@ func (d *Daemon) handleDevicePairCode(_ context.Context, _ json.RawMessage) (any
 }
 
 // handleDeviceHandshake 处理 device.handshake：设备接入握手（强制闸唯一对外开口）。
-// account_trust 非空时走同账号互信路径（跨端连接第二步，DEVICE-TRUST.md 定案一）：
+// account_trust 非空时走同账号互信路径（跨端连接第二步）：
 // 凭被连方自己的 AuthToken 向社区服务端核验对端凭据——同账号且凭据签发设备与
 // 对端自报身份一致才放行互信，否则置空回落既有弹窗/配对码流程。
 func (d *Daemon) handleDeviceHandshake(ctx context.Context, params json.RawMessage) (any, error) {

@@ -17,7 +17,7 @@ import (
 // 工具命名规则：mcp_<server>_<toolName>，片段经 sanitizeToolName 清洗。
 // 这样即使多个 server 暴露同名工具也不会在 ToolRegistry 里冲突。
 // 注意不能用冒号拼接：OpenAI 兼容 API 要求工具名匹配 ^[a-zA-Z0-9_-]+$，
-// 冒号/点号/中文等会直接 400（2026-10-21 修复）。
+// 冒号/点号/中文等会直接 400。
 //
 // Schema 透传策略：
 //   - RawSchema: 放完整 MCP inputSchema（嵌套 / 联合类型 / $ref 全保留），

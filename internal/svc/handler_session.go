@@ -665,7 +665,6 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 
 	// 窗口大小已通过 modelContextResolver 回调动态获取，无需手动 SetMaxWindowSize。
 	// 文件记忆：压缩摘要经 SummarySink 落盘到项目目录 .agents/memory/
-	//（2026-10-06 记忆剥离重构，替代 RAGMemoryAdapter）
 	memoryDir := d.app.FileMemory().MemoryDirFor(sess.ProjectDir())
 	sess.SetSummarySink(func(ctx context.Context, summary string) error {
 		return d.app.FileMemory().Write(ctx, memoryDir, sess.AgentName(), sess.ID(), summary)

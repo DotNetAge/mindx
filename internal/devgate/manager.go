@@ -91,10 +91,10 @@ type Device struct {
 	ApprovedAt  time.Time `json:"approved_at"`
 }
 
-// AccountTrust 连接方出示的同账号互信凭据（跨端连接第二步，DEVICE-TRUST.md 定案一）：
+// AccountTrust 连接方出示的同账号互信凭据（跨端连接第二步的同账号互信路径）：
 // nonce 由社区服务端签发（绑定连接方登记设备身份与账号），握手层凭被连方自己的
 // AuthToken 向服务端核验通过后才传到这里——同账号判定与设备身份核对都在
-// 握手层完成，管理器只负责「已核实即免弹窗登记」。作用域仍为 ask（定案二）。
+// 握手层完成，管理器只负责「已核实即免弹窗登记」。作用域仍为 ask。
 type AccountTrust struct {
 	Nonce    string `json:"nonce"`
 	ClientID string `json:"client_id"`
@@ -310,9 +310,9 @@ func (m *Manager) Handshake(clientID, deviceID, name, platform, token, pairCode 
 		}
 	}
 
-	// 同账号互信（跨端连接第二步，定案一）：凭据已由握手层向社区服务端
+	// 同账号互信（跨端连接第二步）：凭据已由握手层向社区服务端
 	// 核验通过（同账号 + 设备身份一致），免弹窗直接登记签发长期令牌。
-	// 作用域仍为 ask（定案二：远程设备永不开放本机级全权）。
+	// 作用域仍为 ask：远程设备永不开放本机级全权。
 	if trust != nil {
 		dev := Device{
 			ID:          deviceID,

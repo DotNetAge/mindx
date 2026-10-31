@@ -371,7 +371,7 @@ func broadcastEvent(gw *gateway.Server, sessionID string, respType gateway.Respo
 
 // newBroadcastAskHandlers 构造广播版事件回调集合：AskBuilder 事件以与
 // newClientAskHandlers 逐字段同构的 ResponseEnvelope 信封广播到所有在线
-// 客户端（2026-10-21 定案回归：调度任务由 daemon 后台执行，事件广播仅作
+// 客户端（调度任务由 daemon 后台执行，事件广播仅作
 // 前端通知呈现，执行不依赖客户端在线）。前端与 TUI 按同一套信封解析，
 // 与定向版无差异。getAgentName/getSubSessionID 的懒取语义与 client 版一致。
 // d 供挂起登记（蜂群侧栏气球）使用，与 gw 同为必传。

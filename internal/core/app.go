@@ -64,7 +64,6 @@ type App struct {
 	permissionRuleStore *MindxPermissionRuleStore
 
 	// fileMemory 把压缩摘要原文写为 .agents/memory/ markdown 记忆文件
-	//（2026-10-06 记忆剥离重构：替代 RAGMemory/RAGMemoryAdapter）
 	fileMemory *FileMemorySink
 
 	// MCP manager (injected by Daemon after initialization)
@@ -108,7 +107,7 @@ type App struct {
 	// marketAuthToken 用户登录令牌（MindX 账号绑定后录入，键 market:auth_token），
 	// 与商户 PAT 是两类凭据，严禁混淆
 	marketAuthToken string
-	// marketUsername / marketPassword 登录凭据（账号机制定案 2026-10-10，键
+	// marketUsername / marketPassword 登录凭据（键
 	// market:username / market:password）：仅存密钥存储与内存，重装后启动静默重登用
 	marketUsername string
 	marketPassword string
@@ -563,8 +562,8 @@ func (a *App) PromptBuilder() *PromptBuilder {
 	return a.promptBuilder
 }
 
-// BuildRulesSection 渲染 System Prompt 的「扩展规则」段（P4 定案：应用语义规则的
-// 拼接收口到 mindx，goharness 不再持有 ruleReg）。内容三部分：
+// BuildRulesSection 渲染 System Prompt 的「扩展规则」段（应用语义规则的
+// 拼接收口到 mindx）。内容三部分：
 //  1. 权限规则（mindx.json 的 always_allow/deny/ask，启动时确定）；
 //  2. Agent 发现引导（原 createRuntime 注册进规则注册表的固定文案，改为直接渲染，
 //     不再写入用户规则文件）；
@@ -620,8 +619,7 @@ func (a *App) SetTestDir(tmpDir string) error {
 
 	// 凭据存储同步重定向：darwin 下 DefaultApp 构造时用的是真实钥匙串（全局），
 	// 且内存三件套（token/username/password）已从真实钥匙串 resolve——本机处于
-	// 登录态时测试 daemon 会带着真实令牌，「匿名形态」类断言随本机状态漂移
-	// （2026-10-20 爆雷：本机登录 user 1 后 TestHandleMarketAccountGet_Anonymous 必红）。
+	// 登录态时测试 daemon 会带着真实令牌，「匿名形态」类断言随本机状态漂移。
 	// 改落测试目录文件并清空内存值，测试从干净的匿名态起步；写路径也落 tmp，不碰钥匙串。
 	a.credStore = &encryptedFileStore{path: filepath.Join(tmpDir, "settings", ".credentials")}
 	a.marketMu.Lock()
@@ -931,7 +929,7 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 	}
 
 	// 基础系统提示词由 mindx 侧组装（IDENTITY → SOUL → Skill 目录 → AGENTS.md → Env → 扩展规则），
-	// 扩展规则（权限规则 + Agent 发现引导 + 用户规则）一并由 mindx 渲染（P4 定案），
+	// 扩展规则（权限规则 + Agent 发现引导 + 用户规则）一并由 mindx 渲染，
 	// goharness 不追加任何文案段，base 输出即完整 system prompt。
 	opts = append(opts, agents.WithBaseSystemPrompt(a.PromptBuilder().Build))
 
@@ -1281,7 +1279,7 @@ func (a *App) EnsureSession() (string, error) {
 // Dual-Store Architecture:
 //   - SessionStore (sessDB): Persists raw messages to disk for history recovery
 //   - SummarySink: Delivers compaction summaries to .agents/memory/ markdown files
-//     (2026-10-06 记忆剥离重构：文件记忆替代 RAGMemory，Agent 按提示词规则自助加载)
+//     (文件记忆；Agent 按提示词规则自助加载)
 func (a *App) NewSessionFromMeta() *session.Session {
 	if a.currentSessionMeta == nil {
 		agentName := a.CurrentAgentName()

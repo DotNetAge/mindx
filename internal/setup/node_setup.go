@@ -1,4 +1,4 @@
-// Node 运行环境装配（2026-10-24 用户定案）：Node 与 Python 同为技能执行标配，
+// Node 运行环境装配：Node 与 Python 同为技能执行标配，
 // 环境责任归 mindx 本体——doctor 检查项 + --fix 自动安装（对齐 python_setup 模式）；
 // GUI Client（mindx-work）的一键安装仅为兜底，不承担主装配职责。
 // Windows 原生不做：Windows 上跑的是 WSL（Linux），Node 由 WSL 内的 Linux 侧装配。

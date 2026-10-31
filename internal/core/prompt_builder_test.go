@@ -252,7 +252,7 @@ func TestPromptBuilderLoadsAgentsMD(t *testing.T) {
 }
 
 // TestBuildEnvSectionNoExperienceSystemDup 验证配置环境段不再注入经验沉淀体系说明
-// （2026-10-19 去重退役：.agents/ 目录作用与记忆加载行为完全由 runtime/AGENTS.md
+// （.agents/ 目录作用与记忆加载行为完全由 runtime/AGENTS.md
 // 公共规则承载，系统提示词不再重复定义，防重复回潮），并保留旧工具名反向护栏
 // （TeamList 已从默认注册剥离、MemorySearch 已随记忆剥离退役，均不得回潮）。
 func TestBuildEnvSectionNoExperienceSystemDup(t *testing.T) {

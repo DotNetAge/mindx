@@ -9,7 +9,7 @@ import (
 )
 
 // 发布与投递 handler 的参数校验路径（网络行为由 bundle 层客户端测试覆盖：
-// 无 token 拒发、sha 头与请求体形态、路由拼接均已实证）。
+// 无 token 拒发、sha 头与请求体形态、路由拼接）。
 
 // TestMarketPackSkillSummary 验收：market.pack 对技能打包返回清单摘要（不入库）。
 func TestMarketPackSkillSummary(t *testing.T) {

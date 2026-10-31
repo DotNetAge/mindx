@@ -198,7 +198,7 @@ type MarketUserIdentity struct {
 
 // MarketUser MindX 账号用户信息（服务端 GET /api/v1/me 响应）。
 type MarketUser struct {
-	// ID 用户唯一标识（TEXT UUID；2026-10-26 用户 ID 全链换 UUID 防枚举）
+	// ID 用户唯一标识（TEXT UUID，防枚举）
 	ID        string `json:"id"`
 	Provider  string `json:"provider"`
 	Login     string `json:"login"`
@@ -211,9 +211,9 @@ type MarketUser struct {
 	JobTitle string `json:"job_title"`
 	Phone    string `json:"phone"`
 	Github   string `json:"github"`
-	// Email 邮箱（2026-10-24 定案：第三方授权带回即同步，Profile 可编辑）
+	// Email 邮箱（第三方授权带回即同步，Profile 可编辑）
 	Email string `json:"email"`
-	// 多社区身份（2026-10-20 定案）：绑定身份全表 + 服务端可用提供商清单
+	// 多社区身份：绑定身份全表 + 服务端可用提供商清单
 	Identities         []MarketUserIdentity `json:"identities"`
 	AvailableProviders []string             `json:"available_providers"`
 }
@@ -267,7 +267,7 @@ func (m *MarketClient) Bind(deviceName, platform string) (int64, error) {
 	return out.Migrated, nil
 }
 
-// Register 用户名密码注册（账号机制定案 2026-10-10）：成功下发 AuthToken。
+// Register 用户名密码注册：成功下发 AuthToken。
 func (m *MarketClient) Register(username, password, displayName string) (string, error) {
 	var out struct {
 		AuthToken string `json:"auth_token"`
@@ -623,8 +623,8 @@ func (m *MarketClient) OrgSubscription(orgSlug string) (*OrgSubscription, error)
 }
 
 // UpdateProfileFields 更新 Profile 字段（PATCH /api/v1/me；nil = 不更新。
-// 2026-10-20 定案：github 移出手填白名单，由 GitHub 身份绑定自动获取；
-// 2026-10-24 定案：email 加入白名单，第三方授权带回即同步 + 用户可自改自清）。
+// github 由 GitHub 身份绑定自动获取，不可手填；
+// email 可编辑，第三方授权带回即同步 + 用户可自改自清）。
 func (m *MarketClient) UpdateProfileFields(nickName, jobTitle, phone, email *string) (*MarketUser, error) {
 	if m.authToken == "" {
 		return nil, fmt.Errorf("尚未登录社区")

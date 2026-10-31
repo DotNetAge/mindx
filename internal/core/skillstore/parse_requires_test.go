@@ -18,7 +18,7 @@ func writeSkillDir(t *testing.T, frontmatter string) string {
 	return dir
 }
 
-// TestLoadSkillDetail_RequiresOAuthAndInstall 定稿 frontmatter 全量解析：
+// TestLoadSkillDetail_RequiresOAuthAndInstall frontmatter 全量解析：
 // requires.oauth（provider+env）、envs 名单、metadata.install 平台命令块。
 func TestLoadSkillDetail_RequiresOAuthAndInstall(t *testing.T) {
 	dir := writeSkillDir(t, `---
@@ -52,7 +52,7 @@ metadata:
 	}, detail.InstallCommands)
 }
 
-// TestExtractRequires_EnvKeyCompat 存量 env 键兼容（定稿 envs 优先，env 兜底）。
+// TestExtractRequires_EnvKeyCompat 存量 env 键兼容（envs 优先，env 兜底）。
 func TestExtractRequires_EnvKeyCompat(t *testing.T) {
 	legacy := extractRequires(map[string]any{
 		"requires": map[string]any{

@@ -79,7 +79,7 @@ func (d *Daemon) handleMarketRatingGet(_ context.Context, params json.RawMessage
 // finishMarketBind 市场登录收口（拿到 AuthToken 后调用）：
 // 先持久化并校验 AuthToken 归属（GET /me，失败回滚旧令牌），通过后执行
 // clients/bind 单事务（user_id 落值 + 匿名评分迁移 + 设备元数据上报）。
-// 幂等、支持改绑（服务端 2026-10-20 定案：换号登录即改绑）。
+// 幂等、支持改绑（换号登录即改绑）。
 // 收口成功即写持久化登录史标记（孤儿账号守门的判据，见 autoProvisionMarketAccount）。
 func (d *Daemon) finishMarketBind(authToken string) (user *bundle.MarketUser, migrated int64, err error) {
 	// 先落库再校验：校验失败回滚旧令牌（credStore 与内存同通道恢复，不漂移）
@@ -106,7 +106,7 @@ func (d *Daemon) finishMarketBind(authToken string) (user *bundle.MarketUser, mi
 	return user, migrated, nil
 }
 
-// silentMarketRelogin 启动静默登录（账号机制定案 2026-10-10：新设备零输入即有账号）：
+// silentMarketRelogin 启动静默登录（新设备零输入即有账号）：
 //   - 无凭据 → 自动建号：生成随机凭据注册（称呼=设备名，可后续改），注册即登录并
 //     绑定设备（匿名评分迁移），凭据入密钥存储（重装恢复用）；仅注册成功才持久化，
 //     失败丢弃下次启动重试；
@@ -150,9 +150,9 @@ func (d *Daemon) silentMarketRelogin() {
 // autoProvisionMarketAccount 首次自动建号并登录（无凭据分支，见 silentMarketRelogin）。
 // 称呼取设备名（截断 32 字符，服务端上限），仅注册成功才持久化凭据。
 func (d *Daemon) autoProvisionMarketAccount() {
-	// 孤儿账号守门（2026-10-20 定案）：曾登录过的设备不再自动建号。OAuth 账号
+	// 孤儿账号守门：曾登录过的设备不再自动建号。OAuth 账号
 	// 退出后本地无凭据，若无此守门，每次「退出 + 重启」都会静默生成一个新账号
-	// 并把设备从原账号改绑走（用户今早「注销后变 iMac 账号」的根源）。
+	// 并把设备从原账号改绑走。
 	if d.kvGetStringInternal("market_ever_logged_in") == "1" {
 		d.logger.Info("本设备曾登录过社区账号，保持匿名等待手动登录")
 		return
@@ -181,7 +181,7 @@ func (d *Daemon) autoProvisionMarketAccount() {
 	d.logger.Info("MindX 账号已自动创建并登录")
 }
 
-// handleMarketAccountRegister 用户名密码注册（账号机制定案 2026-10-10）：
+// handleMarketAccountRegister 用户名密码注册：
 // 注册 → 收口绑定；凭据入密钥存储（重装恢复用）。昵称缺省由服务端取用户名。
 func (d *Daemon) handleMarketAccountRegister(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketAccountCredentialsParams
@@ -250,8 +250,7 @@ func (d *Daemon) handleMarketAccountLogout(_ context.Context, _ json.RawMessage)
 }
 
 // handleMarketAccountProfileSet Profile 字段编辑（nil = 不更新，前端整表单提交；
-// 2026-10-20 定案：github 由 GitHub 身份绑定自动获取，移出手填通道；
-// 2026-10-24 定案：email 加入编辑白名单）。
+// github 由 GitHub 身份绑定自动获取，不可手填；email 可编辑）。
 func (d *Daemon) handleMarketAccountProfileSet(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketAccountProfileSetParams
 	if err := unmarshalParams(params, &p); err != nil {

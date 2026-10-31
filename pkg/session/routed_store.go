@@ -17,7 +17,7 @@ import (
 
 // RoutedSessionStore 是按工作目录分片的会话存储路由器。
 //
-// 存储布局（TODO 定案：工作目录与会话生命周期绑定，工作目录消失会话即消失）：
+// 存储布局（工作目录与会话生命周期绑定，工作目录消失会话即消失）：
 //
 //	<project_dir>/.sessions/<agent>/<sessionID>/{session.yml, meta.json, tmp/...}
 //

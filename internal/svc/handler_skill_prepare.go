@@ -18,7 +18,7 @@ import (
 // ---------------------------------------------------------------------------
 // skill.prepare / skill.prepare.confirm_install —— 技能准备流程（阶段五）
 //
-// 定稿（TODO.md「对Skills的require进行重定义」）：凭据三层解析链缺失时触发
+// 凭据三层解析链缺失时触发
 // 准备流程——有 oauth 走授权（daemon 内部启动 runOAuthFlow，存储键
 // <skill_name>:<env_name>，壳经 present_* 全局订阅自动弹授权弹窗）；有
 // install 命令块走「展示确认一次后自动执行」；都没有则报环境不满足。
@@ -342,7 +342,7 @@ type installWithPrepare struct {
 }
 
 // prepareInstalledSkills 安装完成后对落入全局库的技能自动跑一次准备流程
-// （定稿「安装时触发准备流程」：授权直接启动，命令确认随响应带回壳侧裁决）。
+// （授权直接启动，命令确认随响应带回壳侧裁决）。
 // ok 且无警告的技能省略；永不产生错误——安装已成功，准备态属附加信息。
 func (d *Daemon) prepareInstalledSkills(names []string) []skillPrepareResult {
 	if len(names) == 0 {

@@ -1,4 +1,4 @@
-// Package rules 是 mindx 的规则域包（PR-PROMPTS P4 评审定案）：
+// Package rules 是 mindx 的规则域包：
 // 行为规则类型与 RuleRegistry 接口、权限规则类型，以及两种实现——
 // FileRuleRegistry（YAML 文件持久化，~/.mindx/data/rules.yml）
 // 与 MemRuleRegistry（内存聚合，不做持久化）。

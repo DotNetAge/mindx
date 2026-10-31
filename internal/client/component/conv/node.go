@@ -52,7 +52,7 @@ type TurnUsage struct {
 // ContentNode 正文/过程段（对齐 Desktop ContentNode）。
 // finishReason 区分过程段（推理区）与最终答案段：
 //
-//	stop     = 最终答案定稿（final_answer / task_summary / finish_reason=stop）
+//	stop     = 最终答案（final_answer / task_summary / finish_reason=stop）
 //	tool_calls = 过程段（每次 T-A-O 迭代的 content）
 //	streaming = 流式中
 type ContentNode struct {

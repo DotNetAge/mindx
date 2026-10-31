@@ -371,7 +371,7 @@ func TestSetAllowedFalseDisconnects(t *testing.T) {
 
 // TestHandshakeAccountTrust 同账号互信路径（跨端连接第二步）：凭据已由
 // 握手层向社区服务端核验通过后才传入——到闸里免弹窗直接登记签发令牌，
-// 作用域仍为 ask（定案二），设备列表标注来源 account，重连凭令牌免互信。
+// 作用域仍为 ask，设备列表标注来源 account，重连凭令牌免互信。
 func TestHandshakeAccountTrust(t *testing.T) {
 	mgr := newTestManager(t)
 	trust := &AccountTrust{Nonce: "nonce-x", ClientID: "client-a"}
@@ -380,7 +380,7 @@ func TestHandshakeAccountTrust(t *testing.T) {
 		t.Fatalf("同账号互信应直接 paired 并下发令牌，得到 %+v", res)
 	}
 	if got := mgr.ScopeOf("conn-a"); got != ScopeAsk {
-		t.Fatalf("互信设备作用域应为 ask（定案二），得到 %q", got)
+		t.Fatalf("互信设备作用域应为 ask，得到 %q", got)
 	}
 	// 设备列表标注来源
 	var source string

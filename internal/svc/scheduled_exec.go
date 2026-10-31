@@ -1,6 +1,6 @@
 package svc
 
-// 调度任务后台执行链（2026-10-21 定案回归，恢复 aa24dc8 删除前的设计意图）：
+// 调度任务后台执行链：
 // Scheduler 供 Agent 用 Cron 工具创建定时任务；到点后由 daemon 直接拉起
 // Runtime Ask Agent 在后台执行，不依赖任何客户端在线。执行事件经
 // newBroadcastAskHandlers 广播到在线客户端仅作通知呈现（无人在线则事件

@@ -25,8 +25,8 @@ const marketDevicePollInterval = 2 * time.Second
 
 // marketDeviceLoginState 设备登录编排状态（单飞：同一时刻至多一条进行中流程）。
 // provider 记录进行中流程的登录方式：换 provider 再次发起时作废旧流程而非幂等重开
-// （2026-10-20 实锤：用户点 GitHub 后改点 Gitee，单飞闸把旧 pending 当进行中，
-// 只会重开 GitHub 链接——「点 A 跳 B」假故障）；gen 为流程代次，旧轮询 goroutine
+// （单飞闸会把旧 pending 当进行中，只重开旧 provider 链接——「点 A 跳 B」假故障）；
+// gen 为流程代次，旧轮询 goroutine
 // 收口/报错前对号，防止晚到的旧流程覆盖新流程状态。
 type marketDeviceLoginState struct {
 	mu       sync.Mutex
@@ -90,7 +90,7 @@ func (d *Daemon) handleMarketDeviceLogin(_ context.Context, params json.RawMessa
 	d.marketDevice.mu.Unlock()
 	start, err := d.app.Market().DeviceStart(p.Provider)
 	if err != nil {
-		// 收口失败的排障入口：只回前端不留痕会变成「日志全静默」（2026-10-20 教训）
+		// 收口失败的排障入口：只回前端不留痕会变成「日志全静默」
 		d.logger.Error("发起设备登录失败", err)
 		d.marketDevice.set("error", err.Error(), "", p.Provider)
 		return nil, fmt.Errorf("发起设备登录失败：%w", err)

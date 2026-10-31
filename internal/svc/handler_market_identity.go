@@ -12,8 +12,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// market.account.identity.* / market.org.create RPC —— 社区账号绑定与组织创建
-// （2026-10-20 多社区身份定案）。
+// market.account.identity.* / market.org.create RPC —— 社区账号绑定与组织创建。
 //
 // 绑定编排与设备登录（handler_market_device.go）同构：link 受理即返回——调服务端
 // 发起绑定拿一次性授权入口 URL，经既有 link_open 广播通道下发客户端（一律系统

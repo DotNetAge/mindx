@@ -13,7 +13,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/core/teamstore"
 )
 
-// 本文件是 mindx 侧的基础系统提示词组装器（PR-PROMPTS 第一节定案）：
+// 本文件是 mindx 侧的基础系统提示词组装器：
 //
 //   - 生成逻辑独立成类、独立成文件维护；
 //   - 拼接顺序固定为 IDENTITY → SOUL → Skill summary list → AGENTS.md（用户目录文件）→ Env → 扩展规则，
@@ -108,8 +108,8 @@ func (b *PromptBuilder) Build(_ string, s *session.Session) string {
 		sections = append(sections, sec)
 	}
 
-	// 7. 扩展规则（权限规则 + Agent 发现引导 + 用户规则，App.BuildRulesSection 渲染；
-	// P4 定案由 mindx 拼装，goharness 侧 ruleReg 已退役）
+	// 7. 扩展规则（权限规则 + Agent 发现引导 + 用户规则，App.BuildRulesSection 渲染，
+	// 由 mindx 拼装）
 	if b.rulesSection != nil {
 		if sec := b.rulesSection(); sec != "" {
 			sections = append(sections, sec)
@@ -119,7 +119,7 @@ func (b *PromptBuilder) Build(_ string, s *session.Session) string {
 	return strings.Join(sections, "\n\n")
 }
 
-// buildIdentitySection 渲染身份段（评审定案）：
+// buildIdentitySection 渲染身份段：
 //   - IDENTITY.md 带正文（frontmatter 之外）时，优先取正文作为整个 Agent 的
 //     「人设定义」，原样拼接（标题由定义文件自身处理）；
 //   - 正文为空时才启用兜底生成规则：由 frontmatter 的 name/role/description
@@ -279,8 +279,6 @@ func (b *PromptBuilder) buildEnvSection(s *session.Session) string {
 	sb.WriteString(fmt.Sprintf("- **项目目录**: %s\n", projectDir))
 	sb.WriteString(" 用户工作目录 — 文件在此永久保留，跨会话持续存在。\n")
 	sb.WriteString(" 在此修改用户现有文件并创建长期使用的输出。\n")
-
-	// 经验沉淀体系说明已退役（2026-10-19 去重，职责在 runtime/AGENTS.md），不再注入。
 
 	// SessionDir：限定于当前对话的临时工作区。
 	sessionDir := s.SessionDir()

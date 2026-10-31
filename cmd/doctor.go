@@ -200,7 +200,7 @@ func runAllChecks() []Check {
 		})
 	}
 
-	// 4a. Node.js runtime（技能执行标配，与 Python 同级；2026-10-24 用户定案）
+	// 4a. Node.js runtime（技能执行标配，与 Python 同级）
 	if ver := setup.DetectNode(); ver != "" {
 		checks = append(checks, Check{
 			Name:    "Node.js Runtime",

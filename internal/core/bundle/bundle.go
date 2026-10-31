@@ -1,6 +1,6 @@
 // Package bundle 实现 Agent / Skill / Team 分发包的导出、安装与 COS 静态市场客户端。
 //
-// 分发包格式（PR-PROMPTS 第四节定稿；Skill 包是 Agent 包的子集）：
+// 分发包格式（Skill 包是 Agent 包的子集）：
 //
 //	<name>.mindpkg（zip 容器）
 //	├── manifest.json                    包清单：{ format, kind, name, description, icon, skills }

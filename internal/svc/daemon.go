@@ -121,10 +121,10 @@ type Daemon struct {
 	marketDevice marketDeviceLoginState
 
 	// marketLoggedOut 用户已主动退出标记（内存态，重启即失效）：退出后本次
-	// 运行期静默登录通道整体静默，重新登录成功即解除（2026-10-20 退出语义定案）
+	// 运行期静默登录通道整体静默，重新登录成功即解除
 	marketLoggedOut bool
 
-	// marketIdentity 社区账号绑定编排状态（单飞；2026-10-20 多社区身份定案）
+	// marketIdentity 社区账号绑定编排状态（单飞；支持多社区身份）
 	marketIdentity marketIdentityLinkState
 }
 
@@ -151,8 +151,8 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) (*Daemon, er
 	}
 
 	// ── Shared Memory（对话记忆）─────────────────────────────────
-	// 2026-10-06 记忆剥离重构：RAGMemory 退役，压缩摘要改经 FileMemorySink
-	// 落盘为 .agents/memory/ markdown 文件（App 内置），daemon 不再持有共享记忆。
+	// daemon 不再持有共享记忆：压缩摘要经 FileMemorySink
+	// 落盘为 .agents/memory/ markdown 文件（App 内置）。
 
 	d := &Daemon{
 		app:         app,
@@ -184,7 +184,7 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) (*Daemon, er
 		})
 
 		// 生命周期回调：started 由 Scheduler 到点触发，Daemon 直接拉起 Runtime
-		// 在后台执行（2026-10-21 定案回归，不依赖客户端在线，离线照常执行）；
+		// 在后台执行（不依赖客户端在线，离线照常执行）；
 		// completed / failed / missed 由 ReportResult 触发并广播，前端仅作通知。
 		d.scheduler.OnLifecycle(func(info scheduler.JobLifecycleInfo) {
 			if d.gw == nil {
@@ -389,7 +389,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 	// ── 自动升级检查（启动时 + 每日一次） ─────────────────
 	go d.autoUpdateLoop(ctx)
 
-	// ── MindX 账号静默登录（账号机制定案 2026-10-10） ─────────────
+	// ── MindX 账号静默登录 ─────────────
 	// 重装恢复：密钥存储存有 username+password 时静默重登换 token 并绑定设备；
 	// 失败只记日志不打扰（匿名态可用，下次启动再试）。全程无 UI。
 	go d.silentMarketRelogin()
@@ -908,7 +908,6 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			goharnesssession.WithModelContextResolver(d.resolveSessionModelContextLength),
 		)
 		// 文件记忆：压缩摘要经 SummarySink 落盘到会话项目目录 .agents/memory/
-		//（2026-10-06 记忆剥离重构，替代 RAGMemoryAdapter）
 		memoryDir := d.app.FileMemory().MemoryDirFor(d.sessionProjectDir(sessionID))
 		sessOpts = append(sessOpts, goharnesssession.WithSummarySink(func(ctx context.Context, summary string) error {
 			return d.app.FileMemory().Write(ctx, memoryDir, resolvedAgentName, sessionID, summary)

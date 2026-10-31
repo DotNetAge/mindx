@@ -15,7 +15,7 @@ import (
 // 每轮 Ask 结束后，把当轮的用户问题原文与助手最终回复原文原样写入
 // <Session.ProjectDir>/.agents/logs/<YYYY-MM-DD-HHMMSS>-<agent_name>.md。
 //
-// 设计定稿（2026-10-12 与用户确认）：
+// 设计约定：
 //   - 零提炼零算力：只存原文，不做任何结论摘要（提炼留给日报生成时一次完成）；
 //   - 这是日报（daily-report 技能）的专用事实流：由 mindx report collect
 //     跨工作目录收割（聚合落盘校验成功后才删除源文件），消费后即删除；

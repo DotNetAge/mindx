@@ -107,7 +107,7 @@ type SkillEnvRequirement struct {
 type Requires struct {
 	// Bins 需要在 PATH 中找到的二进制名列表（如 lark-cli、ffmpeg）。
 	Bins []string `yaml:"bins"`
-	// Env 环境变量名名单。定稿键为 envs，兼容存量 env 写法（两者都收）；
+	// Env 环境变量名名单。规范键为 envs，兼容存量 env 写法（两者都收）；
 	// 字符串条目与对象条目的 name 都并入此名单（MissingEnvs / verifyDependencies 出口兼容）。
 	Env []string `yaml:"-"`
 	// Envs 对象形态条目（{name, prompt, url, sensitive}），与 Env 并存：
@@ -130,7 +130,7 @@ type SkillDetail struct {
 	Requires *Requires      // metadata.requires 依赖声明（可为 nil）
 	Metadata map[string]any // frontmatter metadata 原始键值（可为 nil）
 	// InstallCommands metadata.install 修复动作命令块（平台名 → 命令列表，
-	// 如 darwin / linux；定稿：安装时展示命令清单，用户确认一次后自动执行）。
+	// 如 darwin / linux；安装时展示命令清单，用户确认一次后自动执行）。
 	// 与 requires 平级（metadata.install），可为 nil。
 	InstallCommands map[string][]string
 }
@@ -277,7 +277,7 @@ func parseFrontmatter(content string) (skillFrontmatter, string, error) {
 }
 
 // extractRequires 从 metadata 中提取 requires 声明（规范：扩展键放在 metadata）。
-// env 名单定稿键为 envs，兼容存量 env 写法；oauth 为 provider+env 两字段对象。
+// env 名单规范键为 envs，兼容存量 env 写法；oauth 为 provider+env 两字段对象。
 func extractRequires(metadata map[string]any) *Requires {
 	raw, ok := metadata["requires"]
 	if !ok {
@@ -295,7 +295,7 @@ func extractRequires(metadata map[string]any) *Requires {
 			}
 		}
 	}
-	// env 名单：envs（定稿）优先，env（存量兼容）兜底；条目支持字符串或
+	// env 名单：envs（规范键）优先，env（存量兼容）兜底；条目支持字符串或
 	// 对象 {name, prompt, url, sensitive} 两种形态——对象 name 缺失整条忽略
 	//（告警由 CheckQuality 的 quality-envs 检查兜底，不阻断装载）。
 	envsRaw, ok := reqMap["envs"].([]any)

@@ -109,8 +109,8 @@ type firstRunModel struct {
 
 	preResolvedKeys map[string]string
 
-	// Step 3 前置：环境变量发现的供应商 Key 确认清单（2026-10-24 定案：
-	// 静默收编改知情勾选——勾选=保存/覆盖，不勾=不动钥匙串）
+	// Step 3 前置：环境变量发现的供应商 Key 确认清单（知情勾选：
+	// 勾选=保存/覆盖，不勾=不动钥匙串）
 	discovered       []discoveredKey
 	discoveredCursor int
 
@@ -154,8 +154,8 @@ type firstRunResult struct {
 	SelectedModel    string
 	APIKey           string
 	ResolvedKeys     map[string]string
-	// ConfirmedKeys 用户在确认清单中勾选的供应商 Key（name→value，2026-10-24
-	// 定案：静默收编改知情勾选——落库只认用户确认项，ResolvedKeys 仅供 UI 内部使用）。
+	// ConfirmedKeys 用户在确认清单中勾选的供应商 Key（name→value；
+	// 落库只认用户确认项，ResolvedKeys 仅供 UI 内部使用）。
 	ConfirmedKeys map[string]string
 	Err           error
 

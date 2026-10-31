@@ -284,15 +284,15 @@ func (c *Client) MarketUploadAvatar(dataBase64, filename string) (json.RawMessag
 	return c.CallWithTimeout("market.uploadAvatar", MarketUploadAvatarParams{DataBase64: dataBase64, Filename: filename})
 }
 
-// MarketAccountCredentialsParams 用户名密码注册/登录参数（账号机制定案 2026-10-10）。
+// MarketAccountCredentialsParams 用户名密码注册/登录参数。
 type MarketAccountCredentialsParams struct {
 	Username    string `json:"username"`
 	Password    string `json:"password"`
 	DisplayName string `json:"display_name,omitempty"` // 仅注册用（缺省取用户名）
 }
 
-// MarketAccountProfileSetParams Profile 字段编辑参数（2026-10-20 定案：github 移出
-// 手填白名单，由 GitHub 身份绑定自动获取；2026-10-24 定案：email 加入白名单；
+// MarketAccountProfileSetParams Profile 字段编辑参数（github 不可手填，
+// 由 GitHub 身份绑定自动获取；email 可编辑；
 // nil 指针语义在 handler 内以字符串指针表达）。
 type MarketAccountProfileSetParams struct {
 	NickName *string `json:"nick_name,omitempty"`

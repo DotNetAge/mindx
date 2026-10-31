@@ -80,7 +80,7 @@ const (
 )
 
 // parseIdentity 解析 IDENTITY.md：frontmatter → AgentMeta，正文 → 身份正文。
-// 正文优先（评审定案）：正文非空时覆盖 frontmatter 的 introduction——带正文的
+// 正文优先：正文非空时覆盖 frontmatter 的 introduction——带正文的
 // IDENTITY.md 以正文作为整个人设定义（标题由文件自身处理）；frontmatter 的
 // introduction 降级为正文缺失时的备用说明。
 // 迁移语义：旧版一级字段 domains（中文业务领域，恒为单值）一次性迁移为
