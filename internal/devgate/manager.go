@@ -201,10 +201,9 @@ func NewManager(cfg Config) (*Manager, error) {
 			}
 			mgr.devices = devices
 		} else {
-			// 损坏即自愈：重置空表并立即回写覆盖坏值（本机令牌直通不受影响，
-			// 外接设备需重新配对——可接受的降级）。坏值若不清理，此后每次
-			// 启动都重复报损坏且授权表永远不可用（hex 残留事故实证：
-			// 冒烟工具曾以 hex 编码 JSON 写入，读侧解析 7 后遇 b 炸）。
+			// 损坏即自愈：重置空表并立即回写覆盖坏值。不清理则每次启动都
+			// 重复报损坏且授权表永远不可用。降级代价：外接设备需重新配对
+			//（本机令牌直通不受影响）。
 			mgr.logger.Warn("devgate: 已授权设备表损坏，已重置为空表",
 				"error", err.Error(), "corrupt_head", truncateForLog(v))
 			mgr.devices = map[string]Device{}

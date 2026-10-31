@@ -608,11 +608,9 @@ func (d *Daemon) initGateway() {
 		gateway.WithAddr(d.addr),
 		gateway.WithPath(d.wsPath),
 		gateway.WithHandler(d.defaultHandler),
-		// Origin 白名单：gort 默认列表只放行 http/localhost/内网段/Wails 壳，
-		// Electron 打包壳从 file:// 加载页面，浏览器 WebSocket Origin 恒为
-		// file://，会被默认白名单 403 拒绝（mindx-work 打包版连接全灭实证）。
-		// 此处整体覆盖为 gort v0.1.9 默认列表 + file://——列表手抄自
-		// gort defaultWSConfig，升级 gort 版本时必须对齐漂移。
+		// Origin 白名单 = gort 默认列表 + file://（Electron 打包壳从 file://
+		// 加载页面，其 WebSocket Origin 恒为 file://）。升级 gort 版本时
+		// 需与 defaultWSConfig 对齐。
 		gateway.WithWSConfig(&gateway.WSConfig{
 			AllowedOrigins: []string{
 				"http://localhost:*",
