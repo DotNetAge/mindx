@@ -46,7 +46,7 @@ func TestLoadClientProviders_BuiltInFile(t *testing.T) {
 	}
 }
 
-// TestLoadClientProviders_MissingFile 文件缺失返回 nil,nil（对齐 LoadProvidersFile 先例）
+// TestLoadClientProviders_MissingFile 文件缺失返回 nil,nil
 func TestLoadClientProviders_MissingFile(t *testing.T) {
 	providers, err := LoadClientProviders(filepath.Join(t.TempDir(), "not-exist.yml"))
 	require.NoError(t, err)

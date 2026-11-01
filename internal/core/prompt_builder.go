@@ -271,11 +271,9 @@ func (b *PromptBuilder) buildEnvSection(s *session.Session) string {
 	var sb strings.Builder
 	sb.WriteString("## 配置环境\n")
 
-	// ProjectDir：用户的工作目录（持久化，数据源头）。
+	// ProjectDir：用户的工作目录（持久化，数据源头）。空值如实呈现，禁止用
+	// 进程 cwd 伪造（daemon cwd 通常是 ~/.mindx，会误导模型把数据目录当工作区）。
 	projectDir := s.ProjectDir()
-	if projectDir == "" {
-		projectDir, _ = os.Getwd()
-	}
 	sb.WriteString(fmt.Sprintf("- **项目目录**: %s\n", projectDir))
 	sb.WriteString(" 用户工作目录 — 文件在此永久保留，跨会话持续存在。\n")
 	sb.WriteString(" 在此修改用户现有文件并创建长期使用的输出。\n")

@@ -48,7 +48,7 @@ func (d *Daemon) daemonTokenPath() string {
 	return filepath.Join(core.DefaultUserPrefsDir(), ".token")
 }
 
-// legacyTokenPaths 历史遗留落点（dataDir 偏离产物与早期根目录落点）。
+// legacyTokenPaths 旧版令牌落点（dataDir 偏离产物与早期根目录落点）。
 // 仅在启动迁移窗口读取一次，旧值迁入 .token 后即删除，不留双源。
 func legacyTokenPaths() []string {
 	home := core.DefaultUserPrefsDir()

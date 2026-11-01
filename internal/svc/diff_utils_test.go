@@ -72,7 +72,7 @@ func TestNormalizeHunkHeadersIdentity(t *testing.T) {
 
 // TestNormalizePreservesNewFileDiff 新建文件 diff（GNU 空侧特例 @@ -0,0 +1,N @@）
 // 的 newStart 本来正确，归一化必须原样保留。
-// 回归防护：曾因缺少 oldStart>0 条件把 newStart 由 1 错改为 0，
+// 回归防护：oldStart>0 条件缺失时 newStart 会被归一化错改为 0，
 // 触发前端 reverseUnifiedDiff 的 newStart<=0 守卫，新建文件条目退回普通编辑器。
 func TestNormalizePreservesNewFileDiff(t *testing.T) {
 	newFileDiff := "--- a/new.txt\n+++ b/new.txt\n@@ -0,0 +1,3 @@\n+alpha\n+beta\n+gamma\n"

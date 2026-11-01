@@ -789,13 +789,11 @@ func (a *App) SetProviderConfigs(providers []*config.ProviderConfig) {
 // CreateSession creates a new session with metadata including the captured project directory (os.Getwd() at invocation time).
 // CreateSession 创建会话。team 变参非空时（团队会话）绑定该团队：
 // TeamName 随 meta 持久化，重载后 System Prompt 的团队段与原会话一致。
+// projectDir 为空直接报错：工作目录必须由调用方明确给出，禁止用进程 cwd
+// 兜底（daemon cwd 通常是 ~/.mindx，兜底会把用户会话悄悄落进数据目录）。
 func (a *App) CreateSession(agentName, projectDir string, team ...string) (*session.SessionInfo, error) {
-	// 空目录兜底 Getwd：维持旧 FileSessionStore.Create 的语义（工作目录分片存储
-	// 要求 project_dir 明确，路由器不接受空值落盘）。
-	if projectDir == "" {
-		if wd, wdErr := os.Getwd(); wdErr == nil {
-			projectDir = wd
-		}
+	if strings.TrimSpace(projectDir) == "" {
+		return nil, fmt.Errorf("创建会话失败: project_dir 不能为空（工作目录必须明确指定）")
 	}
 	var opts []session.SessionOption
 	if projectDir != "" {
@@ -1386,18 +1384,11 @@ func (a *App) ClearCurrentSession() (*session.SessionInfo, error) {
 		}
 	}
 
-	// Use the old session's project_dir if available; otherwise fall back to CWD.
-	projectDir := ""
-	if currentMeta != nil && currentMeta.ProjectDir != "" {
-		projectDir = currentMeta.ProjectDir
-	} else {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("getwd failed and no previous project_dir: %w", err)
-		}
-		projectDir = cwd
+	// project_dir 必须来自旧会话元数据：禁止用 cwd 兜底伪造工作目录
+	if currentMeta == nil || currentMeta.ProjectDir == "" {
+		return nil, fmt.Errorf("清除会话失败: 当前会话没有工作目录，无法定位新会话落点（请先选择工作区）")
 	}
-	newSession, err := a.CreateSession(a.CurrentAgentName(), projectDir)
+	newSession, err := a.CreateSession(a.CurrentAgentName(), currentMeta.ProjectDir)
 	if err != nil {
 		return nil, fmt.Errorf("create new session failed: %w", err)
 	}

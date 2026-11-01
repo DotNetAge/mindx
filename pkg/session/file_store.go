@@ -479,10 +479,7 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goharnessses
 			si.LastActivityAt = info.ModTime()
 		}
 	} else {
-		cwd, cwdErr := os.Getwd()
-		if cwdErr == nil {
-			si.ProjectDir = cwd
-		}
+		// meta.json 缺失（历史异常数据）：ProjectDir 留空，禁止用 cwd 伪造工作目录
 		defaultMeta := &goharnesssession.SessionInfo{
 			SessionID:      sessionID,
 			AgentName:      agentName,
@@ -564,7 +561,7 @@ func (s *FileSessionStore) updateSessionMeta(sessionDir, agentName, sponsor stri
 // Create creates a new session with the given agent name and options.
 // This centralizes session creation logic:
 //  1. Generates a unique session ID (format: sess_<timestamp>)
-//  2. Captures ProjectDir from options or os.Getwd()
+//  2. Captures ProjectDir from options (空值直接报错，禁止 cwd 兜底)
 //  3. Creates session directory structure: <root>/<agent>/<session_id>/tmp
 //  4. Persists session metadata (for future GetMeta calls)
 //  5. Returns complete SessionInfo with directory context
@@ -582,12 +579,8 @@ func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...g
 		opt(sessionInfo)
 	}
 
-	if sessionInfo.ProjectDir == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("get working directory: %w", err)
-		}
-		sessionInfo.ProjectDir = cwd
+	if strings.TrimSpace(sessionInfo.ProjectDir) == "" {
+		return nil, fmt.Errorf("创建会话失败: project_dir 不能为空（工作目录必须明确指定）")
 	}
 
 	sessionDirPath := s.sessionDir(agentName, sessionID)

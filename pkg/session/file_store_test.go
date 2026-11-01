@@ -265,8 +265,8 @@ func TestFileStoreDeleteSession(t *testing.T) {
 	ctx := context.Background()
 	agentName := "test-agent"
 
-	// 创建 session
-	info, err := store.Create(ctx, agentName)
+	// 创建 session（project_dir 必传，store 对空值报错不兜底）
+	info, err := store.Create(ctx, agentName, goharnesssession.WithProjectDirOption(tmpDir))
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}

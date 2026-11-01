@@ -110,7 +110,7 @@ type ClientProvidersConfig struct {
 }
 
 // LoadClientProviders 从指定路径加载 OAuth 客户端提供商注册表并逐条校验。
-// 文件不存在时返回 (nil, nil)——对齐 LoadProvidersFile 先例（首次启动无配置属正常）。
+// 文件不存在时返回 (nil, nil)（首次启动无配置属正常）。
 func LoadClientProviders(path string) ([]*OAuthProviderConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
