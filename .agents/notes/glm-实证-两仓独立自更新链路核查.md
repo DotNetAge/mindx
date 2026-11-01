@@ -4,8 +4,8 @@
 
 ## 用户定案与修复（2026-11-01 当轮完成）
 
-- 内核 Windows 资产缺口已修：release.yml 加 windows/amd64 构建目标（产出 mindx-<v>-windows-amd64.zip 进 checksums.txt），下次 mindx 发版生效；验收 = 新 release 资产含该 zip 且 checksums.txt 覆盖。
-- 壳 win/linux 走私有源码库 CI 补发（用户定案：源码库 GitHub Actions 打包后直发 mindx-app，mac 本机直发不变）：已落地 .github/workflows/release-win-linux.yml。要点：WSL rootfs 须在 ubuntu job 生成（windows runner 无 linux 容器）；release 未建轮询等待 10 分钟（mac 直发与 CI 的时序竞态）；跨库上传要 MINDX_APP_TOKEN secret（用户待配）。
+- **【2026-11-02 用户纠正，推翻下一条】内核 Windows 资产缺口是伪问题**：mindx 定位不含 Windows 原生产物（4 个月前即放弃），Windows 用户的 daemon 由壳的 WSL 版本以 rootfs（内含 linux-amd64 二进制）分发，升级链在 WSL 内部走 linux GOOS——linux 资产恒在，从未断裂。当时给 release.yml 加的 windows/amd64 构建目标已回滚（commit 2b8e711），首跑因 Setsid 字段无 Windows 支持构建失败恰好暴露伪前提。教训：daemon-installer.ts 里的 Windows 分支（wsl.exe/schtasks）描述的是「壳在 Windows 上的操作」，不等于「daemon 有 Windows 原生形态」——从壳代码反推 daemon 分发面时必须先问分发载体。
+- 壳 win/linux 走私有源码库 CI 补发（用户定案：源码库 GitHub Actions 打包后直发 mindx-app，mac 本机直发不变）：已落地 .github/workflows/release-win-linux.yml。要点：WSL rootfs 须在 ubuntu job 生成（windows runner 无 linux 容器）；release 未建轮询等待 10 分钟（mac 直发与 CI 的时序竞态）；跨库上传要 MINDX_APP_TOKEN secret（已配置，2026-11-01 实证在册）。
 - 壳 nsis 无签名会被 SmartScreen 拦——与 mac ad-hoc 分发限制同类，已记 mindx-work TODO 改进项。
 
 ## 实证结论

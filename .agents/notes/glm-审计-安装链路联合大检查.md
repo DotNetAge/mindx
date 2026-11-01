@@ -8,7 +8,7 @@
   1. mindx-work runWsl timeoutMs 可 undefined，wsl.exe 服务损坏时状态机永久卡 detecting/registering（wsl.exe 挂起是已知行为）→ 缺省 60s。
   2. mindx SetupDaemon 用 os.Executable()（源路径）写 plist ProgramArguments，从 Downloads 装完删源即服务坏死 → 改传 destExe。
   3. Linux 注册 mindx-daemon.service 但 Check/Start/Stop 全打 mindx.service——Linux 全链控制落空 → 统一 linuxServiceName。
-  4. Windows 更新资产是 zip 而 extractZip 直接 return not implemented——Windows 升级必败 → 系统 tar 解包。
+  4. 【2026-11-02 推翻】Windows 更新资产 zip 一条是伪问题：mindx 不发 Windows 原生产物，Windows daemon = WSL 内 linux 二进制，升级链走 linux 资产。extractZip 的系统 tar 解包保留（防御性，无消费方）。
 - 连带发现（已随复验清理，用户确认后执行）：release.yml 旧名 mindx-daemon.service 系统单元投递段已删、scripts/mindx-daemon.service 已删、postinstall.sh 的 systemctl enable/start 段已改指 `mindx install`（deb/rpm 包只投二进制，服务注册统一走用户级 mindx.service）；preremove.sh 保留旧名 stop/disable——升级机器上旧版包曾投递过该系统单元，预删除脚本要负责停掉它。
   - takeCredential 一次性删除的修复把清理时机移到 uninstallProbeIpc 的 credentialValues.clear()——若将来新增常驻通道消费凭据需重新评估。
 - 复验（用户挑战「禁止假设正确，必须验证」）后新抓两个修复自身的 bug：
