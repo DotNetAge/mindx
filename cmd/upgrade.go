@@ -56,62 +56,62 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	)
 
 	// Run check
-	fmt.Println("🔍 Checking for updates...")
+	fmt.Println("🔍 正在检查更新...")
 	info := updater.Check(true)
 	if info.Error != "" {
-		return fmt.Errorf("check update: %s", info.Error)
+		return fmt.Errorf("检查更新失败: %s", info.Error)
 	}
 
 	if !info.UpdateAvailable {
-		fmt.Printf("✅ You are up to date (v%s).\n", core.Version)
+		fmt.Printf("✅ 已是最新版本 (v%s)。\n", core.Version)
 		return nil
 	}
 
-	fmt.Printf("📦 New version available: %s\n", info.LatestVersion)
-	fmt.Printf("   Current version: v%s\n", core.Version)
-	fmt.Printf("   Download: %s\n", info.LatestURL)
+	fmt.Printf("📦 发现新版本: %s\n", info.LatestVersion)
+	fmt.Printf("   当前版本: v%s\n", core.Version)
+	fmt.Printf("   下载地址: %s\n", info.LatestURL)
 
 	if onlyCheck {
-		fmt.Println("\nℹ️  Run 'mindx upgrade' (without --check) to install the update.")
+		fmt.Println("\nℹ️  运行 'mindx upgrade'（不带 --check）即可安装更新。")
 		return nil
 	}
 
 	// Confirm
-	fmt.Println("\n⬇️  Downloading and installing update...")
+	fmt.Println("\n⬇️  正在下载并安装更新...")
 
 	// Stop daemon before replacing the binary
 	daemonWasRunning := false
 	status, err := setup.CheckDaemon()
 	if err == nil && status == setup.DaemonRunning {
-		fmt.Println("  → Stopping daemon...")
+		fmt.Println("  → 正在停止后台服务...")
 		if err := setup.StopDaemon(); err != nil {
-			fmt.Printf("⚠️  Failed to stop daemon: %v\n", err)
-		} else {
-			daemonWasRunning = true
-			fmt.Println("  ✅ Daemon stopped")
+			// 停不下来就中止：旧服务可能仍占用端口，此时替换二进制后新服务起不来。
+			return fmt.Errorf("无法停止正在运行的后台服务，本次升级已中止: %w\n旧服务可能仍占用端口，请手动运行 'mindx stop' 后重试", err)
 		}
+		daemonWasRunning = true
+		fmt.Println("  ✅ 后台服务已停止")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
 	if err := updater.DownloadAndInstall(ctx); err != nil {
-		return fmt.Errorf("install update: %w", err)
+		return fmt.Errorf("安装更新失败: %w", err)
 	}
 
-	fmt.Println("✅ Update installed successfully.")
+	fmt.Println("✅ 更新安装成功。")
 
 	// Restart daemon if it was running before
 	if daemonWasRunning {
-		fmt.Println("  → Restarting daemon...")
+		fmt.Println("  → 正在重启后台服务...")
 		if err := setup.StartDaemon(); err != nil {
-			fmt.Printf("⚠️  Failed to restart daemon: %v\n", err)
-			fmt.Println("   Run 'mindx restart' manually.")
+			fmt.Printf("⚠️  后台服务重启失败: %v\n", err)
+			fmt.Println("   请手动运行 'mindx restart'。")
 		} else {
-			fmt.Println("  ✅ Daemon restarted")
+			fmt.Println("  ✅ 后台服务已重启")
 		}
 	} else {
-		fmt.Println("ℹ️  Daemon was not running. Start it with: mindx start")
+		fmt.Println("ℹ️  升级前后台服务未在运行，需要时运行 'mindx start' 启动。")
 	}
 
 	return nil

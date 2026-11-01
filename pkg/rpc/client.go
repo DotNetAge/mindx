@@ -51,23 +51,23 @@ func Dial(addr string) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := c.Connect(ctx); err != nil {
-		return nil, fmt.Errorf("cannot connect to daemon at %s: %w\nIs the daemon running? (mindx start)", addr, err)
+		return nil, fmt.Errorf("无法连接 %s: %w\n后台服务可能尚未启动，请运行 'mindx start'", addr, err)
 	}
 	if err := HandshakeLocal(ctx, c); err != nil {
 		_ = c.Close()
-		return nil, fmt.Errorf("cannot handshake with daemon at %s: %w\nIs the daemon up to date? (mindx upgrade)", addr, err)
+		return nil, fmt.Errorf("与 %s 握手失败: %w\n后台服务版本可能过旧，请运行 'mindx upgrade'", addr, err)
 	}
 	return &Client{gw: c}, nil
 }
 
 // LocalToken 读取本机 daemon 握手令牌：唯一落点 ~/.mindx/.token（AGENTS.md
-// 数据落点军规：唯一写方是 daemon，CLI 只读不生成，缺失即失败；历史遗留的
+// 数据落点军规：唯一写方是 daemon，CLI 只读不生成，缺失即失败；旧落点
 // data/daemon_token 由 daemon 启动时单点迁移，CLI 不保留兼容分支）。
 func LocalToken() (string, error) {
 	path := filepath.Join(defaultUserPrefsDir(), ".token")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("读取本机握手令牌失败: %w（请确认本机 daemon 已启动）", err)
+		return "", fmt.Errorf("本机令牌未就绪，请重启 MindX 或重新安装后重试: %w", err)
 	}
 	token := trimSpaceBytes(data)
 	if token == "" {
@@ -95,7 +95,15 @@ func HandshakeLocal(ctx context.Context, c gwCaller) error {
 	var result struct {
 		Status string `json:"status"`
 	}
-	if json.Unmarshal(raw, &result) != nil || (result.Status != "paired") {
+	if json.Unmarshal(raw, &result) != nil {
+		return fmt.Errorf("本机设备握手未通过，请重启后台服务后重试")
+	}
+	if result.Status == "closed" || result.Status == "pending" {
+		// closed：设备接入总闸关闭或本机信任未建立；pending：待本机批准。
+		// 两种状态对壳/CLI 的含义一致：本机信任链尚未建立。
+		return fmt.Errorf("这台设备还没有建立信任，请在本机完成首次配对后重试")
+	}
+	if result.Status != "paired" {
 		return fmt.Errorf("本机设备握手未通过（状态: %s）", result.Status)
 	}
 	return nil

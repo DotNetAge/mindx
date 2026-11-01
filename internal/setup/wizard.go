@@ -792,7 +792,7 @@ func (m *firstRunModel) startAutoSetup() tea.Cmd {
 
 	// Daemon 安装
 	go func(idx int) {
-		err := SetupDaemon(wd)
+		err := SetupDaemon(wd, "")
 		if err == nil && DaemonInstalled(wd) {
 			m.markTaskDone(idx, taskDone, nil, "")
 		} else {

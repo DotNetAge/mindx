@@ -22,24 +22,24 @@ Examples:
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
-	fmt.Println("🚀 Starting MindX daemon...")
+	fmt.Println("🚀 正在启动后台服务...")
 
 	status, err := setup.CheckDaemon()
 	if err != nil {
-		return fmt.Errorf("check status: %w", err)
+		return fmt.Errorf("检查服务状态失败: %w", err)
 	}
 
 	switch status {
 	case setup.DaemonNotInstalled:
-		fmt.Println("ℹ️  Daemon is not installed. Run 'mindx install' to set it up.")
+		fmt.Println("ℹ️  后台服务尚未安装，请先运行 'mindx install'。")
 		return nil
 	case setup.DaemonRunning:
-		fmt.Println("ℹ️  Daemon is already running.")
+		fmt.Println("ℹ️  后台服务已在运行中。")
 		return nil
 	}
 
 	if err := setup.StartDaemon(); err != nil {
-		return fmt.Errorf("failed to start daemon: %w", err)
+		return fmt.Errorf("启动后台服务失败: %w\n可查看 ~/.mindx/logs/daemon.err.log 了解具体原因", err)
 	}
 
 	return verifyDaemonStarted()

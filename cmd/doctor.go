@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/setup"
@@ -156,7 +158,7 @@ func runAllChecks() []Check {
 			Name:    "Daemon Service",
 			Status:  "⚠️",
 			Message: "Not installed — auto-start disabled",
-			Fix:     func() error { return setup.SetupDaemon(workspaceDir) },
+			Fix:     func() error { return setup.SetupDaemon(workspaceDir, "") },
 		})
 	default:
 		checks = append(checks, Check{Name: "Daemon Service", Status: "❓", Message: "Cannot determine status"})
@@ -170,7 +172,7 @@ func runAllChecks() []Check {
 				Name:    "Daemon Launcher",
 				Status:  "⚠️",
 				Message: "Daemon registered but VBS launcher missing — may have been installed by an older version with a buggy launcher",
-				Fix:     func() error { return setup.SetupDaemon(workspaceDir) },
+				Fix:     func() error { return setup.SetupDaemon(workspaceDir, "") },
 			})
 		}
 	}
@@ -229,8 +231,16 @@ func runAllChecks() []Check {
 
 	// 6. Port availability (quick check)
 	if daemonStatus == setup.DaemonRunning {
-		// If daemon is running, assume port is fine
 		checks = append(checks, Check{Name: "WebUI Port", Status: "✅", Message: "Daemon managing port allocation"})
+	} else if conn, dialErr := net.DialTimeout("tcp", "127.0.0.1:1314", 500*time.Millisecond); dialErr == nil {
+		_ = conn.Close()
+		checks = append(checks, Check{
+			Name:    "WebUI Port",
+			Status:  "❌",
+			Message: "Port 1314 is held by another process while the daemon service is not running — the daemon cannot start until that process exits (find it with: lsof -nP -iTCP:1314)",
+		})
+	} else {
+		checks = append(checks, Check{Name: "WebUI Port", Status: "✅", Message: "Port 1314 available"})
 	}
 
 	return checks

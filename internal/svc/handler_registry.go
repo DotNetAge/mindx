@@ -130,7 +130,6 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"fs.write":                           r.daemon.handleFSWrite,
 		"fs.write_base64":                    r.daemon.handleFSWriteBase64,
 		"fs.home":                            r.daemon.handleFSHome,
-		"fs.choose_dir":                      r.daemon.handleFSChooseDir,
 		"fs.mkdir":                           r.daemon.handleFSMkdir,
 		"fs.rm":                              r.daemon.handleFSRm,
 		"fs.mv":                              r.daemon.handleFSMv,

@@ -62,12 +62,13 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	// 静默模式（-s/--silent）跳过交互向导，不配置模型，供其它 Client 子进程调用
 	workspaceDir := core.DefaultUserPrefsDir()
 	cfg, cfgErr := core.LoadMindxConfig(workspaceDir)
-	needsWizard := cfgErr == nil && !cfg.Initialized && !installSilent
-	if !installSilent && cfgErr == nil && cfg.Initialized && cfg.DefaultModel == "" {
-		needsWizard = true // 已初始化但无模型，仍需补配
+	if cfgErr != nil {
+		// 配置文件损坏或不可读：按未初始化处理，引导走向导重建。
+		cfg = core.DefaultMindxConfig(workspaceDir)
 	}
+	needsWizard := !installSilent && (cfgErr != nil || !cfg.Initialized || cfg.DefaultModel == "")
 	if needsWizard {
-		fmt.Println("⚙️  Configuration not complete — launching setup wizard...")
+		fmt.Println("⚙️  配置尚未完成，正在打开设置向导...")
 		fmt.Println()
 
 		settingsDir := filepath.Join(workspaceDir, "settings")
@@ -77,11 +78,11 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		agentsDir := filepath.Join(workspaceDir, "agents")
 
 		if err := setup.RunWizard(modelsPath, providersPath, clientProvidersPath, agentsDir, workspaceDir, cfg, RuntimeFS); err != nil {
-			fmt.Fprintf(os.Stderr, "⚠️  Setup wizard failed: %v\n", err)
-			fmt.Println("   You can run 'mindx' later to complete configuration.")
+			fmt.Fprintf(os.Stderr, "⚠️  设置向导未完成: %v\n", err)
+			fmt.Println("   稍后可运行 'mindx' 继续完成配置。")
 		} else {
 			fmt.Println()
-			fmt.Println("✅ Configuration complete!")
+			fmt.Println("✅ 配置完成！")
 		}
 		fmt.Println()
 	}
@@ -96,7 +97,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 	result, err := setup.Install(opts)
 	if err != nil {
-		return fmt.Errorf("installation failed: %w", err)
+		return fmt.Errorf("安装失败: %w", err)
 	}
 
 	// 静默模式安装成功后标记为已初始化，否则 daemon 会因未初始化而拒绝启动
@@ -108,36 +109,39 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 	fmt.Println("────────────────────────────────────────")
-	fmt.Println("Installation complete!")
+	fmt.Println("安装完成！")
 	fmt.Println()
-	fmt.Printf("   Source:  %s\n", result.Source)
-	fmt.Printf("   Binary:  %s\n", result.BinaryDest)
+	fmt.Printf("   来源:     %s\n", result.Source)
+	fmt.Printf("   程序位置: %s\n", result.BinaryDest)
 
 	if result.PathConfigured {
-		fmt.Println("   PATH:   configured")
+		fmt.Println("   PATH:    已配置")
 	}
 	if result.DaemonSetup {
-		fmt.Println("   Daemon: registered")
+		fmt.Println("   后台服务: 已注册")
 		// Verify daemon is actually running — launchctl bootstrap may succeed
 		// even when the daemon process crashes immediately (port conflict, etc.)
 		daemonStatus, _ := setup.CheckDaemon()
 		if daemonStatus != setup.DaemonRunning {
-			fmt.Println("   ⚠️  Daemon registered but not yet running.")
-			fmt.Println("      Run 'mindx start' to launch it, or check:")
+			fmt.Println("   ⚠️  后台服务已注册但尚未运行。")
+			fmt.Println("      可运行 'mindx start' 启动，或查看日志排查原因:")
 			fmt.Println("        ~/.mindx/logs/daemon.err.log")
 		}
+	} else if !installNoDaemon {
+		// 注册已尝试但失败：不打印「安装完成」，明确失败并指引。
+		return fmt.Errorf("后台服务注册失败（原因见上方输出）；解决问题后重新运行 'mindx install' 即可")
 	}
 	if result.ShortcutCreated {
-		fmt.Println("   Shortcut: Desktop")
+		fmt.Println("   快捷方式: 桌面")
 	}
 
 	fmt.Println()
-	fmt.Println("Next steps:")
-	fmt.Println("  1. Open a new terminal (PATH changes take effect)")
+	fmt.Println("后续步骤:")
+	fmt.Println("  1. 打开一个新终端（PATH 变更生效）")
 	if !result.DaemonSetup {
-		fmt.Println("  2. Run 'mindx start' to launch the daemon")
+		fmt.Println("  2. 运行 'mindx start' 启动后台服务")
 	}
-	fmt.Println("  3. Run 'mindx' to start chatting")
+	fmt.Println("  3. 运行 'mindx' 开始使用")
 
 	return nil
 }

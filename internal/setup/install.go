@@ -101,7 +101,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 		return nil, fmt.Errorf("resolve install dir: %w", err)
 	}
 
-	shouldCopy := !opts.ForceCopy && (source == SourceCustom)
+	shouldCopy := source == SourceCustom || opts.ForceCopy
 
 	// Step 1: Stop old daemon before replacing binary or config
 	if !opts.SkipDaemon {
@@ -179,7 +179,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 	// Step 5: Register daemon with updated config and start it
 	if !opts.SkipDaemon {
 		workspaceDir := resolveWorkspaceDir(installDir)
-		if err := SetupDaemon(workspaceDir); err != nil {
+		if err := SetupDaemon(workspaceDir, destExe); err != nil {
 			fmt.Printf("  Daemon registration: %v\n", err)
 		} else {
 			result.DaemonSetup = true

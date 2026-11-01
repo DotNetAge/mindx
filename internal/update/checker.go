@@ -122,3 +122,16 @@ func (r *ReleaseInfo) FindAssetForPlatform(os, arch string) (string, string, err
 	}
 	return "", "", fmt.Errorf("no release asset found for %s/%s", os, arch)
 }
+
+// FindChecksumAsset finds the checksum asset accompanying the given asset,
+// either "<asset>.sha256" or a combined "checksums.txt".
+func (r *ReleaseInfo) FindChecksumAsset(assetName string) (string, string, bool) {
+	for _, name := range []string{assetName + ".sha256", "checksums.txt"} {
+		for _, asset := range r.Assets {
+			if asset.Name == name {
+				return asset.BrowserDownloadURL, asset.Name, true
+			}
+		}
+	}
+	return "", "", false
+}

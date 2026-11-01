@@ -23,7 +23,21 @@ func DaemonInstalled(workspaceDir string) bool {
 	return cfg.Daemon.Installed
 }
 
-func SetupDaemon(workspaceDir string) error {
+func SetupDaemon(workspaceDir, binPath string) error {
+	// 工作目录兜底创建：三平台服务定义里的 WorkingDirectory 都指向它，
+	// 目录缺失会让服务启动即失败并被反复重启。
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		return fmt.Errorf("创建工作目录失败: %w", err)
+	}
+	// binPath 为空时回落当前可执行文件（doctor / 向导等原位调用场景）。
+	if binPath == "" {
+		resolved, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("定位程序文件失败: %w", err)
+		}
+		binPath = resolved
+	}
+
 	// Detect sandboxed/containerized environments first — they have
 	// their own service managers that override the OS defaults.
 	if isSnap() {
@@ -35,17 +49,17 @@ func SetupDaemon(workspaceDir string) error {
 
 	switch runtime.GOOS {
 	case "darwin":
-		return setupDaemonMacOS(workspaceDir)
+		return setupDaemonMacOS(workspaceDir, binPath)
 	case "linux":
-		return setupDaemonLinux(workspaceDir)
+		return setupDaemonLinux(workspaceDir, binPath)
 	case "windows":
-		return setupDaemonWindows(workspaceDir)
+		return setupDaemonWindows(workspaceDir, binPath)
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
 }
 
-func setupDaemonMacOS(workspaceDir string) error {
+func setupDaemonMacOS(workspaceDir, binPath string) error {
 	plistPath := filepath.Join(os.TempDir(), "com.mindx.daemon.plist")
 
 	home, _ := os.UserHomeDir()
@@ -53,8 +67,6 @@ func setupDaemonMacOS(workspaceDir string) error {
 	if home != "" {
 		pathEnv = filepath.Join(home, ".mindx", "bin") + ":" + pathEnv
 	}
-
-	binPath, _ := os.Executable()
 
 	plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -115,21 +127,20 @@ func setupDaemonMacOS(workspaceDir string) error {
 	// launchctl bootout returns exit status 5 if not loaded, which is fine
 	_ = exec.Command("launchctl", "bootout", "gui/"+fmt.Sprint(os.Getuid()), agentPlist).Run()
 
-	if err := exec.Command("launchctl", "bootstrap", "gui/"+fmt.Sprint(os.Getuid()), agentPlist).Run(); err != nil {
-		return fmt.Errorf("launchctl bootstrap: %w", err)
+	if out, err := exec.Command("launchctl", "bootstrap", "gui/"+fmt.Sprint(os.Getuid()), agentPlist).CombinedOutput(); err != nil {
+		return fmt.Errorf("launchctl bootstrap: %w\n%s", err, string(out))
 	}
 
 	return nil
 }
 
-func setupDaemonLinux(workspaceDir string) error {
+func setupDaemonLinux(workspaceDir, binPath string) error {
 	serviceDir := filepath.Join(os.Getenv("HOME"), ".config", "systemd", "user")
 	if err := os.MkdirAll(serviceDir, 0755); err != nil {
 		return fmt.Errorf("create systemd user dir: %w", err)
 	}
 
 	home, _ := os.UserHomeDir()
-	binPath, _ := os.Executable()
 	pathEnv := "/usr/local/bin:/usr/bin:/bin"
 	if home != "" {
 		pathEnv = filepath.Join(home, ".mindx", "bin") + ":" + pathEnv
@@ -153,7 +164,7 @@ StandardError=append:%s
 WantedBy=default.target
 `, binPath, workspaceDir, pathEnv, filepath.Join(workspaceDir, "logs", "daemon.log"), filepath.Join(workspaceDir, "logs", "daemon.err.log"))
 
-	servicePath := filepath.Join(serviceDir, "mindx-daemon.service")
+	servicePath := filepath.Join(serviceDir, linuxServiceName+".service")
 	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
 		return fmt.Errorf("write service file: %w", err)
 	}
@@ -167,8 +178,8 @@ WantedBy=default.target
 
 	cmds := [][]string{
 		{"systemctl", "--user", "daemon-reload"},
-		{"systemctl", "--user", "enable", "mindx-daemon.service"},
-		{"systemctl", "--user", "start", "mindx-daemon.service"},
+		{"systemctl", "--user", "enable", linuxServiceName + ".service"},
+		{"systemctl", "--user", "start", linuxServiceName + ".service"},
 	}
 	for _, args := range cmds {
 		if err := exec.Command(args[0], args[1:]...).Run(); err != nil {
@@ -179,7 +190,7 @@ WantedBy=default.target
 	return nil
 }
 
-func setupDaemonWindows(workspaceDir string) error {
+func setupDaemonWindows(workspaceDir, binPath string) error {
 	taskName := "MindXDaemon"
 	username := os.Getenv("USERNAME")
 	if username == "" {
@@ -192,7 +203,6 @@ func setupDaemonWindows(workspaceDir string) error {
 	}
 
 	// Create VBS launcher that starts mindx with a hidden window (no Cmd popup on logon).
-	binPath, _ := os.Executable()
 	vbsPath := filepath.Join(workspaceDir, "bin", "MindXDaemon.vbs")
 	if err := os.MkdirAll(filepath.Dir(vbsPath), 0755); err != nil {
 		return fmt.Errorf("create bin dir: %w", err)

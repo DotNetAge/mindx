@@ -245,7 +245,7 @@ func startDaemonDirect(workspaceDir string) error {
 	// future boots / restarts use the normal managed path.
 	go func() {
 		time.Sleep(2 * time.Second) // give the direct process time to settle
-		if err := setupDaemonMacOS(workspaceDir); err != nil {
+		if err := setupDaemonMacOS(workspaceDir, exePath); err != nil {
 			fmt.Fprintf(os.Stderr, "  ⚠  Could not repair launchd registration: %v\n", err)
 			fmt.Fprintln(os.Stderr, "     Run 'mindx install' to fix manually.")
 			return

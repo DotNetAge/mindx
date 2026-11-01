@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -114,7 +115,28 @@ func (u *Updater) DownloadAndInstall(ctx context.Context) error {
 		return fmt.Errorf("download: %w", err)
 	}
 
-	// Verify SHA256 if checksum asset is available
+	// 若发布附带了校验文件则校验完整性；未附带则提示跳过。
+	if sumURL, sumName, ok := rel.FindChecksumAsset(assetName); ok {
+		sumPath := filepath.Join(tmpDir, sumName)
+		if err := u.downloadFile(ctx, sumURL, sumPath); err != nil {
+			return fmt.Errorf("download checksum: %w", err)
+		}
+		expected, err := parseChecksumFile(sumPath, assetName)
+		if err != nil {
+			return fmt.Errorf("解析校验文件失败: %w", err)
+		}
+		actual, err := SHA256(archivePath)
+		if err != nil {
+			return fmt.Errorf("计算下载文件校验值失败: %w", err)
+		}
+		if !strings.EqualFold(actual, expected) {
+			return fmt.Errorf("下载的更新包校验不匹配，已中止安装（文件可能下载不完整或被篡改）")
+		}
+		u.logf("checksum verified for %s", assetName)
+	} else {
+		u.logf("发布未附带 %s 的校验文件，跳过完整性校验", assetName)
+	}
+
 	u.logf("downloaded to %s, extracting...", archivePath)
 
 	// Extract the binary
@@ -253,11 +275,58 @@ func extractTarGz(archivePath, destDir string) (string, error) {
 }
 
 // extractZip extracts a zip archive and returns the path to the binary.
+// Uses the system tar (bsdtar on Windows 10+ / macOS) which handles zip natively,
+// avoiding a pure-Go zip dependency.
 func extractZip(archivePath, destDir string) (string, error) {
-	// Use the system's unzip command for simplicity, avoiding CGO dependency.
-	// Short-circuit: we don't use a pure-Go zip reader to keep things simple.
-	// zip extraction only matters for Windows anyway.
-	return "", fmt.Errorf("zip extraction not implemented; use tar.gz on Unix")
+	if out, err := exec.Command("tar", "-C", destDir, "-xf", archivePath).CombinedOutput(); err != nil {
+		return "", fmt.Errorf("解压更新包失败（系统 tar 不可用）: %w\n%s", err, string(out))
+	}
+
+	// 定位二进制：优先 mindx.exe，否则要求包内恰好有一个 .exe 文件。
+	entries, err := os.ReadDir(destDir)
+	if err != nil {
+		return "", err
+	}
+	var exes []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if strings.EqualFold(filepath.Ext(e.Name()), ".exe") {
+			exes = append(exes, e.Name())
+		}
+	}
+	switch len(exes) {
+	case 1:
+		return filepath.Join(destDir, exes[0]), nil
+	case 0:
+		return "", fmt.Errorf("更新包中没有找到 MindX 程序文件")
+	default:
+		return "", fmt.Errorf("更新包中包含多个程序文件，无法确定安装目标")
+	}
+}
+
+// parseChecksumFile 从校验文件中取出目标资产的校验值。
+// 支持 "<sha256>  <filename>" 行格式与纯 "<sha256>" 单行格式。
+func parseChecksumFile(path, assetName string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		switch {
+		case len(fields) >= 2 && fields[1] == assetName:
+			return fields[0], nil
+		case len(fields) == 1 && len(fields[0]) == 64:
+			return fields[0], nil
+		}
+	}
+	return "", fmt.Errorf("校验文件中未找到 %s 对应的校验值", assetName)
 }
 
 // SHA256 computes the SHA-256 checksum of a file.
