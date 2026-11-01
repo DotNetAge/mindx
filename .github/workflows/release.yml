@@ -99,7 +99,6 @@ jobs:
           CONTENT+="| Linux | amd64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-linux-amd64.tar.gz\` |\n"
           CONTENT+="| Linux | arm64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-linux-arm64.tar.gz\` |\n"
           CONTENT+="| macOS (Intel) | amd64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-darwin-amd64.tar.gz\` |\n"
-          CONTENT+="| Windows | amd64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-windows-amd64.zip\` |\n"
           CONTENT+="| macOS (Apple Silicon) | arm64 | \`${{ env.BINARY_NAME }}-${{ steps.version.outputs.version_num }}-darwin-arm64.tar.gz\` |\n"
 
           echo "content<<EOF" >> "$GITHUB_OUTPUT"
@@ -133,10 +132,6 @@ jobs:
             goarch: arm64
             runner: macos-latest
             ext: ''
-          - goos: windows
-            goarch: amd64
-            runner: ubuntu-latest
-            ext: '.exe'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -172,20 +167,13 @@ jobs:
 
           ls -lh dist/
 
-      - name: Package (tar.gz / windows zip)
+      - name: Package (tar.gz)
         shell: bash
         run: |
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
           cd dist
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            # 升级链 FindAssetForPlatform 匹配 mindx-<v>-windows-amd64.zip；bsdtar 解 zip 不依赖
-            # 权限位（installer.go 解出后 chmod 0755）
-            zip "${{ env.BINARY_NAME }}-${VERSION_NUM}-windows-${{ matrix.goarch }}.zip" \
-              "${{ env.BINARY_NAME }}${{ matrix.ext }}"
-          else
-            tar czf "../${{ env.BINARY_NAME }}-${VERSION_NUM}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
-              "${{ env.BINARY_NAME }}"
-          fi
+          tar czf "../${{ env.BINARY_NAME }}-${VERSION_NUM}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
+            "${{ env.BINARY_NAME }}"
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v5
@@ -193,7 +181,6 @@ jobs:
           name: package-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
             *.tar.gz
-            *.zip
           retention-days: 1
 
   # ==========================================================================
@@ -217,7 +204,7 @@ jobs:
       - name: Generate SHA256 checksums
         run: |
           cd packages
-          shasum -a 256 *.tar.gz *.zip > checksums.txt
+          shasum -a 256 *.tar.gz > checksums.txt
           cat checksums.txt
 
       - name: Create GitHub Release
@@ -230,7 +217,6 @@ jobs:
           prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
           files: |
             packages/*.tar.gz
-            packages/*.zip
             packages/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
