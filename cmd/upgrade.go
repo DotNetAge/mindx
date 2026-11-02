@@ -34,6 +34,8 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	onlyCheck, _ := cmd.Flags().GetBool("check")
 	stageOnly, _ := cmd.Flags().GetBool("stage")
 	yes, _ := cmd.Flags().GetBool("yes")
+	fromArchive, _ := cmd.Flags().GetString("from")
+	fromVersion, _ := cmd.Flags().GetString("version")
 
 	workspaceDir := core.DefaultUserPrefsDir()
 	cfg, err := core.LoadMindxConfig(workspaceDir)
@@ -58,23 +60,20 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		},
 	)
 
-	// 1. Check
-	fmt.Println("🔍 正在检查更新...")
-	info := updater.Check(true)
-	if info.Error != "" {
-		return fmt.Errorf("检查更新失败: %s", info.Error)
-	}
-
-	if !info.UpdateAvailable {
-		fmt.Printf("✅ 已是最新版本 (v%s)。\n", core.Version)
-		return nil
-	}
-
-	fmt.Printf("📦 发现新版本: %s\n", info.LatestVersion)
-	fmt.Printf("   当前版本: v%s\n", core.Version)
-	fmt.Printf("   下载地址: %s\n", info.LatestURL)
-
+	// 1. Check only
 	if onlyCheck {
+		fmt.Println("🔍 正在检查更新...")
+		info := updater.Check(true)
+		if info.Error != "" {
+			return fmt.Errorf("检查更新失败: %s", info.Error)
+		}
+		if !info.UpdateAvailable {
+			fmt.Printf("✅ 已是最新版本 (v%s)。\n", core.Version)
+			return nil
+		}
+		fmt.Printf("📦 发现新版本: %s\n", info.LatestVersion)
+		fmt.Printf("   当前版本: v%s\n", core.Version)
+		fmt.Printf("   下载地址: %s\n", info.LatestURL)
 		fmt.Println("\nℹ️  运行 'mindx upgrade'（不带 --check）即可安装更新。")
 		return nil
 	}
@@ -82,18 +81,42 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	// 2. Download — 服务照常运行，不受任何干扰（网络慢时可能要几分钟）
-	fmt.Println("\n⬇️  正在下载更新（后台服务运行不受影响）...")
-	stageBinary, version, cleanup, err := updater.Download(ctx)
-	defer cleanup()
-	if err != nil {
-		return fmt.Errorf("下载更新失败（服务未受影响，可稍后重试）: %w", err)
+	// 2. 获取待应用的更新二进制，来源优先级：
+	//    本地归档（--from，MindX 壳静默链用随包归档，零下载）>
+	//    已持久化暂存（--yes 第二跳，直接消费 --stage 的落盘成果）>
+	//    网络下载（收入持久暂存区，暂存不再随进程退出蒸发）
+	var stageBinary, version string
+	switch {
+	case fromArchive != "":
+		if fromVersion == "" {
+			return fmt.Errorf("--from 需同时指定 --version（本地归档对应的版本号）")
+		}
+		fmt.Printf("📦 从本地归档暂存更新: %s\n", fromArchive)
+		bin, stageErr := updater.StageFromArchive(fromArchive, fromVersion)
+		if stageErr != nil {
+			return fmt.Errorf("从本地归档暂存更新失败: %w", stageErr)
+		}
+		stageBinary, version = bin, fromVersion
+		fmt.Printf("✅ 新版本 v%s 暂存就绪。\n", version)
+	default:
+		if yes {
+			if bin, ver := updater.Staged(); bin != "" {
+				stageBinary, version = bin, ver
+				fmt.Printf("📦 应用已暂存的更新: v%s\n", version)
+			}
+		}
+		if stageBinary == "" {
+			bin, ver, acquireErr := acquireFromNetwork(updater, ctx)
+			if acquireErr != nil {
+				return acquireErr
+			}
+			if bin == "" {
+				fmt.Printf("✅ 已是最新版本 (v%s)。\n", core.Version)
+				return nil
+			}
+			stageBinary, version = bin, ver
+		}
 	}
-	if stageBinary == "" {
-		fmt.Printf("✅ 已是最新版本 (v%s)。\n", core.Version)
-		return nil
-	}
-	fmt.Printf("✅ 新版本 v%s 下载就绪。\n", version)
 
 	// 3. --stage：只就绪不应用（MindX 壳的静默链用：下载完提示用户一键应用）
 	if stageOnly {
@@ -116,6 +139,37 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 	// 5. Apply：停服 → 秒级替换 → 拉回。停了服务就要负责到底：
 	// 替换失败必须恢复服务（实证事故——停服后下载失败，daemon 躺尸无人拉回）。
 	return applyUpgrade(updater, stageBinary, version)
+}
+
+// acquireFromNetwork 网络链路：检查 → 下载 → 收入持久暂存区。
+// 返回空 binary 表示已是最新（无更新可装）。
+func acquireFromNetwork(updater *update.Updater, ctx context.Context) (string, string, error) {
+	fmt.Println("🔍 正在检查更新...")
+	info := updater.Check(true)
+	if info.Error != "" {
+		return "", "", fmt.Errorf("检查更新失败: %s", info.Error)
+	}
+	if !info.UpdateAvailable {
+		return "", "", nil
+	}
+	fmt.Printf("📦 发现新版本: %s\n", info.LatestVersion)
+	fmt.Printf("   下载地址: %s\n", info.LatestURL)
+
+	fmt.Println("\n⬇️  正在下载更新（后台服务运行不受影响）...")
+	tmpBinary, version, cleanup, err := updater.Download(ctx)
+	defer cleanup()
+	if err != nil {
+		return "", "", fmt.Errorf("下载更新失败（服务未受影响，可稍后重试）: %w", err)
+	}
+	if tmpBinary == "" {
+		return "", "", nil
+	}
+	bin, err := updater.PersistStage(tmpBinary, version)
+	if err != nil {
+		return "", "", fmt.Errorf("暂存更新失败: %w", err)
+	}
+	fmt.Printf("✅ 新版本 v%s 下载就绪。\n", version)
+	return bin, version, nil
 }
 
 func applyUpgrade(updater *update.Updater, stageBinary, version string) error {
@@ -143,6 +197,7 @@ func applyUpgrade(updater *update.Updater, stageBinary, version string) error {
 	}
 
 	fmt.Println("✅ 更新安装成功。")
+	updater.ClearStage()
 
 	if daemonWasRunning {
 		fmt.Println("  → 正在重启后台服务...")
@@ -163,5 +218,7 @@ func init() {
 	upgradeCmd.Flags().Bool("check", false, "Only check for updates, don't install")
 	upgradeCmd.Flags().Bool("stage", false, "Download and stage the update only; apply later with --yes")
 	upgradeCmd.Flags().Bool("yes", false, "Apply without confirmation (service restarts briefly)")
+	upgradeCmd.Flags().String("from", "", "Stage from a local release archive instead of downloading (MindX shell bundled kernel)")
+	upgradeCmd.Flags().String("version", "", "Version of the --from archive (required with --from)")
 	rootCmd.AddCommand(upgradeCmd)
 }

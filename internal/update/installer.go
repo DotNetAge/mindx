@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -169,6 +170,114 @@ func (u *Updater) Download(ctx context.Context) (stageBinary string, version str
 	}
 
 	return binaryPath, strings.TrimPrefix(rel.TagName, "v"), cleanup, nil
+}
+
+// ── 持久暂存区（~/.mindx/bin/.update/，写方仅 mindx upgrade） ──────────────
+//
+// 静默链两段式（--stage 与 --yes 是两次独立进程调用）的唯一交接面：暂存必须
+// 落盘存活到应用时刻。禁止用进程存活期的临时目录充当暂存——实证事故：旧实现
+// --stage 的下载物随进程退出被 cleanup 删除，--yes 再全量下载一次，一次升级
+// 两次下载且零离线可用性。
+
+func (u *Updater) stageDir() string {
+	return filepath.Join(u.workspaceDir, "bin", ".update")
+}
+
+func (u *Updater) stageBinaryPath() string {
+	name := "mindx"
+	if runtime.GOOS == "windows" {
+		name = "mindx.exe"
+	}
+	return filepath.Join(u.stageDir(), name)
+}
+
+func (u *Updater) stageVersionPath() string {
+	return filepath.Join(u.stageDir(), "version.json")
+}
+
+// Staged 返回已持久化暂存的二进制路径与版本；版本标记或二进制缺失视为无暂存
+// （二进制被 InstallFromStage rename 消费后，陈旧标记自动失效）。
+func (u *Updater) Staged() (string, string) {
+	data, err := os.ReadFile(u.stageVersionPath())
+	if err != nil {
+		return "", ""
+	}
+	var meta struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil || meta.Version == "" {
+		return "", ""
+	}
+	bin := u.stageBinaryPath()
+	if st, err := os.Stat(bin); err != nil || st.IsDir() {
+		return "", ""
+	}
+	return bin, meta.Version
+}
+
+// PersistStage 把就绪的二进制收入持久暂存区。copy 而非 rename：源常在另一
+// 文件系统（os.MkdirTemp 的 /var/folders、/tmp），跨设备 rename 会失败。
+func (u *Updater) PersistStage(srcBinary, version string) (string, error) {
+	if err := os.MkdirAll(u.stageDir(), 0755); err != nil {
+		return "", fmt.Errorf("create stage dir: %w", err)
+	}
+	dst := u.stageBinaryPath()
+	if err := copyFile(srcBinary, dst, 0755); err != nil {
+		return "", fmt.Errorf("stage binary: %w", err)
+	}
+	meta, _ := json.Marshal(map[string]string{"version": version})
+	if err := os.WriteFile(u.stageVersionPath(), meta, 0644); err != nil {
+		return "", fmt.Errorf("write stage version: %w", err)
+	}
+	u.logf("staged update v%s at %s", version, dst)
+	return dst, nil
+}
+
+// StageFromArchive 从本地归档（MindX 壳随包的 tar.gz/zip）直接暂存，跳过
+// 网络 Check/Download——归档就是目标版本的同一份产物，重新下载是浪费且把
+// 升级可用性押在 GitHub 可达性上。
+func (u *Updater) StageFromArchive(archivePath, version string) (string, error) {
+	tmpDir, err := os.MkdirTemp("", "mindx-stage-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	var bin string
+	if strings.HasSuffix(archivePath, ".zip") {
+		bin, err = extractZip(archivePath, tmpDir)
+	} else {
+		bin, err = extractTarGz(archivePath, tmpDir)
+	}
+	if err != nil {
+		return "", fmt.Errorf("extract archive: %w", err)
+	}
+	if err := os.Chmod(bin, 0755); err != nil {
+		return "", fmt.Errorf("chmod binary: %w", err)
+	}
+	return u.PersistStage(bin, version)
+}
+
+// ClearStage 清理暂存版本标记（二进制已被 InstallFromStage 消费后调用）。
+func (u *Updater) ClearStage() {
+	_ = os.Remove(u.stageVersionPath())
+}
+
+func copyFile(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = out.Close() }()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Sync()
 }
 
 // InstallFromStage swaps the installed binary with the staged one. It is a
