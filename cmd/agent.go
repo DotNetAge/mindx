@@ -99,7 +99,7 @@ var agentListCmd = &cobra.Command{
 			return nil
 		}
 
-		table := render.NewTable([]string{"Name", "Role", "Description", "Skills"}, 100)
+		table := render.NewTable([]string{"昵称", "角色", "描述", "技能"}, 100)
 		for _, a := range agents {
 			role := a.Meta.Role
 			if role == "" {
@@ -113,7 +113,12 @@ var agentListCmd = &cobra.Command{
 			if len(a.Meta.Skills) > 0 {
 				skills = strings.Join(a.Meta.Skills, ", ")
 			}
-			table.AddRow([]string{a.Meta.Name, role, desc, skills})
+			// 展示名统一走昵称（未配置回退内部名）
+			display := a.Meta.NickName
+			if display == "" {
+				display = a.Meta.Name
+			}
+			table.AddRow([]string{display, role, desc, skills})
 		}
 		fmt.Println(table.Render())
 		if showAll {
@@ -474,6 +479,7 @@ Examples:
 
 		type memberInfo struct {
 			Name        string   `json:"name"`
+			NickName    string   `json:"nick_name,omitempty"`
 			Role        string   `json:"role,omitempty"`
 			Description string   `json:"description,omitempty"`
 			Skills      []string `json:"skills,omitempty"`
@@ -502,6 +508,7 @@ Examples:
 			}
 			matched = append(matched, memberInfo{
 				Name:        a.Meta.Name,
+				NickName:    a.Meta.NickName,
 				Role:        a.Meta.Role,
 				Description: a.Meta.Description,
 				Skills:      a.Meta.Skills,
@@ -518,7 +525,7 @@ Examples:
 			if len(matched) == 0 {
 				fmt.Println("未找到指定的智能体。")
 			} else {
-				table := render.NewTable([]string{"Name", "Role", "Description", "Skills"}, 100)
+				table := render.NewTable([]string{"昵称", "角色", "描述", "技能"}, 100)
 				for _, m := range matched {
 					role := m.Role
 					if role == "" {
@@ -532,7 +539,12 @@ Examples:
 					if len(m.Skills) > 0 {
 						skills = strings.Join(m.Skills, ", ")
 					}
-					table.AddRow([]string{m.Name, role, desc, skills})
+					// 展示名统一走昵称（未配置回退内部名）
+					display := m.NickName
+					if display == "" {
+						display = m.Name
+					}
+					table.AddRow([]string{display, role, desc, skills})
 				}
 				fmt.Println(table.Render())
 			}

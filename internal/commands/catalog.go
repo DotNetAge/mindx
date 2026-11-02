@@ -63,8 +63,8 @@ func handleAgents(ctx *gateway.CommandContext) (any, error) {
 	}
 
 	// Send structured notification for TUI rendering
-	ctx.RespondWithType(gateway.RespTable, "Available Agents", map[string]interface{}{
-		"headers": []string{"Name", "Role", "Description"},
+	ctx.RespondWithType(gateway.RespTable, i18n.T("cmd.catalog.agents.title"), map[string]interface{}{
+		"headers": []string{i18n.T("cmd.table.name"), i18n.T("cmd.table.role"), i18n.T("cmd.table.description")},
 		"rows":    toAgentTableRows(list),
 	})
 
@@ -72,15 +72,11 @@ func handleAgents(ctx *gateway.CommandContext) (any, error) {
 	// Call/SendCommand can parse it directly.
 	result := make([]map[string]string, 0, len(list))
 	for _, item := range list {
-		if item["model"] == "" {
-			return nil, fmt.Errorf("agent %q has no model configured", item["name"])
-		}
 		r := map[string]string{
-			"label": item["name"],
+			"label": displayName(item),
 			"value": item["name"],
 			"role":  item["role"],
 			"desc":  item["description"],
-			"model": item["model"],
 		}
 		// Pass through the active flag from the backend (if present).
 		if item["active"] == "true" {
@@ -145,11 +141,20 @@ func handleSkills(ctx *gateway.CommandContext) (any, error) {
 	return result, nil
 }
 
+// displayName 统一展示名：昵称优先（未配置回退内部名，与展示主名规则同源）；
+// value 等内部标识字段不受影响
+func displayName(item map[string]string) string {
+	if item["nick_name"] != "" {
+		return item["nick_name"]
+	}
+	return item["name"]
+}
+
 func toAgentTableRows(items []map[string]string) [][]string {
 	rows := make([][]string, 0, len(items))
 	for _, item := range items {
 		rows = append(rows, []string{
-			item["name"],
+			displayName(item),
 			item["role"],
 			item["description"],
 		})

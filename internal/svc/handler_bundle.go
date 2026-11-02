@@ -35,7 +35,7 @@ func (d *Daemon) handleAgentExport(_ context.Context, params json.RawMessage) (a
 
 	agent := d.app.Agents().Get(p.Name)
 	if agent == nil {
-		return nil, fmt.Errorf("agent %q not found", p.Name)
+		return nil, fmt.Errorf("智能体 %q 不存在，请确认名称是否正确", p.Name)
 	}
 
 	manifest, warnings, err := bundle.ExportAgent(agent, d.app.Skills(), p.OutPath)

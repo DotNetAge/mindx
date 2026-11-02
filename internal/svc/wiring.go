@@ -61,6 +61,7 @@ func listAgents(app *core.App) []map[string]string {
 	for _, agent := range agents {
 		entry := map[string]string{
 			"name":        agent.Meta.Name,
+			"nick_name":   agent.Meta.NickName,
 			"role":        agent.Meta.Role,
 			"description": agent.Meta.Description,
 		}

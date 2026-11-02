@@ -56,12 +56,12 @@ func (d *Daemon) handleAgentGet(_ context.Context, params json.RawMessage) (any,
 
 	agents := d.app.Agents()
 	if agents == nil {
-		return nil, fmt.Errorf("agent registry not available")
+		return nil, fmt.Errorf("智能体注册表暂不可用，请稍后重试")
 	}
 
 	agent := agents.Get(p.Name)
 	if agent == nil {
-		return nil, fmt.Errorf("agent %q not found", p.Name)
+		return nil, fmt.Errorf("智能体 %q 不存在，请确认名称是否正确", p.Name)
 	}
 	return agentDetailResult{AgentMeta: agent.Meta, IsLeader: core.AgentIsLeader(d.app.Teams(), agent), Soul: agent.Soul, TeamDuty: agent.TeamDuty}, nil
 }
@@ -86,11 +86,11 @@ func (d *Daemon) handleAgentCreate(_ context.Context, params json.RawMessage) (a
 
 	agents := d.app.Agents()
 	if agents == nil {
-		return nil, fmt.Errorf("agent registry not available")
+		return nil, fmt.Errorf("智能体注册表暂不可用，请稍后重试")
 	}
 
 	if agents.Get(p.Name) != nil {
-		return nil, fmt.Errorf("agent %q already exists", p.Name)
+		return nil, fmt.Errorf("智能体 %q 已存在，请换一个名称", p.Name)
 	}
 
 	introduction := p.Introduction
@@ -131,12 +131,12 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 
 	agents := d.app.Agents()
 	if agents == nil {
-		return nil, fmt.Errorf("agent registry not available")
+		return nil, fmt.Errorf("智能体注册表暂不可用，请稍后重试")
 	}
 
 	existing := agents.Get(p.Name)
 	if existing == nil {
-		return nil, fmt.Errorf("agent %q not found", p.Name)
+		return nil, fmt.Errorf("智能体 %q 不存在，请确认名称是否正确", p.Name)
 	}
 
 	updated := *existing
@@ -206,10 +206,10 @@ func (d *Daemon) handleAgentScore(_ context.Context, params json.RawMessage) (an
 	// Verify agent exists (but do NOT write to its config file)
 	agents := d.app.Agents()
 	if agents == nil {
-		return nil, fmt.Errorf("agent registry not available")
+		return nil, fmt.Errorf("智能体注册表暂不可用，请稍后重试")
 	}
 	if agents.Get(p.AgentName) == nil {
-		return nil, fmt.Errorf("agent %q not found", p.AgentName)
+		return nil, fmt.Errorf("智能体 %q 不存在，请确认名称是否正确", p.AgentName)
 	}
 
 	if d.kvStore == nil {
@@ -319,7 +319,7 @@ func (d *Daemon) setAgentHired(params json.RawMessage, hired bool) (any, error) 
 
 	agents := d.app.Agents()
 	if agents == nil {
-		return nil, fmt.Errorf("agent registry not available")
+		return nil, fmt.Errorf("智能体注册表暂不可用，请稍后重试")
 	}
 
 	if err := core.SetAgentHired(agents, p.Name, hired); err != nil {

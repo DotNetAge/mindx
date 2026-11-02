@@ -832,11 +832,11 @@ func (a *App) resolveModelName() (string, *config.ModelConfig, error) {
 		}
 	}
 	if modelName == "" {
-		return "", nil, fmt.Errorf("no model configured")
+		return "", nil, fmt.Errorf("尚未配置可用模型，请先在模型设置中添加模型并设为默认")
 	}
 	modelCfg := a.Models().Get(modelName)
 	if modelCfg == nil {
-		return "", nil, fmt.Errorf("model %q not found", modelName)
+		return "", nil, fmt.Errorf("模型 %q 不存在，请在模型设置中检查该配置", modelName)
 	}
 	return modelName, modelCfg, nil
 }
@@ -847,12 +847,17 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 
 	agent := a.Agents().Get(agentName)
 	if agent == nil {
-		return nil, fmt.Errorf("agent %q not found", agentName)
+		return nil, fmt.Errorf("智能体 %q 不存在，请确认已安装该智能体", agentName)
 	}
 
 	_, modelCfg, err := a.resolveModelName()
 	if err != nil {
-		return nil, fmt.Errorf("agent %q: %w", agent.Meta.Name, err)
+		// 错误提示展示名统一走昵称（未配置昵称时回退内部名，与展示主名规则同源）
+		displayName := agent.Meta.NickName
+		if displayName == "" {
+			displayName = agent.Meta.Name
+		}
+		return nil, fmt.Errorf("智能体 %s 启动失败：%w", displayName, err)
 	}
 	resolvedModel := *modelCfg
 
