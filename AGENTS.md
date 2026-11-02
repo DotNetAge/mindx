@@ -45,6 +45,8 @@
 
 ## 必须禁止
 
+* CLI（cmd/ 输出、gateway 命令的机器消费字段）是 Agent 的数据源，禁止以「展示优化」为由改动——team leader 靠 `agent info` 的 name 列加载成员，整列替换成昵称即破坏加载链（2026-11-02 实锤：用户怒斥「CLI 绝对不能改！我只叫你改显示给用户看的内容」）。「显示给用户看的内容」边界 = GUI（chatflow 等）透传的错误文案与界面渲染层；改动前先定位每个点的消费方是人还是 Agent
+
 * 禁止凭上游摘要/注释/记忆复刻跨端共享的文件路径、协议细节——**编码前必须先读事实源当前实现**（2026-10-11 实锤：设备接入闸落地时凭摘要写 `~/.mindx/daemon_token`，真实路径是 `daemonTokenPath()` 的 `~/.mindx/data/daemon_token`（dataDir 运行期指向 data 子目录），GUI/CLI 读不到令牌全部握手失败，注册层强制闸把本机客户端一并挡死，用户"一起动就失去与任何 Daemon 的连接"；修复=LocalToken/readDaemonToken 两级查找 data/daemon_token 优先、根目录回落。**2026-10-30 用户否定了当时的修复方向**：事故后未归一数据源、反而以兼容层迁就偏离位置，正是数据源混乱的源头；同日落点已定案为 `~/.mindx/.token`，见「~/.mindx 数据落点军规」）
 * 禁止在注释/TODO 中引用未经核实的 API——被注释停用的代码不参与编译，引用了不存在的符号编译器不会报错，启用当天才爆炸（2026-10-17 实锤：daemon.go 的 TODO 注释引用 `gateway.WithAuthenticator`，而该选项在 gort gateway 中从未实现，启用公网鉴权钩子时才暴露，被迫当场在 gort 补实现）；启用任何长期停用的代码前，先确认其依赖的真实存在
 * 隔离 MINDX_HOME 起测试 daemon 做连接冒烟时，CLI 的本机握手读的是真实用户根令牌（现为 `~/.mindx/.token`；pkg/rpc 的 defaultUserPrefsDir 不认 MINDX_HOME，与 daemon 侧 core.DefaultUserPrefsDir 不同源）——须把真实 .token 预置进隔离目录再起 daemon，否则 CLI 被强制闸判为外部设备卡 pending（2026-10-17 冒烟实证）
