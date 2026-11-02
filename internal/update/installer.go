@@ -81,56 +81,66 @@ func (u *Updater) Check(checkRemote bool) *VersionInfo {
 	return info
 }
 
-// DownloadAndInstall downloads the latest release and replaces the current binary.
-// If the context is cancelled the download is aborted.
-func (u *Updater) DownloadAndInstall(ctx context.Context) error {
+// Download downloads the latest release into a staging directory WITHOUT
+// touching the running service or the installed binary — the daemon keeps
+// serving throughout the download (which can take minutes on slow networks).
+// Stopping the service is a user-authorized action and only ever happens
+// right before the second-long InstallFromStage swap.
+//
+// Returns the staged binary path, the new version, and a cleanup func that
+// removes the staging dir. If no newer release exists, stageBinary is ""
+// and version is the current version.
+func (u *Updater) Download(ctx context.Context) (stageBinary string, version string, cleanup func(), err error) {
 	u.logf("checking for updates: current=%s installed=%s", u.currentVer, u.installedVer)
 
 	rel, err := LatestRelease(u.httpClient)
 	if err != nil {
-		return fmt.Errorf("fetch latest release: %w", err)
+		return "", u.currentVer, func() {}, fmt.Errorf("fetch latest release: %w", err)
 	}
-
 	if !IsNewer(rel.TagName, u.currentVer) {
 		u.logf("already up-to-date (%s)", u.currentVer)
-		return nil
+		return "", u.currentVer, func() {}, nil
 	}
 
 	downloadURL, assetName, err := rel.FindAssetForPlatform(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
-		return fmt.Errorf("find asset: %w", err)
+		return "", "", nil, fmt.Errorf("find asset: %w", err)
 	}
 
 	u.logf("downloading %s ...", assetName)
 
-	// Download to a temp directory
 	tmpDir, err := os.MkdirTemp("", "mindx-update-*")
 	if err != nil {
-		return fmt.Errorf("create temp dir: %w", err)
+		return "", "", nil, fmt.Errorf("create temp dir: %w", err)
 	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
+	cleanup = func() { _ = os.RemoveAll(tmpDir) }
 
 	archivePath := filepath.Join(tmpDir, assetName)
 	if err := u.downloadFile(ctx, downloadURL, archivePath); err != nil {
-		return fmt.Errorf("download: %w", err)
+		cleanup()
+		return "", "", nil, fmt.Errorf("download: %w", err)
 	}
 
 	// 若发布附带了校验文件则校验完整性；未附带则提示跳过。
 	if sumURL, sumName, ok := rel.FindChecksumAsset(assetName); ok {
 		sumPath := filepath.Join(tmpDir, sumName)
 		if err := u.downloadFile(ctx, sumURL, sumPath); err != nil {
-			return fmt.Errorf("download checksum: %w", err)
+			cleanup()
+			return "", "", nil, fmt.Errorf("download checksum: %w", err)
 		}
 		expected, err := parseChecksumFile(sumPath, assetName)
 		if err != nil {
-			return fmt.Errorf("解析校验文件失败: %w", err)
+			cleanup()
+			return "", "", nil, fmt.Errorf("解析校验文件失败: %w", err)
 		}
 		actual, err := SHA256(archivePath)
 		if err != nil {
-			return fmt.Errorf("计算下载文件校验值失败: %w", err)
+			cleanup()
+			return "", "", nil, fmt.Errorf("计算下载文件校验值失败: %w", err)
 		}
 		if !strings.EqualFold(actual, expected) {
-			return fmt.Errorf("下载的更新包校验不匹配，已中止安装（文件可能下载不完整或被篡改）")
+			cleanup()
+			return "", "", nil, fmt.Errorf("下载的更新包校验不匹配，已中止安装（文件可能下载不完整或被篡改）")
 		}
 		u.logf("checksum verified for %s", assetName)
 	} else {
@@ -139,28 +149,35 @@ func (u *Updater) DownloadAndInstall(ctx context.Context) error {
 
 	u.logf("downloaded to %s, extracting...", archivePath)
 
-	// Extract the binary
 	var binaryPath string
 	if strings.HasSuffix(assetName, ".tar.gz") {
 		binaryPath, err = extractTarGz(archivePath, tmpDir)
 	} else if strings.HasSuffix(assetName, ".zip") {
 		binaryPath, err = extractZip(archivePath, tmpDir)
 	} else {
-		return fmt.Errorf("unsupported archive format: %s", assetName)
+		cleanup()
+		return "", "", nil, fmt.Errorf("unsupported archive format: %s", assetName)
 	}
 	if err != nil {
-		return fmt.Errorf("extract: %w", err)
+		cleanup()
+		return "", "", nil, fmt.Errorf("extract: %w", err)
 	}
 
-	// Get the current executable path
+	if err := os.Chmod(binaryPath, 0755); err != nil {
+		cleanup()
+		return "", "", nil, fmt.Errorf("chmod binary: %w", err)
+	}
+
+	return binaryPath, strings.TrimPrefix(rel.TagName, "v"), cleanup, nil
+}
+
+// InstallFromStage swaps the installed binary with the staged one. It is a
+// second-long, atomic-ish rename and never stops or starts services — the
+// caller orchestrates stop/start around it with the user's consent.
+func (u *Updater) InstallFromStage(stageBinary, version string) error {
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("get executable path: %w", err)
-	}
-
-	// Ensure binary is executable
-	if err := os.Chmod(binaryPath, 0755); err != nil {
-		return fmt.Errorf("chmod binary: %w", err)
 	}
 
 	// Replace the current binary
@@ -173,7 +190,7 @@ func (u *Updater) DownloadAndInstall(ctx context.Context) error {
 		return fmt.Errorf("backup current binary: %w", err)
 	}
 
-	if err := os.Rename(binaryPath, execPath); err != nil {
+	if err := os.Rename(stageBinary, execPath); err != nil {
 		// Try to restore
 		_ = os.Rename(backupPath, execPath)
 		return fmt.Errorf("install new binary: %w", err)
@@ -182,8 +199,6 @@ func (u *Updater) DownloadAndInstall(ctx context.Context) error {
 	// Remove backup (will work on most Unix systems after exec restarts)
 	_ = os.Remove(backupPath)
 
-	// Update config
-	version := strings.TrimPrefix(rel.TagName, "v")
 	if err := u.saveConfig(version); err != nil {
 		u.logf("warning: failed to update config version: %v", err)
 	}

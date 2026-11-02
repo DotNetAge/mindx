@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/setup"
@@ -17,20 +19,21 @@ var upgradeCmd = &cobra.Command{
 	Short: "Upgrade MindX to the latest version",
 	Long: `Downloads and installs the latest MindX release from GitHub.
 
-Automatically checks for a new version, downloads the appropriate
-binary for your platform, and replaces the current installation.
+Upgrade order (user-first): check, then download with the daemon still
+serving; only with the user's confirmation does it stop the service,
+swap the binary (seconds), and start the service back up.
 
-After upgrading, you should restart the daemon service:
-  mindx restart
-
-Examples:
-  mindx upgrade          # Check and apply the latest update
-  mindx upgrade --check  # Only check for updates, don't install`,
+  mindx upgrade            # Interactive: download, confirm, apply
+  mindx upgrade --yes      # Non-interactive apply (scripts / MindX shell)
+  mindx upgrade --stage    # Download and stage only; apply later
+  mindx upgrade --check    # Only check for updates`,
 	RunE: runUpgrade,
 }
 
 func runUpgrade(cmd *cobra.Command, args []string) error {
 	onlyCheck, _ := cmd.Flags().GetBool("check")
+	stageOnly, _ := cmd.Flags().GetBool("stage")
+	yes, _ := cmd.Flags().GetBool("yes")
 
 	workspaceDir := core.DefaultUserPrefsDir()
 	cfg, err := core.LoadMindxConfig(workspaceDir)
@@ -55,7 +58,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		},
 	)
 
-	// Run check
+	// 1. Check
 	fmt.Println("🔍 正在检查更新...")
 	info := updater.Check(true)
 	if info.Error != "" {
@@ -76,10 +79,46 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Confirm
-	fmt.Println("\n⬇️  正在下载并安装更新...")
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
 
-	// Stop daemon before replacing the binary
+	// 2. Download — 服务照常运行，不受任何干扰（网络慢时可能要几分钟）
+	fmt.Println("\n⬇️  正在下载更新（后台服务运行不受影响）...")
+	stageBinary, version, cleanup, err := updater.Download(ctx)
+	defer cleanup()
+	if err != nil {
+		return fmt.Errorf("下载更新失败（服务未受影响，可稍后重试）: %w", err)
+	}
+	if stageBinary == "" {
+		fmt.Printf("✅ 已是最新版本 (v%s)。\n", core.Version)
+		return nil
+	}
+	fmt.Printf("✅ 新版本 v%s 下载就绪。\n", version)
+
+	// 3. --stage：只就绪不应用（MindX 壳的静默链用：下载完提示用户一键应用）
+	if stageOnly {
+		fmt.Printf("ℹ️  已暂存待应用。运行 'mindx upgrade --yes' 即可应用（服务将短暂重启）。\n")
+		return nil
+	}
+
+	// 4. 用户确认——停服务是用户的权力，升级进程无权擅自暂停任何服务
+	if !yes {
+		fmt.Print("\n应用更新需要短暂停止后台服务（通常数秒），继续? [y/N] ")
+		reader := bufio.NewReader(os.Stdin)
+		answer, _ := reader.ReadString('\n')
+		answer = strings.ToLower(strings.TrimSpace(answer))
+		if answer != "y" && answer != "yes" {
+			fmt.Println("ℹ️  已取消应用。新版本仍处于暂存状态，随时可运行 'mindx upgrade --yes' 应用。")
+			return nil
+		}
+	}
+
+	// 5. Apply：停服 → 秒级替换 → 拉回。停了服务就要负责到底：
+	// 替换失败必须恢复服务（实证事故——停服后下载失败，daemon 躺尸无人拉回）。
+	return applyUpgrade(updater, stageBinary, version)
+}
+
+func applyUpgrade(updater *update.Updater, stageBinary, version string) error {
 	daemonWasRunning := false
 	status, err := setup.CheckDaemon()
 	if err == nil && status == setup.DaemonRunning {
@@ -92,16 +131,19 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 		fmt.Println("  ✅ 后台服务已停止")
 	}
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
-	defer cancel()
-
-	if err := updater.DownloadAndInstall(ctx); err != nil {
+	if err := updater.InstallFromStage(stageBinary, version); err != nil {
+		if daemonWasRunning {
+			fmt.Println("⚠️  安装失败，正在恢复后台服务...")
+			if startErr := setup.StartDaemon(); startErr != nil {
+				return fmt.Errorf("安装更新失败: %v\n且后台服务自动恢复失败: %v\n请手动运行 'mindx start' 启动服务", err, startErr)
+			}
+			fmt.Println("  ✅ 后台服务已恢复（版本保持不变）")
+		}
 		return fmt.Errorf("安装更新失败: %w", err)
 	}
 
 	fmt.Println("✅ 更新安装成功。")
 
-	// Restart daemon if it was running before
 	if daemonWasRunning {
 		fmt.Println("  → 正在重启后台服务...")
 		if err := setup.StartDaemon(); err != nil {
@@ -119,5 +161,7 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 
 func init() {
 	upgradeCmd.Flags().Bool("check", false, "Only check for updates, don't install")
+	upgradeCmd.Flags().Bool("stage", false, "Download and stage the update only; apply later with --yes")
+	upgradeCmd.Flags().Bool("yes", false, "Apply without confirmation (service restarts briefly)")
 	rootCmd.AddCommand(upgradeCmd)
 }

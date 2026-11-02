@@ -339,10 +339,18 @@ func (d *Daemon) autoUpdateLoop(ctx context.Context) {
 						},
 					})
 				}
-				// 自动下载并安装新二进制（但不要重启，只记录日志通知用户）
-				if err := d.updater.DownloadAndInstall(ctx); err != nil {
-					d.logger.Warn("auto-update: download and install failed", "error", err)
+				// 自动下载并替换二进制（不停自己、不重启——替换即生效于下次重启；
+				// 下载阶段服务照常跑，替换是秒级 rename。服务重启只由用户触发）
+				stageBinary, ver, cleanup, err := d.updater.Download(ctx)
+				if err != nil {
+					d.logger.Warn("auto-update: download failed", "error", err)
+				} else if stageBinary == "" {
+					d.logger.Info("auto-update: already up-to-date", "version", ver)
+				} else if err := d.updater.InstallFromStage(stageBinary, ver); err != nil {
+					d.logger.Warn("auto-update: install staged binary failed", "error", err)
+					cleanup()
 				} else {
+					cleanup()
 					d.logger.Info("auto-update: update installed. User should restart the daemon.")
 					if d.gw != nil {
 						d.gw.BroadcastNotification("update_installed", map[string]any{

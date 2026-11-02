@@ -24,7 +24,16 @@ func (d *Daemon) handleServerApplyUpdate(ctx context.Context, params json.RawMes
 	d.gw.BroadcastNotification("update_started", map[string]interface{}{
 		"type": "update_started",
 	})
-	if err := d.updater.DownloadAndInstall(ctx); err != nil {
+	// 下载阶段服务照常跑；替换是秒级 rename；重启由下方 goroutine 触发（用户已点击应用）
+	stageBinary, version, cleanup, err := d.updater.Download(ctx)
+	if err != nil {
+		return map[string]string{"error": err.Error()}, nil
+	}
+	defer cleanup()
+	if stageBinary == "" {
+		return map[string]string{"status": "up-to-date", "message": "已是最新版本。"}, nil
+	}
+	if err := d.updater.InstallFromStage(stageBinary, version); err != nil {
 		return map[string]string{"error": err.Error()}, nil
 	}
 
