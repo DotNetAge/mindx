@@ -115,7 +115,10 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 	// 仅内存态生效，不回写存储（避免与调度器一次性禁用/执行统计落盘竞态）；
 	// 落实失败才按失败回写，任务状态不留悬空 started。
 	if entry.SessionID == "" {
-		sid, serr := d.ensureScheduleSession(entry.Agent, entry.SessionID, entry.ProjectDir)
+		// 首跑需要新建会话时，ensureScheduleSession 内部先阻塞式提炼标题
+		// （entry.Content 为提炼原料），得到标题后再创建会话（见 session_title.go）；
+		// 提炼失败也不重试，避免双重阻塞
+		sid, serr := d.ensureScheduleSession(entry.Agent, entry.SessionID, entry.ProjectDir, entry.Content)
 		if serr != nil {
 			serr = fmt.Errorf("任务未绑定会话且自动落实失败: %w", serr)
 			d.logger.Error("scheduled job: resolve session failed", serr, "entry_id", info.EntryID, "agent", entry.Agent)
@@ -123,11 +126,12 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 			return
 		}
 		entry.SessionID = sid
+	} else {
+		// 复用已有会话（含客户端/上次运行留下的空壳）：全新会话的首跑在执行前
+		// 阻塞式提炼标题并落库（已有标题或已有消息的会话被门控跳过，见 session_title.go）
+		meta, metaErr := d.getSessionMeta(entry.SessionID)
+		d.maybeGenerateSessionTitle(entry.SessionID, entry.Agent, entry.Content, meta, metaErr)
 	}
-
-	// Agent 首跑新会话：同款标题提炼（阻塞式先行，任务提示词为提炼原料），
-	// 已有标题/已有消息的复用会话被门控跳过（见 session_title.go），不重命名
-	d.maybeGenerateSessionTitle(entry.SessionID, entry.Agent, entry.Content)
 	rt, err := d.app.ResolveRuntime(entry.Agent)
 	if err != nil {
 		d.logger.Error("scheduled job: resolve runtime failed", err,

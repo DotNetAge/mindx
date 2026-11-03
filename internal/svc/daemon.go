@@ -29,6 +29,7 @@ import (
 	"github.com/DotNetAge/mindx/internal/update"
 	"github.com/DotNetAge/mindx/pkg/logging"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
+	mindxses "github.com/DotNetAge/mindx/pkg/session"
 	"go.etcd.io/bbolt"
 )
 
@@ -702,6 +703,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	var payload struct {
 		Text      string `json:"text"`
 		SessionID string `json:"session_id,omitempty"`
+		AgentName string `json:"agent_name,omitempty"`
 		Images    []struct {
 			Path      string `json:"path"`
 			MediaType string `json:"media_type"`
@@ -736,6 +738,11 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	)
 
 	agentName, providedSessionID, content := parseAgentTarget(text)
+	if agentName == "" && strings.TrimSpace(payload.AgentName) != "" {
+		// 客户端显式携带的 agent 选择（输入框 AgentSelector）：比会话绑定更
+		// 强的信号，无会话/跨 agent 切换场景下消除全局当前 agent 兜底的抖动
+		agentName = strings.TrimSpace(payload.AgentName)
+	}
 
 	// 子代理提问回答分派：目标会话存在挂起等待回答的子智能体提问时，
 	// 本条消息即用户对提问的回答，注入挂起的子 exec（askCh）恢复其执行
@@ -749,11 +756,24 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		return
 	}
 
-	rt, err := d.app.ResolveRuntime(agentName)
+	// 会话先于 agent 定案：执行 agent 按「@目标 > 载荷 agent_name（客户端显式
+	// 选择）> 会话绑定 agent_name > 全局当前 agent」裁定——输入框选定的 agent
+	// 若只落在会话上或被全局回退吃掉，会出现其它 agent 抢答。
+	sessionID := d.resolveSessionID(msg.SessionID, providedSessionID)
+	sessionMeta, metaErr := d.getSessionMeta(sessionID)
+	resolvedAgentName := agentName
+	if resolvedAgentName == "" {
+		resolvedAgentName = d.app.CurrentAgentName()
+		if sessionMeta != nil && sessionMeta.AgentName != "" {
+			resolvedAgentName = sessionMeta.AgentName
+		}
+	}
+
+	rt, err := d.app.ResolveRuntime(resolvedAgentName)
 	if err != nil {
 		d.logger.Error("defaultHandler: failed to resolve runtime", err,
 			"client_id", msg.ClientID,
-			"requested_agent", agentName,
+			"requested_agent", resolvedAgentName,
 		)
 		d.sendEvent(msg.ClientID, msg.SessionID, gateway.RespError, i18n.T("svc.event.error"), err.Error())
 		return
@@ -777,17 +797,9 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	// the magic word, drains session.PendingPermission, and either runs the
 	// tool (Allow) or appends a "Permission Denied" result (Deny).
 
-	sessionID := d.resolveSessionID(msg.SessionID, providedSessionID)
-	resolvedAgentName := agentName
-	if resolvedAgentName == "" {
-		resolvedAgentName = d.app.CurrentAgentName()
-	}
-
-	// 新会话标题提炼（阻塞式先行）：全新会话的首条提问先用独立 LLM 调用
-	// 提炼成简短标题并回填（RenameSession，先于首轮 append 使补录跳过），
-	// 完成后继续本轮执行；失败/超时静默回退补录（原文截断标题），不阻塞创建。
-	// 详见 session_title.go。
-	d.maybeGenerateSessionTitle(sessionID, resolvedAgentName, content)
+	// 全新会话的首问：阻塞式提炼标题并在首轮执行前落库（详见 session_title.go）；
+	// 提炼失败/超时静默跳过，回退补录（首问截断标题），不阻塞本轮执行。
+	d.maybeGenerateSessionTitle(sessionID, resolvedAgentName, content, sessionMeta, metaErr)
 
 	d.logger.Info("request start",
 		"client_id", msg.ClientID,
@@ -1148,6 +1160,16 @@ func parseAgentTarget(text string) (agentName string, sessionID string, content 
 	return agentName, "", rest
 }
 
+// getSessionMeta 读取会话 meta：消息路径上 agent 裁定与标题提炼共用一次
+// 磁盘读取（GetSessionMeta 内部走目录树）。store 不可用或查询失败时返回
+// nil 与原始错误，由调用方决定回退语义。
+func (d *Daemon) getSessionMeta(sessionID string) (*goharnesssession.SessionInfo, error) {
+	if d.app == nil || d.app.SessDB() == nil {
+		return nil, fmt.Errorf("session store not available")
+	}
+	return d.app.SessDB().GetSessionMeta(sessionID)
+}
+
 func (d *Daemon) resolveSessionID(clientProvided string, commandProvided string) string {
 	if commandProvided != "" && commandProvided != "new" {
 		d.logger.Info("using session_id from command", "session", commandProvided)
@@ -1157,6 +1179,9 @@ func (d *Daemon) resolveSessionID(clientProvided string, commandProvided string)
 		return clientProvided
 	}
 
+	// 裸发路径（无任何会话来源）没有用户选定 agent：按全局当前 agent 取其
+	// 最近会话；执行时 agent 裁定读该会话绑定，meta.AgentName 与全局一致，
+	// 不会漂移到其它 agent
 	if d.app.SessionDB() != nil {
 		currentAgent := d.app.CurrentAgentName()
 		if currentAgent != "" {
@@ -1199,9 +1224,11 @@ func (d *Daemon) resolveLatestSessionForAgent(agent string) string {
 
 // ensureScheduleSession 为调度条目落实可执行的绑定会话：空 ID 与 CLI 约定的
 // "new" 哨兵都视为未绑定——先回退该智能体最近活动的会话，仍无则新建
-// （project_dir 非空随 meta 落库，文件记忆随之落到项目目录）。返回绑定后的
-// 会话 ID；调用方决定是否回写调度存储。
-func (d *Daemon) ensureScheduleSession(agent, sessionID, projectDir string) (string, error) {
+// （project_dir 非空随 meta 落库，文件记忆随之落到项目目录）。需要创建全新
+// 会话时先阻塞式提炼标题（firstQuestion 为提炼原料），得到标题后再创建会话，
+// 标题随创建落库（见 session_title.go）。返回绑定后的会话 ID；调用方决定是
+// 否回写调度存储。
+func (d *Daemon) ensureScheduleSession(agent, sessionID, projectDir, firstQuestion string) (string, error) {
 	if sessionID != "" && sessionID != "new" {
 		return sessionID, nil
 	}
@@ -1214,6 +1241,16 @@ func (d *Daemon) ensureScheduleSession(agent, sessionID, projectDir string) (str
 	var opts []goharnesssession.SessionOption
 	if projectDir != "" {
 		opts = append(opts, goharnesssession.WithProjectDirOption(projectDir))
+		// 全新会话：先提炼标题，得到标题后再创建会话（标题随创建落库）；
+		// 提炼失败不阻塞创建，回退首条消息补录
+		if firstQuestion != "" {
+			if title, terr := d.generateSessionTitle(firstQuestion); terr != nil {
+				d.logger.Warn("schedule entry: session title generation failed, create session without title",
+					"agent", agent, "error", terr)
+			} else if title != "" {
+				opts = append(opts, mindxses.WithTitleOption(title))
+			}
+		}
 	}
 	info, err := goharnesssession.CreateSession(context.Background(), d.app.SessDB(), agent, opts...)
 	if err != nil {

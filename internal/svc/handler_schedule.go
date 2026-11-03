@@ -84,7 +84,8 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 	// 前端创建调度任务时通常不传 session_id：回退到该智能体最近活动的会话，
 	// 仍无则新建（project_dir 随 meta 落库）；CLI 的 "new" 哨兵同走此兜底。
 	// 杜绝空绑定条目——否则任务到点因 load session 空 ID 失败、一次机会直接作废。
-	sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir)
+	// 此时无首问，新建不带标题；首跑执行前再提炼（见 session_title.go）。
+	sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir, "")
 	if err != nil {
 		return nil, fmt.Errorf("落实调度任务会话失败: %w", err)
 	}
@@ -166,7 +167,7 @@ func (d *Daemon) handleScheduleUpdate(_ context.Context, params json.RawMessage)
 		return nil, err
 	}
 	// 改绑会话同创建口径：空 ID 与 "new" 哨兵都落实为可执行会话（回退最近或新建）
-	sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir)
+	sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir, "")
 	if err != nil {
 		return nil, fmt.Errorf("落实调度任务会话失败: %w", err)
 	}
@@ -282,7 +283,7 @@ func (d *Daemon) enqueueOneJobNow(agent, content string) error {
 		return err
 	}
 	// 会话落实与 schedule.add 同兜底：回退最近会话或新建，杜绝空绑定条目
-	sid, serr := d.ensureScheduleSession(agent, "", "")
+	sid, serr := d.ensureScheduleSession(agent, "", "", "")
 	if serr != nil {
 		return fmt.Errorf("落实叫醒会话失败: %w", serr)
 	}

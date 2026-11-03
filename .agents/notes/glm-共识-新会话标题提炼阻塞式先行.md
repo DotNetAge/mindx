@@ -1,25 +1,25 @@
-# 新会话标题提炼：阻塞式先行与补录的协作语义
+# 新会话标题提炼：先提炼标题，后创建会话
 
-- 分类：共识 / 设计定稿
+- 分类：共识 / 实现语义
 - 日期：2026-11-03
-- 涉及：mindx internal/svc/session_title.go、internal/core/prompts.go、daemon.go defaultHandler、pkg/session 补录
+- 涉及：mindx internal/svc/session_title.go、internal/svc/daemon.go（ensureScheduleSession）、pkg/session（WithTitleOption / Create）、internal/core/prompts.go
 
-## 定稿语义（2026-11-03 用户定案）
+## 权威语义（用户原话，以此为准）
 
-新会话首条提问 → **阻塞式先行**：先用独立 LLM 调用（`core.NewCaller` + 默认模型 + `PROMPT_SESSION_TITLE`）提炼标题并 `RenameSession` 回填，完成后才继续首轮执行；模型用默认模型（不新增配置）。
+当 daemon 检测到当前是用户的首问需要创建全新会话时，先以阻塞方式调用 LLM（core.NewCaller + 默认模型 + PROMPT_SESSION_TITLE）把首问提炼成会话标题，得到标题后才开始调用创建会话——标题随创建落库。用户之后手动重命名会话与标题提炼无关。
 
-## 否决记录（2026-11-03 用户定案，强信号）
+## 实现落点（2026-11-03 实证后定案）
 
-- **禁止把标题提炼耦合进 session.create RPC**（用户怒斥「污染 Session」）：标题提炼与翻译（handler_translate）/提交信息（handler_commit_message）同类，是原有功能的**独立补充**，独立成文（session_title.go）、挂在消费侧（defaultHandler 首轮前），不动创建契约。
-- 同理类推：凡「横切增强」类功能（提炼、摘要、翻译）都不得侵入被增强流程的协议与创建语义，只能以独立模块挂消费侧钩子。
+- 真正由 daemon 创建全新会话的路径是 `ensureScheduleSession`（调度任务空 ID 且无最近会话）：先 `generateSessionTitle`（12s 兜底超时），成功则 `mindxses.WithTitleOption(title)` 随 `CreateSession` 落库；失败静默创建不带标题。add/update/叫醒入口无首问，传 `""` 不提炼。
+- defaultHandler 的会话由客户端先行创建（`goharnesssession.Load` 要求会话已存在，daemon.go:893；裸发路径本就卡在 Load），故此处只处理「空壳首问」：meta 存在且 `Title=="" && MessageCount==0` → 阻塞提炼 → `RenameSession` 在首条消息 append 前写入；会话不存在直接跳过。
+- `pkg/session.WithTitleOption` 是 mindx 自定义的 `goharnesssession.SessionOption`，`FileSessionStore.createSession` 把 `sessionInfo.Title` 写进 meta；RoutedSessionStore 透传 opts，无需转发方法。
 
-## 关键协作事实（下次改标题相关代码必读）
+## 关键事实（下次改标题相关代码必读）
 
-- pkg/session `AppendMessage` 的补录（首条 user 消息截断 → 标题）**仅在 meta.Title 为空时生效**——提炼标题在首轮 append 之前落库，补录自然跳过；提炼失败/超时不重试，静默回退补录，两条路径天然互斥不冲突。
-- 新会话门控：`GetSessionMeta` 无错且 `Title=="" && MessageCount==0` 才触发；`ErrSessionNotFound`（裸发消息未过 session.create）也尝试提炼，但 `RenameSession` 需要 会话目录已存在 且 `Create` 无法指定 ID——此场景回填失败落补录兜底。UI 全部走 session.create，不受影响。
-- 超时设计：`llmcaller.Call` 内置 4 分钟超时，阻塞式先行不可等——外层 12 秒兜底，Token 用量在调用协程内即时落库（超时放弃结果不丢用量），模式对齐 handler_commit_message（agent 名 `session_title`）。
-- goharness `SessionStore` 接口**没有** RenameSession/GetSessionMeta（mindx 扩展方法，RoutedSessionStore 转发 FileSessionStore）；SessDB() 返回的是具体类型，可直接调用。
+- 提炼失败 / 超时 / 无默认模型 → 静默跳过，回退 pkg/session Append 的补录（首条 user 消息截断为标题，仅 Title 为空时生效），不重试。
+- goharness `SessionStore` 接口没有 RenameSession/GetSessionMeta（mindx 扩展方法，RoutedSessionStore 逐个转发）；SessDB() 返回具体类型可直接调用。
+- Token 用量在调用协程内即时落库（agent 名 `session_title`），外层超时放弃结果不丢用量。
 
-## 下次我看到「标题被覆盖 / 新会话标题不对 / 想改成异步」，我将
+## 下次我看到「会话标题 / 提炼类流程」，我将
 
-先核对本篇的补录互斥关系与门控条件；改异步时把 maybeGenerateSessionTitle 移入首轮完成后的钩子并补 sessions 变更广播（前端 TasksSection 订阅 agents_changed 同款模式）。
+先按用户最新口述的定序实施，禁止引用旧笔记里与口述相悖的结论当依据；改前实证会话的真实创建路径（goharness Load 要求会话已存在）。

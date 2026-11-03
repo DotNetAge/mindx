@@ -558,6 +558,14 @@ func (s *FileSessionStore) updateSessionMeta(sessionDir, agentName, sponsor stri
 
 // === Session Lifecycle Management (Framework-level directory control) ===
 
+// WithTitleOption 返回写入会话标题的创建选项：标题随创建落库到 meta.json，
+// 供「先提炼标题、后创建会话」的流程使用。
+func WithTitleOption(title string) goharnesssession.SessionOption {
+	return func(info *goharnesssession.SessionInfo) {
+		info.Title = strings.TrimSpace(title)
+	}
+}
+
 // Create creates a new session with the given agent name and options.
 // This centralizes session creation logic:
 //  1. Generates a unique session ID (format: sess_<timestamp>)
@@ -566,8 +574,11 @@ func (s *FileSessionStore) updateSessionMeta(sessionDir, agentName, sponsor stri
 //  4. Persists session metadata (for future GetMeta calls)
 //  5. Returns complete SessionInfo with directory context
 func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...goharnesssession.SessionOption) (*goharnesssession.SessionInfo, error) {
-	sessionID := generateSessionID()
+	return s.createSession(generateSessionID(), agentName, opts...)
+}
 
+// createSession 以指定会话 ID 创建会话（Create 的共用实现体）。
+func (s *FileSessionStore) createSession(sessionID, agentName string, opts ...goharnesssession.SessionOption) (*goharnesssession.SessionInfo, error) {
 	sessionInfo := &goharnesssession.SessionInfo{
 		SessionID:      sessionID,
 		AgentName:      agentName,
@@ -598,6 +609,7 @@ func (s *FileSessionStore) Create(_ context.Context, agentName string, opts ...g
 		Sponsor:        sessionInfo.Sponsor,
 		TeamName:       sessionInfo.TeamName,
 		ProjectDir:     sessionInfo.ProjectDir,
+		Title:          sessionInfo.Title,
 		CreatedAt:      time.Now(),
 		LastActivityAt: time.Now(),
 		MessageCount:   0,

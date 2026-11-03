@@ -1,18 +1,15 @@
 package svc
 
-// 新会话标题提炼（阻塞式先行）：会话首条提问（人首问 defaultHandler / Agent
-// 首跑调度任务 scheduled_exec）先用独立 LLM 调用（core.NewCaller + 默认模型 +
-// PROMPT_SESSION_TITLE）把问题提炼成简短标题并回填（RenameSession），完成后
-// 才继续执行——侧栏从头显示提炼标题而非截断原文。
+// 新会话标题提炼：daemon 检测到首问需要创建全新会话时，先以阻塞方式调用
+// LLM（core.NewCaller + 默认模型 + PROMPT_SESSION_TITLE）把首问提炼成简短
+// 标题，得到标题后才开始调用创建会话——标题随创建落库（WithTitleOption，
+// 见 ensureScheduleSession）；会话已由客户端先行创建（session.create 空壳）
+// 时，标题在首条消息 append 之前写入（RenameSession）。侧栏从头显示提炼
+// 标题而非首问截断原文。用户之后手动重命名会话与标题提炼无关（已有标题的
+// 会话不参与提炼）。
 //
-// 本功能与翻译（handler_translate）/提交信息（handler_commit_message）同类，
-// 是原有功能的独立补充：独立成文、挂消费侧钩子，不碰 session.create 协议与
-// 会话创建语义。
-//
-// 回填语义与补录的关系：pkg/session 的 AppendMessage 补录（首条 user 消息 →
-// 标题）仅在 Title 为空时生效；本流程在首轮 append 之前改名，补录自然跳过。
-// 提炼失败 / 超时 / 无默认模型时静默回退补录行为（原文截断标题），不重试、
-// 不阻塞会话执行。
+// 提炼失败 / 超时 / 无默认模型时静默跳过，回退 pkg/session 的补录（首条
+// user 消息截断为标题），不重试、不阻塞会话执行。
 
 import (
 	"context"
@@ -38,25 +35,29 @@ const sessionTitleMaxRunes = 40
 // sessionTitleAgentName Token 用量记账的智能体名（对齐 commit_message 惯例）。
 const sessionTitleAgentName = "session_title"
 
-// maybeGenerateSessionTitle 在首轮执行前为全新会话提炼并回填标题。
+// maybeGenerateSessionTitle 在首轮执行前为全新会话提炼并落库标题。
 //
-// 触发门控（仅全新会话）：meta 查询失败（ErrSessionNotFound 之外的错误视为
-// 存储异常）直接跳过回退补录；meta 存在但已有标题（用户重命名或已补录）或
-// 已有消息的会话不是新会话，跳过。question 为空（纯图片消息）跳过。
-func (d *Daemon) maybeGenerateSessionTitle(sessionID, agentName, question string) {
+// 门控（仅全新会话的首问）：会话尚未创建（meta 不存在）时跳过——需要创建
+// 全新会话的流程（ensureScheduleSession）先提炼标题、得到标题后再创建会话，
+// 此处无事可做；已有标题或已有消息的会话不是新会话，跳过；question 为空
+// （纯图片消息）跳过。meta 与 metaErr 由调用方传入（与 agent 裁定共用一次
+// 读取，避免消息路径重复遍历目录树）。
+func (d *Daemon) maybeGenerateSessionTitle(sessionID, agentName, question string, meta *goharnesssession.SessionInfo, metaErr error) {
 	if question == "" || d.app == nil || d.app.SessDB() == nil {
 		return
 	}
 	sessDB := d.app.SessDB()
 
-	meta, err := sessDB.GetSessionMeta(sessionID)
-	if err == nil {
-		if meta.Title != "" || meta.MessageCount > 0 {
-			return
+	if metaErr != nil {
+		// 存储异常与会话未创建区分开：前者留痕便于排查；会话尚未创建时
+		// 标题提炼先于创建会话完成，无需处理
+		if !errors.Is(metaErr, goharnesssession.ErrSessionNotFound) {
+			d.logger.Warn("session title: get meta failed, skip title generation",
+				"session_id", sessionID, "error", metaErr)
 		}
-	} else if !errors.Is(err, goharnesssession.ErrSessionNotFound) {
-		d.logger.Warn("session title: get meta failed, skip title generation",
-			"session_id", sessionID, "error", err)
+		return
+	}
+	if meta == nil || meta.Title != "" || meta.MessageCount > 0 {
 		return
 	}
 
@@ -71,9 +72,8 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, agentName, question string
 		return
 	}
 
-	// 回填走 RenameSession：session.create 先行的正常路径下目录已存在。
-	// 裸发消息（未经 session.create）时目录尚不存在且 Create 无法指定 ID，
-	// 改名失败留待首轮 append 的补录兜底（原文截断标题）。
+	// 会话由客户端先行创建（session.create 空壳），目录已存在；
+	// 标题在首条消息 append 之前写入，落库失败回退补录（原文截断标题）。
 	if renameErr := sessDB.RenameSession(sessionID, title); renameErr != nil {
 		d.logger.Warn("session title: rename failed",
 			"session_id", sessionID, "title", title, "error", renameErr)
