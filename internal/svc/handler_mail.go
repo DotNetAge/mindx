@@ -10,6 +10,7 @@ import (
 
 	bbolt "go.etcd.io/bbolt"
 
+	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/core/bundle"
 	"github.com/DotNetAge/mindx/pkg/rpc"
 )
@@ -21,8 +22,9 @@ import (
 // 收信后叫醒本机智能体读信，由它分辨处置（自己干 / 转告人类伙伴 / 仅知会）。
 //
 // 收发单一通道：信一律落服务端组织信箱，收方 daemon 轮询拉取（已送达落档去重）。
-// 直连投递口 mail.deliver 一期停用（原实现无身份核验，注释所声称的核验未落地）；
-// 二期重接线时必须带发信方令牌经服务端内省核验直属上下级。
+// 直连投递口 mail.deliver 仅对本机直通连接开放（原实现无身份核验，外接设备
+// 一律拒绝——跨机器直投没有发信方身份保证，不能凭握手连接权投信）；二期
+// 重接线时补发信方令牌经服务端内省核验直属上下级后再放宽。
 // ---------------------------------------------------------------------------
 
 // mailInboxBucket 本地信件留档桶（kvstore bbolt 内独立 bucket；key=信件编号）。
@@ -152,9 +154,14 @@ func (d *Daemon) wakeForMail(uid string) {
 	}
 }
 
-// handleMailDeliver 直连投递入站（mail.deliver）：一期停用（已移出免握手白名单，
-// 且原实现无发信方身份核验）。handler 与落档逻辑保留，待二期带令牌核验重接线。
-func (d *Daemon) handleMailDeliver(_ context.Context, params json.RawMessage) (any, error) {
+// handleMailDeliver 直连投递入站（mail.deliver）：仅本机直通连接可调（已移出
+// 免握手白名单，且原实现无发信方身份核验——外接设备凭握手连接权即可伪造
+// from_persona 投信，一律拒绝）。handler 与落档逻辑保留，待二期带令牌核验
+// 重接线后放宽到设备连接。
+func (d *Daemon) handleMailDeliver(ctx context.Context, params json.RawMessage) (any, error) {
+	if d.devGate == nil || !d.devGate.LocalVerified(gateway.ClientIDFromContext(ctx)) {
+		return nil, fmt.Errorf("直投口仅限本机使用；请改用组织信箱收发信件")
+	}
 	var p struct {
 		OrgSlug     string `json:"org_slug"`
 		UID         string `json:"uid"`

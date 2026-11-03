@@ -75,7 +75,8 @@ func (tm *terminalManager) cleanupClient(clientID string) {
 // handleTerminalStart 启动一个新的终端会话
 func (d *Daemon) handleTerminalStart(ctx context.Context, params json.RawMessage) (any, error) {
 	var req struct {
-		Cwd string `json:"cwd"`
+		Cwd       string `json:"cwd"`
+		SessionID string `json:"session_id"`
 	}
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid params: %w", err)
@@ -86,10 +87,10 @@ func (d *Daemon) handleTerminalStart(ctx context.Context, params json.RawMessage
 		return nil, fmt.Errorf("client_id required")
 	}
 
-	// Resolve working directory: use provided cwd, or try to find a sensible default
+	// Resolve working directory: explicit cwd > session project_dir > daemon cwd
 	cwd := req.Cwd
 	if cwd == "" {
-		cwd = d.resolveTerminalCwd()
+		cwd = d.terminalCwd(req.SessionID)
 	}
 
 	cmd := exec.Command("zsh", "--login", "-i")
@@ -171,7 +172,7 @@ func (d *Daemon) handleTerminalStart(ctx context.Context, params json.RawMessage
 			}))
 	}()
 
-	d.logger.Info("terminal started", "session_id", sessionID, "cwd", req.Cwd)
+	d.logger.Info("terminal started", "session_id", sessionID, "cwd", cwd)
 	return map[string]any{"session_id": sessionID}, nil
 }
 
@@ -237,9 +238,20 @@ func (d *Daemon) handleTerminalResize(ctx context.Context, params json.RawMessag
 	return nil, nil
 }
 
-// resolveTerminalCwd tries to find a sensible working directory when none is provided.
-func (d *Daemon) resolveTerminalCwd() string {
-	//TODO: 应该从当前Session中获取ProjectDir
+// terminalCwd 解析终端工作目录（terminal.start 未传 cwd 时）：优先取 session_id
+// 对应会话的 project_dir（daemon 无法自行知道客户端「当前会话」，由调用方传
+// session_id 指定）；无会话 / 会话不存在 / 会话无 project_dir 时回退 daemon 进程
+// cwd（launchd 拉起时通常是 /，仅兜底不保证有意义）。
+func (d *Daemon) terminalCwd(sessionID string) string {
+	if sessionID != "" && d.app != nil && d.app.SessDB() != nil {
+		if meta, err := d.app.SessDB().GetSessionMeta(sessionID); err == nil && meta.ProjectDir != "" {
+			// 目录可能已被删除/移动（历史会话常见）：chdir 失败会让 PTY 启动
+			// 硬报错，此处校验存在性，失效即回退 daemon cwd
+			if info, statErr := os.Stat(meta.ProjectDir); statErr == nil && info.IsDir() {
+				return meta.ProjectDir
+			}
+		}
+	}
 	if cwd, err := os.Getwd(); err == nil {
 		return cwd
 	}

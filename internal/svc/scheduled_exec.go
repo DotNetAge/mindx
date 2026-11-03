@@ -124,6 +124,10 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 		}
 		entry.SessionID = sid
 	}
+
+	// Agent 首跑新会话：同款标题提炼（阻塞式先行，任务提示词为提炼原料），
+	// 已有标题/已有消息的复用会话被门控跳过（见 session_title.go），不重命名
+	d.maybeGenerateSessionTitle(entry.SessionID, entry.Agent, entry.Content)
 	rt, err := d.app.ResolveRuntime(entry.Agent)
 	if err != nil {
 		d.logger.Error("scheduled job: resolve runtime failed", err,

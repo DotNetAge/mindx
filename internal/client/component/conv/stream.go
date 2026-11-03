@@ -64,6 +64,15 @@ type Item struct {
 	// 用于同轮多次重试原地更新、recovered 时整条移除。
 	IsRetry bool
 
+	// itemNotice：通知细类（max_turns / cancelled / timeout / subtask_spawn /
+	// subtask_fail），构建器据此精确分派节点类型；空值走文本启发兜底（历史还原）。
+	NoticeSub string
+
+	// itemNotice：max_turns 细类的轮次计数（构建器透传给 MaxTurnsNode，
+	// 避免卡片 Object 渲染成 0/0 轮）。
+	TurnsCompleted int
+	MaxTurns       int
+
 	// itemAction
 	Action ActionStep
 
@@ -332,18 +341,19 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		if text == "" {
 			text = fmt.Sprintf("%d / %d", e.TurnsCompleted, e.MaxTurns)
 		}
-		s.append(Item{At: time.Now(), Kind: itemNotice, Text: "💡 " + text})
+		s.append(Item{At: time.Now(), Kind: itemNotice, Text: "💡 " + text, NoticeSub: "max_turns",
+			TurnsCompleted: e.TurnsCompleted, MaxTurns: e.MaxTurns})
 		s.Status = StatusDone
 		return s, nil
 
 	case msg.LLMCancelledMsg:
-		s.append(Item{At: time.Now(), Kind: itemNotice, Text: fmt.Sprintf(i18n.T("output.cancelled"), e.Elapsed.Round(time.Second))})
+		s.append(Item{At: time.Now(), Kind: itemNotice, Text: fmt.Sprintf(i18n.T("output.cancelled"), e.Elapsed.Round(time.Second)), NoticeSub: "cancelled"})
 		s.Status = StatusDone
 		return s, nil
 
 	case msg.LLMTimeoutMsg:
 		text := fmt.Sprintf(i18n.T("output.timeout.llm"), e.Timeout.Round(time.Second), e.Elapsed.Round(time.Second))
-		s.append(Item{At: time.Now(), Kind: itemNotice, Text: text})
+		s.append(Item{At: time.Now(), Kind: itemNotice, Text: text, NoticeSub: "timeout"})
 		s.Status = StatusError
 		return s, nil
 
@@ -382,14 +392,14 @@ func UpdateStream(s Stream, e tea.Msg) (Stream, tea.Cmd) {
 		} else {
 			name = icon + " " + name
 		}
-		s.append(Item{At: time.Now(), Kind: itemNotice, Text: strings.TrimSpace(name + " · " + e.Description)})
+		s.append(Item{At: time.Now(), Kind: itemNotice, Text: strings.TrimSpace(name + " · " + e.Description), NoticeSub: "subtask_spawn"})
 		return s, nil
 
 	case msg.SubtaskCompletedMsg:
 		if e.Success && e.Answer != "" {
 			s.append(Item{At: time.Now(), Kind: itemOutput, Text: e.Answer})
 		} else if !e.Success {
-			s.append(Item{At: time.Now(), Kind: itemNotice, Text: "❌ " + e.AgentName + " · " + e.Error})
+			s.append(Item{At: time.Now(), Kind: itemNotice, Text: "❌ " + e.AgentName + " · " + e.Error, NoticeSub: "subtask_fail"})
 		}
 		return s, nil
 

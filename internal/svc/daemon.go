@@ -783,6 +783,12 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		resolvedAgentName = d.app.CurrentAgentName()
 	}
 
+	// 新会话标题提炼（阻塞式先行）：全新会话的首条提问先用独立 LLM 调用
+	// 提炼成简短标题并回填（RenameSession，先于首轮 append 使补录跳过），
+	// 完成后继续本轮执行；失败/超时静默回退补录（原文截断标题），不阻塞创建。
+	// 详见 session_title.go。
+	d.maybeGenerateSessionTitle(sessionID, resolvedAgentName, content)
+
 	d.logger.Info("request start",
 		"client_id", msg.ClientID,
 		"session_id", sessionID,

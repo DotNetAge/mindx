@@ -670,7 +670,9 @@ func buildErrorNode(it Item, offset time.Duration) *ErrorNode {
 	}
 }
 
-// buildSystemNotice 从 Notice Item 分派到各系统节点类型。
+// buildSystemNotice 从 Notice Item 分派到各系统节点类型：实时流条目带 NoticeSub
+// 细类精确分派（超时→错误卡、子任务通知→原文直渲等）；无细类条目（历史还原）
+// 走文本启发兜底，仍未命中时按原文直渲为 content，不再误标 max_turns。
 func buildSystemNode(state *BuildState, it Item, offset time.Duration) TreeNode {
 	if it.IsRetry {
 		return &LlmRetryNode{
@@ -684,6 +686,60 @@ func buildSystemNode(state *BuildState, it Item, offset time.Duration) TreeNode 
 			RetryAfter: 0, // 从 Text 里解析
 		}
 	}
+	switch it.NoticeSub {
+	case "max_turns":
+		return &MaxTurnsNode{
+			NodeBase: NodeBase{
+				ID:          fmt.Sprintf("max_turns_%d", offset.Milliseconds()),
+				Kind:        "max_turns",
+				Status:      NodeSuccess,
+				Offset:      offset,
+				FoldDefault: true,
+			},
+			TurnsCompleted: it.TurnsCompleted,
+			MaxTurns:       it.MaxTurns,
+			Suggestion:     strings.TrimPrefix(it.Text, "💡 "),
+		}
+	case "cancelled":
+		return &CancelledNode{
+			NodeBase: NodeBase{
+				ID:          fmt.Sprintf("cancelled_%d", offset.Milliseconds()),
+				Kind:        "cancelled",
+				Status:      NodeCancelled,
+				Offset:      offset,
+				FoldDefault: false,
+			},
+		}
+	case "timeout": // LLM 超时走错误卡（不再误标最大轮数）
+		return &ErrorNode{
+			NodeBase: NodeBase{
+				ID:          fmt.Sprintf("error_%d", offset.Milliseconds()),
+				Kind:        "error",
+				Status:      NodeFailed,
+				Offset:      offset,
+				FoldDefault: false,
+			},
+			Message: truncate(firstLine(it.Text), 200),
+			Source:  "llm_timeout",
+		}
+	case "subtask_spawn", "subtask_fail": // 子任务通知按原文直渲；失败态落在节点 Status 上
+		status := NodeSuccess
+		if it.NoticeSub == "subtask_fail" {
+			status = NodeFailed
+		}
+		return &ContentNode{
+			NodeBase: NodeBase{
+				ID:          fmt.Sprintf("notice_%d", offset.Milliseconds()),
+				Kind:        "content",
+				Status:      status,
+				Offset:      offset,
+				FoldDefault: false,
+			},
+			Text:         it.Text,
+			FinishReason: "stop",
+		}
+	}
+	// 文本启发兜底：历史还原的无细类条目
 	if it.Text != "" && contains(it.Text, "max_turns") {
 		return &MaxTurnsNode{
 			NodeBase: NodeBase{
@@ -706,15 +762,16 @@ func buildSystemNode(state *BuildState, it Item, offset time.Duration) TreeNode 
 			},
 		}
 	}
-	// 默认 fallback：compaction / permission 等系统事件
-	return &MaxTurnsNode{
+	return &ContentNode{
 		NodeBase: NodeBase{
-			ID:          fmt.Sprintf("system_%d", offset.Milliseconds()),
-			Kind:        "max_turns", // 临时占位，后续细化
+			ID:          fmt.Sprintf("notice_%d", offset.Milliseconds()),
+			Kind:        "content",
 			Status:      NodeSuccess,
 			Offset:      offset,
-			FoldDefault: true,
+			FoldDefault: false,
 		},
+		Text:         it.Text,
+		FinishReason: "stop",
 	}
 }
 

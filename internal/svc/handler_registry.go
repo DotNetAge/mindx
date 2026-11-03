@@ -171,7 +171,8 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"schedule.del":                       r.daemon.handleScheduleDelete,
 		"schedule.job_cancel":                r.daemon.handleScheduleJobCancel,
 
-		// 组织信箱（M9 跨机器派工与汇报；mail.deliver 直投口一期停用，handler 保留待二期重接线）
+		// 组织信箱（M9 跨机器派工与汇报；mail.deliver 直投口仅限本机直通连接，
+		// handler 保留待二期带发信方令牌核验重接线后放宽）
 		"mail.send":         r.daemon.handleMailSend,
 		"mail.deliver":      r.daemon.handleMailDeliver,
 		"mail.reply":        r.daemon.handleMailReply,
@@ -239,8 +240,8 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 // openMethods 免握手白名单：device.handshake 是接入入口（自带令牌/批准闸）；
 // server.version 供对方连前探测兼容；channel.bootstrap 与 channel.verify 是
 // 手机端引导入口（手机链路自带同意闸 + 本地短码双重把关）。mail.deliver
-// 直投口一期停用（原实现无身份核验）：已移出本白名单，须握手后才能调用；
-// 二期重接线时补发信方令牌经服务端内省核验后再回白名单。
+// 直投口不在本白名单且仅限本机直通连接（原实现无发信方身份核验，外接设备
+// 一律拒绝）；二期重接线补发信方令牌核验后再评估放宽。
 var openMethods = map[string]bool{
 	"device.handshake":  true,
 	"server.version":    true,
@@ -308,9 +309,12 @@ func (r *RPCHandlerRegistry) guard(method string, h gateway.MethodHandler) gatew
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		clientID := gateway.ClientIDFromContext(ctx)
 		if !r.daemon.deviceGateAuthorized(clientID) {
-			// 本机 App 场景用户不该看到此错（连接建立即自动静默握手）；出现即内部
-			// 状态错乱，给出重启自救 + 可反馈的出口，绝不说「接入验证」这类黑话
-			return nil, fmt.Errorf("MindX 内部服务还没有就绪，请重启 MindX 后再试；若反复出现，请把诊断信息复制给我们。")
+			// 本机 App 场景用户不该看到此错（连接建立即自动静默校验）；出现即
+			// 校验尚未完成或校验失败——如实说明卡在哪一步（安全校验未完成、
+			// 暂时读不到数据），动作给「稍等重试」（时序竞态下等一拍即自愈，
+			// 客户端拉数重试按「安全校验还没完成」文案匹配），重启只作为
+			// 持续失败的兜底出口，不作为第一建议误导排查
+			return nil, fmt.Errorf("MindX 与智能主机的安全校验还没完成，暂时读不到数据。请稍等几秒再试；若反复出现，请重新打开 MindX，仍不行就把诊断信息复制给我们。")
 		}
 		if managerMethods[method] && r.daemon.devGate != nil && r.daemon.devGate.ScopeOf(clientID) != devgate.ScopeLocal {
 			return nil, fmt.Errorf("这项操作涉及本机管理，请直接在主机上操作")
