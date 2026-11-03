@@ -78,6 +78,12 @@
 * 声称"修复已生效"前必须证明运行二进制与源码一致：`go version -m ~/.mindx/bin/mindx` 核对 BuildTime 与 vcs.modified，再用 Makefile 同参（-trimpath + 同 ldflags）在 /tmp 重建并比对 sha256，一致才算进入运行版本。只改源码、只重启、只看到修复相关日志都不构成证据。
 * `~/.mindx/bin/.update/mindx` 是升级暂存包，可能是 clean-tree 旧构建（无 +dirty），应用后会把未提交修复回滚；排障"改了却没用"必须先比对暂存包的 BuildTime 与 vcs 标记。
 
+## 发版纪律（2026-11-04 用户定案）
+
+* 打 tag 前工作区必须全量干净：`git status --short` 输出为空（含 untracked 的 .agents 笔记）才允许 commit+tag 发版——tag 指向的 commit 必须包含全部修改，严禁把部分改动留在工作区只发"干净子集"。
+* `git push origin main` 在 mindx 仓会报 refspec 歧义（存在游离 `refs/tags/main` 同名 tag），推分支用 `git push origin refs/heads/main`；或先清理该游离 tag。
+* 发版依赖升级（如 goharness）时 `go get` 后必须 `go build ./...` 验证通过再提交。
+
 ## 分发面与跨平台编译（2026-11-02 实锤）
 
 * **mindx 不产出 Windows 原生构建物**（2026-10 前后已放弃 Windows 原生定位）：Windows 用户的 daemon 由壳的 WSL 版本以 rootfs（内含 linux-amd64 二进制）分发，升级链在 WSL 内部走 linux GOOS。给 release.yml/打包矩阵加任何 Windows 目标前必须先核对分发载体；daemon-installer.ts 等壳代码里的 Windows 分支描述的是「壳在 Windows 上的操作」，不等于 daemon 有 Windows 原生形态
