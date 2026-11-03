@@ -73,6 +73,11 @@
 * 任何 `exec.Command` 拉起可能交互化的 shell（`zsh -i`/`-lic` 等）必须加 `SysProcAttr{Setsid: true}` 脱离控制终端——交互式 zsh 会主动 open /dev/tty 并开启作业控制 tcsetpgrp 抢占前台，把宿主 TUI 挤到后台，后续 bubbletea 进入 raw mode 时触发 SIGTTOU 挂起（实锤：skillstore resolveBinViaShell 的 `zsh -lic` 致 TUI 启动即 suspended）。注意断 stdin 无效：`exec.Cmd` Stdin 默认已是 /dev/null，zsh 抢前台靠的是自己打开控制终端，唯有 Setsid 可断
 * 排障信号：报 "error entering raw mode" 或被 zsh 报 `suspended (tty output)`，先 `ps -o pgid,tpgid` 对比自身 pgid 与 tty 前台 tpgid，再 `ps -t <tty>` 抓占前台的子进程名，禁止盲猜环境问题
 
+## 验证运行版本（2026-11-03 实锤）
+
+* 声称"修复已生效"前必须证明运行二进制与源码一致：`go version -m ~/.mindx/bin/mindx` 核对 BuildTime 与 vcs.modified，再用 Makefile 同参（-trimpath + 同 ldflags）在 /tmp 重建并比对 sha256，一致才算进入运行版本。只改源码、只重启、只看到修复相关日志都不构成证据。
+* `~/.mindx/bin/.update/mindx` 是升级暂存包，可能是 clean-tree 旧构建（无 +dirty），应用后会把未提交修复回滚；排障"改了却没用"必须先比对暂存包的 BuildTime 与 vcs 标记。
+
 ## 分发面与跨平台编译（2026-11-02 实锤）
 
 * **mindx 不产出 Windows 原生构建物**（2026-10 前后已放弃 Windows 原生定位）：Windows 用户的 daemon 由壳的 WSL 版本以 rootfs（内含 linux-amd64 二进制）分发，升级链在 WSL 内部走 linux GOOS。给 release.yml/打包矩阵加任何 Windows 目标前必须先核对分发载体；daemon-installer.ts 等壳代码里的 Windows 分支描述的是「壳在 Windows 上的操作」，不等于 daemon 有 Windows 原生形态
