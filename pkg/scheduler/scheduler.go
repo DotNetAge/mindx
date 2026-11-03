@@ -125,12 +125,17 @@ func (s *Scheduler) reloadAll() error {
 	}
 
 	s.mu.Lock()
+	var staleIDs []string
 	for id := range s.entries {
 		if !fileIDs[id] {
-			s.removeJob(id)
+			staleIDs = append(staleIDs, id)
 		}
 	}
 	s.mu.Unlock()
+	// removeJob 自身会加锁，必须在释放 s.mu 后逐个删除，否则同锁重入造成自锁
+	for _, id := range staleIDs {
+		s.removeJob(id)
+	}
 
 	s.mu.RLock()
 	changed := len(s.entries) != prevCount

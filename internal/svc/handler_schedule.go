@@ -81,8 +81,8 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 		return nil, err
 	}
 
-	// 前端创建调度任务时通常不传 session_id：回退到该智能体最近活动的会话，
-	// 仍无则新建（project_dir 随 meta 落库）；CLI 的 "new" 哨兵同走此兜底。
+	// 前端创建调度任务时通常不传 session_id：一律新建任务专属会话线（不走
+	// 人机会话复用，杜绝跨项目串线与对话污染）；CLI 的 "new" 哨兵同走此路径。
 	// 杜绝空绑定条目——否则任务到点因 load session 空 ID 失败、一次机会直接作废。
 	// 此时无首问，新建不带标题；首跑执行前再提炼（见 session_title.go）。
 	sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir, "")
@@ -282,7 +282,7 @@ func (d *Daemon) enqueueOneJobNow(agent, content string) error {
 	if err := scheduler.ValidateCronExpr(cronExpr); err != nil {
 		return err
 	}
-	// 会话落实与 schedule.add 同兜底：回退最近会话或新建，杜绝空绑定条目
+	// 会话落实与 schedule.add 同源：新建任务专属会话线，杜绝空绑定条目
 	sid, serr := d.ensureScheduleSession(agent, "", "", "")
 	if serr != nil {
 		return fmt.Errorf("落实叫醒会话失败: %w", serr)

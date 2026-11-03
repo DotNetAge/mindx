@@ -1223,11 +1223,11 @@ func (d *Daemon) resolveLatestSessionForAgent(agent string) string {
 }
 
 // ensureScheduleSession 为调度条目落实可执行的绑定会话：空 ID 与 CLI 约定的
-// "new" 哨兵都视为未绑定——先回退该智能体最近活动的会话，仍无则新建
-// （project_dir 非空随 meta 落库，文件记忆随之落到项目目录）。需要创建全新
-// 会话时先阻塞式提炼标题（firstQuestion 为提炼原料），得到标题后再创建会话，
-// 标题随创建落库（见 session_title.go）。返回绑定后的会话 ID；调用方决定是
-// 否回写调度存储。
+// "new" 哨兵都视为未绑定——不做任何复用猜测，一律新建任务专属会话线
+// （project_dir 非空随 meta 落库，文件记忆随之落到项目目录）；后续触发的
+// 上下文延续靠条目持久化的 session_id，与人机会话零接触。新建前先阻塞式
+// 提炼标题（firstQuestion 为提炼原料），标题随创建落库（见 session_title.go）。
+// 返回绑定后的会话 ID；调用方决定是否回写调度存储。
 func (d *Daemon) ensureScheduleSession(agent, sessionID, projectDir, firstQuestion string) (string, error) {
 	if sessionID != "" && sessionID != "new" {
 		return sessionID, nil
@@ -1235,21 +1235,18 @@ func (d *Daemon) ensureScheduleSession(agent, sessionID, projectDir, firstQuesti
 	if d.app == nil || d.app.SessDB() == nil {
 		return "", fmt.Errorf("session store not available")
 	}
-	if sid := d.resolveLatestSessionForAgent(agent); sid != "" {
-		return sid, nil
-	}
 	var opts []goharnesssession.SessionOption
 	if projectDir != "" {
 		opts = append(opts, goharnesssession.WithProjectDirOption(projectDir))
-		// 全新会话：先提炼标题，得到标题后再创建会话（标题随创建落库）；
-		// 提炼失败不阻塞创建，回退首条消息补录
-		if firstQuestion != "" {
-			if title, terr := d.generateSessionTitle(firstQuestion); terr != nil {
-				d.logger.Warn("schedule entry: session title generation failed, create session without title",
-					"agent", agent, "error", terr)
-			} else if title != "" {
-				opts = append(opts, mindxses.WithTitleOption(title))
-			}
+	}
+	// 全新会话：先提炼标题，得到标题后再创建会话（标题随创建落库）；
+	// 提炼失败不阻塞创建，回退首条消息补录
+	if firstQuestion != "" {
+		if title, terr := d.generateSessionTitle(firstQuestion); terr != nil {
+			d.logger.Warn("schedule entry: session title generation failed, create session without title",
+				"agent", agent, "error", terr)
+		} else if title != "" {
+			opts = append(opts, mindxses.WithTitleOption(title))
 		}
 	}
 	info, err := goharnesssession.CreateSession(context.Background(), d.app.SessDB(), agent, opts...)
