@@ -84,8 +84,9 @@ type SessionRunStatus struct {
 // 运行态不落库、只在进程内存：主会话取会话串行队列（sessionQueues）的
 // running 标志，子代理取各 Runtime 的强停登记表（sponsored）；挂起态取
 // sessionBlocks 登记（emit 点登记，用户回应 / 取消 / 删除时解除）。
-// 事件按发起客户端单播，其它端接入后收不到在途执行的事件——前端据此
-// RPC 轮询对齐会话列表的运行状态（侧栏头像绕行描边、挂起气球、ChatInput
+// 会话事件已广播化（所有在线客户端都能收到在途执行事件），本 RPC 仍保留
+// 作为轮询兜底：事件在「无任何客户端在线」窗口内丢失、或客户端对某会话的
+// 观察窗状态存疑时，据此全量对齐（侧栏头像绕行描边、挂起气球、ChatInput
 // 停止态）。
 func (d *Daemon) handleSessionStatuses(_ context.Context, _ json.RawMessage) (any, error) {
 	statuses := make([]SessionRunStatus, 0, 4)
@@ -106,10 +107,17 @@ func (d *Daemon) handleSessionStatuses(_ context.Context, _ json.RawMessage) (an
 	})
 
 	// 子代理：遍历全部缓存 Runtime，收集登记中的运行中子会话。
+	// 子会话挂起（提问/授权冒泡统一登记到父会话）时父队列仍在轮询
+	// （running=true），挂起类型经 subBlockParents 反查父会话的 blocked 登记——
+	// 侧栏子会话行据此点亮气球。
 	if d.app != nil {
 		d.app.ForEachRuntime(func(rt *agents.Runtime) {
 			for _, id := range rt.RunningSubAgentSessions() {
-				statuses = append(statuses, SessionRunStatus{SessionID: id, Kind: "sub", Running: true})
+				blocked := ""
+				if parentID, ok := d.subBlockParents.Load(id); ok {
+					blocked = d.sessionBlockOf(parentID.(string))
+				}
+				statuses = append(statuses, SessionRunStatus{SessionID: id, Kind: "sub", Running: true, Blocked: blocked})
 			}
 		})
 	}

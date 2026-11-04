@@ -852,7 +852,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			if r := recover(); r != nil {
 				d.logger.Error("defaultHandler: AskBuilder panic", fmt.Errorf("%v", r),
 					"client_id", clientID, "session_id", sid)
-				d.sendEvent(clientID, sid, gateway.RespError, i18n.T("svc.event.error"), fmt.Sprintf(i18n.T("svc.event.execution.exception"), r))
+				broadcastEvent(gw, sid, gateway.RespError, i18n.T("svc.event.error"), fmt.Sprintf(i18n.T("svc.event.execution.exception"), r))
 			}
 		}()
 
@@ -863,9 +863,10 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			return
 		}
 
-		// 排队中的消息正式开始执行：通知前端从「排队中」切换为「处理中」。
+		// 排队中的消息正式开始执行：广播通知（全部在线客户端把该会话从「排队中」
+		// 切换为「处理中」，busySessions 全局点亮）。
 		if queued && gw != nil {
-			_ = gw.SendResponse(clientID, gateway.RespMessageProcessing,
+			broadcastResp(gw, gateway.RespMessageProcessing,
 				i18n.T("svc.event.message.processing"), map[string]any{
 					"timestamp": time.Now().Unix(),
 				}, gateway.WithSessionID(sessionID), withAgent())
@@ -905,7 +906,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		s, err := goharnesssession.Load(context.Background(), sessionID, resolvedAgentName, d.app.SessDB(), d.logger, sessOpts...)
 		if err != nil {
 			d.logger.Error("failed to load session", err, "session_id", sessionID)
-			d.sendEvent(clientID, sessionID, gateway.RespError, "Session Error", err.Error())
+			broadcastEvent(gw, sessionID, gateway.RespError, "Session Error", err.Error())
 			return
 		}
 
@@ -935,7 +936,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 				"files":  []string{fp},
 				"action": ev.Action,
 			})
-			d.sendEvent(clientID, sessionID, gateway.RespFileModified,
+			broadcastEvent(gw, sessionID, gateway.RespFileModified,
 				i18n.T("svc.event.file_modified"), string(payload))
 		})
 
@@ -946,7 +947,14 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		// 该字段即可拿到本事件的会话归属，从而把子会话流式事件精确路由到
 		// 前端对应的子任务卡片（见 effectiveEventSession）。
 		var eventSubSessionID string
-		emitter := newClientAskHandlers(d, gw, clientID, sid, withAgent, s, func() string { return currentAgentName }, func() string { return eventSubSessionID })
+		// 会话事件广播化：AskBuilder 事件以会话 ID 为路由键广播到全部在线客户端，
+		// 不再单播绑定发起请求时的 clientID。单播在发起客户端断连后全部静默丢失
+		// （gateway 断连不取消执行，执行继续但事件无处可投），前端卡片与对话流
+		// 永久滞留「执行中」；广播化后任一客户端在线即能收到，断连重连的客户端
+		// 也即刻恢复接收。前端所有事件处理器按 envelope.session_id 写各自会话流
+		// （单一数据源），活动态字段有 activeSessionId 门控，多端广播安全。
+		// 语义与调度任务后台执行的广播路径（newBroadcastAskHandlers）完全同构。
+		emitter := newBroadcastAskHandlers(d, gw, sid, withAgent, s, func() string { return currentAgentName }, func() string { return eventSubSessionID })
 
 		// 轮次日志（日报事实流）：记录本轮起点快照与开始时间，Run() 返回后
 		// 把当轮「用户问题 + 最终回复」原文落盘到项目目录 .agents/logs/
@@ -1012,7 +1020,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 
 		_, err = builder.
 			OnPermissionDenied(func(reason string) {
-				d.sendEvent(clientID, sid, gateway.RespPermissionDenied, i18n.T("svc.event.permission.denied"), reason, withAgent())
+				broadcastEvent(gw, sid, gateway.RespPermissionDenied, i18n.T("svc.event.permission.denied"), reason, withAgent())
 			}).
 			Run()
 
@@ -1056,11 +1064,12 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		)
 	})
 
-	// 通知前端：消息已进入该会话的串行队列，正在等待上一轮执行完成。
+	// 通知前端：消息已进入该会话的串行队列，正在等待上一轮执行完成（广播，
+	// 全部在线客户端点亮该会话的排队/运行指示）。
 	if queued && gw != nil {
 		d.logger.Info("request queued behind running execution",
 			"client_id", clientID, "session_id", sessionID)
-		_ = gw.SendResponse(clientID, gateway.RespMessageQueued,
+		broadcastResp(gw, gateway.RespMessageQueued,
 			i18n.T("svc.event.message.queued"), map[string]any{
 				"timestamp": time.Now().Unix(),
 			}, gateway.WithSessionID(sessionID), withAgent())
