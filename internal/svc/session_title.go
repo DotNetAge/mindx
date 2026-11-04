@@ -20,7 +20,9 @@ import (
 
 	harness "github.com/DotNetAge/goharness/config"
 	goharnesssession "github.com/DotNetAge/goharness/session"
+	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/google/uuid"
 )
 
@@ -81,6 +83,47 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, agentName, question string
 	}
 	d.logger.Info("session title: generated",
 		"session_id", sessionID, "agent", agentName, "title", title, "elapsed", time.Since(start))
+}
+
+// refineSubSessionTitle 是注入 goharness Runtime（WithTitleFn）的子代理会话
+// 标题提炼回调：把派工任务描述提炼成简短标题 → RenameSession 落库 → 返回
+// 新标题（goharness 据返回值发射 SubtaskTitleUpdated 事件刷新前端标题）。
+// 复用主会话首问的提炼器 generateSessionTitle（12s 兜底，失败静默）。
+// 返回空串表示提炼/落库失败——goharness 保持受理快照标题（任务截断）兜底。
+//
+// 与主会话首问提炼（maybeGenerateSessionTitle）的差异：子会话每次受理都会
+// 提炼并覆盖旧标题——同一子会话被复用承接新任务时，侧栏标题始终反映
+// 「正在处理的任务」；无「已有标题不参与提炼」的门控（子会话标题属派工
+// 状态而非用户命名资产，用户手动改子会话标题会被下一次派工覆盖，可接受）。
+func (d *Daemon) refineSubSessionTitle(sessionID, task string) string {
+	if task == "" || d.app == nil || d.app.SessDB() == nil {
+		return ""
+	}
+	title, err := d.generateSessionTitle(task)
+	if err != nil || title == "" {
+		d.logger.Warn("session title: sub-session generation failed, keep snapshot title",
+			"session_id", sessionID, "error", err)
+		return ""
+	}
+	if renameErr := d.app.SessDB().RenameSession(sessionID, title); renameErr != nil {
+		d.logger.Warn("session title: sub-session rename failed",
+			"session_id", sessionID, "title", title, "error", renameErr)
+		return ""
+	}
+	d.logger.Info("session title: sub-session title generated",
+		"session_id", sessionID, "title", title)
+
+	// 标题刷新直接广播到 gateway（不依赖主会话 exec 总线存活）：goharness 的
+	// SubtaskTitleUpdated 事件经主会话 exec EventBus 异步发射，而主会话首轮
+	// 通常在标题提炼完成前就已结束（Run 返回即摘除订阅），事件会静默丢失
+	//——侧栏只能刷新后才见新标题。落库成功的瞬间由 daemon 亲自广播，前端
+	// 侧栏/spawn 卡片/localStorage 三处即时刷新（处理器幂等，与 goharness
+	// 事件链重复无害）。
+	broadcastResp(d.gw, gateway.ResponseType("subtask_title_updated"),
+		i18n.T("svc.event.subtask.title.updated"),
+		map[string]any{"session_id": sessionID, "title": title},
+		gateway.WithSessionID(sessionID))
+	return title
 }
 
 // generateSessionTitle 调用默认模型把用户提问提炼成会话标题。

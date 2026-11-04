@@ -171,6 +171,18 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) (*Daemon, er
 	// Open/Visit/TerminalRun 三工具（未走 daemon 的 TUI 场景不注册）。
 	app.SetUIBroadcast(d.broadcastUI)
 
+	// 子代理会话标题提炼：把 daemon 的提炼回调注入 App，createRuntime 经
+	// agents.WithTitleFn 转注 goharness Runtime——子任务受理后 goharness 在
+	// 后台调用（提炼 + RenameSession 落库），并按返回值发射标题刷新事件。
+	// 复用主会话首问的提炼器（generateSessionTitle），子会话从此不再缺席。
+	app.SetSubSessionTitleFn(d.refineSubSessionTitle)
+
+	// 收割报告回灌：把 daemon 的回灌实现注入 App，createRuntime 经
+	// agents.WithHarvestReporter 转注 goharness Runtime——后台收割全部
+	// 落定/超限时，以「系统收割」消息经主会话串行队列发起一轮执行，
+	// LLM 在此轮才得知结果并回应用户（非阻塞 CollectResults 的收尾）。
+	app.SetHarvestReporter(d.reportHarvestToSession)
+
 	if schedulerDB != nil {
 		d.scheduler = scheduler.NewScheduler(schedulerDB, logger)
 		logger.Info("scheduler instance created")

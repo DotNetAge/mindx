@@ -282,6 +282,7 @@
   "svc.event.request.failed": "请求失败",
   "svc.event.subtask.completed": "子任务已完成",
   "svc.event.subtask.spawned": "子任务已创建",
+  "svc.event.subtask.title.updated": "子任务标题已更新",
   "svc.event.task.summary": "任务总结",
   "svc.event.thinking": "思考中",
   "svc.event.thinking.done": "思考完成",

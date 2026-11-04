@@ -76,6 +76,19 @@ type App struct {
 	// 供 Open/Visit/TerminalRun 三工具把呈现请求广播给各客户端。
 	uiBroadcast mindxtools.UIBroadcast
 
+	// subSessionTitleFn 是子代理会话标题提炼回调（Daemon 注入其
+	// refineSubSessionTitle）：调 LLM 提炼 + RenameSession 落库并返回标题。
+	// createRuntime 经 agents.WithTitleFn 注入 goharness Runtime，nil 时
+	// goharness 用受理快照标题（任务截断）兜底。
+	subSessionTitleFn func(sessionID, task string) string
+
+	// harvestReporterFn 是收割报告回灌回调（Daemon 注入其
+	// reportHarvestToSession）：后台收割全部落定/超限时被调用，以「系统
+	// 收割」消息发起主会话一轮执行（走主会话串行队列）。createRuntime 经
+	// agents.WithHarvestReporter 注入 goharness Runtime，nil 时收割结果
+	// 不进上下文（仅日志）。
+	harvestReporterFn func(tools.HarvestReport)
+
 	// Embedded app icon filesystem (for favicon / .app bundle)
 	iconFS fs.FS
 
@@ -298,6 +311,21 @@ func (a *App) Settings() *Settings {
 // 初始化时调用；未注入时 createRuntime 不注册 Open/Visit/TerminalRun 三工具。
 func (a *App) SetUIBroadcast(broadcast mindxtools.UIBroadcast) {
 	a.uiBroadcast = broadcast
+}
+
+// SetSubSessionTitleFn 注入子代理会话标题提炼回调（Daemon 的
+// refineSubSessionTitle：调 LLM 提炼 + RenameSession 落库并返回标题）。
+// 由 Daemon 初始化时调用；createRuntime 将其注入 goharness Runtime
+// （WithTitleFn），子任务受理后 goharness 在后台调用并按返回值刷新前端标题。
+func (a *App) SetSubSessionTitleFn(fn func(sessionID, task string) string) {
+	a.subSessionTitleFn = fn
+}
+
+// SetHarvestReporter 注入收割报告回灌回调（Daemon 的 reportHarvestToSession）。
+// 由 Daemon 初始化时调用；createRuntime 将其注入 goharness Runtime
+// （WithHarvestReporter），后台收割全部落定/超限时回灌主会话。
+func (a *App) SetHarvestReporter(fn func(tools.HarvestReport)) {
+	a.harvestReporterFn = fn
 }
 
 // FileMemory 返回文件记忆交付器（压缩摘要 → .agents/memory/*.md）。
@@ -898,6 +926,24 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 		// goharness 对 Agent 结构零依赖（PR-PROMPTS 第一节）。
 		agents.WithAgentExists(a.agents.Exists),
 		agents.WithExcludeTools(a.agents.ExcludeToolsOf),
+		// 子代理会话标题提炼回调：实现在 Daemon（LLM 提炼 + RenameSession 落库），
+		// 经闭包间接注入——运行时字段已就位即生效，Runtime 创建早于 Daemon 接线
+		// 也不影响（调用时机在子任务受理后）。nil 时 goharness 用快照标题兜底。
+		agents.WithTitleFn(func(sessionID, task string) string {
+			if a.subSessionTitleFn == nil {
+				return ""
+			}
+			return a.subSessionTitleFn(sessionID, task)
+		}),
+		// 收割报告回灌回调：实现在 Daemon（「系统收割」消息 + 程序化发起
+		// 主会话轮，走串行队列），同样经闭包间接注入。nil 时收割结果不进
+		// 上下文（goharness 仅记日志）。
+		agents.WithHarvestReporter(func(report tools.HarvestReport) {
+			if a.harvestReporterFn == nil {
+				return
+			}
+			a.harvestReporterFn(report)
+		}),
 		agents.WithProviderRegistry(a.providerReg),
 		agents.WithLogger(a.logger),
 		agents.WithTokenUsageStore(a.tokenUsageStore),

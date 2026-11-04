@@ -470,6 +470,7 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goharnessses
 		si.Sponsor = meta.Sponsor
 		si.ProjectDir = meta.ProjectDir
 		si.Title = meta.Title
+		si.TeamName = meta.TeamName
 		si.CreatedAt = meta.CreatedAt
 		si.LastActivityAt = meta.UpdatedAt
 		si.UpdatedAt = meta.UpdatedAt

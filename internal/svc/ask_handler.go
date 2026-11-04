@@ -15,28 +15,29 @@ import (
 // （调度任务已改为前台执行，与主动对话走同一条事件路由）。
 // 字段为 nil 表示对应事件不注册到 builder。
 type askEventHandlers struct {
-	Thinking           func(chunk string)
-	Content            func(chunk string)
-	ToolUseDelta       func(data goharnessevents.ToolUseDeltaData)
-	ThinkingDone       func()
-	ToolStart          func(data goharnessevents.ToolExecStartData)
-	ToolEnd            func(data goharnessevents.ToolExecEndData)
-	Answer             func(answer string)
-	ExecutionSummary   func(data goharnessevents.ExecutionSummaryData)
-	LoopEnd            func(data goharnessevents.CycleInfo)
-	Compaction         func(data goharnessevents.CompactionData)
-	MaxTurnsReached    func(data goharnessevents.MaxTurnsReachedData)
-	Error              func(errMsg string)
-	SubtaskSpawned     func(data goharnessevents.SubtaskInfo)
-	SubtaskCompleted   func(data goharnessevents.SubtaskResult)
-	TaskSummary        func(data goharnessevents.TaskSummaryData)
-	LLMTimeout         func(data goharnessevents.LLMTimeoutData)
-	LLMCancelled       func(data goharnessevents.LLMCancelledData)
-	LLMRetry           func(data goharnessevents.LLMRetryData)
-	TokenUsageRecorded func(record goharnesssession.TokenUsageRecord)
-	AskUserPending     func(data goharnessevents.AskUserPendingData)
-	PermissionPending  func(data goharnessevents.PermissionPendingData)
-	UserMessageSaved   func(timestamp int64)
+	Thinking            func(chunk string)
+	Content             func(chunk string)
+	ToolUseDelta        func(data goharnessevents.ToolUseDeltaData)
+	ThinkingDone        func()
+	ToolStart           func(data goharnessevents.ToolExecStartData)
+	ToolEnd             func(data goharnessevents.ToolExecEndData)
+	Answer              func(answer string)
+	ExecutionSummary    func(data goharnessevents.ExecutionSummaryData)
+	LoopEnd             func(data goharnessevents.CycleInfo)
+	Compaction          func(data goharnessevents.CompactionData)
+	MaxTurnsReached     func(data goharnessevents.MaxTurnsReachedData)
+	Error               func(errMsg string)
+	SubtaskSpawned      func(data goharnessevents.SubtaskInfo)
+	SubtaskCompleted    func(data goharnessevents.SubtaskResult)
+	SubtaskTitleUpdated func(data goharnessevents.SubtaskTitle)
+	TaskSummary         func(data goharnessevents.TaskSummaryData)
+	LLMTimeout          func(data goharnessevents.LLMTimeoutData)
+	LLMCancelled        func(data goharnessevents.LLMCancelledData)
+	LLMRetry            func(data goharnessevents.LLMRetryData)
+	TokenUsageRecorded  func(record goharnesssession.TokenUsageRecord)
+	AskUserPending      func(data goharnessevents.AskUserPendingData)
+	PermissionPending   func(data goharnessevents.PermissionPendingData)
+	UserMessageSaved    func(timestamp int64)
 }
 
 // wireAskEvents attaches the common set of event handlers onto an AskBuilder.
@@ -85,6 +86,9 @@ func wireAskEvents(b *agents.AskBuilder, h askEventHandlers) *agents.AskBuilder 
 	}
 	if h.SubtaskCompleted != nil {
 		b = b.OnSubtaskCompleted(h.SubtaskCompleted)
+	}
+	if h.SubtaskTitleUpdated != nil {
+		b = b.OnSubtaskTitleUpdated(h.SubtaskTitleUpdated)
 	}
 	if h.TaskSummary != nil {
 		b = b.OnTaskSummary(h.TaskSummary)
@@ -246,6 +250,7 @@ func newBroadcastAskHandlers(
 				"agent_name":  data.AgentName,
 				"description": data.Description,
 				"timeout":     data.Timeout,
+				"title":       data.Title,
 			}, gateway.WithSessionID(sid), withAgent())
 		},
 		SubtaskCompleted: func(data goharnessevents.SubtaskResult) {
@@ -257,6 +262,17 @@ func newBroadcastAskHandlers(
 				"answer":      data.Answer,
 				"error":       data.Error,
 				"description": data.Description,
+			}, gateway.WithSessionID(sid), withAgent())
+		},
+		SubtaskTitleUpdated: func(data goharnessevents.SubtaskTitle) {
+			// 标题刷新广播到主会话（与 SubtaskSpawned 同路由）：前端按 data.session_id
+			// 定位子会话条目与主会话流的 spawn 卡片。响应类型经内联构造——gort 当前
+			// 未定义常量（与 llm_retry 先例一致）。
+			broadcastResp(gw, gateway.ResponseType("subtask_title_updated"), i18n.T("svc.event.subtask.title.updated"), map[string]any{
+				"session_id": data.SessionID,
+				"task_id":    data.TaskID,
+				"agent_name": data.AgentName,
+				"title":      data.Title,
 			}, gateway.WithSessionID(sid), withAgent())
 		},
 		TaskSummary: func(data goharnessevents.TaskSummaryData) {

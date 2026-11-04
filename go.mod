@@ -23,7 +23,7 @@ require (
 
 require (
 	github.com/DotNetAge/gochat v0.2.12
-	github.com/DotNetAge/goharness v0.2.57
+	github.com/DotNetAge/goharness v0.2.58
 	github.com/DotNetAge/gort v0.1.9
 	github.com/creack/pty v1.1.24
 	github.com/grandcat/zeroconf v1.0.0
@@ -33,7 +33,7 @@ require (
 )
 
 require (
-	github.com/DotNetAge/goagent v0.1.1 // indirect
+	github.com/DotNetAge/goagent v0.1.2 // indirect
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0 // indirect
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect

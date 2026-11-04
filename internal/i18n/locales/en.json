@@ -282,6 +282,7 @@
   "svc.event.request.failed": "Request failed",
   "svc.event.subtask.completed": "Subtask Completed",
   "svc.event.subtask.spawned": "Subtask Spawned",
+  "svc.event.subtask.title.updated": "Subtask Title Updated",
   "svc.event.task.summary": "Task Summary",
   "svc.event.thinking": "Thinking",
   "svc.event.thinking.done": "Thinking Complete",

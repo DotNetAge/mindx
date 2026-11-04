@@ -42,6 +42,12 @@ func (d *Daemon) handleMessageCancel(ctx context.Context, params json.RawMessage
 					cancelled += set.CancelSession(req.SessionID)
 				}
 			}
+			// 收割回灌轮同属虚拟键登记（无客户端归属），按会话停止一并取消。
+			if v, ok := d.clientCancels.Load(harvestCancelClientID); ok {
+				if set, ok := v.(*clientCancelSet); ok {
+					cancelled += set.CancelSession(req.SessionID)
+				}
+			}
 			subStopped := d.cancelSubAgents(req.SessionID)
 			// 执行树被实际取消/强停：挂起等待随执行消亡，解除挂起登记（气球熄灭）。
 			// 仅在实际发生取消时清除——对未在执行、仅挂起等待的会话，停止指令

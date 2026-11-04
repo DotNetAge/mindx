@@ -132,17 +132,43 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 		meta, metaErr := d.getSessionMeta(entry.SessionID)
 		d.maybeGenerateSessionTitle(entry.SessionID, entry.Agent, entry.Content, meta, metaErr)
 	}
-	rt, err := d.app.ResolveRuntime(entry.Agent)
-	if err != nil {
+	// 预检：agent 可解析才入队（执行体 runBackgroundTurn 内会重新解析）
+	if _, err := d.app.ResolveRuntime(entry.Agent); err != nil {
 		d.logger.Error("scheduled job: resolve runtime failed", err,
 			"entry_id", info.EntryID, "agent", entry.Agent)
 		d.scheduler.ReportResult(info.EntryID, info.RunID, err)
 		return
 	}
 
-	sid := entry.SessionID
-	content := entry.Content
-	agentName := entry.Agent
+	// 后台执行链与收割回灌共用 runBackgroundTurn（广播版事件链、串行队列、
+	// 虚拟客户端取消登记）；调度任务按本轮结果回写任务状态。
+	d.runBackgroundTurn(entry.SessionID, entry.Agent, entry.Content, scheduledCancelClientID, func(err error) {
+		// 终态回写：取消按 missed，其余失败按 failed，成功按 success；
+		// ReportResult 内部广播 completed/failed/missed，前端日历据此刷新。
+		d.scheduler.ReportResult(info.EntryID, info.RunID, err)
+	})
+}
+
+// runBackgroundTurn 程序化发起主会话一轮执行（后台通道共用实现）。
+//
+// 两条通道复用：①调度任务到点执行（runScheduledJob）；②收割回灌
+// （reportHarvestToSession，非阻塞 CollectResults 的结果送达）。要点：
+//   - 会话装配与前台 defaultHandler 同源（Runtime 统一注入压缩/沙箱配置、
+//     动态窗口 resolver、文件记忆 SummarySink）；
+//   - 执行经会话串行队列（sessionQueueFor）：与用户消息天然顺序化，
+//     用户间隙继续与主 Agent 聊天互不干扰；
+//   - 事件走广播版链路（无人在线自然丢弃，会话历史照常落盘）；
+//   - 取消登记在虚拟客户端集合：message.cancel 按会话取消一并覆盖；
+//   - onDone 在本轮结束后调用（含排队取消场景，err=ctx.Err()）。
+func (d *Daemon) runBackgroundTurn(sid, agentName, content, virtualClientID string, onDone func(error)) {
+	rt, err := d.app.ResolveRuntime(agentName)
+	if err != nil {
+		d.logger.Error("background turn: resolve runtime failed", err,
+			"agent", agentName, "session_id", sid)
+		onDone(err)
+		return
+	}
+
 	gw := d.gw
 	currentAgentName := agentName
 	var eventSubSessionID string
@@ -152,13 +178,12 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 		return gateway.WithResponseMeta(map[string]any{"agent_name": currentAgentName})
 	}
 
-	d.logger.Info("scheduled job: background execution started",
-		"entry_id", info.EntryID, "run_id", info.RunID,
+	d.logger.Info("background turn: execution started",
 		"agent", agentName, "session_id", sid)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// 后台执行登记在虚拟客户端集合：message.cancel 按会话取消时一并覆盖。
-	cancelSet := d.clientCancelSetFor(scheduledCancelClientID)
+	cancelSet := d.clientCancelSetFor(virtualClientID)
 	cancelEntry := cancelSet.Add(sid, cancel)
 	// 子智能体授权/提问冒泡旁路：与前台执行共用实现。
 	ctx = d.withAskBypassSinks(ctx, sid, getAgentName)
@@ -171,16 +196,16 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 		defer func() {
 			d.activeSessions.Delete(sid)
 			if r := recover(); r != nil {
-				d.logger.Error("scheduled job: AskBuilder panic", fmt.Errorf("%v", r),
-					"entry_id", info.EntryID, "session_id", sid)
+				d.logger.Error("background turn: AskBuilder panic", fmt.Errorf("%v", r),
+					"session_id", sid)
 			}
 		}()
 
-		// 排队等待期间被取消（停止按钮）：按失败回写终态。
+		// 排队等待期间被取消（停止按钮）：按取消收尾。
 		if ctx.Err() != nil {
-			d.logger.Info("scheduled job: skipped, cancelled while queued",
-				"entry_id", info.EntryID, "session_id", sid)
-			d.scheduler.ReportResult(info.EntryID, info.RunID, ctx.Err())
+			d.logger.Info("background turn: skipped, cancelled while queued",
+				"session_id", sid)
+			onDone(ctx.Err())
 			return
 		}
 
@@ -201,8 +226,8 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 		}))
 		s, err := goharnesssession.Load(context.Background(), sid, agentName, d.app.SessDB(), d.logger, sessOpts...)
 		if err != nil {
-			d.logger.Error("scheduled job: failed to load session", err, "session_id", sid)
-			d.scheduler.ReportResult(info.EntryID, info.RunID, err)
+			d.logger.Error("background turn: failed to load session", err, "session_id", sid)
+			onDone(err)
 			return
 		}
 		d.activeSessions.Store(sid, s)
@@ -264,19 +289,16 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 			}).
 			Run()
 
-		// 终态回写：取消按 missed，其余失败按 failed，成功按 success；
-		// ReportResult 内部广播 completed/failed/missed，前端日历据此刷新。
-		d.scheduler.ReportResult(info.EntryID, info.RunID, err)
-
 		if err != nil && !errors.Is(err, context.Canceled) {
-			d.logger.Error("scheduled job: execution failed", err,
-				"entry_id", info.EntryID, "session_id", sid, "agent", agentName)
+			d.logger.Error("background turn: execution failed", err,
+				"session_id", sid, "agent", agentName)
 		} else {
-			d.logger.Info("scheduled job: execution finished",
-				"entry_id", info.EntryID, "session_id", sid, "agent", agentName)
+			d.logger.Info("background turn: execution finished",
+				"session_id", sid, "agent", agentName)
 		}
 
 		// 轮次日志落盘（旁路采集，失败不影响执行结果）。
 		d.appendTurnLog(s, agentName, content, turnLogLenBefore, turnLogStart)
+		onDone(err)
 	})
 }
