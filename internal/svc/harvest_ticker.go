@@ -46,6 +46,12 @@ const (
 	// 绝不静默等待；回灌后意图文件删除，超时状态自然持久化（重启不重复等）。
 	harvestTotalCap = 30 * time.Minute
 
+	// harvestDeadWindow 是落盘恢复路径判定「会话已中断」的观察窗：
+	// 正常执行中相邻消息的间隔可能长达数分钟（单轮 LLM 耗时），窗口取
+	// 保守值——最后一条消息落盘后超窗仍无任何新增，才判中断落定，
+	// 避免把正在执行的任务误判为死会话。
+	harvestDeadWindow = 3 * time.Minute
+
 	// harvestReportingStall reporting 停滞回退阈值：置 reporting 后超过此
 	// 时长仍未见 onDone（回灌轮崩溃 / daemon 重启）即回退 pending 重投。
 	harvestReportingStall = 5 * time.Minute
@@ -475,13 +481,29 @@ func (d *Daemon) classifyHarvestTarget(ctx context.Context, sub harvestIntentSub
 		st.Result = last + "\n（结果自会话落盘记录恢复）"
 		return st, true
 	}
-	// 会话无 assistant 落盘产出：先看是否在等待用户回答/授权（跨重启后
-	// 控制平面句柄已丢，挂起 sidecar 是唯一证据），否则任务可能仍在执行
-	//（终态条目被清理）或已中断。不落定、继续轮询，由总上限兜底。
+	// 会话无 assistant 落盘产出：依次区分等待授权、意外中断、仍在执行。
+	// 中断判定基于落盘事实 + 观察窗（无控制平面条目时的恢复路径）：
+	//   - 最后一条是 tool 消息且超窗无后续：工具结果已回、LLM 无响应——意外中断
+	//   - 只有首问且超窗无任何后续：子代理从未开跑或立即夭折
+	// 两者以 failed 落定并引导续跑（军规：异常必须给出下一步处理方案），
+	// 不再等总上限；窗口内的保持 running 继续轮询。
 	if d.subSessionBlocked(sub.SessionID) {
 		st.Status = "blocked"
 		st.Error = "子代理在等待回答或授权。下一步：告知用户到对应子代理会话中回答问题或完成授权，子代理会自动继续"
 		return st, false
+	}
+	lastMsg := msgs[len(msgs)-1]
+	lastAt := time.Unix(int64(lastMsg.Timestamp), 0)
+	dead := time.Since(lastAt) >= harvestDeadWindow
+	if lastMsg.Role == "tool" && dead {
+		st.Status = "failed"
+		st.Error = "会话执行被意外中断（终止于工具调用之后，无最终答案）。下一步：向该子代理会话发起继续（重试），子代理会从上下文断点自动修复续跑，不要重新派发任务"
+		return st, true
+	}
+	if len(msgs) == 1 && lastMsg.Role == "user" && dead {
+		st.Status = "failed"
+		st.Error = "子代理收到任务后长时间未开始执行。下一步：向该子代理会话发起继续（重试）让子代理开始任务；若持续无效则重新派发"
+		return st, true
 	}
 	st.Status = "running"
 	return st, false
