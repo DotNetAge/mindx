@@ -214,7 +214,8 @@ func (d *Daemon) processHarvestIntent(ctx context.Context, intent *harvestIntent
 		case "completed", "failed", "blocked":
 		default:
 			statuses[i].Status = "timeout"
-			statuses[i].Error = fmt.Sprintf("收割时长超过 %s 仍未落定：该子任务可能仍在后台执行或已挂死，可到其会话中查看进展", harvestTotalCap)
+			statuses[i].Error = fmt.Sprintf("收割时长超过 %s 仍未落定：该子任务可能仍在后台执行或已中断。"+
+				"下一步：先到其子代理会话中查看进展；若确认已中断，向该会话发起继续（重试）让子代理从断点自动修复，不要原样重新派发任务", harvestTotalCap)
 		}
 		reported = append(reported, statuses[i])
 	}
@@ -425,7 +426,7 @@ func (d *Daemon) classifyHarvestTarget(ctx context.Context, sub harvestIntentSub
 		case goagent.StatusPending, goagent.StatusRunning:
 			if d.subSessionBlocked(sub.SessionID) {
 				st.Status = "blocked"
-				st.Error = "子代理在等待你回答或授权"
+				st.Error = "子代理在等待回答或授权。下一步：告知用户到对应子代理会话中回答问题或完成授权，子代理会自动继续"
 			} else {
 				st.Status = "running"
 			}
@@ -448,7 +449,8 @@ func (d *Daemon) classifyHarvestTarget(ctx context.Context, sub harvestIntentSub
 	// 消除事后收割对基线机制的死局；daemon 重启也不丢）。
 	if sub.SessionID == "" {
 		st.Status = "failed"
-		st.Error = "任务句柄不存在（可能 daemon 已重启），请对该 agent 重新派发 SubAgent 任务"
+		// 无会话锚点时续跑无处着力，重新派发是唯一路径——文案直接给出该方案。
+		st.Error = "任务句柄不存在且无子代理会话锚点，无法恢复或续跑；请以原任务描述重新派发 SubAgent 任务"
 		return st, true
 	}
 	sessDB := d.app.SessDB()
@@ -478,7 +480,7 @@ func (d *Daemon) classifyHarvestTarget(ctx context.Context, sub harvestIntentSub
 	//（终态条目被清理）或已中断。不落定、继续轮询，由总上限兜底。
 	if d.subSessionBlocked(sub.SessionID) {
 		st.Status = "blocked"
-		st.Error = "子代理在等待你回答或授权"
+		st.Error = "子代理在等待回答或授权。下一步：告知用户到对应子代理会话中回答问题或完成授权，子代理会自动继续"
 		return st, false
 	}
 	st.Status = "running"
@@ -564,9 +566,10 @@ func formatHarvestReport(report tools.HarvestReport) string {
 		case "completed":
 			fmt.Fprintf(&b, "\n- %s（会话 %s）：已完成\n%s", name, t.SessionID, t.Result)
 		case "failed":
-			fmt.Fprintf(&b, "\n- %s（会话 %s）：失败，原因：%s", name, t.SessionID, t.Error)
+			fmt.Fprintf(&b, "\n- %s（会话 %s）：失败，原因：%s。下一步：向该子代理会话发起继续（重试）可保留已有进度自动修复；"+
+				"仅当确认任务需要全新开始时才重新派发", name, t.SessionID, t.Error)
 		default:
-			// blocked / timeout：未落定，条目的 Error 已含具体说明
+			// blocked / timeout：未落定，条目的 Error 已含具体说明与下一步方案
 			fmt.Fprintf(&b, "\n- %s（会话 %s）：未完成——%s", name, t.SessionID, t.Error)
 		}
 	}
