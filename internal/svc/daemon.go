@@ -177,11 +177,12 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) (*Daemon, er
 	// 复用主会话首问的提炼器（generateSessionTitle），子会话从此不再缺席。
 	app.SetSubSessionTitleFn(d.refineSubSessionTitle)
 
-	// 收割报告回灌：把 daemon 的回灌实现注入 App，createRuntime 经
-	// agents.WithHarvestReporter 转注 goharness Runtime——后台收割全部
-	// 落定/超限时，以「系统收割」消息经主会话串行队列发起一轮执行，
-	// LLM 在此轮才得知结果并回应用户（非阻塞 CollectResults 的收尾）。
-	app.SetHarvestReporter(d.reportHarvestToSession)
+	// 收割意图落盘：把 Daemon 注入 App（实现 goharness tools.HarvestIntentRecorder），
+	// createRuntime 经 agents.WithHarvestIntentRecorder 转注 goharness
+	// Runtime——CollectResults 经它把收割意图落到主会话目录
+	// session-harvest.json，落定判定与结果回灌由收割 ticker（Start 中启动）
+	// 从磁盘重新推导执行，收割状态不再依赖任何进程内存。
+	app.SetHarvestIntentRecorder(d)
 
 	if schedulerDB != nil {
 		d.scheduler = scheduler.NewScheduler(schedulerDB, logger)
@@ -409,6 +410,18 @@ func (d *Daemon) Start(ctx context.Context) error {
 
 	// ── 自动升级检查（启动时 + 每日一次） ─────────────────
 	go d.autoUpdateLoop(ctx)
+
+	// ── 等待标记启动清扫 ─────────────────
+	// daemon 重启后进程内等待必然消亡，上一轮残留的 session-wait.json 在
+	// 收割轮询器启动前统一清除（收割的 blocked 判定依赖标记的准确性，
+	// 见 sweepStaleWaitMarkers）。同步执行：启动流程内任何等待都不可能存活。
+	d.sweepStaleWaitMarkers(ctx)
+
+	// ── 收割轮询器（持久化收割的执行端） ─────────────────
+	// 无状态扫描全部会话目录的 session-harvest.json 收割意图，每轮从磁盘
+	// 重新推导落定状态并经 runBackgroundTurn 回灌主会话；daemon 重启后
+	// 下一轮扫描自然捡起 pending 意图继续收割（跨重启恢复，无需启动重锚）。
+	go d.harvestTicker(ctx)
 
 	// ── MindX 账号静默登录 ─────────────
 	// 重装恢复：密钥存储存有 username+password 时静默重登换 token 并绑定设备；

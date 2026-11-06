@@ -12,6 +12,8 @@ github.com/DotNetAge/gochat v0.2.12 h1:fFvi91Td9byuHtMhZzHKSKuJh7gy8Xjylc41U0y8K
 github.com/DotNetAge/gochat v0.2.12/go.mod h1:w7m36rMZoDwmReJNTLUGHhok6DSqnIidg9wFKwYM1dM=
 github.com/DotNetAge/goharness v0.2.58 h1:56bv+ImzZ3rB1cowQgR/j5ngzfDZP24sU65pUU2PPCU=
 github.com/DotNetAge/goharness v0.2.58/go.mod h1:vMLaeSQmz2AN8hJqBLu1TATDRKyYndbxJKq6JQjH0T8=
+github.com/DotNetAge/goharness v0.2.59 h1:djeHUQl4goDLnUkse3Sz2EpYAZpEVygPIRk68M7ROVA=
+github.com/DotNetAge/goharness v0.2.59/go.mod h1:vMLaeSQmz2AN8hJqBLu1TATDRKyYndbxJKq6JQjH0T8=
 github.com/DotNetAge/gort v0.1.9 h1:gdCk0zgbkI6VQQowFkQY/ADUb++Gt+jYhpRuHIRiB/U=
 github.com/DotNetAge/gort v0.1.9/go.mod h1:m6mjzyaP/Ufx+Uv7uh51BSK7N4LVR/viWEHV9ZQ3OM8=
 github.com/JohannesKaufmann/html-to-markdown v1.6.0 h1:04VXMiE50YYfCfLboJCLcgqF5x+rHJnb1ssNmqpLH/k=

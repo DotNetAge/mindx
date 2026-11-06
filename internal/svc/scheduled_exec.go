@@ -198,6 +198,11 @@ func (d *Daemon) runBackgroundTurn(sid, agentName, content, virtualClientID stri
 			if r := recover(); r != nil {
 				d.logger.Error("background turn: AskBuilder panic", fmt.Errorf("%v", r),
 					"session_id", sid)
+				// panic 也必须抵达 onDone：调用方（收割轮询器 / 定时任务）以
+				// onDone 计数重投与放弃，onDone 丢失会让收割意图永远停在
+				// reporting、每 5 分钟停滞回退无限重注入注定 panic 的轮次
+				//（第三轮审计：全落定场景无上限检查，活锁）。
+				onDone(fmt.Errorf("后台回灌执行异常退出: %v", r))
 			}
 		}()
 

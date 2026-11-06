@@ -82,12 +82,11 @@ type App struct {
 	// goharness 用受理快照标题（任务截断）兜底。
 	subSessionTitleFn func(sessionID, task string) string
 
-	// harvestReporterFn 是收割报告回灌回调（Daemon 注入其
-	// reportHarvestToSession）：后台收割全部落定/超限时被调用，以「系统
-	// 收割」消息发起主会话一轮执行（走主会话串行队列）。createRuntime 经
-	// agents.WithHarvestReporter 注入 goharness Runtime，nil 时收割结果
-	// 不进上下文（仅日志）。
-	harvestReporterFn func(tools.HarvestReport)
+	// harvestIntent 是收割意图落盘器（Daemon 实现，写主会话目录
+	// session-harvest.json）：createRuntime 经 agents.WithHarvestIntentRecorder
+	// 注入 goharness Runtime，nil 时 CollectResults 返回引导性错误
+	//（收割状态没有独立于进程生命周期的存在形式，收割语义即不成立）。
+	harvestIntent tools.HarvestIntentRecorder
 
 	// Embedded app icon filesystem (for favicon / .app bundle)
 	iconFS fs.FS
@@ -321,11 +320,12 @@ func (a *App) SetSubSessionTitleFn(fn func(sessionID, task string) string) {
 	a.subSessionTitleFn = fn
 }
 
-// SetHarvestReporter 注入收割报告回灌回调（Daemon 的 reportHarvestToSession）。
-// 由 Daemon 初始化时调用；createRuntime 将其注入 goharness Runtime
-// （WithHarvestReporter），后台收割全部落定/超限时回灌主会话。
-func (a *App) SetHarvestReporter(fn func(tools.HarvestReport)) {
-	a.harvestReporterFn = fn
+// SetHarvestIntentRecorder 注入收割意图落盘器（Daemon 实现，写主会话目录
+// session-harvest.json）。由 Daemon 初始化时调用；createRuntime 将其注入
+// goharness Runtime（WithHarvestIntentRecorder），CollectResults 经它落盘
+// 收割意图，落定判定与结果回灌由 Daemon 的无状态收割 ticker 执行。
+func (a *App) SetHarvestIntentRecorder(rec tools.HarvestIntentRecorder) {
+	a.harvestIntent = rec
 }
 
 // FileMemory 返回文件记忆交付器（压缩摘要 → .agents/memory/*.md）。
@@ -935,14 +935,15 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 			}
 			return a.subSessionTitleFn(sessionID, task)
 		}),
-		// 收割报告回灌回调：实现在 Daemon（「系统收割」消息 + 程序化发起
-		// 主会话轮，走串行队列），同样经闭包间接注入。nil 时收割结果不进
-		// 上下文（goharness 仅记日志）。
-		agents.WithHarvestReporter(func(report tools.HarvestReport) {
-			if a.harvestReporterFn == nil {
-				return
+		// 收割意图落盘器：实现在 Daemon（主会话目录 session-harvest.json），
+		// 经闭包间接注入——运行时字段已就位即生效，Runtime 创建早于 Daemon
+		// 接线也不影响（调用时机在 CollectResults 执行时）。nil 时返回引导性
+		// 错误，工具层转为可重试回执。
+		agents.WithHarvestIntentRecorder(func(mainSessionID string, targets []tools.HarvestTarget) error {
+			if a.harvestIntent == nil {
+				return fmt.Errorf("收割意图落盘器未就绪（尚未接线），请稍后重新调用")
 			}
-			a.harvestReporterFn(report)
+			return a.harvestIntent.Record(mainSessionID, targets)
 		}),
 		agents.WithProviderRegistry(a.providerReg),
 		agents.WithLogger(a.logger),
