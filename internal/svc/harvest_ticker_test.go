@@ -30,7 +30,7 @@ func TestFormatHarvestReportTruncatesResult(t *testing.T) {
 }
 
 // TestFormatHarvestReportFailedGuidance 失败条目必须含下一步处理方案
-//（异常回执军规：LLM 看不到处理方案会自行原样重派）。
+// （异常回执军规：LLM 看不到处理方案会自行原样重派）。
 func TestFormatHarvestReportFailedGuidance(t *testing.T) {
 	report := tools.HarvestReport{
 		MainSessionID: "main-1",
