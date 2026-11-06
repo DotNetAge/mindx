@@ -572,6 +572,12 @@ func (d *Daemon) subSessionBlocked(sessionID string) bool {
 	return false
 }
 
+// harvestResultMaxChars 是回灌报告中单个子任务结果的字符上限：
+// Result 全文回灌会让长交付（可达数万字）整体滞留主会话历史，随后 LLM
+// 还会复述一遍——同一内容进历史两次。截断保留开头足够 LLM 理解任务
+// 结局的部分，完整内容引导 LLM 按需去子会话记录获取。
+const harvestResultMaxChars = 8000
+
 // formatHarvestReport 把收割报告格式化为「系统收割」消息正文：
 // 内容进主会话上下文，LLM 在此轮才得知各子任务结局并向用户转述。
 // 每个条目带子代理名称与会话锚点（session_id 落盘持久，LLM 后续轮次
@@ -586,7 +592,12 @@ func formatHarvestReport(report tools.HarvestReport) string {
 		}
 		switch t.Status {
 		case "completed":
-			fmt.Fprintf(&b, "\n- %s（会话 %s）：已完成\n%s", name, t.SessionID, t.Result)
+			result := []rune(t.Result)
+			if len(result) > harvestResultMaxChars {
+				result = append(result[:harvestResultMaxChars],
+					[]rune(fmt.Sprintf("\n…（结果超过 %d 字符已截断；完整内容在该子代理会话记录中，需要时按会话 ID 查看）", harvestResultMaxChars))...)
+			}
+			fmt.Fprintf(&b, "\n- %s（会话 %s）：已完成\n%s", name, t.SessionID, string(result))
 		case "failed":
 			fmt.Fprintf(&b, "\n- %s（会话 %s）：失败，原因：%s。下一步：向该子代理会话发起继续（重试）可保留已有进度自动修复；"+
 				"仅当确认任务需要全新开始时才重新派发", name, t.SessionID, t.Error)

@@ -22,6 +22,8 @@ github.com/DotNetAge/goharness v0.2.62 h1:Jso4+eGhu8/iQKgyw3/M43uOCL239QVmJHEqwa
 github.com/DotNetAge/goharness v0.2.62/go.mod h1:vMLaeSQmz2AN8hJqBLu1TATDRKyYndbxJKq6JQjH0T8=
 github.com/DotNetAge/goharness v0.2.63 h1:AktmI1PcRBTLg7MSbSS1eYmPeYi2ZADCijaKLM5BJek=
 github.com/DotNetAge/goharness v0.2.63/go.mod h1:vMLaeSQmz2AN8hJqBLu1TATDRKyYndbxJKq6JQjH0T8=
+github.com/DotNetAge/goharness v0.2.64 h1:pQPuKqSyp+Ril+XqxcFlVzog2xc0OQH2p2QHQ8Z72BE=
+github.com/DotNetAge/goharness v0.2.64/go.mod h1:vMLaeSQmz2AN8hJqBLu1TATDRKyYndbxJKq6JQjH0T8=
 github.com/DotNetAge/gort v0.1.9 h1:gdCk0zgbkI6VQQowFkQY/ADUb++Gt+jYhpRuHIRiB/U=
 github.com/DotNetAge/gort v0.1.9/go.mod h1:m6mjzyaP/Ufx+Uv7uh51BSK7N4LVR/viWEHV9ZQ3OM8=
 github.com/JohannesKaufmann/html-to-markdown v1.6.0 h1:04VXMiE50YYfCfLboJCLcgqF5x+rHJnb1ssNmqpLH/k=

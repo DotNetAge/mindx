@@ -23,7 +23,7 @@ require (
 
 require (
 	github.com/DotNetAge/gochat v0.2.12
-	github.com/DotNetAge/goharness v0.2.63
+	github.com/DotNetAge/goharness v0.2.64
 	github.com/DotNetAge/gort v0.1.9
 	github.com/creack/pty v1.1.24
 	github.com/grandcat/zeroconf v1.0.0
