@@ -479,6 +479,38 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
  A powerful CLI tool for managing AI agents, providers, and conversations.
 
 Package: mindx
+Version: 2.6.20
+Architecture: arm64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 38720
+Filename: pool/stable/m/mindx/mindx_2.6.20_arm64.deb
+Size: 15837818
+MD5sum: a9fcff05cf375aeb35a7ae63f8e8a783
+SHA1: e6796350f3c47913cd55db7a7c83fa0b0776a046
+SHA256: 40444f5f06398eceefeff5d2610d95ef014e0c9fe51ec2c32de4ab8ed040946b
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.20
+Architecture: amd64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 38720
+Filename: pool/stable/m/mindx/mindx_2.6.20_amd64.deb
+Size: 15837816
+MD5sum: 5a7a3fbd4aadb04419a860f7a2714176
+SHA1: 9d7cabbcbfd6adb240392fba6a1ea1a56f5219fb
+SHA256: c82847dc5681fb7be867b1a2b5da9d05109284693906c2ec514f2d2a121ad166
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
 Version: 2.6.3
 Architecture: arm64
 Maintainer: DotNetAge <ray@dotnetage.com>
