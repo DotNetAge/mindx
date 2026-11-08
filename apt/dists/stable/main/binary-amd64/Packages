@@ -516,10 +516,10 @@ Architecture: arm64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38720
 Filename: pool/stable/m/mindx/mindx_2.6.21_arm64.deb
-Size: 15838042
-MD5sum: 1854df539b461ef6cf011374b2e012dd
-SHA1: c619a5fb706eed310ec6d9c01ecec9f17cc470da
-SHA256: 84b3b62c68522797f56db1a938576525b75cb642a62cfa9e0d688eb5c97020f9
+Size: 15837634
+MD5sum: c560248b83d6f292481bdc715f087d77
+SHA1: b1a324087c41ca7be6ba1a1443cca560ae0daad5
+SHA256: c050742dc438134bd543d46adbe2dd303894aea62b98a9a13fb6619fd1f48a05
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -532,10 +532,10 @@ Architecture: amd64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38720
 Filename: pool/stable/m/mindx/mindx_2.6.21_amd64.deb
-Size: 15838044
-MD5sum: 9d6561aad31155a3782ad2882071669e
-SHA1: 91084f4684cd3a611698a1a72a69f23fffb496bf
-SHA256: 6a264ba2c00cca84001d65c04ef5f1c854612adf78660c193145bea56e4955bc
+Size: 15837634
+MD5sum: 142adf95714b5524db955b3d1d7449d0
+SHA1: 08201069eda39f2e8c2e3855d065c6b72d8ac3c4
+SHA256: 738d158ea81dca9e5959e9eeaaa05f9671a69706e8068fb2b15e279b1445476a
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
