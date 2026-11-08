@@ -94,3 +94,4 @@
 
 * **mindx 不产出 Windows 原生构建物**（2026-10 前后已放弃 Windows 原生定位）：Windows 用户的 daemon 由壳的 WSL 版本以 rootfs（内含 linux-amd64 二进制）分发，升级链在 WSL 内部走 linux GOOS。给 release.yml/打包矩阵加任何 Windows 目标前必须先核对分发载体；daemon-installer.ts 等壳代码里的 Windows 分支描述的是「壳在 Windows 上的操作」，不等于 daemon 有 Windows 原生形态
 * **Unix 专属 syscall 字段（SysProcAttr.Setsid/Credential 等）必须 build-tag 隔离**（`//go:build unix` 与 `//go:build windows` 成对文件或 GOOS 分支内联结构体字面量），禁止在平台无关代码里直接写——release.yml 补 Windows 矩阵首跑即被 skillstore/parse.go 的 Setsid 炸出（CI 两月全绿是因为从未构建过 Windows，绿不等于可移植）
+* **发布工作流里消费构建产物或 Release 资产的 job，`needs` 必须显式写到对应上游 job**（tag 推送取产物 → 等 `build`；从 Release 下载 → 等 `release`），禁止只写 `prepare`：job 会与 build 抢跑，`actions/download-artifact` 空手而归，后续 `shasum` 在文件缺失时只报 stderr、`cut` 仍退出 0，公式被写成 `sha256 ""` 推上 tap（v2.6.17 起 brew 装不上，v2.6.21 重发时实锤）。校验和类步骤一律 `set -euo pipefail` 并显式 `test -n` 断言，禁止让空值流到下游产物

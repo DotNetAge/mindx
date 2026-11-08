@@ -297,7 +297,9 @@ jobs:
   homebrew:
     name: Homebrew Formula
     runs-on: ubuntu-latest
-    needs: [prepare]
+    # tag 推送要等 build（取 package-darwin-* 产物），手动 dispatch 要等 release
+    #（从既有 Release 下载 darwin 资产）；两者都等，禁止只依赖 prepare 抢跑
+    needs: [prepare, build, release]
     if: needs.prepare.outputs.is_prerelease == 'false' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
@@ -334,10 +336,15 @@ jobs:
       - name: Calculate SHA256
         id: sha256
         run: |
+          set -euo pipefail
           VERSION_NUM=${{ needs.prepare.outputs.version_num }}
 
           SHA256_AMD64=$(shasum -a 256 "dist/mindx-${VERSION_NUM}-darwin-amd64.tar.gz" | cut -d' ' -f1)
           SHA256_ARM64=$(shasum -a 256 "dist/mindx-${VERSION_NUM}-darwin-arm64.tar.gz" | cut -d' ' -f1)
+
+          # 空校验和会让 formula 生成 sha256 ""（brew 安装必失败），必须当场终止
+          test -n "${SHA256_AMD64}"
+          test -n "${SHA256_ARM64}"
 
           echo "sha256_amd64=${SHA256_AMD64}" >> "$GITHUB_OUTPUT"
           echo "sha256_arm64=${SHA256_ARM64}" >> "$GITHUB_OUTPUT"
