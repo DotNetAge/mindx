@@ -78,6 +78,12 @@
 * 声称"修复已生效"前必须证明运行二进制与源码一致：`go version -m ~/.mindx/bin/mindx` 核对 BuildTime 与 vcs.modified，再用 Makefile 同参（-trimpath + 同 ldflags）在 /tmp 重建并比对 sha256，一致才算进入运行版本。只改源码、只重启、只看到修复相关日志都不构成证据。
 * `~/.mindx/bin/.update/mindx` 是升级暂存包，可能是 clean-tree 旧构建（无 +dirty），应用后会把未提交修复回滚；排障"改了却没用"必须先比对暂存包的 BuildTime 与 vcs 标记。
 
+## 调度任务会话落实（2026-11-08 实锤）
+
+* 调度任务有两条写入通路，口径必须一致：RPC `schedule.add` 在 [handler_schedule.go](internal/svc/handler_schedule.go) 入口把空 ID 与 `"new"` 哨兵落实成真实会话；Agent 的 `Cron` 工具（`internal/tools/cron.go`）**直写 store、原样落库**，而其参数说明本身允许传 `"new"`。凡新增写入口，禁止假设「哨兵不会落库」，执行侧必须兜底（`scheduled_exec.go` 现把 `""` 与 `"new"` 同视为未绑定，运行前落实会话线）。
+* 排障铁律：用户说「定时任务没执行」时，先查 `~/.mindx/logs/daemon.log` 的 `schedule job fired`——有 fired 说明调度器正常，问题在随后几十毫秒内的会话落实/加载；无 fired 才查 reload、cron 表达式与时区。「到点即失败」和「根本没调度」是两类问题。
+* 调度任务落库的 `project_dir` 不能为空（ensureScheduleSession 建会话要求工作目录归属），Cron 工具少传 `project_dir` 时任务会到点才炸，创建时不报错。
+
 ## 发版纪律（2026-11-04 用户定案）
 
 * 打 tag 前工作区必须全量干净：`git status --short` 输出为空（含 untracked 的 .agents 笔记）才允许 commit+tag 发版——tag 指向的 commit 必须包含全部修改，严禁把部分改动留在工作区只发"干净子集"。

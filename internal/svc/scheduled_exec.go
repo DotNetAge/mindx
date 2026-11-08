@@ -110,11 +110,13 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 		d.scheduler.ReportResult(info.EntryID, info.RunID, err)
 		return
 	}
-	// 会话未绑定（空 ID）：现场落实——回退该智能体最近会话或新建。
-	// "new" 哨兵在 add/update 入口已解析为真实会话 ID，绝不落库，此处不认；
+	// 会话未绑定（空 ID 或 "new" 哨兵）：现场落实（新建任务专属会话线）。
+	// 两处都会落库：GUI/CLI 走 schedule.add 时已在入口解析成真实 ID，但 Agent 的
+	// Cron 工具直写存储、会把 "new" 原样写进来（工具参数说明就允许传 "new"），
+	// 执行侧必须一并兜底，否则到点即报「会话 new 未找到」、一次性机会直接作废。
 	// 仅内存态生效，不回写存储（避免与调度器一次性禁用/执行统计落盘竞态）；
 	// 落实失败才按失败回写，任务状态不留悬空 started。
-	if entry.SessionID == "" {
+	if entry.SessionID == "" || entry.SessionID == "new" {
 		// 首跑需要新建会话时，ensureScheduleSession 内部先阻塞式提炼标题
 		// （entry.Content 为提炼原料），得到标题后再创建会话（见 session_title.go）；
 		// 提炼失败也不重试，避免双重阻塞
