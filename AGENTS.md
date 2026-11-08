@@ -82,7 +82,7 @@
 
 * 调度任务有两条写入通路，口径必须一致：RPC `schedule.add` 在 [handler_schedule.go](internal/svc/handler_schedule.go) 入口把空 ID 与 `"new"` 哨兵落实成真实会话；Agent 的 `Cron` 工具（`internal/tools/cron.go`）**直写 store、原样落库**，而其参数说明本身允许传 `"new"`。凡新增写入口，禁止假设「哨兵不会落库」，执行侧必须兜底（`scheduled_exec.go` 现把 `""` 与 `"new"` 同视为未绑定，运行前落实会话线）。
 * 排障铁律：用户说「定时任务没执行」时，先查 `~/.mindx/logs/daemon.log` 的 `schedule job fired`——有 fired 说明调度器正常，问题在随后几十毫秒内的会话落实/加载；无 fired 才查 reload、cron 表达式与时区。「到点即失败」和「根本没调度」是两类问题。
-* 调度任务落库的 `project_dir` 不能为空（ensureScheduleSession 建会话要求工作目录归属），Cron 工具少传 `project_dir` 时任务会到点才炸，创建时不报错。
+* 调度任务落库的 `project_dir` 不能为空（ensureScheduleSession 建会话要求工作目录归属）。Agent 的 `Cron` 工具在创建时按「显式传参 > 当前会话工作目录」回填，两者都没有就当场拒绝并给出人话指引（禁止静默落库、留给执行期才炸）。改动此处必须跑 `internal/tools/cron_test.go` 的 Cron 用例：缺目录拒绝、显式目录落库、会话目录回填三条都在。
 
 ## 发版纪律（2026-11-04 用户定案）
 

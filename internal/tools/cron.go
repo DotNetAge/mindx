@@ -91,7 +91,7 @@ func (t *Cron) Info() *tools.ToolInfo {
 			{
 				Name:        "project_dir",
 				Type:        "string",
-				Description: "任务执行的工作目录。",
+				Description: "任务执行的工作目录（绝对路径）。省略时取当前会话的工作目录；当前会话也没有工作目录时创建会失败并要求显式提供。",
 				Required:    false,
 			},
 		},
@@ -205,6 +205,21 @@ func (t *Cron) createEntry(ctx context.Context, params map[string]any) (any, err
 	sessionID, _ := sessionIDRaw.(string)
 	projectDirRaw, _ := getParam(params, "project_dir")
 	projectDir, _ := projectDirRaw.(string)
+	// 工作目录缺省时取当前会话的项目目录：调度到点会新建专属会话，会话必须归属
+	// 一个工作目录（否则到点才炸「project_dir 不能为空」）；创建阶段就拿不到目录
+	// 就当场拒绝并给出人话指引，禁止静默落库留给执行期报错。
+	if projectDir == "" {
+		if tc := tools.GetToolContext(ctx); tc != nil && tc.Session != nil {
+			projectDir = tc.Session.ProjectDir()
+		}
+	}
+	if projectDir == "" {
+		return nil, fmt.Errorf("%s", tools.BuildGuide(
+			"创建定时任务被拒绝：没有可用的工作目录",
+			"定时任务到点会新建一个专属会话去执行，该会话必须归属某个工作目录才能落库",
+			"先自查：本次对话是否已选择工作目录？没有的话，显式传 project_dir（绝对路径，如 /Users/ray/workspaces/xxx）后重新调用",
+		))
+	}
 
 	entry := &scheduler.ScheduleEntry{
 		ID:         id,
@@ -270,7 +285,7 @@ func (t *Cron) updateEntry(ctx context.Context, params map[string]any) (any, err
 		}
 	}
 	if v, ok := getParam(params, "project_dir"); ok {
-		if s, ok := v.(string); ok {
+		if s, ok := v.(string); ok && s != "" {
 			existing.ProjectDir = s
 		}
 	}

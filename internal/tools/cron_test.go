@@ -2,12 +2,16 @@ package tools
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	gblogs "github.com/DotNetAge/goharness/logging"
+	ghsession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/goharness/tools"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
+	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
 
 func newCronForTest(t *testing.T) tools.FuncTool {
@@ -29,6 +33,7 @@ func TestCronCreateWithScheduledAt(t *testing.T) {
 		"agent":        "writer",
 		"content":      "巡检任务",
 		"scheduled_at": future,
+		"project_dir":  t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("scheduled_at 创建失败：%v", err)
@@ -80,5 +85,72 @@ func TestCronCreateScheduledAtInPast(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "已过") {
 		t.Fatalf("过去时间应报已过错误，实际：%v", err)
+	}
+}
+
+func TestCronCreateWithoutProjectDirRejected(t *testing.T) {
+	cron := newCronForTest(t)
+
+	// 无工具上下文（拿不到当前会话工作目录）且未显式传 project_dir：
+	// 必须在创建阶段拒绝，禁止静默落库到点才炸「project_dir 不能为空」
+	_, err := cron.Execute(context.Background(), map[string]any{
+		"action":    "create",
+		"agent":     "writer",
+		"content":   "巡检任务",
+		"cron_expr": "0 0 9 * * *",
+	})
+	if err == nil || !strings.Contains(err.Error(), "工作目录") {
+		t.Fatalf("缺工作目录应在创建阶段拒绝，实际：%v", err)
+	}
+}
+
+func TestCronCreateKeepsProjectDir(t *testing.T) {
+	cron := newCronForTest(t)
+	dir := t.TempDir()
+
+	out, err := cron.Execute(context.Background(), map[string]any{
+		"action":      "create",
+		"agent":       "writer",
+		"content":     "巡检任务",
+		"cron_expr":   "0 0 9 * * *",
+		"project_dir": dir,
+	})
+	if err != nil {
+		t.Fatalf("显式 project_dir 创建失败：%v", err)
+	}
+	entry := out.(map[string]any)["entry"].(*scheduler.ScheduleEntry)
+	if entry.ProjectDir != dir {
+		t.Fatalf("落库的工作目录不对：期望 %q，实际 %q", dir, entry.ProjectDir)
+	}
+}
+
+// 未传 project_dir 时按当前会话的工作目录落库：这是大秘自建定时任务的常态路径，
+// 缺省值必须在创建阶段就补齐，而不是留给到点执行时报「project_dir 不能为空」
+func TestCronCreateDefaultsProjectDirFromSession(t *testing.T) {
+	cron := newCronForTest(t)
+	dir := t.TempDir()
+
+	store, err := mindxses.NewRoutedSessionStore(filepath.Join(t.TempDir(), "session_dirs.json"))
+	if err != nil {
+		t.Fatalf("初始化会话存储失败：%v", err)
+	}
+	sess, err := ghsession.New("assistant", "", dir, store, gblogs.DefaultLogger())
+	if err != nil {
+		t.Fatalf("构造会话失败：%v", err)
+	}
+	ctx := tools.WithToolContext(context.Background(), &tools.ToolContext{Session: sess})
+
+	out, err := cron.Execute(ctx, map[string]any{
+		"action":    "create",
+		"agent":     "writer",
+		"content":   "巡检任务",
+		"cron_expr": "0 0 9 * * *",
+	})
+	if err != nil {
+		t.Fatalf("有会话上下文时创建失败：%v", err)
+	}
+	entry := out.(map[string]any)["entry"].(*scheduler.ScheduleEntry)
+	if entry.ProjectDir != dir {
+		t.Fatalf("未回填当前会话工作目录：期望 %q，实际 %q", dir, entry.ProjectDir)
 	}
 }

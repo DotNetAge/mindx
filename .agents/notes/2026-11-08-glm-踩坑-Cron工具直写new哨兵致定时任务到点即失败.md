@@ -25,6 +25,13 @@
   - 第二次探针带 `project_dir` → 18:39:18 触发，会话落实为真实 ULID，LLM 单轮完成，`last_status: success`。
 - 验收后已删除探针任务文件与探针会话。
 
+## 后续：project_dir 同类坑一并修掉
+
+- 现象：`Cron` 工具不传 `project_dir` 时创建成功、到点才炸「project_dir 不能为空（工作目录分片存储要求会话归属明确）」。
+- 修法（internal/tools/cron.go 创建入口）：`显式 project_dir > 当前会话 ProjectDir()（tools.GetToolContext(ctx).Session）` 回填；两者都没有就创建阶段直接拒绝，返回人话指引（「定时任务到点会新建专属会话，必须归属某个工作目录」）；update 时空串不再覆盖已有目录；参数说明同步改写。
+- 回归测试 `internal/tools/cron_test.go`：缺目录拒绝、显式目录落库、会话目录回填（用 `mindxses.NewRoutedSessionStore` + `ghsession.New` 造真会话）三条；原有用例补 `project_dir`。
+- 部署：`make restart`（21:07 新二进制上线，`vcs.modified=true`）。
+
 ## 下次我看到「某个定时任务到点没动静」，我将
 
 先 grep `schedule job fired` 定位到点是「没调度」还是「触发后秒失败」；若是后者，看 `background turn` 行里的 session_id 是否为哨兵（`new`/空）或 project_dir 是否为空，再对照该任务是由 `Cron` 工具还是 RPC 创建。
