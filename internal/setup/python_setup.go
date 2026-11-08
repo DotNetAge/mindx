@@ -2,6 +2,7 @@ package setup
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/DotNetAge/mindx/internal/core"
 	"github.com/DotNetAge/mindx/internal/i18n"
@@ -98,6 +100,35 @@ func GetVenvPipPath(venvPath string) string {
 	return filepath.Join(venvPath, "bin", "pip")
 }
 
+// pythonInstallTimeout / pipInstallTimeout 给外部下载命令设硬上限：网络不可用时
+// brew/apt/winget/pip 会长时间不返回，上层装配流程（mindx doctor --fix）跟着一起挂住，
+// 用户只能看到一直转圈。超时后统一收敛成「暂时无法下载 + 手动安装办法」的可操作提示。
+const (
+	pythonInstallTimeout = 5 * time.Minute
+	pipInstallTimeout    = 5 * time.Minute
+)
+
+// errCommandTimeout 标识「命令在超时预算内没有返回」，与其它失败分开收口：
+// 前者翻译成网络不可用的可操作提示，后者保留原始错误便于排查。
+var errCommandTimeout = errors.New("命令执行超时")
+
+// runWithTimeout 执行外部命令并强制限时。
+func runWithTimeout(timeout time.Duration, name string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return errCommandTimeout
+		}
+		return err
+	}
+	return nil
+}
+
 func InstallPipRequirements(venvPath string, reqFiles ...string) error {
 	pipPath := GetVenvPipPath(venvPath)
 
@@ -110,10 +141,19 @@ func InstallPipRequirements(venvPath string, reqFiles ...string) error {
 			continue
 		}
 
-		cmd := exec.Command(pipPath, "install", "-r", reqFile)
+		ctx, cancel := context.WithTimeout(context.Background(), pipInstallTimeout)
+		// 显式写死 pip 的下载预算：单次读超时 15 秒、最多重试 3 次，
+		// 避免默认重试策略在网络抖动时把等待拖长
+		cmd := exec.CommandContext(ctx, pipPath, "install", "--timeout", "15", "--retries", "3", "-r", reqFile)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
+		err := cmd.Run()
+		timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded)
+		cancel()
+		if err != nil {
+			if timedOut {
+				return fmt.Errorf(i18n.T("setup.python.pip.network"), reqFile)
+			}
 			return fmt.Errorf("pip install requirements (%s): %w\n%s", reqFile, err, stderr.String())
 		}
 	}
@@ -138,10 +178,13 @@ func installPythonMacOS() error {
 	if _, err := exec.LookPath("brew"); err != nil {
 		return errors.New(i18n.T("setup.python.homebrew.missing"))
 	}
-	cmd := exec.Command("brew", "install", "python3")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := runWithTimeout(pythonInstallTimeout, "brew", "install", "python3"); err != nil {
+		if errors.Is(err, errCommandTimeout) {
+			return errors.New(i18n.T("setup.python.install.network.macos"))
+		}
+		return fmt.Errorf(i18n.T("setup.python.install.failed.macos"), err)
+	}
+	return nil
 }
 
 func installPythonLinux() error {
@@ -160,24 +203,23 @@ func installPythonLinux() error {
 	}
 
 	parts := strings.Split(pkgArgs, " ")
-	args := append([]string{pkgManager}, parts...)
-
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf(i18n.T("setup.linux.root.required"), pkgManager, pkgArgs)
+	if err := runWithTimeout(pythonInstallTimeout, pkgManager, parts...); err != nil {
+		if errors.Is(err, errCommandTimeout) {
+			return errors.New(i18n.T("setup.python.install.network.linux"))
+		}
+		return fmt.Errorf(i18n.T("setup.python.install.failed.linux"), err)
 	}
 	return nil
 }
 
 func installPythonWindows() error {
 	if execCmd("winget", "--version") == nil {
-		cmd := exec.Command("winget", "install", "Python.Python.3.12", "--accept-source-agreements", "--silent")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err == nil {
+		err := runWithTimeout(pythonInstallTimeout, "winget", "install", "Python.Python.3.12", "--accept-source-agreements", "--silent")
+		if err == nil {
 			return nil
+		}
+		if errors.Is(err, errCommandTimeout) {
+			return errors.New(i18n.T("setup.python.install.network.windows"))
 		}
 	}
 	return errors.New(i18n.T("setup.python.manual.install"))
