@@ -107,10 +107,10 @@ func applyPolicyOverrides(p *sandbox.SandboxPolicy, ov policyOverrides, logger l
 }
 
 // expandTilde 把 "~" 或 "~/..." 前缀展开为用户主目录；其余原样返回。
-// "~/.mindx" 前缀按平台偏好目录展开（M11）：Windows 上用户数据实际落在
-// %APPDATA%\mindx（DefaultUserPrefsDir），若仍按 home/.mindx 字面展开，USER.md
-// 等豁免条目将错位命中不了真实路径，读写触发授权。主目录解析失败时原样保留
-// "~/..." 前缀——该条目将无法命中任何真实路径（静默失效，方向 fail-closed），无安全风险。
+// "~/.mindx" 前缀按平台偏好目录展开（M11）：用户数据固定落在 home/.mindx
+// （DefaultUserPrefsDir），按字面展开即可让 USER.md 等豁免条目命中真实路径。
+// 主目录解析失败时原样保留 "~/..." 前缀——该条目将无法命中任何真实路径
+// （静默失效，方向 fail-closed），无安全风险。
 func expandTilde(p string) string {
 	if p == "~" || strings.HasPrefix(p, "~/") {
 		rest := strings.TrimPrefix(strings.TrimPrefix(p, "~"), "/")

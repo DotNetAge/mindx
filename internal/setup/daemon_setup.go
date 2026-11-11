@@ -1,16 +1,11 @@
 package setup
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
-
-	"golang.org/x/text/encoding/unicode"
-	"golang.org/x/text/transform"
 
 	"github.com/DotNetAge/mindx/internal/core"
 )
@@ -24,7 +19,7 @@ func DaemonInstalled(workspaceDir string) bool {
 }
 
 func SetupDaemon(workspaceDir, binPath string) error {
-	// 工作目录兜底创建：三平台服务定义里的 WorkingDirectory 都指向它，
+	// 工作目录兜底创建：各平台服务定义里的 WorkingDirectory 都指向它，
 	// 目录缺失会让服务启动即失败并被反复重启。
 	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
 		return fmt.Errorf("创建工作目录失败: %w", err)
@@ -52,8 +47,6 @@ func SetupDaemon(workspaceDir, binPath string) error {
 		return setupDaemonMacOS(workspaceDir, binPath)
 	case "linux":
 		return setupDaemonLinux(workspaceDir, binPath)
-	case "windows":
-		return setupDaemonWindows(workspaceDir, binPath)
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
@@ -188,190 +181,6 @@ WantedBy=default.target
 	}
 
 	return nil
-}
-
-func setupDaemonWindows(workspaceDir, binPath string) error {
-	taskName := "MindXDaemon"
-	username := os.Getenv("USERNAME")
-	if username == "" {
-		if out, e := exec.Command("whoami").Output(); e == nil {
-			username = strings.TrimSpace(string(out))
-		}
-	}
-	if username == "" {
-		username = "%USERNAME%"
-	}
-
-	// Create VBS launcher that starts mindx with a hidden window (no Cmd popup on logon).
-	vbsPath := filepath.Join(workspaceDir, "bin", "MindXDaemon.vbs")
-	if err := os.MkdirAll(filepath.Dir(vbsPath), 0755); err != nil {
-		return fmt.Errorf("create bin dir: %w", err)
-	}
-	vbsContent := fmt.Sprintf(`CreateObject("WScript.Shell").Run "%s daemon", 0, False`, binPath)
-	if err := os.WriteFile(vbsPath, []byte(vbsContent), 0644); err != nil {
-		return fmt.Errorf("write vbs launcher: %w", err)
-	}
-
-	// Resolve wscript.exe path — handles non-C: system drives (e.g. D:\Windows\System32\wscript.exe)
-	systemRoot := os.Getenv("SystemRoot")
-	if systemRoot == "" {
-		systemRoot = "C:\\Windows"
-	}
-	wscriptPath := filepath.Join(systemRoot, "System32", "wscript.exe")
-
-	xmlContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo>
-    <Description>MindX Daemon</Description>
-  </RegistrationInfo>
-  <Triggers>
-    <LogonTrigger>
-      <Enabled>true</Enabled>
-      <UserId>%s</UserId>
-    </LogonTrigger>
-  </Triggers>
-  <Principals>
-    <Principal>
-      <UserId>%s</UserId>
-      <LogonType>InteractiveToken</LogonType>
-      <RunLevel>LeastPrivilege</RunLevel>
-    </Principal>
-  </Principals>
-  <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
-    <Priority>7</Priority>
-  </Settings>
-  <Actions>
-    <Exec>
-      <Command>%s</Command>
-      <Arguments>%s</Arguments>
-      <WorkingDirectory>%s</WorkingDirectory>
-    </Exec>
-  </Actions>
-</Task>`, username, username, wscriptPath, vbsPath, workspaceDir)
-
-	// Write temp XML file (schtasks /create /xml requires UTF-16LE with BOM)
-	tmpXML := filepath.Join(os.TempDir(), "MindXDaemon.xml")
-	if err := os.WriteFile(tmpXML, toUTF16LE(xmlContent), 0644); err != nil {
-		return fmt.Errorf("write task xml: %w", err)
-	}
-	defer func() { _ = os.Remove(tmpXML) }()
-
-	// Try schtasks /create first
-	if err := createSchtasks(taskName, tmpXML); err == nil {
-		recordInstallMethod(workspaceDir, "schtasks")
-		return nil
-	}
-
-	// Fallback: PowerShell New-ScheduledTask (more reliable on some Windows configs)
-	if err := setupDaemonWindowsPowerShell(vbsPath, workspaceDir, taskName); err != nil {
-		return err
-	}
-	recordInstallMethod(workspaceDir, "schtasks")
-	return nil
-}
-
-func createSchtasks(taskName, xmlPath string) error {
-	cmd := exec.Command("schtasks", "/create", "/tn", taskName, "/xml", xmlPath, "/f")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("schtasks: %s", decodeWindowsOutput(out))
-	}
-	return nil
-}
-
-func setupDaemonWindowsPowerShell(vbsPath, workspaceDir, taskName string) error {
-	psScript := fmt.Sprintf(`
-$ErrorActionPreference = 'Stop'
-$action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument '"%s"' -WorkingDirectory '%s'
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-$principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType InteractiveToken -RunLevel LeastPrivilege
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskName '%s' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force
-`, vbsPath, workspaceDir, taskName)
-
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", psScript)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("powershell fallback: %s", decodeWindowsOutput(out))
-	}
-	return nil
-}
-
-// toUTF16LE converts a UTF-8 string to UTF-16LE with BOM, as required by schtasks /xml.
-// Uses golang.org/x/text for correct surrogate pair handling (non-BMP characters).
-func toUTF16LE(s string) []byte {
-	enc := unicode.UTF16(unicode.LittleEndian, unicode.IgnoreBOM)
-
-	var buf bytes.Buffer
-	// Write BOM
-	buf.WriteByte(0xFF)
-	buf.WriteByte(0xFE)
-	// Encode the string using the transformer
-	writer := transform.NewWriter(&buf, enc.NewEncoder())
-	_, _ = writer.Write([]byte(s))
-	_ = writer.Close()
-	return buf.Bytes()
-}
-
-// decodeWindowsOutput attempts to decode Windows command output.
-// Tries UTF-8 first, then GBK (common on Chinese Windows), then raw bytes.
-func decodeWindowsOutput(raw []byte) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	// Try UTF-8 first
-	s := string(raw)
-	if utf8Valid(s) {
-		return s
-	}
-	// Try GBK (common on Chinese Windows systems)
-	if decoded, err := decodeGBK(raw); err == nil && utf8Valid(decoded) {
-		return decoded
-	}
-	// Fallback: raw string (may have replacement chars)
-	return s
-}
-
-// utf8Valid checks if a string contains only valid UTF-8 sequences.
-func utf8Valid(s string) bool {
-	for _, r := range s {
-		if r == '\ufffd' {
-			return false
-		}
-	}
-	return true
-}
-
-// decodeGBK tries to decode bytes as GBK/GB2312 encoding.
-func decodeGBK(b []byte) (string, error) {
-	var runes []rune
-	i := 0
-	for i < len(b) {
-		if b[i] >= 0x81 && b[i] <= 0xFE && i+1 < len(b) {
-			next := b[i+1]
-			if (next >= 0x40 && next <= 0x7E) || (next >= 0x80 && next <= 0xFE) {
-				runes = append(runes, rune(uint16(b[i])<<8|uint16(next)))
-				i += 2
-				continue
-			}
-		}
-		runes = append(runes, rune(b[i]))
-		i++
-	}
-	if len(runes) == 0 {
-		return "", fmt.Errorf("empty output")
-	}
-	result := string(runes)
-	for _, r := range result {
-		if r >= 0x20 && r != '\ufffd' {
-			return result, nil
-		}
-	}
-	return "", fmt.Errorf("invalid GBK")
 }
 
 // ── Sandbox / package-manager environment detection ─────────────────────

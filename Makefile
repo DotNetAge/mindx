@@ -20,7 +20,7 @@
 
 .PHONY: build build-all setup-cross clear install run run-daemon restart stop test clean docs help \
         dev uninstall sync \
-        release release-notes release-publish release-homebrew release-winget publish \
+        release release-notes release-publish release-homebrew publish \
         docker .env docker-build docker-run docker-run-daemon docker-push docker-release docker-clean \
         ci cd deps-update \
         pre-commit version info changelog \
@@ -121,18 +121,17 @@ build: fmt pre-build
 	@ls -lh $(BUILD_DIR)/$(BINARY_NAME)
 
 ## build-all: 编译所有主流平台二进制至 dist/ (前置: fmt → lint)
-build-all: fmt lint pre-build build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 build-windows-amd64
+build-all: fmt lint pre-build build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64
 	@echo "$(GREEN)✅ All platforms built! Check $(BUILD_DIR)/$(NC)"
 
-## setup-cross: 安装交叉编译工具链（用于 Linux/Windows 目标）
+## setup-cross: 安装交叉编译工具链（用于 Linux 目标）
 setup-cross:
 	@echo "$(GREEN)➡ Installing cross-compilation toolchains...$(NC)"
 	@if command -v brew >/dev/null 2>&1; then \
-		brew install FiloSottile/musl-cross/musl-cross mingw-w64; \
+		brew install FiloSottile/musl-cross/musl-cross; \
 	else \
 		echo "$(YELLOW)⚠  Homebrew not found. Install manually:$(NC)"; \
-		echo "  Linux:   brew install FiloSottile/musl-cross/musl-cross"; \
-		echo "  Windows: brew install mingw-w64"; \
+		echo "  brew install FiloSottile/musl-cross/musl-cross"; \
 	fi
 	@echo "$(GREEN)✅ Cross-compilation toolchains installed! Run 'make build-all' for all platforms.$(NC)"
 
@@ -378,23 +377,6 @@ build-darwin-arm64:
 	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/darwin-arm64/$(BINARY_NAME) .
 	@echo "$(GREEN)✅ darwin/arm64 done$(NC)"
 
-## build-windows-amd64: Windows x86_64
-build-windows-amd64:
-	@echo "$(GREEN)➡ Building for windows/amd64...$(NC)"
-	@mkdir -p $(BUILD_DIR)/windows-amd64
-	@if command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then \
-		if CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/windows-amd64/$(BINARY_NAME).exe . 2>/dev/null; then \
-			echo "$(GREEN)✅ windows/amd64 done (CGO)$(NC)"; \
-		else \
-			echo "$(YELLOW)⚠  windows/amd64 CGO build failed, trying CGO_ENABLED=0...$(NC)"; \
-			CGO_ENABLED=0 GOOS=windows GOARCH=amd64 $(GO) build $(GOFLAGS) -o $(BUILD_DIR)/windows-amd64/$(BINARY_NAME).exe . && \
-			echo "$(GREEN)✅ windows/amd64 done (CGO_ENABLED=0)$(NC)" || \
-			echo "$(RED)❌ windows/amd64 failed$(NC)"; \
-		fi \
-	else \
-		echo "$(YELLOW)⚠  windows/amd64 skipped — install: brew install mingw-w64$(NC)"; \
-	fi
-
 # =============================================================================
 # 发布目标
 # =============================================================================
@@ -402,7 +384,7 @@ build-windows-amd64:
 REL = releases
 V   = $(VERSION_NUM)
 
-# 辅助：打包一个平台为 tar.gz（或 .zip），跳过缺失的二进制
+# 辅助：打包一个平台为 tar.gz，跳过缺失的二进制
 define package-platform
 	@mkdir -p $(REL)
 	@platform_dir="$(BUILD_DIR)/$(1)-$(2)"; \
@@ -412,12 +394,7 @@ define package-platform
 		exit 0; \
 	fi; \
 	archive="$(REL)/$(BINARY_NAME)-$(V)-$(1)-$(2).tar.gz"; \
-	if [ "$(1)" = "windows" ]; then \
-		archive="$(REL)/$(BINARY_NAME)-$(V)-$(1)-$(2).zip"; \
-		(cd "$$platform_dir" && zip -q "$$OLDPWD/$$archive" "$(BINARY_NAME).exe"); \
-	else \
-		tar czf "$$archive" -C "$$platform_dir" "$(BINARY_NAME)"; \
-	fi; \
+	tar czf "$$archive" -C "$$platform_dir" "$(BINARY_NAME)"; \
 	echo "  ✅ $$(basename $$archive)  $$(ls -lh $$archive | awk '{print $$5}')"
 endef
 
@@ -428,9 +405,8 @@ release: clean build-all
 	$(call package-platform,darwin,arm64,)
 	$(call package-platform,linux,amd64,)
 	$(call package-platform,linux,arm64,)
-	$(call package-platform,windows,amd64,.exe)
 	@echo "$(GREEN)🔐 Checksums...$(NC)"
-	@cd $(REL) && shasum -a 256 *.tar.gz 2>/dev/null > checksums.txt; shasum -a 256 *.zip 2>/dev/null >> checksums.txt; cat checksums.txt
+	@cd $(REL) && shasum -a 256 *.tar.gz 2>/dev/null > checksums.txt; cat checksums.txt
 	@echo "$(GREEN)✅ Release packages in $(REL)/$(NC)"
 	@ls -lh $(REL)/
 
@@ -442,9 +418,9 @@ release-notes:
 	@printf '| %s | %s | %s |\n' "Platform" "File" "SHA256" >> RELEASE_NOTES.md
 	@printf '|%s|%s|%s|\n' "----------" "------" "------" >> RELEASE_NOTES.md
 	@{ \
-		for f in $(REL)/*.tar.gz $(REL)/*.zip; do \
+		for f in $(REL)/*.tar.gz; do \
 			[ -f "$$f" ] || continue; \
-			platform=$$(basename "$$f" | sed 's/\.tar\.gz$$//;s/\.zip$$//;s/^[^-]*-[^-]*-//'); \
+			platform=$$(basename "$$f" | sed 's/\.tar\.gz$$//;s/^[^-]*-[^-]*-//'); \
 			sha=$$(shasum -a 256 "$$f" | cut -d' ' -f1); \
 			printf '| %s | %s | %s |\n' "$$platform" "$$(basename "$$f")" "$$sha"; \
 		done; \
@@ -475,67 +451,7 @@ release-homebrew:
 	@bash scripts/homebrew-release.sh
 	@echo "$(GREEN)✅ Formula generated in dist/$(NC)"
 
-## release-winget: 提交 winget-pkgs PR（需 Windows zip 已发布到 GitHub Release）
-release-winget:
-	@echo "$(GREEN)📦 Submitting winget-pkgs PR...$(NC)"
-	@SHA256=$$(shasum -a 256 "$(REL)/$(BINARY_NAME)-$(V)-windows-amd64.zip" 2>/dev/null | cut -d' ' -f1); \
-	if [ -z "$$SHA256" ]; then \
-		echo "$(RED)❌ Windows zip not found in $(REL)/$(NC)"; \
-		exit 1; \
-	fi; \
-	WINGET_DIR=/tmp/winget-pkgs; \
-	MANIFEST_DIR="manifests/d/DotNetAge/Mindx/$(V)"; \
-	MANIFEST_PATH="$$MANIFEST_DIR/DotNetAge.Mindx.yaml"; \
-	GH_REPO="DotNetAge/mindx"; \
-	GIT_USER=$$(git config user.name); \
-	GIT_EMAIL=$$(git config user.email); \
-	rm -rf "$$WINGET_DIR"; \
-	gh repo fork microsoft/winget-pkgs --clone --remote=false 2>/dev/null || true; \
-	git clone --depth=1 "https://github.com/$$GIT_USER/winget-pkgs.git" "$$WINGET_DIR" 2>/dev/null || { \
-		echo "$(YELLOW)⚠  Fork not found, cloning upstream...$(NC)"; \
-		git clone --depth=1 "https://github.com/microsoft/winget-pkgs.git" "$$WINGET_DIR"; \
-		cd "$$WINGET_DIR" && gh repo fork --remote=false; \
-		cd "$(CURDIR)"; \
-	}; \
-	mkdir -p "$$WINGET_DIR/$$MANIFEST_DIR"; \
-	cat > "$$WINGET_DIR/$$MANIFEST_PATH" <<-MANIFEST
-	PackageIdentifier: DotNetAge.Mindx
-	PackageVersion: $(V)
-	PackageLocale: en-US
-	Publisher: DotNetAge
-	PublisherUrl: https://github.com/$(GH_REPO)
-	PackageName: MindX
-	License: MIT
-	ShortDescription: MindX - AI-native multi-agent conversation platform
-	Tags: AI agent cli llm mindx
-	Installers:
-	  - Architecture: x64
-	    InstallerType: zip
-	    NestedInstallerType: portable
-	    NestedInstallerFiles:
-	      - RelativeFilePath: $(BINARY_NAME).exe
-	        PortableCommandAlias: mindx
-	    InstallerUrl: https://github.com/$(GH_REPO)/releases/download/v$(V)/$(BINARY_NAME)-$(V)-windows-amd64.zip
-	    InstallerSha256: $$SHA256
-	ManifestType: singleton
-	ManifestVersion: 1.9.0
-	MANIFEST; \
-	cd "$$WINGET_DIR" && \
-	git add "$$MANIFEST_PATH" && \
-	git -c user.name="$$GIT_USER" -c user.email="$$GIT_EMAIL" \
-		commit -m "DotNetAge.Mindx v$(V)" && \
-	git push origin HEAD:main 2>&1 && \
-	gh pr create \
-		--repo microsoft/winget-pkgs \
-		--head "$$GIT_USER:main" \
-		--title "DotNetAge.Mindx version $(V)" \
-		--body "New version: **$(V)**\n\n- Package: DotNetAge.Mindx\n- URL: https://github.com/$(GH_REPO)" \
-		--label "package-submission" && \
-	echo "$(GREEN)✅ winget-pkgs PR submitted!$(NC)" || \
-	echo "$(YELLOW)⚠  PR creation failed. Manifest saved at $$WINGET_DIR/$$MANIFEST_PATH$(NC)"; \
-	cd "$(CURDIR)"
-
-## publish: 一键发布 — 打标签 → 编译 → GitHub Release → Homebrew → Winget
+## publish: 一键发布 — 打标签 → 编译 → GitHub Release → Homebrew
 publish:
 	@echo "$(GREEN)═══════════════════════════════════════════════════════════════$(NC)"
 	@echo "$(GREEN)  MindX 一键发布管道$(NC)"
@@ -595,12 +511,6 @@ publish:
 	@# ── Homebrew ──
 	@$(MAKE) release-homebrew
 	@echo ""
-	@# ── Winget ──
-	@read -p "  提交 winget-pkgs PR? [y/N]: " winget_confirm; \
-	if [ "$$winget_confirm" = "y" ] || [ "$$winget_confirm" = "Y" ]; then \
-		$(MAKE) release-winget; \
-	fi
-	@echo ""
 	@# ── Docker (本地构建推送，需 runtime/bin/mindx 和 runtime/data) ──
 	@read -p "  推送 Docker 镜像? (make docker-release) [y/N]: " docker_confirm; \
 	if [ "$$docker_confirm" = "y" ] || [ "$$docker_confirm" = "Y" ]; then \
@@ -613,7 +523,6 @@ publish:
 	@echo ""
 	@echo "  GitHub:   https://github.com/$(GITHUB_REPO)/releases/tag/v$(VERSION_NUM)"
 	@echo "  Homebrew: brew install $(HOMEBREW_TAP)/$(BINARY_NAME)"
-	@echo "  Winget:   winget install DotNetAge.Mindx"
 	@echo "  Docker:   docker pull $(BINARY_NAME):v$(VERSION_NUM)"
 	@echo ""
 
@@ -853,14 +762,13 @@ help:
 	@echo ""
 	@echo "$(YELLOW)📦 Build Targets:$(NC)"
 	@echo "  $(GREEN)build$(NC)           Compile for current platform"
-	@echo "  $(GREEN)build-all$(NC)      Build all platforms (darwin + linux + windows)"
+	@echo "  $(GREEN)build-all$(NC)      Build all platforms (darwin + linux)"
 	@echo "  $(GREEN)build-debug$(NC)     Compile debug binary (with symbols)"
 	@echo "  $(GREEN)setup-cross$(NC)     Install cross-compilation toolchains (brew)"
 	@echo "  $(GREEN)build-linux-amd64$(NC)   Linux x86_64"
 	@echo "  $(GREEN)build-linux-arm64$(NC)   Linux ARM64"
 	@echo "  $(GREEN)build-darwin-amd64$(NC)   macOS Intel"
 	@echo "  $(GREEN)build-darwin-arm64$(NC)   macOS Apple Silicon"
-	@echo "  $(GREEN)build-windows-amd64$(NC)  Windows x86_64"
 	@echo "  $(GREEN)install$(NC)         Install to system PATH (requires sudo)"
 	@echo "  $(GREEN)uninstall$(NC)       Remove from system PATH"
 	@echo ""

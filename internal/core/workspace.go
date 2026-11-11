@@ -6,24 +6,15 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/pkg/logging"
 )
 
-// DefaultUserPrefsDir returns the platform-appropriate user preferences directory.
+// DefaultUserPrefsDir returns the user preferences directory (~/.mindx).
 // This is the root directory for all MindX user data (config, sessions, memory, skills, etc.).
-//   - macOS/Linux: ~/.mindx
-//   - Windows:     %APPDATA%\mindx  (typically C:\Users\<user>\AppData\Roaming\mindx)
 func DefaultUserPrefsDir() string {
-	if runtime.GOOS == "windows" {
-		appData := os.Getenv("APPDATA")
-		if appData != "" {
-			return filepath.Join(appData, "mindx")
-		}
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return filepath.Join(".", ".mindx")

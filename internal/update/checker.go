@@ -109,8 +109,6 @@ func (r *ReleaseInfo) FindAssetForPlatform(os, arch string) (string, string, err
 	switch os {
 	case "darwin", "linux":
 		suffix = fmt.Sprintf("%s-%s.tar.gz", os, arch)
-	case "windows":
-		suffix = fmt.Sprintf("windows-%s.zip", arch)
 	default:
 		return "", "", fmt.Errorf("unsupported OS: %s", os)
 	}

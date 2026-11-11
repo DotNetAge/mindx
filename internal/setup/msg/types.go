@@ -20,10 +20,6 @@ type PythonDecisionMsg struct {
 	Version string
 }
 
-type PathDecisionMsg struct {
-	AddToPath bool
-}
-
 type StepNextMsg struct{}
 type StepPrevMsg struct{}
 type SkipStepMsg struct{}

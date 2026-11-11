@@ -15,26 +15,14 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// ResolveLogDir returns the absolute path to the MindX log directory.
-//   - macOS/Linux: ~/.mindx/logs
-//   - Windows:     %APPDATA%\mindx\logs
+// ResolveLogDir returns the absolute path to the MindX log directory (~/.mindx/logs).
 func ResolveLogDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "logs"
 	}
 
-	var base string
-	if runtime.GOOS == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			base = filepath.Join(appData, "mindx")
-		} else {
-			base = filepath.Join(home, ".mindx")
-		}
-	} else {
-		base = filepath.Join(home, ".mindx")
-	}
-
+	base := filepath.Join(home, ".mindx")
 	logDir := filepath.Join(base, "logs")
 
 	if err := os.MkdirAll(logDir, 0755); err != nil {

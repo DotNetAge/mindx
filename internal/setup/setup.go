@@ -83,11 +83,6 @@ func RunWizard(modelsPath, providersPath, clientProvidersPath, agentsDir, worksp
 		cfg.Python = result.PythonInfo
 	}
 
-	// PATH 配置（仅 Windows，已由 wizard 内部执行）
-	if !result.PathOK && result.PathErr != nil {
-		fmt.Printf("⚠️  PATH configuration failed: %v\n", result.PathErr)
-	}
-
 	if err := cfg.Save(); err != nil {
 		return fmt.Errorf(i18n.T("config.error.serialize.failed"), err)
 	}

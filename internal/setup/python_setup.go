@@ -20,12 +20,7 @@ import (
 func DetectPython() core.PythonConfig {
 	info := core.PythonConfig{}
 
-	pythonCommands := []string{"python3", "python"}
-	if runtime.GOOS == "windows" {
-		pythonCommands = []string{"python", "python3", "py"}
-	}
-
-	for _, cmd := range pythonCommands {
+	for _, cmd := range []string{"python3", "python"} {
 		out, err := exec.Command(cmd, "--version").Output()
 		if err != nil {
 			continue
@@ -55,12 +50,7 @@ func SetupPython(workspaceDir string) (core.PythonConfig, error) {
 	venvPath := filepath.Join(workspaceDir, ".venv")
 
 	if _, err := os.Stat(venvPath); os.IsNotExist(err) {
-		pythonCmd := "python3"
-		if runtime.GOOS == "windows" {
-			pythonCmd = "python"
-		}
-
-		cmd := exec.Command(pythonCmd, "-m", "venv", venvPath)
+		cmd := exec.Command("python3", "-m", "venv", venvPath)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return info, fmt.Errorf(i18n.T("setup.python.venv.create.failed"), err, string(out))
 		}
@@ -94,14 +84,11 @@ func findRequirementsFiles(root string) []string {
 }
 
 func GetVenvPipPath(venvPath string) string {
-	if runtime.GOOS == "windows" {
-		return filepath.Join(venvPath, "Scripts", "pip")
-	}
 	return filepath.Join(venvPath, "bin", "pip")
 }
 
 // pythonInstallTimeout / pipInstallTimeout 给外部下载命令设硬上限：网络不可用时
-// brew/apt/winget/pip 会长时间不返回，上层装配流程（mindx doctor --fix）跟着一起挂住，
+// brew/apt/pip 会长时间不返回，上层装配流程（mindx doctor --fix）跟着一起挂住，
 // 用户只能看到一直转圈。超时后统一收敛成「暂时无法下载 + 手动安装办法」的可操作提示。
 const (
 	pythonInstallTimeout = 5 * time.Minute
@@ -167,8 +154,6 @@ func InstallPython() error {
 		return installPythonMacOS()
 	case "linux":
 		return installPythonLinux()
-	case "windows":
-		return installPythonWindows()
 	default:
 		return fmt.Errorf(i18n.T("setup.python.unsupported.platform"), runtime.GOOS)
 	}
@@ -210,19 +195,6 @@ func installPythonLinux() error {
 		return fmt.Errorf(i18n.T("setup.python.install.failed.linux"), err)
 	}
 	return nil
-}
-
-func installPythonWindows() error {
-	if execCmd("winget", "--version") == nil {
-		err := runWithTimeout(pythonInstallTimeout, "winget", "install", "Python.Python.3.12", "--accept-source-agreements", "--silent")
-		if err == nil {
-			return nil
-		}
-		if errors.Is(err, errCommandTimeout) {
-			return errors.New(i18n.T("setup.python.install.network.windows"))
-		}
-	}
-	return errors.New(i18n.T("setup.python.manual.install"))
 }
 
 func execCmd(name string, args ...string) error {

@@ -13,7 +13,7 @@ import (
 
 var installCmd = &cobra.Command{
 	Use:   "install",
-	Short: "Install MindX to system (daemon + PATH + shortcut)",
+	Short: "Install MindX to system (daemon + PATH)",
 	Long: `Installs MindX and configures all necessary system integrations.
 
 Behavior adapts to how MindX was installed:
@@ -21,10 +21,9 @@ Behavior adapts to how MindX was installed:
   - **Package manager** (Homebrew, apt, etc.): Skips binary copy and PATH setup.
     Only registers the daemon service. The package manager owns the binary.
   - **Manual download**: Copies binary to a stable location, adds to PATH,
-    registers daemon, and creates desktop shortcut (Windows).
+    and registers daemon.
 
-This command requires administrator / elevated privileges on Windows (for System PATH
-and schtasks registration). On macOS/Linux, user-level installation is sufficient.
+On macOS/Linux, user-level installation is sufficient.
 
 Examples:
   mindx install                  # Smart install (auto-detects source)
@@ -36,12 +35,11 @@ Examples:
 }
 
 var (
-	installDir        string
-	installNoDaemon   bool
-	installNoPath     bool
-	installNoShortcut bool
-	installForceCopy  bool
-	installSilent     bool
+	installDir       string
+	installNoDaemon  bool
+	installNoPath    bool
+	installForceCopy bool
+	installSilent    bool
 )
 
 func init() {
@@ -49,7 +47,6 @@ func init() {
 	installCmd.Flags().StringVar(&installDir, "dir", "", "Custom install directory (default: platform-specific)")
 	installCmd.Flags().BoolVar(&installNoDaemon, "no-daemon", false, "Skip daemon/service registration")
 	installCmd.Flags().BoolVar(&installNoPath, "no-path", false, "Skip PATH configuration")
-	installCmd.Flags().BoolVar(&installNoShortcut, "no-shortcut", false, "Skip desktop shortcut creation")
 	installCmd.Flags().BoolVar(&installForceCopy, "force-copy", false, "Force copy binary even from managed location")
 	installCmd.Flags().BoolVarP(&installSilent, "silent", "s", false, "Skip the interactive setup wizard (provider/model); install without configuring a model")
 }
@@ -88,11 +85,10 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	opts := setup.InstallOptions{
-		InstallDir:   installDir,
-		SkipDaemon:   installNoDaemon,
-		SkipPath:     installNoPath,
-		SkipShortcut: installNoShortcut,
-		ForceCopy:    installForceCopy,
+		InstallDir: installDir,
+		SkipDaemon: installNoDaemon,
+		SkipPath:   installNoPath,
+		ForceCopy:  installForceCopy,
 	}
 
 	result, err := setup.Install(opts)
@@ -130,9 +126,6 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	} else if !installNoDaemon {
 		// 注册已尝试但失败：不打印「安装完成」，明确失败并指引。
 		return fmt.Errorf("后台服务注册失败（原因见上方输出）；解决问题后重新运行 'mindx install' 即可")
-	}
-	if result.ShortcutCreated {
-		fmt.Println("   快捷方式: 桌面")
 	}
 
 	fmt.Println()

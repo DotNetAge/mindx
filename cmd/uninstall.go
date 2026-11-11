@@ -10,17 +10,16 @@ import (
 
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall",
-	Short: "Uninstall MindX from system (daemon + PATH + shortcut)",
+	Short: "Uninstall MindX from system (daemon + PATH)",
 	Long: `Removes MindX system integrations, reversing the installation:
 
   - Stops and unregisters the daemon service
   - Removes the install directory from system PATH
-  - Removes desktop shortcut (Windows only)
   - Deletes installed binary (unless managed by package manager)
 
 Behavior adapts to how MindX was installed:
   - **Package manager** (Homebrew, etc.): Skips binary removal — use
-    'brew uninstall mindx' instead. Only cleans up daemon/PATH/shortcut.
+    'brew uninstall mindx' instead. Only cleans up daemon/PATH.
   - **Manual download**: Full cleanup including binary removal.
 
 This is the inverse of 'mindx install'. By default all removable components are
@@ -36,7 +35,6 @@ Examples:
 var (
 	uninstallNoDaemon   bool
 	uninstallNoPath     bool
-	uninstallNoShortcut bool
 	uninstallKeepBinary bool
 )
 
@@ -44,7 +42,6 @@ func init() {
 	rootCmd.AddCommand(uninstallCmd)
 	uninstallCmd.Flags().BoolVar(&uninstallNoDaemon, "no-daemon", false, "Skip daemon/service unregistration")
 	uninstallCmd.Flags().BoolVar(&uninstallNoPath, "no-path", false, "Skip PATH cleanup")
-	uninstallCmd.Flags().BoolVar(&uninstallNoShortcut, "no-shortcut", false, "Skip desktop shortcut removal")
 	uninstallCmd.Flags().BoolVar(&uninstallKeepBinary, "keep-binary", false, "Keep installed binary (only clean up integrations)")
 }
 
@@ -53,10 +50,9 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	opts := setup.UninstallOptions{
-		SkipDaemon:   uninstallNoDaemon,
-		SkipPath:     uninstallNoPath,
-		SkipShortcut: uninstallNoShortcut,
-		KeepBinary:   uninstallKeepBinary,
+		SkipDaemon: uninstallNoDaemon,
+		SkipPath:   uninstallNoPath,
+		KeepBinary: uninstallKeepBinary,
 	}
 
 	result, err := setup.Uninstall(opts)
@@ -76,9 +72,6 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	if result.PathCleaned {
 		fmt.Println("   PATH:     cleaned")
 	}
-	if result.ShortcutRemoved {
-		fmt.Println("   Shortcut: removed")
-	}
 	if result.BinaryRemoved {
 		fmt.Println("   Binary:   removed")
 	} else if !uninstallKeepBinary && result.Source == setup.SourceManaged {
@@ -88,7 +81,7 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 		fmt.Println("   Binary:   kept (--keep-binary)")
 	}
 
-	allClean := !result.DaemonRemoved && !result.PathCleaned && !result.ShortcutRemoved && !result.BinaryRemoved
+	allClean := !result.DaemonRemoved && !result.PathCleaned && !result.BinaryRemoved
 	if allClean && !uninstallKeepBinary && result.Source != setup.SourceManaged {
 		fmt.Println("   (nothing to clean — already uninstalled)")
 	}

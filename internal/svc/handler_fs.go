@@ -425,12 +425,6 @@ func (d *Daemon) handleFSReveal(_ context.Context, params json.RawMessage) (any,
 		if err := cmd.Run(); err != nil {
 			return nil, fmt.Errorf("failed to reveal in Finder: %w", err)
 		}
-	case "windows":
-		// Windows: explorer /select highlights the file
-		cmd := exec.Command("explorer", "/select,", absPath)
-		if err := cmd.Run(); err != nil {
-			return nil, fmt.Errorf("failed to reveal in Explorer: %w", err)
-		}
 	default:
 		// Linux: open the parent directory with the default file manager
 		parentDir := filepath.Dir(absPath)

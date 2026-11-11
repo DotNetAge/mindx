@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -22,8 +21,7 @@ var logsCmd = &cobra.Command{
 	Long: `Display the MindX daemon and application logs.
 
 Log files are stored in the user's MindX data directory:
-  macOS/Linux: ~/.mindx/logs/
-  Windows:     %APPDATA%\mindx\logs\
+  ~/.mindx/logs/
 
 Available log files:
   mindx.log    — Main application log (TUI + daemon)
@@ -96,11 +94,6 @@ func resolveLogDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return filepath.Join(".", ".mindx", "logs")
-	}
-	if runtime.GOOS == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, "mindx", "logs")
-		}
 	}
 	return filepath.Join(home, ".mindx", "logs")
 }

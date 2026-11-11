@@ -55,8 +55,6 @@ func CheckDaemon() (DaemonStatus, error) {
 		return checkDaemonMacOS(workspaceDir)
 	case "linux":
 		return checkDaemonLinux()
-	case "windows":
-		return checkDaemonWindows()
 	default:
 		return DaemonUnknown, fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
@@ -81,8 +79,6 @@ func StartDaemon() error {
 		return startDaemonMacOS(workspaceDir)
 	case "linux":
 		return startDaemonLinux()
-	case "windows":
-		return startDaemonWindows()
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
@@ -107,8 +103,6 @@ func StopDaemon() error {
 		return stopDaemonMacOS(workspaceDir)
 	case "linux":
 		return stopDaemonLinux()
-	case "windows":
-		return stopDaemonWindows()
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
@@ -264,15 +258,6 @@ func startDaemonLinux() error {
 	return nil
 }
 
-func startDaemonWindows() error {
-	cmd := exec.Command("schtasks", "/run", "/tn", "MindXDaemon")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("schtasks run: %w\n%s", err, decodeWindowsOutput(out))
-	}
-	return nil
-}
-
 func checkDaemonMacOS(workspaceDir string) (DaemonStatus, error) {
 	cfg, err := core.LoadMindxConfig(workspaceDir)
 	if err != nil || !cfg.Daemon.Installed {
@@ -409,38 +394,6 @@ func stopDaemonLinux() error {
 	return nil
 }
 
-// ── Windows ──────────────────────────────────────────────────────────────────
-
-func checkDaemonWindows() (DaemonStatus, error) {
-	// Check via PowerShell Get-ScheduledTask which returns English state values.
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
-		`try { (Get-ScheduledTask -TaskName "MindXDaemon" -ErrorAction Stop).State } catch { Write-Output "NotFound" }`)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return DaemonNotInstalled, nil
-	}
-	state := strings.TrimSpace(string(out))
-	switch state {
-	case "Running":
-		return DaemonRunning, nil
-	case "Ready", "Disabled":
-		return DaemonStopped, nil
-	default:
-		return DaemonNotInstalled, nil
-	}
-}
-
-func stopDaemonWindows() error {
-	// schtasks /end only stops a currently running instance; /delete would remove it.
-	// We want graceful stop, so try /end first.
-	cmd := exec.Command("schtasks", "/end", "/tn", "MindXDaemon")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("schtasks end: %w\n%s", err, decodeWindowsOutput(out))
-	}
-	return nil
-}
-
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 // parseIntSafe parses a string as an integer. Returns 0 on failure (never panics).
@@ -453,18 +406,6 @@ func parseIntSafe(s string) int {
 		n = n*10 + int(ch-'0')
 	}
 	return n
-}
-
-// isRunningTask checks if the MindXDaemon scheduled task is currently running.
-//
-//nolint:unused
-func _isRunningTask() (bool, error) {
-	cmd := exec.Command("schtasks", "/query", "/tn", "MindXDaemon", "/fo", "CSV", "/nh")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return false, err
-	}
-	return strings.Contains(string(out), "Running"), nil
 }
 
 // ── Install method helpers ───────────────────────────────────────────────

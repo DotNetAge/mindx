@@ -12,7 +12,7 @@ var startCmd = &cobra.Command{
 	Short: "Start the installed MindX daemon service",
 	Long: `Starts the MindX daemon service that was previously installed via 'mindx install'.
 
-This command tells the system service manager (launchctl / systemd / schtasks)
+This command tells the system service manager (launchctl / systemd)
 to launch the daemon process. The daemon provides WebSocket gateway for
 WebUI/MacUI and runs the scheduler for timed tasks.
 

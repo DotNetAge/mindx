@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -165,8 +164,6 @@ type firstRunResult struct {
 	PythonOK   bool
 	PythonInfo core.PythonConfig
 	PythonErr  error
-	PathOK     bool
-	PathErr    error
 }
 
 // ── Constructor & helpers ─────────────────────────────────────────────────
@@ -357,12 +354,6 @@ func runFirstRunWizard(modelsPath, providersPath, agentsDir, workspaceDir string
 		result.PythonOK = fm.autoTasks[1].Status == taskDone || fm.autoTasks[1].Status == taskSkipped
 		result.PythonErr = fm.autoTasks[1].Err
 		result.PythonInfo = fm.pythonInfoFromTask(fm.autoTasks[1])
-		if runtime.GOOS == "windows" && len(fm.autoTasks) > 2 {
-			result.PathOK = fm.autoTasks[2].Status == taskDone || fm.autoTasks[2].Status == taskSkipped
-			result.PathErr = fm.autoTasks[2].Err
-		} else {
-			result.PathOK = true // 非 Windows 不需要 PATH 设置
-		}
 	}
 
 	return result
@@ -774,13 +765,6 @@ func (m *firstRunModel) initAutoSetupTasks() {
 		{Name: i18n.T("wizard.autosetup.task.daemon"), spinner: spinner.New(spinner.WithSpinner(spinner.Dot))},
 		{Name: i18n.T("wizard.autosetup.task.python"), spinner: spinner.New(spinner.WithSpinner(spinner.Dot))},
 	}
-	// Windows 额外需要 PATH 配置任务
-	if runtime.GOOS == "windows" {
-		tasks = append(tasks, &setupTask{
-			Name:    i18n.T("wizard.autosetup.task.path"),
-			spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
-		})
-	}
 	m.autoTasks = tasks
 	m.autoSetupDone = false
 }
@@ -827,27 +811,6 @@ func (m *firstRunModel) startAutoSetup() tea.Cmd {
 			}
 		}
 	}(1)
-
-	// PATH 配置（仅 Windows）
-	if runtime.GOOS == "windows" && taskCount > 2 {
-		go func(idx int) {
-			exe, exeErr := os.Executable()
-			if exeErr != nil {
-				m.markTaskDone(idx, taskFailed, exeErr, "")
-				return
-			}
-			installDir := filepath.Dir(exe)
-			if CheckInPath(installDir) {
-				m.markTaskDone(idx, taskSkipped, nil, installDir)
-				return
-			}
-			if _, pathErr := AddToSystemPath(installDir); pathErr != nil {
-				m.markTaskDone(idx, taskFailed, pathErr, "")
-			} else {
-				m.markTaskDone(idx, taskDone, nil, installDir)
-			}
-		}(2)
-	}
 
 	return tea.Batch(append([]tea.Cmd{m.listenTaskResults(taskCount)}, m.spinnerTickCmds()...)...)
 }
@@ -1047,17 +1010,6 @@ func (m *firstRunModel) renderComplete() string {
 		}
 	}
 
-	// PATH (Windows only)
-	if runtime.GOOS == "windows" && len(m.autoTasks) > 2 {
-		if CheckInPath(m.autoTasks[2].Detail) || m.autoTasks[2].Status == taskDone {
-			items = append(items, i18n.T("wizard.complete.item.path.added"))
-		} else if m.autoTasks[2].Status == taskFailed {
-			items = append(items, i18n.T("wizard.complete.item.path.failed"))
-		} else {
-			items = append(items, i18n.T("wizard.complete.item.path.skipped"))
-		}
-	}
-
 	// Build markdown output
 	var cb strings.Builder
 	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.title")))
@@ -1068,9 +1020,6 @@ func (m *firstRunModel) renderComplete() string {
 	cb.WriteString("---\n\n")
 	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.header")))
 	cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.usage.tui.detail")))
-	if runtime.GOOS == "windows" {
-		cb.WriteString(fmt.Sprintf("%s\n\n", i18n.T("wizard.complete.windows.restart")))
-	}
 	cb.WriteString(i18n.T("wizard.complete.finish"))
 
 	return m.paddedView(borderStyle.Render(m.renderMarkdown(cb.String())))

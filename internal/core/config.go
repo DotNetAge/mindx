@@ -18,7 +18,7 @@ type DaemonConfig struct {
 	Path          string `json:"path,omitempty"`
 	AutoStart     bool   `json:"autostart,omitempty"`
 	Installed     bool   `json:"installed,omitempty"`
-	InstallMethod string `json:"install_method,omitempty"` // "launchd" | "systemd" | "snapctl" | "schtasks" | "dbus"
+	InstallMethod string `json:"install_method,omitempty"` // "launchd" | "systemd" | "snapctl" | "dbus"
 }
 
 type PythonConfig struct {

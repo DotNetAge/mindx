@@ -10,7 +10,7 @@
 #
 # =============================================================================
 
-.PHONY: help all modelselect apikeyinput daemoncheck pythoncheck pathsetup
+.PHONY: help all modelselect apikeyinput daemoncheck pythoncheck
 
 ROOT := ../../..
 SRC  := internal/setup/examples
@@ -26,7 +26,6 @@ help:
 	@echo "  apikeyinput   — 步骤1: API Key 密码输入（密码模式 / Esc 返回）"
 	@echo "  daemoncheck   — 步骤2: Daemon 后台服务检查（← → 切换 Yes/No）"
 	@echo "  pythoncheck   — 步骤3: Python 环境检测（按 1/2/3 切换场景）"
-	@echo "  pathsetup     — 步骤5: 系统 PATH 配置（Windows 专用）"
 	@echo ""
 	@echo "Other:"
 	@echo "  all           — 编译验证所有示例（不运行）"
@@ -44,4 +43,3 @@ modelselect:   ; $(call RUN_EXAMPLE,modelselect)
 apikeyinput:   ; $(call RUN_EXAMPLE,apikeyinput)
 daemoncheck:   ; $(call RUN_EXAMPLE,daemoncheck)
 pythoncheck:   ; $(call RUN_EXAMPLE,pythoncheck)
-pathsetup:     ; $(call RUN_EXAMPLE,pathsetup)

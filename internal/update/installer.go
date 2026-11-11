@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -153,8 +152,6 @@ func (u *Updater) Download(ctx context.Context) (stageBinary string, version str
 	var binaryPath string
 	if strings.HasSuffix(assetName, ".tar.gz") {
 		binaryPath, err = extractTarGz(archivePath, tmpDir)
-	} else if strings.HasSuffix(assetName, ".zip") {
-		binaryPath, err = extractZip(archivePath, tmpDir)
 	} else {
 		cleanup()
 		return "", "", nil, fmt.Errorf("unsupported archive format: %s", assetName)
@@ -184,11 +181,7 @@ func (u *Updater) stageDir() string {
 }
 
 func (u *Updater) stageBinaryPath() string {
-	name := "mindx"
-	if runtime.GOOS == "windows" {
-		name = "mindx.exe"
-	}
-	return filepath.Join(u.stageDir(), name)
+	return filepath.Join(u.stageDir(), "mindx")
 }
 
 func (u *Updater) stageVersionPath() string {
@@ -244,11 +237,7 @@ func (u *Updater) StageFromArchive(archivePath, version string) (string, error) 
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	var bin string
-	if strings.HasSuffix(archivePath, ".zip") {
-		bin, err = extractZip(archivePath, tmpDir)
-	} else {
-		bin, err = extractTarGz(archivePath, tmpDir)
-	}
+	bin, err = extractTarGz(archivePath, tmpDir)
 	if err != nil {
 		return "", fmt.Errorf("extract archive: %w", err)
 	}
@@ -375,9 +364,9 @@ func extractTarGz(archivePath, destDir string) (string, error) {
 			return "", err
 		}
 
-		// Look for the binary (mindx or mindx.exe)
+		// Look for the binary
 		name := filepath.Base(header.Name)
-		if name != "mindx" && name != "mindx.exe" {
+		if name != "mindx" {
 			continue
 		}
 
@@ -396,38 +385,6 @@ func extractTarGz(archivePath, destDir string) (string, error) {
 	}
 
 	return "", fmt.Errorf("binary not found in archive")
-}
-
-// extractZip extracts a zip archive and returns the path to the binary.
-// Uses the system tar (bsdtar on Windows 10+ / macOS) which handles zip natively,
-// avoiding a pure-Go zip dependency.
-func extractZip(archivePath, destDir string) (string, error) {
-	if out, err := exec.Command("tar", "-C", destDir, "-xf", archivePath).CombinedOutput(); err != nil {
-		return "", fmt.Errorf("解压更新包失败（系统 tar 不可用）: %w\n%s", err, string(out))
-	}
-
-	// 定位二进制：优先 mindx.exe，否则要求包内恰好有一个 .exe 文件。
-	entries, err := os.ReadDir(destDir)
-	if err != nil {
-		return "", err
-	}
-	var exes []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if strings.EqualFold(filepath.Ext(e.Name()), ".exe") {
-			exes = append(exes, e.Name())
-		}
-	}
-	switch len(exes) {
-	case 1:
-		return filepath.Join(destDir, exes[0]), nil
-	case 0:
-		return "", fmt.Errorf("更新包中没有找到 MindX 程序文件")
-	default:
-		return "", fmt.Errorf("更新包中包含多个程序文件，无法确定安装目标")
-	}
 }
 
 // parseChecksumFile 从校验文件中取出目标资产的校验值。

@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -26,11 +25,7 @@ const loginShellPathTimeout = 5 * time.Second
 //     管理器普遍只写在 ~/.zshrc / ~/.bashrc（交互式才加载），纯 -l 不够
 //   - 回退链：$SHELL → /bin/zsh → /bin/bash（macOS/Linux）
 //   - 取输出中最后一个含分隔符的非空行（交互模式 rc 可能 echo 杂物污染 stdout）
-//   - Windows 无登录 shell 语义，直接返回空串
 var loginShellPath = sync.OnceValue(func() string {
-	if runtime.GOOS == "windows" {
-		return ""
-	}
 	shells := []string{os.Getenv("SHELL"), "/bin/zsh", "/bin/bash"}
 	for _, sh := range shells {
 		if sh == "" {
@@ -66,10 +61,9 @@ func enhancedPath() string {
 // 构造期的命令解析只看 daemon 自身 PATH（cmd.Env 不参与 LookPath），GUI 拉起的
 // 精简 PATH 直接导致 exec "npx" 失败——必须先解析再构造。
 //   - 含路径分隔符的命令原样返回（相对/绝对路径交 exec 自行处理）
-//   - Windows 构建跳过（探测语义不适用），保留原生 LookPath 行为
 //   - 解析失败返回原名，保留 exec 原生错误语义（"npx": executable file not found）
 func resolveCommand(command string) string {
-	if runtime.GOOS == "windows" || strings.ContainsRune(command, os.PathSeparator) {
+	if strings.ContainsRune(command, os.PathSeparator) {
 		return command
 	}
 	for seg := range strings.SplitSeq(enhancedPath(), string(os.PathListSeparator)) {

@@ -54,9 +54,6 @@ type InstallOptions struct {
 	// SkipPath skips PATH configuration.
 	SkipPath bool
 
-	// SkipShortcut skips desktop shortcut creation (Windows only).
-	SkipShortcut bool
-
 	// ForceCopy forces copying even when the binary is in a managed location
 	// (useful for testing or non-standard setups).
 	ForceCopy bool
@@ -64,12 +61,11 @@ type InstallOptions struct {
 
 // InstallResult reports what was done during installation.
 type InstallResult struct {
-	BinaryDest      string        // where the binary ended up (or original path if managed)
-	DaemonSetup     bool          // whether daemon was registered
-	PathConfigured  bool          // whether PATH was updated
-	ShortcutCreated bool          // whether desktop shortcut was created
-	Source          InstallSource // detected install source
-	SkippedCopy     bool          // whether binary copy was skipped (managed/in-place)
+	BinaryDest     string        // where the binary ended up (or original path if managed)
+	DaemonSetup    bool          // whether daemon was registered
+	PathConfigured bool          // whether PATH was updated
+	Source         InstallSource // detected install source
+	SkippedCopy    bool          // whether binary copy was skipped (managed/in-place)
 }
 
 // Install performs a platform-aware installation of MindX.
@@ -149,11 +145,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 			result.PathConfigured = pathOk
 			if pathOk {
 				fmt.Printf("  System PATH updated: %s\n", installDir)
-				if runtime.GOOS == "windows" {
-					fmt.Println("    New terminals will pick up the change automatically.")
-				} else {
-					fmt.Println("    Restart your terminal or run: source ~/.zshrc (or ~/.bashrc)")
-				}
+				fmt.Println("    Restart your terminal or run: source ~/.zshrc (or ~/.bashrc)")
 			} else {
 				fmt.Println("  Already in system PATH")
 			}
@@ -163,20 +155,7 @@ func Install(opts InstallOptions) (*InstallResult, error) {
 		fmt.Println("  PATH: already configured (managed source)")
 	}
 
-	// Step 4: Create desktop shortcut (Windows only)
-	if !opts.SkipShortcut && runtime.GOOS == "windows" {
-		scOk, scErr := CreateDesktopShortcut(destExe)
-		if scErr != nil {
-			fmt.Printf("  Desktop shortcut: %v\n", scErr)
-		} else {
-			result.ShortcutCreated = scOk
-			if scOk {
-				fmt.Println("  Desktop shortcut created")
-			}
-		}
-	}
-
-	// Step 5: Register daemon with updated config and start it
+	// Step 4: Register daemon with updated config and start it
 	if !opts.SkipDaemon {
 		workspaceDir := resolveWorkspaceDir(installDir)
 		if err := SetupDaemon(workspaceDir, destExe); err != nil {
@@ -319,8 +298,6 @@ func resolveInstallDir(override string) (string, error) {
 		return override, nil
 	}
 	switch runtime.GOOS {
-	case "windows":
-		return filepath.Join(os.Getenv("ProgramFiles"), "mindx"), nil
 	case "darwin", "linux":
 		home, _ := os.UserHomeDir()
 		if home != "" {

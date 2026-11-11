@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 
@@ -112,11 +111,6 @@ func HandshakeLocal(ctx context.Context, c gwCaller) error {
 // defaultUserPrefsDir 返回用户数据根目录（与 daemon 侧 core.DefaultUserPrefsDir
 // 同语义；pkg/ 不得引用 internal/，故在此复刻最小实现）。
 func defaultUserPrefsDir() string {
-	if runtime.GOOS == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, "mindx")
-		}
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return filepath.Join(".", ".mindx")

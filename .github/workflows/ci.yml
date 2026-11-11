@@ -130,12 +130,8 @@ jobs:
           mkdir -p .test
           cp -r config .test/config 2>/dev/null || true
           # DefaultApp(nil) requires mindx home with agents/models/providers/skills
-          # macOS/Linux: ~/.mindx  Windows: %APPDATA%/mindx
-          if [ -n "$APPDATA" ]; then
-            MINDX_HOME="$APPDATA/mindx"
-          else
-            MINDX_HOME="$HOME/.mindx"
-          fi
+          # 用户数据固定在 ~/.mindx
+          MINDX_HOME="$HOME/.mindx"
           mkdir -p "$MINDX_HOME/agents" "$MINDX_HOME/skills" "$MINDX_HOME/sessions" "$MINDX_HOME/settings"
           echo 'models: []' > "$MINDX_HOME/settings/models.yml"
           echo 'providers: []' > "$MINDX_HOME/settings/providers.yml"
@@ -154,7 +150,6 @@ jobs:
           MINDX_WORKSPACE: ${{ env.MINDX_WORKSPACE }}
 
       - name: Display coverage summary
-        if: runner.os != 'Windows'
         run: go tool cover -func=coverage.out | tail -1
 
       - name: Upload coverage artifact
@@ -259,8 +254,6 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           COMMIT=${{ steps.version.outputs.commit }}
           BUILD_TIME=${{ steps.version.outputs.build_time }}
-          SUFFIX=""
-          [ "${{ matrix.goos }}" = "windows" ] && SUFFIX=".exe"
 
           go build \
             -trimpath \
@@ -268,7 +261,7 @@ jobs:
               -X github.com/DotNetAge/mindx/internal/core.Version=${VERSION#v} \
               -X github.com/DotNetAge/mindx/internal/core.Commit=${COMMIT} \
               -X github.com/DotNetAge/mindx/internal/core.BuildTime=${BUILD_TIME}" \
-            -o dist/${BINARY_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}${SUFFIX} \
+            -o dist/${BINARY_NAME}-${{ matrix.goos }}-${{ matrix.goarch }} \
             .
 
           ls -lh dist/

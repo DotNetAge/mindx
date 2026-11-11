@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os/exec"
-	"runtime"
 	"strings"
 	"time"
 
@@ -17,7 +16,7 @@ var restartCmd = &cobra.Command{
 	Long: `Restarts the running MindX daemon service.
 
 This command stops and then starts the daemon via the system
-service manager (launchctl / systemd / schtasks).
+service manager (launchctl / systemd).
 
 Examples:
   mindx restart   # Restart daemon service`,
@@ -59,8 +58,8 @@ func runRestart(cmd *cobra.Command, args []string) error {
 }
 
 // verifyDaemonStarted checks whether the daemon is actually alive after
-// StartDaemon() returned success. Service managers (launchctl, systemd,
-// schtasks) may report success even when the child process crashes
+// StartDaemon() returned success. Service managers (launchctl, systemd)
+// may report success even when the child process crashes
 // immediately due to port conflicts or configuration errors.
 func verifyDaemonStarted() error {
 	time.Sleep(500 * time.Millisecond)
@@ -121,19 +120,14 @@ func detectPortConflict() string {
 // runPortCheck runs the platform-appropriate command to check a port's usage.
 func runPortCheck(port string) ([]byte, error) {
 	portNum := strings.TrimPrefix(port, ":")
-	switch runtime.GOOS {
-	case "windows":
-		return exec.Command("netstat", "-ano").CombinedOutput()
-	default:
-		// macOS / Linux: try lsof first, fall back to ss (Linux) then netstat
-		if out, err := exec.Command("lsof", "-i", port).CombinedOutput(); err == nil {
-			return out, nil
-		}
-		if out, err := exec.Command("ss", "-tlnp", "sport", "=:", portNum).CombinedOutput(); err == nil {
-			return out, nil
-		}
-		return exec.Command("netstat", "-tlnp").CombinedOutput()
+	// macOS / Linux: try lsof first, fall back to ss (Linux) then netstat
+	if out, err := exec.Command("lsof", "-i", port).CombinedOutput(); err == nil {
+		return out, nil
 	}
+	if out, err := exec.Command("ss", "-tlnp", "sport", "=:", portNum).CombinedOutput(); err == nil {
+		return out, nil
+	}
+	return exec.Command("netstat", "-tlnp").CombinedOutput()
 }
 
 // parsePortOutput parses port-check tool output into a human-readable string.
@@ -142,47 +136,30 @@ func parsePortOutput(output, port string) string {
 	portNum := strings.TrimPrefix(port, ":")
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 
-	switch runtime.GOOS {
-	case "windows":
-		// netstat -ano format:   TCP    0.0.0.0:1314    0.0.0.0:0    LISTENING    57714
-		for _, line := range lines {
-			fields := strings.Fields(line)
-			if len(fields) < 5 || fields[1] != "LISTENING" {
-				continue
-			}
-			addr := fields[1] // e.g. "0.0.0.0:1314" or "[::]:1314"
-			if !strings.HasSuffix(addr, ":"+portNum) && !strings.Contains(addr, ":"+portNum+" ") {
-				continue
-			}
-			return fmt.Sprintf("Port %s is held by PID %s", port, fields[len(fields)-1])
-		}
-
-	default:
-		// lsof format (macOS/Linux):
-		//   COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
-		//   mindx   57714 ray   23u  IPv6  ... TCP *:bmc_patroldb (LISTEN)
-		if len(lines) >= 2 {
-			for i := 1; i < len(lines); i++ {
-				fields := strings.Fields(lines[i])
-				if len(fields) >= 2 {
-					return fmt.Sprintf("Port %s is held by PID %s (%s)", port, fields[1], fields[0])
-				}
+	// lsof format (macOS/Linux):
+	//   COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+	//   mindx   57714 ray   23u  IPv6  ... TCP *:bmc_patroldb (LISTEN)
+	if len(lines) >= 2 {
+		for i := 1; i < len(lines); i++ {
+			fields := strings.Fields(lines[i])
+			if len(fields) >= 2 {
+				return fmt.Sprintf("Port %s is held by PID %s (%s)", port, fields[1], fields[0])
 			}
 		}
+	}
 
-		// ss/netstat format (Linux fallback):
-		//   tcp  LISTEN 0 128  *:1314  users:(("mindx",pid=57714,fd=23))
-		for _, line := range lines {
-			if !strings.Contains(line, ":"+portNum) {
-				continue
+	// ss/netstat format (Linux fallback):
+	//   tcp  LISTEN 0 128  *:1314  users:(("mindx",pid=57714,fd=23))
+	for _, line := range lines {
+		if !strings.Contains(line, ":"+portNum) {
+			continue
+		}
+		if idx := strings.Index(line, "pid="); idx >= 0 {
+			pidStr := line[idx+4:]
+			if endIdx := strings.IndexAny(pidStr, ",)"); endIdx > 0 {
+				pidStr = pidStr[:endIdx]
 			}
-			if idx := strings.Index(line, "pid="); idx >= 0 {
-				pidStr := line[idx+4:]
-				if endIdx := strings.IndexAny(pidStr, ",)"); endIdx > 0 {
-					pidStr = pidStr[:endIdx]
-				}
-				return fmt.Sprintf("Port %s is held by PID %s", port, pidStr)
-			}
+			return fmt.Sprintf("Port %s is held by PID %s", port, pidStr)
 		}
 	}
 
