@@ -259,16 +259,3 @@ func setupDaemonFlatpak(workspaceDir string) error {
 	fmt.Fprintln(os.Stderr, "     No persistent background process to register.")
 	return nil
 }
-
-// recordInstallMethod persists the daemon install method to config.
-// Errors are intentionally ignored — this is best-effort metadata;
-// the actual service registration already succeeded by this point.
-func recordInstallMethod(workspaceDir string, method string) {
-	cfg, err := core.LoadMindxConfig(workspaceDir)
-	if err != nil {
-		return
-	}
-	cfg.Daemon.Installed = true
-	cfg.Daemon.InstallMethod = method
-	_ = cfg.Save()
-}
