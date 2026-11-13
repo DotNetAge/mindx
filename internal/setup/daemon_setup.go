@@ -53,8 +53,6 @@ func SetupDaemon(workspaceDir, binPath string) error {
 }
 
 func setupDaemonMacOS(workspaceDir, binPath string) error {
-	plistPath := filepath.Join(os.TempDir(), "com.mindx.daemon.plist")
-
 	home, _ := os.UserHomeDir()
 	pathEnv := "/usr/local/bin:/usr/bin:/bin"
 	if home != "" {
@@ -90,23 +88,28 @@ func setupDaemonMacOS(workspaceDir, binPath string) error {
 </dict>
 </plist>`, binPath, pathEnv, workspaceDir, filepath.Join(workspaceDir, "logs", "daemon.log"), filepath.Join(workspaceDir, "logs", "daemon.err.log"))
 
-	if err := os.WriteFile(plistPath, []byte(plistContent), 0644); err != nil {
-		return fmt.Errorf("write plist: %w", err)
+	agentPlist := filepath.Join(home, "Library", "LaunchAgents", "com.mindx.daemon.plist")
+
+	// 变化检测收敛：plist 内容一致且服务已加载即跳过注册。
+	// bootout→bootstrap 在 macOS 看来是「删除旧后台项 + 添加新项」——重复 install /
+	// doctor --fix 会反复触发「App 后台活动」系统通知，且 bootout 先杀活实例造成
+	// 服务闪断。仅在首次安装或配置真实变更（二进制/工作目录/日志路径变化）时注册。
+	if existing, err := os.ReadFile(agentPlist); err == nil && string(existing) == plistContent && macosAgentLoaded() {
+		if cfg, err := core.LoadMindxConfig(workspaceDir); err == nil {
+			cfg.Daemon.Installed = true
+			cfg.Daemon.InstallMethod = "launchd"
+			_ = cfg.Save()
+		}
+		return nil
 	}
 
 	launchAgentDir := filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents")
-	if err := os.MkdirAll(launchAgentDir, 0755); err != nil {
+	if err := os.MkdirAll(launchAgentDir, 0o755); err != nil {
 		return fmt.Errorf("create LaunchAgents dir: %w", err)
 	}
 
-	agentPlist := filepath.Join(launchAgentDir, "com.mindx.daemon.plist")
-	if err := os.Rename(plistPath, agentPlist); err != nil {
-		// if rename fails (cross-device), copy instead
-		data, _ := os.ReadFile(plistPath)
-		if err := os.WriteFile(agentPlist, data, 0644); err != nil {
-			return fmt.Errorf("copy plist to LaunchAgents: %w", err)
-		}
-		_ = os.Remove(plistPath)
+	if err := os.WriteFile(agentPlist, []byte(plistContent), 0o644); err != nil {
+		return fmt.Errorf("copy plist to LaunchAgents: %w", err)
 	}
 
 	// Record install method so start/stop/status know to use launchd
@@ -125,6 +128,14 @@ func setupDaemonMacOS(workspaceDir, binPath string) error {
 	}
 
 	return nil
+}
+
+// macosAgentLoaded 报告 com.mindx.daemon 是否已加载进当前用户的 launchd 域
+// （launchctl print 非零退出 = 未加载或 plist 已失效）。
+func macosAgentLoaded() bool {
+	service := "gui/" + fmt.Sprint(os.Getuid()) + "/com.mindx.daemon"
+	out, err := exec.Command("launchctl", "print", service).CombinedOutput()
+	return err == nil && len(out) > 0
 }
 
 func setupDaemonLinux(workspaceDir, binPath string) error {

@@ -168,9 +168,22 @@ func (d *Daemon) generateSessionTitle(question string) (string, error) {
 	}
 }
 
-// sanitizeSessionTitle 清洗模型输出：去首尾空白与包裹引号、折叠空白（含换行）、
-// 截断到长度上限。
+// hasSessionTitleMarkup 检测模型把内部特殊标记当正文吐出来的字面残迹：
+// 全角竖线 ｜（U+FF5C）是 DeepSeek 系 tokenizer 特殊标记（<｜tool▁calls▁begin｜>
+// 等）的特征字符；<| 与 |> 是通用 <|...|> 形态的边界。正常标题不会含这些
+// 字符，命中即整条判生成失败（调用方回退快照标题/原文截断），防垃圾落库。
+// 实证样本：<｜｜DSML｜｜ calls> <｜｜DSML｜｜ invoke name="（deepseek-flash
+// 子会话标题调用偶发泄漏，输入为纯中文派工文本）。
+func hasSessionTitleMarkup(s string) bool {
+	return strings.ContainsRune(s, '｜') || strings.Contains(s, "<|") || strings.Contains(s, "|>")
+}
+
+// sanitizeSessionTitle 清洗模型输出：含特殊标记残迹整条拒绝（返回空串，调用方
+// 走失败回退）；去首尾空白与包裹引号、折叠空白（含换行）、截断到长度上限。
 func sanitizeSessionTitle(raw string) string {
+	if hasSessionTitleMarkup(raw) {
+		return ""
+	}
 	title := strings.TrimSpace(raw)
 	title = strings.Trim(title, "\"“”'「」『』`")
 	title = strings.Join(strings.Fields(title), " ")
