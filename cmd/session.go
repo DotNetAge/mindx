@@ -597,7 +597,9 @@ var sessionRepairCmd = &cobra.Command{
 		}
 		if !apply {
 			fmt.Printf("检测到断裂：活跃窗口内第 %d 条起。\n", res.BreakAt)
-			fmt.Println("未修改任何内容。确认修复请加 --yes（会截断该轮并回补其中的用户消息）。")
+			fmt.Println("未修改任何内容。按项目铁律，上下文只允许「文末插入」与「文末删除」，" +
+				"且改动范围不得超过最后一轮；该断裂若不在最后一轮，就无法在不报废 KV 的前提下修复。")
+			fmt.Println("建议新建会话继续工作。")
 			return nil
 		}
 		fmt.Printf("已修复：截断点 %d，回滚 tool_call %d 个；该轮的用户消息已回补。\n",
