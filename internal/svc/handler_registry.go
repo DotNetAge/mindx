@@ -33,6 +33,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"session.truncate":                   r.daemon.handleSessionTruncate,
 		"session.delete_round":               r.daemon.handleSessionDeleteRound,
 		"session.compact":                    r.daemon.handleSessionCompact,
+		"session.repair_pairing":             r.daemon.handleSessionRepairPairing,
 		"project.list":                       r.daemon.handleProjectList,
 		"agent.list":                         r.daemon.handleAgentList,
 		"agent.get":                          r.daemon.handleAgentGet,

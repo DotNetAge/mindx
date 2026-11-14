@@ -543,6 +543,69 @@ cursor 前移不可逆，故必须显式加 --yes；建议先跑 --dry-run 看�
 	},
 }
 
+// ── session repair ────────────────────────────────────────────
+
+var sessionRepairCmd = &cobra.Command{
+	Use:   "repair",
+	Short: "Detect and repair broken tool_call pairing in a session",
+	Long: `检测并修复会话窗口中的工具调用配对断裂。
+
+断裂指 assistant 声明的多个 tool_calls 没有被紧随其后的 tool 消息逐一回应
+（典型成因：并行工具调用返回图片时，图片消息被插在 tool 响应之间）。
+这类会话上的压缩与记忆提取会被接口以 400 拒绝。
+
+修复方式与主对话每轮开始前的自动修复一致：截断到断裂点之前，并把被截区间
+内的 user 消息按原顺序回补——只丢弃坏轮次的 assistant/tool，不吞用户提问。
+
+默认只检测（等同 --dry-run）；确认修复请加 --yes。`,
+	Example: `  mindx session repair --session-id "01ABCDEF..."
+  mindx session repair --session-id "01ABCDEF..." --yes`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, _ := cmd.Flags().GetString("session-id")
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		assumeYes, _ := cmd.Flags().GetBool("yes")
+		if id == "" {
+			return fmt.Errorf("--session-id is required")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+
+		apply := assumeYes && !dryRun
+		raw, err := cl.SessionRepairPairing(id, !apply)
+		if err != nil {
+			return err
+		}
+		if jsonOut {
+			fmt.Println(string(raw))
+			return nil
+		}
+
+		var res rpc.SessionRepairResult
+		if json.Unmarshal(raw, &res) != nil {
+			fmt.Println(string(raw))
+			return nil
+		}
+
+		if res.BreakAt < 0 {
+			fmt.Println("配对完整，无需修复。")
+			return nil
+		}
+		if !apply {
+			fmt.Printf("检测到断裂：活跃窗口内第 %d 条起。\n", res.BreakAt)
+			fmt.Println("未修改任何内容。确认修复请加 --yes（会截断该轮并回补其中的用户消息）。")
+			return nil
+		}
+		fmt.Printf("已修复：截断点 %d，回滚 tool_call %d 个；该轮的用户消息已回补。\n",
+			res.BreakAt, res.RemovedToolCalls)
+		return nil
+	},
+}
+
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
@@ -565,6 +628,10 @@ func init() {
 	sessionCompactCmd.Flags().Bool("dry-run", false, "Only show context usage, do not compact")
 	sessionCompactCmd.Flags().Bool("memory-only", false, "Only extract memory, keep context window untouched")
 	sessionCompactCmd.Flags().BoolP("yes", "y", false, "Confirm compaction (required; consumes one LLM summary call)")
+	sessionRepairCmd.Flags().String("session-id", "", "Session ID (required)")
+	sessionRepairCmd.Flags().Bool("json", false, "Output raw JSON")
+	sessionRepairCmd.Flags().Bool("dry-run", false, "Only detect, do not modify (default)")
+	sessionRepairCmd.Flags().BoolP("yes", "y", false, "Apply the repair (truncates the broken round)")
 
 	sessionCmd.AddCommand(sessionCreateCmd)
 	sessionCmd.AddCommand(sessionListCmd)
@@ -575,4 +642,5 @@ func init() {
 	sessionCmd.AddCommand(sessionConfirmCmd)
 	sessionCmd.AddCommand(sessionRollbackCmd)
 	sessionCmd.AddCommand(sessionCompactCmd)
+	sessionCmd.AddCommand(sessionRepairCmd)
 }

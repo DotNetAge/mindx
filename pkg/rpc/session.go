@@ -78,6 +78,24 @@ type SessionCompactParams struct {
 	MemoryOnly bool `json:"memory_only,omitempty"`
 }
 
+// SessionRepairParams are the params for session.repair_pairing.
+type SessionRepairParams struct {
+	SessionID string `json:"session_id"`
+	// DryRun 为 true 时只检测不断言，用于修复前预览。
+	DryRun bool `json:"dry_run,omitempty"`
+}
+
+// SessionRepairResult 是 session.repair_pairing 的结果。
+type SessionRepairResult struct {
+	SessionID string `json:"session_id"`
+	// BreakAt 是断裂在活跃窗口内的索引；-1 表示配对完整。
+	BreakAt int `json:"break_at"`
+	// Repaired 表示本次是否执行了修复。
+	Repaired bool `json:"repaired"`
+	// RemovedToolCalls 是随坏轮次回滚的 tool_call 数量。
+	RemovedToolCalls int `json:"removed_tool_calls"`
+}
+
 // ContextWindowUsage is the result of session.context.
 // It mirrors goharness/session.ContextWindowUsage.
 type ContextWindowUsage struct {
@@ -162,5 +180,18 @@ func (c *Client) SessionExtractMemory(sessionID string) (json.RawMessage, error)
 	return c.CallWithTimeout("session.compact", SessionCompactParams{
 		SessionID:  sessionID,
 		MemoryOnly: true,
+	})
+}
+
+// SessionRepairPairing 检查并修复会话窗口的工具调用配对断裂。
+//
+// 断裂成因通常是并行工具调用返回图片时，图片消息被插在 tool 响应之间，
+// 使 assistant 声明的多个 tool_calls 未被连续回应。这类会话上的任何整窗
+// 请求（含压缩/记忆提取）都会被接口以 400 拒绝。
+// 修复只丢弃坏轮次的 assistant/tool，用户消息会原样回补。
+func (c *Client) SessionRepairPairing(sessionID string, dryRun bool) (json.RawMessage, error) {
+	return c.CallWithTimeout("session.repair_pairing", SessionRepairParams{
+		SessionID: sessionID,
+		DryRun:    dryRun,
 	})
 }

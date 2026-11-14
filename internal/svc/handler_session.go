@@ -775,3 +775,73 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 		"total_cost":           usage.TotalCost,
 	}, nil
 }
+
+// handleSessionRepairPairing 检查并修复会话窗口的工具调用配对断裂。
+//
+// 断裂成因：并行工具调用返回图片时，图片 user 消息被插在 tool 响应之间，
+// 使 assistant 声明的多个 tool_calls 未被连续回应。这类会话上任何整窗请求
+// （压缩、记忆提取）都会被接口以 400 拒绝，用户侧表现为「压缩莫名失败」。
+//
+// 修复语义与主对话每轮开始前的自动修复完全一致：截断到断裂点之前，
+// 但会把被截区间内的 user 消息按原顺序回补——只丢弃坏轮次的 assistant/tool，
+// 不会吞掉用户提问。DryRun 时只检测不修改。
+func (d *Daemon) handleSessionRepairPairing(ctx context.Context, params json.RawMessage) (any, error) {
+	var p rpc.SessionRepairParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	sess, err := d.getOrLoadSession(p.SessionID)
+	if err != nil {
+		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
+	}
+
+	rt, rtErr := d.app.ResolveRuntime(sess.AgentName())
+	if rtErr != nil || rt == nil {
+		return nil, fmt.Errorf("resolve runtime for agent %q failed: %w", sess.AgentName(), rtErr)
+	}
+
+	breakAt := rt.DetectSessionPairingBreak(sess)
+	result := rpc.SessionRepairResult{SessionID: p.SessionID, BreakAt: breakAt}
+
+	if breakAt < 0 {
+		d.logger.Info("session.repair_pairing: 配对完整，无需修复", "session_id", p.SessionID)
+		return result, nil
+	}
+	if p.DryRun {
+		d.logger.Info("session.repair_pairing: 检测到断裂（dry-run 未修改）",
+			"session_id", p.SessionID, "break_at", breakAt)
+		return result, nil
+	}
+
+	// 安全闸：repair 的语义是「回滚到最近一次用户提问」，为末轮断裂设计
+	// （loop 每轮开始时就用它修最后一轮）。若断裂点在窗口早期，回滚会连带
+	// 丢弃其后全部合法轮次——实测 ai-artist 一案会砍掉 79/80 条消息，
+	// 只剩一条提问。这类会话绝不能走 repair。
+	usage := sess.ContextUsage(d.buildSessionPricing())
+	active := usage.ActiveMessageCount
+	if active > 0 {
+		drop := active - breakAt
+		if float64(drop)/float64(active) > 0.5 {
+			return nil, fmt.Errorf(
+				"断裂点在活跃窗口第 %d 条，修复将丢弃 %d/%d 条消息（仅保留其中的用户提问），"+
+					"影响过大已拒绝。该会话的断裂位于历史中段，repair 不适用——"+
+					"请勿修复，改为新建会话或按需人工处理",
+				breakAt, drop, active)
+		}
+	}
+
+	repaired, removed := rt.RepairSessionPairing(ctx, sess)
+	result.Repaired = repaired
+	result.RemovedToolCalls = removed
+
+	d.logger.Info("session.repair_pairing: 已修复",
+		"session_id", p.SessionID,
+		"break_at", breakAt,
+		"repaired", repaired,
+		"removed_tool_calls", removed)
+	return result, nil
+}
