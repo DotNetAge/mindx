@@ -384,6 +384,139 @@ Examples:
 	},
 }
 
+// ── session compact ───────────────────────────────────────────
+
+// forceCompactMinTokens 与 goharness session.ForceCompact 的内部下限保持一致
+// （session/compaction.go: const forceCompactThreshold int64 = 100_000）。
+// 低于该值时服务端直接跳过压缩，CLI 必须提前拦下，避免“看起来压了其实没压”。
+const forceCompactMinTokens int64 = 100_000
+
+var sessionCompactCmd = &cobra.Command{
+	Use:   "compact",
+	Short: "Compact a session's context window (LLM summary + cursor slide)",
+	Long: `Compact 手动触发一次上下文压缩。
+
+压缩方式为 LLM 摘要式滑动窗口：
+  - 旧消息不会被删除，session.yml 保留完整历史
+  - 只把 cursor 前移，使活跃窗口从 messages[cursor:] 变为空
+  - 摘要经 SummarySink 落盘到项目 .agents/memory/
+
+服务端走 ForceCompact，它有两道跳过条件，CLI 会提前预检并拒绝：
+  - 活跃窗口为空（消息已全部滑出）
+  - 窗口 tokens 未超过 100,000
+
+压缩会真实调用一次 LLM 生成摘要并消耗 token（约等于把整个窗口再读一遍），
+cursor 前移不可逆，故必须显式加 --yes；建议先跑 --dry-run 看占用与预检结论。`,
+	Example: `  mindx session compact --session-id "01ABCDEF..." --dry-run
+  mindx session compact --session-id "01ABCDEF..." --yes`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, _ := cmd.Flags().GetString("session-id")
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		assumeYes, _ := cmd.Flags().GetBool("yes")
+		if id == "" {
+			return fmt.Errorf("--session-id is required")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+
+		printUsage := func(raw json.RawMessage) {
+			var u rpc.ContextWindowUsage
+			if json.Unmarshal(raw, &u) != nil {
+				fmt.Println(string(raw))
+				return
+			}
+			pct := "N/A"
+			if u.MaxWindowSize > 0 {
+				pct = fmt.Sprintf("%.1f%%", u.UsageRatio*100)
+			}
+			table := render.NewTable([]string{"Metric", "Value"}, 80)
+			table.AddRow([]string{"Window Tokens", fmt.Sprintf("%d", u.WindowTokens)})
+			table.AddRow([]string{"Max Window Size", fmt.Sprintf("%d", u.MaxWindowSize)})
+			table.AddRow([]string{"Usage Ratio", pct})
+			table.AddRow([]string{"Total Messages", fmt.Sprintf("%d", u.MessageCount)})
+			table.AddRow([]string{"Cursor", fmt.Sprintf("%d", u.Cursor)})
+			table.AddRow([]string{"Active Messages", fmt.Sprintf("%d", u.ActiveMessageCount)})
+			fmt.Println(table.Render())
+		}
+
+		// 压缩前快照：占用很低时压缩纯属白烧 token，让用户先看清楚
+		var before rpc.ContextWindowUsage
+		haveBefore := false
+		if raw, err := cl.SessionContext(id); err == nil {
+			if json.Unmarshal(raw, &before) == nil {
+				haveBefore = true
+			}
+			if !jsonOut {
+				fmt.Println("压缩前：")
+				printUsage(raw)
+			}
+		}
+
+		// 预检：goharness 的 ForceCompact 内部有两道跳过条件——
+		// activeMessages 为空、或 windowTokens <= 100K。GUI 端已据此控制按钮可用性，
+		// CLI 必须先判掉，否则服务端静默跳过而命令看起来“成功了”。
+		verdict := ""
+		if haveBefore {
+			switch {
+			case before.ActiveMessageCount == 0:
+				verdict = fmt.Sprintf("活跃窗口为空（cursor=%d），无可压缩内容", before.Cursor)
+			case before.WindowTokens <= forceCompactMinTokens:
+				verdict = fmt.Sprintf("窗口 %d tokens 未超过 ForceCompact 下限 %d，服务端会跳过压缩",
+					before.WindowTokens, forceCompactMinTokens)
+			}
+		}
+
+		if dryRun {
+			if verdict != "" {
+				fmt.Printf("预检结论：%s\n", verdict)
+			} else {
+				fmt.Println("预检结论：满足压缩条件，可执行。")
+			}
+			fmt.Println("--dry-run：仅查看占用，未执行压缩。")
+			return nil
+		}
+		if verdict != "" {
+			return fmt.Errorf("未执行压缩：%s", verdict)
+		}
+		if !assumeYes {
+			return fmt.Errorf("压缩会消耗一次 LLM 摘要调用且 cursor 前移不可逆；确认执行请加 --yes")
+		}
+
+		if _, err := cl.SessionCompact(id); err != nil {
+			return err
+		}
+
+		if jsonOut {
+			// 压缩后重查一次，不依赖 session.compact 返回体的字段完整性
+			if after, err := cl.SessionContext(id); err == nil {
+				fmt.Println(string(after))
+			}
+			return nil
+		}
+
+		after, err := cl.SessionContext(id)
+		if err != nil {
+			fmt.Println("压缩已完成，但读取压缩后占用失败：", err)
+			return nil
+		}
+		fmt.Println("压缩后：")
+		printUsage(after)
+
+		// 事后校验：cursor 未推进 = 服务端仍跳过了，不能报成功
+		var afterUsage rpc.ContextWindowUsage
+		if json.Unmarshal(after, &afterUsage) == nil && haveBefore &&
+			afterUsage.Cursor == before.Cursor {
+			return fmt.Errorf("压缩未生效：cursor 仍为 %d，请检查 daemon 日志中的 ForceCompact 记录", before.Cursor)
+		}
+		return nil
+	},
+}
+
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
@@ -401,6 +534,10 @@ func init() {
 	sessionConfirmCmd.Flags().String("files", "", "Comma-separated file paths to confirm")
 	sessionRollbackCmd.Flags().String("session-id", "", "Session ID (required)")
 	sessionRollbackCmd.Flags().String("files", "", "Comma-separated file paths to rollback")
+	sessionCompactCmd.Flags().String("session-id", "", "Session ID (required)")
+	sessionCompactCmd.Flags().Bool("json", false, "Output raw JSON")
+	sessionCompactCmd.Flags().Bool("dry-run", false, "Only show context usage, do not compact")
+	sessionCompactCmd.Flags().BoolP("yes", "y", false, "Confirm compaction (required; consumes one LLM summary call)")
 
 	sessionCmd.AddCommand(sessionCreateCmd)
 	sessionCmd.AddCommand(sessionListCmd)
@@ -410,4 +547,5 @@ func init() {
 	sessionCmd.AddCommand(sessionContextCmd)
 	sessionCmd.AddCommand(sessionConfirmCmd)
 	sessionCmd.AddCommand(sessionRollbackCmd)
+	sessionCmd.AddCommand(sessionCompactCmd)
 }

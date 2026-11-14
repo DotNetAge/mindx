@@ -139,3 +139,12 @@ func (c *Client) SessionTruncate(sessionID string) (json.RawMessage, error) {
 func (c *Client) SessionContext(sessionID string) (json.RawMessage, error) {
 	return c.CallWithTimeout("session.context", SessionContextParams{SessionID: sessionID})
 }
+
+// SessionCompact 手动触发一次上下文压缩（LLM 摘要式滑动窗口）。
+//
+// 服务端走 ForceCompact，不校验 needsCompaction()，即使远未达 80% 阈值也会执行。
+// 压缩本身会真实调用一次 LLM 生成摘要（消耗 token），且 cursor 前移不可逆
+// （session.yml 的完整历史仍保留，只影响活跃窗口），调用方应先展示占用再决定。
+func (c *Client) SessionCompact(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("session.compact", SessionCompactParams{SessionID: sessionID})
+}
