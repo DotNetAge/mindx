@@ -829,36 +829,20 @@ func (d *Daemon) handleSessionRepairPairing(ctx context.Context, params json.Raw
 		return result, nil
 	}
 	if p.DryRun {
-		d.logger.Info("session.repair_pairing: 检测到断裂（dry-run 未修改）",
+		d.logger.Info("session.repair_pairing: 检测到断裂（只读检测，未修改）",
 			"session_id", p.SessionID, "break_at", breakAt)
 		return result, nil
 	}
 
-	// 安全闸：repair 的语义是「回滚到最近一次用户提问」，为末轮断裂设计
-	// （loop 每轮开始时就用它修最后一轮）。若断裂点在窗口早期，回滚会连带
-	// 丢弃其后全部合法轮次——实测 ai-artist 一案会砍掉 79/80 条消息，
-	// 只剩一条提问。这类会话绝不能走 repair。
-	usage := sess.ContextUsage(d.buildSessionPricing())
-	active := usage.ActiveMessageCount
-	if active > 0 {
-		drop := active - breakAt
-		if float64(drop)/float64(active) > 0.5 {
-			return nil, fmt.Errorf(
-				"断裂点在活跃窗口第 %d 条，修复将丢弃 %d/%d 条消息（仅保留其中的用户提问），"+
-					"影响过大已拒绝。该会话的断裂位于历史中段，repair 不适用——"+
-					"请勿修复，改为新建会话或按需人工处理",
-				breakAt, drop, active)
-		}
-	}
-
-	repaired, removed := rt.RepairSessionPairing(ctx, sess)
-	result.Repaired = repaired
-	result.RemovedToolCalls = removed
-
-	d.logger.Info("session.repair_pairing: 已修复",
-		"session_id", p.SessionID,
-		"break_at", breakAt,
-		"repaired", repaired,
-		"removed_tool_calls", removed)
-	return result, nil
+	// 项目铁律：任何改变上下文的动作一律禁止，无需取证。
+	//
+	// 修复配对断裂的唯一手段是截断/重排历史消息，而 KV 前缀缓存以「历史不可变」
+	// 为前提——一旦改动，整段缓存失效，且引入不可追溯的语义偏差。因此这里
+	// 不提供任何执行入口：只报结论，让用户新建会话。
+	// （实测：ai-artist 一案若执行回滚会丢弃 79/80 条消息，只剩一条提问。）
+	return nil, fmt.Errorf(
+		"按项目铁律，禁止任何改变上下文的操作：本命令只提供只读检测（--dry-run）。"+
+			"该会话活跃窗口第 %d 条起存在工具调用配对断裂，压缩与记忆提取都会被"+
+			"接口拒绝。请新建会话；不要试图修补历史",
+		breakAt)
 }
