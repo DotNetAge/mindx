@@ -260,6 +260,7 @@
   "svc.event.final.answer": "最終答案",
   "svc.event.llm.timeout": "LLM 逾時 (%s): %s",
   "svc.event.llm.cancelled": "LLM 呼叫已取消",
+  "svc.event.message.cancelled": "執行已停止",
   "svc.event.llm.retry": "LLM 請求重試",
   "svc.event.max.turns.reached": "已達最大對話輪次",
   "svc.event.message.processing": "訊息開始執行",

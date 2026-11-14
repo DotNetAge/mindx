@@ -145,6 +145,15 @@ func (s *clientCancelSet) CancelSession(sessionID string) int {
 	return count
 }
 
+// Empty 报告集合内是否已无待取消条目。
+// 用于回收「断连后迁移到 detached 键」的集合：其中的执行全部结束（各自
+// Remove）后，集合只剩空壳，若一直留在 map 里会随重连次数累积。
+func (s *clientCancelSet) Empty() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.cancels) == 0
+}
+
 // clientCancelSetFor 获取（必要时创建）指定客户端的取消集合。
 func (d *Daemon) clientCancelSetFor(clientID string) *clientCancelSet {
 	v, _ := d.clientCancels.LoadOrStore(clientID, &clientCancelSet{})

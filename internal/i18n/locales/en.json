@@ -271,6 +271,7 @@
   "svc.event.final.answer": "Final Answer",
   "svc.event.llm.timeout": "LLM timed out after %s: %s",
   "svc.event.llm.cancelled": "LLM call cancelled",
+  "svc.event.message.cancelled": "Execution stopped",
   "svc.event.llm.retry": "LLM request retrying",
   "svc.event.max.turns.reached": "Max Turns Reached",
   "svc.event.message.processing": "Message processing started",

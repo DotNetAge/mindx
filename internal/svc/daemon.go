@@ -49,6 +49,14 @@ type Daemon struct {
 	addr          string
 	wsPath        string
 	logger        logging.Logger
+	// clientCancels 按「发起消息的 WS 连接」登记执行取消函数。
+	//
+	// 注意它有别于「按会话登记」：执行归属发起连接，而停止按钮可能来自
+	// 另一条连接（重连后 / 另一窗口）。因此按会话取消必须遍历全部集合，
+	// 不能只查当前 clientID（详见 handleMessageCancel）。
+	// 连接断开时执行仍在服务端继续，集合会被迁移到 detachedCancelPrefix
+	// 前缀的键下保留取消句柄，不可随连接删除——否则用户重连后点停止
+	// 会拿不到句柄（cancelled=0）而执行继续跑。
 	clientCancels sync.Map
 
 	// sessionQueues 按 sessionID 维护同一会话内串行执行的 FIFO 队列，
@@ -128,6 +136,13 @@ type Daemon struct {
 	// marketIdentity 社区账号绑定编排状态（单飞；支持多社区身份）
 	marketIdentity marketIdentityLinkState
 }
+
+// detachedCancelPrefix 是「连接断开后仍保留取消句柄」的键前缀。
+//
+// 执行运行在服务端、不随连接消亡，因此断连时把该连接的取消集合迁移到这个
+// 前缀下，而不是删除。集合内条目随执行结束自行 Remove，空集合在下次按会话
+// 取消遍历时回收（见 handleMessageCancel）。
+const detachedCancelPrefix = "__detached__:"
 
 func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) (*Daemon, error) {
 	logDir := logging.ResolveLogDir()
@@ -655,9 +670,14 @@ func (d *Daemon) initGateway() {
 			d.logger.Debug("client disconnected, execution continues",
 				"client_id", clientID,
 			)
-			// 释放该客户端的取消集合（停止按钮只在连接期间有效）；
-			// 在途执行不会因此被取消。
-			d.clientCancels.Delete(clientID)
+			// 迁移而非删除：执行仍在服务端跑，取消句柄必须保留。
+			// 旧实现在这里 clientCancels.Delete(clientID)，句柄随集合一起丢失
+			// （无其他引用，GC 后无从调用），而执行继续——用户重连后（新
+			// clientID）点停止必然 cancelled=0，正是「停止按钮点了没反应，
+			// 界面打断一下又继续跑」的根因。
+			if v, ok := d.clientCancels.LoadAndDelete(clientID); ok {
+				d.clientCancels.Store(detachedCancelPrefix+clientID, v)
+			}
 			termMgr.cleanupClient(clientID)
 			// 设备接入验证登记随连接失效（重连需重新握手）。
 			if d.devGate != nil {
@@ -885,6 +905,14 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		if ctx.Err() != nil {
 			d.logger.Info("request skipped: cancelled while queued",
 				"client_id", clientID, "session_id", sid)
+			// 必须发收尾事件：前端已因 message_queued 点亮 busy，
+			// 若此处静默 return，界面会永久停在「执行中」，用户只能刷新。
+			if gw != nil {
+				broadcastResp(gw, gateway.ResponseType("message_cancelled"),
+					i18n.T("svc.event.message.cancelled"), map[string]any{
+						"reason": "cancelled_while_queued",
+					}, gateway.WithSessionID(sid), withAgent())
+			}
 			return
 		}
 

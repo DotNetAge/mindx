@@ -271,6 +271,7 @@
   "svc.event.final.answer": "最终答案",
   "svc.event.llm.timeout": "LLM 超时 (%s): %s",
   "svc.event.llm.cancelled": "LLM 调用已取消",
+  "svc.event.message.cancelled": "执行已停止",
   "svc.event.llm.retry": "LLM 请求重试",
   "svc.event.max.turns.reached": "已达最大对话轮次",
   "svc.event.message.processing": "消息开始执行",

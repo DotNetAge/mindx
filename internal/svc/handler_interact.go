@@ -3,6 +3,7 @@ package svc
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/DotNetAge/gort/pkg/gateway"
 )
@@ -29,25 +30,33 @@ func (d *Daemon) handleMessageCancel(ctx context.Context, params json.RawMessage
 	clientID := gateway.ClientIDFromContext(ctx)
 	if clientID != "" {
 		if req.SessionID != "" {
+			// 按会话取消：遍历全部客户端集合，而不是只查当前连接。
+			//
+			// 执行登记在「发起消息的那条连接」名下，而停止指令可能来自另一条
+			// 连接——断连重连后拿到的是新 clientID，或用户在另一个窗口（chatpop）
+			// 点停止。只查当前 clientID 必然 cancelled=0 而执行继续。
+			// 会话全局唯一且由 sessionQueue 串行执行，按会话取消不会波及
+			// 其它会话的执行。
+			//
+			// scheduled / harvest 两个虚拟键本身就是集合，Range 天然覆盖，
+			// 无需再单独特查。
 			var cancelled int
-			if v, ok := d.clientCancels.Load(clientID); ok {
-				if set, ok := v.(*clientCancelSet); ok {
-					cancelled = set.CancelSession(req.SessionID)
+			d.clientCancels.Range(func(key, value any) bool {
+				set, ok := value.(*clientCancelSet)
+				if !ok {
+					return true
 				}
-			}
-			// 后台执行的调度任务不属于任何客户端（登记在虚拟键集合），
-			// 按会话停止时一并取消，保证停止能力对后台执行同样生效。
-			if v, ok := d.clientCancels.Load(scheduledCancelClientID); ok {
-				if set, ok := v.(*clientCancelSet); ok {
-					cancelled += set.CancelSession(req.SessionID)
+				cancelled += set.CancelSession(req.SessionID)
+				// 回收断连迁移遗留的空壳集合：其中的执行已全部结束，
+				// 留着会随重连次数累积。
+				if ks, ok := key.(string); ok &&
+					strings.HasPrefix(ks, detachedCancelPrefix) && set.Empty() {
+					d.clientCancels.Delete(ks)
 				}
-			}
-			// 收割回灌轮同属虚拟键登记（无客户端归属），按会话停止一并取消。
-			if v, ok := d.clientCancels.Load(harvestCancelClientID); ok {
-				if set, ok := v.(*clientCancelSet); ok {
-					cancelled += set.CancelSession(req.SessionID)
-				}
-			}
+				return true
+			})
+			// 级联强停该会话派生的整棵子代理树（含成员再派工的孙代理），
+			// 使用户在负责人会话点一次停止即可停下整个团队任务。
 			subStopped := d.cancelSubAgents(req.SessionID)
 			// 执行树被实际取消/强停：挂起等待随执行消亡，解除挂起登记（气球熄灭）。
 			// 仅在实际发生取消时清除——对未在执行、仅挂起等待的会话，停止指令
@@ -58,7 +67,15 @@ func (d *Daemon) handleMessageCancel(ctx context.Context, params json.RawMessage
 			d.logger.Info("message.cancel called for session",
 				"client_id", clientID, "session_id", req.SessionID,
 				"cancelled", cancelled, "sub_agents_stopped", subStopped)
-			return map[string]string{"status": "ok"}, nil
+			// 返回实际停止数量：前端据此决定是否保留本地乐观标记。
+			// cancelled=0 且 subStopped=0 说明没有任何执行被停，
+			// 前端不能把 busy 置否（否则执行继续推事件会把 busy 重新点亮，
+			// 表现为「打断一下又继续跑」）。
+			return map[string]any{
+				"status":             "ok",
+				"cancelled":          cancelled,
+				"sub_agents_stopped": subStopped,
+			}, nil
 		}
 		d.logger.Info("message.cancel called", "client_id", clientID)
 		d.cancelClientExecution(clientID)
