@@ -222,6 +222,18 @@ func (r *RoutedSessionStore) Append(ctx context.Context, sessionID string, agent
 	return st.Append(ctx, sessionID, agentName, sponsor, msg)
 }
 
+// AppendBatch 成组原子追加（转发到 sessionID 所在分片）。
+//
+// 必须显式实现：goharness 用类型断言检测 SessionStore 是否支持批量，
+// 若本层缺少该方法，整组写入会回退成逐条 Append，成对落盘即失效。
+func (r *RoutedSessionStore) AppendBatch(ctx context.Context, sessionID string, agentName string, sponsor string, msgs []goharnesssession.Message) error {
+	st := r.locate(sessionID)
+	if st == nil {
+		return goharnesssession.ErrSessionNotFound
+	}
+	return st.AppendBatch(ctx, sessionID, agentName, sponsor, msgs)
+}
+
 // Get 读取全部消息（转发；未命中返回空列表，与旧版全树扫描不中语义一致）。
 func (r *RoutedSessionStore) Get(ctx context.Context, sessionID string) ([]goharnesssession.Message, error) {
 	st := r.locate(sessionID)

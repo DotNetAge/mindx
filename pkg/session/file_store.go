@@ -13,6 +13,7 @@ import (
 	"time"
 
 	goharnesssession "github.com/DotNetAge/goharness/session"
+	"github.com/DotNetAge/goharness/utils"
 	"gopkg.in/yaml.v3"
 )
 
@@ -135,18 +136,26 @@ func (s *FileSessionStore) findSessionDir(sessionID string) string {
 }
 
 func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentName string, sponsor string, msg goharnesssession.Message) error {
+	return s.AppendBatch(ctx, sessionID, agentName, sponsor, []goharnesssession.Message{msg})
+}
+
+// AppendBatch 一次原子写入多条消息。
+//
+// 这是「成对落盘」的落点：一个 assistant(tool_calls) 与它欠的全部 tool 响应
+// 必须一次写入。整组要么全部可见、要么完全不可见，磁盘上永不存在
+// 「有 tool_calls、无 tool 响应」的中间态——那会让该会话之后的每一次请求都
+// 被接口 400 拒绝，用户只能删掉会话。
+//
+// 实现上本来就是「读全量 → 追加 → 重写整个文件」，批量与单条成本几乎相同，
+// 却把一次组写从 N 次文件重写收敛成 1 次。写入走 WriteFileAtomic：
+// 中途崩溃只会看到旧内容，不会留下截断文件。
+func (s *FileSessionStore) AppendBatch(ctx context.Context, sessionID string, agentName string, sponsor string, msgs []goharnesssession.Message) error {
 	s.ioMu.Lock()
 	defer s.ioMu.Unlock()
 
-	if msg.Role == "system" {
+	if len(msgs) == 0 {
 		return nil
 	}
-
-	timestamp := msg.Timestamp
-	if timestamp == 0 {
-		timestamp = time.Now().UnixMilli()
-	}
-	msg.Timestamp = timestamp
 
 	dir := s.sessionDir(agentName, sessionID)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -155,30 +164,44 @@ func (s *FileSessionStore) Append(ctx context.Context, sessionID string, agentNa
 
 	path := s.sessionFilePath(agentName, sessionID)
 
-	var msgs []goharnesssession.Message
+	var stored []goharnesssession.Message
 	if data, err := os.ReadFile(path); err == nil {
-		if err := yaml.Unmarshal(data, &msgs); err != nil {
+		if err := yaml.Unmarshal(data, &stored); err != nil {
 			return fmt.Errorf("parse existing session file %s: %w", path, err)
 		}
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("read session file %s: %w", path, err)
 	}
 
-	msgs = append(msgs, encodeMsg(msg))
+	// 首条带正文的 user 消息用于补录标题（仅首次，不覆盖）
+	var titleSource *goharnesssession.Message
+	for _, msg := range msgs {
+		if msg.Role == "system" {
+			continue
+		}
+		if msg.Timestamp == 0 {
+			msg.Timestamp = time.Now().UnixMilli()
+		}
+		stored = append(stored, encodeMsg(msg))
+		if titleSource == nil && msg.Role == "user" && msg.Content != "" {
+			m := msg
+			titleSource = &m
+		}
+	}
 
-	data, err := yaml.Marshal(msgs)
+	data, err := yaml.Marshal(stored)
 	if err != nil {
 		return fmt.Errorf("marshal messages: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := utils.WriteFileAtomic(path, data, 0600); err != nil {
 		return fmt.Errorf("write session file %s: %w", path, err)
 	}
 
 	// 补录 title：首条 user 消息内容 → session 标题（仅首次，不覆盖）
-	if msg.Role == "user" && msg.Content != "" {
+	if titleSource != nil {
 		if existingMeta, err := LoadSessionMeta(dir); err == nil && existingMeta.Title == "" {
-			title := strings.TrimSpace(msg.Content)
+			title := strings.TrimSpace(titleSource.Content)
 			title = strings.ReplaceAll(title, "\n", " ")
 			if len(title) > 80 {
 				title = title[:77] + "..."
