@@ -1,6 +1,10 @@
 package rpc
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+	"time"
+)
 
 // SessionCreateParams are the params for session.create.
 type SessionCreateParams struct {
@@ -167,8 +171,18 @@ func (c *Client) SessionContext(sessionID string) (json.RawMessage, error) {
 // 服务端走 ForceCompact，不校验 needsCompaction()，即使远未达 80% 阈值也会执行。
 // 压缩本身会真实调用一次 LLM 生成摘要（消耗 token），且 cursor 前移不可逆
 // （session.yml 的完整历史仍保留，只影响活跃窗口），调用方应先展示占用再决定。
+// compactionCallTimeout 是压缩/记忆提取类 RPC 的超时。
+//
+// 必须长于服务端 goharness 的 compactionTimeout（10 分钟）：压缩要发一整窗
+// 上下文并等模型输出完整摘要，实测 68K 窗口耗时 21 秒、285K 窗口必然超过
+// 默认的 30 秒。若 RPC 先超时，客户端断开会让服务端压缩被 ctx 取消
+// （compactor stream read: context canceled），白烧一整窗 token 却什么都没得到。
+const compactionCallTimeout = 11 * time.Minute
+
 func (c *Client) SessionCompact(sessionID string) (json.RawMessage, error) {
-	return c.CallWithTimeout("session.compact", SessionCompactParams{SessionID: sessionID})
+	ctx, cancel := context.WithTimeout(context.Background(), compactionCallTimeout)
+	defer cancel()
+	return c.Call(ctx, "session.compact", SessionCompactParams{SessionID: sessionID})
 }
 
 // SessionExtractMemory 只提取记忆，不压缩上下文窗口。
@@ -177,7 +191,9 @@ func (c *Client) SessionCompact(sessionID string) (json.RawMessage, error) {
 // 清窗口会让后续几轮的前缀缓存全部失效；本方法只做前一半，把会话里的
 // 决策/踩坑/路径沉淀成可检索记忆，窗口保持不变。
 func (c *Client) SessionExtractMemory(sessionID string) (json.RawMessage, error) {
-	return c.CallWithTimeout("session.compact", SessionCompactParams{
+	ctx, cancel := context.WithTimeout(context.Background(), compactionCallTimeout)
+	defer cancel()
+	return c.Call(ctx, "session.compact", SessionCompactParams{
 		SessionID:  sessionID,
 		MemoryOnly: true,
 	})
