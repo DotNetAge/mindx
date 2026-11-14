@@ -256,13 +256,20 @@ func (b *PromptBuilder) buildSkillsSection(agent *agentstore.Agent) string {
 	for _, sk := range catalog {
 		sb.WriteString(fmt.Sprintf("- %s - %s\n", sk.Name, sk.Description))
 	}
+	// 执行前自检：只保留判定本身。
+	//
+	// 原先还有第 3 点「输出你的推理和决策：- 推理：[…] - 决策：…」。
+	// 实测 521 条 assistant 消息中该格式命中 0 次——模型从未照它输出，
+	// 它是一条死指令，对行为没有正贡献。
+	//
+	// 更关键的是它构成「假完成」触发面：goagent 的 agent.go:378 在
+	// len(msg.ToolCalls) == 0 时即判定为最终答案并结束循环。若模型某次真的
+	// 照格式只输出自检文本（不带工具调用），循环会把这段文本当成任务交付。
+	// 删除输出格式、保留 1/2 两点判定，既消掉该触发面，也不削弱技能加载检查。
 	sb.WriteString("### 执行前自检\n" +
 		"在调用 Bash、Read 或 Grep 访问文件或目录内容之前，必须先执行此检查：\n" +
 		"1. 上述能力列表是否包含覆盖此任务的技能？\n" +
-		"2. 如果是，我是否已通过 Skill 加载？\n" +
-		"3. 输出你的推理和决策：\n" +
-		"   - 推理：[考虑了哪个技能]\n" +
-		"   - 决策：Skill（如果尚未加载）| 使用工具继续（如果已加载或无匹配技能）\n")
+		"2. 如果是，我是否已通过 Skill 加载？\n")
 	return sb.String()
 }
 
