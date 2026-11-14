@@ -72,6 +72,10 @@ type SessionDeleteRoundParams struct {
 // （改写中间消息会破坏 KV 缓存，属于负优化）。
 type SessionCompactParams struct {
 	SessionID string `json:"session_id"`
+	// MemoryOnly 为 true 时只把活跃窗口沉淀为记忆，不移动 cursor。
+	// 上下文窗口原封不动，因此不产生「清窗口」带来的前缀缓存失效，
+	// 也不受 ForceCompact 的 100K 下限约束。
+	MemoryOnly bool `json:"memory_only,omitempty"`
 }
 
 // ContextWindowUsage is the result of session.context.
@@ -147,4 +151,16 @@ func (c *Client) SessionContext(sessionID string) (json.RawMessage, error) {
 // （session.yml 的完整历史仍保留，只影响活跃窗口），调用方应先展示占用再决定。
 func (c *Client) SessionCompact(sessionID string) (json.RawMessage, error) {
 	return c.CallWithTimeout("session.compact", SessionCompactParams{SessionID: sessionID})
+}
+
+// SessionExtractMemory 只提取记忆，不压缩上下文窗口。
+//
+// 与 SessionCompact 的差别：压缩是「提取记忆 + 清空窗口」的一体化操作，
+// 清窗口会让后续几轮的前缀缓存全部失效；本方法只做前一半，把会话里的
+// 决策/踩坑/路径沉淀成可检索记忆，窗口保持不变。
+func (c *Client) SessionExtractMemory(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("session.compact", SessionCompactParams{
+		SessionID:  sessionID,
+		MemoryOnly: true,
+	})
 }

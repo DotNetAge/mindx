@@ -738,8 +738,18 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 		}
 	})
 
-	// ForceCompact 不检查 needsCompaction()，由前端自行判断按钮可用性
-	sess.ForceCompact(ctx)
+	// ForceCompact 不检查 needsCompaction()，由前端自行判断按钮可用性。
+	// MemoryOnly 时走 ForceExtractMemory：只沉淀记忆，窗口与 cursor 都不动，
+	// 因此没有「清空窗口」带来的前缀缓存失效，也不受 100K 下限约束。
+	if p.MemoryOnly {
+		// 失败必须上抛：记忆提取可能因窗口结构问题（如工具调用配对断裂
+		// 导致 API 400）而失败，静默返回会让调用方误以为记忆已沉淀。
+		if err := sess.ForceExtractMemory(ctx); err != nil {
+			return nil, err
+		}
+	} else {
+		sess.ForceCompact(ctx)
+	}
 
 	// Note: 不清除 compact handler，因为 Runtime（ask loop）会重新设置自己的 handler。
 	// 如果这里清除，后续 Runtime 自动压缩时将丢失 CompactStart/CompactDone 事件广播。

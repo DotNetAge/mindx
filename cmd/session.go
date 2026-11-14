@@ -414,6 +414,7 @@ cursor 前移不可逆，故必须显式加 --yes；建议先跑 --dry-run 看�
 		jsonOut, _ := cmd.Flags().GetBool("json")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		assumeYes, _ := cmd.Flags().GetBool("yes")
+		memoryOnly, _ := cmd.Flags().GetBool("memory-only")
 		if id == "" {
 			return fmt.Errorf("--session-id is required")
 		}
@@ -460,13 +461,16 @@ cursor 前移不可逆，故必须显式加 --yes；建议先跑 --dry-run 看�
 		// 预检：goharness 的 ForceCompact 内部有两道跳过条件——
 		// activeMessages 为空、或 windowTokens <= 100K。GUI 端已据此控制按钮可用性，
 		// CLI 必须先判掉，否则服务端静默跳过而命令看起来“成功了”。
+		//
+		// --memory-only 不受 100K 下限约束：它只沉淀记忆、不清窗口，
+		// 低占用会话同样值得提取，因此只判空窗口。
 		verdict := ""
 		if haveBefore {
 			switch {
 			case before.ActiveMessageCount == 0:
-				verdict = fmt.Sprintf("活跃窗口为空（cursor=%d），无可压缩内容", before.Cursor)
-			case before.WindowTokens <= forceCompactMinTokens:
-				verdict = fmt.Sprintf("窗口 %d tokens 未超过 ForceCompact 下限 %d，服务端会跳过压缩",
+				verdict = fmt.Sprintf("活跃窗口为空（cursor=%d），无可提取内容", before.Cursor)
+			case !memoryOnly && before.WindowTokens <= forceCompactMinTokens:
+				verdict = fmt.Sprintf("窗口 %d tokens 未超过 ForceCompact 下限 %d，服务端会跳过压缩（如需只提取记忆请加 --memory-only）",
 					before.WindowTokens, forceCompactMinTokens)
 			}
 		}
@@ -484,15 +488,24 @@ cursor 前移不可逆，故必须显式加 --yes；建议先跑 --dry-run 看�
 			return fmt.Errorf("未执行压缩：%s", verdict)
 		}
 		if !assumeYes {
+			if memoryOnly {
+				return fmt.Errorf("提取记忆会消耗一次 LLM 摘要调用；确认执行请加 --yes")
+			}
 			return fmt.Errorf("压缩会消耗一次 LLM 摘要调用且 cursor 前移不可逆；确认执行请加 --yes")
 		}
 
-		if _, err := cl.SessionCompact(id); err != nil {
-			return err
+		var callErr error
+		if memoryOnly {
+			_, callErr = cl.SessionExtractMemory(id)
+		} else {
+			_, callErr = cl.SessionCompact(id)
+		}
+		if callErr != nil {
+			return callErr
 		}
 
 		if jsonOut {
-			// 压缩后重查一次，不依赖 session.compact 返回体的字段完整性
+			// 操作后重查一次，不依赖返回体的字段完整性
 			if after, err := cl.SessionContext(id); err == nil {
 				fmt.Println(string(after))
 			}
@@ -501,17 +514,30 @@ cursor 前移不可逆，故必须显式加 --yes；建议先跑 --dry-run 看�
 
 		after, err := cl.SessionContext(id)
 		if err != nil {
-			fmt.Println("压缩已完成，但读取压缩后占用失败：", err)
+			fmt.Println("操作已完成，但读取后续占用失败：", err)
 			return nil
 		}
-		fmt.Println("压缩后：")
+		if memoryOnly {
+			fmt.Println("提取后（窗口应保持不变）：")
+		} else {
+			fmt.Println("压缩后：")
+		}
 		printUsage(after)
 
-		// 事后校验：cursor 未推进 = 服务端仍跳过了，不能报成功
+		// 事后校验：压缩时 cursor 未推进 = 服务端仍跳过了，不能报成功。
+		// --memory-only 本就要求 cursor 不动，跳过该校验。
 		var afterUsage rpc.ContextWindowUsage
-		if json.Unmarshal(after, &afterUsage) == nil && haveBefore &&
+		if !memoryOnly && json.Unmarshal(after, &afterUsage) == nil && haveBefore &&
 			afterUsage.Cursor == before.Cursor {
 			return fmt.Errorf("压缩未生效：cursor 仍为 %d，请检查 daemon 日志中的 ForceCompact 记录", before.Cursor)
+		}
+		// --memory-only 的等价校验：活跃窗口必须原封不动
+		if memoryOnly && haveBefore &&
+			json.Unmarshal(after, &afterUsage) == nil &&
+			(afterUsage.Cursor != before.Cursor || afterUsage.ActiveMessageCount != before.ActiveMessageCount) {
+			return fmt.Errorf("窗口被意外改动：cursor %d→%d，活跃消息 %d→%d",
+				before.Cursor, afterUsage.Cursor,
+				before.ActiveMessageCount, afterUsage.ActiveMessageCount)
 		}
 		return nil
 	},
@@ -537,6 +563,7 @@ func init() {
 	sessionCompactCmd.Flags().String("session-id", "", "Session ID (required)")
 	sessionCompactCmd.Flags().Bool("json", false, "Output raw JSON")
 	sessionCompactCmd.Flags().Bool("dry-run", false, "Only show context usage, do not compact")
+	sessionCompactCmd.Flags().Bool("memory-only", false, "Only extract memory, keep context window untouched")
 	sessionCompactCmd.Flags().BoolP("yes", "y", false, "Confirm compaction (required; consumes one LLM summary call)")
 
 	sessionCmd.AddCommand(sessionCreateCmd)
