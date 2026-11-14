@@ -741,6 +741,23 @@ func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessag
 	// ForceCompact 不检查 needsCompaction()，由前端自行判断按钮可用性。
 	// MemoryOnly 时走 ForceExtractMemory：只沉淀记忆，窗口与 cursor 都不动，
 	// 因此没有「清空窗口」带来的前缀缓存失效，也不受 100K 下限约束。
+	// 预检（只读）：历史存在工具调用配对断裂时，整窗请求必然被接口以 400
+	// 拒绝。与其把整个 prompt 发出去、等接口报错，不如在这里直接返回可诊断
+	// 的错误——省下一次必然失败的完整调用。
+	//
+	// 注意：此处绝不修改任何消息。任何对上下文的重排、剔除或补写都会改变
+	// 前缀，使 KV 缓存整段失效；宁可让该会话报错，也不做「为了能压而改内容」
+	// 的事。
+	if rt, rtErr := d.app.ResolveRuntime(sess.AgentName()); rtErr == nil && rt != nil {
+		if at := rt.DetectSessionPairingBreak(sess); at >= 0 {
+			return nil, fmt.Errorf(
+				"会话历史存在工具调用配对断裂（活跃窗口第 %d 条），压缩与记忆提取"+
+					"都会被接口拒绝，已提前终止以免白耗一次完整请求。"+
+					"建议新建会话；或先在主对话中继续一轮，由运行时按既有逻辑自动回滚该轮",
+				at)
+		}
+	}
+
 	if p.MemoryOnly {
 		// 失败必须上抛：记忆提取可能因窗口结构问题（如工具调用配对断裂
 		// 导致 API 400）而失败，静默返回会让调用方误以为记忆已沉淀。
