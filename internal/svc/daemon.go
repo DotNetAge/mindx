@@ -45,10 +45,10 @@ type Daemon struct {
 	schedulerDB *scheduler.FileSchedulerStore
 
 	// token usage recording
-	usageStore    goharnesssession.TokenUsageStore
-	addr          string
-	wsPath        string
-	logger        logging.Logger
+	usageStore goharnesssession.TokenUsageStore
+	addr       string
+	wsPath     string
+	logger     logging.Logger
 	// clientCancels 按「发起消息的 WS 连接」登记执行取消函数。
 	//
 	// 注意它有别于「按会话登记」：执行归属发起连接，而停止按钮可能来自
