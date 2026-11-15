@@ -142,7 +142,7 @@ func TestClientCancelSet_CancelAll(t *testing.T) {
 }
 
 // TestClientCancelSet_CancelSession 验证停止按钮的按会话隔离语义：
-// CancelSession 仅取消目标会话的条目（并从集合移除），
+// CancelSession 仅触发目标会话的取消函数，
 // 其它会话的执行不受影响——多 Tab 场景下停止当前对话流不能波及别的 Tab。
 func TestClientCancelSet_CancelSession(t *testing.T) {
 	var s1Cancelled, s2Cancelled int32
@@ -162,14 +162,12 @@ func TestClientCancelSet_CancelSession(t *testing.T) {
 		t.Fatalf("expected s2 untouched, got %d", got)
 	}
 
-	// 被取消的条目已移除：再次 CancelSession 无效果，CancelAll 只剩 s2
-	if got := set.CancelSession("s1"); got != 0 {
-		t.Fatalf("expected 0 cancels for removed entries, got %d", got)
+	// 条目在执行结束前保留：用户重复点停止仍命中同一执行（cancel 幂等），
+	// 前端据此区分「已受理、正在收尾」与「无执行可停」
+	if got := set.CancelSession("s1"); got != 2 {
+		t.Fatalf("expected 2 hits while execution alive, got %d", got)
 	}
 	set.CancelAll()
-	if got := atomic.LoadInt32(&s1Cancelled); got != 2 {
-		t.Fatalf("expected s1 stay cancelled, got %d", got)
-	}
 	if got := atomic.LoadInt32(&s2Cancelled); got != 1 {
 		t.Fatalf("expected s2 cancelled once, got %d", got)
 	}

@@ -132,24 +132,24 @@ func (s *clientCancelSet) CancelAll() []string {
 	return ids
 }
 
-// CancelSession 精确取消指定会话的执行（运行中与排队中），返回取消的条目数。
+// CancelSession 精确取消指定会话的执行（运行中与排队中），返回命中的条目数。
 // 排队中的任务启动时检查 ctx.Err() 跳过执行（见 daemon.go 请求闭包），
-// 因此提前调用 cancel 即可同时覆盖两种状态。仅移除被取消的条目，
-// 其它会话的执行不受影响。
+// 因此提前调用 cancel 即可同时覆盖两种状态。其它会话的执行不受影响。
+//
+// 条目在取消后**保留**，由执行自身结束时 Remove：取消函数对同一执行是幂等的，
+// 而「执行是否真的退出」需要时间（工具可能在跑）。若这里就摘除条目，用户看到
+// 界面没停下来而重复点停止时会一律返回 0，前端无法区分「已被受理、正在收尾」
+// 与「根本没有执行可停」，只能干等。
 func (s *clientCancelSet) CancelSession(sessionID string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	count := 0
-	kept := s.cancels[:0]
 	for _, e := range s.cancels {
 		if e.sessionID == sessionID {
 			e.fn()
 			count++
-			continue
 		}
-		kept = append(kept, e)
 	}
-	s.cancels = kept
 	return count
 }
 

@@ -11,9 +11,15 @@ import (
 	"regexp"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/DotNetAge/goharness/tools"
 )
+
+// quickSearchTimeout 单次查询时限：知识库服务（mrag serve）可能未启动、端口
+// 拒绝、或接受连接后不返回。http.DefaultClient 没有超时，缺这道闸时工具会
+// 无限等待——执行轮次停在那里，用户看到的就是「一直转」。
+const quickSearchTimeout = 30 * time.Second
 
 // QuickSearch performs semantic search over the local knowledge base.
 // It finds relevant code and documentation by meaning, not by exact text match.
@@ -36,6 +42,8 @@ func (t *QuickSearch) Info() *tools.ToolInfo {
 
 要求知识库服务（mrag serve）已运行。`,
 		IsReadOnly: true,
+		// 自身请求 30s（见 quickSearchTimeout）；60s 只作外层兜底
+		TimeoutSec: 60,
 		Parameters: []tools.Parameter{
 			{
 				Name:        "query",
@@ -207,9 +215,11 @@ func (t *QuickSearch) Execute(ctx context.Context, params map[string]any) (any, 
 		), err)
 	}
 
-	// 调用 MindStore WebAPI /api/query
+	// 调用 MindStore WebAPI /api/query（带单次查询时限，见 quickSearchTimeout）
+	reqCtx, reqCancel := context.WithTimeout(ctx, quickSearchTimeout)
+	defer reqCancel()
 	url := t.serverURL + "/api/query"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
 			"构造发送给知识库服务的 HTTP 请求时失败",
