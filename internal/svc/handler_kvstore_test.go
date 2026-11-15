@@ -372,7 +372,7 @@ func TestInitKVStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("initKVStore error = %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	// 默认 bucket 应已就绪
 	err = db.View(func(tx *bbolt.Tx) error {
 		if tx.Bucket([]byte(kvStoreBucket)) == nil {

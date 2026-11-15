@@ -260,7 +260,7 @@ func TestHandleProviderFetchSiliconFlowModels(t *testing.T) {
 		if !strings.HasPrefix(r.URL.Path, "/v1/models") {
 			t.Errorf("path = %q, want /v1/models 前缀（base_url 需补 /v1）", r.URL.Path)
 		}
-		w.Write([]byte(payload))
+		_, _ = w.Write([]byte(payload))
 	})
 
 	result, err := d.handleProviderFetchSiliconFlowModels(context.Background(), mustParams(t, rpc.FetchSiliconFlowModelsParams{Provider: "remote"}))
@@ -299,7 +299,7 @@ func TestHandleProviderFetchSiliconFlowModels_Errors(t *testing.T) {
 	}
 
 	// 非法 JSON
-	d, _ = onlineModelsTestDaemon(t, func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("not-json")) })
+	d, _ = onlineModelsTestDaemon(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("not-json")) })
 	if _, err := d.handleProviderFetchSiliconFlowModels(context.Background(), mustParams(t, rpc.FetchSiliconFlowModelsParams{Provider: "remote"})); err == nil {
 		t.Error("invalid json: expected error")
 	}
@@ -331,7 +331,7 @@ func TestHandleProviderFetchOpenRouterModels(t *testing.T) {
 		if !strings.Contains(r.URL.RawQuery, "sort=most-popular") {
 			t.Errorf("query = %q, want sort=most-popular", r.URL.RawQuery)
 		}
-		w.Write([]byte(payload))
+		_, _ = w.Write([]byte(payload))
 	})
 
 	result, err := d.handleProviderFetchOpenRouterModels(context.Background(), mustParams(t, rpc.FetchOpenRouterModelsParams{Provider: "remote"}))
