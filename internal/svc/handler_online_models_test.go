@@ -359,7 +359,7 @@ func TestHandleProviderFetchOpenRouterModels_UpstreamError(t *testing.T) {
 	// 上游 500 + error.message JSON → upstreamErrorText 提取 message
 	d, _ := onlineModelsTestDaemon(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":{"message":"upstream exploded"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"upstream exploded"}}`))
 	})
 	_, err := d.handleProviderFetchOpenRouterModels(context.Background(), mustParams(t, rpc.FetchOpenRouterModelsParams{Provider: "remote"}))
 	if err == nil || err.Error() != "upstream exploded" {
@@ -384,7 +384,7 @@ func TestHandleProviderFetchDashScopeModels(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer sk-test" {
 			t.Errorf("Authorization = %q", got)
 		}
-		w.Write([]byte(payload))
+		_, _ = w.Write([]byte(payload))
 	})
 
 	result, err := d.handleProviderFetchDashScopeModels(context.Background(), mustParams(t, rpc.FetchDashScopeModelsParams{Provider: "remote"}))
@@ -407,7 +407,7 @@ func TestHandleProviderFetchDashScopeModels(t *testing.T) {
 func TestHandleProviderFetchDashScopeModels_Errors(t *testing.T) {
 	// 业务失败：success=false
 	d, _ := onlineModelsTestDaemon(t, func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"success":false,"output":{}}`))
+		_, _ = w.Write([]byte(`{"success":false,"output":{}}`))
 	})
 	if _, err := d.handleProviderFetchDashScopeModels(context.Background(), mustParams(t, rpc.FetchDashScopeModelsParams{Provider: "remote"})); err == nil {
 		t.Error("success=false: expected error")
@@ -419,7 +419,7 @@ func TestHandleProviderFetchDashScopeModels_Errors(t *testing.T) {
 	}
 
 	// 非法 JSON
-	d, _ = onlineModelsTestDaemon(t, func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("{broken")) })
+	d, _ = onlineModelsTestDaemon(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("{broken")) })
 	if _, err := d.handleProviderFetchDashScopeModels(context.Background(), mustParams(t, rpc.FetchDashScopeModelsParams{Provider: "remote"})); err == nil {
 		t.Error("invalid json: expected error")
 	}
@@ -432,7 +432,7 @@ func TestHandleProviderFetchBigModelModels(t *testing.T) {
 		if r.URL.Path != "/models" {
 			t.Errorf("path = %q, want /models（自定义镜像 host 原样拼接）", r.URL.Path)
 		}
-		w.Write([]byte(payload))
+		_, _ = w.Write([]byte(payload))
 	})
 
 	result, err := d.handleProviderFetchBigModelModels(context.Background(), mustParams(t, rpc.FetchBigModelModelsParams{Provider: "remote"}))
@@ -446,7 +446,7 @@ func TestHandleProviderFetchBigModelModels(t *testing.T) {
 
 	// success=false → 业务失败
 	d, _ = onlineModelsTestDaemon(t, func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"success":false,"data":[]}`))
+		_, _ = w.Write([]byte(`{"success":false,"data":[]}`))
 	})
 	if _, err := d.handleProviderFetchBigModelModels(context.Background(), mustParams(t, rpc.FetchBigModelModelsParams{Provider: "remote"})); err == nil {
 		t.Error("success=false: expected error")
@@ -471,7 +471,7 @@ func TestHandleProviderFetchTencentModels(t *testing.T) {
 		if !strings.HasPrefix(r.URL.Path, "/v1/models") {
 			t.Errorf("path = %q, want /v1/models 前缀", r.URL.Path)
 		}
-		w.Write([]byte(payload))
+		_, _ = w.Write([]byte(payload))
 	})
 
 	result, err := d.handleProviderFetchTencentModels(context.Background(), mustParams(t, rpc.FetchTencentModelsParams{Provider: "remote"}))
@@ -491,7 +491,7 @@ func TestHandleProviderFetchTencentModels(t *testing.T) {
 	}
 
 	// 非法 JSON
-	d, _ = onlineModelsTestDaemon(t, func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("nope")) })
+	d, _ = onlineModelsTestDaemon(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("nope")) })
 	if _, err := d.handleProviderFetchTencentModels(context.Background(), mustParams(t, rpc.FetchTencentModelsParams{Provider: "remote"})); err == nil {
 		t.Error("invalid json: expected error")
 	}
@@ -507,7 +507,7 @@ func TestHandleProviderFetchKimiModels(t *testing.T) {
 		if !strings.HasPrefix(r.URL.Path, "/v1/models") {
 			t.Errorf("path = %q, want /v1/models 前缀", r.URL.Path)
 		}
-		w.Write([]byte(payload))
+		_, _ = w.Write([]byte(payload))
 	})
 
 	result, err := d.handleProviderFetchKimiModels(context.Background(), mustParams(t, rpc.FetchKimiModelsParams{Provider: "remote"}))
@@ -526,7 +526,7 @@ func TestHandleProviderFetchKimiModels(t *testing.T) {
 	// HTTP 500 → upstreamErrorText
 	d, _ = onlineModelsTestDaemon(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(503)
-		w.Write([]byte(`{"error":{"message":"kimi down"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"kimi down"}}`))
 	})
 	_, err = d.handleProviderFetchKimiModels(context.Background(), mustParams(t, rpc.FetchKimiModelsParams{Provider: "remote"}))
 	if err == nil || err.Error() != "kimi down" {
@@ -541,7 +541,7 @@ func TestHandleProviderFetchMiniMaxModels(t *testing.T) {
 		if !strings.HasPrefix(r.URL.Path, "/v1/models") {
 			t.Errorf("path = %q, want /v1/models 前缀", r.URL.Path)
 		}
-		w.Write([]byte(payload))
+		_, _ = w.Write([]byte(payload))
 	})
 
 	result, err := d.handleProviderFetchMiniMaxModels(context.Background(), mustParams(t, rpc.FetchMiniMaxModelsParams{Provider: "remote"}))
