@@ -1,165 +1,107 @@
 package svc
 
 import (
-	"fmt"
-	"regexp"
-	"strconv"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/aymanbagabas/go-udiff"
-
-	"github.com/DotNetAge/mindx/internal/diffutil"
 )
 
-// 构造三处修改：前两处相距 4 行（<= 6，go-udiff 会把它们合并进同一个 hunk），
-// 第三处距离较远（应另开 hunk）——翻译类批量编辑的典型分布
-func buildThreeEditContent() (oldContent, newContent string) {
-	lines := make([]string, 30)
-	for i := range lines {
-		lines[i] = fmt.Sprintf("line %02d", i+1)
-	}
-	oldContent = strings.Join(lines, "\n") + "\n"
-	lines[4] = "CHANGED A"
-	lines[8] = "CHANGED B"
-	lines[24] = "CHANGED C"
-	newContent = strings.Join(lines, "\n") + "\n"
-	return oldContent, newContent
-}
-
-// TestGoUdiffHunkHeaderBug 复现 go-udiff 上游缺陷（铁证）：
-// 多个相近修改合并进同一 hunk 后，后续 hunk 头 newStart 少计合并进来的
-// 上下文行数（toUnified 的 "within range" 分支不累加 toLine）。
-// 期望第二块头为 @@ -22,7 +22,7 @@，缺陷输出却是 +19（少了 3 行上下文）。
-func TestGoUdiffHunkHeaderBug(t *testing.T) {
-	oldContent, newContent := buildThreeEditContent()
-	raw := udiff.Unified("a", "b", oldContent, newContent)
-	if !strings.Contains(raw, "@@ -22,7 +19,7 @@") {
-		t.Errorf("预期复现上游缺陷输出 +19,7，实际输出:\n%s", raw)
+func TestBuildNewFileDiff(t *testing.T) {
+	got := buildNewFileDiff("/tmp/proj/src/main.go", []string{"package main", "func main() {}"})
+	want := "--- /dev/null\n+++ b/main.go\n@@ -0,0 +1,2 @@\n+package main\n+func main() {}\n"
+	if got != want {
+		t.Errorf("buildNewFileDiff =\n%q\nwant\n%q", got, want)
 	}
 }
 
-// TestNormalizeHunkHeadersFixes 验证修正层把缺陷行号纠正为正确值
-func TestNormalizeHunkHeadersFixes(t *testing.T) {
-	oldContent, newContent := buildThreeEditContent()
-	fixed := diffutil.NormalizeHunkHeaders(udiff.Unified("a", "b", oldContent, newContent))
-	if !strings.Contains(fixed, "@@ -22,7 +22,7 @@") {
-		t.Errorf("预期修正为 +22,7，实际输出:\n%s", fixed)
+func TestCountDiffLines(t *testing.T) {
+	old := "a\nb\nc\n"
+	// 新增 x,y；b 保留；c 删除
+	add, del := countDiffLines(old, "a\nb\nx\ny\n")
+	if add != 2 || del != 1 {
+		t.Errorf("count = %d/%d, want 2/1", add, del)
 	}
-	// 首块头不受缺陷影响，应保持原样
-	if !strings.Contains(fixed, "@@ -2,11 +2,11 @@") {
-		t.Errorf("首块头应保持 -2,11 +2,11，实际输出:\n%s", fixed)
+
+	// 相同内容 → 0/0
+	if add, del = countDiffLines(old, old); add != 0 || del != 0 {
+		t.Errorf("identical = %d/%d, want 0/0", add, del)
+	}
+
+	// 多重集合语义：旧行出现 2 次删 1 次只算 1 删除
+	add, del = countDiffLines("dup\ndup\n", "dup\n")
+	if add != 0 || del != 1 {
+		t.Errorf("multiset = %d/%d, want 0/1", add, del)
+	}
+
+	// 空内容
+	add, del = countDiffLines("", "only\n")
+	if add != 1 || del != 0 {
+		t.Errorf("empty old = %d/%d, want 1/0", add, del)
 	}
 }
 
-// TestNormalizeHunkHeadersIdentity 对本来正确的 diff 应为恒等变换
-func TestNormalizeHunkHeadersIdentity(t *testing.T) {
-	lines := make([]string, 30)
-	for i := range lines {
-		lines[i] = fmt.Sprintf("line %02d", i+1)
-	}
-	oldContent := strings.Join(lines, "\n") + "\n"
-	// 只有两处且相距很远（>= 7 行）时不会触发合并，diff 本身正确
-	lines[2] = "CHANGED A"
-	lines[20] = "CHANGED B"
-	newContent := strings.Join(lines, "\n") + "\n"
+func TestComputeFileDiff_NewFile(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
 
-	raw := udiff.Unified("a", "b", oldContent, newContent)
-	if got := diffutil.NormalizeHunkHeaders(raw); got != raw {
-		t.Errorf("正确 diff 应为恒等变换。\n原始:\n%s\n归一化后:\n%s", raw, got)
+	sid := mustCreateSession(t, d.app.SessDB(), "tester")
+	sess := loadTestSession(t, d, sid, "tester")
+
+	// 无备份的新文件
+	file := filepath.Join(t.TempDir(), "fresh.txt")
+	if err := os.WriteFile(file, []byte("line1\nline2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	info := computeFileDiff(sess, file)
+	if !info.IsNew || info.Additions != 2 || info.Deletions != 0 {
+		t.Errorf("new file info = %+v", info)
+	}
+	if !strings.HasPrefix(info.Diff, "--- /dev/null\n+++ b/fresh.txt") {
+		t.Errorf("new file diff = %q", info.Diff)
+	}
+
+	// 文件不存在 → 零值信息
+	info = computeFileDiff(sess, filepath.Join(t.TempDir(), "missing.txt"))
+	if info.Diff != "" || info.Additions != 0 || info.IsNew {
+		t.Errorf("missing file info = %+v", info)
 	}
 }
 
-// TestNormalizePreservesNewFileDiff 新建文件 diff（GNU 空侧特例 @@ -0,0 +1,N @@）
-// 的 newStart 本来正确，归一化必须原样保留。
-// 回归防护：oldStart>0 条件缺失时 newStart 会被归一化错改为 0，
-// 触发前端 reverseUnifiedDiff 的 newStart<=0 守卫，新建文件条目退回普通编辑器。
-func TestNormalizePreservesNewFileDiff(t *testing.T) {
-	newFileDiff := "--- a/new.txt\n+++ b/new.txt\n@@ -0,0 +1,3 @@\n+alpha\n+beta\n+gamma\n"
-	if got := diffutil.NormalizeHunkHeaders(newFileDiff); got != newFileDiff {
-		t.Errorf("新建文件 diff 应为恒等变换。\n原始:\n%s\n归一化后:\n%s", newFileDiff, got)
-	}
-	// 前端同款守卫：newStart==0 的 diff 会被判 null，故必须保证修正后仍 > 0
-	if _, ok := reverseApply(newFileDiff, "alpha\nbeta\ngamma\n"); !ok {
-		t.Errorf("新建文件 diff 应能反向还原为空原文")
-	}
-}
+func TestComputeFileDiff_Modified(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
 
-// reverseApply 与前端 reverseUnifiedDiff 同款算法：
-// 以当前内容为基准反向应用 diff，还原修改前原文；任一块校验失败返回 false
-func reverseApply(diff, current string) (string, bool) {
-	hunkHeaderRe := regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
-	type hunk struct {
-		newStart int
-		lines    []string
-	}
-	var hunks []*hunk
-	var cur *hunk
-	for _, raw := range strings.Split(diff, "\n") {
-		if m := hunkHeaderRe.FindStringSubmatch(raw); m != nil {
-			start, _ := strconv.Atoi(m[1])
-			cur = &hunk{newStart: start}
-			hunks = append(hunks, cur)
-			continue
-		}
-		if cur != nil && raw != "" {
-			cur.lines = append(cur.lines, raw)
-		}
-	}
-	if len(hunks) == 0 {
-		return "", false
-	}
-	row := strings.Split(current, "\n")
-	for i := len(hunks) - 1; i >= 0; i-- {
-		h := hunks[i]
-		if h.newStart <= 0 {
-			return "", false
-		}
-		var newSide, oldSide []string
-		for _, l := range h.lines {
-			switch {
-			case strings.HasPrefix(l, "\\"):
-				continue
-			case strings.HasPrefix(l, "-"):
-				oldSide = append(oldSide, l[1:])
-			case strings.HasPrefix(l, "+"):
-				newSide = append(newSide, l[1:])
-			default:
-				text := strings.TrimPrefix(l, " ")
-				newSide = append(newSide, text)
-				oldSide = append(oldSide, text)
-			}
-		}
-		start := h.newStart - 1
-		if start+len(newSide) > len(row) {
-			return "", false
-		}
-		if strings.Join(row[start:start+len(newSide)], "\n") != strings.Join(newSide, "\n") {
-			return "", false
-		}
-		row = append(row[:start], append(append([]string{}, oldSide...), row[start+len(newSide):]...)...)
-	}
-	return strings.Join(row, "\n"), true
-}
+	sid := mustCreateSession(t, d.app.SessDB(), "tester")
+	sess := loadTestSession(t, d, sid, "tester")
 
-// TestReverseApplyEndToEnd 端到端验证：以新内容为基准反向应用修正后的 diff，
-// 必须精确还原出修改前原文；未修正的缺陷 diff 则必须还原失败。
-func TestReverseApplyEndToEnd(t *testing.T) {
-	oldContent, newContent := buildThreeEditContent()
-	raw := udiff.Unified("a", "b", oldContent, newContent)
-
-	// 缺陷 diff：第二块 +19 定位错误，反向还原必须失败（这正是线上现象）
-	if _, ok := reverseApply(raw, newContent); ok {
-		t.Errorf("未修正的缺陷 diff 不应能反向还原成功")
+	base := t.TempDir()
+	file := filepath.Join(base, "code.txt")
+	newContent := "kept\nchanged-new\n"
+	if err := os.WriteFile(file, []byte(newContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// 手工落备份（BackupPathForRead 只做路径推导，写入即模拟 TrackModify 留下的备份）
+	backupPath := sess.BackupPathForRead(file)
+	if err := os.MkdirAll(filepath.Dir(backupPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(backupPath, []byte("kept\nchanged-old\n"), 0644); err != nil {
+		t.Fatal(err)
 	}
 
-	// 修正后：必须成功且结果与原文逐字节一致
-	fixed := diffutil.NormalizeHunkHeaders(raw)
-	got, ok := reverseApply(fixed, newContent)
-	if !ok {
-		t.Fatalf("修正后的 diff 反向还原失败")
+	info := computeFileDiff(sess, file)
+	if info.IsNew {
+		t.Errorf("modified file should not be marked new: %+v", info)
 	}
-	if got != oldContent {
-		t.Errorf("反向还原结果与原文不一致。\n期望:\n%s\n实际:\n%s", oldContent, got)
+	if info.Additions != 1 || info.Deletions != 1 {
+		t.Errorf("stats = +%d/-%d, want +1/-1", info.Additions, info.Deletions)
+	}
+	// 标准 unified diff：hunk 头 + 加减行
+	if !strings.Contains(info.Diff, "@@") || !strings.Contains(info.Diff, "-changed-old") || !strings.Contains(info.Diff, "+changed-new") {
+		t.Errorf("diff = %q", info.Diff)
+	}
+	if !strings.Contains(info.Diff, "a/"+file) {
+		t.Errorf("diff header should reference original path: %q", info.Diff)
 	}
 }

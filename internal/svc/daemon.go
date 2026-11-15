@@ -135,6 +135,13 @@ type Daemon struct {
 
 	// marketIdentity 社区账号绑定编排状态（单飞；支持多社区身份）
 	marketIdentity marketIdentityLinkState
+
+	// bgCancel 取消构造期启动的后台协程（如 MCP 远程同步），bgWG 等待其收敛。
+	// 停机时必须先 cancel 并等待：这些协程会写配置/日志文件（如重写 mcp.json），
+	// 不收敛就退出会与目录清理竞争——测试表现为 t.TempDir 清理偶发
+	// "directory not empty"，生产表现为关机窗口内文件写回已废弃目录。
+	bgCancel context.CancelFunc
+	bgWG     sync.WaitGroup
 }
 
 // detachedCancelPrefix 是「连接断开后仍保留取消句柄」的键前缀。
@@ -275,9 +282,15 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) (*Daemon, er
 		d.mcpMgr.SetOnConfigChanged(func() { app.InvalidateRuntimes() })
 		logger.Info("mcp manager initialized（Runtime 热更新已启用）")
 
-		// 后台异步同步远程 market mcp.json（懒操作，不阻塞启动）
+		// 后台异步同步远程 market mcp.json（懒操作，不阻塞启动）。
+		// 协程纳入 bgWG 管控：stopBackgroundServices 先取消再等待收敛，
+		// 禁止留下无人追踪的写文件协程（与停机/测试清理竞争）。
+		bgCtx, bgCancel := context.WithCancel(context.Background())
+		d.bgCancel = bgCancel
+		d.bgWG.Add(1)
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer d.bgWG.Done()
+			ctx, cancel := context.WithTimeout(bgCtx, 20*time.Second)
 			defer cancel()
 			result := d.mcpMgr.Sync(ctx)
 			if len(result.Added) > 0 {
@@ -597,6 +610,14 @@ func (d *Daemon) startMDNS() {
 // stopBackgroundServices 停止所有后台辅助服务。
 func (d *Daemon) stopBackgroundServices() {
 	d.logger.Info("stopping background services...")
+
+	// 先收敛构造期后台协程（MCP 远程同步等）：取消并等待其退出，再关闭
+	// 其余服务——协程在 20s 窗口内会重写 mcp.json，不收敛就继续走停机
+	// 流程会把文件写进已废弃的目录（测试里与 t.TempDir 清理竞争）。
+	if d.bgCancel != nil {
+		d.bgCancel()
+		d.bgWG.Wait()
+	}
 
 	// 停机安全网：先于 gateway 关闭级联强停全部运行中的子代理，并留出
 	// 短暂宽限让 spawn 的 defer 写入 [sub-agent-terminated] 终止标记。

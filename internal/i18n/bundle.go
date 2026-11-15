@@ -129,7 +129,8 @@ func LanguageName(t language.Tag) string {
 	base, _ := t.Base()
 	switch base.String() {
 	case "zh":
-		if strings.HasPrefix(t.String(), "zh-TW") || strings.HasPrefix(t.String(), "zh-HK") {
+		if strings.HasPrefix(t.String(), "zh-TW") || strings.HasPrefix(t.String(), "zh-HK") ||
+			strings.HasPrefix(t.String(), "zh-Hant") || strings.HasPrefix(t.String(), "zh-MO") {
 			return "繁體中文"
 		}
 		return "简体中文"
