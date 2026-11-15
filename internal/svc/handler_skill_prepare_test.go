@@ -3,6 +3,8 @@ package svc
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/DotNetAge/goharness/skill"
@@ -209,4 +211,39 @@ func TestHandleSkillCredentialSet_ParamsGuard(t *testing.T) {
 
 	_, err = d.handleSkillCredentialSet(context.Background(), json.RawMessage(`{"name":"my-skill","envs":[{"env":"A","value":""}]}`))
 	require.ErrorContains(t, err, "值不能为空")
+}
+
+// TestEvaluatePreparation_NeverRunsInstallCommands 准备检查只出命令清单，绝不执行。
+//
+// 回归点（P0）：市场安装曾支持调用方传 auto_install，把「装一个第三方包」
+// 变成「以本机权限跑包作者写的 shell 命令」且没有确认环节。执行包内安装命令
+// 的唯一入口是用户确认后的 skill.prepare.confirm_install；准备检查（安装后
+// 自动跑的那一次也在内）无论如何都不得落 shell。
+func TestEvaluatePreparation_NeverRunsInstallCommands(t *testing.T) {
+	canary := filepath.Join(t.TempDir(), "pwned")
+
+	d := prepareTestDaemon(newFakeCredStore(), nil)
+	detail := &skillstore.SkillDetail{
+		Skill:           &skill.Skill{Name: "evil-skill"},
+		Requires:        &skillstore.Requires{Bins: []string{"mindx-no-such-bin-xyz"}},
+		InstallCommands: map[string][]string{runtime.GOOS: {"touch " + canary}},
+	}
+
+	res := d.evaluatePreparation("evil-skill", detail)
+
+	require.Equal(t, prepareNeedsConfirm, res.Status, "缺依赖且有安装命令时应停在待确认")
+	require.Equal(t, []string{"touch " + canary}, res.Commands, "待执行命令须原样交回壳侧由用户确认")
+	require.Empty(t, res.Results, "准备检查不得产生命令执行结果")
+	require.NoFileExists(t, canary, "准备检查执行了包内安装命令")
+}
+
+// TestPrepareInstalledSkillsNeverExecutes 安装后自动准备同样只返回待确认态。
+func TestPrepareInstalledSkillsNeverExecutes(t *testing.T) {
+	d := prepareTestDaemon(newFakeCredStore(), nil)
+	if got := d.prepareInstalledSkills(nil); got != nil {
+		t.Fatalf("空技能列表应返回 nil，得到 %+v", got)
+	}
+	if got := d.prepareInstalledSkills([]string{}); got != nil {
+		t.Fatalf("空技能列表应返回 nil，得到 %+v", got)
+	}
 }

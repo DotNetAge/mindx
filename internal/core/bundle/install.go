@@ -68,7 +68,10 @@ func installAgent(entries []zipEntry, manifest *Manifest, opts InstallOptions) (
 		return nil, fmt.Errorf("安装 Agent 分发包需要指定 agents 目录")
 	}
 
-	agentDir := filepath.Join(opts.AgentsDir, strings.ToLower(manifest.Name))
+	agentDir, err := joinUnder(opts.AgentsDir, manifest.Name)
+	if err != nil {
+		return nil, err
+	}
 	overwritten := false
 
 	// 全局库名集合（决定包内技能落全局还是 Agent 级）
@@ -132,7 +135,10 @@ func installTeam(entries []zipEntry, manifest *Manifest, opts InstallOptions) (*
 
 	// 冲突预检：团队目录与全部成员 Agent 目录一次检完（避免写一半才发现冲突）。
 	// 盘上内容与包逐字节一致（未修改的重复招募）时静默放行，不要求确认
-	teamDir := filepath.Join(opts.TeamsDir, strings.ToLower(manifest.Name))
+	teamDir, err := joinUnder(opts.TeamsDir, manifest.Name)
+	if err != nil {
+		return nil, err
+	}
 	overwritten := false
 	conflict := func(existing, label string) error {
 		return fmt.Errorf("已存在同名%s %q，如需覆盖请在界面中确认后重试", label, existing)
@@ -207,6 +213,21 @@ func installTeam(entries []zipEntry, manifest *Manifest, opts InstallOptions) (*
 	result.SkillsGlobal = sortedNames(skillGlobal)
 	result.SkillsAgent = sortedNames(skillAgent)
 	return result, nil
+}
+
+// joinUnder 把包名作为单层目录拼到 base 之下，并断言结果没有越出 base。
+//
+// 与 Manifest.validate 的包名白名单互为兜底：白名单是第一道闸（给出可读的
+// 拒绝原因），这里是最后一道——将来若有人放宽白名单或新增一条不走 validate
+// 的安装路径，越界路径仍会被挡在这里。
+func joinUnder(base, name string) (string, error) {
+	cleanBase := filepath.Clean(base)
+	joined := filepath.Join(cleanBase, strings.ToLower(name))
+	if joined != filepath.Join(cleanBase, filepath.Clean(strings.ToLower(name))) ||
+		!strings.HasPrefix(joined, cleanBase+string(os.PathSeparator)) {
+		return "", fmt.Errorf("包名 %q 会写到安装目录之外，已拒绝", name)
+	}
+	return joined, nil
 }
 
 // installAgentDir 将 zip 前缀 prefix 之下的单个 Agent 目录内容落位到 agentDir：

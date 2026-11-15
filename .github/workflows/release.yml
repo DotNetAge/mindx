@@ -32,7 +32,9 @@ permissions:
   contents: write
 
 env:
-  GO_VERSION: '1.26'
+  # 固定到具体补丁版：标准库漏洞随补丁版修复，'1.26' 由 setup-go 解析为最新
+  # 补丁版，构建产物因此不可复现（同一 tag 在不同日子构建出不同的标准库版本）。
+  GO_VERSION: '1.26.11'
   BINARY_NAME: mindx
   GITHUB_REPO: ${{ github.repository }}
   HOMEBREW_TAP: 'DotNetAge/homebrew-mindx'
@@ -476,12 +478,27 @@ jobs:
           cd ..
 
       - name: Install packaging tools
+        shell: bash
         run: |
+          # 下载并执行第三方工具必须 fail-fast，且每一步都要有可核验的断言：
+          # 未指定 shell 时 runner 用 bash -e（无 pipefail），curl -sL 又会把
+          # 错误藏进退出码之外，失败会一路静默到「打包看起来成功」。
+          set -euo pipefail
+
           # nfpm for .deb/.rpm - download binary from GitHub (install.goreleaser.com is deprecated)
-          NFPM_URL=$(curl -sL "https://api.github.com/repos/goreleaser/nfpm/releases/latest" | python3 -c "import sys,json;d=json.load(sys.stdin);print([a['browser_download_url'] for a in d['assets'] if 'Linux_x86_64.tar.gz' in a['name'] and 'sbom' not in a['name']][0])")
-          curl -sL "$NFPM_URL" -o /tmp/nfpm.tar.gz
+          NFPM_URL=$(curl -fsSL "https://api.github.com/repos/goreleaser/nfpm/releases/latest" \
+            | python3 -c "import sys,json;d=json.load(sys.stdin);print([a['browser_download_url'] for a in d['assets'] if 'Linux_x86_64.tar.gz' in a['name'] and 'sbom' not in a['name']][0])")
+          test -n "$NFPM_URL"
+          case "$NFPM_URL" in
+            https://github.com/goreleaser/nfpm/releases/download/*) ;;
+            *) echo "unexpected nfpm download host: $NFPM_URL" >&2; exit 1 ;;
+          esac
+          curl -fsSL "$NFPM_URL" -o /tmp/nfpm.tar.gz
+          test -s /tmp/nfpm.tar.gz
           tar xzf /tmp/nfpm.tar.gz -C /usr/local/bin nfpm
           chmod +x /usr/local/bin/nfpm
+          test -x /usr/local/bin/nfpm
+          /usr/local/bin/nfpm --version
           # dpkg-deb tools + file
           sudo apt-get update -qq
           sudo apt-get install -y -qq fakeroot dpkg-dev file
@@ -511,9 +528,12 @@ jobs:
           cp scripts/com.dotnetage.mindx.svg dist/AppDir/usr/share/icons/hicolor/scalable/apps/ 2>/dev/null || true
 
           # Download linuxdeploy (use correct repo + extract to avoid FUSE requirement)
-          curl -sL \
+          # 固定 URL + 下载后非空断言；-f 让 HTTP 错误直接失败，而不是把
+          # 「404 页面」当 AppImage 存下来再 chmod +x 执行。
+          curl -fsSL \
             https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
             -o linuxdeploy.AppImage
+          test -s linuxdeploy.AppImage
           chmod +x linuxdeploy.AppImage
           ./linuxdeploy.AppImage --appimage-extract 2>/dev/null || true
           if [ -d squashfs-root ]; then

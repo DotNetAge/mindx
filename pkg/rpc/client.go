@@ -94,8 +94,10 @@ func HandshakeLocal(ctx context.Context, c gwCaller) error {
 	var result struct {
 		Status string `json:"status"`
 	}
-	if json.Unmarshal(raw, &result) != nil {
-		return fmt.Errorf("本机设备握手未通过，请重启后台服务后重试")
+	if err := json.Unmarshal(raw, &result); err != nil {
+		// 返回真实原因：静态文案「请重启后台服务」曾把解析错误彻底吞掉，
+		// 排查时无从知道到底哪一步失败。
+		return fmt.Errorf("本机设备握手未通过（响应无法识别：%w）。请重启后台服务后重试", err)
 	}
 	if result.Status == "closed" || result.Status == "pending" {
 		// closed：设备接入总闸关闭或本机信任未建立；pending：待本机批准。

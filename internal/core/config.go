@@ -116,6 +116,13 @@ func LoadMindxConfig(workspaceDir string) (*MindxConfig, error) {
 	return cfg, nil
 }
 
+// Path 返回配置文件的落点（只读，供诊断与测试定位）。
+func (c *MindxConfig) Path() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.filePath
+}
+
 func (c *MindxConfig) Save() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

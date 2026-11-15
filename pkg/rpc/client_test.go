@@ -513,6 +513,12 @@ func TestTokenUsageMethods(t *testing.T) {
 		})
 	})
 
+	t.Run("Daily", func(t *testing.T) {
+		testRPC(t, c, m, "token.usage.daily", TokenUsageDailyParams{Year: 2026, Month: 6, Day: 15}, func() (json.RawMessage, error) {
+			return c.TokenUsageDaily(2026, 6, 15)
+		})
+	})
+
 	t.Run("ByModel", func(t *testing.T) {
 		testRPC(t, c, m, "token.usage.by_model", TokenUsageByModelParams{Model: "gpt-4", Year: 2026, Month: 6}, func() (json.RawMessage, error) {
 			return c.TokenUsageByModel("gpt-4", 2026, 6)

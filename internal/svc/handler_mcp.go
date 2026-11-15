@@ -61,6 +61,22 @@ func (d *Daemon) handleMCPServerDiscover(ctx context.Context, params json.RawMes
 	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.server.discover", params)
 }
 
+// handleMCPPendingList 处理 mcp.pending.list：待确认的远程条目清单（只读）。
+func (d *Daemon) handleMCPPendingList(ctx context.Context, _ json.RawMessage) (any, error) {
+	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.pending.list", nil)
+}
+
+// handleMCPPendingDismiss 处理 mcp.pending.dismiss：丢弃用户不启用的待确认条目。
+func (d *Daemon) handleMCPPendingDismiss(ctx context.Context, params json.RawMessage) (any, error) {
+	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.pending.dismiss", params)
+}
+
+// handleMCPPendingConfirm 处理 mcp.pending.confirm：启用用户已确认的远程条目。
+// 属于管理面（会在本机起子进程），仅本机直通连接可调。
+func (d *Daemon) handleMCPPendingConfirm(ctx context.Context, params json.RawMessage) (any, error) {
+	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.pending.confirm", params)
+}
+
 func (d *Daemon) handleMCPToolCall(ctx context.Context, params json.RawMessage) (any, error) {
 	if d.mcpMgr == nil {
 		return nil, errMCPServiceUnavailable

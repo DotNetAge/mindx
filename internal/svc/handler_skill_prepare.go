@@ -344,6 +344,10 @@ type installWithPrepare struct {
 // prepareInstalledSkills 安装完成后对落入全局库的技能自动跑一次准备流程
 // （授权直接启动，命令确认随响应带回壳侧裁决）。
 // ok 且无警告的技能省略；永不产生错误——安装已成功，准备态属附加信息。
+//
+// 「自动」到此为止：此函数只做检查与授权启动，绝不执行包里声明的安装命令。
+// 执行安装命令的唯一入口是 confirmSkillInstall（用户已看过命令清单并确认），
+// 调用链只有 skill.prepare.confirm_install 一条。新增调用方时不要绕过它。
 func (d *Daemon) prepareInstalledSkills(names []string) []skillPrepareResult {
 	if len(names) == 0 {
 		return nil
@@ -351,31 +355,6 @@ func (d *Daemon) prepareInstalledSkills(names []string) []skillPrepareResult {
 	out := make([]skillPrepareResult, 0, len(names))
 	for _, name := range names {
 		res := d.prepareSkill(name)
-		if res.Status == prepareOK && len(res.Warnings) == 0 {
-			continue
-		}
-		out = append(out, *res)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-// prepareAndAutoInstall 安装后免确认准备（market.install 的 auto_install 契约）：
-// 逐技能评估，needs_confirm（缺二进制 + 有安装命令）直接执行命令后收尾评估；
-// 其余状态（oauth_started / blocked）与常规准备一致，由调用方按状态呈现。
-// ok 且无警告的技能省略；永不产生错误——安装已成功，准备态属附加信息。
-func (d *Daemon) prepareAndAutoInstall(ctx context.Context, names []string) []skillPrepareResult {
-	if len(names) == 0 {
-		return nil
-	}
-	out := make([]skillPrepareResult, 0, len(names))
-	for _, name := range names {
-		res := d.prepareSkill(name)
-		if res.Status == prepareNeedsConfirm {
-			res = d.confirmSkillInstall(ctx, name)
-		}
 		if res.Status == prepareOK && len(res.Warnings) == 0 {
 			continue
 		}

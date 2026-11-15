@@ -27,7 +27,7 @@
         build-debug dev-watch test-verbose test-specific \
         vulnerability-check deps-graph \
         docs-serve readme clean-all setup-hooks clear-creds \
-        lint fmt
+        lint fmt check-toolchain
 
 # =============================================================================
 # 配置变量
@@ -279,7 +279,7 @@ dev-watch:
 # =============================================================================
 
 ## test: 运行所有单元测试（带覆盖率报告）
-test:
+test: check-toolchain
 	@echo "$(GREEN)▶ Running tests with coverage...$(NC)"
 	@mkdir -p $(COVERAGE_DIR)
 	$(GO) test -race -coverprofile=$(COVERAGE_DIR)/coverage.out -v ./...
@@ -809,6 +809,7 @@ help:
 	@echo "  $(GREEN)pre-commit$(NC)       Git pre-commit hook"
 	@echo ""
 	@echo "$(YELLOW)🔍 Code Quality Gates (run before every build):$(NC)"
+	@echo "  $(GREEN)check-toolchain$(NC) Verify Go toolchain matches go.mod (catches GOTOOLCHAIN=local drift)"
 	@echo "  $(GREEN)fmt$(NC)              Check & auto-fix Go formatting (gofmt)"
 	@echo "  $(GREEN)lint$(NC)             Run golint code analysis"
 	@echo ""
@@ -908,7 +909,32 @@ clear-creds:
 # 内部目标（辅助功能）
 # =============================================================================
 
-pre-build:
+## check-toolchain: 校验构建工具链与 go.mod 的 toolchain 声明一致
+#
+# 为什么需要这条：go.mod 写 `toolchain go1.26.x` 只是「要求」，是否生效取决于
+# GOTOOLCHAIN。设成 local 时该指令被完全忽略、静默用本机 go 编译——标准库漏洞
+# 就是这么漏过去的（本机 1.26.4 vs 声明 1.26.11，govulncheck 报 18 项）。
+check-toolchain:
+	@REQUIRED=$$(awk '/^toolchain /{print $$2}' go.mod); \
+	if [ -z "$$REQUIRED" ]; then \
+		echo "$(YELLOW)⚠  go.mod 未声明 toolchain，跳过检查$(NC)"; \
+		exit 0; \
+	fi; \
+	ACTUAL=$$($(GO) env GOVERSION); \
+	if [ "$$ACTUAL" = "$$REQUIRED" ]; then \
+		echo "$(GREEN)✅ 工具链一致：$${ACTUAL}$(NC)"; \
+		exit 0; \
+	fi; \
+	echo "$(RED)❌ 工具链不一致：go.mod 要求 $${REQUIRED}，实际使用 $${ACTUAL}$(NC)"; \
+	if [ "$$($(GO) env GOTOOLCHAIN)" = "local" ]; then \
+		echo "   原因：GOTOOLCHAIN=local 会让 go.mod 的 toolchain 指令完全失效"; \
+		echo "   修复：go env -w GOTOOLCHAIN=auto"; \
+	else \
+		echo "   修复：确认网络可拉取 $${REQUIRED}，或升级本机 Go"; \
+	fi; \
+	exit 1
+
+pre-build: check-toolchain
 	@echo "$(YELLOW)⏳ Pre-build checks...$(NC)"
 	@test -n "$(GO)" || (echo "$(RED)❌ Error: Go not found$(NC)" && exit 1)
 	@$(GO) version >/dev/null 2>&1 && echo "$(GREEN)✅ Pre-build checks passed!$(NC)" || (echo "$(YELLOW)⚠  Go version check warning (continuing)...$(NC)" && echo "$(GREEN)✅ Pre-build checks passed!$(NC)")

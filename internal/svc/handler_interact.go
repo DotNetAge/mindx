@@ -3,6 +3,7 @@ package svc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/DotNetAge/gort/pkg/gateway"
@@ -23,7 +24,12 @@ func (d *Daemon) handleMessageCancel(ctx context.Context, params json.RawMessage
 		SessionID string `json:"session_id"`
 	}
 	if len(params) > 0 {
-		_ = json.Unmarshal(params, &req)
+		// 解析失败必须报错：以前吞掉错误后 req.SessionID 为空，直接落到
+		// 「取消该客户端全部执行」的兜底分支，把「停一个会话」变成「全停」，
+		// 还返回 status: ok。
+		if err := json.Unmarshal(params, &req); err != nil {
+			return nil, fmt.Errorf("停止参数格式不对，这次没有停止任何任务。")
+		}
 	}
 
 	// 按 clientID 精确取消，避免一个客户端停止误杀其他客户端（多窗口/多设备）的执行

@@ -133,7 +133,7 @@ func (s *FileTokenUsageStore) saveAll(records []yamlTokenUsageRecord) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 // Append writes a single TokenUsageRecord with default source "chat".

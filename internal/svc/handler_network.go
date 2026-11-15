@@ -328,11 +328,15 @@ func (d *Daemon) handleNetworkPublicInfo(_ context.Context, _ json.RawMessage) (
 // handleNetworkTokenGet 处理 network.token.get：下发本机握手 token
 // （仅限本机直通连接调用——外接设备即使配对成功也不可得，防止换取
 // 不可撤销的本机身份；外接设备跨网回连一律使用各自的设备令牌）。
+//
+// 闸未装配时一律拒绝：本机令牌是不可撤销的长期凭据，任何「闸不在位就当
+// 本机放行」的写法都会把一次组件故障放大成永久失守。
 func (d *Daemon) handleNetworkTokenGet(ctx context.Context, _ json.RawMessage) (any, error) {
-	if d.devGate != nil {
-		if clientID := gateway.ClientIDFromContext(ctx); !d.devGate.LocalVerified(clientID) {
-			return nil, fmt.Errorf("这个凭据只提供给本机使用")
-		}
+	if d.devGate == nil {
+		return nil, fmt.Errorf("MindX 的安全组件还没准备好，暂时无法继续。请重新打开 MindX 再试。")
+	}
+	if clientID := gateway.ClientIDFromContext(ctx); !d.devGate.LocalVerified(clientID) {
+		return nil, fmt.Errorf("这个凭据只提供给本机使用")
 	}
 	token, err := d.loadOrCreateDaemonToken()
 	if err != nil {

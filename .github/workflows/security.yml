@@ -34,7 +34,9 @@ permissions:
   security-events: write
 
 env:
-  GO_VERSION: '1.26'
+  # 固定到具体补丁版：标准库漏洞随补丁版修复，'1.26' 由 setup-go 解析为最新
+  # 补丁版，构建产物因此不可复现（同一 tag 在不同日子构建出不同的标准库版本）。
+  GO_VERSION: '1.26.11'
   CGO_ENABLED: 1
 
 jobs:
@@ -105,8 +107,17 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
+      # 管道必须带 pipefail：GitHub 默认 shell 是 `bash -e {0}`，没有 -o pipefail，
+      # 管道退出码取最后一个命令（tee 恒为 0），govulncheck 的失败会被吞掉，
+      # 汇总页据此永远显示「通过」。
       - name: Run govulncheck
-        run: govulncheck ./... | tee govulncheck-output.txt
+        shell: bash
+        run: |
+          set -o pipefail
+          # 记录本次扫描所用的工具链补丁版：标准库漏洞随补丁版修复，
+          # 只写 go 1.26 无法判断产物是否带洞。
+          go version
+          govulncheck ./... | tee govulncheck-output.txt
 
       - name: Upload govulncheck report
         if: always()

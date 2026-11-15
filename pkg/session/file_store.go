@@ -242,7 +242,10 @@ func (s *FileSessionStore) Get(ctx context.Context, sessionID string) ([]goharne
 		return filepath.SkipAll
 	})
 
-	sort.Slice(msgs, func(i, j int) bool { return msgs[i].Timestamp < msgs[j].Timestamp })
+	// 不在此处排序：落盘顺序即唯一真值。Get 是所有读取/恢复/上下文组装
+	// 的公共路径，任何读侧重排都会让发给模型的请求前缀与落盘顺序不一致
+	// （sort.Slice 不稳定，同毫秒时间戳的条目相对顺序可被任意交换，工具调用
+	// 与工具结果的配对也会被打乱）。确需顺序修正只能在写入侧保证时间戳单调。
 	return msgs, err
 }
 
@@ -707,7 +710,7 @@ func (s *FileSessionStore) SaveModifyFiles(sessionID string, files []string) err
 		return fmt.Errorf("marshal modify_files: %w", err)
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 // GetModifyFiles loads the tracked modified file paths list from disk.

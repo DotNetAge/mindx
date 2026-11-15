@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strconv"
 	"time"
 
 	goharnesssession "github.com/DotNetAge/goharness/session"
@@ -39,6 +41,22 @@ func (d *Daemon) handleTokenUsageOverview(_ context.Context, params json.RawMess
 		"previous_month":   prevMonthStats,
 		"available_models": models,
 	}, nil
+}
+
+func (d *Daemon) handleTokenUsageDaily(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.TokenUsageDailyParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Year == 0 || p.Month < 1 || p.Month > 12 || p.Day < 1 {
+		return nil, fmt.Errorf("valid year, month (1-12) and day are required")
+	}
+
+	stats, err := d.buildDailyStats(p.Year, p.Month, p.Day)
+	if err != nil {
+		return nil, fmt.Errorf("build daily stats: %w", err)
+	}
+	return stats, nil
 }
 
 func (d *Daemon) handleTokenUsageMonthly(_ context.Context, params json.RawMessage) (any, error) {
@@ -159,6 +177,10 @@ func (d *Daemon) handleTokenUsageSessionDetail(_ context.Context, params json.Ra
 		return nil, fmt.Errorf("query session token usage: %w", err)
 	}
 
+	// 轮次线索：conversationID 在 goharness 每轮 Run 生成且记录已携带；问题文本
+	// 经会话用户消息时间对齐补出（每条记录归到其之前最近的用户提问）。
+	anchors := d.sessionQuestionAnchors(p.SessionID)
+
 	details := make([]any, 0, len(records))
 	for _, r := range records {
 		mcIn, mcOut, mcCache := d.modelCost(r.ModelName, r.ProviderName)
@@ -169,10 +191,12 @@ func (d *Daemon) handleTokenUsageSessionDetail(_ context.Context, params json.Ra
 			"output_tokens": r.CompletionTokens,
 			"cached_tokens": r.CachedTokens,
 			// total_tokens 与会话/月度汇总保持一致：计费口径 prompt + completion - cached
-			"total_tokens":  chargeableTokens(r),
-			"cost":          roundCost(cost),
-			"model_name":    r.ModelName,
-			"provider_name": r.ProviderName,
+			"total_tokens":    chargeableTokens(r),
+			"cost":            roundCost(cost),
+			"model_name":      r.ModelName,
+			"provider_name":   r.ProviderName,
+			"conversation_id": r.ConversationID,
+			"question":        anchorQuestion(anchors, r.Timestamp),
 		})
 	}
 
@@ -256,6 +280,140 @@ func (d *Daemon) handleTokenUsageByModel(_ context.Context, params json.RawMessa
 	}}, nil
 }
 
+func (d *Daemon) buildDailyStats(year, month, day int) (map[string]any, error) {
+	store := d.app.TokenUsageStore()
+	if store == nil {
+		return emptyDailyResult(year, month, day), nil
+	}
+
+	dayStart := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
+	// time.Date 会把越界 day 归一化进下月（如 2 月 30 日），回读校验拦掉这类参数
+	if dayStart.Day() != day {
+		return nil, fmt.Errorf("valid day of %d-%02d is required", year, month)
+	}
+	until := dayStart.AddDate(0, 0, 1)
+
+	filter := goharnesssession.TokenUsageFilter{
+		Since: dayStart,
+		Until: until,
+	}
+
+	records, err := store.Query(context.Background(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+	if len(records) == 0 {
+		return emptyDailyResult(year, month, day), nil
+	}
+
+	hourlyMap := make(map[int]*dayAgg)
+	modelMap := make(map[string]*modelAgg)
+	totalCost := 0.0
+	totalTokens := 0
+
+	for _, r := range records {
+		hour := r.Timestamp.Hour()
+		hData := hourlyMap[hour]
+		if hData == nil {
+			hData = &dayAgg{}
+			hourlyMap[hour] = hData
+		}
+		hData.inputTokens += r.PromptTokens
+		hData.outputTokens += r.CompletionTokens
+		hData.cachedTokens += r.CachedTokens
+		hData.requestCount++
+		hData.model = r.ModelName
+
+		mKey := r.ModelName
+		mData := modelMap[mKey]
+		if mData == nil {
+			mData = &modelAgg{
+				model:    r.ModelName,
+				provider: r.ProviderName,
+			}
+			modelMap[mKey] = mData
+		}
+		mData.inputTokens += r.PromptTokens
+		mData.outputTokens += r.CompletionTokens
+		mData.cachedTokens += r.CachedTokens
+		mData.requestCount++
+		mcIn, mcOut, mcCache := d.modelCost(r.ModelName, r.ProviderName)
+		cost := core.CalculateCost(mcIn, mcOut, mcCache, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
+		if mData.series == nil {
+			mData.series = make(map[string]*modelSeries)
+		}
+		sKey := fmt.Sprintf("%02d", hour)
+		ms := mData.series[sKey]
+		if ms == nil {
+			ms = &modelSeries{}
+			mData.series[sKey] = ms
+		}
+		ms.requestCount++
+		ms.totalTokens += chargeableTokens(r)
+		ms.cost += cost
+
+		hData.cost += cost
+		mData.totalCost += cost
+		totalCost += cost
+		totalTokens += chargeableTokens(r)
+	}
+
+	hourlyUsage := make([]any, 0, len(hourlyMap))
+	for hour, ha := range hourlyMap {
+		hourTotal := chargeableTokensOf(ha.inputTokens, ha.outputTokens, ha.cachedTokens)
+		hourlyUsage = append(hourlyUsage, map[string]any{
+			"hour":          hour,
+			"input_tokens":  ha.inputTokens,
+			"output_tokens": ha.outputTokens,
+			"cached_tokens": ha.cachedTokens,
+			"total_tokens":  hourTotal,
+			"cost":          roundCost(ha.cost),
+			"request_count": ha.requestCount,
+			"model":         ha.model,
+		})
+	}
+
+	modelBreakdown := make([]any, 0, len(modelMap))
+	for _, ma := range modelMap {
+		modelTotal := chargeableTokensOf(ma.inputTokens, ma.outputTokens, ma.cachedTokens)
+		avgReq := 0
+		if ma.requestCount > 0 {
+			avgReq = modelTotal / ma.requestCount
+		}
+		hourly := make([]any, 0, len(ma.series))
+		for k, ms := range ma.series {
+			h, _ := strconv.Atoi(k)
+			hourly = append(hourly, map[string]any{
+				"hour":          h,
+				"request_count": ms.requestCount,
+				"total_tokens":  ms.totalTokens,
+				"cost":          roundCost(ms.cost),
+			})
+		}
+		modelBreakdown = append(modelBreakdown, map[string]any{
+			"model":                  ma.model,
+			"provider":               ma.provider,
+			"total_tokens":           modelTotal,
+			"input_tokens":           ma.inputTokens,
+			"output_tokens":          ma.outputTokens,
+			"cached_tokens":          ma.cachedTokens,
+			"total_cost":             roundCost(ma.totalCost),
+			"request_count":          ma.requestCount,
+			"avg_tokens_per_request": avgReq,
+			"hourly":                 hourly,
+		})
+	}
+
+	return map[string]any{
+		"date":            fmt.Sprintf("%d-%02d-%02d", year, month, day),
+		"total_cost":      roundCost(totalCost),
+		"total_tokens":    totalTokens,
+		"total_requests":  len(records),
+		"hourly_usage":    hourlyUsage,
+		"model_breakdown": modelBreakdown,
+	}, nil
+}
+
 func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 	store := d.app.TokenUsageStore()
 	d.logger.Debug("buildMonthlyStats called",
@@ -317,9 +475,20 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 		mData.outputTokens += r.CompletionTokens
 		mData.cachedTokens += r.CachedTokens
 		mData.requestCount++
-
 		mcIn, mcOut, mcCache := d.modelCost(r.ModelName, r.ProviderName)
 		cost := core.CalculateCost(mcIn, mcOut, mcCache, int64(r.PromptTokens), int64(r.CompletionTokens), int64(r.CachedTokens))
+		if mData.series == nil {
+			mData.series = make(map[string]*modelSeries)
+		}
+		ms := mData.series[dateKey]
+		if ms == nil {
+			ms = &modelSeries{}
+			mData.series[dateKey] = ms
+		}
+		ms.requestCount++
+		ms.totalTokens += chargeableTokens(r)
+		ms.cost += cost
+
 		dayData.cost += cost
 		mData.totalCost += cost
 		totalCost += cost
@@ -362,6 +531,15 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 		if ma.requestCount > 0 {
 			avgReq = modelTotal / ma.requestCount
 		}
+		daily := make([]any, 0, len(ma.series))
+		for k, ms := range ma.series {
+			daily = append(daily, map[string]any{
+				"date":          k,
+				"request_count": ms.requestCount,
+				"total_tokens":  ms.totalTokens,
+				"cost":          roundCost(ms.cost),
+			})
+		}
 		modelBreakdown = append(modelBreakdown, map[string]any{
 			"model":                  ma.model,
 			"provider":               ma.provider,
@@ -372,6 +550,7 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 			"total_cost":             roundCost(ma.totalCost),
 			"request_count":          ma.requestCount,
 			"avg_tokens_per_request": avgReq,
+			"daily":                  daily,
 		})
 	}
 
@@ -384,6 +563,39 @@ func (d *Daemon) buildMonthlyStats(year, month int) (map[string]any, error) {
 		"daily_usage":     dailyUsage,
 		"model_breakdown": modelBreakdown,
 	}, nil
+}
+
+// sessionQuestionAnchors 取会话内全部用户提问（role=user），按时间升序，作为轮次归组锚点。
+func (d *Daemon) sessionQuestionAnchors(sessionID string) []goharnesssession.Message {
+	sess, err := d.getOrLoadSession(sessionID)
+	if err != nil || sess == nil {
+		return nil
+	}
+	msgs := sess.All()
+	anchors := make([]goharnesssession.Message, 0, len(msgs)/4)
+	for _, m := range msgs {
+		if m.Role == "user" {
+			anchors = append(anchors, m)
+		}
+	}
+	sort.Slice(anchors, func(i, j int) bool { return anchors[i].Timestamp < anchors[j].Timestamp })
+	return anchors
+}
+
+// anchorQuestion 返回时间戳之前最近的用户提问（Message.Timestamp 为秒级 Unix）。
+// 同轮多次 LLM 调用归到同一提问；首条提问之前的记录返回空串。
+func anchorQuestion(anchors []goharnesssession.Message, ts time.Time) string {
+	q := ""
+	sec := ts.Unix()
+	for _, m := range anchors {
+		if m.Timestamp > sec {
+			break
+		}
+		if m.Content != "" {
+			q = m.Content
+		}
+	}
+	return q
 }
 
 func (d *Daemon) listAvailableModels() []string {
@@ -427,6 +639,26 @@ type modelAgg struct {
 	cachedTokens int
 	requestCount int
 	totalCost    float64
+	// series 时序桶：day 维度键为 "HH"（小时），month 维度键为 "YYYY-MM-DD"（日期）
+	series map[string]*modelSeries
+}
+
+// modelSeries 单模型单时序桶的请求/token/费用计数
+type modelSeries struct {
+	requestCount int
+	totalTokens  int
+	cost         float64
+}
+
+func emptyDailyResult(year, month, day int) map[string]any {
+	return map[string]any{
+		"date":            fmt.Sprintf("%d-%02d-%02d", year, month, day),
+		"total_cost":      0.0,
+		"total_tokens":    0,
+		"total_requests":  0,
+		"hourly_usage":    []any{},
+		"model_breakdown": []any{},
+	}
 }
 
 func emptyMonthlyResult(year, month int) map[string]any {
@@ -439,6 +671,15 @@ func emptyMonthlyResult(year, month int) map[string]any {
 		"daily_usage":     []any{},
 		"model_breakdown": []any{},
 	}
+}
+
+// chargeableTokensOf 计费口径三数合成：prompt + completion - cached，负值归零。
+func chargeableTokensOf(input, output, cached int) int {
+	n := input + output - cached
+	if n < 0 {
+		return 0
+	}
+	return n
 }
 
 // chargeableTokens returns the billable token count for a record:

@@ -13,6 +13,12 @@ import (
 )
 
 func RegisterBuiltinCommands(gw *gateway.Server, app *core.App, d *Daemon) {
+	registerBuiltinCommandsWith(gw.RegisterCommand, app, d)
+}
+
+// registerBuiltinCommandsWith 是命令注册的唯一实现：注册动作可注入，
+// 生产环境传 gw.RegisterCommand，测试传记录器以校验每条命令都被闸包住。
+func registerBuiltinCommandsWith(register commands.Registerer, app *core.App, d *Daemon) {
 	commands.SetCatalogDeps(commands.CatalogDeps{
 		ListAgents: func() ([]map[string]string, error) { return listAgents(app), nil },
 		ListModels: func() ([]map[string]string, error) { return listModels(app), nil },
@@ -42,7 +48,9 @@ func RegisterBuiltinCommands(gw *gateway.Server, app *core.App, d *Daemon) {
 		},
 	})
 
-	commands.New().RegisterAll(gw)
+	// 命令与 RPC 共用同一道接入闸：RegisterCommand 不走 RegisterMethod，
+	// 少了这层包装就等于「注册路径不同 = 鉴权不同」。
+	commands.New().RegisterAllWith(register, d.guardCommand)
 }
 
 func GetCommandMetas() []gateway.CommandMeta {

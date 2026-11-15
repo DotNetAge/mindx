@@ -123,6 +123,61 @@ var tokenMonthlyCmd = &cobra.Command{
 	},
 }
 
+// ── token daily ───────────────────────────────────────────────
+
+var tokenDailyCmd = &cobra.Command{
+	Use:     "daily",
+	Short:   "Show hourly token usage for a specific day",
+	Example: `  mindx token daily --year 2026 --month 11 --day 15`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		year, _ := cmd.Flags().GetInt("year")
+		month, _ := cmd.Flags().GetInt("month")
+		day, _ := cmd.Flags().GetInt("day")
+		jsonOut, _ := cmd.Flags().GetBool("json")
+
+		now := time.Now()
+		if year == 0 {
+			year = now.Year()
+		}
+		if month == 0 {
+			month = int(now.Month())
+		}
+		if day == 0 {
+			day = now.Day()
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.TokenUsageDaily(year, month, day)
+		if err != nil {
+			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		var data map[string]interface{}
+		if err := json.Unmarshal(result, &data); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		table := render.NewTable([]string{"Metric", "Value"}, 60)
+		for k, v := range data {
+			valStr := fmt.Sprintf("%v", v)
+			table.AddRow([]string{k, valStr})
+		}
+		fmt.Println(table.Render())
+		return nil
+	},
+}
+
 // ── token by-model ────────────────────────────────────────────
 
 var tokenByModelCmd = &cobra.Command{
@@ -265,6 +320,40 @@ var tokenSessionCmd = &cobra.Command{
 	},
 }
 
+// ── token session-detail ──────────────────────────────────────
+
+var tokenSessionDetailCmd = &cobra.Command{
+	Use:     "session-detail",
+	Short:   "Show per-call token usage records of a session",
+	Example: `  mindx token session-detail --session-id "abc123"`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		sessionID, _ := cmd.Flags().GetString("session-id")
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		if sessionID == "" {
+			return fmt.Errorf("--session-id is required")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.TokenUsageSessionDetail(sessionID)
+		if err != nil {
+			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		fmt.Println(string(result))
+		return nil
+	},
+}
+
 // ── init subcommands ──────────────────────────────────────────
 
 func init() {
@@ -272,6 +361,10 @@ func init() {
 	tokenMonthlyCmd.Flags().Int("year", 0, "Year (default: current)")
 	tokenMonthlyCmd.Flags().Int("month", 0, "Month 1-12 (default: current)")
 	tokenMonthlyCmd.Flags().Bool("json", false, "Output raw JSON")
+	tokenDailyCmd.Flags().Int("year", 0, "Year (default: current)")
+	tokenDailyCmd.Flags().Int("month", 0, "Month 1-12 (default: current)")
+	tokenDailyCmd.Flags().Int("day", 0, "Day of month (default: current)")
+	tokenDailyCmd.Flags().Bool("json", false, "Output raw JSON")
 	tokenByModelCmd.Flags().String("model", "", "Model name (required)")
 	tokenByModelCmd.Flags().Int("year", 0, "Year (default: current)")
 	tokenByModelCmd.Flags().Int("month", 0, "Month 1-12 (default: current)")
@@ -279,10 +372,14 @@ func init() {
 	tokenTotalCmd.Flags().Bool("json", false, "Output raw JSON")
 	tokenSessionCmd.Flags().String("session-id", "", "Session ID (required)")
 	tokenSessionCmd.Flags().Bool("json", false, "Output raw JSON")
+	tokenSessionDetailCmd.Flags().String("session-id", "", "Session ID (required)")
+	tokenSessionDetailCmd.Flags().Bool("json", false, "Output raw JSON")
 
 	tokenCmd.AddCommand(tokenOverviewCmd)
 	tokenCmd.AddCommand(tokenMonthlyCmd)
+	tokenCmd.AddCommand(tokenDailyCmd)
 	tokenCmd.AddCommand(tokenByModelCmd)
 	tokenCmd.AddCommand(tokenTotalCmd)
 	tokenCmd.AddCommand(tokenSessionCmd)
+	tokenCmd.AddCommand(tokenSessionDetailCmd)
 }

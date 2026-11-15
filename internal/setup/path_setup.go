@@ -41,7 +41,9 @@ func addUnixPath(dir string) (bool, error) {
 		return false, fmt.Errorf("cannot determine shell rc file")
 	}
 
-	line := fmt.Sprintf(`export PATH="%s:$PATH"`, dir)
+	// 路径按 shell 字面量转义后再拼行：目录名里的 " 或 $ 不能闭合引号、
+	// 也不能被展开。这一行会被每次开 shell 执行，注入即持久化。
+	line := fmt.Sprintf(`export PATH=%s:"$PATH"`, shellQuoteSingle(dir))
 
 	data, err := os.ReadFile(rcFile)
 	if err != nil && !os.IsNotExist(err) {

@@ -301,7 +301,10 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) (*Daemon, er
 
 	// ── 设备接入闸（Mac 间互连）：凭据存储与本机令牌就绪即可装配 ──
 	// 通知回调内判 gw 判空（Notify 时点可能早于 gateway 启动）。
-	d.initDeviceGate()
+	// 装配失败即启动失败：闸不在位时所有准入检查都只能退化成无条件放行。
+	if err := d.initDeviceGate(); err != nil {
+		return nil, err
+	}
 
 	// ── 自动升级 ──────────────────────────────────────────────
 	// 确保 config.InstalledVersion 不为空（首次启动时设置）
@@ -322,6 +325,10 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) (*Daemon, er
 		},
 		func(msg string, args ...any) { logger.Info(fmt.Sprintf("updater: "+msg, args...)) },
 	)
+
+	// 新二进制已完整走到初始化完成，说明上一次升级替换成功：清掉 .old 备份。
+	// 启动失败时备份仍在，可手工回滚（见 update.CleanupBinaryBackup）。
+	update.CleanupBinaryBackup()
 
 	d.logger.Info("=== Daemon initialization complete ===",
 		"has_scheduler", d.scheduler != nil,
@@ -745,30 +752,9 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 		"data_size", len(msg.Data),
 	)
 
-	var payload struct {
-		Text      string `json:"text"`
-		SessionID string `json:"session_id,omitempty"`
-		AgentName string `json:"agent_name,omitempty"`
-		Images    []struct {
-			Path      string `json:"path"`
-			MediaType string `json:"media_type"`
-		} `json:"images,omitempty"`
-	}
-	// 附加图片：前端把粘贴/上传的图片落盘到会话临时目录后，
-	// 以 {path, media_type} 引用随 user.message 一起送达。
-	// 此处仅做路径引用收集（读文件转 base64 延迟到组装 LLM 消息时）。
-	userImages := make([]goharnesssession.ImageBlock, 0, len(payload.Images))
-	for _, img := range payload.Images {
-		if img.Path == "" {
-			continue
-		}
-		userImages = append(userImages, goharnesssession.ImageBlock{
-			Path:      img.Path,
-			MediaType: img.MediaType,
-		})
-	}
-	if err := json.Unmarshal(msg.Data, &payload); err != nil || (payload.Text == "" && len(userImages) == 0) {
-		d.logger.Warn("defaultHandler: missing or invalid text field",
+	payload, userImages, err := parseUserMessagePayload(msg.Data)
+	if err != nil {
+		d.logger.Warn("defaultHandler: 丢弃无法处理的消息",
 			"data", string(msg.Data), "error", err)
 		return
 	}

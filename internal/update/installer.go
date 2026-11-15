@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -144,7 +145,12 @@ func (u *Updater) Download(ctx context.Context) (stageBinary string, version str
 		}
 		u.logf("checksum verified for %s", assetName)
 	} else {
-		u.logf("发布未附带 %s 的校验文件，跳过完整性校验", assetName)
+		// 没有校验文件就无法验证下载物是否被替换/截断。以前这里是「跳过校验
+		// 继续装」，等于把完整性判定交给运气。发布流水线每次都产出
+		// checksums.txt（release.yml 的 Generate SHA256 checksums），
+		// 缺校验文件只可能是异常或人为投毒，一律中止。
+		cleanup()
+		return "", "", nil, fmt.Errorf("发布没有附带 %s 的校验文件，无法验证更新包完整性，已中止安装", assetName)
 	}
 
 	u.logf("downloaded to %s, extracting...", archivePath)
@@ -273,6 +279,18 @@ func copyFile(src, dst string, mode os.FileMode) error {
 // second-long, atomic-ish rename and never stops or starts services — the
 // caller orchestrates stop/start around it with the user's consent.
 func (u *Updater) InstallFromStage(stageBinary, version string) error {
+	// 版本不得倒退：目标版本低于当前版本时拒绝安装，防止把已修好的构建
+	// 回滚成旧版本（本地归档 + 任意 --version 曾可做到）。
+	if cmp := CompareVersions(strings.TrimPrefix(version, "v"), strings.TrimPrefix(u.currentVer, "v")); cmp < 0 {
+		return fmt.Errorf("目标版本 v%s 低于当前版本 v%s，已拒绝降级安装", strings.TrimPrefix(version, "v"), strings.TrimPrefix(u.currentVer, "v"))
+	}
+
+	// 替换前再次确认暂存产物真的是可执行文件：暂存区可能来自磁盘上的旧文件
+	// 或被截断的下载。
+	if err := validateExecutable(stageBinary); err != nil {
+		return fmt.Errorf("暂存的更新包不可用: %w", err)
+	}
+
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("get executable path: %w", err)
@@ -294,8 +312,9 @@ func (u *Updater) InstallFromStage(stageBinary, version string) error {
 		return fmt.Errorf("install new binary: %w", err)
 	}
 
-	// Remove backup (will work on most Unix systems after exec restarts)
-	_ = os.Remove(backupPath)
+	// 刻意不删备份：新二进制还没被验证「真能起来」，此时删掉 .old 就没有回滚
+	// 可用了。备份在下一次成功启动时清理（CleanupBinaryBackup）。
+	u.logf("backup kept at %s until next successful start", backupPath)
 
 	if err := u.saveConfig(version); err != nil {
 		u.logf("warning: failed to update config version: %v", err)
@@ -305,7 +324,35 @@ func (u *Updater) InstallFromStage(stageBinary, version string) error {
 	return nil
 }
 
+// allowedDownloadHosts 是升级包允许的下载域（GitHub 官方资产与 API）。
+var allowedDownloadHosts = map[string]bool{
+	"github.com":                    true,
+	"api.github.com":                true,
+	"codeload.github.com":           true,
+	"objects.githubusercontent.com": true,
+}
+
+// validateDownloadURL 校验下载地址：必须 https，且主机属于 GitHub 官方域。
+// 地址来自 release API 响应，不校验 host 就等于允许被污染的响应把二进制
+// 从任意站点拉进主机。
+func validateDownloadURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("更新包地址无法解析: %w", err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("更新包地址必须是 https：%s", u.Scheme)
+	}
+	if !allowedDownloadHosts[strings.ToLower(u.Hostname())] {
+		return fmt.Errorf("更新包地址不属于 GitHub 官方下载域（%s），已拒绝下载", u.Hostname())
+	}
+	return nil
+}
+
 func (u *Updater) downloadFile(ctx context.Context, url, destPath string) error {
+	if err := validateDownloadURL(url); err != nil {
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
@@ -369,15 +416,30 @@ func extractTarGz(archivePath, destDir string) (string, error) {
 		if name != "mindx" {
 			continue
 		}
+		// 只认真普通文件：symlink/hardlink/目录条目会被 io.Copy 写成 0 字节
+		// 且不报错（探针实测），随后被 os.Rename 顶替正在运行的二进制。
+		if header.Typeflag != tar.TypeReg {
+			continue
+		}
 
 		outPath := filepath.Join(destDir, name)
 		out, err := os.Create(outPath)
 		if err != nil {
 			return "", err
 		}
-		defer func() { _ = out.Close() }()
-
-		if _, err := io.Copy(out, tarr); err != nil {
+		_, copyErr := io.Copy(out, tarr)
+		closeErr := out.Close()
+		if copyErr != nil {
+			_ = os.Remove(outPath)
+			return "", copyErr
+		}
+		if closeErr != nil {
+			_ = os.Remove(outPath)
+			return "", closeErr
+		}
+		// 内容校验：不是可执行魔数或体积异常偏小，一律不认这个条目
+		if err := validateExecutable(outPath); err != nil {
+			_ = os.Remove(outPath)
 			return "", err
 		}
 
@@ -424,4 +486,71 @@ func SHA256(path string) (string, error) {
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+// minBinarySize 是认可的最小可执行文件体积。真实二进制在数十 MB 量级，
+// 1MB 只用于挡「0 字节 / 被截断」这类明显异常，不参与精确判断。
+const minBinarySize = 1 << 20
+
+// validateExecutable 校验产物是真可执行文件：体积下限 + 可执行魔数。
+// 不是「格式洁癖」——没有这一步，一个 0 字节文件就能顶替正在运行的二进制，
+// 且不会有任何错误返回（见 extractTarGz 的条目类型检查）。
+func validateExecutable(path string) error {
+	st, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("检查更新包失败: %w", err)
+	}
+	if st.IsDir() {
+		return fmt.Errorf("更新包不是文件")
+	}
+	if st.Size() < minBinarySize {
+		return fmt.Errorf("更新包体积异常（%d 字节），已拒绝使用", st.Size())
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("打开更新包失败: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	head := make([]byte, 4)
+	if _, err := io.ReadFull(f, head); err != nil {
+		return fmt.Errorf("读取更新包头部失败: %w", err)
+	}
+	if isExecutableMagic(head) {
+		return nil
+	}
+	return fmt.Errorf("更新包不是可执行文件（魔数不匹配）")
+}
+
+// isExecutableMagic 判断文件头是否为 ELF / Mach-O 魔数。
+func isExecutableMagic(head []byte) bool {
+	if len(head) < 4 {
+		return false
+	}
+	// ELF: 0x7F 'E' 'L' 'F'
+	if head[0] == 0x7f && head[1] == 'E' && head[2] == 'L' && head[3] == 'F' {
+		return true
+	}
+	be := uint32(head[0])<<24 | uint32(head[1])<<16 | uint32(head[2])<<8 | uint32(head[3])
+	le := uint32(head[3])<<24 | uint32(head[2])<<16 | uint32(head[1])<<8 | uint32(head[0])
+	switch {
+	case be == 0xfeedface, be == 0xfeedfacf, // Mach-O 32/64 大端
+		le == 0xfeedface, le == 0xfeedfacf, // Mach-O 32/64 小端
+		be == 0xcafebabe, be == 0xbebafeca, // fat binary
+		be == 0xcafebabf, be == 0xbfbafeca:
+		return true
+	}
+	return false
+}
+
+// CleanupBinaryBackup 删除上一次升级留下的 <exe>.old 备份。
+// 调用时机：新二进制已完整启动（能走到 daemon 初始化完成）——这时才证明
+// 替换成功，备份的使命结束。启动失败时备份仍在，可手工回滚。
+func CleanupBinaryBackup() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	_ = os.Remove(exe + ".old")
 }

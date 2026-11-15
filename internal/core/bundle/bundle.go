@@ -20,7 +20,10 @@
 //   - 同名冲突默认拒绝，覆盖需显式确认（Overwrite）。
 package bundle
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // PackageFormat 是包内清单的格式版本（当前唯一版本）。
 const PackageFormat = 1
@@ -127,7 +130,33 @@ func (m *Manifest) validate() error {
 	if m.Name == "" {
 		return fmt.Errorf("包清单缺少 name 字段")
 	}
+	// name 会被直接拼进安装目录（AgentsDir/<name>），属于包内 JSON 提供的
+	// 自由字符串，不受 zip 条目路径校验约束。不设边界就能把包内容写到
+	// 目标目录之外（如 "../../../../tmp/evil"），因此与条目名同一口径收口。
+	if !validPackageName(m.Name) {
+		return fmt.Errorf("包清单的 name 只能用字母、数字和 . _ -（不能含路径分隔符或 ..）：%q", m.Name)
+	}
 	return nil
+}
+
+// validPackageName 判断包名是否可安全用作单层目录名。
+//
+// 规则：非空、≤64 字节、只含字母数字与 . _ @ -，且不以 . 开头、不含 ".."。
+// 中文等非 ASCII 名称目前一律拒绝——安装目录名要参与路径拼接与命令行展示，
+// 白名单比黑名单更容易验证；确有非 ASCII 包名需求时再单独放宽并补测试。
+func validPackageName(name string) bool {
+	if name == "" || len(name) > 64 || strings.HasPrefix(name, ".") || strings.Contains(name, "..") {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.', r == '_', r == '-', r == '@':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // InstallResult 描述一次安装的落位结果（RPC 返回给前端展示）。

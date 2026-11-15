@@ -572,7 +572,12 @@ func buildCollectNode(state *BuildState, it Item, offset time.Duration) *Collect
 	sessionIDs := []string{}
 	digests := []string{}
 	for _, e := range entries {
-		entry := e.(map[string]any)
+		// 外部 JSON 里的元素可能是 null / 字符串 / 数字，直接断言会 panic，
+		// 一张卡片渲染失败就整段对话流崩掉。
+		entry, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
 		sid := builderJsonStr(entry, "session_id")
 		if sid == "" {
 			continue

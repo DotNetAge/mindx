@@ -46,7 +46,10 @@ type MarketInstallParams struct {
 	Overwrite bool `json:"overwrite,omitempty"`
 	// SkipDeps 跳过依赖检查和安装。
 	SkipDeps bool `json:"skip_deps,omitempty"`
-	// AutoInstall 自动执行缺失依赖的安装脚本。
+	// AutoInstall 保留字段，已不再改变行为：安装命令一律需要用户显式确认。
+	// 安装第三方包时自动执行包内提供的 shell 命令，等于把包作者的命令以
+	// 本机权限直接跑掉，没有任何确认环节，因此该捷径取消——安装后仍会
+	// 跑准备检查，缺依赖时把待执行命令清单交回壳侧由用户裁决。
 	AutoInstall bool `json:"auto_install,omitempty"`
 	// OrgSlug 组织源 slug（空 = 公共资源社区；非空 = 从该组织的专用源下载安装）。
 	OrgSlug string `json:"org_slug,omitempty"`

@@ -130,3 +130,70 @@ func TestExtractRequires_EnvsLegacyStringOnly(t *testing.T) {
 	require.Equal(t, []string{"MINDX_API_KEY"}, r.Env)
 	require.Empty(t, r.Envs)
 }
+
+// TestValidBinName 白名单形态判定。
+func TestValidBinName(t *testing.T) {
+	valid := []string{"node", "python3", "docker-compose", "g++", "go1.26", "pnpm", "a"}
+	for _, name := range valid {
+		require.True(t, ValidBinName(name), "%q 应被接受", name)
+	}
+
+	invalid := []string{
+		"", " node", "node ", "node;rm -rf /", "sh -c whoami",
+		"$(whoami)", "`id`", "node|curl", "node&&ls", "a'b", `a"b`,
+		"node>/tmp/x", "../../bin/sh", "/bin/sh", "-rf", "node\nrm",
+	}
+	for _, name := range invalid {
+		require.False(t, ValidBinName(name), "%q 应被拒绝", name)
+	}
+}
+
+// TestResolveBinRejectsInjection requires.bins 是第三方 SKILL.md 声明的字符串，
+// 会被拼进 `zsh -lic "which <name>"` 在登录 shell 里执行（登录 shell 会 source
+// ~/.zprofile、~/.zshrc）。非白名单名字必须在进入 shell 之前被拒绝。
+//
+// 判定依据是拒绝原因而非副作用：名字带分号/替换语法时，第一层 PATH 查找会
+// 失败、第二层 shell 解析可能因登录 shell 启动超时（2s）而未真正执行命令，
+// 只靠「命令有没有跑」会得到与时序相关、甚至空过的结论。这里要求错误文案
+// 明确指出名称不合法——校验一旦被移除，返回的就会是「未找到」或 shell 原错。
+// 探针文件仅作附加断言：一旦真的执行了命令，立即暴露。
+func TestResolveBinRejectsInjection(t *testing.T) {
+	dir := t.TempDir()
+	canary := filepath.Join(dir, "pwned")
+
+	cases := []string{
+		"sh -c 'touch " + canary + "'",
+		"x; touch " + canary,
+		"x&&touch " + canary,
+		"x|tee " + canary,
+		"$(touch " + canary + ")",
+		"`touch " + canary + "`",
+		"../../bin/sh",
+		"/bin/sh",
+	}
+	for _, name := range cases {
+		path, err := resolveBin(name)
+		if err == nil {
+			t.Fatalf("恶意依赖名 %q 应被拒绝，实际解析为 %q", name, path)
+		}
+		require.Contains(t, err.Error(), "不合法", "恶意依赖名 %q 必须在进入 shell 前被拒", name)
+		if _, statErr := os.Stat(canary); statErr == nil {
+			t.Fatalf("依赖名 %q 触发了命令执行", name)
+		}
+	}
+
+	// 合法名字仍走正常三层查找（Layer 1 即可命中，不依赖登录 shell）。
+	if _, err := resolveBin("sh"); err != nil {
+		t.Fatalf("合法依赖名 sh 应能解析: %v", err)
+	}
+}
+
+// TestMissingBinsReportsInvalidName 非法依赖名以专用文案进入警告，而非笼统「未找到」。
+func TestMissingBinsReportsInvalidName(t *testing.T) {
+	missing := MissingBins(&Requires{Bins: []string{"node;rm -rf /"}})
+	require.Equal(t, []string{"node;rm -rf /"}, missing)
+
+	warnings := verifyDependencies(&Requires{Bins: []string{"node;rm -rf /"}})
+	require.Len(t, warnings, 1)
+	require.Contains(t, warnings[0], "不合法")
+}

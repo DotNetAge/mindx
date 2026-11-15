@@ -86,7 +86,13 @@ func setupDaemonMacOS(workspaceDir, binPath string) error {
     <key>StandardErrorPath</key>
     <string>%s</string>
 </dict>
-</plist>`, binPath, pathEnv, workspaceDir, filepath.Join(workspaceDir, "logs", "daemon.log"), filepath.Join(workspaceDir, "logs", "daemon.err.log"))
+</plist>`,
+		xmlEscapeText(binPath),
+		xmlEscapeText(pathEnv),
+		xmlEscapeText(workspaceDir),
+		xmlEscapeText(filepath.Join(workspaceDir, "logs", "daemon.log")),
+		xmlEscapeText(filepath.Join(workspaceDir, "logs", "daemon.err.log")),
+	)
 
 	agentPlist := filepath.Join(home, "Library", "LaunchAgents", "com.mindx.daemon.plist")
 
@@ -166,7 +172,13 @@ StandardError=append:%s
 
 [Install]
 WantedBy=default.target
-`, binPath, workspaceDir, pathEnv, filepath.Join(workspaceDir, "logs", "daemon.log"), filepath.Join(workspaceDir, "logs", "daemon.err.log"))
+`,
+		systemdQuote(binPath),
+		systemdQuote(workspaceDir),
+		systemdQuote(pathEnv),
+		"append:"+systemdQuote(filepath.Join(workspaceDir, "logs", "daemon.log")),
+		"append:"+systemdQuote(filepath.Join(workspaceDir, "logs", "daemon.err.log")),
+	)
 
 	servicePath := filepath.Join(serviceDir, linuxServiceName+".service")
 	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {

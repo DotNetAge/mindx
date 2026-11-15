@@ -145,8 +145,11 @@ type SyncResult struct {
 	RemoteURL  string   `json:"remote_url"`
 	Downloaded bool     `json:"downloaded"`
 	Added      []string `json:"added,omitempty"`
-	Error      string   `json:"error,omitempty"`
-	Reloaded   bool     `json:"reloaded"`
+	// Pending 需要用户确认才会启用的条目（远程声明的本地进程）。
+	// 这些条目已落在 mcp.json 的待确认区，不会被自动拉起。
+	Pending  []PendingServer `json:"pending,omitempty"`
+	Error    string          `json:"error,omitempty"`
+	Reloaded bool            `json:"reloaded"`
 }
 
 // Sync 把远程 COS 上的 mcp.json 合并进本地。
@@ -167,13 +170,24 @@ func (m *Manager) Sync(ctx context.Context) SyncResult {
 	}
 	result.Downloaded = true
 
-	added, err := MergeRemote(m.configPath, data)
+	mergeResult, err := MergeRemote(m.configPath, data)
 	if err != nil {
 		result.Error = fmt.Sprintf("合并远程条目失败: %v", err)
 		m.log.Error("mcp: Sync 合并失败", err)
 		return result
 	}
+	added := mergeResult.Added
 	result.Added = added
+	// 待确认条目只上报清单（名称 + 命令行），绝不自动启用：远程配置里的
+	// stdio 条目等价于在本机执行一条命令，必须由用户看过再点确认。
+	if len(mergeResult.Pending) > 0 {
+		pending, listErr := ListPending(m.configPath)
+		if listErr == nil {
+			result.Pending = pending
+		}
+		m.log.Info("mcp: 远程配置含需确认的本地进程条目", "count", len(mergeResult.Pending),
+			"servers", strings.Join(mergeResult.Pending, ","))
+	}
 
 	if len(added) > 0 {
 		servers, _ := LoadServers(m.configPath)
@@ -193,6 +207,59 @@ func (m *Manager) Sync(ctx context.Context) SyncResult {
 	}
 
 	return result
+}
+
+// ConfirmPending 启用用户已确认的远程条目（原本留在待确认区）。
+// 返回实际启用的条目名；未命中的名字忽略。
+//
+// 这是远程 stdio 条目进入连接池的唯一入口：Sync 只会把它们放进待确认区。
+func (m *Manager) ConfirmPending(names []string) ([]string, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	moved, err := ConfirmPending(m.configPath, names)
+	if err != nil {
+		return nil, err
+	}
+	if len(moved) == 0 {
+		return nil, nil
+	}
+	servers, _ := LoadServers(m.configPath)
+	movedSet := make(map[string]bool, len(moved))
+	for _, n := range moved {
+		movedSet[n] = true
+	}
+	for _, s := range servers {
+		if !movedSet[s.Name] {
+			continue
+		}
+		// 用户确认的是「允许这条命令在本机跑」，但条目自身的 enabled 仍按
+		// mcp.json 语义：装了不等于启用。这里显式打开，因为确认动作的意图
+		// 就是启用。
+		if err := m.SetEnabled(s.Name, true); err != nil {
+			m.log.Warn("mcp: 启用已确认条目失败", "server", s.Name, "error", err)
+		}
+	}
+	m.InvalidateToolsCache()
+	m.log.Info("mcp: 已确认远程本地进程条目", "count", len(moved), "servers", strings.Join(moved, ","))
+	return moved, nil
+}
+
+// DismissPending 丢弃用户明确不启用的待确认条目（不写入 mcpServers）。
+func (m *Manager) DismissPending(names []string) ([]string, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	return DismissPending(m.configPath, names)
+}
+
+// ListPending 返回待确认条目的展示清单。
+func (m *Manager) ListPending() []PendingServer {
+	pending, err := ListPending(m.configPath)
+	if err != nil {
+		return nil
+	}
+	return pending
 }
 
 // download HTTP GET 下载远程 mcp.json，带超时和大小上限。

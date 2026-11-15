@@ -203,6 +203,14 @@ func (d *Daemon) handleProviderUpdate(_ context.Context, params json.RawMessage)
 	for i, ep := range existing {
 		if ep.Name == p.Name {
 			found = true
+			// 凭据先落盘，再改内存中的 provider 配置：反过来做，一旦凭据写入失败
+			// 就会出现「YAML 指向新引用、密钥却没存」的半成品状态。
+			if paramsContainsKey(params, "api_key") {
+				if err := storeAndResolveProviderAPIKey(d, ep.Name, p.APIKey); err != nil {
+					d.logger.Error("provider.update: 凭据写入失败", err, "provider", ep.Name)
+					return nil, fmt.Errorf("API Key 没能存进本机的安全存储，这次修改没有生效。请确认系统钥匙串没有被锁定后重试。")
+				}
+			}
 			if p.Title != "" {
 				existing[i].Title = p.Title
 			}
@@ -213,7 +221,6 @@ func (d *Daemon) handleProviderUpdate(_ context.Context, params json.RawMessage)
 			// 有值则以provider name为键存CredentialStore；无值则以用户输入为值存CredentialStore。
 			// 绝不将原始值明文写入YAML配置文件。
 			if paramsContainsKey(params, "api_key") {
-				storeAndResolveProviderAPIKey(d, existing[i].Name, p.APIKey)
 				existing[i].APIKey = existing[i].Name // YAML中只存引用（provider name）
 			}
 			if paramsContainsKey(params, "auth_token") {
@@ -713,7 +720,12 @@ func (d *Daemon) handleModelUpdate(_ context.Context, params json.RawMessage) (a
 		if storeKey == "" {
 			storeKey = updated.Name
 		}
-		storeAndResolveAPIKey(d, storeKey, p.APIKey)
+		// 与 provider.update 同一条纪律：凭据写不进去就中止，绝不把 YAML 改成
+		// 指向一个并不存在的密钥。
+		if err := storeAndResolveAPIKey(d, storeKey, p.APIKey); err != nil {
+			d.logger.Error("model.update: 凭据写入失败", err, "store_key", storeKey)
+			return nil, fmt.Errorf("API Key 没能存进本机的安全存储，这次修改没有生效。请确认系统钥匙串没有被锁定后重试。")
+		}
 		updated.APIKey = storeKey // YAML中只存引用（provider name 或 model name）
 	}
 	if paramsContainsKey(params, "auth_token") {
@@ -847,11 +859,21 @@ func providerIndex(providers []*goharnessconfig.ProviderConfig, name string) int
 // storeAndResolveProviderAPIKey 实现规则4：处理 WebUI/Daemon RPC 设置 Provider APIKey 的请求。
 // 先以用户输入值为键尝试从环境变量读取实际值，有值则存CredentialStore；
 // 无值则直接以用户输入值作为实际值存入CredentialStore（以providerName为键）。
-func storeAndResolveProviderAPIKey(d *Daemon, providerName, userInput string) {
+//
+// 返回错误必须由调用方处理并中止后续 YAML 写入：凭据没落盘而 YAML 已改成
+// 指向该键的引用，会让之后每次调用都拿空 Key 打上游，表现为「保存成功却一直
+// 401」——这条事故在本文件注释里已有记录，不能再靠调用方自觉。
+// credentialStoreFor 是凭据库构造入口。抽成变量只为一件事：让「写入失败」
+// 这条路径可测——真实钥匙串在测试环境里既不可控也不该被碰。
+var credentialStoreFor = func(d *Daemon) core.CredentialStore {
+	return core.NewCredentialStore(d.app.Settings().UserPreferences())
+}
+
+func storeAndResolveProviderAPIKey(d *Daemon, providerName, userInput string) error {
 	if userInput == "" || providerName == "" {
-		return
+		return nil
 	}
-	credStore := core.NewCredentialStore(d.app.Settings().UserPreferences())
+	credStore := credentialStoreFor(d)
 	// 规则4: 先尝试从环境变量中以用户提供的值作为键读取
 	var actualValue string
 	if v := os.Getenv(userInput); v != "" {
@@ -859,10 +881,10 @@ func storeAndResolveProviderAPIKey(d *Daemon, providerName, userInput string) {
 	} else {
 		actualValue = userInput
 	}
-	_ = credStore.Set(providerName, actualValue)
+	return credStore.Set(providerName, actualValue)
 }
 
 // storeAndResolveAPIKey 通用版本：以指定storeKey为键将解析后的APIKey存入CredentialStore。
-func storeAndResolveAPIKey(d *Daemon, storeKey, userInput string) {
-	storeAndResolveProviderAPIKey(d, storeKey, userInput)
+func storeAndResolveAPIKey(d *Daemon, storeKey, userInput string) error {
+	return storeAndResolveProviderAPIKey(d, storeKey, userInput)
 }

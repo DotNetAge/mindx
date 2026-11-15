@@ -86,7 +86,13 @@ type conn struct {
 	ws   *websocket.Conn
 	send chan outMsg
 
-	closed    chan struct{} // 读循环退出信号（close 触发）
+	closed chan struct{} // 读循环退出信号（读泵退出时关闭）
+	// done 是「本端不再发送」的信号，由 close() 关闭。
+	// 刻意不关闭 send：一旦关闭，任何并发 enqueue 都会命中
+	// 「send on closed channel」直接 panic（select 里的 send 分支不会退化到
+	// default），而「客户端断连 + 并发广播」是常态。现在 send 永不关闭，
+	// 关闭语义只由 done 表达，写泵收到 done 后排空再退。
+	done      chan struct{}
 	closeOnce sync.Once
 
 	onText   func(data []byte) // 控制消息回调（Manager 分发）
@@ -100,6 +106,7 @@ func newConn(ws *websocket.Conn, onText, onBinary func([]byte), onClose func()) 
 		ws:       ws,
 		send:     make(chan outMsg, sendBufSize),
 		closed:   make(chan struct{}),
+		done:     make(chan struct{}),
 		onText:   onText,
 		onBinary: onBinary,
 		onClose:  onClose,
@@ -111,15 +118,20 @@ func newConn(ws *websocket.Conn, onText, onBinary func([]byte), onClose func()) 
 }
 
 // enqueue 非阻塞入队；队列满或连接已关闭返回错误（慢速对端直接丢弃，与服务端语义一致）。
+//
+// 两个 select 都监听 done：close() 与并发发送之间没有窗口可以让发送落到
+// 已关闭的通道上（send 永不关闭，见 conn.done 的注释）。
 func (c *conn) enqueue(typ int, data []byte) error {
 	select {
-	case <-c.closed:
+	case <-c.done:
 		return errors.New("连接已关闭")
 	default:
 	}
 	select {
 	case c.send <- outMsg{typ: typ, data: data}:
 		return nil
+	case <-c.done:
+		return errors.New("连接已关闭")
 	default:
 		return errors.New("发送队列已满")
 	}
@@ -139,11 +151,12 @@ func (c *conn) sendBinary(data []byte) error {
 	return c.enqueue(websocket.BinaryMessage, data)
 }
 
-// close 幂等关闭：仅关闭发送队列，写泵排空后下发关闭帧并断开底层连接，
+// close 幂等关闭：只发 done 信号，不关闭发送队列（关闭队列会让并发 enqueue
+// panic）。写泵收到 done 后排空已入队消息，下发关闭帧并断开底层连接，
 // 读循环随底层连接关闭而退出并触发 onClose。
 func (c *conn) close() {
 	c.closeOnce.Do(func() {
-		close(c.send)
+		close(c.done)
 	})
 }
 
@@ -181,7 +194,22 @@ func (c *conn) readPump() {
 	}
 }
 
-// writePump 写泵：唯一写出口；定期 ping 保活；队列关闭后排空剩余消息、
+// drainSend 把发送队列里已入队的消息尽量发完（非阻塞，队列空即返回）。
+func (c *conn) drainSend() {
+	for {
+		select {
+		case m := <-c.send:
+			_ = c.ws.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.ws.WriteMessage(m.typ, m.data); err != nil {
+				return
+			}
+		default:
+			return
+		}
+	}
+}
+
+// writePump 写泵：唯一写出口；定期 ping 保活；收到 done 后排空剩余消息、
 // 下发关闭帧，退出时关闭底层连接以解除读泵阻塞。
 func (c *conn) writePump() {
 	ticker := time.NewTicker(pingPeriod)
@@ -192,17 +220,17 @@ func (c *conn) writePump() {
 
 	for {
 		select {
-		case m, ok := <-c.send:
-			if !ok {
-				// 队列已关闭且排空：下发关闭帧后退出
-				_ = c.ws.SetWriteDeadline(time.Now().Add(writeWait))
-				_ = c.ws.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
+		case m := <-c.send:
 			_ = c.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.ws.WriteMessage(m.typ, m.data); err != nil {
 				return
 			}
+		case <-c.done:
+			// 关闭信号：把已入队的消息发完，再下发关闭帧退出
+			c.drainSend()
+			_ = c.ws.SetWriteDeadline(time.Now().Add(writeWait))
+			_ = c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+			return
 		case <-ticker.C:
 			_ = c.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {

@@ -31,7 +31,9 @@ concurrency:
 # Environment defaults
 # ==========================================================================
 env:
-  GO_VERSION: '1.26'
+  # 固定到具体补丁版：标准库漏洞随补丁版修复，'1.26' 由 setup-go 解析为最新
+  # 补丁版，构建产物因此不可复现（同一 tag 在不同日子构建出不同的标准库版本）。
+  GO_VERSION: '1.26.11'
   CGO_ENABLED: 1
   GOLANGCI_LINT_VERSION: v2.9
   MINDX_WORKSPACE: ${{ github.workspace }}/.test
@@ -52,6 +54,12 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+
+      # go.mod 的 toolchain 与 CI 的 GO_VERSION 是两处声明，漂移时构建产物会
+      # 悄悄换掉标准库补丁版（本地构建同理，只要 GOTOOLCHAIN=local）。
+      # 这条检查让两处必须一致。
+      - name: Verify toolchain matches go.mod
+        run: make check-toolchain
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -99,8 +107,18 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
+      # 管道必须带 pipefail：GitHub 默认 shell 是 `bash -e {0}`，没有 -o pipefail，
+      # 管道退出码取最后一个命令（tee 恒为 0），govulncheck 的失败会被吞掉。
+      # 显式 `shell: bash` 让 runner 使用 `bash --noprofile --norc -eo pipefail {0}`，
+      # 再叠一层 `set -o pipefail` 防止 shell 被改回。
       - name: Run govulncheck
-        run: govulncheck ./... | tee govulncheck-output.txt
+        shell: bash
+        run: |
+          set -o pipefail
+          # 记录本次扫描所用的工具链补丁版：标准库漏洞随补丁版修复，
+          # 只写 go 1.26 无法判断产物是否带洞。
+          go version
+          govulncheck ./... | tee govulncheck-output.txt
 
   # ==========================================================================
   # Stage 4: Test — race detector + coverage (matrix: OS)

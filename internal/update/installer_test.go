@@ -14,6 +14,15 @@ func newTestUpdater(t *testing.T) *Updater {
 	return NewUpdater("1.0.0", "1.0.0", t.TempDir(), nil, nil)
 }
 
+// fakeBinaryPayload 造一段能通过产物校验的伪造二进制：ELF 魔数 + 达标体积。
+// 升级链现在会校验条目类型、体积与可执行魔数（见 installer.go 的
+// validateExecutable），测试载荷必须满足这三条，否则测的就不是真实路径。
+func fakeBinaryPayload() string {
+	buf := make([]byte, minBinarySize+8)
+	copy(buf, []byte{0x7f, 'E', 'L', 'F'})
+	return string(buf)
+}
+
 // makeFakeTarGz 打一个内含 mindx 二进制占位文件的 tar.gz，模拟 MindX 壳随包归档。
 func makeFakeTarGz(t *testing.T, dest, payload string) {
 	t.Helper()
@@ -41,7 +50,8 @@ func makeFakeTarGz(t *testing.T, dest, payload string) {
 func TestStageFromArchiveAndStaged(t *testing.T) {
 	u := newTestUpdater(t)
 	archive := filepath.Join(t.TempDir(), "mindx-2.6.14-darwin-arm64.tar.gz")
-	makeFakeTarGz(t, archive, "fake-binary-payload")
+	payload := fakeBinaryPayload()
+	makeFakeTarGz(t, archive, payload)
 
 	staged, err := u.StageFromArchive(archive, "2.6.14")
 	if err != nil {
@@ -50,7 +60,7 @@ func TestStageFromArchiveAndStaged(t *testing.T) {
 
 	// 暂存二进制内容一致、可执行位在
 	got, err := os.ReadFile(staged)
-	if err != nil || string(got) != "fake-binary-payload" {
+	if err != nil || string(got) != payload {
 		t.Fatalf("staged binary content mismatch: err=%v got=%q", err, got)
 	}
 	if info, err := os.Stat(staged); err != nil || info.Mode().Perm() != 0o755 {
@@ -85,7 +95,7 @@ func TestStaged_MissingPieces(t *testing.T) {
 func TestClearStage(t *testing.T) {
 	u := newTestUpdater(t)
 	archive := filepath.Join(t.TempDir(), "mindx-1.0.0.tar.gz")
-	makeFakeTarGz(t, archive, "x")
+	makeFakeTarGz(t, archive, fakeBinaryPayload())
 	if _, err := u.StageFromArchive(archive, "1.0.0"); err != nil {
 		t.Fatalf("StageFromArchive: %v", err)
 	}

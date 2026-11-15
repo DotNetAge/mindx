@@ -196,14 +196,14 @@ func fixLogFilePermissions(filename string) {
 	}
 
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		f, createErr := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		f, createErr := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 		if createErr == nil {
 			_ = f.Close()
 		}
 		return
 	}
 
-	_ = os.Chmod(filename, 0644)
+	_ = os.Chmod(filename, 0o600)
 
 	removeMacOSQuarantine(filename)
 
@@ -253,8 +253,8 @@ func cleanOldRotatedFiles(logDir, baseName string) {
 
 	matches, _ := filepath.Glob(filepath.Join(logDir, baseName+"-*"))
 	for _, m := range matches {
-		if info, err := os.Stat(m); err == nil && info.Mode().Perm() != 0644 {
-			_ = os.Chmod(m, 0644)
+		if info, err := os.Stat(m); err == nil && info.Mode().Perm() != 0o600 {
+			_ = os.Chmod(m, 0o600)
 		}
 		removeMacOSQuarantine(m)
 	}
@@ -351,7 +351,7 @@ type simpleFileWriter struct {
 }
 
 func newSimpleFileWriter(path string) *simpleFileWriter {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "WARNING: cannot open log file %s: %v\n", path, err)
 		return &simpleFileWriter{path: path, file: nil}
@@ -370,7 +370,7 @@ func (w *simpleFileWriter) Write(p []byte) (n int, err error) {
 		if w.file != nil {
 			_ = w.file.Close()
 		}
-		f, openErr := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		f, openErr := os.OpenFile(w.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if openErr != nil {
 			fmt.Fprintf(os.Stderr, "WARNING: 重建日志文件失败 %s: %v\n", w.path, openErr)
 			w.file = nil

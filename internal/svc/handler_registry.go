@@ -3,9 +3,10 @@ package svc
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 
 	"github.com/DotNetAge/gort/pkg/gateway"
+	"github.com/DotNetAge/mindx/internal/commands"
 	"github.com/DotNetAge/mindx/internal/devgate"
 )
 
@@ -161,6 +162,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"metric.consent.get":                 r.daemon.handleMetricConsentGet,
 		"metric.consent.set":                 r.daemon.handleMetricConsentSet,
 		"token.usage.monthly":                r.daemon.handleTokenUsageMonthly,
+		"token.usage.daily":                  r.daemon.handleTokenUsageDaily,
 		"token.usage.by_model":               r.daemon.handleTokenUsageByModel,
 		"token.usage.total":                  r.daemon.handleTokenUsageTotal,
 		"token.usage.session":                r.daemon.handleTokenUsageSession,
@@ -217,6 +219,9 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"mcp.server.test":        r.daemon.handleMCPServerTest,
 		"mcp.server.discover":    r.daemon.handleMCPServerDiscover,
 		"mcp.tool.call":          r.daemon.handleMCPToolCall,
+		"mcp.pending.list":       r.daemon.handleMCPPendingList,
+		"mcp.pending.confirm":    r.daemon.handleMCPPendingConfirm,
+		"mcp.pending.dismiss":    r.daemon.handleMCPPendingDismiss,
 
 		// OAuth 提供商（阶段四壳侧授权配合：设置区状态 + client_id 填入 + 授权流程）
 		"oauth.provider.list":      r.daemon.handleOAuthProviderList,
@@ -286,6 +291,9 @@ var managerMethods = map[string]bool{
 	"oauth.provider.configure": true,
 	"oauth.authorize.start":    true,
 	"oauth.authorize.cancel":   true,
+	// 远程 MCP 条目确认 / 丢弃（确认即允许在本机起子进程）
+	"mcp.pending.confirm": true,
+	"mcp.pending.dismiss": true,
 	// Provider 管理（含 API Key）
 	"provider.create": true,
 	"provider.update": true,
@@ -298,9 +306,21 @@ func (r *RPCHandlerRegistry) RegisterAll(gw *gateway.Server) {
 	}
 }
 
+// errGateNotReady 是未完成设备接入验证时统一回给客户端的人话错误。
+//
+// 本机 App 场景用户不该看到此错（连接建立即自动静默校验）；出现即校验
+// 尚未完成或校验失败——如实说明卡在哪一步（安全校验未完成、暂时读不到
+// 数据），动作给「稍等重试」（时序竞态下等一拍即自愈，客户端拉数重试按
+// 「安全校验还没完成」文案匹配），重启只作为持续失败的兜底出口。
+var errGateNotReady = errors.New("MindX 与智能主机的安全校验还没完成，暂时读不到数据。请稍等几秒再试；若反复出现，请重新打开 MindX，仍不行就把诊断信息复制给我们。")
+
+// errManagerScopeOnly 是远程设备调用管理面方法时的统一错误。
+var errManagerScopeOnly = errors.New("这项操作涉及本机管理，请直接在主机上操作")
+
 // guard 设备接入强制闸：客户端必须先经 device.handshake 完成接入验证
 // （本机令牌直通或已授权设备 token）才能调用其余方法；未验证客户端
-// 收到统一的人话错误。闸未装配（devgate 初始化失败降级）时放行。
+// 收到统一的人话错误。闸未装配时一律拒绝（fail-closed，见
+// deviceGateAuthorized）。
 // 闸之上叠加作用域闸（PAT 分层授权）：远程设备（ask）不得调用管理面
 // 方法——设备管理、本机凭据、系统与全局配置变更仅限本机直通连接。
 func (r *RPCHandlerRegistry) guard(method string, h gateway.MethodHandler) gateway.MethodHandler {
@@ -310,16 +330,29 @@ func (r *RPCHandlerRegistry) guard(method string, h gateway.MethodHandler) gatew
 	return func(ctx context.Context, params json.RawMessage) (any, error) {
 		clientID := gateway.ClientIDFromContext(ctx)
 		if !r.daemon.deviceGateAuthorized(clientID) {
-			// 本机 App 场景用户不该看到此错（连接建立即自动静默校验）；出现即
-			// 校验尚未完成或校验失败——如实说明卡在哪一步（安全校验未完成、
-			// 暂时读不到数据），动作给「稍等重试」（时序竞态下等一拍即自愈，
-			// 客户端拉数重试按「安全校验还没完成」文案匹配），重启只作为
-			// 持续失败的兜底出口，不作为第一建议误导排查
-			return nil, fmt.Errorf("MindX 与智能主机的安全校验还没完成，暂时读不到数据。请稍等几秒再试；若反复出现，请重新打开 MindX，仍不行就把诊断信息复制给我们。")
+			return nil, errGateNotReady
 		}
 		if managerMethods[method] && r.daemon.devGate != nil && r.daemon.devGate.ScopeOf(clientID) != devgate.ScopeLocal {
-			return nil, fmt.Errorf("这项操作涉及本机管理，请直接在主机上操作")
+			return nil, errManagerScopeOnly
 		}
 		return h(ctx, params)
+	}
+}
+
+// guardCommand 把与 RPC 完全相同的设备接入闸施加到内建斜杠命令上。
+//
+// 命令经 gateway.RegisterCommand 直接写进 method 表，与 RegisterMethod 是
+// 两条不同的注册路径，因此不会经过 RegisterAll 的 guard 包装。少了这一层，
+// 私网任意设备无需任何凭据即可发 `job.add`，把任意指令落库成定时任务，
+// 到点由带完整工具链的 Agent 运行时执行——一条完整的免交互攻击链。
+//
+// 命令的作用域声明（Scope）本来就是面向远程设备的，因此这里只加接入闸，
+// 不再额外按管理面收窄，避免削弱已配对设备的正常用法。
+func (d *Daemon) guardCommand(_ string, h commands.Handler) commands.Handler {
+	return func(ctx *gateway.CommandContext) (any, error) {
+		if !d.deviceGateAuthorized(ctx.ClientID) {
+			return nil, errGateNotReady
+		}
+		return h(ctx)
 	}
 }

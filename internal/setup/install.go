@@ -293,9 +293,14 @@ func InstallSourceSlug(exePath string) string {
 
 // resolveInstallDir returns the platform-appropriate default install directory,
 // or the user-specified override. This is only used for custom-source installs.
+//
+// override 来自 `mindx install --dir`（`-s` 静默模式下由上层 Client 子进程
+// 传入，没有人工确认），因此必须先校验再使用：它会进入 shell rc、plist、
+// systemd unit 三种宿主格式。校验只管「合法性」（绝对路径、无控制字符），
+// 各格式的字面量安全由 escape.go 的三个转义函数负责。
 func resolveInstallDir(override string) (string, error) {
 	if override != "" {
-		return override, nil
+		return validateInstallDir(override)
 	}
 	switch runtime.GOOS {
 	case "darwin", "linux":
@@ -307,6 +312,25 @@ func resolveInstallDir(override string) (string, error) {
 	default:
 		return "/usr/local/bin", nil
 	}
+}
+
+// validateInstallDir 校验并规范化安装目录。
+func validateInstallDir(dir string) (string, error) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return "", fmt.Errorf("安装目录不能为空")
+	}
+	if !filepath.IsAbs(dir) {
+		return "", fmt.Errorf("安装目录必须是绝对路径：%q", dir)
+	}
+	// 控制字符（尤其换行）会破坏 rc 文件、plist 与 unit 的行结构，
+	// 无论怎么转义都不该出现在路径里。
+	for _, r := range dir {
+		if r < 0x20 || r == 0x7f {
+			return "", fmt.Errorf("安装目录不能包含换行或控制字符：%q", dir)
+		}
+	}
+	return filepath.Clean(dir), nil
 }
 
 // resolveWorkspaceDir returns the workspace/data directory for the given install location.

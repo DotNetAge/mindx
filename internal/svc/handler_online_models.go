@@ -699,7 +699,9 @@ func (d *Daemon) handleProviderFetchTencentModels(_ context.Context, params json
 		return nil, fmt.Errorf("读取腾讯云响应失败: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("腾讯云 TokenHub 返回错误 (HTTP %d): %s", resp.StatusCode, string(body))
+		// base_url 是用户可配置的，上游正文可能长达 10MB 且夹带技术细节：
+		// 界面只给一句人话，原始响应不进 RPC 错误。
+		return nil, fmt.Errorf("腾讯云 TokenHub 暂时不可用（服务返回 %d）。请稍后重试；若持续失败，请检查该提供商的服务地址与密钥是否有效。", resp.StatusCode)
 	}
 
 	var thResp struct {

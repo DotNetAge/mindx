@@ -310,3 +310,59 @@ func TestFileStoreDeleteSessionNotFound(t *testing.T) {
 		t.Errorf("expected ErrSessionNotFound, got %v", err)
 	}
 }
+
+// TestFileStoreGetKeepsFileOrder 读取路径不得重排历史消息。
+//
+// 落盘顺序是唯一真值：Get 是所有加载/恢复/上下文组装的公共读路径，
+// 一旦读侧按时间戳排序（且 sort.Slice 不稳定，同秒时间戳的相对顺序可被
+// 任意交换），发给模型的请求前缀就与落盘顺序不一致，工具调用与工具结果
+// 的配对也会被打乱。这里刻意让文件顺序与时间戳顺序相反，并包含同一
+// 时间戳的多条消息，断言读出的仍是文件顺序。
+func TestFileStoreGetKeepsFileOrder(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, err := NewFileSessionStore(tmpDir)
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	const agentName, sessionID = "order-agent", "order-session"
+	dir := filepath.Join(tmpDir, agentName, sessionID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir session dir: %v", err)
+	}
+
+	// 文件顺序 = [B(ts=300), A(ts=100), C(ts=200), D(ts=200)]
+	// 时间戳顺序 = [A, C/D, B]，两者相反；若发生读侧排序，B 会跑到末尾。
+	// content 按落盘约定为 base64（Qg== B / QQ== A / Qw== C / RA== D）。
+	body := `- role: assistant
+  content: Qg==
+  timestamp: 300
+- role: user
+  content: QQ==
+  timestamp: 100
+- role: assistant
+  content: Qw==
+  timestamp: 200
+- role: tool
+  content: RA==
+  timestamp: 200
+`
+	if err := os.WriteFile(filepath.Join(dir, "session.yml"), []byte(body), 0o600); err != nil {
+		t.Fatalf("write session.yml: %v", err)
+	}
+
+	msgs, err := store.Get(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	want := []string{"B", "A", "C", "D"}
+	if len(msgs) != len(want) {
+		t.Fatalf("expected %d messages, got %d", len(want), len(msgs))
+	}
+	for i, w := range want {
+		if msgs[i].Content != w {
+			t.Fatalf("message %d = %q, want %q（读取路径不得重排历史）", i, msgs[i].Content, w)
+		}
+	}
+}

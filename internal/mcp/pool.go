@@ -32,11 +32,75 @@ type ConnectionPool struct {
 	cancel context.CancelFunc
 }
 
+// managedConn 是一条托管连接。
+//
+// mu 同时保护 lastUsed/refs/closed：Call 借用连接期间（refs>0）不得关闭底层
+// client，否则会对着已关闭的连接发工具调用（结果不确定，可能 panic）。
+// 以前 Call 只持有指针、读锁在取出后立即释放，Disconnect/reap/CloseAll
+// 可以在窗口内把它关掉——典型的 TOCTOU。
 type managedConn struct {
 	client   MCPClient
 	lastUsed time.Time
 	ttl      time.Duration
 	mu       sync.Mutex
+	refs     int  // 借用中计数
+	closed   bool // 已标记关闭（不再允许借用）
+}
+
+// acquire 借用连接：未关闭则 refs++ 并刷新空闲时间。
+func (mc *managedConn) acquire() bool {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	if mc.closed || mc.client == nil {
+		return false
+	}
+	mc.refs++
+	mc.lastUsed = time.Now()
+	return true
+}
+
+// release 归还连接。若期间已被标记关闭且再无人使用，则此刻真正关闭底层连接。
+func (mc *managedConn) release() {
+	mc.mu.Lock()
+	if mc.refs > 0 {
+		mc.refs--
+	}
+	mc.lastUsed = time.Now()
+	closeNow := mc.closed && mc.refs == 0 && mc.client != nil
+	mc.mu.Unlock()
+	if closeNow {
+		_ = mc.client.Close()
+	}
+}
+
+// markClosed 标记连接不再可用；无借用者时立即关闭，有借用者则在最后一次
+// release 时关闭（不会出现「借用中连接被抽掉」）。
+func (mc *managedConn) markClosed() {
+	mc.mu.Lock()
+	mc.closed = true
+	closeNow := mc.refs == 0 && mc.client != nil
+	mc.mu.Unlock()
+	if closeNow {
+		_ = mc.client.Close()
+	}
+}
+
+// touch 只刷新空闲时间（不建立借用关系）。用于「确认可复用」这类不进入
+// 阻塞调用的路径；真正要发请求的调用方必须用 acquire/release。
+func (mc *managedConn) touch() {
+	mc.mu.Lock()
+	mc.lastUsed = time.Now()
+	mc.mu.Unlock()
+}
+
+// idleFor 返回空闲时长（仅在无借用者时有效）。
+func (mc *managedConn) idleFor() (time.Duration, bool) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	if mc.closed || mc.refs > 0 {
+		return 0, false
+	}
+	return time.Since(mc.lastUsed), true
 }
 
 // NewConnectionPool creates a new connection pool.
@@ -154,9 +218,9 @@ func (p *ConnectionPool) Connect(ctx context.Context, name string) error {
 	}
 
 	p.mu.Lock()
-	// Close existing connection if any
+	// Close existing connection if any（走 markClosed：借用中的连接等它归还再关）
 	if mc, ok := p.connections[name]; ok {
-		_ = mc.client.Close()
+		mc.markClosed()
 	}
 	p.connections[name] = &managedConn{
 		client:   client,
@@ -172,35 +236,50 @@ func (p *ConnectionPool) Connect(ctx context.Context, name string) error {
 // Call sends a tool invocation to an MCP server.
 // Auto-connects and auto-reconnects if needed.
 func (p *ConnectionPool) Call(ctx context.Context, serverName, toolName string, args map[string]any) (string, error) {
-	p.mu.RLock()
-	mc, ok := p.connections[serverName]
-	p.mu.RUnlock()
-
-	if !ok || !mc.client.IsAlive() {
-		if !ok {
-			p.log.Debug("mcp: no connection, auto-connecting", "server", serverName)
-		} else {
-			p.log.Debug("mcp: connection dead, reconnecting", "server", serverName)
-		}
-		if err := p.Connect(ctx, serverName); err != nil {
-			p.log.Error("mcp: auto-connect for call failed", err, "server", serverName)
-			return "", fmt.Errorf("connect for call: %w", err)
-		}
-		p.mu.RLock()
-		mc = p.connections[serverName]
-		p.mu.RUnlock()
+	mc, err := p.acquireConn(ctx, serverName)
+	if err != nil {
+		return "", err
 	}
-
-	mc.touch()
+	defer mc.release()
 
 	p.log.Debug("mcp: calling tool", "server", serverName, "tool", toolName)
-	result, err := ToolsCall(ctx, mc.client, toolName, args)
-	if err != nil {
-		p.log.Error("mcp: tool call failed", err, "server", serverName, "tool", toolName)
-		return "", err
+	result, callErr := ToolsCall(ctx, mc.client, toolName, args)
+	if callErr != nil {
+		p.log.Error("mcp: tool call failed", callErr, "server", serverName, "tool", toolName)
+		return "", callErr
 	}
 	p.log.Debug("mcp: tool call succeeded", "server", serverName, "tool", toolName)
 	return result, nil
+}
+
+// acquireConn 取出可用连接并借用（refs++）。不持有 p.mu 进入工具调用，
+// 但借用期间该连接不会被 Disconnect / reap / CloseAll 关闭。
+func (p *ConnectionPool) acquireConn(ctx context.Context, serverName string) (*managedConn, error) {
+	p.mu.RLock()
+	mc := p.connections[serverName]
+	p.mu.RUnlock()
+
+	if mc != nil && mc.client.IsAlive() && mc.acquire() {
+		return mc, nil
+	}
+
+	if mc == nil {
+		p.log.Debug("mcp: no connection, auto-connecting", "server", serverName)
+	} else {
+		p.log.Debug("mcp: connection dead, reconnecting", "server", serverName)
+	}
+	if err := p.Connect(ctx, serverName); err != nil {
+		p.log.Error("mcp: auto-connect for call failed", err, "server", serverName)
+		return nil, fmt.Errorf("connect for call: %w", err)
+	}
+
+	p.mu.RLock()
+	mc = p.connections[serverName]
+	p.mu.RUnlock()
+	if mc == nil || !mc.acquire() {
+		return nil, fmt.Errorf("连接未就绪")
+	}
+	return mc, nil
 }
 
 // Disconnect closes a specific server connection.
@@ -208,8 +287,9 @@ func (p *ConnectionPool) Disconnect(name string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if mc, ok := p.connections[name]; ok {
-		_ = mc.client.Close()
+		// 先移出索引（不再接受新借用），再标记关闭（借用中则等归还）
 		delete(p.connections, name)
+		mc.markClosed()
 		p.log.Info("mcp: disconnected", "server", name)
 	}
 }
@@ -221,8 +301,8 @@ func (p *ConnectionPool) CloseAll() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for name, mc := range p.connections {
-		_ = mc.client.Close()
 		delete(p.connections, name)
+		mc.markClosed()
 	}
 	p.log.Info("mcp: all connections closed")
 }
@@ -250,21 +330,14 @@ func (p *ConnectionPool) reap() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for name, mc := range p.connections {
-		mc.mu.Lock()
-		idle := time.Since(mc.lastUsed)
-		mc.mu.Unlock()
-		if idle > mc.ttl {
-			_ = mc.client.Close()
-			delete(p.connections, name)
-			p.log.Info("mcp: connection reaped (idle timeout)", "server", name, "idle", idle.Round(time.Second))
+		idle, reclaimable := mc.idleFor()
+		if !reclaimable || idle <= mc.ttl {
+			continue // 借用中或未超时：本轮跳过
 		}
+		delete(p.connections, name)
+		mc.markClosed()
+		p.log.Info("mcp: connection reaped (idle timeout)", "server", name, "idle", idle.Round(time.Second))
 	}
-}
-
-func (m *managedConn) touch() {
-	m.mu.Lock()
-	m.lastUsed = time.Now()
-	m.mu.Unlock()
 }
 
 func (p *ConnectionPool) resolveCreds(cfg ServerConfig) (map[string]string, error) {
@@ -304,11 +377,12 @@ func (p *ConnectionPool) DiscoverTools(ctx context.Context, serverName string) (
 		return nil, err
 	}
 
-	p.mu.RLock()
-	mc := p.connections[serverName]
-	p.mu.RUnlock()
+	mc, err := p.acquireConn(ctx, serverName)
+	if err != nil {
+		return nil, err
+	}
+	defer mc.release()
 
-	mc.touch()
 	tools, err := ToolsList(ctx, mc.client)
 	if err != nil {
 		p.log.Error("mcp: tools/list failed", err, "server", serverName)

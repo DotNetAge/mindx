@@ -70,9 +70,12 @@ WORKDIR /home/mindx
 # Deploy runtime environment (agents, schemas, settings, skills, mindx.json)
 COPY --chown=mindx:mindx runtime/ /home/mindx/.mindx/
 
-# Fix venv path in mindx.json for container
-RUN sed -i 's|/Users/ray/.mindx/.venv|/home/mindx/.mindx/.venv|g' \
-  /home/mindx/.mindx/mindx.json 2>/dev/null || true
+# 容器内虚拟环境路径：种子文件 venv_path 留空（它是所有平台的初装模板，
+# 写死容器路径会让 macOS/WSL 用户拿到一个不存在的目录），容器路径只在这里写入。
+# 旧实现是一条匹配不到任何内容的 sed 加 `|| true`——永不生效，还掩盖了
+# 种子被容器化的事实。现在直接写目标值，并断言写进去了。
+RUN python3 -c 'import json;p="/home/mindx/.mindx/mindx.json";c=json.load(open(p));c.setdefault("python",{})["venv_path"]="/home/mindx/.mindx/.venv";json.dump(c,open(p,"w"),ensure_ascii=False,indent=2)' \
+    && grep -q '/home/mindx/.mindx/.venv' /home/mindx/.mindx/mindx.json
 
 # Ports
 # 1314: WebSocket Gateway

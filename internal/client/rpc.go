@@ -1658,6 +1658,13 @@ func (r *daemonRPCClient) TokenUsageByModel(model string, year, month int) ([]ma
 	return out, err
 }
 
+// TokenUsageDaily 返回指定日期按小时聚合的用量统计。
+func (r *daemonRPCClient) TokenUsageDaily(year, month, day int) (map[string]any, error) {
+	var out map[string]any
+	err := r.callInto("token.usage.daily", map[string]any{"year": year, "month": month, "day": day}, &out)
+	return out, err
+}
+
 func (r *daemonRPCClient) TokenUsageTotal() (map[string]any, error) {
 	var out map[string]any
 	err := r.callInto("token.usage.total", nil, &out)

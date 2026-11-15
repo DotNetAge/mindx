@@ -66,7 +66,7 @@ func (s *FileMetricStore) saveEvents(events []MetricEvent) error {
 	if err := os.MkdirAll(s.dataDir, 0755); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
-	return os.WriteFile(s.eventsPath(), data, 0644)
+	return os.WriteFile(s.eventsPath(), data, 0o600)
 }
 
 // loadConfoundings 读取全部混杂登记；文件不存在时返回空切片。
@@ -94,7 +94,7 @@ func (s *FileMetricStore) saveConfoundings(events []ConfoundingEvent) error {
 	if err := os.MkdirAll(s.dataDir, 0755); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
-	return os.WriteFile(s.confoundingsPath(), data, 0644)
+	return os.WriteFile(s.confoundingsPath(), data, 0o600)
 }
 
 // AppendEvent 写入一条计量事件（round / rating / overall）。

@@ -54,6 +54,14 @@ func (q *sessionQueue) run() {
 	}
 }
 
+// Busy 报告队列是否有任务正在执行或等待执行。
+// 供「回收本轮」这类会与运行中轮次交错的写操作做前置拒绝。
+func (q *sessionQueue) Busy() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.running || len(q.pending) > 0
+}
+
 // sessionQueueFor 获取（必要时创建）指定会话的串行执行队列。
 func (d *Daemon) sessionQueueFor(sessionID string) *sessionQueue {
 	v, _ := d.sessionQueues.LoadOrStore(sessionID, &sessionQueue{})

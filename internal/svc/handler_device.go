@@ -22,8 +22,13 @@ import (
 // 完成 device.handshake 验证（本机令牌直通或已授权设备 token）。
 // ---------------------------------------------------------------------------
 
-// initDeviceGate 创建设备接入闸管理器（NewDaemon 阶段调用，失败降级为无闸）。
-func (d *Daemon) initDeviceGate() {
+// initDeviceGate 创建设备接入闸管理器（NewDaemon 阶段调用）。
+//
+// 失败即让 daemon 启动失败（fail-closed）：闸是准入判定的唯一依据，闸不在
+// 位时「授权检查」只能退化成「无条件放行」，而放行的后果是私网任意设备可
+// 免凭据调用全部工作面 RPC、甚至领走不可撤销的本机令牌。安全组件缺失必须
+// 拒绝提供服务，不能静默降级。
+func (d *Daemon) initDeviceGate() error {
 	mgr, err := devgate.NewManager(devgate.Config{
 		Store:      d.oauthCredStore, // 同一凭据存储（core.CredentialStore）
 		LocalToken: d.loadOrCreateDaemonToken,
@@ -42,8 +47,7 @@ func (d *Daemon) initDeviceGate() {
 		},
 	})
 	if err != nil {
-		d.logger.Warn("devgate: 设备接入闸初始化失败，闸已停用", "error", err.Error())
-		return
+		return fmt.Errorf("MindX 的安全组件没能启动，为避免安全校验失效，MindX 已停止运行。请重新打开 MindX；若反复出现，请把诊断信息复制给我们（%w）", err)
 	}
 	d.devGate = mgr
 
@@ -54,21 +58,28 @@ func (d *Daemon) initDeviceGate() {
 	if _, err := d.loadOrCreateDaemonToken(); err != nil {
 		d.logger.Warn("devgate: 本机握手令牌生成失败，本机直通将不可用", "error", err.Error())
 	}
+	return nil
 }
 
-// deviceGateAuthorized 连接是否已完成设备接入验证（RPC 闸与 user.message 闸共用）。
-// 闸未装配（初始化失败）时放行，不阻断本机使用。
+// deviceGateAuthorized 连接是否已完成设备接入验证（RPC 闸、命令闸与
+// user.message 闸共用）。
+//
+// 闸未装配时返回 false（fail-closed）：这是「安全组件缺失」而非「本机使用
+// 场景」，放行等于把整台机器的工作面与管理面交给任何能连上端口的设备。
+// 闸缺失时 daemon 根本不会启动（见 initDeviceGate），此分支只为兜住
+// 「装配后被人为置空」这类意外。
 func (d *Daemon) deviceGateAuthorized(clientID string) bool {
 	if d.devGate == nil {
-		return true
+		return false
 	}
 	return d.devGate.Authorized(clientID)
 }
 
 // handleDeviceStatus 处理 device.status：设备接入状态摘要（桌面端设备分组数据源）。
+// 闸未装配时报告「未启用」而非「允许」：状态查询绝不能给出比真实情况更松的结论。
 func (d *Daemon) handleDeviceStatus(_ context.Context, _ json.RawMessage) (any, error) {
 	if d.devGate == nil {
-		return map[string]any{"allowed": true, "devices": []any{}}, nil
+		return map[string]any{"allowed": false, "devices": []any{}, "available": false}, nil
 	}
 	return d.devGate.Status(), nil
 }

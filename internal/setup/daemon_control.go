@@ -193,14 +193,28 @@ func startDaemonDirect(workspaceDir string) error {
 	}
 
 	logDir := filepath.Join(workspaceDir, "logs")
-	_ = os.MkdirAll(logDir, 0755)
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return fmt.Errorf("创建日志目录失败（%s）：%w", logDir, err)
+	}
 
 	cmd := exec.Command(exePath, "daemon")
 	cmd.Dir = workspaceDir
 	setDetachAttrs(cmd)
 
-	stdoutF, _ := os.OpenFile(filepath.Join(logDir, "daemon.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	stderrF, _ := os.OpenFile(filepath.Join(logDir, "daemon.err.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	// 打开失败必须当场返回：以前忽略错误后把 nil *os.File 交给 cmd.Stdout，
+	// exec.Start() 取文件描述符时直接 panic，用户只看到崩溃而非原因。
+	stdoutF, err := os.OpenFile(filepath.Join(logDir, "daemon.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("打开日志文件失败（%s）：%w", filepath.Join(logDir, "daemon.log"), err)
+	}
+	defer func() { _ = stdoutF.Close() }()
+
+	stderrF, err := os.OpenFile(filepath.Join(logDir, "daemon.err.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("打开错误日志失败（%s）：%w", filepath.Join(logDir, "daemon.err.log"), err)
+	}
+	defer func() { _ = stderrF.Close() }()
+
 	cmd.Stdout = stdoutF
 	cmd.Stderr = stderrF
 

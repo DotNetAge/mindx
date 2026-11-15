@@ -359,13 +359,13 @@ func (c *sseClient) Connect(ctx context.Context) error {
 	}
 
 	// endpoint 可能是相对路径（官方 SDK 返回 "/message?sessionId=..."），按 SSE URL 解析为绝对地址
-	if ref, err := url.Parse(strings.TrimSpace(postEndpoint)); err == nil {
-		if base, err := url.Parse(c.sseURL); err == nil {
-			postEndpoint = base.ResolveReference(ref).String()
-		}
+	resolved, err := resolveSSEEndpoint(c.sseURL, strings.TrimSpace(postEndpoint))
+	if err != nil {
+		_ = resp.Body.Close()
+		cancel()
+		return err
 	}
-
-	c.postURL = postEndpoint
+	c.postURL = resolved
 
 	// Start background goroutine to receive SSE events
 	go c.readSSE(streamCtx, scanner, resp.Body)
@@ -751,4 +751,50 @@ func ToolsCall(ctx context.Context, client MCPClient, toolName string, args map[
 		}
 	}
 	return output, nil
+}
+
+// resolveSSEEndpoint 把 SSE 服务端下发的 endpoint 解析成绝对 URL，并校验它
+// 仍指向同一主机。
+//
+// 为什么必须校验：后续 POST 会带上 Authorization / x-api-key 等凭据
+// （见 applyHeaders），而 endpoint 是**服务端下发的数据**。恶意或被劫持的
+// MCP 服务只要回一个指向第三方主机的 endpoint，就能把凭据引导出去。
+// 允许的形态：与 SSE 初始 URL 同 host（含端口）；相对路径按 SSE URL 解析。
+func resolveSSEEndpoint(sseURL, endpoint string) (string, error) {
+	if endpoint == "" {
+		return "", fmt.Errorf("SSE 服务端没有下发可用的消息地址")
+	}
+	base, err := url.Parse(sseURL)
+	if err != nil {
+		return "", fmt.Errorf("SSE 地址无法解析: %w", err)
+	}
+	ref, err := url.Parse(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("SSE 服务端下发的消息地址无法解析: %w", err)
+	}
+	resolved := base.ResolveReference(ref)
+	// 协议必须一致：https 初始连接不允许被降级到 http 投递凭据。
+	if !strings.EqualFold(resolved.Scheme, base.Scheme) {
+		return "", fmt.Errorf("SSE 服务端下发的消息地址协议不一致，已拒绝连接")
+	}
+	if hostPortKey(resolved) != hostPortKey(base) {
+		return "", fmt.Errorf("SSE 服务端下发的消息地址与连接主机不一致，为避免凭据外发已拒绝连接")
+	}
+	return resolved.String(), nil
+}
+
+// hostPortKey 归一化「主机:端口」用于比较：默认端口按协议补全，
+// 这样 https://h/x 与 https://h:443/x 视为同一主机。
+func hostPortKey(u *url.URL) string {
+	host := strings.ToLower(u.Hostname())
+	port := u.Port()
+	if port == "" {
+		switch strings.ToLower(u.Scheme) {
+		case "https":
+			port = "443"
+		case "http":
+			port = "80"
+		}
+	}
+	return host + ":" + port
 }

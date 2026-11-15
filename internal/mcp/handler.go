@@ -48,6 +48,11 @@ type ServerDiscoverParams struct {
 	Name string `json:"name"`
 }
 
+// PendingConfirmParams is the parameter for mcp.pending.confirm.
+type PendingConfirmParams struct {
+	Names []string `json:"names"`
+}
+
 // ToolCallParams is the parameter for mcp.tool.call.
 type ToolCallParams struct {
 	Server string         `json:"server"`
@@ -120,6 +125,12 @@ func (h *RPCHandler) Handle(ctx context.Context, method string, params json.RawM
 		return h.handleToolCall(ctx, params)
 	case "mcp.sync":
 		return h.handleSync(ctx)
+	case "mcp.pending.list":
+		return h.handlePendingList()
+	case "mcp.pending.confirm":
+		return h.handlePendingConfirm(params)
+	case "mcp.pending.dismiss":
+		return h.handlePendingDismiss(params)
 	default:
 		return nil, fmt.Errorf("unknown method: %s", method)
 	}
@@ -346,4 +357,48 @@ func (h *RPCHandler) handleToolCall(ctx context.Context, raw json.RawMessage) (a
 		return nil, err
 	}
 	return ToolCallResult{Server: p.Server, Tool: p.Tool, Result: result}, nil
+}
+
+// handlePendingList 返回待确认的远程条目（远程声明的本地进程）。
+//
+// 为什么需要这个只读口：远程同步在智能主机启动时自动跑，用户打开面板时
+// 同步早已结束，拿不到当次响应；面板必须能主动查询「有哪些条目在等我确认」。
+func (h *RPCHandler) handlePendingList() (any, error) {
+	pending := h.mgr.ListPending()
+	if pending == nil {
+		return []PendingServer{}, nil
+	}
+	return pending, nil
+}
+
+// handlePendingDismiss 丢弃用户明确不启用的待确认条目。
+func (h *RPCHandler) handlePendingDismiss(raw json.RawMessage) (any, error) {
+	var p PendingConfirmParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if len(p.Names) == 0 {
+		return nil, fmt.Errorf("请选择要忽略的条目")
+	}
+	moved, err := h.mgr.DismissPending(p.Names)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"dismissed": moved}, nil
+}
+
+// handlePendingConfirm 启用用户已确认的远程条目（远程 stdio 条目的唯一启用入口）。
+func (h *RPCHandler) handlePendingConfirm(raw json.RawMessage) (any, error) {
+	var p PendingConfirmParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if len(p.Names) == 0 {
+		return nil, fmt.Errorf("请选择要启用的条目")
+	}
+	moved, err := h.mgr.ConfirmPending(p.Names)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"enabled": moved}, nil
 }

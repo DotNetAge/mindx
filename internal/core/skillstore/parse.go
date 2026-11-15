@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -484,6 +485,10 @@ func verifyDependencies(r *Requires) []string {
 	var warnings []string
 	for i, bin := range bins {
 		if binResults[i] != nil {
+			if !ValidBinName(bin) {
+				warnings = append(warnings, fmt.Sprintf("依赖声明的二进制名 %q 不合法，已忽略（只允许字母、数字与 . _ + -）", bin))
+				continue
+			}
 			warnings = append(warnings, fmt.Sprintf("必需的二进制文件 %q 未找到", bin))
 		}
 	}
@@ -527,6 +532,21 @@ func checkRuntimeVersionCached(runtime, constraint string) error {
 	return err
 }
 
+// binNamePattern 是二进制名允许的形态：字母或数字开头，其余只能是字母、
+// 数字与 . _ + -。
+//
+// 这条白名单是安全边界而非格式洁癖：requires.bins 来自第三方 SKILL.md 的
+// frontmatter，名字会被拼进 `zsh -lic "which <name>"` 在登录 shell 里执行，
+// 而登录 shell 会 source ~/.zprofile / ~/.zshrc。只要允许空格、引号、分号、
+// 竖线、$、反引号、括号、重定向等字符，装一个技能就等于执行包作者指定的
+// 任意命令。白名单同时挡住 / 与 ..（既防用路径绕过 PATH，也防目录穿越）。
+var binNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*$`)
+
+// ValidBinName 判断依赖声明的二进制名是否在允许形态内。
+func ValidBinName(name string) bool {
+	return binNamePattern.MatchString(name)
+}
+
 // resolveBin 三层查找链解析二进制真实路径。
 //
 //  1. 先用 exec.LookPath 查进程 PATH（快，但 macOS GUI 进程 PATH 极其受限）；
@@ -534,8 +554,14 @@ func checkRuntimeVersionCached(runtime, constraint string) error {
 //     拿到用户完整 PATH（nvm、bun、volta、Homebrew 等安装位置都能覆盖）；
 //  3. 最后扫常见安装目录兜底，直接读文件系统（不依赖任何 PATH）。
 //
+// 名字不在白名单内时立即拒绝，不进入任何一层查找——尤其是第二层会执行
+// shell 命令，绝不能把未校验的外部字符串带进去。
 // 成功返回绝对路径，全部失败返回 error。
 func resolveBin(name string) (string, error) {
+	if !ValidBinName(name) {
+		return "", fmt.Errorf("依赖声明的二进制名 %q 不合法：只允许字母、数字与 . _ + -", name)
+	}
+
 	// Layer 1: 进程 PATH
 	if p, err := exec.LookPath(name); err == nil {
 		return p, nil
@@ -559,7 +585,15 @@ func resolveBin(name string) (string, error) {
 // （包含 nvm / bun / volta / Homebrew / 手动 export 的路径等），
 // 这是 macOS GUI 进程 PATH 阉割情况下最关键的补充层。
 // 超时保护：shell 启动 + profile 解析不应超过 2 秒。
+//
+// 只接受白名单形态的名字（同 resolveBin 的前置校验）——此函数会把名字拼进
+// shell 命令，未校验的外部字符串进来就是命令注入。`--` 保证以 - 开头的名字
+// 不被 which 当作选项。
 func resolveBinViaShell(name string) (string, error) {
+	if !ValidBinName(name) {
+		return "", fmt.Errorf("依赖声明的二进制名 %q 不合法：只允许字母、数字与 . _ + -", name)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -570,7 +604,7 @@ func resolveBinViaShell(name string) (string, error) {
 	// （tcsetpgrp 把自己设为前台进程组），把父进程（TUI）永久挤到后台，
 	// 导致后续 bubbletea 进入 raw mode 时触发 SIGTTOU 被挂起。
 	// 新会话中没有控制终端，zsh 便不会开启作业控制，PATH 补全能力不受影响。
-	cmd := exec.CommandContext(ctx, "zsh", "-lic", "which "+name)
+	cmd := exec.CommandContext(ctx, "zsh", "-lic", "which -- "+name)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	out, err := cmd.CombinedOutput()
 	if err != nil {

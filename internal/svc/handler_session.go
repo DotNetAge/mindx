@@ -3,6 +3,7 @@ package svc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/DotNetAge/goharness/agents"
@@ -584,21 +585,40 @@ func (d *Daemon) handleSessionContext(_ context.Context, params json.RawMessage)
 	}, nil
 }
 
-func (d *Daemon) handleSessionTruncate(ctx context.Context, params json.RawMessage) (any, error) {
-	var p rpc.SessionTruncateParams
-	if err := unmarshalParams(params, &p); err != nil {
-		return nil, err
-	}
-	if p.SessionID == "" {
-		return nil, fmt.Errorf("session_id is required")
-	}
+// 会话回收（truncate / delete_round）的三条拒绝原因。
+//
+// 回收是唯一允许改变已有上下文的动作，因此边界必须写死在服务端：
+// 只允许作用于**最后一轮**，且截断点不得落在活跃窗口起点之前。
+var (
+	// errNoReclaimableRound 会话里已没有可回收的轮次。
+	errNoReclaimableRound = errors.New("这个会话里没有可回收的轮次。")
+	// errLastRoundOnly 目标不是最后一轮。
+	errLastRoundOnly = errors.New("只能回收最后一轮：更早的轮次已经作为上下文发给过模型，改它会让后续请求的前缀与历史对不上。要从更早处重来，请新建会话。")
+	// errRoundNotInWindow 最后一轮已被压缩出当前窗口。
+	errRoundNotInWindow = errors.New("这一轮已经不在当前上下文窗口里（会话已压缩过），无法回收。")
+	// errTurnInFlight 该会话有执行正在运行或排队。
+	errTurnInFlight = errors.New("这一轮还在执行，先等它结束或先停止，再回收。")
+)
 
-	sess, err := d.getOrLoadSession(p.SessionID)
+// reclaimLastRound 回收会话的最后一轮：删除**最后一条 user 消息及其后的全部消息**。
+//
+// 语义边界（与项目铁律一致）：
+//   - 截断点永远锚定在最后一条 user 消息上，因此只会动「最后一轮」；
+//     任何指向更早轮次的目标一律拒绝——中间删除在本实现里已无入口。
+//   - 截断点必须不早于活跃窗口起点（cursor），否则会把已压缩的历史一起删掉。
+//   - 执行中/排队中/挂起等待用户输入的会话拒绝回收，避免与运行中的轮次交错。
+//
+// expectTimestamp 为 0 表示不校验目标（truncate 语义：就是最后一轮）；
+// 非 0 时必须是最后一轮内任意一条消息的时间戳（delete_round 语义：UI 传
+// user 消息的 backendTimestamp）。
+//
+// 返回被保留的消息条数。
+func (d *Daemon) reclaimLastRound(ctx context.Context, sessionID string, expectTimestamp int64) (int, error) {
+	sess, err := d.getOrLoadSession(sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
+		return 0, fmt.Errorf("打开会话失败：%w", err)
 	}
 
-	// Find the last user message — we truncate everything after it
 	msgs := sess.All()
 	lastUserIdx := -1
 	for i := len(msgs) - 1; i >= 0; i-- {
@@ -608,25 +628,77 @@ func (d *Daemon) handleSessionTruncate(ctx context.Context, params json.RawMessa
 		}
 	}
 	if lastUserIdx < 0 {
-		return nil, fmt.Errorf("no user message found to truncate at")
+		return 0, errNoReclaimableRound
+	}
+
+	if expectTimestamp != 0 {
+		inLastRound := false
+		for i := lastUserIdx; i < len(msgs); i++ {
+			if msgs[i].Timestamp == expectTimestamp {
+				inLastRound = true
+				break
+			}
+		}
+		if !inLastRound {
+			return 0, errLastRoundOnly
+		}
+	}
+
+	if cursor := sess.Cursor(); lastUserIdx < cursor {
+		return 0, errRoundNotInWindow
+	}
+
+	if d.sessionTurnBusy(sessionID) {
+		return 0, errTurnInFlight
 	}
 
 	if err := sess.Truncate(ctx, lastUserIdx); err != nil {
-		return nil, fmt.Errorf("truncate session %q failed: %w", p.SessionID, err)
+		return 0, fmt.Errorf("回收失败：%w", err)
+	}
+	return lastUserIdx, nil
+}
+
+// sessionTurnBusy 报告该会话是否有执行在运行/排队，或正挂起等待用户输入。
+func (d *Daemon) sessionTurnBusy(sessionID string) bool {
+	if v, ok := d.sessionQueues.Load(sessionID); ok {
+		if q, ok := v.(*sessionQueue); ok && q.Busy() {
+			return true
+		}
+	}
+	return d.sessionBlockOf(sessionID) != ""
+}
+
+func (d *Daemon) handleSessionTruncate(ctx context.Context, params json.RawMessage) (any, error) {
+	var p rpc.SessionTruncateParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
 	}
 
-	d.logger.Info("session truncated for retry",
+	kept, err := d.reclaimLastRound(ctx, p.SessionID, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	d.logger.Info("session last round reclaimed",
 		"session_id", p.SessionID,
-		"messages_kept", lastUserIdx,
+		"messages_kept", kept,
 	)
 
 	return map[string]any{
 		"session_id":    p.SessionID,
-		"messages_kept": lastUserIdx,
+		"messages_kept": kept,
 		"truncated":     true,
 	}, nil
 }
 
+// handleSessionDeleteRound 处理 session.delete_round：回收 UI 指定的那一轮。
+//
+// 名字沿用历史（客户端与 UI 都在用），但**能力已收窄**：只接受最后一轮，
+// 命中更早轮次一律拒绝。中间删除在实现里已不存在——它会让已发出的上下文
+// 与磁盘历史分叉，且不可追溯。
 func (d *Daemon) handleSessionDeleteRound(ctx context.Context, params json.RawMessage) (any, error) {
 	var p rpc.SessionDeleteRoundParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -636,24 +708,22 @@ func (d *Daemon) handleSessionDeleteRound(ctx context.Context, params json.RawMe
 		return nil, fmt.Errorf("session_id is required")
 	}
 
-	sess, err := d.getOrLoadSession(p.SessionID)
+	kept, err := d.reclaimLastRound(ctx, p.SessionID, p.MessageID)
 	if err != nil {
-		return nil, fmt.Errorf("get session %q failed: %w", p.SessionID, err)
+		return nil, err
 	}
 
-	if err := sess.DeleteRound(ctx, p.MessageID); err != nil {
-		return nil, fmt.Errorf("delete round failed: %w", err)
-	}
-
-	d.logger.Info("session round deleted",
+	d.logger.Info("session last round reclaimed by id",
 		"session_id", p.SessionID,
 		"message_id", p.MessageID,
+		"messages_kept", kept,
 	)
 
 	return map[string]any{
-		"session_id": p.SessionID,
-		"message_id": p.MessageID,
-		"deleted":    true,
+		"session_id":    p.SessionID,
+		"message_id":    p.MessageID,
+		"messages_kept": kept,
+		"deleted":       true,
 	}, nil
 }
 

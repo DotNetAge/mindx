@@ -119,7 +119,7 @@ func DefaultConsoleLogger() Logger {
 // DefaultFileLogger creates a logger that writes to a file.
 // The file is created if it doesn't exist, and appended to if it does.
 func DefaultFileLogger(filePath string, opts ...Option) (Logger, error) {
-	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, err
 	}

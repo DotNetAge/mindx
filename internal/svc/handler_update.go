@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/DotNetAge/mindx/internal/setup"
@@ -48,7 +49,8 @@ func (d *Daemon) handleServerApplyUpdate(ctx context.Context, params json.RawMes
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				d.logger.Error("update restart: goroutine panic", fmt.Errorf("%v", r))
+				// 堆栈只在日志里：没有它，一次 panic 只留一行 %v，无法定位。
+				d.logger.Error("update restart: goroutine panic", fmt.Errorf("%v\n%s", r, debug.Stack()))
 			}
 		}()
 		// Brief delay to let the RPC response reach the client
@@ -63,7 +65,7 @@ func (d *Daemon) handleServerRestartDaemon(ctx context.Context, params json.RawM
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				d.logger.Error("manual restart: goroutine panic", fmt.Errorf("%v", r))
+				d.logger.Error("manual restart: goroutine panic", fmt.Errorf("%v\n%s", r, debug.Stack()))
 			}
 		}()
 		time.Sleep(500 * time.Millisecond)

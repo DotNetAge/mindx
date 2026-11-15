@@ -362,7 +362,8 @@ func (d *Daemon) handleMarketPackageRead(_ context.Context, params json.RawMessa
 
 // handleMarketInstall 从市场下载分发包（sha256 校验）并安装。
 // 安装即触发准备流程（requires.oauth 授权 / install 命令块）；skip_deps 跳过
-// 准备；auto_install 时安装命令免确认直接执行（CLI --auto 契约）。
+// 准备。包内声明的安装命令不在安装流程中执行：一律返回待确认清单，
+// 由用户确认后经 skill.prepare.confirm_install 执行。
 func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage) (any, error) {
 	var p rpc.MarketInstallParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -434,14 +435,15 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 			"重载失效": (time.Since(t0) - tInstall).String(),
 		})
 	// 安装即触发准备流程（agent 包携带的技能也落入全局库，一并准备）；
-	// skip_deps 显式跳过准备；auto_install 时安装命令免确认直接执行（CLI --auto 契约）
+	// skip_deps 显式跳过准备。
+	//
+	// 安装命令一律不在安装流程里执行：包内 install.<platform> 是包作者写的
+	// shell 命令，安装时自动执行等于把「装一个包」变成「以本机权限跑包作者的
+	// 任意命令」，且没有确认环节。缺依赖时只把待执行清单返回壳侧，用户确认后
+	// 才经 skill.prepare.confirm_install 执行（auto_install 亦然）。
 	var prepares []skillPrepareResult
 	if !p.SkipDeps {
-		if p.AutoInstall {
-			prepares = d.prepareAndAutoInstall(ctx, installed.SkillsGlobal)
-		} else {
-			prepares = d.prepareInstalledSkills(installed.SkillsGlobal)
-		}
+		prepares = d.prepareInstalledSkills(installed.SkillsGlobal)
 	}
 	return installWithPrepare{InstallResult: *installed, Prepares: prepares}, nil
 }
