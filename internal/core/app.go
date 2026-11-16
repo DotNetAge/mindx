@@ -510,6 +510,21 @@ func (a *App) Market() *bundle.MarketClient {
 	return a.market
 }
 
+// SetMarketBaseForTest 把市场客户端指向指定的服务根地址（仅测试模式）。
+//
+// 为测试留的唯一后门：升级链路的正确性完全取决于「取哪个版本的字节」，
+// 而这个动作只能对着可编程的市场服务验证；生产配置（换源/邀请码）不应被测试路径复用。
+func (a *App) SetMarketBaseForTest(base string) error {
+	if !a.settings.Test {
+		return fmt.Errorf("仅测试模式可用")
+	}
+	a.marketMu.Lock()
+	defer a.marketMu.Unlock()
+	a.market = bundle.NewMarketClient(base, filepath.Join(a.settings.DataDir(), "market-cache"))
+	a.market.SetClientID(a.marketClientID)
+	return nil
+}
+
 // MarketPAT 返回当前专用源访问令牌（AT，消费者语境称邀请码；方法名历史沿用）。
 // 仅内存值，来自密钥存储加载或 SetMarketPAT 写入；严禁写日志。
 func (a *App) MarketPAT() string {

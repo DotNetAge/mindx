@@ -25,7 +25,10 @@ type TeamMeta struct {
 	Members  []string `yaml:"members,omitempty" json:"members,omitempty"`
 	Icon     string   `yaml:"icon,omitempty" json:"icon,omitempty"`
 	Category string   `yaml:"category,omitempty" json:"category,omitempty"`
-	Hired    bool     `yaml:"hired,omitempty" json:"hired,omitempty"`
+	// Version 定义版本（血统唯一事实源）：随 TEAM.md 走，与 Agent 同口径。
+	// 团队升级以它与线上版本比对；覆盖安装后换成新包的值。
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+	Hired   bool   `yaml:"hired,omitempty" json:"hired,omitempty"`
 }
 
 // Team 是加载后的内存态团队：强类型元数据 + Profile 正文 + 目录路径。

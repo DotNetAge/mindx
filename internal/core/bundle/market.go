@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -28,6 +29,11 @@ const (
 	packageMaxSize = 200 << 20
 	httpTimeout    = 15 * time.Second
 )
+
+// ErrMarketPackageNotFound 市场里没有这个包（404）。
+// 调用方需要区分「确实不存在」与「市场连不上」：前者是正常状态（本地独有的包），
+// 后者必须报错——把网络故障说成「没有这个包」会让人以为包被下架了。
+var ErrMarketPackageNotFound = errors.New("市场中没有该包")
 
 // MarketPackage 描述一个可安装的分发包条目。预留扩展字段，不做超前设计。
 type MarketPackage struct {
@@ -89,6 +95,29 @@ type MarketPackage struct {
 	DerivedFrom *DerivedRef `json:"derived_from,omitempty"`
 	// DerivedCount 在架衍生包数（仅详情 API 下发；「衍生 N 个」展示用）。
 	DerivedCount int64 `json:"derived_count,omitempty"`
+	// Versions 版本历史（仅详情 API 下发，按发布时间倒序；含已下架标注）。
+	// 升级链路靠它做两件事：确认本地那版还在架上（能否拿到字节做内容闸）、
+	// 取出该版的 sha256 以走按版本下载。
+	Versions []MarketVersion `json:"versions,omitempty"`
+}
+
+// MarketVersion 市场端单版本条目（GET /api/v1/packages/{kind}/{name} 的 versions[]）。
+type MarketVersion struct {
+	Version     string `json:"version"`
+	Sha256      string `json:"sha256"`
+	Size        int64  `json:"size"`
+	Deleted     bool   `json:"deleted"`
+	PublishedAt string `json:"published_at,omitempty"`
+}
+
+// FindVersion 在版本历史里查某个版本（只认未下架的）。
+func (p MarketPackage) FindVersion(version string) (MarketVersion, bool) {
+	for _, v := range p.Versions {
+		if v.Version == version && !v.Deleted {
+			return v, true
+		}
+	}
+	return MarketVersion{}, false
 }
 
 // MarketQuery 是分页浏览市场的查询参数（契约 §2.2，全部可选）。
@@ -1353,7 +1382,7 @@ func (m *MarketClient) packageAt(u, kind, name string) (*MarketPackage, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("社区中不存在 %s 类型的包 %q", kind, name)
+		return nil, fmt.Errorf("社区中不存在 %s 类型的包 %q：%w", kind, name, ErrMarketPackageNotFound)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("包详情 API 响应状态 %d", resp.StatusCode)
@@ -1382,11 +1411,16 @@ func packageFromDetail(data []byte) (*MarketPackage, error) {
 		return nil, fmt.Errorf("解析包详情失败：%w", err)
 	}
 	pkg := body.toMarketPackage()
+	latestSeen := false
 	for _, v := range body.Versions {
-		if !v.Deleted {
-			// 最新未删除版本：与安装校验链对齐
+		pkg.Versions = append(pkg.Versions, MarketVersion{
+			Version: v.Version, Sha256: v.Sha256, Size: v.Size,
+			Deleted: v.Deleted, PublishedAt: v.PublishedAt,
+		})
+		if !v.Deleted && !latestSeen {
+			// 最新未删除版本：与安装校验链对齐（服务端按发布时间倒序，首条即最新）
 			pkg.Version, pkg.Sha256, pkg.Size = v.Version, v.Sha256, v.Size
-			break
+			latestSeen = true
 		}
 	}
 	return &pkg, nil
@@ -1472,6 +1506,33 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// DownloadVersion 下载指定历史版本到缓存（按版本可寻址）。
+//
+// 存在的意义不是「多一个参数」，而是让历史版本对客户端可见：服务端逐版留档、
+// 文件内容寻址，但原先只有 latest 一个下载入口 —— 于是回滚、复现某版问题、
+// 以「本地记录的那一版」做内容闸，全都无从落地。
+//
+// 缓存按版本分文件（packages/<kind>/<name>@<version>.mindpkg），不同版本不互相
+// 覆盖：latest 与「本地装的那版」经常不是同一个文件，共用文件名会让每次校验都失败重下。
+func (m *MarketClient) DownloadVersion(pkg MarketPackage, version string) (string, error) {
+	ver, ok := pkg.FindVersion(version)
+	if !ok {
+		return "", fmt.Errorf("%s/%s 的版本 %q 已下架或不存在，无法取回该版本文件",
+			pkg.Kind, pkg.Name, version)
+	}
+	if len(ver.Sha256) != 64 {
+		return "", fmt.Errorf("%s/%s@%s 的 sha256 缺失或格式非法", pkg.Kind, pkg.Name, version)
+	}
+	clone := pkg
+	clone.Version = ver.Version
+	clone.Sha256 = ver.Sha256
+	clone.Size = ver.Size
+	clone.DownloadURL = m.apiBase + "/packages/" + url.PathEscape(string(pkg.Kind)) + "/" +
+		url.PathEscape(pkg.Name) + "/versions/" + url.PathEscape(version) + "/download"
+	clone.File = "packages/" + string(pkg.Kind) + "/" + pkg.Name + "@" + version + ".mindpkg"
+	return m.Download(clone)
 }
 
 // cachePackagePath 返回包文件的本地缓存路径（File 为内容寻址相对路径，拒绝穿越）。

@@ -60,8 +60,13 @@ func packAgentContent(zw *zip.Writer, agent *agentstore.Agent, skills *skillstor
 	packed = append(packed, globalRefs...)
 	sort.Strings(packed)
 
-	// 本体文件：IDENTITY.md 必需，SOUL.md 缺省为空是合法状态，跳过即可
-	if err := zipFileEntry(zw, filepath.Join(agent.Dir, identityFileName), zipPrefix+identityFileName); err != nil {
+	// 本体文件：IDENTITY.md 必需，SOUL.md 缺省为空是合法状态，跳过即可。
+	// IDENTITY.md 剥离 hired：雇佣是本机运行态，不是包语义（见 hired.go）
+	identityBytes, err := os.ReadFile(filepath.Join(agent.Dir, identityFileName))
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("读取 %s 失败：%w", identityFileName, err)
+	}
+	if err := zipBytesEntry(zw, zipPrefix+identityFileName, stripHiredField(identityBytes)); err != nil {
 		return nil, nil, nil, nil, err
 	}
 	if _, err := os.Stat(filepath.Join(agent.Dir, soulFileName)); err == nil {
@@ -275,8 +280,12 @@ func BuildTeamBytes(team *teamstore.Team, agents *agentstore.AgentStore, skills 
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
-	// 团队本体（磁盘现状）
-	if err := zipFileEntry(zw, filepath.Join(team.Dir, teamDocFileName), zipPathTeamDoc); err != nil {
+	// 团队本体（磁盘现状）；TEAM.md 剥离 hired，理由同 Agent IDENTITY.md
+	teamDocBytes, err := os.ReadFile(filepath.Join(team.Dir, teamDocFileName))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("读取 %s 失败：%w", teamDocFileName, err)
+	}
+	if err := zipBytesEntry(zw, zipPathTeamDoc, stripHiredField(teamDocBytes)); err != nil {
 		return nil, nil, nil, err
 	}
 

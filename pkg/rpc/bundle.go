@@ -424,3 +424,33 @@ func (c *Client) ArticleList(p ArticleListParams) (json.RawMessage, error) {
 func (c *Client) ArticleDelete(p ArticleDeleteParams) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.article.delete", p)
 }
+
+// ─── 升级链路（血统与升级定案 L3）───
+
+// BundleUpgradeCheckParams 是 bundle.upgrade_check 的入参。
+// kind/name 都为空 = 检查全部已装包；给了 name 时 kind 必填。
+type BundleUpgradeCheckParams struct {
+	Kind string `json:"kind,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
+// BundleUpgradeParams 是 bundle.upgrade 的入参。
+type BundleUpgradeParams struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	// Force 本地内容被改过时仍然覆盖。默认拒绝——保留还是覆盖是用户的决定，
+	// 不做三方合并（合并是猜测，不是事实）。
+	Force bool `json:"force,omitempty"`
+	// Version 目标版本（空 = 市场最新）。给旧版本号即回滚。
+	Version string `json:"version,omitempty"`
+}
+
+// UpgradeCheck 检查已装包是否有新版本（版本闸 + 内容闸）。
+func (c *Client) UpgradeCheck(p BundleUpgradeCheckParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("bundle.upgrade_check", p)
+}
+
+// Upgrade 升级单个包到指定版本（缺省最新）。
+func (c *Client) Upgrade(p BundleUpgradeParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("bundle.upgrade", p)
+}

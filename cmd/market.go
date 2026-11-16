@@ -64,6 +64,10 @@ func init() {
 	marketInstallCmd.Flags().Bool("overwrite", false, "Overwrite existing target (agent dir or skill with the same name)")
 	marketInstallCmd.Flags().Bool("auto", false, "Auto-install missing dependencies without prompting")
 	marketInstallCmd.Flags().Bool("skip-deps", false, "Skip dependency checking and installation")
+	marketUpdateCmd.Flags().Bool("check", false, "只检查并列出可升级的包，不做任何改动")
+	marketUpdateCmd.Flags().Bool("force", false, "本地内容被改过时仍然覆盖（覆盖前自动备份）")
+	marketUpdateCmd.Flags().String("version", "", "升到指定版本（用于回滚）；须同时给出类型与包名")
+	marketUpdateCmd.Flags().Bool("json", false, "Output structured JSON")
 	marketPublishCmd.Flags().String("version", "", "发布版本号（必填，写入包内清单）")
 	marketPublishCmd.Flags().String("license", "", "许可证标识（SPDX 简称，写入包内清单）")
 	marketPublishCmd.Flags().String("publish-name", "", "发布名覆盖（衍生改名发布时用；缺省 = 本地包名）")
@@ -98,7 +102,7 @@ func init() {
 	marketCmd.AddCommand(marketListCmd, marketInstallCmd, marketCanonicalizeAgentsCmd, marketPackAgentsCmd,
 		marketPublishCmd, marketSubmitCmd, marketSubmissionsCmd, marketRateCmd, marketWhoamiCmd, marketArticleCmd)
 	marketSubmissionsCmd.AddCommand(marketSubmissionsListCmd, marketSubmissionsDecideCmd)
-	marketCmd.AddCommand(marketUnpublishCmd)
+	marketCmd.AddCommand(marketUnpublishCmd, marketUpdateCmd)
 	marketArticleCmd.AddCommand(marketArticlePublishCmd, marketArticleReadCmd, marketArticleListCmd, marketArticleDeleteCmd)
 	rootCmd.AddCommand(marketCmd)
 }
@@ -1478,4 +1482,206 @@ func normalizeLegacyAgent(content string) (string, bool) {
 	out = append(out, "---")
 	out = append(out, body...)
 	return strings.Join(out, "\n"), true
+}
+
+// ── market update：已装包升级 / 回滚（血统与升级定案 L3） ──────────
+
+// bundleUpgradeItem 与 daemon bundle.upgrade_check 的条目同构。
+type bundleUpgradeItem struct {
+	Kind          string `json:"kind"`
+	Name          string `json:"name"`
+	LocalVersion  string `json:"local_version"`
+	LatestVersion string `json:"latest_version"`
+	Upgradable    bool   `json:"upgradable"`
+	Modified      *bool  `json:"modified"`
+	Note          string `json:"note"`
+}
+
+type bundleUpgradeCheck struct {
+	Items      []bundleUpgradeItem `json:"items"`
+	Total      int                 `json:"total"`
+	Upgradable int                 `json:"upgradable"`
+	Errors     []string            `json:"errors"`
+}
+
+type bundleUpgradeResult struct {
+	Applied bool              `json:"applied"`
+	Status  string            `json:"status"`
+	Item    bundleUpgradeItem `json:"item"`
+	Backup  string            `json:"backup"`
+}
+
+var marketUpdateCmd = &cobra.Command{
+	Use:   "update [agent|skill|team] [name]",
+	Short: "Check installed packages for new versions and upgrade them (requires mindx start)",
+	Long: `Upgrade installed packages to the version published in the market.
+
+Two gates decide what happens (no three-way merge: merging is guesswork, not fact):
+
+  version gate  local definition file frontmatter version != market latest
+  content gate  local files still byte-identical to the version you installed
+
+Behaviour:
+  - packages you never edited are upgraded directly;
+  - packages you edited (or whose version was never recorded) are SKIPPED and
+    reported — pass --force to overwrite them anyway. Every overwrite is
+    snapshotted to <runtime>/.bundle-backups/<kind>/<name>/<timestamp>/ first;
+  - --check only reports, changes nothing;
+  - --version <v> installs that specific version instead of the latest, which is
+    how you roll back.
+
+Examples:
+  mindx market update --check
+  mindx market update agent dashboard-builder
+  mindx market update --force
+  mindx market update agent dashboard-builder --version 1.2.0`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		checkOnly, _ := cmd.Flags().GetBool("check")
+		force, _ := cmd.Flags().GetBool("force")
+		version, _ := cmd.Flags().GetString("version")
+		useJSON, _ := cmd.Flags().GetBool("json")
+
+		if len(args) > 0 && (args[0] != "agent" && args[0] != "skill" && args[0] != "team") {
+			return fmt.Errorf("类型仅支持 agent、skill 或 team")
+		}
+		if len(args) == 1 {
+			return fmt.Errorf("指定类型时须同时给出包名")
+		}
+		if version != "" && len(args) == 0 {
+			return fmt.Errorf("--version 只对单个包有意义，请同时给出类型与包名")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		params := rpc.BundleUpgradeCheckParams{}
+		if len(args) == 2 {
+			params.Kind, params.Name = args[0], args[1]
+		}
+		raw, err := cl.UpgradeCheck(params)
+		if err != nil {
+			return err
+		}
+		var res bundleUpgradeCheck
+		if err := json.Unmarshal(raw, &res); err != nil {
+			fmt.Println(string(raw))
+			return nil
+		}
+
+		if checkOnly {
+			if useJSON {
+				return printUpgradeJSON(res)
+			}
+			printUpgradeTable(res)
+			return nil
+		}
+
+		// 逐个升级：未改动的直接升，改过的（或判不出来的）跳过
+		type outcome struct {
+			Item   bundleUpgradeItem `json:"item"`
+			Status string            `json:"status"`
+			Backup string            `json:"backup,omitempty"`
+		}
+		results := make([]outcome, 0, len(res.Items))
+		for _, it := range res.Items {
+			if !it.Upgradable {
+				continue
+			}
+			edited := it.Modified == nil || *it.Modified
+			if edited && !force {
+				results = append(results, outcome{Item: it, Status: "skipped_local_changes"})
+				continue
+			}
+			up := rpc.BundleUpgradeParams{Kind: it.Kind, Name: it.Name, Force: force, Version: version}
+			raw, err := cl.Upgrade(up)
+			if err != nil {
+				results = append(results, outcome{Item: it, Status: "failed: " + err.Error()})
+				continue
+			}
+			var ur bundleUpgradeResult
+			if err := json.Unmarshal(raw, &ur); err != nil {
+				results = append(results, outcome{Item: it, Status: "failed: 无法解析升级结果"})
+				continue
+			}
+			results = append(results, outcome{Item: ur.Item, Status: ur.Status, Backup: ur.Backup})
+		}
+
+		if useJSON {
+			return printUpgradeJSON(map[string]any{
+				"check":   res,
+				"results": results,
+			})
+		}
+		printUpgradeTable(res)
+		if len(results) == 0 {
+			fmt.Println("没有需要升级的包。")
+			return nil
+		}
+		fmt.Println()
+		table := render.NewTable([]string{"Kind", "Name", "From", "To", "Result"}, 90)
+		for _, r := range results {
+			table.AddRow([]string{r.Item.Kind, r.Item.Name, dashIfEmpty(r.Item.LocalVersion),
+				dashIfEmpty(r.Item.LatestVersion), r.Status})
+		}
+		table.Render()
+		for _, r := range results {
+			if r.Backup != "" {
+				fmt.Printf("备份：%s\n", r.Backup)
+			}
+			if r.Status == "skipped_local_changes" {
+				fmt.Printf("跳过 %s/%s：本地内容被改过（或无法判断）。确认要覆盖请加 --force。\n",
+					r.Item.Kind, r.Item.Name)
+			}
+		}
+		return nil
+	},
+}
+
+// printUpgradeTable 打印升级检查结果。
+func printUpgradeTable(res bundleUpgradeCheck) {
+	if res.Total == 0 {
+		fmt.Println("本地没有可检查的已安装包。")
+		return
+	}
+	table := render.NewTable([]string{"Kind", "Name", "Local", "Latest", "State", "Note"}, 110)
+	for _, it := range res.Items {
+		state := "已最新"
+		if it.Upgradable {
+			state = "可升级"
+		}
+		note := it.Note
+		if it.Modified != nil && *it.Modified {
+			if note == "" {
+				note = "本地已修改"
+			}
+		}
+		table.AddRow([]string{it.Kind, it.Name, dashIfEmpty(it.LocalVersion),
+			dashIfEmpty(it.LatestVersion), state, note})
+	}
+	table.Render()
+	fmt.Printf("共 %d 个包，%d 个可升级。\n", res.Total, res.Upgradable)
+	for _, e := range res.Errors {
+		fmt.Printf("检查失败：%s\n", e)
+	}
+}
+
+// printUpgradeJSON 升级检查/结果的结构化输出（cmd 包已有 printJSON(raw) 用于原始 JSON 透传）。
+func printUpgradeJSON(v any) error {
+	formatted, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(formatted))
+	return nil
+}
+
+// dashIfEmpty 空串显示为破折号（表格可读性）。
+func dashIfEmpty(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "—"
+	}
+	return s
 }

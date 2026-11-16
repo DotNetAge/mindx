@@ -53,6 +53,19 @@ func zipFileEntry(zw *zip.Writer, srcPath, zipPath string) error {
 	return nil
 }
 
+// zipBytesEntry 将内存字节写入 zip 的指定路径。
+// 用于打包时需要先改写内容的条目（如剥离 frontmatter 里的运行态字段）。
+func zipBytesEntry(zw *zip.Writer, zipPath string, content []byte) error {
+	w, err := zw.Create(zipPath)
+	if err != nil {
+		return fmt.Errorf("创建包内条目 %s 失败：%w", zipPath, err)
+	}
+	if _, err := w.Write(content); err != nil {
+		return fmt.Errorf("写入包内条目 %s 失败：%w", zipPath, err)
+	}
+	return nil
+}
+
 // zipEntry 是解包时收集的单条目内容（zip 内路径 → 文件字节）。
 type zipEntry struct {
 	Name    string

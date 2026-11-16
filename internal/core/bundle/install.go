@@ -184,10 +184,19 @@ func installTeam(entries []zipEntry, manifest *Manifest, opts InstallOptions) (*
 	}
 
 	// 团队本体：team/TEAM.md → teams/<name>/TEAM.md
+	// 与 Agent 同则：剥掉包里的 hired，恢复本地原有的雇佣态
+	prevTeamHired := false
+	if data, err := os.ReadFile(filepath.Join(teamDir, teamDocFileName)); err == nil {
+		prevTeamHired = frontmatterHired(data)
+	}
 	teamDocWritten := false
 	for _, e := range entries {
 		if e.Name == zipPathTeamDoc {
-			if err := writeEntryFile(filepath.Join(teamDir, teamDocFileName), e.Content); err != nil {
+			content := stripHiredField(e.Content)
+			if prevTeamHired {
+				content = withHiredTrue(content)
+			}
+			if err := writeEntryFile(filepath.Join(teamDir, teamDocFileName), content); err != nil {
 				return nil, err
 			}
 			teamDocWritten = true
@@ -237,12 +246,25 @@ func joinUnder(base, name string) (string, error) {
 // 该函数不预检冲突（调用方负责），installAgent 与 installTeam 共用。
 func installAgentDir(entries []zipEntry, prefix, agentDir, globalDir string, globalNames map[string]bool, skillGlobal, skillAgent map[string]bool) error {
 	skillLevel := prefix + zipPrefixSkills
+	// 覆盖安装前的本地雇佣态：包里的 hired 一律不生效（雇佣是本机决定），
+	// 但本地原本已雇佣的，覆盖后必须还是已雇佣——否则升级看起来像被解雇
+	prevHired := false
+	if data, err := os.ReadFile(filepath.Join(agentDir, identityFileName)); err == nil {
+		prevHired = frontmatterHired(data)
+	}
 	for _, e := range entries {
 		switch {
 		case e.Name == prefix+identityFileName || e.Name == prefix+soulFileName:
 			// Agent 本体文件：IDENTITY.md / SOUL.md
 			rel := strings.TrimPrefix(e.Name, prefix)
-			if err := writeEntryFile(filepath.Join(agentDir, filepath.FromSlash(rel)), e.Content); err != nil {
+			content := e.Content
+			if rel == identityFileName {
+				content = stripHiredField(content)
+				if prevHired {
+					content = withHiredTrue(content)
+				}
+			}
+			if err := writeEntryFile(filepath.Join(agentDir, filepath.FromSlash(rel)), content); err != nil {
 				return err
 			}
 		case strings.HasPrefix(e.Name, skillLevel):

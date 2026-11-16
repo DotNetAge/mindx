@@ -11,3 +11,11 @@
 - [ ] 壳侧采纳 terminal.start 的 session_id 参数：daemon 已支持 cwd 解析顺序 = 显式 cwd > 会话 project_dir > daemon cwd，但壳不传 session_id 时仍落 daemon 进程 cwd（launchd 下通常是 /）——mindx-work / mindx-desktop 打开终端时带上当前会话 ID
 - [ ] 会话标题提炼 + 轮词元统计已落地待实机验收：`make restart`（吃进 goharness v0.2.54 的 Usage 回填）后 ①新建会话发首问看侧栏标题为提炼标题；②跑一次未绑定会话的调度任务看任务会话标题；③对话含工具调用的轮次末尾出现词元统计行；④重新加载该历史会话，统计行仍在（恢复链路读 token_usage）。注意 make restart 会中断运行中的会话，挑空闲时机执行
 - [ ] 会话绑定 agent 抢答修复待实机验收（与上条共用一次 make restart）：user.message 新增 agent_name 载荷（mindx-work 发送时携带输入框选定 agent），daemon 按「@目标 > 载荷 agent_name > 会话绑定 agent_name > 全局当前 agent」裁定执行者。验收：①与大秘聊完，AgentSelector 切到从未聊过的梁工直接发消息，应答者必须是梁工；②选中梁工会话内继续聊，应答者仍为梁工
+
+## 市场包血统与升级链路（定案：mindx-market/docs/设计定案-市场包血统与升级链路.md）
+
+已落地（L1 血统字段 / L2 打包自增与发布闸 / L2.5 按版本下载 / L3 升级 RPC 与 CLI / L4 市场货架可更新态），验证见 .agents/notes/assistant-事实-市场包升级链路落地与两道闸.md。以下是**明确留下的边界**，不是未做完：
+
+- [ ] 团队升级粒度：当前是整队一个决定——任一成员被改过，整队走「保留 / 覆盖」。逐成员跳过（未改的成员照升、改过的单个跳过）需要在 `bundle.Install` 增加 per-member skip 语义，属安装器能力扩展；在「不做三方合并」的前提下，整队覆盖是保守正确的一侧（不会留下半新半旧的团队），要细粒度再单独立项
+- [ ] 存量已装包不迁移：定案明确「不猜」——本地没记 version 的包在 `bundle.upgrade_check` 里标 `modified=null`（无法判定），用户确认后才覆盖；重装即获血统。不做事后回填（回填靠内容比对认领版本，认错就把别人的血统挂到本地改动上）
+- [ ] 服务端发版顺序：按版本下载端点在 market-server 里，必须先部署服务端再发客户端；服务端未升级时 `DownloadVersion` 404 → 内容闸降级为「无法判定」→ 升级要求用户确认，不会静默误覆盖

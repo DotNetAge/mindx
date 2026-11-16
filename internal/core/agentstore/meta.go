@@ -31,9 +31,13 @@ type AgentMeta struct {
 	Name string `yaml:"name" json:"name"`
 	Role string `yaml:"role" json:"role"`
 	// NickName 昵称（2-3 字外号，展示主名；统一显示规则 = 昵称 + Role 小字）。
-	NickName     string   `yaml:"nick_name,omitempty" json:"nick_name,omitempty"`
-	Description  string   `yaml:"description" json:"description"`
-	Introduction string   `yaml:"introduction,omitempty" json:"introduction,omitempty"`
+	NickName     string `yaml:"nick_name,omitempty" json:"nick_name,omitempty"`
+	Description  string `yaml:"description" json:"description"`
+	Introduction string `yaml:"introduction,omitempty" json:"introduction,omitempty"`
+	// Version 定义版本（血统唯一事实源）：随 IDENTITY.md 走，安装 / 导出 / 发布
+	// 全程只有这一份，不做旁挂记录。市场升级以它与线上版本比对；本地改 SOUL、
+	// 改技能都不动它，覆盖安装换成新包的值即「血统刷新」。
+	Version      string   `yaml:"version,omitempty" json:"version,omitempty"`
 	Icon         string   `yaml:"icon,omitempty" json:"icon,omitempty"`
 	Category     string   `yaml:"category,omitempty" json:"category,omitempty"`
 	Hired        bool     `yaml:"hired,omitempty" json:"hired,omitempty"`

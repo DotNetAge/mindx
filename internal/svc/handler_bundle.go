@@ -515,6 +515,10 @@ func (d *Daemon) handleMarketPack(_ context.Context, params json.RawMessage) (an
 	}
 	if manifest.Version != "" {
 		resp["version"] = manifest.Version
+	} else if fm := d.entityFrontmatterVersion(p.Kind, p.Name); fm != "" {
+		// 版本现在住在实体 frontmatter（血统事实源）：本地打包不写清单版本，
+		// 这里把它透出给发布表单预填，用户不必手抄
+		resp["version"] = fm
 	}
 	if len(manifest.SkillNames) > 0 {
 		resp["skill_names"] = manifest.SkillNames
@@ -530,9 +534,14 @@ func (d *Daemon) handleMarketPublish(_ context.Context, params json.RawMessage) 
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(p.Version) == "" {
-		return nil, fmt.Errorf("version 为必填")
+	// 版本权威 = 实体 frontmatter（血统唯一事实源）：参数缺省时回退读它，
+	// 显式提供则必须与 frontmatter 一致（两个事实源会让升级比对立刻失效）
+	fmVersion := d.entityFrontmatterVersion(p.Kind, p.Name)
+	version, verr := bundle.ResolvePublishVersion(bundle.PackageKind(p.Kind), p.Name, p.Version, fmVersion)
+	if verr != nil {
+		return nil, verr
 	}
+	p.Version = version
 	ov, err := marketBuildOverrides(p.Version, p.License, p.DerivedKind, p.DerivedName, p.DerivedVersion)
 	if err != nil {
 		return nil, err
@@ -569,6 +578,22 @@ func (d *Daemon) handleMarketPublish(_ context.Context, params json.RawMessage) 
 		"created":    res.Created,
 		"warnings":   warnings,
 	}, nil
+}
+
+// entityFrontmatterVersion 读实体的定义版本（agent → IDENTITY.md / team → TEAM.md）。
+// 未安装或未写 version 返回空串——是否放行由 bundle.ResolvePublishVersion 决定。
+func (d *Daemon) entityFrontmatterVersion(kind, name string) string {
+	switch bundle.PackageKind(kind) {
+	case bundle.KindAgent:
+		if a := d.app.Agents().Get(name); a != nil {
+			return a.Meta.Version
+		}
+	case bundle.KindTeam:
+		if t := d.app.Teams().Get(name); t != nil {
+			return t.Meta.Version
+		}
+	}
+	return ""
 }
 
 // handleMarketUnpublish 作者下架自己包的某版本（服务端软删，仅包主可操作）。
