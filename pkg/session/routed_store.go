@@ -375,6 +375,15 @@ func (r *RoutedSessionStore) SetCursor(_ context.Context, sessionID string, curs
 	return st.SetCursor(context.Background(), sessionID, cursor)
 }
 
+// SetParentSessionID 更新会话的父会话归属（转发）。
+func (r *RoutedSessionStore) SetParentSessionID(_ context.Context, sessionID string, parentSessionID string) error {
+	st := r.locate(sessionID)
+	if st == nil {
+		return goharnesssession.ErrSessionNotFound
+	}
+	return st.SetParentSessionID(context.Background(), sessionID, parentSessionID)
+}
+
 // SaveModifyFiles 持久化修改文件追踪（转发）。
 func (r *RoutedSessionStore) SaveModifyFiles(sessionID string, files []string) error {
 	st := r.locate(sessionID)

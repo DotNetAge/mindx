@@ -98,6 +98,10 @@ func (m *mockSessionStore) SetCursor(ctx context.Context, sessionID string, curs
 	return nil
 }
 
+func (m *mockSessionStore) SetParentSessionID(ctx context.Context, sessionID string, parentSessionID string) error {
+	return nil
+}
+
 func (m *mockSessionStore) SaveModifyFiles(sessionID string, files []string) error {
 	return nil
 }

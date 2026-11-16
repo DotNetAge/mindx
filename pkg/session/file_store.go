@@ -494,6 +494,7 @@ func statSessionInfo(agentName, sessionID, sessionDirPath string) (*goharnessses
 	meta, metaErr := LoadSessionMeta(sessionDirPath)
 	if metaErr == nil {
 		si.Sponsor = meta.Sponsor
+		si.ParentSessionID = meta.ParentSessionID
 		si.ProjectDir = meta.ProjectDir
 		si.Title = meta.Title
 		si.TeamName = meta.TeamName
@@ -537,6 +538,24 @@ func (s *FileSessionStore) GetSessionMeta(sessionID string) (*goharnesssession.S
 		return nil, goharnesssession.ErrSessionNotFound
 	}
 	return LoadSessionMeta(dirPath)
+}
+
+// SetParentSessionID 更新会话的父会话归属（子会话被另一父会话复用时的回写）。
+// 仅覆写 meta.json 的 ParentSessionID 字段，其余元数据原样保留。
+func (s *FileSessionStore) SetParentSessionID(_ context.Context, sessionID string, parentSessionID string) error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+
+	dirPath := s.findSessionDir(sessionID)
+	if dirPath == "" {
+		return goharnesssession.ErrSessionNotFound
+	}
+	info, err := LoadSessionMeta(dirPath)
+	if err != nil {
+		return err
+	}
+	info.ParentSessionID = parentSessionID
+	return SaveSessionMeta(dirPath, info)
 }
 
 // RenameSession 更新会话标题（用户可编辑，session.rename RPC 承载）。
@@ -631,15 +650,16 @@ func (s *FileSessionStore) createSession(sessionID, agentName string, opts ...go
 	sessionInfo.SessionDir = sessionDirPath
 
 	meta := &goharnesssession.SessionInfo{
-		SessionID:      sessionID,
-		AgentName:      agentName,
-		Sponsor:        sessionInfo.Sponsor,
-		TeamName:       sessionInfo.TeamName,
-		ProjectDir:     sessionInfo.ProjectDir,
-		Title:          sessionInfo.Title,
-		CreatedAt:      time.Now(),
-		LastActivityAt: time.Now(),
-		MessageCount:   0,
+		SessionID:       sessionID,
+		AgentName:       agentName,
+		Sponsor:         sessionInfo.Sponsor,
+		ParentSessionID: sessionInfo.ParentSessionID,
+		TeamName:        sessionInfo.TeamName,
+		ProjectDir:      sessionInfo.ProjectDir,
+		Title:           sessionInfo.Title,
+		CreatedAt:       time.Now(),
+		LastActivityAt:  time.Now(),
+		MessageCount:    0,
 		// 沙箱目录随 meta 持久化，GetMeta 读路径无需再推导
 		SessionDir: sessionDirPath,
 	}

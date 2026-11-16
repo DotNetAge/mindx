@@ -355,17 +355,99 @@ func (d *Daemon) handleSessionDelete(_ context.Context, params json.RawMessage) 
 		return nil, fmt.Errorf("session store not available")
 	}
 
-	// 会话删除即解除其挂起登记（若挂起中），避免侧栏气球指向已不存在的会话
-	d.clearSessionBlock(p.SessionID)
+	// 删除整棵派生子树：父会话删除后子会话在侧栏没有入口（会话树的父节点不在），
+	// 留着只能靠搜索捞回，用户视角就是「删了还在」。子会话同一时刻只归属一个
+	// 父会话（spawn 回写保证），因此级联不会误删其它父会话的子会话。
+	doomed, subtreeErr := collectSessionSubtree(sessDB, p.SessionID)
+	if subtreeErr != nil {
+		// 列举失败退化为仅删本条（旧行为），不因级联失败阻断主删除
+		d.logger.Warn("session.delete: 派生子树列举失败，仅删除本条会话",
+			"session_id", p.SessionID, "error", subtreeErr)
+		doomed = []string{p.SessionID}
+	}
 
-	if err := goharnesssession.DeleteSession(context.Background(), sessDB, p.SessionID); err != nil {
-		return nil, fmt.Errorf("delete session %q failed: %w", p.SessionID, err)
+	// 先强停整棵树的执行（含子代理级联），再删盘：执行体在删除后仍会向
+	// 已删目录追加消息，把 meta.json 重建出来，留下无主残留。
+	// 强停是取消信号，落定与删除之间存在毫秒级窗口，属已知残余竞态。
+	for _, sid := range doomed {
+		d.clearSessionBlock(sid)
+		if n := d.cancelSessionExecutions(sid); n > 0 {
+			d.logger.Info("session.delete: 已强停待删会话的执行", "session_id", sid, "cancelled", n)
+		}
+	}
+
+	deleted := make([]string, 0, len(doomed))
+	var firstErr error
+	for _, sid := range doomed {
+		if err := goharnesssession.DeleteSession(context.Background(), sessDB, sid); err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("delete session %q failed: %w", sid, err)
+			}
+			continue
+		}
+		deleted = append(deleted, sid)
+	}
+	if len(deleted) == 0 && firstErr != nil {
+		return nil, firstErr
+	}
+	if firstErr != nil {
+		// 部分成功：父会话已删则树已无入口，返回已删清单让客户端对齐，
+		// 同时把残留会话 ID 记入日志供人工清理
+		d.logger.Warn("session.delete: 部分会话删除失败", "session_id", p.SessionID, "deleted", deleted, "error", firstErr)
 	}
 
 	return map[string]any{
-		"session_id": p.SessionID,
-		"deleted":    true,
+		"session_id":          p.SessionID,
+		"deleted":             len(deleted) > 0,
+		"deleted_session_ids": deleted,
 	}, nil
+}
+
+// collectSessionSubtree 返回以 rootID 为根的派生子树会话 ID（root 在前，BFS 序）。
+// 归属依据是 SessionInfo.ParentSessionID（spawn 时写入、复用命中时回写），
+// 不依赖消息流里的 spawn 事件——冷启动与压缩滑出窗口都不影响。
+func collectSessionSubtree(sessDB goharnesssession.SessionStore, rootID string) ([]string, error) {
+	sessions, err := goharnesssession.ListSessions(context.Background(), sessDB)
+	if err != nil {
+		return nil, err
+	}
+	childrenOf := make(map[string][]string, len(sessions))
+	for _, si := range sessions {
+		if si.ParentSessionID == "" {
+			continue
+		}
+		childrenOf[si.ParentSessionID] = append(childrenOf[si.ParentSessionID], si.SessionID)
+	}
+	// BFS 覆盖孙会话：子代理自己也可能派工（字段支持任意深度，虽然当前链路少见）
+	out := make([]string, 0, 2)
+	visited := map[string]bool{rootID: true}
+	out = append(out, rootID)
+	for i := 0; i < len(out); i++ {
+		for _, cid := range childrenOf[out[i]] {
+			if visited[cid] {
+				continue
+			}
+			visited[cid] = true
+			out = append(out, cid)
+		}
+	}
+	return out, nil
+}
+
+// cancelSessionExecutions 强停指定会话自身的执行与它派生的子代理，
+// 返回强停数量。删除链路用：先停后删，避免执行体在已删目录里重建元数据。
+func (d *Daemon) cancelSessionExecutions(sessionID string) int {
+	if sessionID == "" {
+		return 0
+	}
+	cancelled := 0
+	d.clientCancels.Range(func(_, value any) bool {
+		if set, ok := value.(*clientCancelSet); ok {
+			cancelled += set.CancelSession(sessionID)
+		}
+		return true
+	})
+	return cancelled + d.cancelSubAgents(sessionID)
 }
 
 func (d *Daemon) handleSessionCreate(_ context.Context, params json.RawMessage) (any, error) {
