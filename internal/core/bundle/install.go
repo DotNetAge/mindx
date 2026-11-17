@@ -305,7 +305,8 @@ func teamUnmodified(entries []zipEntry, teamDir string, packedAgents map[string]
 	docSeen := false
 	for _, e := range entries {
 		if e.Name == zipPathTeamDoc {
-			if !fileMatches(filepath.Join(teamDir, teamDocFileName), e.Content) {
+			// TEAM.md 同样剥掉 hired 再比（与 Agent 的定义文件一致）
+			if !fileMatchesIgnoringHired(filepath.Join(teamDir, teamDocFileName), e.Content) {
 				return false
 			}
 			docSeen = true
@@ -334,7 +335,16 @@ func agentPrefixContentIdentical(entries []zipEntry, prefix, agentDir, globalDir
 		switch {
 		case e.Name == prefix+identityFileName || e.Name == prefix+soulFileName:
 			rel := strings.TrimPrefix(e.Name, prefix)
-			if !fileMatches(filepath.Join(agentDir, filepath.FromSlash(rel)), e.Content) {
+			dest := filepath.Join(agentDir, filepath.FromSlash(rel))
+			// hired 是安装者的运行态，不随包流动：比对时必须先剥掉再比，
+			// 否则「本地已雇佣」会让未改动的包永远被判成已修改（重装要确认、纳管认不出）。
+			if rel == identityFileName {
+				if !fileMatchesIgnoringHired(dest, e.Content) {
+					return false
+				}
+				break
+			}
+			if !fileMatches(dest, e.Content) {
 				return false
 			}
 		case strings.HasPrefix(e.Name, skillLevel):
@@ -361,6 +371,17 @@ func agentPrefixContentIdentical(entries []zipEntry, prefix, agentDir, globalDir
 func fileMatches(path string, content []byte) bool {
 	existing, err := os.ReadFile(path)
 	return err == nil && bytes.Equal(existing, content)
+}
+
+// fileMatchesIgnoringHired 比较时两侧都剥掉 frontmatter 的 hired 字段。
+// 只用于定义文件（IDENTITY.md / TEAM.md）：hired 是「本机是否雇佣」的运行态，
+// 打包时被剥离、安装时保留本地值，因此它不该参与「内容是否被改过」的判断。
+func fileMatchesIgnoringHired(path string, content []byte) bool {
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(stripHiredField(existing), stripHiredField(content))
 }
 
 // installSkill 展开 Skill 分发包（直接进全局库）。

@@ -20,11 +20,21 @@ func (s *AgentStore) Save(agent *Agent) error {
 	}
 
 	dir := s.agentDirPath(agent.Meta.Name)
+	// 新建（目录此前不存在）时给一个显式的版本起点：血统是身份的一部分，
+	// 种子与技能模板都从 1.0.0 起，用户自建的 Agent 没有理由例外。
+	// 已存在的实体不动——不替它编一个版本（旧安装的版本靠纳管或重装确认）。
+	_, statErr := os.Stat(dir)
+	isNew := os.IsNotExist(statErr)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("创建 Agent 目录 %s 失败: %w", dir, err)
 	}
 
-	identity, err := renderIdentity(agent.Meta)
+	meta := agent.Meta
+	if isNew && strings.TrimSpace(meta.Version) == "" {
+		meta.Version = DefaultVersion
+	}
+
+	identity, err := renderIdentity(meta)
 	if err != nil {
 		return err
 	}
@@ -39,6 +49,7 @@ func (s *AgentStore) Save(agent *Agent) error {
 
 	// 更新内存缓存（深拷贝语义：直接存调用方对象即可，调用方此后不应再修改）
 	stored := *agent
+	stored.Meta = meta
 	stored.Dir = dir
 	s.mu.Lock()
 	s.agents[stored.Meta.Name] = &stored

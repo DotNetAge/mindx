@@ -1,6 +1,9 @@
 package rpc
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // AgentExportParams are the params for agent.export（导出 Agent 分发包到指定路径）。
 type AgentExportParams struct {
@@ -445,12 +448,34 @@ type BundleUpgradeParams struct {
 	Version string `json:"version,omitempty"`
 }
 
+// 升级链路的超时预算：全量检查要逐个包查市场、并下载「已装那版」做内容闸；
+// 纳管还要逐版本比对。给足时间，否则用户看到的是「连接超时」而不是任务结果。
+const (
+	upgradeCheckTimeout = 2 * time.Minute
+	upgradeApplyTimeout = 5 * time.Minute
+	adoptTimeout        = 15 * time.Minute
+)
+
 // UpgradeCheck 检查已装包是否有新版本（版本闸 + 内容闸）。
 func (c *Client) UpgradeCheck(p BundleUpgradeCheckParams) (json.RawMessage, error) {
-	return c.CallWithTimeout("bundle.upgrade_check", p)
+	return c.CallWithTimeoutDur("bundle.upgrade_check", p, upgradeCheckTimeout)
 }
 
 // Upgrade 升级单个包到指定版本（缺省最新）。
 func (c *Client) Upgrade(p BundleUpgradeParams) (json.RawMessage, error) {
-	return c.CallWithTimeout("bundle.upgrade", p)
+	return c.CallWithTimeoutDur("bundle.upgrade", p, upgradeApplyTimeout)
+}
+
+// BundleAdoptParams 是 bundle.adopt 的入参：把「版本字段出现之前装上的包」
+// 按「与社区某一版逐字节一致」补写版本号。kind/name 皆空 = 全量尝试。
+type BundleAdoptParams struct {
+	Kind string `json:"kind,omitempty"`
+	Name string `json:"name,omitempty"`
+	// DryRun 只报告哪些包能纳管，不写盘。
+	DryRun bool `json:"dry_run,omitempty"`
+}
+
+// AdoptVersion 把存量安装纳入版本管理（只补版本字段，不改内容）。
+func (c *Client) AdoptVersion(p BundleAdoptParams) (json.RawMessage, error) {
+	return c.CallWithTimeoutDur("bundle.adopt", p, adoptTimeout)
 }

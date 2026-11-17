@@ -49,21 +49,49 @@ func TestVersionRoundTrip(t *testing.T) {
 	}
 }
 
-// TestVersionAbsentKeepsFrontmatterClean 未写版本时不产生空字段（旧文件字节不受扰动）。
-func TestVersionAbsentKeepsFrontmatterClean(t *testing.T) {
+// TestNewAgentGetsDefaultVersion 新建即给版本起点（与种子、技能模板同口径）。
+func TestNewAgentGetsDefaultVersion(t *testing.T) {
 	dir := t.TempDir()
 	store, _, err := Load(dir)
 	if err != nil {
 		t.Fatalf("加载失败: %v", err)
 	}
-	if err := store.Save(&Agent{Meta: AgentMeta{Name: "noversion", Role: "测试", Description: "无版本"}}); err != nil {
+	if err := store.Save(&Agent{Meta: AgentMeta{Name: "fresh", Role: "测试", Description: "新建"}}); err != nil {
 		t.Fatalf("保存失败: %v", err)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "noversion", "IDENTITY.md"))
+	raw, err := os.ReadFile(filepath.Join(dir, "fresh", "IDENTITY.md"))
 	if err != nil {
 		t.Fatalf("读取失败: %v", err)
 	}
+	if !strings.Contains(string(raw), "version: "+DefaultVersion) {
+		t.Fatalf("新建 Agent 应带默认版本：%s", string(raw))
+	}
+}
+
+// TestExistingUnversionedKeepsNoVersion 已存在的老实体不被补版本：
+// 目录已存在时保存不写 version（旧安装的版本只能靠纳管或重装确认，不替它编）。
+func TestExistingUnversionedKeepsNoVersion(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "legacy"), 0755); err != nil {
+		t.Fatalf("建目录失败: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "legacy", "IDENTITY.md"),
+		[]byte("---\nname: legacy\nrole: 测试\n---\n\n正文\n"), 0644); err != nil {
+		t.Fatalf("写文件失败: %v", err)
+	}
+	store, _, err := Load(dir)
+	if err != nil {
+		t.Fatalf("加载失败: %v", err)
+	}
+	agent := store.Get("legacy")
+	if agent == nil {
+		t.Fatal("应能载入老实体")
+	}
+	if err := store.SetHired("legacy", true); err != nil {
+		t.Fatalf("保存失败: %v", err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "legacy", "IDENTITY.md"))
 	if strings.Contains(string(raw), "version:") {
-		t.Fatalf("未设置版本时不应写空字段：%s", string(raw))
+		t.Fatalf("已存在的老实体不应被补版本：%s", string(raw))
 	}
 }

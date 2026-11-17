@@ -113,6 +113,16 @@ func unquoteScalar(raw string) string {
 //
 // 盘上多出的文件不参与判断（安装本就不删文件；残留不该阻止升级）。
 func ContentMatches(pkgPath string, opts InstallOptions) (bool, error) {
+	return ContentMatchesAt(pkgPath, "", opts)
+}
+
+// ContentMatchesAt 与 ContentMatches 相同，但可显式指定盘上目标目录
+// （空 = 按包内清单名推导）。
+//
+// 存在的理由：纳管要拿「本地这个目录」去比，而按清单名拼路径可能拼不到——
+// 本地目录名与包内清单名大小写不一致时，按名字推导会比对到不存在的目录，
+// 结果永远是「不一致」，纳管就永远认不出来。判定本身完全复用同一套规则。
+func ContentMatchesAt(pkgPath, dir string, opts InstallOptions) (bool, error) {
 	if strings.TrimSpace(opts.GlobalDir) == "" {
 		return false, fmt.Errorf("全局技能库目录不能为空")
 	}
@@ -126,12 +136,16 @@ func ContentMatches(pkgPath string, opts InstallOptions) (bool, error) {
 	}
 	switch manifest.Kind {
 	case KindAgent:
-		if strings.TrimSpace(opts.AgentsDir) == "" {
-			return false, fmt.Errorf("比对 Agent 内容需要指定 agents 目录")
-		}
-		agentDir, err := joinUnder(opts.AgentsDir, manifest.Name)
-		if err != nil {
-			return false, err
+		agentDir := dir
+		if agentDir == "" {
+			if strings.TrimSpace(opts.AgentsDir) == "" {
+				return false, fmt.Errorf("比对 Agent 内容需要指定 agents 目录")
+			}
+			var err error
+			agentDir, err = joinUnder(opts.AgentsDir, manifest.Name)
+			if err != nil {
+				return false, err
+			}
 		}
 		globalNames, err := dirNames(opts.GlobalDir)
 		if err != nil {
@@ -139,12 +153,19 @@ func ContentMatches(pkgPath string, opts InstallOptions) (bool, error) {
 		}
 		return agentPrefixContentIdentical(entries, zipPrefixAgent, agentDir, opts.GlobalDir, globalNames), nil
 	case KindTeam:
-		if strings.TrimSpace(opts.TeamsDir) == "" || strings.TrimSpace(opts.AgentsDir) == "" {
+		if strings.TrimSpace(opts.AgentsDir) == "" {
 			return false, fmt.Errorf("比对团队内容需要指定 teams 与 agents 目录")
 		}
-		teamDir, err := joinUnder(opts.TeamsDir, manifest.Name)
-		if err != nil {
-			return false, err
+		teamDir := dir
+		if teamDir == "" {
+			if strings.TrimSpace(opts.TeamsDir) == "" {
+				return false, fmt.Errorf("比对团队内容需要指定 teams 与 agents 目录")
+			}
+			var err error
+			teamDir, err = joinUnder(opts.TeamsDir, manifest.Name)
+			if err != nil {
+				return false, err
+			}
 		}
 		packedAgents := packedAgentNames(entries)
 		if len(packedAgents) == 0 {
@@ -152,6 +173,9 @@ func ContentMatches(pkgPath string, opts InstallOptions) (bool, error) {
 		}
 		return teamUnmodified(entries, teamDir, packedAgents, opts), nil
 	case KindSkill:
+		if dir != "" {
+			return skillDefinitionIdenticalAt(entries, dir), nil
+		}
 		return skillContentIdentical(entries, opts.GlobalDir), nil
 	default:
 		return false, fmt.Errorf("未知的分发包类型：%q", manifest.Kind)
@@ -170,6 +194,55 @@ func packedAgentNames(entries []zipEntry) map[string]bool {
 		}
 	}
 	return out
+}
+
+// skillDefinitionIdenticalAt 已知本地技能目录时的定义比对（SKILL.md 语义、其余字节）。
+func skillDefinitionIdenticalAt(entries []zipEntry, skillDir string) bool {
+	for _, e := range entries {
+		rest, ok := strings.CutPrefix(e.Name, zipPrefixSkills)
+		if !ok || rest == "" || strings.HasSuffix(rest, "/") {
+			continue
+		}
+		_, rel, ok := strings.Cut(rest, "/")
+		if !ok || rel == "" {
+			continue
+		}
+		if strings.Contains(rel, "..") {
+			return false // 含穿越的包本身不合法，不能判成「一致」
+		}
+		dest := filepath.Join(skillDir, filepath.FromSlash(rel))
+		if filepath.Base(dest) == skillDocName {
+			if !definitionFileEquals(dest, e.Content) {
+				return false
+			}
+			continue
+		}
+		if !fileMatches(dest, e.Content) {
+			return false
+		}
+	}
+	return true
+}
+
+// skillContentIdenticalAt 已知本地技能目录时的比对（纳管用）。
+func skillContentIdenticalAt(entries []zipEntry, skillDir string) bool {
+	for _, e := range entries {
+		rest, ok := strings.CutPrefix(e.Name, zipPrefixSkills)
+		if !ok || rest == "" || strings.HasSuffix(rest, "/") {
+			continue
+		}
+		_, rel, ok := strings.Cut(rest, "/")
+		if !ok || rel == "" {
+			continue
+		}
+		if strings.Contains(rel, "..") {
+			return false
+		}
+		if !fileMatches(filepath.Join(skillDir, filepath.FromSlash(rel)), e.Content) {
+			return false
+		}
+	}
+	return true
 }
 
 // skillContentIdentical 技能包内容是否与全局库现装内容逐字节一致。

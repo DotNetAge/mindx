@@ -46,6 +46,26 @@ type BundleUpgradeOutcome struct {
 type BundleUpgradeBackend interface {
 	CheckBundleUpdates(kind, name string) ([]BundleUpdateTarget, error)
 	UpgradeBundle(kind, name string, force bool, version string) (BundleUpgradeOutcome, error)
+	// AdoptPackages 把「版本字段出现之前装上的包」纳入版本管理：定义文件能对上某一版
+	// 就写那一版；社区没有同名包则按自建起版（详见 bundle.adopt 的说明）。
+	AdoptPackages(kind, name string, dryRun bool) (AdoptSummary, error)
+}
+
+// AdoptRow 单个包的纳管结果。
+type AdoptRow struct {
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
+	Adopted bool   `json:"adopted"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+// AdoptSummary 纳管汇总。
+type AdoptSummary struct {
+	Items   []AdoptRow `json:"items"`
+	Adopted int        `json:"adopted"`
+	Pending int        `json:"pending"`
+	Errors  []string   `json:"errors,omitempty"`
 }
 
 // BundleUpgrade 升级已安装的 Agent / 团队 / 技能包。
@@ -64,7 +84,7 @@ func (t *BundleUpgrade) Info() *tools.ToolInfo {
 		Description:  "检查并升级本机已安装的 Agent、团队、技能包到社区发布的新版本。",
 		IsReadOnly:   false,
 		IsIdempotent: false,
-		TimeoutSec:   300,
+		TimeoutSec:   600,
 		Prompt: `检查并升级本机已安装的 Agent / 团队 / 技能包。
 
 调用时机（严格）：
@@ -76,10 +96,17 @@ func (t *BundleUpgrade) Info() *tools.ToolInfo {
 - **upgrade**：执行升级。kind 必填；name 省略时升级该类全部可升级的包。version 用于回滚到指定版本（省略=升到最新）。
 
 本地改动与 force：
-- 升级前会判断「本机文件是否与已装那版逐字节一致」。
+- 升级前会判断「本机的定义文件是否与已装那版一致」（解析 frontmatter 后比对，忽略排版与雇佣标记；
+  包内附带的技能副本不参与——技能有自己的版本链）。
 - 一致 → 直接升级（覆盖前自动整目录备份）。
 - 不一致或判不出来 → 工具**不会覆盖**，返回 status="needs_confirm"。此时必须先把「哪个包被改过/判不出来、升级会覆盖哪些文件」告诉用户，用户明确同意后才以 force=true 重试。
 - 永远不要为了「省一步」自己加 force。
+
+旧安装（没有版本号）：
+- 这类包查不到版本，也就收不到更新提示。用 action="adopt"（必须给 kind）可以为它们补上版本号：
+  拿本机定义文件与社区的各个版本比对，只有能对上某一版时才写（对上就不会认错），
+  一个版本都对不上就如实报「认不出来」；社区根本没有同名包时，视为本地自建，起版 1.0.0。
+  这只是补一个字段，不改任何内容。
 
 结果怎么汇报：用包名 + 版本变化说清楚（例如「dashboard-builder 从 1.0.0 升到 1.0.1」），
 不要念 JSON，也不要暴露备份目录路径之外的内部细节。`,
@@ -87,9 +114,9 @@ func (t *BundleUpgrade) Info() *tools.ToolInfo {
 			{
 				Name:        "action",
 				Type:        "string",
-				Description: "操作类型：\"check\" 只查不改，\"upgrade\" 执行升级。",
+				Description: "操作类型：\"check\" 只查不改，\"upgrade\" 执行升级，\"adopt\" 给旧安装补版本号。",
 				Required:    true,
-				Enum:        []any{"check", "upgrade"},
+				Enum:        []any{"check", "upgrade", "adopt"},
 			},
 			{
 				Name:        "kind",
@@ -244,9 +271,28 @@ func (t *BundleUpgrade) Execute(_ context.Context, params map[string]any) (any, 
 		}
 		return resp, nil
 
+	case "adopt":
+		// 给「版本字段出现之前装上的包」补版本号：定义文件能对上某一版才写，
+		// 认不出来就如实说。不改任何内容，所以可以被模型安全地调用。
+		// 必须指定 kind：纳管要逐个版本下载比对，一次跑三类可能几百次下载，
+		// 既超出单次调用的合理时长，也让用户看不到中间进展。
+		if kind == "" {
+			return nil, fmt.Errorf("%s", tools.GuideInvalidValue("BundleUpgrade", "kind", kind,
+				"先自查：纳入版本管理必须指定 kind（agent / team / skill），一次处理一类；用户若说「全部」，按类型分三次调用"))
+		}
+		summary, err := t.backend.AdoptPackages(kind, name, false)
+		if err != nil {
+			return nil, fmt.Errorf("%s（原始错误：%w）", tools.BuildGuide(
+				"纳入版本管理时失败",
+				tools.WithErrDetail("无法完成比对或写回，可能只处理了一部分", err),
+				"先自查：社区是否可访问？失败时如实告知用户，不要声称已全部纳管",
+			), err)
+		}
+		return summary, nil
+
 	default:
 		return nil, fmt.Errorf("%s", tools.GuideInvalidValue("BundleUpgrade", "action", action,
-			"先自查：action 只支持 check / upgrade 两者之一，对照工具参数定义确认拼写后重新调用"))
+			"先自查：action 只支持 check / upgrade / adopt 三者之一，对照工具参数定义确认拼写后重新调用"))
 	}
 }
 

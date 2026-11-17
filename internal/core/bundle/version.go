@@ -45,8 +45,14 @@ func ResolvePublishVersion(kind PackageKind, name, paramVersion, frontmatterVers
 			param, doc, fm,
 		)
 	}
-	if fm != "" {
-		return fm, nil
+	resolved := fm
+	if resolved == "" {
+		resolved = param
 	}
-	return param, nil
+	// 版本号最终会落进 frontmatter（纳管会把它写回本地），与 adopt 用同一套字符白名单，
+	// 避免「发布时能填、回来写不进本地」的两套口径
+	if !versionPattern.MatchString(resolved) {
+		return "", fmt.Errorf("版本号 %q 含非法字符：只允许字母数字与 . + _ -（例如 1.2.0）", resolved)
+	}
+	return resolved, nil
 }

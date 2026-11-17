@@ -68,6 +68,9 @@ func init() {
 	marketUpdateCmd.Flags().Bool("force", false, "本地内容被改过时仍然覆盖（覆盖前自动备份）")
 	marketUpdateCmd.Flags().String("version", "", "升到指定版本（用于回滚）；须同时给出类型与包名")
 	marketUpdateCmd.Flags().Bool("json", false, "Output structured JSON")
+	marketAdoptCmd.Flags().String("kind", "", "只处理某一类：agent、skill 或 team")
+	marketAdoptCmd.Flags().Bool("check", false, "只报告哪些包能纳入版本管理，不写盘")
+	marketAdoptCmd.Flags().Bool("json", false, "Output structured JSON")
 	marketPublishCmd.Flags().String("version", "", "发布版本号（必填，写入包内清单）")
 	marketPublishCmd.Flags().String("license", "", "许可证标识（SPDX 简称，写入包内清单）")
 	marketPublishCmd.Flags().String("publish-name", "", "发布名覆盖（衍生改名发布时用；缺省 = 本地包名）")
@@ -102,7 +105,7 @@ func init() {
 	marketCmd.AddCommand(marketListCmd, marketInstallCmd, marketCanonicalizeAgentsCmd, marketPackAgentsCmd,
 		marketPublishCmd, marketSubmitCmd, marketSubmissionsCmd, marketRateCmd, marketWhoamiCmd, marketArticleCmd)
 	marketSubmissionsCmd.AddCommand(marketSubmissionsListCmd, marketSubmissionsDecideCmd)
-	marketCmd.AddCommand(marketUnpublishCmd, marketUpdateCmd)
+	marketCmd.AddCommand(marketUnpublishCmd, marketUpdateCmd, marketAdoptCmd)
 	marketArticleCmd.AddCommand(marketArticlePublishCmd, marketArticleReadCmd, marketArticleListCmd, marketArticleDeleteCmd)
 	rootCmd.AddCommand(marketCmd)
 }
@@ -1519,7 +1522,8 @@ var marketUpdateCmd = &cobra.Command{
 Two gates decide what happens (no three-way merge: merging is guesswork, not fact):
 
   version gate  local definition file frontmatter version != market latest
-  content gate  local files still byte-identical to the version you installed
+  content gate  local definition files still match the version you installed
+                (formatting and the hire flag are ignored; bundled skills are not compared)
 
 Behaviour:
   - packages you never edited are upgraded directly;
@@ -1626,14 +1630,17 @@ Examples:
 			table.AddRow([]string{r.Item.Kind, r.Item.Name, dashIfEmpty(r.Item.LocalVersion),
 				dashIfEmpty(r.Item.LatestVersion), r.Status})
 		}
-		table.Render()
+		fmt.Println(table.Render())
 		for _, r := range results {
 			if r.Backup != "" {
 				fmt.Printf("备份：%s\n", r.Backup)
 			}
 			if r.Status == "skipped_local_changes" {
-				fmt.Printf("跳过 %s/%s：本地内容被改过（或无法判断）。确认要覆盖请加 --force。\n",
-					r.Item.Kind, r.Item.Name)
+				hint := "确认要覆盖请加 --force"
+				if r.Item.LocalVersion == "" {
+					hint = "这个包还没纳入版本管理，先跑 `mindx market adopt` 再升级"
+				}
+				fmt.Printf("跳过 %s/%s：本地内容被改过（或无法判断）。%s。\n", r.Item.Kind, r.Item.Name, hint)
 			}
 		}
 		return nil
@@ -1648,9 +1655,13 @@ func printUpgradeTable(res bundleUpgradeCheck) {
 	}
 	table := render.NewTable([]string{"Kind", "Name", "Local", "Latest", "State", "Note"}, 110)
 	for _, it := range res.Items {
+		// 三种状态要分清：可升级 / 已最新 / 未纳入版本管理（本地没记版本，无法判断）
 		state := "已最新"
-		if it.Upgradable {
+		switch {
+		case it.Upgradable:
 			state = "可升级"
+		case it.LocalVersion == "":
+			state = "未纳入版本管理"
 		}
 		note := it.Note
 		if it.Modified != nil && *it.Modified {
@@ -1661,7 +1672,7 @@ func printUpgradeTable(res bundleUpgradeCheck) {
 		table.AddRow([]string{it.Kind, it.Name, dashIfEmpty(it.LocalVersion),
 			dashIfEmpty(it.LatestVersion), state, note})
 	}
-	table.Render()
+	fmt.Println(table.Render())
 	fmt.Printf("共 %d 个包，%d 个可升级。\n", res.Total, res.Upgradable)
 	for _, e := range res.Errors {
 		fmt.Printf("检查失败：%s\n", e)
@@ -1684,4 +1695,104 @@ func dashIfEmpty(s string) string {
 		return "—"
 	}
 	return s
+}
+
+// ── market adopt：把旧安装纳入版本管理（血统补写，只补字段不改内容） ──────────
+
+// bundleAdoptItem 与 daemon bundle.adopt 的条目同构。
+type bundleAdoptItem struct {
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Adopted bool   `json:"adopted"`
+	Reason  string `json:"reason"`
+}
+
+var marketAdoptCmd = &cobra.Command{
+	Use:   "adopt [agent|skill|team] [name]",
+	Short: "Bring pre-version installs into version tracking (requires mindx start)",
+	Long: `Give packages installed before version tracking existed a trustworthy version number.
+
+How it decides: the local definition files (IDENTITY.md / SOUL.md, or TEAM.md and its
+members') are compared with each published version of the same package. Layout noise is
+ignored - frontmatter is compared after dropping the hire flag and the version field, so
+re-serialising the file does not count as a change. Bundled skill copies are not compared:
+skills have their own version chain.
+
+When community has no package of that name, the package is treated as locally authored and
+starts its lineage at 1.0.0. Only the version field is written; no file content is changed.
+
+Examples:
+  mindx market adopt --check
+  mindx market adopt agent ai-artist
+  mindx market adopt --kind agent
+  mindx market adopt`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		checkOnly, _ := cmd.Flags().GetBool("check")
+		useJSON, _ := cmd.Flags().GetBool("json")
+
+		if len(args) > 0 && (args[0] != "agent" && args[0] != "skill" && args[0] != "team") {
+			return fmt.Errorf("类型仅支持 agent、skill 或 team")
+		}
+		if len(args) == 1 {
+			return fmt.Errorf("指定类型时须同时给出包名；要按类型整批处理，用 --kind")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		params := rpc.BundleAdoptParams{DryRun: checkOnly}
+		if len(args) == 2 {
+			params.Kind, params.Name = args[0], args[1]
+		} else if kind, _ := cmd.Flags().GetString("kind"); kind != "" {
+			if kind != "agent" && kind != "skill" && kind != "team" {
+				return fmt.Errorf("--kind 仅支持 agent、skill 或 team")
+			}
+			params.Kind = kind
+		}
+		raw, err := cl.AdoptVersion(params)
+		if err != nil {
+			return err
+		}
+		var res struct {
+			Items   []bundleAdoptItem `json:"items"`
+			Adopted int               `json:"adopted"`
+			Pending int               `json:"pending"`
+			Errors  []string          `json:"errors"`
+		}
+		if err := json.Unmarshal(raw, &res); err != nil {
+			fmt.Println(string(raw))
+			return nil
+		}
+		if useJSON {
+			return printUpgradeJSON(res)
+		}
+
+		if len(res.Items) == 0 {
+			fmt.Println("没有需要纳入版本管理的包。")
+			return nil
+		}
+		table := render.NewTable([]string{"Kind", "Name", "Version", "Result", "Note"}, 110)
+		for _, it := range res.Items {
+			result := "未纳入"
+			if it.Adopted {
+				result = "已纳入"
+			} else if it.Version != "" {
+				result = "可纳入"
+			}
+			table.AddRow([]string{it.Kind, it.Name, dashIfEmpty(it.Version), result, it.Reason})
+		}
+		fmt.Println(table.Render())
+		fmt.Printf("已纳入 %d 个包。\n", res.Adopted)
+		if checkOnly {
+			fmt.Println("（--check：只是报告，未写入任何文件）")
+		}
+		for _, e := range res.Errors {
+			fmt.Printf("处理失败：%s\n", e)
+		}
+		return nil
+	},
 }

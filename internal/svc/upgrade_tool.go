@@ -1,6 +1,8 @@
 package svc
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -62,4 +64,46 @@ func (b upgradeToolBackend) UpgradeBundle(kind, name string, force bool, version
 		Note:        res.Item.Note,
 	}
 	return out, nil
+}
+
+// AdoptPackages 存量纳管（与 bundle.adopt RPC 同一执行体）。
+func (b upgradeToolBackend) AdoptPackages(kind, name string, dryRun bool) (mindxtools.AdoptSummary, error) {
+	out := mindxtools.AdoptSummary{}
+	var items []AdoptItem
+	if kind == "" && name != "" {
+		return out, fmt.Errorf("指定 name 时必须同时给出 kind")
+	}
+	// 复用 RPC 处理器的收集逻辑：拼一个参数走同一条路径，避免两套判定
+	raw, err := b.d.handleBundleAdopt(context.Background(), mustMarshalAdopt(kind, name, dryRun))
+	if err != nil {
+		return out, err
+	}
+	m, _ := raw.(map[string]any)
+	if v, ok := m["items"].([]AdoptItem); ok {
+		items = v
+	}
+	for _, it := range items {
+		out.Items = append(out.Items, mindxtools.AdoptRow{
+			Kind: it.Kind, Name: it.Name, Version: it.Version, Adopted: it.Adopted, Reason: it.Reason,
+		})
+	}
+	if v, ok := m["adopted"].(int); ok {
+		out.Adopted = v
+	}
+	if v, ok := m["pending"].(int); ok {
+		out.Pending = v
+	}
+	if v, ok := m["errors"].([]string); ok {
+		out.Errors = v
+	}
+	return out, nil
+}
+
+// mustMarshalAdopt 组装 bundle.adopt 的入参（参数序列化失败等同于空参数）。
+func mustMarshalAdopt(kind, name string, dryRun bool) json.RawMessage {
+	data, err := json.Marshal(map[string]any{"kind": kind, "name": name, "dry_run": dryRun})
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return data
 }

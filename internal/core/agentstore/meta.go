@@ -72,6 +72,10 @@ type Agent struct {
 	Dir      string // Agent 目录的绝对路径
 }
 
+// DefaultVersion 新建实体的版本起点。与团队、技能模板的口径保持一致：
+// 版本是血统的载体，新建即应有起点，而不是等到要发布时才补。
+const DefaultVersion = "1.0.0"
+
 // Name 返回 Agent 名称。
 func (a *Agent) Name() string { return a.Meta.Name }
 

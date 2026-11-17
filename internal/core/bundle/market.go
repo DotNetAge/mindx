@@ -35,6 +35,17 @@ const (
 // 后者必须报错——把网络故障说成「没有这个包」会让人以为包被下架了。
 var ErrMarketPackageNotFound = errors.New("市场中没有该包")
 
+// marketPackageNotFoundError 单包 404：对用户只说一句人话，对调用方经 Is 暴露哨兵。
+type marketPackageNotFoundError struct{ kind, name string }
+
+func (e *marketPackageNotFoundError) Error() string {
+	return fmt.Sprintf("社区中不存在 %s 类型的包 %q", e.kind, e.name)
+}
+
+func (e *marketPackageNotFoundError) Is(target error) bool {
+	return target == ErrMarketPackageNotFound
+}
+
 // MarketPackage 描述一个可安装的分发包条目。预留扩展字段，不做超前设计。
 type MarketPackage struct {
 	Kind        PackageKind `json:"kind"`
@@ -1382,7 +1393,9 @@ func (m *MarketClient) packageAt(u, kind, name string) (*MarketPackage, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("社区中不存在 %s 类型的包 %q：%w", kind, name, ErrMarketPackageNotFound)
+		// 用类型而不是 `%w` 拼在文案后面：这段字符串会直接出现在界面与 CLI 上，
+		// 拼上去会变成「社区中不存在 agent 类型的包 "x"：市场中没有该包」这种叠词。
+		return nil, &marketPackageNotFoundError{kind: kind, name: name}
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("包详情 API 响应状态 %d", resp.StatusCode)

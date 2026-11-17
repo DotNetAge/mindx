@@ -133,7 +133,9 @@ func (d *Daemon) checkBundleUpgrade(kind, name string) (UpgradeItem, error) {
 			item.Note = "取回本地版本包失败：" + derr.Error()
 			break
 		}
-		same, cerr := bundle.ContentMatches(path, d.bundleInstallOptions(false))
+		// 比的是「这个实体的定义」，不是整包字节：包内附带的技能副本与全局技能库
+		// 各有自己的版本链，拿它们的差异判定「这个包被改过」是错的（详见 definition.go）
+		same, cerr := bundle.DefinitionMatches(path, dir, d.bundleInstallOptions(false))
 		if cerr != nil {
 			item.Note = "内容比对失败：" + cerr.Error()
 			break
@@ -142,6 +144,11 @@ func (d *Daemon) checkBundleUpgrade(kind, name string) (UpgradeItem, error) {
 		item.Modified = &modified
 	}
 	return item, nil
+}
+
+// validUpgradeKind 包类型白名单（升级/纳管三条入口共用）。
+func validUpgradeKind(kind string) bool {
+	return kind == "agent" || kind == "team" || kind == "skill"
 }
 
 // upgradeKindLabel 包类型中文名（错误与提示文案用）。
@@ -225,6 +232,9 @@ func (d *Daemon) handleBundleUpgradeCheck(_ context.Context, params json.RawMess
 	if p.Kind != "" && p.Name == "" {
 		return nil, fmt.Errorf("指定 kind 时必须同时给出 name")
 	}
+	if p.Kind != "" && !validUpgradeKind(p.Kind) {
+		return nil, fmt.Errorf("kind 只支持 agent / team / skill（收到 %q）", p.Kind)
+	}
 	items, errs := d.collectUpgradeItems(p.Kind, p.Name)
 	upgradable := 0
 	for _, it := range items {
@@ -251,6 +261,9 @@ func (d *Daemon) handleBundleUpgrade(_ context.Context, params json.RawMessage) 
 	}
 	if p.Kind == "" || p.Name == "" {
 		return nil, fmt.Errorf("kind 与 name 均为必填")
+	}
+	if !validUpgradeKind(p.Kind) {
+		return nil, fmt.Errorf("kind 只支持 agent / team / skill（收到 %q）", p.Kind)
 	}
 	return d.applyUpgrade(p.Kind, p.Name, p.Force, p.Version)
 }
@@ -392,4 +405,176 @@ func copyTree(src, dst string) error {
 		}
 		return out.Close()
 	})
+}
+
+// ─── 存量纳管（bundle.adopt）───
+//
+// 只补一个字段，不动任何内容：本地内容与市场某一版逐字节一致 ⇒ 这个版本号是事实；
+// 一个版本都不匹配 ⇒ 如实说「认不出来」，不写。定案「不猜」的边界就落在这里。
+
+// AdoptItem 单个包的纳管结果。
+type AdoptItem struct {
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Version string `json:"version,omitempty"`
+	Adopted bool   `json:"adopted"`
+	// Already 原本就有版本记录（无需纳管）：不计入 pending，也不出现在结果里
+	Already bool   `json:"already,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+// adoptOne 尝试为一个无版本记录的包补写版本号。
+func (d *Daemon) adoptOne(kind, name string, dryRun bool) (AdoptItem, error) {
+	item := AdoptItem{Kind: kind, Name: name}
+	dir, ok := d.installedBundleDirs(kind)[name]
+	if !ok {
+		return item, fmt.Errorf("本地没有已安装的%s %q", upgradeKindLabel(kind), name)
+	}
+	cur, found, err := bundle.LocalVersion(bundle.PackageKind(kind), dir)
+	if err != nil {
+		return item, err
+	}
+	if found {
+		item.Version = cur
+		item.Already = true
+		item.Reason = "已有版本记录，无需纳管"
+		return item, nil
+	}
+
+	pkg, err := d.app.Market().PackageByKindName(kind, name)
+	if err != nil {
+		if errors.Is(err, bundle.ErrMarketPackageNotFound) {
+			// 社区里没有同名包 = 本地自建（或已下架）。它没有「对应哪一版」的问题，
+			// 但也不该永远没有起点：按本地自有内容起版 1.0.0，之后要发布就是常规流程。
+			// 技能不套用这条——技能版本约定写在 SKILL.md 的 metadata.version，由技能链管。
+			if kind == "skill" {
+				item.Reason = "社区中没有同名包，无从确认版本"
+				return item, nil
+			}
+			item.Version = bundle.DefaultVersion
+			if dryRun {
+				item.Reason = "社区无同名包，可按本地内容起版 " + bundle.DefaultVersion + "（未写入）"
+				return item, nil
+			}
+			if werr := bundle.WriteLocalVersion(bundle.PackageKind(kind), dir, bundle.DefaultVersion); werr != nil {
+				return item, fmt.Errorf("写入版本号失败：%w", werr)
+			}
+			item.Adopted = true
+			item.Reason = "社区无同名包，按本地内容起版 " + bundle.DefaultVersion
+			return item, nil
+		}
+		return item, fmt.Errorf("查询社区失败：%w", err)
+	}
+	ver, matched, err := bundle.MatchInstalledVersion(bundle.PackageKind(kind), dir, *pkg,
+		d.bundleInstallOptions(false), d.app.Market())
+	if err != nil {
+		return item, err
+	}
+	if !matched {
+		item.Reason = "本地内容与社区任何版本都不一致（可能本地改过，或来源不同），不写版本号"
+		return item, nil
+	}
+	item.Version = ver
+	if dryRun {
+		item.Reason = "可纳管（未写入）"
+		return item, nil
+	}
+	if err := bundle.WriteLocalVersion(bundle.PackageKind(kind), dir, ver); err != nil {
+		return item, fmt.Errorf("写入版本号失败：%w", err)
+	}
+	item.Adopted = true
+	return item, nil
+}
+
+// handleBundleAdopt 把「版本字段出现之前装上的包」纳入版本管理。
+// kind/name 皆空 = 全量尝试；dry_run 只报告不写盘。
+func (d *Daemon) handleBundleAdopt(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.BundleAdoptParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Kind != "" && !validUpgradeKind(p.Kind) {
+		return nil, fmt.Errorf("kind 只支持 agent / team / skill（收到 %q）", p.Kind)
+	}
+	if p.Kind == "" && p.Name != "" {
+		return nil, fmt.Errorf("指定 name 时必须同时给出 kind")
+	}
+	kinds := upgradeKinds
+	if p.Kind != "" {
+		kinds = []string{p.Kind}
+	}
+
+	type target struct{ kind, name string }
+	var targets []target
+	for _, k := range kinds {
+		dirs := d.installedBundleDirs(k)
+		if p.Name != "" {
+			targets = append(targets, target{kind: k, name: p.Name})
+			continue
+		}
+		for n := range dirs {
+			targets = append(targets, target{kind: k, name: n})
+		}
+	}
+
+	items := make([]AdoptItem, len(targets))
+	failed := make([]string, len(targets))
+	sem := make(chan struct{}, upgradeCheckWorkers)
+	var wg sync.WaitGroup
+	for i, tg := range targets {
+		wg.Add(1)
+		go func(i int, tg target) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			it, err := d.adoptOne(tg.kind, tg.name, p.DryRun)
+			if err != nil {
+				failed[i] = fmt.Sprintf("%s/%s: %v", tg.kind, tg.name, err)
+				return
+			}
+			items[i] = it
+		}(i, tg)
+	}
+	wg.Wait()
+
+	adopted, pending := 0, 0
+	out := make([]AdoptItem, 0, len(items))
+	errs := make([]string, 0, len(failed))
+	for i, it := range items {
+		if failed[i] != "" {
+			errs = append(errs, failed[i])
+			continue
+		}
+		if it.Adopted {
+			adopted++
+		}
+		// pending = 「能认出版本但这次没写」（dry_run，或调用方没让写）。
+		// 本来就有版本的包不算 pending——那会让人以为有活没干。
+		if it.Version != "" && !it.Adopted && !it.Already {
+			pending++
+		}
+		// 已有版本的包不进结果：全量纳管时那是绝大多数，列出来只会淹没有效信息
+		if !it.Already && (it.Adopted || it.Reason != "") {
+			out = append(out, it)
+		}
+	}
+
+	// 写盘过的包要把内存里的版本刷出来（否则列表/检查仍显示未纳管）
+	if adopted > 0 {
+		for _, k := range kinds {
+			if err := d.reloadBundles(k); err != nil {
+				errs = append(errs, fmt.Sprintf("纳管已写入但重载失败（%s）：%v", k, err))
+			}
+		}
+	}
+
+	resp := map[string]any{
+		"items":   out,
+		"adopted": adopted,
+		"pending": pending,
+	}
+	if len(errs) > 0 {
+		resp["errors"] = errs
+	}
+	return resp, nil
 }

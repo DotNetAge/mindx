@@ -90,6 +90,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"market.install":                     r.daemon.handleMarketInstall,
 		"bundle.upgrade_check":               r.daemon.handleBundleUpgradeCheck,
 		"bundle.upgrade":                     r.daemon.handleBundleUpgrade,
+		"bundle.adopt":                       r.daemon.handleBundleAdopt,
 		"market.package.read":                r.daemon.handleMarketPackageRead,
 		"market.rate":                        r.daemon.handleMarketRate,
 		"market.rating.get":                  r.daemon.handleMarketRatingGet,

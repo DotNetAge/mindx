@@ -39,6 +39,9 @@ type Team struct {
 	Dir     string // 团队目录的绝对路径
 }
 
+// DefaultVersion 新建团队的版本起点（与 Agent 同口径）。
+const DefaultVersion = "1.0.0"
+
 // Name 返回团队名称。
 func (t *Team) Name() string { return t.Meta.Name }
 

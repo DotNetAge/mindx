@@ -152,7 +152,19 @@ func (c *Client) Call(ctx context.Context, method string, params any) (json.RawM
 
 // CallWithTimeout calls a JSON-RPC method with a default timeout.
 func (c *Client) CallWithTimeout(method string, params any) (json.RawMessage, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+	return c.CallWithTimeoutDur(method, params, DefaultTimeout)
+}
+
+// CallWithTimeoutDur 用指定超时调用（长任务专用）。
+//
+// 为什么需要：默认 30 秒是给普通查询定的。包升级/纳管这类动作要下载若干个分发包
+// 再逐版比对，30 秒必然不够——用默认超时会表现为「命令超时」而不是「任务失败」，
+// 用户看到的是连接错误，实际后台可能已经写了一半。
+func (c *Client) CallWithTimeoutDur(method string, params any, timeout time.Duration) (json.RawMessage, error) {
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	return c.Call(ctx, method, params)
 }

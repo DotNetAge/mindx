@@ -20,11 +20,20 @@ func (s *Store) Save(team *Team) error {
 	}
 
 	dir := s.teamDirPath(team.Meta.Name)
+	// 新建（目录此前不存在）时给版本起点，与 Agent / 技能模板同口径；
+	// 已存在的团队不动（不替它编版本）。
+	_, statErr := os.Stat(dir)
+	isNew := os.IsNotExist(statErr)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("创建团队目录 %s 失败: %w", dir, err)
 	}
 
-	rendered, err := renderTeam(team.Meta, team.Profile)
+	meta := team.Meta
+	if isNew && strings.TrimSpace(meta.Version) == "" {
+		meta.Version = DefaultVersion
+	}
+
+	rendered, err := renderTeam(meta, team.Profile)
 	if err != nil {
 		return err
 	}
@@ -34,6 +43,7 @@ func (s *Store) Save(team *Team) error {
 
 	// 更新内存缓存（深拷贝语义：直接存调用方对象即可，调用方此后不应再修改）
 	stored := *team
+	stored.Meta = meta
 	stored.Dir = dir
 	s.mu.Lock()
 	s.teams[stored.Meta.Name] = &stored

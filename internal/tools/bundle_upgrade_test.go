@@ -15,6 +15,9 @@ type fakeUpgradeBackend struct {
 	upgradeStatus map[string]string // name → status
 	upgradeErr    map[string]error
 
+	adoptSummary AdoptSummary
+	adoptErr     error
+
 	calls []struct {
 		kind  string
 		name  string
@@ -64,6 +67,19 @@ func (f *fakeUpgradeBackend) UpgradeBundle(kind, name string, force bool, versio
 		Kind: kind, Name: name, Status: status,
 		Applied: status == "upgraded", FromVersion: "1.0.0", ToVersion: "1.1.0",
 	}, nil
+}
+
+func (f *fakeUpgradeBackend) AdoptPackages(kind, name string, dryRun bool) (AdoptSummary, error) {
+	f.calls = append(f.calls, struct {
+		kind  string
+		name  string
+		force bool
+		ver   string
+	}{kind: kind, name: name})
+	if f.adoptErr != nil {
+		return AdoptSummary{}, f.adoptErr
+	}
+	return f.adoptSummary, nil
 }
 
 func modFlag(v bool) *bool { return &v }
@@ -235,5 +251,32 @@ func TestBundleUpgradeNoBackend(t *testing.T) {
 	_, err := NewBundleUpgrade(nil).Execute(context.Background(), map[string]any{"action": "check"})
 	if err == nil {
 		t.Fatal("无后端应报错")
+	}
+}
+
+// TestBundleUpgradeAdopt 纳管动作：把后端结果原样交回模型，不做二次解读。
+func TestBundleUpgradeAdopt(t *testing.T) {
+	fe := &fakeUpgradeBackend{adoptSummary: AdoptSummary{
+		Items: []AdoptRow{
+			{Kind: "agent", Name: "alpha", Version: "1.0.0", Adopted: true},
+			{Kind: "agent", Name: "beta", Reason: "本地内容与社区任何版本都不一致（可能本地改过，或来源不同），不写版本号"},
+		},
+		Adopted: 1,
+	}}
+	got, err := NewBundleUpgrade(fe).Execute(context.Background(), map[string]any{
+		"action": "adopt", "kind": "agent",
+	})
+	if err != nil {
+		t.Fatalf("adopt 失败：%v", err)
+	}
+	summary, ok := got.(AdoptSummary)
+	if !ok {
+		t.Fatalf("返回值类型不对：%T", got)
+	}
+	if summary.Adopted != 1 || len(summary.Items) != 2 {
+		t.Fatalf("纳管结果没透传：%+v", summary)
+	}
+	if last := fe.calls[len(fe.calls)-1]; last.kind != "agent" || last.name != "" {
+		t.Fatalf("纳管参数没透传：%+v", last)
 	}
 }

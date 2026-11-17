@@ -367,3 +367,139 @@ func TestUpgradeToolBackend(t *testing.T) {
 		t.Fatal("非法 kind 应报错")
 	}
 }
+
+// TestBundleAdopt 存量纳管：本地内容与社区某一版逐字节一致才写版本号。
+//
+// 三条边界都在这里钉死：①一致 ⇒ 写入且能立刻被版本闸看见；②本地改过 ⇒ 不写，
+// 如实说认不出来；③即使本地已雇佣（hired: true），也不影响「内容一致」的判定
+// ——hired 是运行态，不参与内容比对。
+func TestBundleAdopt(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	agents := d.app.Agents()
+	if err := agents.Save(&agentstore.Agent{
+		Meta: agentstore.AgentMeta{Name: "adopt-alpha", Role: "测试", Description: "纳管用例"},
+		Soul: "原始规则",
+	}); err != nil {
+		t.Fatalf("保存 agent 失败: %v", err)
+	}
+	if err := agents.SetHired("adopt-alpha", true); err != nil {
+		t.Fatalf("设置雇佣态失败: %v", err)
+	}
+	skills := d.app.Skills()
+	v1 := exportAgentPkg(t, agents.Get("adopt-alpha"), skills)
+
+	// 模拟「版本字段出现之前的老安装」：磁盘上的 IDENTITY.md 没有 version
+	stripVersionField(t, agents.Get("adopt-alpha").Dir)
+
+	// 社区里有同名包 1.0.0，内容与本地一致
+	fm := newFakeMarket(t, "agent", "adopt-alpha")
+	fm.publish("1.0.0", v1)
+	if err := d.app.SetMarketBaseForTest(fm.srv.URL); err != nil {
+		t.Fatalf("设置测试市场失败: %v", err)
+	}
+
+	raw, err := d.handleBundleAdopt(context.Background(), mustJSON(t, map[string]any{
+		"kind": "agent", "name": "adopt-alpha",
+	}))
+	if err != nil {
+		t.Fatalf("纳管失败: %v", err)
+	}
+	res := raw.(map[string]any)
+	if res["adopted"] != 1 {
+		t.Fatalf("应纳管 1 个包，实际 %+v", res)
+	}
+	items := res["items"].([]AdoptItem)
+	if len(items) != 1 || items[0].Version != "1.0.0" || !items[0].Adopted {
+		t.Fatalf("纳管结果不对：%+v", items)
+	}
+	// 落盘后可被版本闸读到，且雇佣态仍在
+	v, ok, err := bundle.LocalVersion(bundle.KindAgent, agents.Get("adopt-alpha").Dir)
+	if err != nil || !ok || v != "1.0.0" {
+		t.Fatalf("版本号未写入正确：v=%q ok=%v err=%v", v, ok, err)
+	}
+	data, _ := os.ReadFile(filepath.Join(agents.Get("adopt-alpha").Dir, "IDENTITY.md"))
+	if !strings.Contains(string(data), "hired: true") {
+		t.Fatalf("纳管不应改动雇佣态：%s", string(data))
+	}
+
+	// 本地改过的包：认不出来，不写
+	if err := os.WriteFile(filepath.Join(agents.Get("adopt-alpha").Dir, "SOUL.md"), []byte("我改过的规则"), 0644); err != nil {
+		t.Fatalf("改写失败: %v", err)
+	}
+	stripVersionField(t, agents.Get("adopt-alpha").Dir)
+	raw, err = d.handleBundleAdopt(context.Background(), mustJSON(t, map[string]any{
+		"kind": "agent", "name": "adopt-alpha",
+	}))
+	if err != nil {
+		t.Fatalf("二次纳管失败: %v", err)
+	}
+	res = raw.(map[string]any)
+	if res["adopted"] != 0 {
+		t.Fatalf("改过的包不应被纳管：%+v", res)
+	}
+	for _, it := range res["items"].([]AdoptItem) {
+		if it.Name == "adopt-alpha" && !strings.Contains(it.Reason, "不一致") {
+			t.Fatalf("应说明为何认不出来：%+v", it)
+		}
+	}
+}
+
+// TestBundleAdoptLocalOnly 社区没有同名包（本地自建 / 已下架）：照样给起点 1.0.0，
+// 理由写清楚——这不是「猜它是哪一版」，而是给自建实体一个显式起点。
+func TestBundleAdoptLocalOnly(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	agents := d.app.Agents()
+	if err := agents.Save(&agentstore.Agent{
+		Meta: agentstore.AgentMeta{Name: "solo", Role: "测试", Description: "自建"},
+		Soul: "规则",
+	}); err != nil {
+		t.Fatalf("保存失败: %v", err)
+	}
+	stripVersionField(t, agents.Get("solo").Dir)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.NotFound(w, nil)
+	}))
+	defer srv.Close()
+	if err := d.app.SetMarketBaseForTest(srv.URL); err != nil {
+		t.Fatalf("设置测试市场失败: %v", err)
+	}
+
+	raw, err := d.handleBundleAdopt(context.Background(), mustJSON(t, map[string]any{
+		"kind": "agent", "name": "solo",
+	}))
+	if err != nil {
+		t.Fatalf("纳管失败: %v", err)
+	}
+	items := raw.(map[string]any)["items"].([]AdoptItem)
+	if len(items) != 1 || !items[0].Adopted || items[0].Version != "1.0.0" {
+		t.Fatalf("自建包应起版 1.0.0：%+v", items)
+	}
+	if !strings.Contains(items[0].Reason, "社区无同名包") {
+		t.Fatalf("理由要说清是自建包起版：%+v", items[0])
+	}
+}
+
+// stripVersionField 从 IDENTITY.md 里删掉 version 行，模拟版本字段出现之前的老安装。
+func stripVersionField(t *testing.T, dir string) {
+	t.Helper()
+	path := filepath.Join(dir, "IDENTITY.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读取失败: %v", err)
+	}
+	var kept []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "version:") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(kept, "\n")), 0644); err != nil {
+		t.Fatalf("写回失败: %v", err)
+	}
+}

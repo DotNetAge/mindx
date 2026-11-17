@@ -412,17 +412,34 @@ Examples:
 
 		existing := store.Get(name)
 
-		meta := agentstore.AgentMeta{
-			Name:        name,
-			Role:        agentAddFlags.role,
-			NickName:    agentAddFlags.nickName,
-			Description: agentAddFlags.description,
+		// 已存在时是「更新」语义：以盘上现有 meta 为基底，只覆盖显式给出的字段。
+		// 不能从零构造——那会把 version / hired / icon / exclude_tools 以及 SOUL 正文
+		// 一并清空（版本被清空等于把它踢出升级链，雇佣态被清空等于把人解雇）。
+		meta := agentstore.AgentMeta{Name: name}
+		soul := ""
+		if existing != nil {
+			meta = existing.Meta
+			soul = existing.Soul
 		}
-		if agentAddFlags.skills != "" {
-			meta.Skills = splitComma(agentAddFlags.skills)
+		setIfGiven := func(flag string) bool { return existing == nil || cmd.Flags().Changed(flag) }
+		if setIfGiven("role") {
+			meta.Role = agentAddFlags.role
+		}
+		if setIfGiven("nick_name") {
+			meta.NickName = agentAddFlags.nickName
+		}
+		if setIfGiven("description") {
+			meta.Description = agentAddFlags.description
+		}
+		if setIfGiven("skills") {
+			if agentAddFlags.skills != "" {
+				meta.Skills = splitComma(agentAddFlags.skills)
+			} else if existing == nil {
+				meta.Skills = nil
+			}
 		}
 
-		if err := store.Save(&agentstore.Agent{Meta: meta}); err != nil {
+		if err := store.Save(&agentstore.Agent{Meta: meta, Soul: soul}); err != nil {
 			return fmt.Errorf("cannot save agent: %w", err)
 		}
 
