@@ -5,7 +5,7 @@ updated: 2026-10-10
 
 > Agent 定义的结构事实：文件布局、frontmatter 字段、工具控制、样式规则。
 > 编写方法论（description 怎么写、SOUL 怎么写）见 [agent-writing.md](agent-writing.md)；
-> 团队实体见 [team-design.md](team-design.md)。
+> 团队实体见 team-creator 技能的 references/team-design.md。
 
 ## 文件结构
 

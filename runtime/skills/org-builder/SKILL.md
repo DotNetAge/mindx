@@ -4,12 +4,12 @@ description: 为老板构建与修订组织——建组织、画架构图并发�
 allowed-tools:
   - Bash(mindx org *)
 metadata:
-  name_zh: 构建组织
-  version: 1.1.0
+  name_zh: 搭建组织
+  version: 1.1.1
   author: Ray
 ---
 
-# 构建组织
+# 搭建组织
 
 组织架构图的生产者唯一是你。老板只看图，不见 XML——所有 XML 的组装、修改、发布都由你完成，老板全程只面对两样东西：一张图，和你的提问。
 

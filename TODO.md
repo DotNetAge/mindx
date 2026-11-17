@@ -1,5 +1,13 @@
 # TODO
 
+## runtime/AGENTS.md 修订待发布（2026-11-17 评审定稿，结论见 .agents/notes/2026-11-17-glm-决策-runtimeAGENTS评审修订与遗留在途改动.md）
+
+- [ ] 与下次发版合并窗口同步释放 runtime/AGENTS.md 评审修订（规则裁决序、高风险收窄、先查证条款、AskUser 合并等 8 处）：同步 = 在飞会话 KV 前缀全量失效，须用户授权且禁止单独 cp 到 ~/.mindx/。验收：发版后 `diff -q mindx/runtime/AGENTS.md ~/.mindx/AGENTS.md` 一致。卡点：工作区混有自省体系升级等在途改动，提交时需确认整体去留
+
+## 存量治理（2026-11-17 定案：先修造物主再治理存量，定案依据见 .agents/notes/2026-11-17-glm-决策-空心Agent判据与派工阶梯量化定案.md；估算定档章法已收编 goal-planner v0.2.0 第二步作共用能力，dispatch-gate/scheduler 独立技能已删除）
+
+- [ ] 存量治理：改写 bega-lead 等 leader SOUL 为「估算+阶梯派工+抽查验证自己动手」范式（章法见 goal-planner 的「派工前估算定档」）；盘点本地与市场 skills≤1 空心 Agent，逐个评估补技能/改职责/撤编
+
 ## 单元测试补缺（覆盖率规划 2026-11-15，基线：go test -cover 全量，svc 包 17.9%；P0 后 25.2%；P1 svc handler 批量补齐后 42.6%）
 
 - [ ] scheduled_exec.go runBackgroundTurn 全链路（排队取消/真实轮次执行）与 handler_device.go 剩余分支（device.scan mDNS、互信凭据领取、handshake 外部令牌路径）、mail 收发正向路径需集成夹具（真实 Runtime/模型/市场服务端），单元层已覆盖可达分支；svc 现状：handler_device 49.4%、handler_mail 61.9%、mail_dispatcher 30%、scheduled_exec 32.9%；另 internal/commands 的 handleAgents/Models/Skills/JobList/Compact 成功路径与 handleHelp 同因（需真实 gateway Server + WS 客户端才能命中 RespondWithType/ctx.Server()），包覆盖 74.8%；P1 svc handler 补齐后新增集成账：fetchSiliconFlowPricing/fetchRate*（价格页与汇率 URL 硬编码，进程缓存分支已覆盖）、wireAskEvents/AskBuilder（需完整 agent 运行时）、handler_fs.go handleFSReveal 成功路径（真弹 Finder）

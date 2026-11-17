@@ -4,7 +4,7 @@ updated: 2026-10-13
 # Agent 编写方法论 — 概览与角色职责
 
 > description 与 SOUL.md 的编写规范：概览怎么写让 LLM 一眼选对，SOUL 怎么写才有行为约束力。
-> 字段与文件结构的事实见 [agent-schema.md](agent-schema.md)；团队编制见 [team-design.md](team-design.md)。
+> 字段与文件结构的事实见 [agent-schema.md](agent-schema.md)；团队编制见 team-creator 技能的 references/team-design.md。
 
 ## `description` — 概览
 

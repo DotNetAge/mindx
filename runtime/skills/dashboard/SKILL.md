@@ -6,8 +6,8 @@ description: >
   数据可视化为面板时使用，也支持任意自定义领域。
 metadata:
   author: Ray
-  name_zh: 构建仪表板
-  version: 0.2.0
+  name_zh: 搭建仪表板
+  version: 0.2.1
 ---
 
 ## 何时用
