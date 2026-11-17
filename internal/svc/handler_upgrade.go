@@ -162,30 +162,24 @@ func upgradeKindLabel(kind string) string {
 // 但也不能不限并发——服务端与本地磁盘都不喜欢突发流量。
 const upgradeCheckWorkers = 8
 
-// handleBundleUpgradeCheck 检查已装包是否有新版本。kind/name 皆空 = 全量检查。
-func (d *Daemon) handleBundleUpgradeCheck(_ context.Context, params json.RawMessage) (any, error) {
-	var p rpc.BundleUpgradeCheckParams
-	if err := unmarshalParams(params, &p); err != nil {
-		return nil, err
-	}
-	if p.Kind != "" && p.Name == "" {
-		return nil, fmt.Errorf("指定 kind 时必须同时给出 name")
-	}
+// collectUpgradeItems 全量或单包检查（并发有界）。
+// RPC 与 Agent 工具共用它：两条入口必须给出同一份判定，否则「界面说可升级、Agent 说没有」。
+func (d *Daemon) collectUpgradeItems(kind, name string) ([]UpgradeItem, []string) {
 	kinds := upgradeKinds
-	if p.Kind != "" {
-		kinds = []string{p.Kind}
+	if kind != "" {
+		kinds = []string{kind}
 	}
 
 	type target struct{ kind, name string }
 	var targets []target
-	for _, kind := range kinds {
-		dirs := d.installedBundleDirs(kind)
-		if p.Name != "" {
-			targets = append(targets, target{kind: kind, name: p.Name})
+	for _, k := range kinds {
+		dirs := d.installedBundleDirs(k)
+		if name != "" {
+			targets = append(targets, target{kind: k, name: name})
 			continue
 		}
-		for name := range dirs {
-			targets = append(targets, target{kind: kind, name: name})
+		for n := range dirs {
+			targets = append(targets, target{kind: k, name: n})
 		}
 	}
 
@@ -212,20 +206,35 @@ func (d *Daemon) handleBundleUpgradeCheck(_ context.Context, params json.RawMess
 
 	out := make([]UpgradeItem, 0, len(items))
 	errs := make([]string, 0, len(failed))
-	upgradable := 0
 	for i, it := range items {
 		if failed[i] != "" {
 			errs = append(errs, failed[i])
 			continue
 		}
+		out = append(out, it)
+	}
+	return out, errs
+}
+
+// handleBundleUpgradeCheck 检查已装包是否有新版本。kind/name 皆空 = 全量检查。
+func (d *Daemon) handleBundleUpgradeCheck(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.BundleUpgradeCheckParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.Kind != "" && p.Name == "" {
+		return nil, fmt.Errorf("指定 kind 时必须同时给出 name")
+	}
+	items, errs := d.collectUpgradeItems(p.Kind, p.Name)
+	upgradable := 0
+	for _, it := range items {
 		if it.Upgradable {
 			upgradable++
 		}
-		out = append(out, it)
 	}
 	resp := map[string]any{
-		"items":      out,
-		"total":      len(out),
+		"items":      items,
+		"total":      len(items),
 		"upgradable": upgradable,
 	}
 	if len(errs) > 0 {
@@ -235,7 +244,7 @@ func (d *Daemon) handleBundleUpgradeCheck(_ context.Context, params json.RawMess
 }
 
 // handleBundleUpgrade 升级单个包（缺省升到市场最新；给 version 即回滚到该版）。
-func (d *Daemon) handleBundleUpgrade(ctx context.Context, params json.RawMessage) (any, error) {
+func (d *Daemon) handleBundleUpgrade(_ context.Context, params json.RawMessage) (any, error) {
 	var p rpc.BundleUpgradeParams
 	if err := unmarshalParams(params, &p); err != nil {
 		return nil, err
@@ -243,21 +252,26 @@ func (d *Daemon) handleBundleUpgrade(ctx context.Context, params json.RawMessage
 	if p.Kind == "" || p.Name == "" {
 		return nil, fmt.Errorf("kind 与 name 均为必填")
 	}
-	item, err := d.checkBundleUpgrade(p.Kind, p.Name)
+	return d.applyUpgrade(p.Kind, p.Name, p.Force, p.Version)
+}
+
+// applyUpgrade 执行单包升级（RPC 与 Agent 工具共用同一条执行体）。
+func (d *Daemon) applyUpgrade(kind, name string, force bool, version string) (UpgradeResult, error) {
+	item, err := d.checkBundleUpgrade(kind, name)
 	if err != nil {
-		return nil, err
+		return UpgradeResult{}, err
 	}
 
-	pkg, err := d.app.Market().PackageByKindName(p.Kind, p.Name)
+	pkg, err := d.app.Market().PackageByKindName(kind, name)
 	if err != nil {
-		return nil, err
+		return UpgradeResult{}, err
 	}
-	target := strings.TrimSpace(p.Version)
+	target := strings.TrimSpace(version)
 	if target == "" {
 		target = pkg.Version
 	}
 	if target == "" {
-		return nil, fmt.Errorf("市场未下发 %s/%s 的版本号，无法确定升级目标", p.Kind, p.Name)
+		return UpgradeResult{}, fmt.Errorf("市场未下发 %s/%s 的版本号，无法确定升级目标", kind, name)
 	}
 
 	status := "upgraded"
@@ -272,7 +286,7 @@ func (d *Daemon) handleBundleUpgrade(ctx context.Context, params json.RawMessage
 	}
 	// 内容闸：改动过或判不出来，默认不覆盖（保留），由用户决定
 	if item.Modified == nil || *item.Modified {
-		if !p.Force {
+		if !force {
 			return UpgradeResult{Status: "needs_confirm", Item: item}, nil
 		}
 	}
@@ -284,30 +298,30 @@ func (d *Daemon) handleBundleUpgrade(ctx context.Context, params json.RawMessage
 		pkgPath, err = d.app.Market().DownloadVersion(*pkg, target)
 	}
 	if err != nil {
-		return nil, err
+		return UpgradeResult{}, err
 	}
 
-	dir := d.installedBundleDirs(p.Kind)[p.Name]
-	backup, err := d.backupBundleDir(p.Kind, p.Name, dir)
+	dir := d.installedBundleDirs(kind)[name]
+	backup, err := d.backupBundleDir(kind, name, dir)
 	if err != nil {
-		return nil, fmt.Errorf("升级前备份失败，已中止（未改动本地文件）：%w", err)
+		return UpgradeResult{}, fmt.Errorf("升级前备份失败，已中止（未改动本地文件）：%w", err)
 	}
 
 	if _, err := bundle.Install(pkgPath, d.bundleInstallOptions(true)); err != nil {
-		return nil, err
+		return UpgradeResult{}, err
 	}
-	if err := d.reloadBundles(p.Kind); err != nil {
-		return nil, fmt.Errorf("包已落盘但重载失败（备份在 %s）：%w", backup, err)
+	if err := d.reloadBundles(kind); err != nil {
+		return UpgradeResult{}, fmt.Errorf("包已落盘但重载失败（备份在 %s）：%w", backup, err)
 	}
 
-	newVer, _, _ := bundle.LocalVersion(bundle.PackageKind(p.Kind), dir)
+	newVer, _, _ := bundle.LocalVersion(bundle.PackageKind(kind), dir)
 	item.LocalVersion = newVer
 	item.LatestVersion = pkg.Version
 	item.Upgradable = pkg.Version != "" && pkg.Version != newVer
 	item.Modified = nil
 	item.Note = ""
 
-	d.logger.Info("分发包升级完成", "kind", p.Kind, "name", p.Name,
+	d.logger.Info("分发包升级完成", "kind", kind, "name", name,
 		"from", item.LocalVersion, "to", target, "backup", backup)
 	return UpgradeResult{Applied: true, Status: status, Item: item, Backup: backup}, nil
 }

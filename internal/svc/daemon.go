@@ -193,6 +193,10 @@ func NewDaemon(app *core.App, addr, wsPath string, runtimeFS fs.FS) (*Daemon, er
 	// Open/Visit/TerminalRun 三工具（未走 daemon 的 TUI 场景不注册）。
 	app.SetUIBroadcast(d.broadcastUI)
 
+	// 升级执行后端：Agent 的 BundleUpgrade 工具据此调用与界面/CLI 同一条执行体
+	//（两把闸 + 覆盖前备份 + 重载）。未注入时不注册该工具。
+	app.SetBundleUpgrader(upgradeToolBackend{d: d})
+
 	// 子代理会话标题提炼：把 daemon 的提炼回调注入 App，createRuntime 经
 	// agents.WithTitleFn 转注 goharness Runtime——子任务受理后 goharness 在
 	// 后台调用（提炼 + RenameSession 落库），并按返回值发射标题刷新事件。

@@ -75,6 +75,9 @@ type App struct {
 	// uiBroadcast 是 UI 命令通道的广播回调（Daemon 注入其 broadcastUI），
 	// 供 Open/Visit/TerminalRun 三工具把呈现请求广播给各客户端。
 	uiBroadcast mindxtools.UIBroadcast
+	// bundleUpgrader 是「升级已装市场包」的执行后端（Daemon 注入）。未注入时
+	// createRuntime 不注册 BundleUpgrade 工具——TUI 等无 daemon 场景没有市场链路。
+	bundleUpgrader mindxtools.BundleUpgradeBackend
 
 	// subSessionTitleFn 是子代理会话标题提炼回调（Daemon 注入其
 	// refineSubSessionTitle）：调 LLM 提炼 + RenameSession 落库并返回标题。
@@ -310,6 +313,13 @@ func (a *App) Settings() *Settings {
 // 初始化时调用；未注入时 createRuntime 不注册 Open/Visit/TerminalRun 三工具。
 func (a *App) SetUIBroadcast(broadcast mindxtools.UIBroadcast) {
 	a.uiBroadcast = broadcast
+}
+
+// SetBundleUpgrader 注入升级执行后端（Daemon 实现）。由 Daemon 初始化时调用；
+// 未注入时 createRuntime 不注册 BundleUpgrade 工具——没有市场链路就不要给模型
+// 一个点了会报错的入口。
+func (a *App) SetBundleUpgrader(backend mindxtools.BundleUpgradeBackend) {
+	a.bundleUpgrader = backend
 }
 
 // SetSubSessionTitleFn 注入子代理会话标题提炼回调（Daemon 的
@@ -1104,6 +1114,15 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 			a.logger.Warn("createRuntime: 注册 Cron 失败", "agent", agentName, "error", err)
 		} else {
 			a.logger.Info("createRuntime: Cron 注册成功", "agent", agentName)
+		}
+	}
+
+	// Register BundleUpgrade 工具（升级已装 Agent/团队/技能）：后端由 Daemon 注入。
+	// 与界面按钮、CLI 走同一条执行体（applyUpgrade），是「升级一律显式触发」的第三条入口。
+	if a.bundleUpgrader != nil {
+		t := mindxtools.NewBundleUpgrade(a.bundleUpgrader)
+		if err := rt.RegisterTool(t); err != nil {
+			a.logger.Warn("createRuntime: 注册 BundleUpgrade 失败", "agent", agentName, "error", err)
 		}
 	}
 

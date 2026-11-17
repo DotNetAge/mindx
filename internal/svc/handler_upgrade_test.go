@@ -304,3 +304,66 @@ func TestBundleUpgrade_LocalOnly(t *testing.T) {
 		t.Fatalf("本地独有包应标注「市场中无同名包」且不可升级：%+v", it)
 	}
 }
+
+// TestUpgradeToolBackend Agent 工具与 RPC 走同一条执行体：
+// 工具侧只要能把「检查 → 执行」跑通，就不可能出现「界面说可升级、Agent 说没有」。
+func TestUpgradeToolBackend(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	agents := d.app.Agents()
+	if err := agents.Save(&agentstore.Agent{
+		Meta: agentstore.AgentMeta{Name: "tool-alpha", Version: "1.0.0", Role: "测试", Description: "工具入口用例"},
+		Soul: "原始规则",
+	}); err != nil {
+		t.Fatalf("保存 agent 失败: %v", err)
+	}
+	skills := d.app.Skills()
+	v1 := exportAgentPkg(t, agents.Get("tool-alpha"), skills)
+
+	cur := agents.Get("tool-alpha")
+	cur.Meta.Version = "2.0.0"
+	cur.Soul = "线上新版"
+	if err := agents.Save(cur); err != nil {
+		t.Fatalf("保存 2.0.0 失败: %v", err)
+	}
+	v2 := exportAgentPkg(t, agents.Get("tool-alpha"), skills)
+
+	cur.Meta.Version = "1.0.0"
+	cur.Soul = "原始规则"
+	if err := agents.Save(cur); err != nil {
+		t.Fatalf("回滚失败: %v", err)
+	}
+
+	fm := newFakeMarket(t, "agent", "tool-alpha")
+	fm.publish("1.0.0", v1)
+	fm.publish("2.0.0", v2)
+	if err := d.app.SetMarketBaseForTest(fm.srv.URL); err != nil {
+		t.Fatalf("设置测试市场失败: %v", err)
+	}
+
+	backend := upgradeToolBackend{d: d}
+	items, err := backend.CheckBundleUpdates("agent", "tool-alpha")
+	if err != nil {
+		t.Fatalf("工具检查失败: %v", err)
+	}
+	if len(items) != 1 || !items[0].Upgradable || items[0].LocalVersion != "1.0.0" {
+		t.Fatalf("工具检查结果不对：%+v", items)
+	}
+
+	out, err := backend.UpgradeBundle("agent", "tool-alpha", false, "")
+	if err != nil {
+		t.Fatalf("工具升级失败: %v", err)
+	}
+	if !out.Applied || out.Status != "upgraded" {
+		t.Fatalf("工具升级结果不对：%+v", out)
+	}
+	if out.ToVersion != "2.0.0" {
+		t.Fatalf("升级后目标版本应为 2.0.0，实际 %q", out.ToVersion)
+	}
+
+	// 非法 kind 在适配层就挡掉，不落到 daemon 逻辑里
+	if _, err := backend.CheckBundleUpdates("plugin", ""); err == nil {
+		t.Fatal("非法 kind 应报错")
+	}
+}
