@@ -119,8 +119,8 @@ func (d *Daemon) checkBundleUpgrade(kind, name string) (UpgradeItem, error) {
 	item.LatestVersion = pkg.Version
 	item.Upgradable = pkg.Version != "" && pkg.Version != local
 
-	switch {
-	case pkg.Version == "":
+	switch pkg.Version {
+	case "":
 		item.Note = "市场未下发版本号"
 	default:
 		// 内容闸：只有能取回「本地记录的那一版」字节才判定得出来
