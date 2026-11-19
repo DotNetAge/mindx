@@ -62,6 +62,13 @@
 - 测试超时类失败先怀疑资源在测试进程内被重复持有（`lsof` 指定测试进程 pid 抓本进程句柄），不要先怀疑环境/沙箱。
 - 凭据存储类测试：`SetTestDir` 会将 credStore 重定向到测试目录 `encryptedFileStore` 并清空内存三件套（token/username/password 在 DefaultApp 构造期已从真实钥匙串 resolve，只换 store 不清内存不够）。新测试若需凭据态，显式 `SetMarketCredentials/SetMarketAuthToken` 落 tmp 文件存储。
 - 隔离 `MINDX_HOME` 起测试 daemon 做连接冒烟时，CLI 的本机握手读的是真实用户根令牌（pkg/rpc 的 defaultUserPrefsDir 不认 MINDX_HOME，与 daemon 侧 core.DefaultUserPrefsDir 不同源）——须把真实 `.token` 预置进隔离目录再起 daemon，否则 CLI 被强制闸判为外部设备卡 pending。
+- `internal/discovery` 的 `TestStartAndDiscover` 在本机必失败（同进程内 `zeroconf.Browse` 收不到自己刚注册的组播），改动前同样失败，属库限制不是回归。判断 mDNS 广播是否正常要用外部 `dns-sd -L "<实例名>" _mindx._tcp local`，不要只看这条测试。
+
+## mDNS / Bonjour
+
+- **macOS 的 `os.Hostname()` 不是 Bonjour 主机名**：前者是 uname 名（`iMac`，无 A 记录），后者是 `scutil --get LocalHostName`（`RaydeiMac`，有 A 记录）。凡是要拼 `.local` 广播的地方一律用 `discovery.LocalHostName()`，否则广播出的 SRV target 无法解析——症状是「局域网搜得到设备但连不上」，很容易误判成客户端问题。
+- **`grandcat/zeroconf` 的 `Register` 会用 `os.Hostname()` 当 HostName**（server.go 的 `entry.HostName, err = os.Hostname()`），且其 `handleQuestion` 只应答 PTR/SRV/TXT，**没有 A/AAAA 分支**。所以必须用 `RegisterProxy` 显式传 Bonjour 名与 IP 列表：不传 IP 则广播里没有地址记录，指望别人来查主机名也拿不到应答。
+- **同一个身份值必须同源**：`server.version` 返回的 hostname 与 mDNS 实例名 `MindX@<hostname>` 必须都取 `discovery.LocalHostName()`。iOS 端用两者做「是不是同一台机器」的比对（地址自愈判据），取不同源会导致自愈永远匹配失败，且症状离根因很远。
 
 ## 子进程与终端前台
 

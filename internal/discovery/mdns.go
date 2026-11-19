@@ -9,7 +9,10 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/grandcat/zeroconf"
@@ -36,21 +39,32 @@ func Start(port int, instance string) (*Broadcaster, error) {
 	if port <= 0 {
 		return nil, fmt.Errorf("非法的监听端口: %d", port)
 	}
+	host := LocalHostName()
 	if instance == "" {
-		hostname, err := os.Hostname()
-		if err != nil || hostname == "" {
-			hostname = "unknown-host"
-		}
-		instance = fmt.Sprintf("MindX@%s", hostname)
+		instance = fmt.Sprintf("MindX@%s", host)
 	}
 
-	server, err := zeroconf.Register(
+	// 显式指定 HostName 与 IP —— 这是「广播出去却连不上」的修复点。
+	//
+	// zeroconf.Register 在 HostName 留空时用 os.Hostname() 拼成
+	// "<uname 名>.local."。macOS 上这不是 Bonjour 主机名
+	// （Bonjour 名由 `scutil --get LocalHostName` 给出），于是 SRV 记录
+	// 指向一个不存在的主机名：客户端能搜到服务、拿到端口，却解析不出地址，
+	// 表现为「局域网发现了设备但连不上」。
+	//
+	// 正确做法是两件事一起做：
+	//   1. HostName 用系统真正的 Bonjour 名；
+	//   2. 显式带上本机非回环 IP，保证 A/AAAA 记录有确切内容
+	//      （RegisterProxy 不做自动探测，ips 为空则广播里没有地址记录）。
+	server, err := zeroconf.RegisterProxy(
 		instance,
 		ServiceType,
 		Domain,
 		port,
+		host,
+		localIPStrings(),
 		[]string{TextVersion},
-		nil, // nil 表示在所有可用网络接口上广播
+		nil, // nil = 在所有可用组播接口上广播
 	)
 	if err != nil {
 		return nil, fmt.Errorf("注册 mDNS 广播失败: %w", err)
@@ -112,4 +126,76 @@ func Browse(timeout time.Duration) ([]ServiceEntry, error) {
 			return entries, nil
 		}
 	}
+}
+
+// LocalHostName 返回本机的 Bonjour 主机名（不含 ".local" 后缀）。
+//
+// macOS 上 `os.Hostname()` 与 Bonjour 主机名是两套东西：
+//
+//	os.Hostname()            → "iMac"        （uname 名，不可解析）
+//	scutil --get LocalHostName → "RaydeiMac"  （Bonjour 名，有 A 记录）
+//
+// 广播必须用后者，否则客户端拿到的地址解析不出来。非 macOS 平台
+// 没有这个区分，直接用 os.Hostname()。
+func LocalHostName() string {
+	if name := bonjourHostName(); name != "" {
+		return name
+	}
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" {
+		return "unknown-host"
+	}
+	// os.Hostname 偶尔带 ".local" 后缀，去掉以免拼成 "x.local.local"
+	return strings.TrimSuffix(hostname, "."+strings.TrimSuffix(Domain, "."))
+}
+
+// bonjourHostName 读 macOS 的 Bonjour 主机名；非 macOS 或读取失败返回空串。
+func bonjourHostName() string {
+	if !isDarwin {
+		return ""
+	}
+	out, err := exec.Command("scutil", "--get", "LocalHostName").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// localIPStrings 收集本机所有非回环、非链路本地的 IP（字符串形式）。
+//
+// 广而全比精确更重要：客户端可能走 Wi-Fi、有线或 USB 共享网络，
+// 只广播一张网卡的地址会让另一种接入方式的用户连不上。
+func localIPStrings() []string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var ips []string
+	seen := map[string]bool{}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ip := ipnet.IP
+			if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+				continue
+			}
+			text := ip.String()
+			if seen[text] {
+				continue
+			}
+			seen[text] = true
+			ips = append(ips, text)
+		}
+	}
+	return ips
 }

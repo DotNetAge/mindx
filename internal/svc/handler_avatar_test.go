@@ -5,6 +5,7 @@ package svc
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"image"
@@ -52,7 +53,7 @@ func TestAvatarListAndGet(t *testing.T) {
 	prepareAvatarHome(t, "10", "2", "1")
 
 	d := &Daemon{}
-	got, err := d.handleAvatarList(nil, json.RawMessage(`{"group":"agent"}`))
+	got, err := d.handleAvatarList(context.TODO(), json.RawMessage(`{"group":"agent"}`))
 	if err != nil {
 		t.Fatalf("avatar.list 失败: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestAvatarListAndGet(t *testing.T) {
 		}
 	}
 
-	gotGet, err := d.handleAvatarGet(nil, json.RawMessage(`{"group":"agent","id":"2"}`))
+	gotGet, err := d.handleAvatarGet(context.TODO(), json.RawMessage(`{"group":"agent","id":"2"}`))
 	if err != nil {
 		t.Fatalf("avatar.get 失败: %v", err)
 	}
@@ -97,10 +98,10 @@ func TestAvatarListAndGet(t *testing.T) {
 func TestAvatarGetRejectsTraversal(t *testing.T) {
 	prepareAvatarHome(t, "1")
 	d := &Daemon{}
-	if _, err := d.handleAvatarGet(nil, json.RawMessage(`{"group":"agent","id":"../secret"}`)); err == nil {
+	if _, err := d.handleAvatarGet(context.TODO(), json.RawMessage(`{"group":"agent","id":"../secret"}`)); err == nil {
 		t.Fatalf("路径穿越 id 应被拒绝")
 	}
-	if _, err := d.handleAvatarGet(nil, json.RawMessage(`{"group":"bogus","id":"1"}`)); err == nil {
+	if _, err := d.handleAvatarGet(context.TODO(), json.RawMessage(`{"group":"bogus","id":"1"}`)); err == nil {
 		t.Fatalf("未知分组应被拒绝")
 	}
 }
@@ -109,7 +110,7 @@ func TestAvatarListEmptyWhenAssetsMissing(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	d := &Daemon{}
-	got, err := d.handleAvatarList(nil, json.RawMessage(`{"group":"team"}`))
+	got, err := d.handleAvatarList(context.TODO(), json.RawMessage(`{"group":"team"}`))
 	if err != nil {
 		t.Fatalf("目录缺失时应返回空清单而非错误: %v", err)
 	}
