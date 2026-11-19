@@ -7,6 +7,7 @@ import "embed"
 //go:embed runtime/agents
 //go:embed runtime/settings
 //go:embed runtime/skills
+//go:embed runtime/assets
 //go:embed runtime/data
 //go:embed runtime/mindx.json
 //go:embed runtime/policy.json

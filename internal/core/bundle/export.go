@@ -174,6 +174,7 @@ func BuildAgentBytes(agent *agentstore.Agent, skills *skillstore.Store, override
 		Description: agent.Meta.Description,
 		Icon:        agent.Meta.Icon,
 		Role:        agent.Meta.Role,
+		NickName:    agent.Meta.NickName,
 		Category:    agent.Meta.Category,
 	}
 

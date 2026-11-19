@@ -6,7 +6,7 @@ description: >
   或复盘产出单个 Agent 招募提议时使用；需要成建制多成员协作时不适用。
 metadata:
   name_zh: 招募智能体
-  version: 1.4.0
+  version: 1.4.1
   author: Ray
 ---
 
@@ -125,6 +125,12 @@ mindx agent add <agent-name> \
 ### 步骤 6：补全定义文件
 
 - **IDENTITY.md**：补充 `category`、`exclude_tools`、`allows_tools` 等字段；正文惯例留空
+- **头像**：从内置头像库挑一张未占用的图写入 `icon`（库随安装分发，256×256 JPEG）；脚本按指纹判占用，同图不会派给两个实体：
+  ```bash
+  python3 ~/.mindx/assets/bin/pick-avatar.py --group agent --target ~/.mindx/agents/<name>/IDENTITY.md
+  ```
+  写回的是单行 data URI（icon 自带字节，包才能单独分发）；库存耗尽以退出码 2 报告，此时停下补充库存，禁止手编 base64。
+  派图只在**本机新建 Agent 时**做一次：装市场包沿用包内自带 icon，不重派、不覆盖；旧实体补头像才手动跑同一脚本
 - **SOUL.md**：按 [agent-writing.md](references/agent-writing.md) 编写角色职责（三段式、三要素、价值观排序、两层边界、按需退化行为与自检清单）；面向用户的角色按 [persona-engineering.md](references/persona-engineering.md) 长入人格要素并过人格质量门
 
 ### 步骤 7：概览选择验证（行为面验收）

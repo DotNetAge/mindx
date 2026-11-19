@@ -40,6 +40,9 @@ type AgentUpdateParams struct {
 	NickName     *string `json:"nick_name,omitempty"`
 	Description  string  `json:"description,omitempty"`
 	Introduction string  `json:"introduction,omitempty"`
+	// Icon 头像（data URI 或图标名）：指针区分「未传」与「清空」——nil 保持不变，
+	// 非 nil 覆盖（TrimSpace 后空串即清空，展示回退首字/默认占位）。
+	Icon *string `json:"icon,omitempty"`
 	// Soul / IdentityBody 用指针区分「未传」与「清空」：nil 保持不变，非 nil 覆盖（含空串清空）。
 	// IdentityBody 对应 IDENTITY.md 身份正文（写入后与 frontmatter introduction 保持一致），
 	// Soul 对应 SOUL.md 正文。

@@ -90,7 +90,11 @@ func (d *Daemon) handleTeamUpdate(_ context.Context, params json.RawMessage) (an
 		updated.Meta.Members = p.Members
 	}
 	if p.Icon != nil {
-		updated.Meta.Icon = strings.TrimSpace(*p.Icon)
+		icon, iconErr := normalizeIcon(*p.Icon)
+		if iconErr != nil {
+			return nil, iconErr
+		}
+		updated.Meta.Icon = icon
 	}
 	if p.Category != nil {
 		updated.Meta.Category = strings.TrimSpace(*p.Category)

@@ -37,6 +37,8 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"session.repair_pairing":             r.daemon.handleSessionRepairPairing,
 		"project.list":                       r.daemon.handleProjectList,
 		"agent.list":                         r.daemon.handleAgentList,
+		"avatar.list":                        r.daemon.handleAvatarList,
+		"avatar.get":                         r.daemon.handleAvatarGet,
 		"agent.get":                          r.daemon.handleAgentGet,
 		"agent.create":                       r.daemon.handleAgentCreate,
 		"agent.update":                       r.daemon.handleAgentUpdate,

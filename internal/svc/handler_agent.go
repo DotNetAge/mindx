@@ -148,6 +148,14 @@ func (d *Daemon) handleAgentUpdate(_ context.Context, params json.RawMessage) (a
 	if p.NickName != nil {
 		updated.Meta.NickName = strings.TrimSpace(*p.NickName)
 	}
+	// 头像：指针语义（nil 不变，非 nil 覆盖），与 team.update 同口径。
+	if p.Icon != nil {
+		icon, iconErr := normalizeIcon(*p.Icon)
+		if iconErr != nil {
+			return nil, iconErr
+		}
+		updated.Meta.Icon = icon
+	}
 	if p.Description != "" {
 		updated.Meta.Description = p.Description
 	}

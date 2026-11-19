@@ -96,6 +96,9 @@ func SyncRuntimeAssets(embeddedFS fs.FS, workspaceDir, appVersion string, cfg *M
 	// Directories that should be unconditionally overwritten
 	overwriteDirs := map[string]bool{
 		"schemas": true,
+		// assets = 随安装分发的素材（头像库 + 派图脚本）：版本升级必须整体刷新，
+		// 否则老用户永远停在旧库存；用户自己追加的文件不在嵌入清单里，不受影响。
+		"assets": true,
 	}
 
 	// Directories that should be protected from overwriting user edits

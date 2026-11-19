@@ -6,7 +6,7 @@ description: >
   只招单个 Agent 时不适用。
 metadata:
   name_zh: 组建团队
-  version: "0.8.2"
+  version: "0.8.3"
   author: Ray
 ---
 
@@ -107,6 +107,12 @@ metadata:
 4. 建制前核对：leader 装配清单含 1 门计划管理技能（目标拆解/估算定档/选岗派工类）+ 1 门领域手艺技能（蓝图「负责人选定」节的硬性要求），缺一不建队
 5. 全部岗位就位后 `mindx team add <team> --leader <lead> --member ...`，蓝图「团队职责」与「工作区约定」节写入 Team Profile（`mindx team update <team> --profile`），并按约定在本项目根建好目录骨架与 AGENTS.md
 6. `mindx team hire <team>`
+7. 团队头像：从内置库挑一张未占用的图写入 TEAM.md 的 `icon`（成员头像已在各自 IDENTITY.md，团队只配自己那一张）：
+   ```bash
+   python3 ~/.mindx/assets/bin/pick-avatar.py --group team --target ~/.mindx/teams/<team>/TEAM.md
+   ```
+   库存耗尽（退出码 2）时停下补充库存，禁止手编 base64。
+   派图只在**本机新建团队时**做一次：整队复用市场现成团队（步骤 5 第 1 条）时沿用包内 TEAM.md 自带 icon，不重派、不覆盖
 
 ### 步骤 6：交接
 
