@@ -5,7 +5,6 @@ import (
 
 	goharnessevents "github.com/DotNetAge/goharness/events"
 	"github.com/DotNetAge/gort/pkg/gateway"
-	"github.com/DotNetAge/mindx/internal/i18n"
 	"github.com/DotNetAge/mindx/pkg/scheduler"
 )
 
@@ -43,7 +42,8 @@ func (d *Daemon) broadcastScheduleChanged() {
 	d.gw.BroadcastNotification("schedule.entries_changed", map[string]any{})
 }
 
+// buildTaskSummaryMarkdown 只输出摘要正文：标题由界面承载，正文再重复一次
+// 「📋 任务总结」会让每条消息都顶着同一个不携带信息的抬头。
 func buildTaskSummaryMarkdown(ts goharnessevents.TaskSummaryData) string {
-	return fmt.Sprintf("### %s\n\n%s\n",
-		i18n.T("svc.md.task.summary"), ts.Summary)
+	return fmt.Sprintf("%s\n", ts.Summary)
 }
