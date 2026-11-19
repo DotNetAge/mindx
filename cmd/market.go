@@ -227,8 +227,22 @@ type marketPackage struct {
 	Role        string   `json:"role"`
 	Category    string   `json:"category"`
 	Skills      []string `json:"skills"`
-	Version     string   `json:"version"`
-	Size        int64    `json:"size"`
+	// 归属与分类（跨端稳定标识）：ownerId 为发布者 UUID，categorySlug 为分类 slug
+	OwnerID      string `json:"ownerId,omitempty"`
+	PublisherID  string `json:"publisherId,omitempty"`
+	CategorySlug string `json:"categorySlug,omitempty"`
+	// 聚合信号
+	LikeCount    int64 `json:"likes,omitempty"`
+	VersionCount int64 `json:"versionCount,omitempty"`
+	// SkillNames 技能中文名映射（服务端技能目录按 slug 下发，含成员/团队包逐 slug 回填）。
+	// 与 SkillDescs 同为展示辅助字段，Agent 核查中文名链路时可直接读取。
+	SkillNames map[string]string `json:"skillNames,omitempty"`
+	// SkillDescs 技能描述映射（同上，值为中文 description）。
+	SkillDescs map[string]string `json:"skillDescs,omitempty"`
+	// NameZh 包自身中文名（kind=skill：服务端技能目录下发；其它 kind 为空）。
+	NameZh  string `json:"nameZh,omitempty"`
+	Version string `json:"version"`
+	Size    int64  `json:"size"`
 	// 市场质量信号（对齐 daemon DTO 的 snake_case 键；表格与 JSON 均透出）
 	DownloadCount int64   `json:"download_count"`
 	RatingAvg     float64 `json:"rating_avg"`
@@ -313,6 +327,17 @@ func marketKindArgs(args []string) (string, error) {
 	return kind, nil
 }
 
+// marketPublishKindArgs 发布侧放宽到 plugin：插件包已在本机安装产物目录里，
+// 打包只换版本与指纹（bundle.BuildPluginBytes），归一条发布链路；
+// 投递/审核/评分仍只收 agent/skill/team（插件没有提案机制）。
+func marketPublishKindArgs(args []string) (string, error) {
+	kind := args[0]
+	if kind != "agent" && kind != "skill" && kind != "team" && kind != "plugin" {
+		return "", fmt.Errorf("kind 必须为 agent、skill、team 或 plugin")
+	}
+	return kind, nil
+}
+
 // printMarketJSON 以 --json 模式输出原始 RPC 结果（格式化）。
 func printMarketJSON(result json.RawMessage) {
 	formatted, _ := json.MarshalIndent(json.RawMessage(result), "", "  ")
@@ -329,7 +354,7 @@ func shortSha(s string) string {
 
 // marketPublishCmd 打包本地包并发布为资源社区新版本。
 var marketPublishCmd = &cobra.Command{
-	Use:   "publish <agent|skill|team> <name>",
+	Use:   "publish <agent|skill|team|plugin> <name>",
 	Short: "Publish a local package as a new market version (requires mindx start)",
 	Long: `打包本地包并发布到资源社区作为新版本（需要 mindx start 运行且已登录社区账号）。
 
@@ -339,10 +364,11 @@ var marketPublishCmd = &cobra.Command{
 Examples:
   mindx market publish agent architect --version 1.0.0
   mindx market publish skill api-design --version 1.1.0 --license MIT
-  mindx market publish agent my-architect --version 1.0.0 --derived-kind agent --derived-name architect`,
+  mindx market publish agent my-architect --version 1.0.0 --derived-kind agent --derived-name architect
+  mindx market publish plugin com.mindxwork.gitgraph --version 1.1.0`, // 用本机已装产物打包，只换版本与指纹
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		kind, err := marketKindArgs(args)
+		kind, err := marketPublishKindArgs(args)
 		if err != nil {
 			return err
 		}

@@ -212,6 +212,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"ui.open":           r.daemon.handleUIOpen,
 		"ui.open_link":      r.daemon.handleUIOpenLink,
 		"ui.run":            r.daemon.handleUIRun,
+		"ui.handoff":        r.daemon.handleUIHandoff,
 
 		// MCP server management（工具清单不再持久化 manifest，改为运行时 tools/list 动态发现）
 		"mcp.server.add":         r.daemon.handleMCPServerAdd,

@@ -118,6 +118,8 @@ type PublishOverrides struct {
 	Name string
 	// DerivedFrom 衍生谱系声明（§4；原创发布留空）。
 	DerivedFrom *DerivedRef
+	// PublisherID 发布者账号 UUID（发布链路从账号档案取；随包写入清单，离线可追溯）。
+	PublisherID string
 }
 
 // apply 将覆盖项写入清单并做基础合法性校验（kind 枚举 + 非空 + 不自指；
@@ -128,6 +130,7 @@ func (o *PublishOverrides) apply(m *Manifest) error {
 	}
 	m.Version = strings.TrimSpace(o.Version)
 	m.License = strings.TrimSpace(o.License)
+	m.PublisherID = strings.TrimSpace(o.PublisherID)
 	// 发布名覆盖先落清单（§4.2 改名发布）：后续谱系自指校验按覆盖后的身份判定
 	if n := strings.TrimSpace(o.Name); n != "" {
 		m.Name = n

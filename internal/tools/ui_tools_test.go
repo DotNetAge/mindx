@@ -144,3 +144,85 @@ func TestTerminalRun_CwdResolution(t *testing.T) {
 		t.Fatal("缺 command 应报错")
 	}
 }
+
+// TestHandoff_BroadcastAndGuards 验收：交接事件参数透传 + 三道闸（自我交接/未安装/目录越界）。
+func TestHandoff_BroadcastAndGuards(t *testing.T) {
+	projectDir := t.TempDir()
+	ctx := uiToolContext(t, projectDir)
+	cap := &uiCapture{}
+
+	exists := func(name string) bool { return name == "go-programmer" }
+	tool := NewHandoff(cap.broadcast, exists)
+
+	// 正常交接：广播 session_handoff，参数逐一透传，返回文案点明「不用继续」
+	res, err := tool.Execute(ctx, map[string]any{
+		"agent": "go-programmer", "task": "把导出改成流式", "mode": "resume",
+	})
+	if err != nil {
+		t.Fatalf("正常交接应受理: %v", err)
+	}
+	if len(cap.events) != 1 || cap.events[0] != "session_handoff" {
+		t.Fatalf("应广播 session_handoff, 实际 %v", cap.events)
+	}
+	d := cap.data[0]
+	if d["agent"] != "go-programmer" || d["task"] != "把导出改成流式" || d["mode"] != "resume" {
+		t.Fatalf("事件参数不符: %v", d)
+	}
+	if d["project_dir"] != projectDir {
+		t.Fatalf("project_dir 应默认当前项目目录, 实际 %v", d["project_dir"])
+	}
+	note, _ := res.(map[string]any)["note"].(string)
+	if !strings.Contains(note, "go-programmer") || !strings.Contains(note, "不用继续") {
+		t.Fatalf("返回文案需点明接手方与收尾语义, 实际 %q", note)
+	}
+
+	// deliver 默认 draft：事件带 deliver，返回文案点明「等用户按发送键」
+	if d["deliver"] != "draft" {
+		t.Fatalf("deliver 应默认 draft, 实际 %v", d["deliver"])
+	}
+	if !strings.Contains(note, "发送键") {
+		t.Fatalf("draft 文案需说明等用户按发送键, 实际 %q", note)
+	}
+
+	// deliver=send：直接发出，文案不再提发送键
+	cap.events, cap.data = nil, nil
+	if _, err := tool.Execute(ctx, map[string]any{
+		"agent": "go-programmer", "task": "y", "deliver": "send",
+	}); err != nil {
+		t.Fatalf("send 应受理: %v", err)
+	}
+	if cap.data[0]["deliver"] != "send" {
+		t.Fatalf("deliver 未透传: %v", cap.data[0]["deliver"])
+	}
+
+	// 闸 1：交接给当前会话自己的智能体
+	if _, err := tool.Execute(ctx, map[string]any{"agent": "test-agent", "task": "x"}); err == nil {
+		t.Fatal("交接给自己应报错")
+	}
+
+	// 闸 2：目标未安装
+	if _, err := tool.Execute(ctx, map[string]any{"agent": "ghost", "task": "x"}); err == nil {
+		t.Fatal("交接给未安装的智能体应报错")
+	}
+
+	// 闸 3：目录越界
+	if _, err := tool.Execute(ctx, map[string]any{
+		"agent": "go-programmer", "task": "x", "project_dir": "../outside",
+	}); err == nil {
+		t.Fatal("越界目录应报错")
+	}
+
+	// 闸 5：deliver 非法
+	if _, err := tool.Execute(ctx, map[string]any{
+		"agent": "go-programmer", "task": "x", "deliver": "later",
+	}); err == nil {
+		t.Fatal("非法 deliver 应报错")
+	}
+
+	// 闸 4：mode 非法
+	if _, err := tool.Execute(ctx, map[string]any{
+		"agent": "go-programmer", "task": "x", "mode": "bad",
+	}); err == nil {
+		t.Fatal("非法 mode 应报错")
+	}
+}

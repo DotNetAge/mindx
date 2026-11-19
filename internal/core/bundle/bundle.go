@@ -38,6 +38,9 @@ const (
 	KindSkill PackageKind = "skill"
 	// KindTeam Team 分发包（team/TEAM.md + 成员 Agent 目录整包）。
 	KindTeam PackageKind = "team"
+	// KindPlugin 插件分发包（mindx-work 插件产物整包：manifest.json 在根，
+	// 身份 = 反向域 id；打包与解析见 plugin.go）。
+	KindPlugin PackageKind = "plugin"
 )
 
 // zip 容器内的固定路径前缀。
@@ -91,6 +94,9 @@ type Manifest struct {
 	License string `json:"license,omitempty"`
 	// DerivedFrom 衍生谱系声明（§4；发布链路经覆盖项写入，原创发布留空）。
 	DerivedFrom *DerivedRef `json:"derived_from,omitempty"`
+	// PublisherID 发布者账号 UUID（发布链路经覆盖项写入，随包冻结）。
+	// 归属的稳定标识：离线读包、跨环境迁移、按作者追溯都靠它，不依赖昵称/登录名。
+	PublisherID string `json:"publisher_id,omitempty"`
 }
 
 // DerivedRef 衍生谱系声明（市场生态 §4）：声明本包进化自哪个已发布的包。

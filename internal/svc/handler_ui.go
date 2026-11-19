@@ -57,6 +57,39 @@ func (d *Daemon) handleUIRun(_ context.Context, params json.RawMessage) (any, er
 	return map[string]any{"ok": true}, nil
 }
 
+// handleUIHandoff 处理 ui.handoff：广播 session_handoff，客户端切到目标智能体会话并把
+// 任务原文以用户身份发出。参数闸在 CLI 侧（agent 存在性、目录边界），daemon 只广播。
+func (d *Daemon) handleUIHandoff(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		Agent      string `json:"agent"`
+		Task       string `json:"task"`
+		ProjectDir string `json:"project_dir"`
+		Mode       string `json:"mode"`
+		Deliver    string `json:"deliver"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil || p.Agent == "" || p.Task == "" {
+		return nil, fmt.Errorf("缺少 agent 或 task 参数")
+	}
+	mode := p.Mode
+	if mode == "" {
+		mode = "new"
+	}
+	if mode != "new" && mode != "resume" {
+		return nil, fmt.Errorf("mode 只能是 new 或 resume: %s", mode)
+	}
+	deliver := p.Deliver
+	if deliver == "" {
+		deliver = "draft"
+	}
+	if deliver != "draft" && deliver != "send" {
+		return nil, fmt.Errorf("deliver 只能是 draft 或 send: %s", deliver)
+	}
+	d.broadcastUI("session_handoff", map[string]any{
+		"agent": p.Agent, "task": p.Task, "project_dir": p.ProjectDir, "mode": mode, "deliver": deliver,
+	})
+	return map[string]any{"ok": true}, nil
+}
+
 // broadcastUI 统一广播 UI 命令事件：envelope 结构（type/title/data）对齐
 // permission_request 旁路广播惯例（daemon.go WithPermissionSink），无会话归属。
 func (d *Daemon) broadcastUI(eventType string, data map[string]any) {

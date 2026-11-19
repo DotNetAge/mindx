@@ -109,7 +109,9 @@ python3 .agents/skills/mx-plugin-dev/scripts/scaffold_plugin.py com.acme.widget 
 mw plugin pack .agents/plugins/com.acme.widget
 # 4. 本地直装验收（运行中的 MindX Work 即时感知激活；真机验收链路读 contract.md §18.8）
 mw plugin install .agents/plugins/com.acme.widget-1.0.0.mindpkg && mw plugin list --json
-# 5. 发布到市场（mindx-market 仓库；kind=plugin，发布纪律读规范 §10）
+# 5. 发布到市场（先装成本机产物再发：daemon 取 ~/.mindx/plugins 里的激活代际整包，
+#    只重写 manifest.version 与 fingerprint；跨端发布纪律读规范 §10）
+mindx market publish plugin com.acme.widget --version 1.1.0
 ```
 
 **安装根军规**：一切已安装的可执行插件构建物必须落 **`~/.mindx/plugins`**（机器级唯一根——App 主进程与 mw CLI 缺省根一致，dev 与打包发行无差异；**禁入 userData**）。插件**源码**归项目 `.agents/plugins/<id>/`，pack 出的 .mindpkg 安装展开后进 `~/.mindx/plugins`。`MW_PLUGIN_ROOT` env 仅诊断覆盖（多实例/验收隔离），常规链路无需设置。dev 验收四步循环读 contract.md §18.8。

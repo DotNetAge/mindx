@@ -61,6 +61,20 @@ type MarketPackage struct {
 	Role string `json:"role,omitempty"`
 	// Category 业务分类（kind=agent，中文，包内清单透传；市场陈列与本地注册表同口径）。
 	Category string `json:"category,omitempty"`
+	// CategorySlug 分类 slug（服务端 categories.slug；服务端过滤与跨端分类对齐用）。
+	CategorySlug string `json:"category_slug,omitempty"`
+	// OwnerID 发布者账号 UUID（服务端 packages.owner_id）：归属的唯一稳定标识，
+	// 跨端追溯/按作者聚合/改名后找回同一人全部按此字段，不依赖昵称或登录名。
+	OwnerID string `json:"owner_id,omitempty"`
+	// PublisherID 包内声明的发布者 UUID（服务端 meta 输出层按 owner_id 回填，
+	// 离线读包也能追溯发布者，不必依赖在线接口）。
+	PublisherID string `json:"publisher_id,omitempty"`
+	// LikeCount 点赞数（服务端 likes 聚合）。
+	LikeCount int64 `json:"likes,omitempty"`
+	// VersionCount 在架版本数（服务端版本聚合；多版本安装入口判断用）。
+	// 键不能用 versions：详情响应里 versions 是版本数组（见下方 Versions），
+	// 同结构体两个字段同键会让编码始终二选一、解码后者遮蔽前者。
+	VersionCount int64 `json:"version_count,omitempty"`
 	// Leader 负责人 Agent 名（kind=team，包内清单透传；市场卡片展示）。
 	Leader string `json:"leader,omitempty"`
 	// Members 包内成员 Agent 名（kind=team，含负责人；市场卡片显示成员数）。
@@ -74,6 +88,9 @@ type MarketPackage struct {
 	// SkillDescs 技能描述映射（技能名 → SKILL.md frontmatter description，
 	// 包内清单透传；收录语义同 SkillNames）。市场详情页展示用。
 	SkillDescs map[string]string `json:"skill_descs,omitempty"`
+	// NameZh 包自身的中文展示名（kind=skill：服务端技能目录下发；离线/第三方源缺失时
+	// 展示端回退 skill_names[自身] 再回退 slug）。
+	NameZh string `json:"name_zh,omitempty"`
 	// Version 包版本（kind=skill 取自 SKILL.md frontmatter metadata.version，发布时录入）。
 	Version string `json:"version,omitempty"`
 	// File 包文件的缓存相对路径（内容寻址布局 packages/<kind>/<name>.mindpkg；
@@ -1204,21 +1221,26 @@ func NewMarketClient(baseURL, cacheDir string) *MarketClient {
 // apiPackage 服务端包条目的原始响应结构（列表/详情一致）：基础字段在顶层，
 // 展示元数据（昵称/负责人/成员/技能装配）在嵌套 meta 对象中。
 type apiPackage struct {
-	Kind          string         `json:"kind"`
-	Name          string         `json:"name"`
-	Description   string         `json:"description"`
-	Category      string         `json:"category"`
-	DownloadURL   string         `json:"download_url"`
-	Sha256        string         `json:"sha256"`
-	Size          int64          `json:"size"`
-	DownloadCount int64          `json:"download_count"`
-	RatingAvg     float64        `json:"rating_avg"`
-	RatingCount   int64          `json:"rating_count"`
-	Version       string         `json:"version"`
-	PublishedAt   string         `json:"published_at"`
-	DerivedFrom   *DerivedRef    `json:"derived_from"`
-	DerivedCount  int64          `json:"derived_count"`
-	Meta          apiPackageMeta `json:"meta"`
+	Kind          string  `json:"kind"`
+	Name          string  `json:"name"`
+	Description   string  `json:"description"`
+	Category      string  `json:"category"`
+	DownloadURL   string  `json:"download_url"`
+	Sha256        string  `json:"sha256"`
+	Size          int64   `json:"size"`
+	DownloadCount int64   `json:"download_count"`
+	RatingAvg     float64 `json:"rating_avg"`
+	RatingCount   int64   `json:"rating_count"`
+	Version       string  `json:"version"`
+	PublishedAt   string  `json:"published_at"`
+	// 归属与聚合字段（服务端列表/详情同口径下发）
+	CategorySlug string         `json:"category_slug"`
+	OwnerID      string         `json:"owner_id"`
+	LikeCount    int64          `json:"likes"`
+	VersionCount int64          `json:"versions"`
+	DerivedFrom  *DerivedRef    `json:"derived_from"`
+	DerivedCount int64          `json:"derived_count"`
+	Meta         apiPackageMeta `json:"meta"`
 }
 
 // toMarketPackage 转为统一包条目（分类归一；版本优先取 meta.version，回退顶层）。
@@ -1230,8 +1252,12 @@ func (ap apiPackage) toMarketPackage() MarketPackage {
 	return MarketPackage{
 		Kind: PackageKind(ap.Kind), Name: ap.Name, Description: ap.Description,
 		Icon: ap.Meta.Icon, Title: ap.Meta.Title, NickName: ap.Meta.NickName, Role: ap.Meta.Role,
-		Category: normalizeCategory(ap.Category), Leader: ap.Meta.Leader, Members: ap.Meta.Members,
+		Category: normalizeCategory(ap.Category), CategorySlug: ap.CategorySlug,
+		OwnerID: ap.OwnerID, PublisherID: ap.Meta.PublisherID,
+		LikeCount: ap.LikeCount, VersionCount: ap.VersionCount,
+		Leader: ap.Meta.Leader, Members: ap.Meta.Members,
 		Skills: ap.Meta.Skills, SkillNames: ap.Meta.SkillNames, SkillDescs: ap.Meta.SkillDescs,
+		NameZh:  ap.Meta.NameZh,
 		Version: version, DownloadURL: ap.DownloadURL, Sha256: ap.Sha256, Size: ap.Size,
 		DownloadCount: ap.DownloadCount, RatingAvg: ap.RatingAvg, RatingCount: ap.RatingCount,
 		PublishedAt: ap.PublishedAt,
@@ -1304,22 +1330,25 @@ func (m *MarketClient) ListPage(q MarketQuery) (*MarketPage, error) {
 
 // apiPackageMeta 服务端包条目的嵌套元数据（meta 对象，列表/详情共用结构）。
 type apiPackageMeta struct {
-	Icon        string            `json:"icon"`
-	Title       string            `json:"title"`
-	NickName    string            `json:"nick_name"`
-	Role        string            `json:"role"`
-	Leader      string            `json:"leader"`
-	Members     []string          `json:"members"`
-	Skills      []string          `json:"skills"`
-	SkillNames  map[string]string `json:"skill_names"`
-	SkillDescs  map[string]string `json:"skill_descs"`
-	Version     string            `json:"version"`
-	Author      string            `json:"author"`
-	URL         string            `json:"url"`
-	Repo        string            `json:"repo"`
-	License     string            `json:"license"`
-	Permissions []string          `json:"permissions"`
-	Fingerprint string            `json:"fingerprint"`
+	Icon       string            `json:"icon"`
+	Title      string            `json:"title"`
+	NickName   string            `json:"nick_name"`
+	Role       string            `json:"role"`
+	Leader     string            `json:"leader"`
+	Members    []string          `json:"members"`
+	Skills     []string          `json:"skills"`
+	SkillNames map[string]string `json:"skill_names"`
+	SkillDescs map[string]string `json:"skill_descs"`
+	NameZh     string            `json:"name_zh"`
+	// PublisherID 发布者账号 UUID（服务端输出层按 packages.owner_id 回填）
+	PublisherID string   `json:"publisher_id"`
+	Version     string   `json:"version"`
+	Author      string   `json:"author"`
+	URL         string   `json:"url"`
+	Repo        string   `json:"repo"`
+	License     string   `json:"license"`
+	Permissions []string `json:"permissions"`
+	Fingerprint string   `json:"fingerprint"`
 }
 
 // fetchAPIPage 走服务端分页 API（响应条目为顶层基础字段 + meta 嵌套元数据）。

@@ -42,6 +42,61 @@ Examples:
 	},
 }
 
+var uiHandoffCmd = &cobra.Command{
+	Use:   "handoff --agent <名> --task <任务>",
+	Short: "Hand a task over to another agent and switch the client to that session",
+	Long: `Create (or resume) a session with the target agent in the current project
+directory, send the task text as the user's message, and switch the client UI
+to that session. Acceptance is fire-and-forget.
+
+Examples:
+  mindx ui handoff --agent go-programmer --task "把订单模块的导出改成流式"
+  mindx ui handoff --agent architect --task "评审一下这个方案" --mode resume
+  mindx ui handoff --agent go-programmer --task "把导出改成流式" --deliver send`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agent, _ := cmd.Flags().GetString("agent")
+		task, _ := cmd.Flags().GetString("task")
+		projectDir, _ := cmd.Flags().GetString("project-dir")
+		mode, _ := cmd.Flags().GetString("mode")
+		deliver, _ := cmd.Flags().GetString("deliver")
+		agent = strings.TrimSpace(agent)
+		task = strings.TrimSpace(task)
+		if agent == "" || task == "" {
+			return fmt.Errorf("--agent 与 --task 均为必填")
+		}
+		if mode == "" {
+			mode = "new"
+		}
+		if mode != "new" && mode != "resume" {
+			return fmt.Errorf("--mode 只能是 new 或 resume")
+		}
+		if deliver == "" {
+			deliver = "draft"
+		}
+		if deliver != "draft" && deliver != "send" {
+			return fmt.Errorf("--deliver 只能是 draft 或 send")
+		}
+		// 目标会话目录默认取 CLI 工作目录（Agent 工作区），并校验落在工作区内
+		if strings.TrimSpace(projectDir) == "" {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("获取工作目录失败: %w", err)
+			}
+			projectDir = cwd
+		} else {
+			abs, err := resolveWorkspacePath(projectDir)
+			if err != nil {
+				return err
+			}
+			projectDir = abs
+		}
+		return callUI("交接会话", agent, func(cl *rpc.Client) error {
+			_, err := cl.UIHandoff(agent, task, projectDir, mode, deliver)
+			return err
+		})
+	},
+}
+
 var uiOpenCmd = &cobra.Command{
 	Use:   "open <路径>",
 	Short: "Open a file in the client (routed to its matching viewer)",
@@ -131,6 +186,11 @@ func callUI(action, target string, do func(cl *rpc.Client) error) error {
 }
 
 func init() {
-	uiCmd.AddCommand(uiOpenCmd, uiOpenLinkCmd, uiRunCmd)
+	uiHandoffCmd.Flags().String("agent", "", "目标智能体名（本机已安装）")
+	uiHandoffCmd.Flags().String("task", "", "交给对方的任务原文（可直接用用户原话）")
+	uiHandoffCmd.Flags().String("project-dir", "", "目标会话工作目录（默认当前目录，必须在工作区内）")
+	uiHandoffCmd.Flags().String("mode", "new", "会话形态：new 开新会话 / resume 复用已有会话")
+	uiHandoffCmd.Flags().String("deliver", "draft", "交付方式：draft 只填进输入框等用户按发送键 / send 直接发出")
+	uiCmd.AddCommand(uiOpenCmd, uiOpenLinkCmd, uiRunCmd, uiHandoffCmd)
 	rootCmd.AddCommand(uiCmd)
 }

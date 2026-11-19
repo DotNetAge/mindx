@@ -1135,6 +1135,10 @@ func (a *App) createRuntime(agentName string) (*agents.Runtime, error) {
 			mindxtools.NewVisit(a.uiBroadcast),
 			mindxtools.NewTerminalRun(a.uiBroadcast),
 			mindxtools.NewNotify(a.uiBroadcast),
+			// Handoff：把任务交接给另一个智能体（代用户打开对方会话并发消息）
+			mindxtools.NewHandoff(a.uiBroadcast, func(name string) bool {
+				return a.agents != nil && a.agents.Exists(name)
+			}),
 		}
 		for _, t := range uiTools {
 			if err := rt.RegisterTool(t); err != nil {

@@ -229,11 +229,20 @@ type marketPackageDTO struct {
 	Skills      []string          `json:"skills,omitempty"`
 	SkillNames  map[string]string `json:"skillNames,omitempty"`
 	SkillDescs  map[string]string `json:"skillDescs,omitempty"`
-	Version     string            `json:"version,omitempty"`
-	File        string            `json:"file"`
-	Sha256      string            `json:"sha256"`
-	Size        int64             `json:"size,omitempty"`
-	DownloadURL string            `json:"download_url,omitempty"`
+	// NameZh 包自身中文名（kind=skill：服务端技能目录下发；其它 kind 为空）
+	NameZh string `json:"nameZh,omitempty"`
+	// 归属与分类（跨端稳定标识：ownerId 为发布者 UUID，categorySlug 为分类 slug）
+	OwnerID      string `json:"ownerId,omitempty"`
+	PublisherID  string `json:"publisherId,omitempty"`
+	CategorySlug string `json:"categorySlug,omitempty"`
+	// 聚合信号（点赞数、在架版本数）
+	LikeCount    int64  `json:"likes,omitempty"`
+	VersionCount int64  `json:"versionCount,omitempty"`
+	Version      string `json:"version,omitempty"`
+	File         string `json:"file"`
+	Sha256       string `json:"sha256"`
+	Size         int64  `json:"size,omitempty"`
+	DownloadURL  string `json:"download_url,omitempty"`
 	// 市场信号（§1/§2：下载计数与评分聚合，分页契约只增不破坏）
 	DownloadCnt int64   `json:"download_count,omitempty"`
 	RatingAvg   float64 `json:"rating_avg,omitempty"`
@@ -278,35 +287,41 @@ func (d *Daemon) handleMarketList(_ context.Context, params json.RawMessage) (an
 	dtos := make([]marketPackageDTO, 0, len(packages))
 	for _, p := range packages {
 		dtos = append(dtos, marketPackageDTO{
-			Kind:        string(p.Kind),
-			Name:        p.Name,
-			Title:       p.Title,
-			Description: p.Description,
-			Icon:        p.Icon,
-			NickName:    p.NickName,
-			Role:        p.Role,
-			Category:    p.Category,
-			Leader:      p.Leader,
-			Members:     p.Members,
-			Skills:      p.Skills,
-			SkillNames:  p.SkillNames,
-			SkillDescs:  p.SkillDescs,
-			Version:     p.Version,
-			File:        p.File,
-			Sha256:      p.Sha256,
-			Size:        p.Size,
-			DownloadURL: p.DownloadURL,
-			DownloadCnt: p.DownloadCount,
-			RatingAvg:   p.RatingAvg,
-			RatingCnt:   p.RatingCount,
-			Author:      p.Author,
-			URL:         p.URL,
-			Repo:        p.Repo,
-			License:     p.License,
-			Permissions: p.Permissions,
-			Fingerprint: p.Fingerprint,
-			PublishedAt: p.PublishedAt,
-			DerivedFrom: p.DerivedFrom,
+			Kind:         string(p.Kind),
+			Name:         p.Name,
+			Title:        p.Title,
+			Description:  p.Description,
+			Icon:         p.Icon,
+			NickName:     p.NickName,
+			Role:         p.Role,
+			Category:     p.Category,
+			Leader:       p.Leader,
+			Members:      p.Members,
+			Skills:       p.Skills,
+			SkillNames:   p.SkillNames,
+			SkillDescs:   p.SkillDescs,
+			NameZh:       p.NameZh,
+			OwnerID:      p.OwnerID,
+			PublisherID:  p.PublisherID,
+			CategorySlug: p.CategorySlug,
+			LikeCount:    p.LikeCount,
+			VersionCount: p.VersionCount,
+			Version:      p.Version,
+			File:         p.File,
+			Sha256:       p.Sha256,
+			Size:         p.Size,
+			DownloadURL:  p.DownloadURL,
+			DownloadCnt:  p.DownloadCount,
+			RatingAvg:    p.RatingAvg,
+			RatingCnt:    p.RatingCount,
+			Author:       p.Author,
+			URL:          p.URL,
+			Repo:         p.Repo,
+			License:      p.License,
+			Permissions:  p.Permissions,
+			Fingerprint:  p.Fingerprint,
+			PublishedAt:  p.PublishedAt,
+			DerivedFrom:  p.DerivedFrom,
 		})
 	}
 	return map[string]any{
@@ -465,6 +480,16 @@ func marketBuildOverrides(version, license, derivedKind, derivedName, derivedVer
 	return ov, nil
 }
 
+// marketPublisherID 当前发布者账号 UUID（未登录/取不到时返回空串，不阻断发布）。
+// 账号档案是权威源：UUID 不随昵称、登录名变化，跨端追溯一律按它。
+func (d *Daemon) marketPublisherID() string {
+	u, err := d.app.Market().Me()
+	if err != nil || u == nil {
+		return ""
+	}
+	return strings.TrimSpace(u.ID)
+}
+
 // marketBuildPackage 按类型打包分发包字节（pack/publish/submit 共用打包入口）。
 func (d *Daemon) marketBuildPackage(kind, name string, ov *bundle.PublishOverrides) ([]byte, *bundle.Manifest, []string, error) {
 	switch bundle.PackageKind(kind) {
@@ -486,8 +511,11 @@ func (d *Daemon) marketBuildPackage(kind, name string, ov *bundle.PublishOverrid
 			return nil, nil, nil, err
 		}
 		return data, manifest, nil, nil
+	case bundle.KindPlugin:
+		// 插件包用本机已装产物整包打包（版本与指纹在本轮重写）
+		return bundle.BuildPluginBytes(name, ov)
 	default:
-		return nil, nil, nil, fmt.Errorf("kind（agent/skill/team）非法")
+		return nil, nil, nil, fmt.Errorf("kind（agent/skill/team/plugin）非法")
 	}
 }
 
@@ -546,6 +574,10 @@ func (d *Daemon) handleMarketPublish(_ context.Context, params json.RawMessage) 
 	if err != nil {
 		return nil, err
 	}
+	// 发布者 UUID 随包冻结（离线读包/跨环境迁移都能追溯归属）；取不到账号不阻断发布
+	if uid := d.marketPublisherID(); uid != "" {
+		ov.PublisherID = uid
+	}
 	// 发布名覆盖（§4.2 衍生改名发布）：403 包名冲突后以新名再发布时携带；
 	// 包内清单 name 随覆盖值落盘（zip 内固定目录前缀不含包名，安装端按清单落位）
 	publishName := strings.TrimSpace(p.PublishName)
@@ -592,6 +624,9 @@ func (d *Daemon) entityFrontmatterVersion(kind, name string) string {
 		if t := d.app.Teams().Get(name); t != nil {
 			return t.Meta.Version
 		}
+	case bundle.KindPlugin:
+		// 插件版本的权威是包内 manifest.json 的 version
+		return bundle.PluginManifestVersion(name)
 	}
 	return ""
 }
@@ -629,6 +664,9 @@ func (d *Daemon) handleMarketSubmit(_ context.Context, params json.RawMessage) (
 	ov, err := marketBuildOverrides(p.Version, "", p.DerivedKind, p.DerivedName, p.DerivedVersion)
 	if err != nil {
 		return nil, err
+	}
+	if uid := d.marketPublisherID(); uid != "" {
+		ov.PublisherID = uid
 	}
 	// 投递 = 同名包的进化版：谱系指向投递目标自身无意义且服务端采纳时必拒，前置拦截
 	if ov.DerivedFrom != nil && ov.DerivedFrom.Kind == p.Kind && ov.DerivedFrom.Name == p.Name {

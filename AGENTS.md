@@ -7,6 +7,13 @@
 - Agent / Team / Skill 的 `description` 一律是概览，仅三问：负责什么（或是什么）、能干什么（产出什么）、什么时候用（何时不用）。禁止在 description 中写路由：不得出现「X 归我；Y 归某实体」式指派、指代其他实体的话术、路由层术语、技术细节——LLM 同时阅读多条 description 靠对比决策，路由元语言是噪声，路由是对比多条干净概览的自然涌现。「是否独特可辨」的检验只存在于编写者自检，不产生写进 description 的文本。
 - 生态进化决策先对照《决策路由》论文（全文见仓库根 `.agents/notes/glm-决策-Agent决策路由三层模型与论文方向.md`）：凡涉及本生态工具集（goharness / mindx / mindx-work / mindx-desktop）演进方向的设计取舍——路由分层、技能体系、记忆体系、团队协作机制的改动——先回答两个问题：该设计落在三层路由的哪一层（Team 职责路由 / Agent 领域路由 / Skill 方案路由）？如何被进化闭环（记录→复盘→蒸馏→棘轮）吸收？两问答不上来的设计默认不做。论文成文后引用路径更新为正式文档。
 
+## 内置实体上架社区
+
+- runtime 内置实体（`runtime/skills`、`runtime/agents`）上架资源社区的唯一入口是 `make publish-content`（内部调 `runtime/skills/market-publish/scripts/publish_batch.py`）。禁止逐包手工 `mindx market publish`、禁止用 LLM 记忆判断哪些改过——变更判定与版本推进全部由脚本按内容指纹完成。
+- 首次上架或大批量变更先用 `make publish-content ARGS=--dry-run` 核范围，再 `ARGS=--limit\ 3` 小批，确认无误后整批。不要跳过 dry-run 直接整批。
+- 内置技能的版本推进由脚本写回对应 `SKILL.md` / `IDENTITY.md` 的 frontmatter；手工改版本号仍要遵守「同版本字节终身绑定」，改了内容就必须升版本。
+- 客户端发布链路（打包、上传、回读）归 `market-publish` 技能；官网与服务端二进制发布归 mindx-market 的 `market-release` 技能。两者不要混用。
+
 ## daemon 更新与版本验证
 
 - 让本地 daemon 用上新二进制的唯一路径是 `make restart`（构建 → 写入 `~/.mindx/bin` → launchd 强制重启 → 运行时同步）；禁止手动 kill/重启 daemon 或手动拷贝二进制。例外：HOME 隔离的测试 daemon（如 `-p :1319`）。写任何 daemon 启动/重启命令前先自问「这是不是该 make restart 的场景」。

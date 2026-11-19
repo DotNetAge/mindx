@@ -138,6 +138,37 @@ func TestBuildSkillBytesOverrides(t *testing.T) {
 	}
 }
 
+// TestPublishOverridesPublisherID 发布者 UUID 必须随包冻结：离线解包即可追溯归属，
+// 不依赖服务端输出层回填（回填只覆盖在线读取路径）。
+func TestPublishOverridesPublisherID(t *testing.T) {
+	const uid = "3a05e6a6-b478-4595-8dd1-6fa3b54f75bc"
+	data := mustBuildSkillPkg(t, t.TempDir(), &PublishOverrides{Version: "0.3.0", PublisherID: uid})
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("解包失败: %v", err)
+	}
+	for _, f := range zr.File {
+		if f.Name != zipPathManifest {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("打开清单失败: %v", err)
+		}
+		raw, _ := io.ReadAll(rc)
+		_ = rc.Close()
+		var m Manifest
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatalf("清单解析失败: %v", err)
+		}
+		if m.PublisherID != uid {
+			t.Errorf("清单 publisher_id = %q, want %q", m.PublisherID, uid)
+		}
+		return
+	}
+	t.Fatal("包内缺少 manifest.json")
+}
+
 func TestPublishOverridesSelfRefRejected(t *testing.T) {
 	m := &Manifest{Kind: KindSkill, Name: "demo"}
 	ov := &PublishOverrides{Version: "0.1.0", DerivedFrom: &DerivedRef{Kind: "skill", Name: "demo"}}

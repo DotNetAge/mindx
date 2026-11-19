@@ -15,6 +15,8 @@ func entityVersionDoc(kind PackageKind) string {
 		return "TEAM.md"
 	case KindSkill:
 		return "SKILL.md"
+	case KindPlugin:
+		return "manifest.json"
 	default:
 		return "IDENTITY.md"
 	}

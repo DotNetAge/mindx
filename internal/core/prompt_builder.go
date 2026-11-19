@@ -302,9 +302,6 @@ func (b *PromptBuilder) buildEnvSection(s *session.Session) string {
 	if id := s.ID(); id != "" {
 		sb.WriteString(fmt.Sprintf("- **会话ID**: %s\n", id))
 	}
-	if s.Sponsor() != "" {
-		sb.WriteString(fmt.Sprintf("- **发起会话的Agent**: %s\n", s.Sponsor()))
-	}
 	sb.WriteString(fmt.Sprintf("- **本地时间**: %s\n", time.Now().Format("2006-01-02")))
 
 	// 搜索策略

@@ -20,7 +20,7 @@
 
 .PHONY: build build-all setup-cross clear install run run-daemon restart stop test clean docs help \
         dev uninstall sync \
-        release release-notes release-publish release-homebrew publish \
+        release release-notes release-publish release-homebrew publish publish-content \
         docker .env docker-build docker-run docker-run-daemon docker-push docker-release docker-clean \
         ci cd deps-update \
         pre-commit version info changelog \
@@ -98,15 +98,15 @@ fmt:
 ## lint: 运行 golangci-lint 代码检查
 lint:
 	@echo "$(CYAN)🔍 Running golangci-lint...$(NC)"
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run ./...; \
-		echo "$(GREEN)✅ Lint passed.$(NC)"; \
-	else \
+	@LINT=$$(command -v golangci-lint || echo "$$(go env GOPATH)/bin/golangci-lint"); \
+	if [ ! -x "$$LINT" ]; then \
 		echo "$(YELLOW)⚠  golangci-lint not found, installing...$(NC)"; \
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
-		golangci-lint run ./...; \
-		echo "$(GREEN)✅ Lint passed.$(NC)"; \
-	fi
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest || \
+			{ echo "$(RED)❌ golangci-lint 安装失败，lint 未执行$(NC)"; exit 1; }; \
+		LINT="$$(go env GOPATH)/bin/golangci-lint"; \
+	fi; \
+	"$$LINT" run ./... || { echo "$(RED)❌ Lint 未通过$(NC)"; exit 1; }; \
+	echo "$(GREEN)✅ Lint passed.$(NC)"
 
 # =============================================================================
 # 主要构建目标
@@ -450,6 +450,13 @@ release-homebrew:
 	@echo "$(GREEN)🍺 Generating Homebrew formula from GitHub Release...$(NC)"
 	@bash scripts/homebrew-release.sh
 	@echo "$(GREEN)✅ Formula generated in dist/$(NC)"
+
+## publish-content: 把 runtime 内置实体增量发布到资源社区（维护者专用）
+##   ARGS 透传给批量脚本，常用：ARGS=--dry-run 先核范围；ARGS=--limit\ 3 小批验证
+##   变更判定 = 实体目录内容指纹，版本自动升 patch 回写 frontmatter，台账 ~/.mindx/market-publish-state.json
+publish-content:
+	@python3 runtime/skills/market-publish/scripts/publish_batch.py --kind skill --src runtime/skills $(ARGS)
+	@python3 runtime/skills/market-publish/scripts/publish_batch.py --kind agent --src runtime/agents $(ARGS)
 
 ## publish: 一键发布 — 打标签 → 编译 → GitHub Release → Homebrew
 publish:

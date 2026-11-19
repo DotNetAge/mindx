@@ -261,6 +261,15 @@ func resolveSessionWorkspacePath(ctx context.Context, raw string) (string, error
 	return resolveInProjectDir(toolProjectDir(ctx), raw)
 }
 
+// toolAgentName 从 ToolContext 取当前会话所属智能体名（缺失返回空串）。
+func toolAgentName(ctx context.Context) string {
+	tc := tools.GetToolContext(ctx)
+	if tc == nil || tc.Session == nil {
+		return ""
+	}
+	return tc.Session.AgentName()
+}
+
 // toolProjectDir 从 ToolContext 取会话项目目录（缺失时返回空串，由调用方报引导错误）。
 func toolProjectDir(ctx context.Context) string {
 	tc := tools.GetToolContext(ctx)
@@ -293,4 +302,143 @@ func resolveInProjectDir(projectDir, raw string) (string, error) {
 		))
 	}
 	return p, nil
+}
+
+// Handoff 把会话交接给另一个智能体（对应事件 session_handoff）。
+//
+// 语义：发起方 Agent 代用户打开目标 Agent 的会话，并把任务原文以用户身份发出；
+// 客户端收到事件即切到该会话，此后是「用户 ↔ 目标 Agent」直接对话，发起方退出。
+// 与 Open/Visit 同族：受理即返回，不等客户端回执。
+type Handoff struct {
+	Broadcast   UIBroadcast
+	AgentExists func(string) bool
+}
+
+// NewHandoff 创建 Handoff 工具（broadcast 为空时执行报错；AgentExists 为空时跳过存在性校验）。
+func NewHandoff(broadcast UIBroadcast, agentExists func(string) bool) tools.FuncTool {
+	return &Handoff{Broadcast: broadcast, AgentExists: agentExists}
+}
+
+func (t *Handoff) Info() *tools.ToolInfo {
+	return &tools.ToolInfo{
+		Name:        "Handoff",
+		Description: "把任务交接给另一个智能体，由它直接与用户继续对话（界面切到对方会话）。",
+		Prompt: `把手上的任务交接给一个更合适的智能体，由它直接与用户交流。
+
+适用：这件事需要另一位专职智能体长期负责，或你的职责只是找对人、把话带到。
+
+task 要写成用户自己会说出口的那句话：替他把缺的上下文补齐，不改成任务书格式。
+
+工具返回即完成：你这边不用继续这条任务，不要重复执行，也不要向用户复述——用户接下来是在与对方对话。`,
+		IsReadOnly: false,
+		Parameters: []tools.Parameter{
+			{
+				Name:        "agent",
+				Type:        "string",
+				Description: "接手任务的目标智能体名（必须是本机已安装的智能体，且不是你自己）。",
+				Required:    true,
+			},
+			{
+				Name:        "task",
+				Type:        "string",
+				Description: "交给对方的任务原文。以用户口吻陈述要做什么，可直接使用用户刚才的表述，不要改写成任务书格式。",
+				Required:    true,
+			},
+			{
+				Name:        "project_dir",
+				Type:        "string",
+				Description: "对方会话的工作目录（相对当前项目目录或绝对路径，必须在项目目录内；缺省用当前项目目录）。",
+				Required:    false,
+			},
+			{
+				Name:        "mode",
+				Type:        "string",
+				Description: "会话形态：new（默认，开新会话）| resume（复用该智能体在同一目录下已有的会话）。",
+				Required:    false,
+			},
+			{
+				Name:        "deliver",
+				Type:        "string",
+				Description: "交付方式：draft（默认，只把任务填进对方输入框，用户自己按发送键；用户没让你替他把话说死时一律用这个）| send（直接以用户身份发出，仅在用户明确要求「直接交给它办」时用）。",
+				Required:    false,
+			},
+		},
+	}
+}
+
+func (t *Handoff) Execute(ctx context.Context, params map[string]any) (any, error) {
+	agent, err := tools.ValidateRequiredString("Handoff", params, "agent")
+	if err != nil {
+		return nil, err
+	}
+	agent = strings.TrimSpace(agent)
+	task, err := tools.ValidateRequiredString("Handoff", params, "task")
+	if err != nil {
+		return nil, err
+	}
+	task = strings.TrimSpace(task)
+
+	// 交接给自己无意义：自己就是当前会话的对话方
+	if current := toolAgentName(ctx); current != "" && current == agent {
+		return nil, fmt.Errorf("%s", tools.BuildGuide(
+			fmt.Sprintf("agent=%q 就是当前会话的智能体", agent),
+			"交接的目标必须是与当前会话不同的智能体",
+			"改传另一位已安装智能体的名字；若要把活留给用户，直接正常回复即可",
+		))
+	}
+	if t.AgentExists != nil && !t.AgentExists(agent) {
+		return nil, fmt.Errorf("%s", tools.BuildGuide(
+			fmt.Sprintf("agent=%q 未安装", agent),
+			"只能交接给本机已安装的智能体",
+			"先用技能/市场安装该智能体，或改交接给已安装的智能体",
+		))
+	}
+
+	projectDir := toolProjectDir(ctx)
+	dir := projectDir
+	if raw, _ := params["project_dir"].(string); strings.TrimSpace(raw) != "" {
+		dir, err = resolveInProjectDir(projectDir, strings.TrimSpace(raw))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	mode := "new"
+	if raw, _ := params["mode"].(string); strings.TrimSpace(raw) != "" {
+		mode = strings.TrimSpace(raw)
+	}
+	if mode != "new" && mode != "resume" {
+		return nil, fmt.Errorf("%s", tools.BuildGuide(
+			fmt.Sprintf("mode=%q 非法", mode),
+			"mode 只有两种取值",
+			"传 new（开新会话）或省略；需要接着对方旧会话时传 resume",
+		))
+	}
+
+	deliver := "draft"
+	if raw, _ := params["deliver"].(string); strings.TrimSpace(raw) != "" {
+		deliver = strings.TrimSpace(raw)
+	}
+	if deliver != "draft" && deliver != "send" {
+		return nil, fmt.Errorf("%s", tools.BuildGuide(
+			fmt.Sprintf("deliver=%q 非法", deliver),
+			"deliver 只有两种取值",
+			"传 draft（填进输入框由用户按发送键，默认）或 send（直接发出）",
+		))
+	}
+
+	if t.Broadcast == nil {
+		return nil, fmt.Errorf("%s", tools.GuideMissingContext("Handoff", "可用的 UI 广播通道（daemon 未装配）"))
+	}
+	t.Broadcast("session_handoff", map[string]any{
+		"agent": agent, "task": task, "project_dir": dir, "mode": mode, "deliver": deliver,
+	})
+	note := fmt.Sprintf("已转交给 %s，任务已填进对方输入框并切到该会话，等用户按发送键后对方才开始；你这边不用继续这条任务", agent)
+	if deliver == "send" {
+		note = fmt.Sprintf("已转交给 %s，任务已由其接手，你这边不用继续这条任务", agent)
+	}
+	return map[string]any{
+		"accepted": true, "agent": agent, "project_dir": dir, "mode": mode, "deliver": deliver,
+		"note": note,
+	}, nil
 }
