@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DotNetAge/gort/pkg/gateway"
 	"github.com/DotNetAge/mindx/internal/core"
+	"github.com/DotNetAge/mindx/internal/devgate"
 )
 
 // userConfigFieldSetters maps JSON key → setter on MindxConfig.
@@ -64,7 +66,22 @@ var userConfigFieldSetters = map[string]func(cfg *core.MindxConfig, val any){
 	},
 }
 
-func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (any, error) {
+// handleUserConfig 读/写用户全局配置。
+//
+// **读对远程设备开放，写仅限本机**——这是本方法的权限边界，不是方法拆分。
+//
+// 为什么读要开放：客户端（iOS / 桌面插件 / CLI）恢复「当前生效模型」的唯一
+// 权威来源就是这里的 last_model / default_model，三者共用同一套匹配逻辑。
+// 而 iOS 经局域网配对进来的连接 scope=ask（见 devgate 设备表），若把整个
+// user.config 继续圈在管理面里，手机端每次读都被拒成「这项操作涉及本机管理」，
+// 客户端只能静默回落到本地缓存——界面上的模型与主机上完全不同，用户看到的
+// 就是「像从缓存读出来的」。同源逻辑必须同权限，否则每端都得自己造一套真值。
+//
+// 为什么写必须留本机：这里写的是全局配置（含中继地址、市场源 ID、邀请码
+// 等机器级安全态），远程设备不得改写主机配置。判定不看方法名，只看这次
+// 调用是否真的带着要写入的字段：空体（含桌面端的 `{}`）是纯读，放行；
+// 带非空字段即写，要求本机直通。
+func (d *Daemon) handleUserConfig(ctx context.Context, params json.RawMessage) (any, error) {
 	cfg := d.app.Config()
 
 	// 写：接受任意已知字段，更新并持久化
@@ -73,6 +90,11 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 		if err := json.Unmarshal(params, &updates); err != nil {
 			// 畸形参数以前被静默当成「只读请求」，返回旧配置，调用方以为写入成功。
 			return nil, fmt.Errorf("配置参数格式不对，这次修改没有生效。")
+		}
+		// 非空字段 = 写入意图。远程设备（scope=ask）一律拒绝；
+		// 空对象 `{}` 与无参数等价，按纯读处理，不受此限。
+		if len(updates) > 0 && !d.userConfigWritableBy(ctx) {
+			return nil, errManagerScopeOnly
 		}
 		changed := false
 		kbChanged := false
@@ -185,6 +207,20 @@ func (d *Daemon) handleUserConfig(_ context.Context, params json.RawMessage) (an
 	d.logger.Info("user.config called", "result", result)
 
 	return result, nil
+}
+
+// userConfigWritableBy 判断本次调用是否允许写入全局配置。
+//
+// 口径与本机专属操作一致：只有凭本机令牌直通（ScopeLocal）的连接可写。
+// 闸未装配（d.devGate == nil，例如部分测试/嵌入场景）时按本机处理，
+// 与 handler_registry 里作用域闸的 fail-closed 方向相反是刻意的：
+// 那里是「闸缺失则拒绝所有 RPC」，这里只补一层字段级收窄，
+// 不能因为闸缺失反而让已通过接入闸的调用写坏配置。
+func (d *Daemon) userConfigWritableBy(ctx context.Context) bool {
+	if d.devGate == nil {
+		return true
+	}
+	return d.devGate.ScopeOf(gateway.ClientIDFromContext(ctx)) == devgate.ScopeLocal
 }
 
 // getConfigField 通过 JSON key 读取当前值（用于对比是否变化）。

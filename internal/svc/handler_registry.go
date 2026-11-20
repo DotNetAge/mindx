@@ -280,7 +280,12 @@ var managerMethods = map[string]bool{
 	"server.apply_update":   true,
 	"server.restart_daemon": true,
 	// 全局配置与日志
-	"user.config": true,
+	//
+	// user.config 特意不在管理面清单里：它承担两件事——读全局配置（当前生效
+	// 模型等，各端恢复界面状态的权威来源）与写全局配置。圈进管理面会把**读**
+	// 一并禁掉，导致远程设备只能回落到自己的本地缓存，界面显示与主机不一致。
+	// 写入权限改在 handler 内部按字段判定（见 handleUserConfig /
+	// userConfigWritableBy）：空体纯读放行，非空字段仍要求本机直通。
 	"i18n.switch": true,
 	"log.clear":   true,
 	// 全局 KV 存储
