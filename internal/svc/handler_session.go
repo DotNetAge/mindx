@@ -667,15 +667,13 @@ func (d *Daemon) handleSessionContext(_ context.Context, params json.RawMessage)
 	}, nil
 }
 
-// 会话回收（truncate / delete_round）的三条拒绝原因。
+// 会话回收（truncate / delete_round）的拒绝原因。
 //
 // 回收是唯一允许改变已有上下文的动作，因此边界必须写死在服务端：
-// 只允许作用于**最后一轮**，且截断点不得落在活跃窗口起点之前。
+// 截断点不得落在活跃窗口起点之前，执行中的会话不得回收。
 var (
 	// errNoReclaimableRound 会话里已没有可回收的轮次。
 	errNoReclaimableRound = errors.New("这个会话里没有可回收的轮次。")
-	// errLastRoundOnly 目标不是最后一轮。
-	errLastRoundOnly = errors.New("只能回收最后一轮：更早的轮次已经作为上下文发给过模型，改它会让后续请求的前缀与历史对不上。要从更早处重来，请新建会话。")
 	// errRoundNotInWindow 最后一轮已被压缩出当前窗口。
 	errRoundNotInWindow = errors.New("这一轮已经不在当前上下文窗口里（会话已压缩过），无法回收。")
 	// errTurnInFlight 该会话有执行正在运行或排队。
@@ -690,12 +688,10 @@ var (
 //   - 截断点必须不早于活跃窗口起点（cursor），否则会把已压缩的历史一起删掉。
 //   - 执行中/排队中/挂起等待用户输入的会话拒绝回收，避免与运行中的轮次交错。
 //
-// expectTimestamp 为 0 表示不校验目标（truncate 语义：就是最后一轮）；
-// 非 0 时必须是最后一轮内任意一条消息的时间戳（delete_round 语义：UI 传
-// user 消息的 backendTimestamp）。
+// 只服务于 session.truncate（UI 的「回退到某一轮」走 reclaimRoundFrom）。
 //
 // 返回被保留的消息条数。
-func (d *Daemon) reclaimLastRound(ctx context.Context, sessionID string, expectTimestamp int64) (int, error) {
+func (d *Daemon) reclaimLastRound(ctx context.Context, sessionID string) (int, error) {
 	sess, err := d.getOrLoadSession(sessionID)
 	if err != nil {
 		return 0, fmt.Errorf("打开会话失败：%w", err)
@@ -713,19 +709,6 @@ func (d *Daemon) reclaimLastRound(ctx context.Context, sessionID string, expectT
 		return 0, errNoReclaimableRound
 	}
 
-	if expectTimestamp != 0 {
-		inLastRound := false
-		for i := lastUserIdx; i < len(msgs); i++ {
-			if msgs[i].Timestamp == expectTimestamp {
-				inLastRound = true
-				break
-			}
-		}
-		if !inLastRound {
-			return 0, errLastRoundOnly
-		}
-	}
-
 	if cursor := sess.Cursor(); lastUserIdx < cursor {
 		return 0, errRoundNotInWindow
 	}
@@ -738,6 +721,48 @@ func (d *Daemon) reclaimLastRound(ctx context.Context, sessionID string, expectT
 		return 0, fmt.Errorf("回收失败：%w", err)
 	}
 	return lastUserIdx, nil
+}
+
+// reclaimRoundFrom 从指定的一轮起回收：删除该轮 user 消息及其后的全部消息。
+//
+// 与 reclaimLastRound 的区别只有截断点——这里允许指向更早的轮次，语义是
+// 「回到那次提问之前重来」，因此该轮之后所有已发生的内容一起作废。截断仍
+// 必须不早于活跃窗口起点（cursor），避免把已压缩进摘要的历史删掉。
+//
+// expectTimestamp 必须是该轮 user 消息的持久化时间戳（秒），同秒重复提问只
+// 取最早一条，保证截断点只会偏早不会偏晚。
+//
+// 返回被保留的消息条数。
+func (d *Daemon) reclaimRoundFrom(ctx context.Context, sessionID string, expectTimestamp int64) (int, error) {
+	sess, err := d.getOrLoadSession(sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("打开会话失败：%w", err)
+	}
+
+	msgs := sess.All()
+	idx := -1
+	for i, m := range msgs {
+		if m.Role == "user" && m.Timestamp == expectTimestamp {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return 0, errNoReclaimableRound
+	}
+
+	if cursor := sess.Cursor(); idx < cursor {
+		return 0, errRoundNotInWindow
+	}
+
+	if d.sessionTurnBusy(sessionID) {
+		return 0, errTurnInFlight
+	}
+
+	if err := sess.Truncate(ctx, idx); err != nil {
+		return 0, fmt.Errorf("回收失败：%w", err)
+	}
+	return idx, nil
 }
 
 // sessionTurnBusy 报告该会话是否有执行在运行/排队，或正挂起等待用户输入。
@@ -759,7 +784,7 @@ func (d *Daemon) handleSessionTruncate(ctx context.Context, params json.RawMessa
 		return nil, fmt.Errorf("session_id is required")
 	}
 
-	kept, err := d.reclaimLastRound(ctx, p.SessionID, 0)
+	kept, err := d.reclaimLastRound(ctx, p.SessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -776,11 +801,12 @@ func (d *Daemon) handleSessionTruncate(ctx context.Context, params json.RawMessa
 	}, nil
 }
 
-// handleSessionDeleteRound 处理 session.delete_round：回收 UI 指定的那一轮。
+// handleSessionDeleteRound 处理 session.delete_round：从 UI 指定的那一轮起，
+// 把它及其之后的全部轮次一起回收（回退到那次提问之前重来）。
 //
-// 名字沿用历史（客户端与 UI 都在用），但**能力已收窄**：只接受最后一轮，
-// 命中更早轮次一律拒绝。中间删除在实现里已不存在——它会让已发出的上下文
-// 与磁盘历史分叉，且不可追溯。
+// 不做「只删中间一轮」：中间删除会让已发出的上下文与磁盘历史分叉。这里的
+// 截断点锚在该轮 user 消息上，等价于回到那一刻重新提问，上下文与磁盘同向。
+// 名字沿用历史（客户端与 UI 都在用），语义即「回退到这一轮之前」。
 func (d *Daemon) handleSessionDeleteRound(ctx context.Context, params json.RawMessage) (any, error) {
 	var p rpc.SessionDeleteRoundParams
 	if err := unmarshalParams(params, &p); err != nil {
@@ -790,12 +816,12 @@ func (d *Daemon) handleSessionDeleteRound(ctx context.Context, params json.RawMe
 		return nil, fmt.Errorf("session_id is required")
 	}
 
-	kept, err := d.reclaimLastRound(ctx, p.SessionID, p.MessageID)
+	kept, err := d.reclaimRoundFrom(ctx, p.SessionID, p.MessageID)
 	if err != nil {
 		return nil, err
 	}
 
-	d.logger.Info("session last round reclaimed by id",
+	d.logger.Info("session round reclaimed from id",
 		"session_id", p.SessionID,
 		"message_id", p.MessageID,
 		"messages_kept", kept,

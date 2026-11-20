@@ -60,23 +60,41 @@ func TestReclaimLastRound_OnlyLastRound(t *testing.T) {
 	require.Equal(t, "init", after[0].Content, "第一轮必须原样保留")
 }
 
-// TestReclaimLastRound_RejectsEarlierRound 指向更早轮次必须被拒。
-func TestReclaimLastRound_RejectsEarlierRound(t *testing.T) {
+// TestReclaimRoundFrom_TruncatesFromEarlierRound 指向更早轮次时，从该轮起把
+// 它及其之后的全部轮次一起回收（回退到那次提问之前重来）。
+func TestReclaimRoundFrom_TruncatesFromEarlierRound(t *testing.T) {
 	d, cleanup := newTestDaemon(t)
 	defer cleanup()
 
 	sessDB := d.app.SessDB()
 	sessionID := mustCreateSession(t, sessDB, "test-agent")
 	sess := loadTestSession(t, d, sessionID, "test-agent")
-	firstTs := sess.All()[0].Timestamp
-	appendRound(t, sess, "second")
+	secondTs := appendRound(t, sess, "second")
+	appendRound(t, sess, "third")
 
-	// 试图回收第一轮（中间删除）
+	// 回收第二轮：第一轮保留，第二轮与第三轮一起作废
+	res, err := d.handleSessionDeleteRound(context.Background(),
+		json.RawMessage(fmt.Sprintf(`{"session_id":%q,"id":%d}`, sessionID, secondTs)))
+	require.NoError(t, err)
+	require.Equal(t, 1, res.(map[string]any)["messages_kept"])
+
+	after := loadTestSession(t, d, sessionID, "test-agent").All()
+	require.Len(t, after, 1, "第二轮及其后的第三轮都应被删除")
+	require.Equal(t, "init", after[0].Content, "第一轮必须原样保留")
+}
+
+// TestReclaimRoundFrom_UnknownTimestamp 时间戳对不上任何 user 消息时明确拒绝，
+// 不做「猜一轮」的破坏性操作。
+func TestReclaimRoundFrom_UnknownTimestamp(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	sessionID := mustCreateSession(t, d.app.SessDB(), "test-agent")
 	_, err := d.handleSessionDeleteRound(context.Background(),
-		json.RawMessage(fmt.Sprintf(`{"session_id":%q,"id":%d}`, sessionID, firstTs)))
-	require.ErrorIs(t, err, errLastRoundOnly)
+		json.RawMessage(fmt.Sprintf(`{"session_id":%q,"id":%d}`, sessionID, int64(1))))
+	require.ErrorIs(t, err, errNoReclaimableRound)
 
-	require.Len(t, loadTestSession(t, d, sessionID, "test-agent").All(), 3, "拒绝时不得改动任何消息")
+	require.Len(t, loadTestSession(t, d, sessionID, "test-agent").All(), 1, "拒绝时不得改动任何消息")
 }
 
 // TestReclaimLastRound_TruncateHitsLastRound session.truncate 语义等价于回收最后一轮，

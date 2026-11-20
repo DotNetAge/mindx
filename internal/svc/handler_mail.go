@@ -117,9 +117,9 @@ func (d *Daemon) mailFind(uid string) *LocalMail {
 	return nil
 }
 
-// mailboxKeeper 信箱负责人（大秘）：固定默认名 assistant，注册表验证存在性；
-// 注册表里没有 assistant 时回退取注册表首员代为收信。daemon 只把通知送到人，
-// 不再隐式挑「第一个已雇佣」——收信职责落在谁头上是明确的、可从注册表追溯的。
+// mailboxKeeper 信箱负责人：装有大秘（assistant）时由大秘收信，否则落到初装
+// 内置的 default Agent；两者都不在注册表时回退取注册表首员代为收信。daemon 只把
+// 通知送到人，不再隐式挑「第一个已雇佣」——收信职责落在谁头上是明确的、可从注册表追溯的。
 func (d *Daemon) mailboxKeeper() string {
 	agents := d.app.Agents()
 	if agents == nil {
@@ -129,10 +129,17 @@ func (d *Daemon) mailboxKeeper() string {
 	if len(list) == 0 {
 		return ""
 	}
+	keeper := ""
 	for _, a := range list {
-		if a.Meta.Name == "assistant" {
+		switch a.Meta.Name {
+		case "assistant":
 			return "assistant"
+		case "default":
+			keeper = "default"
 		}
+	}
+	if keeper != "" {
+		return keeper
 	}
 	return list[0].Meta.Name
 }
