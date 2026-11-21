@@ -46,8 +46,8 @@ const (
 	BaseURL = "https://oapi.dingtalk.com"
 
 	EndpointRobotSend = "/robot/send"
-	EndpointToken      = "/gettoken"
-	EndpointUpload     = "/media/upload"
+	EndpointToken     = "/gettoken"
+	EndpointUpload    = "/media/upload"
 )
 
 // Error definitions for DingTalk channel.
@@ -196,7 +196,7 @@ type WebhookRequest struct {
 type TextMessage struct {
 	MsgType string `json:"msgtype"`
 	Text    struct {
-		Content string `json:"content"`
+		Content string  `json:"content"`
 		At      *AtInfo `json:"at,omitempty"`
 	} `json:"text"`
 }
@@ -205,8 +205,8 @@ type TextMessage struct {
 type MarkdownMessage struct {
 	MsgType  string `json:"msgtype"`
 	Markdown struct {
-		Title string `json:"title"`
-		Text  string `json:"text"`
+		Title string  `json:"title"`
+		Text  string  `json:"text"`
 		At    *AtInfo `json:"at,omitempty"`
 	} `json:"markdown"`
 }
@@ -226,11 +226,11 @@ type LinkMessage struct {
 type ActionCardMessage struct {
 	MsgType    string `json:"msgtype"`
 	ActionCard struct {
-		Title          string `json:"title"`
-		Text           string `json:"text"`
-		SingleTitle    string `json:"singleTitle,omitempty"`
-		SingleURL      string `json:"singleURL,omitempty"`
-		BtnOrientation string `json:"btnOrientation,omitempty"`
+		Title          string         `json:"title"`
+		Text           string         `json:"text"`
+		SingleTitle    string         `json:"singleTitle,omitempty"`
+		SingleURL      string         `json:"singleURL,omitempty"`
+		BtnOrientation string         `json:"btnOrientation,omitempty"`
 		Btns           []ActionButton `json:"btns,omitempty"`
 	} `json:"actionCard"`
 }

@@ -4,9 +4,9 @@
 //
 // Configuration Sources (in order of precedence):
 //
-//   1. Environment variables (GORT_*)
-//   2. Configuration file (config.yaml)
-//   3. Default values
+//  1. Environment variables (GORT_*)
+//  2. Configuration file (config.yaml)
+//  3. Default values
 //
 // Configuration Structure:
 //
@@ -364,12 +364,12 @@ func NewLoader() *Loader {
 // Example:
 //
 //	loader := config.NewLoader()
-//	
+//
 //	// Load from default locations
 //	if err := loader.Load(""); err != nil {
 //	    log.Fatal(err)
 //	}
-//	
+//
 //	// Or load from specific path
 //	if err := loader.Load("/etc/gort"); err != nil {
 //	    log.Fatal(err)

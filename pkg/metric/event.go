@@ -94,9 +94,20 @@ type MetricEvent struct {
 	TaskHint string `yaml:"task_hint,omitempty" json:"task_hint,omitempty"`
 }
 
-// LatestJudgment 返回事件的生效判定：时间最新的记录。
-// 回溯修正（rework_trace）天然发生在后，因此覆盖早先的乐观判定；
-// 来源字段仅作统计维度，不参与优先级比较。
+// LatestJudgment 返回事件的生效判定。
+//
+// 生效规则是**两级**的，不是单纯按时间取最新：
+//
+//   - 先比来源层级：用户信号（user_feedback / user_text）始终高于系统与
+//     Agent 信号（agent_report / rework_trace）。白皮书 7.4：「用户是唯一
+//     不被 Goodhart 压力直接作用的数据源」——Agent 自报永远被用户判定覆盖，
+//     且这个覆盖与先后无关：用户在复盘时给某历史会话补一条 Agent 上报，
+//     不得反过来抹掉用户当时的判定。
+//   - 同层级内再比时间：追溯修正（rework_trace）天然发生在后，因此能覆盖
+//     Agent 早先的乐观 success（白皮书 4.3）；用户改主意也以最后一次为准。
+//
+// 只有按时间单维比较时，晚到的低层级判定会静默抹掉高层级判定——这正是
+// 原先「文档写优先级、实现只比时间」的偏差所在。
 // 无判定时返回 false。
 func (e *MetricEvent) LatestJudgment() (JudgmentRecord, bool) {
 	if len(e.Judgments) == 0 {
@@ -104,11 +115,37 @@ func (e *MetricEvent) LatestJudgment() (JudgmentRecord, bool) {
 	}
 	latest := e.Judgments[0]
 	for _, j := range e.Judgments[1:] {
-		if j.At.After(latest.At) {
+		if judgmentBeats(j, latest) {
 			latest = j
 		}
 	}
 	return latest, true
+}
+
+// judgmentBeats 判定 a 是否应盖过 b：先比来源层级，同级再比时间。
+func judgmentBeats(a, b JudgmentRecord) bool {
+	ra, rb := a.Source.rank(), b.Source.rank()
+	if ra != rb {
+		return ra > rb
+	}
+	return a.At.After(b.At)
+}
+
+// rank 返回判定的来源层级（大者优先）。
+// 层级划分依据白皮书 7.4 的判定优先级：用户结构化反馈 > 用户文本 > Agent 上报。
+// rework_trace 是聚合层的客观回溯结论，归入系统侧、与 Agent 上报同级——
+// 它要能覆盖 Agent 的乐观 success（4.3），但不该推翻用户明示的判定。
+func (s OutcomeSource) rank() int {
+	switch s {
+	case SourceUserFeedback:
+		return 3
+	case SourceUserText:
+		return 2
+	case SourceAgentReport, SourceReworkTrace:
+		return 1
+	default:
+		return 0
+	}
 }
 
 // ConfoundingEvent 是混杂登记事件（白皮书 2.1 局限声明）：

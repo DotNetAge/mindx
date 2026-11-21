@@ -9,31 +9,31 @@ import (
 )
 
 type session struct {
-	id           string
-	clientID     string
-	messages     []*Message
+	id            string
+	clientID      string
+	messages      []*Message
 	pendingFrames map[int][]byte
-	frameTotal   int
-	createdAt    time.Time
+	frameTotal    int
+	createdAt     time.Time
 }
 
 type SessionManager struct {
-	mu           sync.RWMutex
-	sessions     map[string]*session
-	timeout      time.Duration
-	done         chan struct{}
-	once         sync.Once
-	maxSessions  int
+	mu          sync.RWMutex
+	sessions    map[string]*session
+	timeout     time.Duration
+	done        chan struct{}
+	once        sync.Once
+	maxSessions int
 }
 
 const defaultMaxSessions = 1000
 
 func newSessionManager(timeout time.Duration) *SessionManager {
 	sm := &SessionManager{
-		sessions:     make(map[string]*session),
-		timeout:      timeout,
-		done:         make(chan struct{}),
-		maxSessions:  defaultMaxSessions,
+		sessions:    make(map[string]*session),
+		timeout:     timeout,
+		done:        make(chan struct{}),
+		maxSessions: defaultMaxSessions,
 	}
 	go sm.cleanupLoop()
 	return sm

@@ -404,8 +404,8 @@ func (c *Channel) buildTemplateCardPayload(msg *channel.Message) (map[string]int
 	}
 
 	return map[string]interface{}{
-		"msgtype":        "template_card",
-		"template_card":  card,
+		"msgtype":       "template_card",
+		"template_card": card,
 	}, nil
 }
 

@@ -9,7 +9,7 @@ metadata:
   author: Ray
   name_zh: 目标规划
   name_zh-tw: 目標規劃
-  version: 0.8.3
+  version: 0.9.0
 ---
 
 # 目标规划
@@ -87,7 +87,7 @@ metadata:
 
 - 0 档 → **自己做**；要跨轮跟踪时用 TaskCreate 建进度清单，清单不等于工作本身
 - 1-2 档 → **SubAgent**：按 [dispatch-matching.md](references/dispatch-matching.md) 比对候选的职责描述与能力标签，执行方栏写「执行方 + 命中依据 + 依据来源」，禁止写「相关专家」「对口同事」这类占位
-- 长时等待（定时触发、跨天等待、用户不在场）→ **Cron**（工具名 `Cron`，字段填 cron 表达式或 scheduled_at）
+- 长时等待（定时触发、跨天等待、用户不在场）→ **Cron**（工具名 `Cron`，字段填 cron 表达式或 scheduled_at）。Cron 等的是真人或外部事件，不用于等 Agent 干活——派给 Agent 的任务默认马上开始（需用户确认或用户明说为真人排期的除外），回看与跟进的间隔按该任务预估执行时长封顶，半小时已是长活，禁止「几小时后再查」「明天再看」这类人的日程间隔
 
 派前三问，任一不过就降档自己做：
 

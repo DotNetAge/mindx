@@ -241,7 +241,7 @@ type Server struct {
 	upgrader          *websocket.Upgrader
 	disconnectHandler func(clientID string)
 	connectHandler    func(clientID string)
-	authenticator     func(*http.Request) error // 升级前握手鉴权（可选，nil = 不校验）
+	authenticator     func(*http.Request) error               // 升级前握手鉴权（可选，nil = 不校验）
 	msgAuthenticator  func(clientID string, msg []byte) error // 首条消息认证（可选，nil = 不启用）
 	msgAuthTimeout    time.Duration
 

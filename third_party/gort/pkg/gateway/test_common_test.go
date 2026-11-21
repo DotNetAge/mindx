@@ -145,15 +145,21 @@ func setupTestServer(t *testing.T) *testEnv { return setupTestEnv(t) }
 
 func dialTestWS(t *testing.T, ts *httptest.Server) *websocket.Conn { return dialWS(t, ts) }
 
-func extractClientIDFromFirstMessage(t *testing.T, conn *websocket.Conn) string { return extractClientID(t, conn) }
+func extractClientIDFromFirstMessage(t *testing.T, conn *websocket.Conn) string {
+	return extractClientID(t, conn)
+}
 
-func extractClientIDFromConn(t *testing.T, conn *websocket.Conn) string { return extractClientID(t, conn) }
+func extractClientIDFromConn(t *testing.T, conn *websocket.Conn) string {
+	return extractClientID(t, conn)
+}
 
 func doSessionStart(t *testing.T, conn *websocket.Conn) string { return wsDoBEGN(t, conn) }
 
 func doSessionEnd(t *testing.T, conn *websocket.Conn, sessionID string) { wsDoCLSE(t, conn, sessionID) }
 
-func doSendText(t *testing.T, conn *websocket.Conn, sessionID, data string) { wsDoTEXT(t, conn, sessionID, data) }
+func doSendText(t *testing.T, conn *websocket.Conn, sessionID, data string) {
+	wsDoTEXT(t, conn, sessionID, data)
+}
 
 func setupTestServerW(t *testing.T) *testEnv { return setupTestEnv(t) }
 
@@ -165,7 +171,9 @@ func setupWSEnv(t *testing.T) *testEnv { return setupTestEnv(t) }
 
 func doBEGN(t *testing.T, conn *websocket.Conn) string { return wsDoBEGN(t, conn) }
 
-func doTEXT(t *testing.T, conn *websocket.Conn, sessionID, data string) { wsDoTEXT(t, conn, sessionID, data) }
+func doTEXT(t *testing.T, conn *websocket.Conn, sessionID, data string) {
+	wsDoTEXT(t, conn, sessionID, data)
+}
 
 func doCLSE(t *testing.T, conn *websocket.Conn, sessionID string) { wsDoCLSE(t, conn, sessionID) }
 

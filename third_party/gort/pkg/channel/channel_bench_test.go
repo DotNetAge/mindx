@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 	"testing"
-
 )
 
 // BenchmarkBaseChannel_Creation benchmarks BaseChannel creation.

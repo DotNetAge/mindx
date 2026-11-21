@@ -54,19 +54,19 @@ const (
 )
 
 var (
-	ErrInvalidSignature      = errors.New("invalid webhook signature")
-	ErrPhoneNumberIDEmpty    = errors.New("phone number ID is empty")
-	ErrAccessTokenEmpty      = errors.New("access token is empty")
-	ErrTemplateNotApproved   = errors.New("template message not approved")
-	ErrOutsideServiceWindow  = errors.New("outside 24-hour service window")
+	ErrInvalidSignature     = errors.New("invalid webhook signature")
+	ErrPhoneNumberIDEmpty   = errors.New("phone number ID is empty")
+	ErrAccessTokenEmpty     = errors.New("access token is empty")
+	ErrTemplateNotApproved  = errors.New("template message not approved")
+	ErrOutsideServiceWindow = errors.New("outside 24-hour service window")
 )
 
 type Config struct {
-	PhoneNumberID  string
-	AccessToken    string
-	AppSecret      string
-	VerifyToken    string
-	WebhookURL     string
+	PhoneNumberID     string
+	AccessToken       string
+	AppSecret         string
+	VerifyToken       string
+	WebhookURL        string
 	BusinessAccountID string
 }
 
@@ -200,7 +200,7 @@ func (w *WhatsAppChannel) SendTemplate(ctx context.Context, recipientID, templat
 		"to":                recipientID,
 		"type":              "template",
 		"template": map[string]interface{}{
-			"name":       templateName,
+			"name": templateName,
 			"language": map[string]string{
 				"code": languageCode,
 			},
@@ -272,8 +272,8 @@ func (w *WhatsAppChannel) parseWebhookData(data []byte) (*channel.Message, error
 	var webhook struct {
 		Object string `json:"object"`
 		Entry  []struct {
-			ID        string `json:"id"`
-			Changes   []struct {
+			ID      string `json:"id"`
+			Changes []struct {
 				Value struct {
 					MessagingProduct string `json:"messaging_product"`
 					Metadata         struct {

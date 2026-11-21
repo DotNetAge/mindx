@@ -59,8 +59,8 @@ var (
 
 // Config contains the configuration for Feishu channel.
 type Config struct {
-	AppID     string
-	AppSecret string
+	AppID      string
+	AppSecret  string
 	WebhookURL string
 }
 
@@ -273,22 +273,22 @@ type SenderInfo struct {
 
 // MessageInfo represents message information.
 type MessageInfo struct {
-	MessageID   string `json:"message_id"`
-	RootID      string `json:"root_id"`
-	ParentID    string `json:"parent_id"`
-	CreateTime  int64  `json:"create_time"`
-	ChatID      string `json:"chat_id"`
-	MessageType string `json:"message_type"`
-	Content     string `json:"content"`
+	MessageID   string        `json:"message_id"`
+	RootID      string        `json:"root_id"`
+	ParentID    string        `json:"parent_id"`
+	CreateTime  int64         `json:"create_time"`
+	ChatID      string        `json:"chat_id"`
+	MessageType string        `json:"message_type"`
+	Content     string        `json:"content"`
 	Mentions    []MentionInfo `json:"mentions"`
 }
 
 // MentionInfo represents mention information.
 type MentionInfo struct {
-	Key       string `json:"key"`
-	ID        struct {
-		OpenID  string `json:"open_id"`
-		UserID  string `json:"user_id"`
+	Key string `json:"key"`
+	ID  struct {
+		OpenID string `json:"open_id"`
+		UserID string `json:"user_id"`
 	} `json:"id"`
 	Name string `json:"name"`
 }
@@ -316,7 +316,7 @@ type AudioContent struct {
 
 // MediaContent represents media message content.
 type MediaContent struct {
-	FileKey string `json:"file_key"`
+	FileKey  string `json:"file_key"`
 	FileName string `json:"file_name"`
 }
 

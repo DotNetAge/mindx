@@ -272,10 +272,118 @@ Exit code 0 = improved, 1 = flat or regressed (for retrospective automation).`,
 // errSilentExit 让命令以非零码退出（compare 配 SilenceErrors 静默，verdict 已在 stdout）。
 var errSilentExit = fmt.Errorf("verdict not improved")
 
+// ── metric record ─────────────────────────────────────────────
+
+// metricRecordCmd 让 Agent 在任务收尾时把成败判定写进量表。
+//
+// 判定归属分两种情形，由服务端按会话是否正在执行自动判别：
+//   - 轮次内上报（会话执行中）→ 暂存，本轮 round 事件落盘后自动挂载。
+//     这是唯一能做到「判定与它评的那一轮严格对齐」的方式：round 事件在
+//     整轮结束的 defer 里才写，此刻就地定位必然落到上一轮上。
+//   - 轮次外上报（补记历史 / 复盘对旧会话下判定）→ 就地挂到该会话最新一轮。
+//
+// outcome=rework 时服务端会把同 Agent、同任务意图的历史会话一并标记为返工——
+// 这是「错误会改写历史判定」的机制实现，也是技能蒸馏的原料入口。
+//
+// 四段式 note 是本命令的用法要点：note 应当能填满技能履历的四个字段
+// （问题/否决/修正/验证）。只写一句「失败了」的 note 对复盘无价值。
+var metricRecordCmd = &cobra.Command{
+	Use:   "record",
+	Short: "Report the outcome judgment for a session (Agent self-report)",
+	Long: `Record a success / fail / rework judgment onto a session's round event.
+
+Judgment placement depends on whether the session is executing:
+
+  * inside a round (session running) — the round event is written only after the
+    whole round finishes, so the judgment is stashed and mounted automatically
+    once that event lands. This keeps the judgment on the round it actually judges.
+  * outside a round (backfilling history) — mounted immediately on the session's
+    latest round event.
+
+The judgment is appended to the event's version chain — history is never rewritten,
+only extended. Recording "rework" additionally marks prior sessions with the same
+task intent as reworked (same agent + identical task name).
+
+Source priority governs which judgment wins (whitepaper 7.4): user feedback always
+outranks agent reporting, regardless of timestamps. Within the same source tier the
+latest timestamp wins, so a later "rework" overrides an earlier "success".
+
+Use --note to carry the four-part evidence a retrospective needs:
+problem / rejected alternatives / fix / verification.
+
+Exit code 0 on success; non-zero when the daemon rejects the payload.`,
+	Example: `  mindx metric record --session-id 01ABCD... --outcome fail --note "问题：… 否决：… 修正：… 验证：…"
+  mindx metric record --session-id 01ABCD... --outcome rework`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		sessionID, _ := cmd.Flags().GetString("session-id")
+		outcome, _ := cmd.Flags().GetString("outcome")
+		note, _ := cmd.Flags().GetString("note")
+		jsonOut, _ := cmd.Flags().GetBool("json")
+
+		if sessionID == "" {
+			return fmt.Errorf("--session-id is required")
+		}
+		switch outcome {
+		case "success", "fail", "rework":
+		default:
+			return fmt.Errorf("--outcome 必须是 success / fail / rework 之一")
+		}
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cl.Close() }()
+
+		result, err := cl.MetricRecord(rpc.MetricRecordParams{
+			SessionID: sessionID,
+			Outcome:   outcome,
+			Note:      note,
+		})
+		if err != nil {
+			return err
+		}
+
+		if jsonOut {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		var data struct {
+			OK        bool `json:"ok"`
+			Revisited int  `json:"revisited"`
+			Deferred  bool `json:"deferred"`
+		}
+		if err := json.Unmarshal(result, &data); err != nil {
+			fmt.Println(string(result))
+			return nil
+		}
+
+		if data.Deferred {
+			// 轮次内上报：本轮 round 事件要等整轮结束才落盘，判定先暂存，
+			// 由服务端在该轮事件写入后自动挂载。必须显式告知——否则调用方
+			// 会以为判定已生效，而此刻它其实还没写进量表。
+			fmt.Printf("判定已暂存：会话 %s → %s（本轮结束后自动挂载到本轮事件）\n", sessionID, outcome)
+			return nil
+		}
+		fmt.Printf("判定已写入：会话 %s → %s\n", sessionID, outcome)
+		if data.Revisited > 0 {
+			// 回溯数是被改写的历史判定条数，必须显式告知——用户要知道
+			// 过去的「成功」记录已被这次返工推翻。
+			fmt.Printf("返工回溯：%d 个同任务意图的历史会话已标记为 rework\n", data.Revisited)
+		}
+		return nil
+	},
+}
+
 func init() {
 	metricBaselineSaveCmd.Flags().Int("window-days", 7, "统计窗口（天）")
 	metricCompareCmd.Flags().String("baseline", "", "基线名称")
 	metricCompareCmd.Flags().Int("window-days", 7, "统计窗口（天）")
 	metricCompareCmd.Flags().Bool("json", false, "输出 JSON")
-	metricCmd.AddCommand(metricBaselineSaveCmd, metricBaselineListCmd, metricCompareCmd)
+	metricRecordCmd.Flags().String("session-id", "", "会话 ID（必填）")
+	metricRecordCmd.Flags().String("outcome", "", "判定结果：success | fail | rework（必填）")
+	metricRecordCmd.Flags().String("note", "", "判定依据（四段式：问题/否决/修正/验证）")
+	metricRecordCmd.Flags().Bool("json", false, "输出 JSON（LLM 消费格式）")
+	metricCmd.AddCommand(metricBaselineSaveCmd, metricBaselineListCmd, metricCompareCmd, metricRecordCmd)
 }

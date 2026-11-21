@@ -49,35 +49,35 @@ import (
 var (
 	BaseURL = "https://api.telegram.org"
 
-	EndpointSendMessage      = "/sendMessage"
-	EndpointSendPhoto        = "/sendPhoto"
-	EndpointSendDocument     = "/sendDocument"
-	EndpointSendAudio        = "/sendAudio"
-	EndpointSendVideo        = "/sendVideo"
-	EndpointSendVoice        = "/sendVoice"
-	EndpointSendLocation     = "/sendLocation"
-	EndpointSendContact      = "/sendContact"
-	EndpointGetUpdates       = "/getUpdates"
-	EndpointSetWebhook       = "/setWebhook"
-	EndpointDeleteWebhook    = "/deleteWebhook"
-	EndpointGetMe            = "/getMe"
+	EndpointSendMessage         = "/sendMessage"
+	EndpointSendPhoto           = "/sendPhoto"
+	EndpointSendDocument        = "/sendDocument"
+	EndpointSendAudio           = "/sendAudio"
+	EndpointSendVideo           = "/sendVideo"
+	EndpointSendVoice           = "/sendVoice"
+	EndpointSendLocation        = "/sendLocation"
+	EndpointSendContact         = "/sendContact"
+	EndpointGetUpdates          = "/getUpdates"
+	EndpointSetWebhook          = "/setWebhook"
+	EndpointDeleteWebhook       = "/deleteWebhook"
+	EndpointGetMe               = "/getMe"
 	EndpointAnswerCallbackQuery = "/answerCallbackQuery"
 )
 
 // Error definitions for Telegram channel.
 var (
-	ErrTokenRequired       = errors.New("bot token is required")
-	ErrInvalidToken        = errors.New("invalid bot token format")
-	ErrChatNotFound        = errors.New("chat not found")
-	ErrUserBlocked         = errors.New("user blocked the bot")
-	ErrMessageTooLong      = errors.New("message exceeds 4096 characters")
-	ErrFileTooLarge        = errors.New("file exceeds size limit")
+	ErrTokenRequired  = errors.New("bot token is required")
+	ErrInvalidToken   = errors.New("invalid bot token format")
+	ErrChatNotFound   = errors.New("chat not found")
+	ErrUserBlocked    = errors.New("user blocked the bot")
+	ErrMessageTooLong = errors.New("message exceeds 4096 characters")
+	ErrFileTooLarge   = errors.New("file exceeds size limit")
 )
 
 // Config contains the configuration for Telegram channel.
 type Config struct {
-	Token      string
-	WebhookURL string
+	Token       string
+	WebhookURL  string
 	SecretToken string
 }
 
@@ -206,19 +206,19 @@ type Update struct {
 
 // MessageObject represents a Telegram message.
 type MessageObject struct {
-	MessageID int64     `json:"message_id"`
-	From      *User     `json:"from,omitempty"`
-	Chat      *Chat     `json:"chat"`
-	Date      int64     `json:"date"`
-	Text      string    `json:"text,omitempty"`
+	MessageID int64       `json:"message_id"`
+	From      *User       `json:"from,omitempty"`
+	Chat      *Chat       `json:"chat"`
+	Date      int64       `json:"date"`
+	Text      string      `json:"text,omitempty"`
 	Photo     []PhotoSize `json:"photo,omitempty"`
-	Document  *Document `json:"document,omitempty"`
-	Audio     *Audio    `json:"audio,omitempty"`
-	Video     *Video    `json:"video,omitempty"`
-	Voice     *Voice    `json:"voice,omitempty"`
-	Location  *Location `json:"location,omitempty"`
-	Contact   *Contact  `json:"contact,omitempty"`
-	Caption   string    `json:"caption,omitempty"`
+	Document  *Document   `json:"document,omitempty"`
+	Audio     *Audio      `json:"audio,omitempty"`
+	Video     *Video      `json:"video,omitempty"`
+	Voice     *Voice      `json:"voice,omitempty"`
+	Location  *Location   `json:"location,omitempty"`
+	Contact   *Contact    `json:"contact,omitempty"`
+	Caption   string      `json:"caption,omitempty"`
 }
 
 // User represents a Telegram user.
@@ -233,10 +233,10 @@ type User struct {
 
 // Chat represents a Telegram chat.
 type Chat struct {
-	ID       int64  `json:"id"`
-	Type     string `json:"type"`
-	Title    string `json:"title,omitempty"`
-	Username string `json:"username,omitempty"`
+	ID        int64  `json:"id"`
+	Type      string `json:"type"`
+	Title     string `json:"title,omitempty"`
+	Username  string `json:"username,omitempty"`
 	FirstName string `json:"first_name,omitempty"`
 	LastName  string `json:"last_name,omitempty"`
 }
@@ -308,10 +308,10 @@ type Contact struct {
 
 // CallbackQuery represents a callback query.
 type CallbackQuery struct {
-	ID      string          `json:"id"`
-	From    *User           `json:"from"`
-	Message *MessageObject  `json:"message,omitempty"`
-	Data    string          `json:"data,omitempty"`
+	ID      string         `json:"id"`
+	From    *User          `json:"from"`
+	Message *MessageObject `json:"message,omitempty"`
+	Data    string         `json:"data,omitempty"`
 }
 
 // InlineQuery represents an inline query.
@@ -324,12 +324,12 @@ type InlineQuery struct {
 
 // SendMessageRequest represents a request to send a message.
 type SendMessageRequest struct {
-	ChatID                interface{} `json:"chat_id"`
-	Text                  string      `json:"text"`
-	ParseMode             string      `json:"parse_mode,omitempty"`
-	DisableNotification   bool        `json:"disable_notification,omitempty"`
-	ReplyToMessageID      int64       `json:"reply_to_message_id,omitempty"`
-	ReplyMarkup           interface{} `json:"reply_markup,omitempty"`
+	ChatID              interface{} `json:"chat_id"`
+	Text                string      `json:"text"`
+	ParseMode           string      `json:"parse_mode,omitempty"`
+	DisableNotification bool        `json:"disable_notification,omitempty"`
+	ReplyToMessageID    int64       `json:"reply_to_message_id,omitempty"`
+	ReplyMarkup         interface{} `json:"reply_markup,omitempty"`
 }
 
 // SendPhotoRequest represents a request to send a photo.

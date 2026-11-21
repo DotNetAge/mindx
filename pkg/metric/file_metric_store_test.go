@@ -225,3 +225,81 @@ func TestConfoundingsWindowQuery(t *testing.T) {
 		t.Fatalf("expected 2 confoundings in window, got %d", len(got))
 	}
 }
+
+// TestJudgmentSourcePriority 覆盖生效判定的来源层级语义（文档与实现的一致性）。
+//
+// 白皮书 7.4：结构化用户反馈 > 用户文本感受 > Agent 收尾上报。
+// 原先实现只按 At 取最新，来源不参与比较——于是一条晚到的 Agent 上报能
+// 静默抹掉用户当时的明确判定，「优先级」形同虚设。本测试固定修正后的行为。
+func TestJudgmentSourcePriority(t *testing.T) {
+	earlier := time.Now().Add(-2 * time.Hour)
+	later := time.Now()
+
+	cases := []struct {
+		name string
+		js   []JudgmentRecord
+		want OutcomeSource
+	}{
+		{
+			name: "晚到的 Agent 上报不得抹掉用户反馈",
+			js: []JudgmentRecord{
+				{Value: OutcomeFail, Source: SourceUserFeedback, At: earlier},
+				{Value: OutcomeSuccess, Source: SourceAgentReport, At: later},
+			},
+			want: SourceUserFeedback,
+		},
+		{
+			name: "晚到的用户文本同样低于结构化反馈",
+			js: []JudgmentRecord{
+				{Value: OutcomeFail, Source: SourceUserFeedback, At: earlier},
+				{Value: OutcomeSuccess, Source: SourceUserText, At: later},
+			},
+			want: SourceUserFeedback,
+		},
+		{
+			name: "用户文本高于 Agent 上报",
+			js: []JudgmentRecord{
+				{Value: OutcomeSuccess, Source: SourceAgentReport, At: earlier},
+				{Value: OutcomeFail, Source: SourceUserText, At: later},
+			},
+			want: SourceUserText,
+		},
+		{
+			name: "早到的用户判定依旧压过晚到的返工回溯",
+			js: []JudgmentRecord{
+				{Value: OutcomeSuccess, Source: SourceUserFeedback, At: earlier},
+				{Value: OutcomeRework, Source: SourceReworkTrace, At: later},
+			},
+			want: SourceUserFeedback,
+		},
+		{
+			name: "同级按时间：返工回溯覆盖 Agent 的乐观成功",
+			js: []JudgmentRecord{
+				{Value: OutcomeSuccess, Source: SourceAgentReport, At: earlier},
+				{Value: OutcomeRework, Source: SourceReworkTrace, At: later},
+			},
+			want: SourceReworkTrace,
+		},
+		{
+			name: "同级按时间：用户改主意以最后一次为准",
+			js: []JudgmentRecord{
+				{Value: OutcomeFail, Source: SourceUserFeedback, At: earlier},
+				{Value: OutcomeSuccess, Source: SourceUserFeedback, At: later},
+			},
+			want: SourceUserFeedback,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ev := MetricEvent{Kind: KindRound, Judgments: c.js}
+			j, ok := ev.LatestJudgment()
+			if !ok {
+				t.Fatal("expected a judgment")
+			}
+			if j.Source != c.want {
+				t.Errorf("生效来源 = %s, want %s", j.Source, c.want)
+			}
+		})
+	}
+}

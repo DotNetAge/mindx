@@ -10,7 +10,7 @@ import "encoding/json"
 // A Request has an ID and expects a Response with the same ID.
 type Request struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      interface{}     `json:"id"`              // string or number, nil for notifications
+	ID      interface{}     `json:"id"` // string or number, nil for notifications
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params,omitempty"`
 }
@@ -93,10 +93,10 @@ const (
 // CommandMeta is the standard metadata model for a slash command.
 // It replaces the legacy CommandInfo type.
 type CommandMeta struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Category    string         `json:"category,omitempty"`    // "agent" | "system" | "ui"
-	Scope       CommandScope   `json:"scope"`                 // local | remote | both
-	Example     string         `json:"example,omitempty"`     // usage example
-	Params      string         `json:"params,omitempty"`      // parameter description
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	Category    string       `json:"category,omitempty"` // "agent" | "system" | "ui"
+	Scope       CommandScope `json:"scope"`              // local | remote | both
+	Example     string       `json:"example,omitempty"`  // usage example
+	Params      string       `json:"params,omitempty"`   // parameter description
 }

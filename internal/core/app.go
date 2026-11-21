@@ -885,7 +885,7 @@ func (a *App) resolveModelName() (string, *config.ModelConfig, error) {
 		}
 	}
 	if modelName == "" {
-		return "", nil, fmt.Errorf("尚未配置可用模型，请先在模型设置中添加模型并设为默认")
+		return "", nil, fmt.Errorf("还没有可用的模型，请先在模型与供应商设置中完成配置")
 	}
 	modelCfg := a.Models().Get(modelName)
 	if modelCfg == nil {

@@ -24,12 +24,12 @@ type RefreshFunc func(ctx context.Context) (string, time.Duration, error)
 
 // Manager manages token refresh lifecycle.
 type Manager struct {
-	mu         sync.RWMutex
-	token      *Token
-	refreshFn  RefreshFunc
+	mu              sync.RWMutex
+	token           *Token
+	refreshFn       RefreshFunc
 	refreshInterval time.Duration
-	stopCh     chan struct{}
-	stopped    bool
+	stopCh          chan struct{}
+	stopped         bool
 }
 
 // Config contains configuration for the token manager.

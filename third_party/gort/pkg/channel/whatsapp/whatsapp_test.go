@@ -184,9 +184,9 @@ func TestWhatsAppChannel_ParseWebhookData_Image(t *testing.T) {
 									"timestamp": "1234567890",
 									"type":      "image",
 									"image": map[string]string{
-										"id":       "media_001",
+										"id":        "media_001",
 										"mime_type": "image/jpeg",
-										"sha256":   "abc123",
+										"sha256":    "abc123",
 									},
 								},
 							},

@@ -53,15 +53,15 @@ const (
 type MessageType string
 
 const (
-	MessageTypeText        MessageType = "text"
-	MessageTypeImage       MessageType = "image"
-	MessageTypeFile        MessageType = "file"
-	MessageTypeAudio       MessageType = "audio"
-	MessageTypeVideo       MessageType = "video"
-	MessageTypeEvent       MessageType = "event"
-	MessageTypeMarkdown    MessageType = "markdown"
-	MessageTypeNews        MessageType = "news"
-	MessageTypeVoice       MessageType = "voice"
+	MessageTypeText         MessageType = "text"
+	MessageTypeImage        MessageType = "image"
+	MessageTypeFile         MessageType = "file"
+	MessageTypeAudio        MessageType = "audio"
+	MessageTypeVideo        MessageType = "video"
+	MessageTypeEvent        MessageType = "event"
+	MessageTypeMarkdown     MessageType = "markdown"
+	MessageTypeNews         MessageType = "news"
+	MessageTypeVoice        MessageType = "voice"
 	MessageTypeTemplateCard MessageType = "template_card"
 )
 
@@ -117,18 +117,18 @@ func NewMessage(id, channelID string, direction Direction, from UserInfo, conten
 // Error definitions for channel operations.
 // These errors are returned by various channel methods to indicate specific failure conditions.
 var (
-	ErrChannelAlreadyRunning   = errors.New("channel is already running")
-	ErrChannelNotRunning       = errors.New("channel is not running")
-	ErrChannelNotFound         = errors.New("channel not found")
-	ErrChannelAlreadyExists    = errors.New("channel already exists")
-	ErrInvalidConfiguration    = errors.New("invalid channel configuration")
-	ErrAuthenticationFailed    = errors.New("authentication failed")
-	ErrRateLimited             = errors.New("rate limited")
-	ErrMessageTooLarge         = errors.New("message too large")
-	ErrUnsupportedMessageType  = errors.New("unsupported message type")
-	ErrTokenExpired            = errors.New("token expired or not available")
-	ErrRequiredField           = errors.New("required field is missing")
-	ErrInvalidFormat           = errors.New("invalid format")
+	ErrChannelAlreadyRunning  = errors.New("channel is already running")
+	ErrChannelNotRunning      = errors.New("channel is not running")
+	ErrChannelNotFound        = errors.New("channel not found")
+	ErrChannelAlreadyExists   = errors.New("channel already exists")
+	ErrInvalidConfiguration   = errors.New("invalid channel configuration")
+	ErrAuthenticationFailed   = errors.New("authentication failed")
+	ErrRateLimited            = errors.New("rate limited")
+	ErrMessageTooLarge        = errors.New("message too large")
+	ErrUnsupportedMessageType = errors.New("unsupported message type")
+	ErrTokenExpired           = errors.New("token expired or not available")
+	ErrRequiredField          = errors.New("required field is missing")
+	ErrInvalidFormat          = errors.New("invalid format")
 )
 
 // Status represents the current operational status of a channel.

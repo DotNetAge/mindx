@@ -48,17 +48,17 @@ const (
 )
 
 var (
-	ErrInvalidSignature    = errors.New("invalid webhook signature")
-	ErrUserNotResponded    = errors.New("user has not responded within 24 hours")
+	ErrInvalidSignature     = errors.New("invalid webhook signature")
+	ErrUserNotResponded     = errors.New("user has not responded within 24 hours")
 	ErrPageAccessTokenEmpty = errors.New("page access token is empty")
 )
 
 type Config struct {
-	PageID         string
+	PageID          string
 	PageAccessToken string
-	AppSecret      string
-	VerifyToken    string
-	WebhookURL     string
+	AppSecret       string
+	VerifyToken     string
+	WebhookURL      string
 }
 
 type MessengerChannel struct {
@@ -246,8 +246,8 @@ func (m *MessengerChannel) parseWebhookData(data []byte) (*channel.Message, erro
 				} `json:"recipient"`
 				Timestamp int64 `json:"timestamp"`
 				Message   *struct {
-					MID        string `json:"mid"`
-					Text       string `json:"text"`
+					MID         string `json:"mid"`
+					Text        string `json:"text"`
 					Attachments []struct {
 						Type    string `json:"type"`
 						Payload struct {

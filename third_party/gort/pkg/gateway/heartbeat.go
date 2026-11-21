@@ -10,9 +10,9 @@ type ConnectionState int
 
 const (
 	StateDisconnected ConnectionState = 0
-	StateConnecting    ConnectionState = 1
-	StateConnected     ConnectionState = 2
-	StateReconnecting  ConnectionState = 3
+	StateConnecting   ConnectionState = 1
+	StateConnected    ConnectionState = 2
+	StateReconnecting ConnectionState = 3
 )
 
 func (s ConnectionState) String() string {
@@ -58,13 +58,13 @@ type HeartbeatStats struct {
 }
 
 type HeartbeatMonitor struct {
-	config      *HeartbeatConfig
-	stats       HeartbeatStats
-	mu          sync.RWMutex
-	cbMu        sync.RWMutex
+	config        *HeartbeatConfig
+	stats         HeartbeatStats
+	mu            sync.RWMutex
+	cbMu          sync.RWMutex
 	onStateChange func(clientID, oldState, newState string)
-	onTimeout    func(clientID string)
-	onReconnect  func(clientID string, attempt int)
+	onTimeout     func(clientID string)
+	onReconnect   func(clientID string, attempt int)
 }
 
 func newHeartbeatMonitor(cfg *HeartbeatConfig) *HeartbeatMonitor {
@@ -159,26 +159,26 @@ func (h *HeartbeatMonitor) notifyReconnect(clientID string, attempt int) {
 }
 
 type ReconnectConfig struct {
-	Enabled          bool
-	MaxRetries       int
-	InitialInterval  time.Duration
-	MaxInterval      time.Duration
-	Multiplier       float64
-	Jitter           float64
-	Strategy         string
-	OnReconnect      func(attempt int) error
-	OnReconnectFail  func(err error)
-	OnConnected      func()
+	Enabled         bool
+	MaxRetries      int
+	InitialInterval time.Duration
+	MaxInterval     time.Duration
+	Multiplier      float64
+	Jitter          float64
+	Strategy        string
+	OnReconnect     func(attempt int) error
+	OnReconnectFail func(err error)
+	OnConnected     func()
 }
 
 func DefaultReconnectConfig() *ReconnectConfig {
 	return &ReconnectConfig{
-		Enabled:          true,
-		MaxRetries:       10,
-		InitialInterval:  1 * time.Second,
-		MaxInterval:      60 * time.Second,
-		Multiplier:       2.0,
-		Jitter:           0.2,
+		Enabled:         true,
+		MaxRetries:      10,
+		InitialInterval: 1 * time.Second,
+		MaxInterval:     60 * time.Second,
+		Multiplier:      2.0,
+		Jitter:          0.2,
 	}
 }
 

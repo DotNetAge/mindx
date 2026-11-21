@@ -226,7 +226,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"mcp.server.discover":      r.daemon.handleMCPServerDiscover,
 		"mcp.credential.list":      r.daemon.handleMCPCredentialList,
 		"mcp.credential.set_group": r.daemon.handleMCPCredentialSetGroup,
-		"mcp.oauth.providers":                r.daemon.handleMCPOAuthProviders,
+		"mcp.oauth.providers":      r.daemon.handleMCPOAuthProviders,
 		"mcp.oauth.device.start":   r.daemon.handleMCPOAuthDeviceStart,
 		"mcp.oauth.device.poll":    r.daemon.handleMCPOAuthDevicePoll,
 		"mcp.tool.call":            r.daemon.handleMCPToolCall,
