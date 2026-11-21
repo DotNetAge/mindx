@@ -90,6 +90,8 @@ type ServerListEntry struct {
 	Enabled bool `json:"enabled"`
 	// Description 面向用户的描述（mcp.json 的 description 属性）
 	Description string `json:"description,omitempty"`
+	// CredentialSet 该连接器的凭据是否已落库（前端据此决定还显不显示「填密钥」）
+	CredentialSet bool `json:"credential_set"`
 }
 
 // ── RPCHandler ──────────────────────────────────────────────────────────────
@@ -210,9 +212,13 @@ func (h *RPCHandler) handleServerUpdate(ctx context.Context, raw json.RawMessage
 		return nil, fmt.Errorf("server %q 不存在，请使用 mcp.server.add 新增", p.Name)
 	}
 
+	title := p.Title
+	if title == "" {
+		title = old.Title // 前端只传凭据时不应把展示名冲掉
+	}
 	cfg := ServerConfig{
 		Name:          p.Name,
-		Title:         p.Title,
+		Title:         title,
 		Type:          p.Type,
 		Command:       p.Command,
 		Args:          p.Args,
@@ -228,6 +234,22 @@ func (h *RPCHandler) handleServerUpdate(ctx context.Context, raw json.RawMessage
 	}
 
 	if len(p.Credential) > 0 {
+		// 凭据对应的 env / header 声明置空：解析侧只认「值未填」的键（见
+		// ConnectionPool.resolveCreds），留着 `<YOUR_XX>` 占位会被当成真值。
+		if cfg.Env != nil {
+			for k := range p.Credential {
+				if _, ok := cfg.Env[k]; ok {
+					cfg.Env[k] = ""
+				}
+			}
+		}
+		if cfg.Headers != nil {
+			for k := range p.Credential {
+				if _, ok := cfg.Headers[k]; ok {
+					cfg.Headers[k] = ""
+				}
+			}
+		}
 		// 对称键写入：<mcp_name>:<env_name>（同 add）。新凭据少于旧值时
 		// credStore 旧 key 残留（凭据存储接口无删除能力），可接受：多出的
 		// 残留值不会被 resolveCreds 引用（解析只认 env 声明中值为空的键）。
@@ -277,6 +299,28 @@ func (h *RPCHandler) handleServerSetEnabled(ctx context.Context, raw json.RawMes
 	return map[string]bool{"ok": true}, nil
 }
 
+// hasCredential 判断连接器是否已经有可用凭据：任一声明的 env/header 键在凭据库
+// 里存有非空值，或配置了 credential_ref，即视为已配置。
+func (h *RPCHandler) hasCredential(s ServerConfig) bool {
+	if s.CredentialRef != "" {
+		return true
+	}
+	if h.mgr.credStore == nil {
+		return false
+	}
+	for k := range s.Env {
+		if v, err := h.mgr.credStore.Get(s.Name + ":" + k); err == nil && v != "" {
+			return true
+		}
+	}
+	for k := range s.Headers {
+		if v, err := h.mgr.credStore.Get(s.Name + ":" + k); err == nil && v != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *RPCHandler) handleServerList(ctx context.Context) (any, error) {
 	servers, err := LoadServers(h.mgr.ConfigPath())
 	if err != nil {
@@ -288,7 +332,22 @@ func (h *RPCHandler) handleServerList(ctx context.Context) (any, error) {
 	entries := make([]ServerListEntry, 0, len(servers))
 	for _, s := range servers {
 		// ServerListEntry 与 ServerConfig 字段同构，直接转换即可
-		entries = append(entries, ServerListEntry(s))
+		entry := ServerListEntry{
+			Name:          s.Name,
+			Title:         s.Title,
+			Type:          s.Type,
+			Command:       s.Command,
+			Args:          s.Args,
+			URL:           s.URL,
+			Headers:       s.Headers,
+			Env:           s.Env,
+			CredentialRef: s.CredentialRef,
+			IdleTTLSecs:   s.IdleTTLSecs,
+			Enabled:       s.Enabled,
+			Description:   s.Description,
+		}
+		entry.CredentialSet = h.hasCredential(s)
+		entries = append(entries, entry)
 	}
 	return entries, nil
 }

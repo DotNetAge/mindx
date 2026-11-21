@@ -340,6 +340,29 @@ func (p *ConnectionPool) reap() {
 	}
 }
 
+// needsCredentialValue 判断某个 env/header 声明是否「值还没填」。
+//
+// 不能只看空串：连接器配置里为了让人看懂，占位值写成 `<YOUR_AMAP_KEY>`、
+// `your_token_here` 这类形式。它们不是真值，却因为非空被当成「已配置」，
+// 导致用户填进凭据库的密钥永远解析不出来——这是「填了 Key 还是连不上」的根因。
+func needsCredentialValue(v string) bool {
+	t := strings.TrimSpace(v)
+	if t == "" {
+		return true
+	}
+	if strings.HasPrefix(t, "<") && strings.HasSuffix(t, ">") {
+		return true
+	}
+	lower := strings.ToLower(t)
+	if strings.HasPrefix(lower, "your_") || strings.HasPrefix(lower, "your-") {
+		return true
+	}
+	if strings.HasSuffix(lower, "_here") {
+		return true
+	}
+	return strings.Contains(lower, "xxx")
+}
+
 func (p *ConnectionPool) resolveCreds(cfg ServerConfig) (map[string]string, error) {
 	result := make(map[string]string)
 	if p.credStore == nil {
@@ -349,7 +372,7 @@ func (p *ConnectionPool) resolveCreds(cfg ServerConfig) (map[string]string, erro
 	// 同构）：env 声明中值为空的变量从凭据库取值。取不到时留空，进程环境
 	// 兜底由 buildCommand 的 os.Environ 继承保证。
 	for key, val := range cfg.Env {
-		if strings.TrimSpace(val) != "" {
+		if !needsCredentialValue(val) {
 			continue
 		}
 		if v, err := p.credStore.Get(cfg.Name + ":" + key); err == nil && v != "" {
