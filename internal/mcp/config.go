@@ -45,7 +45,10 @@ type ServerConfig struct {
 	Headers       map[string]string `json:"headers,omitempty"`
 	Env           map[string]string `json:"env,omitempty"`
 	CredentialRef string            `json:"credential_ref,omitempty"`
-	IdleTTLSecs   int               `json:"idle_ttl_secs,omitempty"`
+	// CredentialGroup 账号级凭据组（如 aliyun）：同一组连接器共用凭据库里的
+	// `group:<组>:<env名>`，一次填写、一次轮换，不在每个连接器里各存一份。
+	CredentialGroup string `json:"credential_group,omitempty"`
+	IdleTTLSecs     int    `json:"idle_ttl_secs,omitempty"`
 	// Enabled 是否启用该 server（mcp.json 的 enabled 属性）。
 	// 缺省视为 false——连接器是货架：装了不等于启用，用户按需开启。
 	// 显式写 true 才会加载进连接池并提供工具。
@@ -138,6 +141,7 @@ func LoadServers(path string) ([]ServerConfig, error) {
 		cfg.Description = stringField(serverMap, "description")
 		// 凭据只存 ref（值在 credStore），加载时必须读回，否则建连时无法解析凭据
 		cfg.CredentialRef = stringField(serverMap, "credential_ref")
+		cfg.CredentialGroup = stringField(serverMap, "credential_group")
 
 		// 推断 transport 类型
 		switch {
@@ -199,6 +203,7 @@ func SaveServers(path string, servers []ServerConfig) error {
 		entry["enabled"] = s.Enabled
 		// credential_ref 由 Go 侧管理：值为空时删除该键（此时凭据未配置）
 		writeString(entry, "credential_ref", s.CredentialRef)
+		writeString(entry, "credential_group", s.CredentialGroup)
 		rawServers[s.Name] = entry
 	}
 

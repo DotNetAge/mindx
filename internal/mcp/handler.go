@@ -10,16 +10,18 @@ import (
 
 // ServerAddParams is the parameter for mcp.server.add.
 type ServerAddParams struct {
-	Name        string            `json:"name"`
-	Title       string            `json:"title,omitempty"`
-	Type        ServerType        `json:"type"`
-	Command     string            `json:"command,omitempty"`
-	Args        []string          `json:"args,omitempty"`
-	URL         string            `json:"url,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty"`
-	Env         map[string]string `json:"env,omitempty"`
-	Credential  map[string]string `json:"credential,omitempty"`
-	IdleTTLSecs int               `json:"idle_ttl_secs"`
+	Name       string            `json:"name"`
+	Title      string            `json:"title,omitempty"`
+	Type       ServerType        `json:"type"`
+	Command    string            `json:"command,omitempty"`
+	Args       []string          `json:"args,omitempty"`
+	URL        string            `json:"url,omitempty"`
+	Headers    map[string]string `json:"headers,omitempty"`
+	Env        map[string]string `json:"env,omitempty"`
+	Credential map[string]string `json:"credential,omitempty"`
+	// CredentialGroup 账号级凭据组（与 Credential 二选一：给了组就只存组级密钥）
+	CredentialGroup string `json:"credential_group,omitempty"`
+	IdleTTLSecs     int    `json:"idle_ttl_secs"`
 }
 
 // ServerRemoveParams is the parameter for mcp.server.remove.
@@ -85,7 +87,9 @@ type ServerListEntry struct {
 	Headers       map[string]string `json:"headers,omitempty"`
 	Env           map[string]string `json:"env,omitempty"`
 	CredentialRef string            `json:"credential_ref,omitempty"`
-	IdleTTLSecs   int               `json:"idle_ttl_secs"`
+	// CredentialGroup 账号级凭据组名（如 aliyun），连接器只记组不存值
+	CredentialGroup string `json:"credential_group,omitempty"`
+	IdleTTLSecs     int    `json:"idle_ttl_secs"`
 	// Enabled 是否启用（mcp.json 的 enabled 属性，缺省 false）
 	Enabled bool `json:"enabled"`
 	// Description 面向用户的描述（mcp.json 的 description 属性）
@@ -119,6 +123,8 @@ func (h *RPCHandler) Handle(ctx context.Context, method string, params json.RawM
 		return h.handleServerSetEnabled(ctx, params)
 	case "mcp.server.list":
 		return h.handleServerList(ctx)
+	case "mcp.credential.set_group":
+		return h.handleCredentialSetGroup(ctx, params)
 	case "mcp.server.test":
 		return h.handleServerTest(ctx, params)
 	case "mcp.server.discover":
@@ -216,18 +222,23 @@ func (h *RPCHandler) handleServerUpdate(ctx context.Context, raw json.RawMessage
 	if title == "" {
 		title = old.Title // 前端只传凭据时不应把展示名冲掉
 	}
+	group := p.CredentialGroup
+	if group == "" {
+		group = old.CredentialGroup // 同理，别把已有的组引用冲掉
+	}
 	cfg := ServerConfig{
-		Name:          p.Name,
-		Title:         title,
-		Type:          p.Type,
-		Command:       p.Command,
-		Args:          p.Args,
-		URL:           p.URL,
-		Headers:       p.Headers,
-		Env:           p.Env,
-		IdleTTLSecs:   p.IdleTTLSecs,
-		Enabled:       old.Enabled,
-		CredentialRef: old.CredentialRef,
+		Name:            p.Name,
+		Title:           title,
+		Type:            p.Type,
+		Command:         p.Command,
+		Args:            p.Args,
+		URL:             p.URL,
+		Headers:         p.Headers,
+		Env:             p.Env,
+		IdleTTLSecs:     p.IdleTTLSecs,
+		Enabled:         old.Enabled,
+		CredentialRef:   old.CredentialRef,
+		CredentialGroup: group,
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -299,6 +310,65 @@ func (h *RPCHandler) handleServerSetEnabled(ctx context.Context, raw json.RawMes
 	return map[string]bool{"ok": true}, nil
 }
 
+// CredentialGroupParams is the parameter for mcp.credential.set_group.
+type CredentialGroupParams struct {
+	Name    string            `json:"group"`
+	Values  map[string]string `json:"values"`
+	Servers []string          `json:"servers"`
+}
+
+// handleCredentialSetGroup 写入账号级凭据组，并把引用该组的连接器打上组标记。
+//
+// 为什么单列一个 RPC：阿里云一套 AccessKey 顶着 15 个产品，逐个连接器写会
+// 变成 15 份拷贝——轮换要改 15 处、漏一处就是「有的能用有的不能用」。
+// 组级只存一份，连接器只记组名，读写都省。
+func (h *RPCHandler) handleCredentialSetGroup(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p CredentialGroupParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if p.Name == "" {
+		return nil, fmt.Errorf("group 不能为空")
+	}
+	if len(p.Values) == 0 {
+		return nil, fmt.Errorf("没有要保存的凭据值")
+	}
+	for k, v := range p.Values {
+		if err := h.mgr.credStore.Set("group:"+p.Name+":"+k, v); err != nil {
+			return nil, fmt.Errorf("store credential: %w", err)
+		}
+	}
+	servers, err := LoadServers(h.mgr.ConfigPath())
+	if err != nil {
+		return nil, err
+	}
+	stamped := make([]string, 0, len(p.Servers))
+	for i := range servers {
+		s := &servers[i]
+		if !contains(p.Servers, s.Name) {
+			continue
+		}
+		s.CredentialGroup = p.Name
+		if err := h.mgr.AddServer(ctx, *s); err != nil {
+			return nil, err
+		}
+		if s.Enabled {
+			h.mgr.pool.Disconnect(s.Name)
+		}
+		stamped = append(stamped, s.Name)
+	}
+	return map[string]any{"ok": true, "servers": stamped}, nil
+}
+
+func contains(list []string, v string) bool {
+	for _, item := range list {
+		if item == v {
+			return true
+		}
+	}
+	return false
+}
+
 // hasCredential 判断连接器是否已经有可用凭据：任一声明的 env/header 键在凭据库
 // 里存有非空值，或配置了 credential_ref，即视为已配置。
 func (h *RPCHandler) hasCredential(s ServerConfig) bool {
@@ -308,14 +378,25 @@ func (h *RPCHandler) hasCredential(s ServerConfig) bool {
 	if h.mgr.credStore == nil {
 		return false
 	}
+	keys := func(k string) []string {
+		out := []string{s.Name + ":" + k}
+		if s.CredentialGroup != "" {
+			out = append(out, "group:"+s.CredentialGroup+":"+k)
+		}
+		return out
+	}
 	for k := range s.Env {
-		if v, err := h.mgr.credStore.Get(s.Name + ":" + k); err == nil && v != "" {
-			return true
+		for _, key := range keys(k) {
+			if v, err := h.mgr.credStore.Get(key); err == nil && v != "" {
+				return true
+			}
 		}
 	}
 	for k := range s.Headers {
-		if v, err := h.mgr.credStore.Get(s.Name + ":" + k); err == nil && v != "" {
-			return true
+		for _, key := range keys(k) {
+			if v, err := h.mgr.credStore.Get(key); err == nil && v != "" {
+				return true
+			}
 		}
 	}
 	return false
@@ -333,18 +414,19 @@ func (h *RPCHandler) handleServerList(ctx context.Context) (any, error) {
 	for _, s := range servers {
 		// ServerListEntry 与 ServerConfig 字段同构，直接转换即可
 		entry := ServerListEntry{
-			Name:          s.Name,
-			Title:         s.Title,
-			Type:          s.Type,
-			Command:       s.Command,
-			Args:          s.Args,
-			URL:           s.URL,
-			Headers:       s.Headers,
-			Env:           s.Env,
-			CredentialRef: s.CredentialRef,
-			IdleTTLSecs:   s.IdleTTLSecs,
-			Enabled:       s.Enabled,
-			Description:   s.Description,
+			Name:            s.Name,
+			Title:           s.Title,
+			Type:            s.Type,
+			Command:         s.Command,
+			Args:            s.Args,
+			URL:             s.URL,
+			Headers:         s.Headers,
+			Env:             s.Env,
+			CredentialRef:   s.CredentialRef,
+			CredentialGroup: s.CredentialGroup,
+			IdleTTLSecs:     s.IdleTTLSecs,
+			Enabled:         s.Enabled,
+			Description:     s.Description,
 		}
 		entry.CredentialSet = h.hasCredential(s)
 		entries = append(entries, entry)

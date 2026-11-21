@@ -350,7 +350,8 @@ func needsCredentialValue(v string) bool {
 	if t == "" {
 		return true
 	}
-	if strings.HasPrefix(t, "<") && strings.HasSuffix(t, ">") {
+	// 占位值可能是整值（`<YOUR_AK>`），也可能嵌在前缀里（`Bearer <TOKEN>`）
+	if i := strings.Index(t, "<"); i >= 0 && strings.Index(t[i:], ">") > 0 {
 		return true
 	}
 	lower := strings.ToLower(t)
@@ -363,20 +364,58 @@ func needsCredentialValue(v string) bool {
 	return strings.Contains(lower, "xxx")
 }
 
+// fillPlaceholder 把密钥填进声明模板，保留模板里除占位符以外的部分。
+//
+// 为什么不能整值覆盖：HTTP 连接器的 header 常写成 `Bearer <TOKEN>`，
+// 直接换成用户粘贴的纯 token 会少掉 Bearer 前缀，鉴权必然失败。
+func fillPlaceholder(template, secret string) string {
+	if start := strings.Index(template, "<"); start >= 0 {
+		if end := strings.Index(template[start:], ">"); end > 0 {
+			return template[:start] + secret + template[start+end+1:]
+		}
+	}
+	return secret
+}
+
 func (p *ConnectionPool) resolveCreds(cfg ServerConfig) (map[string]string, error) {
 	result := make(map[string]string)
 	if p.credStore == nil {
 		return result, nil
 	}
-	// 对称键解析（<mcp_name>:<env_name>，与技能凭据 <skill_name>:<env_name>
-	// 同构）：env 声明中值为空的变量从凭据库取值。取不到时留空，进程环境
-	// 兜底由 buildCommand 的 os.Environ 继承保证。
+	// 候选键的优先级：账号组 → 连接器自身。
+	// 组级（`group:<组>:<env名>`）是常态：阿里云一套 AK 顶着 15 个产品，
+	// 存一份、轮换一次；连接器级（`<mcp_name>:<env_name>`）留给个别要独立密钥的场景。
+	candidates := func(key string) []string {
+		keys := make([]string, 0, 2)
+		if cfg.CredentialGroup != "" {
+			keys = append(keys, "group:"+cfg.CredentialGroup+":"+key)
+		}
+		keys = append(keys, cfg.Name+":"+key)
+		return keys
+	}
+	lookup := func(key string) (string, bool) {
+		for _, k := range candidates(key) {
+			if v, err := p.credStore.Get(k); err == nil && v != "" {
+				return v, true
+			}
+		}
+		return "", false
+	}
+	// env 与 headers 两处声明都可能要密钥（HTTP 类连接器走 Authorization）
 	for key, val := range cfg.Env {
 		if !needsCredentialValue(val) {
 			continue
 		}
-		if v, err := p.credStore.Get(cfg.Name + ":" + key); err == nil && v != "" {
-			result[key] = v
+		if v, ok := lookup(key); ok {
+			result[key] = fillPlaceholder(val, v)
+		}
+	}
+	for key, val := range cfg.Headers {
+		if !needsCredentialValue(val) {
+			continue
+		}
+		if v, ok := lookup(key); ok {
+			result[key] = fillPlaceholder(val, v)
 		}
 	}
 	// 既有 credential_ref 机制保留：手写 mcp.json 的单凭据引用（ref 既是

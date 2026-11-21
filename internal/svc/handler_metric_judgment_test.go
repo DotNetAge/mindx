@@ -320,3 +320,239 @@ func TestTraceReworkToPriorSessions(t *testing.T) {
 		t.Error("unrelated task hint should not be traced")
 	}
 }
+
+// TestIsSystemTaskHint 覆盖系统生成文本的判定边界。
+// 这类文本在多个不相关会话里必然逐字相同，一旦进入匹配域就会造成误命中。
+func TestIsSystemTaskHint(t *testing.T) {
+	cases := []struct {
+		hint string
+		want bool
+	}{
+		{"[系统收割] 以下子任务已结算（或达到各自收割时长上限）……", true},
+		{"[系统] 定时任务触发", true},
+		{"", true},
+		{"   ", true},
+		{"帮我重构这个模块的存储层", false},
+		{"宠物事件链路验收A：请只回复两个字——好的", false},
+	}
+	for _, c := range cases {
+		if got := isSystemTaskHint(c.hint); got != c.want {
+			t.Errorf("isSystemTaskHint(%q) = %v, want %v", c.hint, got, c.want)
+		}
+	}
+}
+
+// TestTraceReworkSkipsSystemTaskHint 验证返工回溯不会因系统文本把无关会话串成一串。
+// 回归的是实测缺陷：216 个 round 事件里 36 个（16.7%）task_hint 是「[系统收割]」，
+// 精确匹配能命中它们，等于一次返工把一批无关会话全判成 rework。
+func TestTraceReworkSkipsSystemTaskHint(t *testing.T) {
+	d, sid := metricTestDaemon(t)
+	store := d.app.MetricStore()
+	ctx := context.Background()
+
+	const sysHint = "[系统收割] 以下子任务已结算，是它们的结果汇总。请基于这些结果继续推进。"
+	target := metric.MetricEvent{
+		Kind: metric.KindRound, SessionID: sid, AgentName: "tester", TaskHint: sysHint, RoundNo: 1,
+	}
+	target, _ = store.AppendEvent(ctx, target)
+
+	// 两个与本任务毫无关系、但 task_hint 同为系统文本的会话
+	var others []string
+	for i := 0; i < 2; i++ {
+		oid := mustCreateSession(t, d.app.SessDB(), "tester")
+		if _, err := store.AppendEvent(ctx, metric.MetricEvent{
+			Kind: metric.KindRound, SessionID: oid, AgentName: "tester", TaskHint: sysHint,
+		}); err != nil {
+			t.Fatalf("append unrelated event: %v", err)
+		}
+		others = append(others, oid)
+	}
+
+	if got := d.traceReworkToPriorSessions(store, target); got != 0 {
+		t.Errorf("revisited = %d, want 0（系统文本不得回溯）", got)
+	}
+	for _, oid := range others {
+		evs, _ := store.Query(ctx, metric.MetricFilter{SessionID: oid, Kind: metric.KindRound})
+		if j, ok := evs[0].LatestJudgment(); ok {
+			t.Errorf("会话 %s 被误判为 %s/%s", oid, j.Value, j.Source)
+		}
+	}
+}
+
+// TestMetricRecordRoundAttribution 固定轮次归因的正确语义。
+//
+// 缺陷根源是写入时序，不是「只能落在最新一轮」这句话能覆盖的：
+// round 事件由 withMetricHook 在 OnExecutionSummary 里落盘，而该事件在
+// runWithGoAgent 的 defer 中发射，即**整轮结束后**才写入；Agent 却是在
+// **轮次之内**调 metric record 的。若就地 latestRoundEvent：
+//
+//  1. 新会话第 1 轮内上报 → 该会话尚无任何 round 事件 → 判定整条丢失。
+//  2. 多轮会话第 N 轮内上报 → 只能定位到第 N-1 轮，判定落到上一轮的事件上，
+//     task_hint 与判定的 note 必然错配一轮（真实数据里就是这样：判定讲的是
+//     round 10 之后的事，却挂在 round 9「社区就有这个技能」上）。
+//
+// 修正：轮内上报只暂存，由该轮事件落盘后的 flushPendingJudgments 挂载。
+func TestMetricRecordRoundAttribution(t *testing.T) {
+	d, sid := metricTestDaemon(t)
+	ctx := context.Background()
+	store := d.app.MetricStore()
+
+	// ── 面 1：新会话第 1 轮内上报，此时该会话零 round 事件 ──
+	freshSid := mustCreateSession(t, d.app.SessDB(), "tester")
+	d.sessionQueueFor(freshSid).Enqueue(func() { select {} }) // 标记为执行中
+	result, err := d.handleMetricRecord(ctx, mustParams(t, metricRecordParams{
+		SessionID: freshSid, Outcome: "fail", Note: "问题：… 否决：… 修正：… 验证：…",
+	}))
+	if err != nil {
+		t.Fatalf("轮内上报不应报错（应暂存而非丢失）：%v", err)
+	}
+	if m := result.(map[string]any); m["deferred"] != true {
+		t.Errorf("轮内上报应标记 deferred，实际 %#v", m)
+	}
+	// 暂存后该会话仍无 round 事件——判定确实还没落地，等轮末挂载
+	if evs, _ := store.Query(ctx, metric.MetricFilter{SessionID: freshSid, Kind: metric.KindRound}); len(evs) != 0 {
+		t.Errorf("暂存阶段不应凭空产生 round 事件，实际 %d 条", len(evs))
+	}
+
+	// 轮末事件落盘 → 判定挂到**这一轮**（round 1），not 丢失
+	first, err := store.AppendEvent(ctx, metric.MetricEvent{
+		Kind: metric.KindRound, SessionID: freshSid, AgentName: "tester",
+		RoundNo: 1, TaskHint: "第一轮的任务",
+	})
+	if err != nil {
+		t.Fatalf("append round 1: %v", err)
+	}
+	d.flushPendingJudgments(store, first)
+
+	evs, _ := store.Query(ctx, metric.MetricFilter{SessionID: freshSid, Kind: metric.KindRound})
+	if len(evs) != 1 {
+		t.Fatalf("round 事件数 = %d, want 1", len(evs))
+	}
+	j, ok := evs[0].LatestJudgment()
+	if !ok {
+		t.Fatal("轮末应挂载暂存的判定，实际判定丢失")
+	}
+	if j.Value != metric.OutcomeFail || j.Source != metric.SourceAgentReport {
+		t.Errorf("挂载的判定 = %s/%s, want fail/agent_report", j.Value, j.Source)
+	}
+
+	// ── 面 2：多轮会话，在第 2 轮内上报 ──
+	// 第 1 轮已落盘
+	if _, err := store.AppendEvent(ctx, metric.MetricEvent{
+		Kind: metric.KindRound, SessionID: sid, AgentName: "tester",
+		RoundNo: 1, TaskHint: "上一轮的任务",
+	}); err != nil {
+		t.Fatalf("append round 1: %v", err)
+	}
+	d.sessionQueueFor(sid).Enqueue(func() { select {} }) // 第 2 轮执行中
+	if _, err := d.handleMetricRecord(ctx, mustParams(t, metricRecordParams{
+		SessionID: sid, Outcome: "fail", Note: "本轮（第 2 轮）才失败的证据",
+	})); err != nil {
+		t.Fatalf("record error = %v", err)
+	}
+	// 此刻第 1 轮不得被写入判定（否则就是错配一轮）
+	round1, _ := store.Query(ctx, metric.MetricFilter{SessionID: sid, Kind: metric.KindRound})
+	for _, ev := range round1 {
+		if ev.RoundNo == 1 {
+			if _, ok := ev.LatestJudgment(); ok {
+				t.Error("第 2 轮内的判定被错写到第 1 轮——错配一轮的缺陷复现")
+			}
+		}
+	}
+	// 第 2 轮事件落盘 → 判定挂到第 2 轮
+	second, err := store.AppendEvent(ctx, metric.MetricEvent{
+		Kind: metric.KindRound, SessionID: sid, AgentName: "tester",
+		RoundNo: 2, TaskHint: "第 2 轮的任务",
+	})
+	if err != nil {
+		t.Fatalf("append round 2: %v", err)
+	}
+	d.flushPendingJudgments(store, second)
+
+	all, _ := store.Query(ctx, metric.MetricFilter{SessionID: sid, Kind: metric.KindRound})
+	var withJudgment []int
+	for _, ev := range all {
+		if _, ok := ev.LatestJudgment(); ok {
+			withJudgment = append(withJudgment, ev.RoundNo)
+		}
+	}
+	if len(withJudgment) != 1 || withJudgment[0] != 2 {
+		t.Errorf("判定应且仅应落在 round 2，实际落在 %v", withJudgment)
+	}
+}
+
+// TestRecordRoundEventMountsStashedJudgment 走生产路径验证「轮内暂存 → 轮末挂载」。
+//
+// 与 TestMetricRecordRoundAttribution 的分工：那个测试手工调 flushPendingJudgments，
+// 只证明挂载逻辑本身正确；本测试经由 recordRoundEvent（withMetricHook 的真实
+// 落盘路径）触发，证明这条因果是**接上的**——否则 flush 写成死代码也照样全绿。
+func TestRecordRoundEventMountsStashedJudgment(t *testing.T) {
+	d, sid := metricTestDaemon(t)
+	ctx := context.Background()
+	store := d.app.MetricStore()
+
+	// 清掉 metricTestDaemon 预置的 round 1，让轮号从 1 起算更直观
+	d.sessionQueueFor(sid).Enqueue(func() { select {} }) // 会话执行中
+
+	const note = "问题：错把缓存失效当成数据丢失 否决：加大超时 修正：查 cursor 语义 验证：重跑通过"
+	// 轮内上报：暂存，不落盘
+	if _, err := d.handleMetricRecord(ctx, mustParams(t, metricRecordParams{
+		SessionID: sid, Outcome: "rework", Note: note,
+	})); err != nil {
+		t.Fatalf("轮内上报 error = %v", err)
+	}
+	// 暂存后尚未落盘，flush 也未发生
+	if got := d.pendingJudgmentCount(sid); got != 1 {
+		t.Fatalf("暂存判定数 = %d, want 1", got)
+	}
+
+	// 轮末：走生产落盘路径
+	saved, err := d.recordRoundEvent(store, roundEventInput{
+		SessionID: sid, AgentName: "tester", TaskHint: "修 cursor 缺陷",
+	})
+	if err != nil {
+		t.Fatalf("recordRoundEvent error = %v", err)
+	}
+
+	// 判定必须挂到这条事件上，且暂存队列清空
+	evs, _ := store.Query(ctx, metric.MetricFilter{SessionID: sid, Kind: metric.KindRound})
+	var target *metric.MetricEvent
+	for i := range evs {
+		if evs[i].ID == saved.ID {
+			target = &evs[i]
+		}
+	}
+	if target == nil {
+		t.Fatal("落盘的 round 事件未查到")
+	}
+	j, ok := target.LatestJudgment()
+	if !ok {
+		t.Fatal("轮末未挂载暂存的判定——flush 未接线")
+	}
+	if j.Value != metric.OutcomeRework || j.Source != metric.SourceAgentReport {
+		t.Errorf("挂载判定 = %s/%s, want rework/agent_report", j.Value, j.Source)
+	}
+	if !strings.Contains(j.Note, "问题：") || !strings.Contains(j.Note, "验证：") {
+		t.Errorf("note 应随判定完整挂载，实际 %q", j.Note)
+	}
+	if left := d.pendingJudgmentCount(sid); left != 0 {
+		t.Errorf("挂载后暂存队列应清空，剩 %d 条", left)
+	}
+}
+
+// TestRoundEventNumbersAreSequential 验证轮号按存量递增（判定定位依赖它）。
+func TestRoundEventNumbersAreSequential(t *testing.T) {
+	d, sid := metricTestDaemon(t)
+	store := d.app.MetricStore()
+
+	// metricTestDaemon 已预置 round 1
+	saved, err := d.recordRoundEvent(store, roundEventInput{
+		SessionID: sid, AgentName: "tester", TaskHint: "第二轮",
+	})
+	if err != nil {
+		t.Fatalf("recordRoundEvent error = %v", err)
+	}
+	if saved.RoundNo != 2 {
+		t.Errorf("轮号 = %d, want 2（存量 1 条 + 1）", saved.RoundNo)
+	}
+}

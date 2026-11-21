@@ -60,33 +60,65 @@ func (d *Daemon) withMetricHook(
 		if sub := getSubSessionID(); sub != "" && sub != sid {
 			return
 		}
-		// 轮号 = 该会话既有 round 事件数 + 1（判定按 session + 轮号定位事件，
-		// daemon 重启后计数自然从存量恢复）。
-		roundNo := 1
-		if existing, err := store.Query(context.Background(), metric.MetricFilter{
-			SessionID: sid, Kind: metric.KindRound,
-		}); err == nil {
-			roundNo = len(existing) + 1
-		}
-		ev := metric.MetricEvent{
-			Kind:            metric.KindRound,
+		d.recordRoundEvent(store, roundEventInput{
 			SessionID:       sid,
 			AgentName:       agentName,
-			RoundNo:         roundNo,
-			DurationMS:      data.TotalDuration.Milliseconds(),
-			Tokens:          data.TokensUsed.ActualTokens(),
-			RoundIterations: data.TotalIterations,
+			TaskHint:        taskHint,
+			Data:            data,
 			RouteCorrection: routeCorrection,
 			SkillsUsed:      skillsUsed,
-			TaskHint:        truncateHint(taskHint),
-		}
-		if _, err := store.AppendEvent(context.Background(), ev); err != nil {
-			d.logger.Warn("metric: 写入轮次事件失败",
-				"session_id", sid, "error", err)
-		}
+		})
 	})
 
 	return b
+}
+
+// roundEventInput 是一次轮次事件落盘所需的全部输入。
+type roundEventInput struct {
+	SessionID       string
+	AgentName       string
+	TaskHint        string
+	Data            goharnessevents.ExecutionSummaryData
+	RouteCorrection int
+	SkillsUsed      []string
+}
+
+// recordRoundEvent 落盘一条 round 事件，并立即挂载该轮暂存的判定。
+//
+// 抽出为独立方法是为了让「写入 → 挂载」这条因果在测试里可被真实执行，
+// 而不是靠外部模拟——判定挂载点一旦错位，run 全绿也毫无意义。
+func (d *Daemon) recordRoundEvent(store *metric.FileMetricStore, in roundEventInput) (metric.MetricEvent, error) {
+	// 轮号 = 该会话既有 round 事件数 + 1（判定按 session + 轮号定位事件，
+	// daemon 重启后计数自然从存量恢复）。
+	roundNo := 1
+	if existing, err := store.Query(context.Background(), metric.MetricFilter{
+		SessionID: in.SessionID, Kind: metric.KindRound,
+	}); err == nil {
+		roundNo = len(existing) + 1
+	}
+	ev := metric.MetricEvent{
+		Kind:            metric.KindRound,
+		SessionID:       in.SessionID,
+		AgentName:       in.AgentName,
+		RoundNo:         roundNo,
+		DurationMS:      in.Data.TotalDuration.Milliseconds(),
+		Tokens:          in.Data.TokensUsed.ActualTokens(),
+		RoundIterations: in.Data.TotalIterations,
+		RouteCorrection: in.RouteCorrection,
+		SkillsUsed:      in.SkillsUsed,
+		TaskHint:        truncateHint(in.TaskHint),
+	}
+	saved, err := store.AppendEvent(context.Background(), ev)
+	if err != nil {
+		d.logger.Warn("metric: 写入轮次事件失败",
+			"session_id", in.SessionID, "error", err)
+		return metric.MetricEvent{}, err
+	}
+	// 轮内上报的判定此刻才可挂载：该轮事件已存在，且正是 Agent 所处的
+	// 这一轮。放在写入成功之后、且不在 goroutine 里——flush 依赖本轮
+	// 完整字段（task_hint / agent），事件未落盘时无从定位。
+	d.flushPendingJudgments(store, saved)
+	return saved, nil
 }
 
 // extractSkillName 从 Skill 工具的参数中提取技能名（参数字段 "name"）。

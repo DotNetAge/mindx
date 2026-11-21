@@ -80,6 +80,14 @@ type Daemon struct {
 	// to look up the session's TrackModify function.
 	activeSessions sync.Map
 
+	// pendingJudgments 按 sessionID 暂存「轮次内上报」的决策量表判定
+	//（值 = *pendingJudgmentList）。轮内调 metric record 时该轮 round 事件
+	// 尚未落盘（OnExecutionSummary 在整轮结束的 defer 里发射），只能暂存，
+	// 由 flushPendingJudgments 在事件写入后挂载——这是轮次归因的唯一
+	// 正确挂载点，详见 handler_metric_judgment.go。进程内存态，重启即清：
+	// 未挂载的判定丢失优于挂到错误的轮次上。
+	pendingJudgments sync.Map
+
 	// global key-value store (bbolt)
 	kvStore *bbolt.DB
 
