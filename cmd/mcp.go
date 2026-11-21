@@ -172,6 +172,7 @@ var mcpToolsCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		useJSON, _ := cmd.Flags().GetBool("json")
+		timeout, _ := cmd.Flags().GetInt("timeout")
 
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
@@ -179,7 +180,10 @@ var mcpToolsCmd = &cobra.Command{
 		}
 		defer func() { _ = cl.Close() }()
 
-		raw, err := cl.CallWithTimeout("mcp.server.discover", map[string]any{"name": args[0]})
+		// 首次发现工具要冷启动服务进程：uvx/npx 冷启动可能超过默认 30 秒，
+		// 用调用方超时，避免把「正在启动」误报成 context deadline exceeded。
+		raw, err := cl.CallWithTimeoutDur("mcp.server.discover", map[string]any{"name": args[0]},
+			time.Duration(timeout)*time.Second)
 		if err != nil {
 			return err
 		}
@@ -346,6 +350,7 @@ func init() {
 
 	mcpListCmd.Flags().Bool("json", false, "输出 JSON（供程序消费）")
 	mcpToolsCmd.Flags().Bool("json", false, "输出 JSON（供程序消费）")
+	mcpToolsCmd.Flags().Int("timeout", 180, "发现工具的超时秒数（首次冷启动需更久）")
 	mcpCallCmd.Flags().Bool("json", false, "输出 JSON（供程序消费）")
 
 	mcpAddCmd.Flags().String("command", "", "本地服务的启动命令（如 npx、uvx）")

@@ -1,0 +1,59 @@
+name: Go
+on:
+  push: { branches: [ "main" ] }
+  pull_request: { branches: [ "main" ] }
+
+# 全局设置：强制使用 Node.js 24 运行所有 JS 动作
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ "1.25.1" ]
+    steps:
+      - uses: actions/checkout@v5
+
+      # 使用官方 Go 安装动作，已兼容 Node.js 24
+      - name: Set up Go
+        uses: actions/setup-go@v6.3.0
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true  # 自动缓存 Go 模块，加速后续运行
+
+      - name: Verify Go version
+        run: go version
+
+      # 现代依赖管理命令
+      - name: Download and verify dependencies
+        run: |
+          set -e  # 命令失败立即终止
+          go mod download
+          go mod verify  # 验证依赖完整性
+
+      # 合并测试命令，一次执行完成所有需求
+      - name: Run tests (with coverage)
+        run: |
+          set -e
+          # 一次执行：详细日志 + 数据竞争检测 + 覆盖率 + JSON结果
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./... \
+            2>&1 | tee >(go test -json ./... > TestResults-${{ matrix.go-version }}.json)
+
+      - name: Upload Go test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: Go-results-${{ matrix.go-version }}
+          path: TestResults-${{ matrix.go-version }}.json
+        if: always()  # 测试失败也上传结果
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.out
+          flags: go-${{ matrix.go-version }}
+          verbose: true
+        if: success()  # 仅测试成功时上传覆盖率
+

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -111,7 +112,53 @@ func buildCommand(command string, args []string, env map[string]string) *exec.Cm
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
+	cmd.Env = withDefaultUVIndex(resolveCommand(command), cmd.Env, env)
 	return cmd
+}
+
+// withDefaultUVIndex 给 uv/uvx 启动的服务补一个国内 PyPI 镜像源。
+//
+// 为什么：daemon 由 GUI 拉起，环境里通常没有用户 shell 里的 UV_DEFAULT_INDEX。
+// uvx 首次冷启动要解析并下载依赖，直连 pypi.org 在国内会长时间挂住——表现是
+// initialize handshake 超时，看起来像「连接器坏了」，实际只是源太慢。
+// 优先级：用户已显式配了 UV_INDEX_URL / UV_DEFAULT_INDEX 或 mcp.json env → 尊重不动；
+// 其次读 MINDX_UV_DEFAULT_INDEX（部署方可换源）；都没有才用阿里云镜像。
+func withDefaultUVIndex(command string, environ []string, cfgEnv map[string]string) []string {
+	if !isUVCommand(command) {
+		return environ
+	}
+	if _, ok := cfgEnv["UV_DEFAULT_INDEX"]; ok {
+		return environ
+	}
+	if _, ok := cfgEnv["UV_INDEX_URL"]; ok {
+		return environ
+	}
+	if !hasEnvKey(environ, "UV_DEFAULT_INDEX") && !hasEnvKey(environ, "UV_INDEX_URL") {
+		index := os.Getenv("MINDX_UV_DEFAULT_INDEX")
+		if index == "" {
+			index = defaultUVIndex
+		}
+		environ = append(environ, "UV_DEFAULT_INDEX="+index)
+	}
+	return environ
+}
+
+const defaultUVIndex = "https://mirrors.aliyun.com/pypi/simple/"
+
+func isUVCommand(command string) bool {
+	base := strings.ToLower(filepath.Base(command))
+	base = strings.TrimSuffix(base, ".exe")
+	return base == "uv" || base == "uvx"
+}
+
+func hasEnvKey(environ []string, key string) bool {
+	prefix := key + "="
+	for _, kv := range environ {
+		if strings.HasPrefix(kv, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *stdioClient) Connect(ctx context.Context) error {
