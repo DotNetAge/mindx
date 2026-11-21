@@ -12,22 +12,6 @@
       "title": "滴滴出行",
       "stars": 1
     },
-    "tuniu-hotel": {
-      "url": "https://github.com/Tuniu/tuniu-mcp",
-      "headers": {
-        "apiKey": "<YOUR_TUNIU_API_KEY>"
-      },
-      "description": "途牛酒店（官方远程）；认证是 apiKey header，不是 Authorization: Bearer",
-      "title": "途牛酒店"
-    },
-    "tuniu-flight": {
-      "url": "https://github.com/Tuniu/tuniu-mcp",
-      "headers": {
-        "apiKey": "<YOUR_TUNIU_API_KEY>"
-      },
-      "description": "途牛机票（官方远程）",
-      "title": "途牛机票"
-    },
     "luckin-coffee": {
       "url": "https://github.com/AD207warlord/smart-luckin",
       "description": "瑞幸咖啡（官方远程）：附近门店、产品浏览、下单",
@@ -600,21 +584,6 @@
       "url": "https://github.com/LittlePeter52012/wolai-mcp",
       "stars": 8
     },
-    "shimo": {
-      "title": "石墨文档",
-      "command": "npx",
-      "args": [
-        "-y",
-        "rush-shimo-cli",
-        "mcp"
-      ],
-      "env": {
-        "SHIMO_TOKEN": "<YOUR_SHIMO_TOKEN>"
-      },
-      "description": "石墨文档",
-      "url": "https://github.com/kanyun-inc/rush-shimo-cli",
-      "stars": 3
-    },
     "wecom-bot": {
       "title": "企业微信群机器人",
       "command": "uvx",
@@ -961,20 +930,6 @@
       "title": "博查 AI 搜索",
       "url": "https://github.com/bocha-ai/bocha-mcp"
     },
-    "tencent-web-search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@tencent/websearch-mcp"
-      ],
-      "env": {
-        "TENCENT_WEB_SEARCH_KEY": "<YOUR_KEY>"
-      },
-      "description": "腾讯 Web 搜索（官方）",
-      "title": "腾讯 Web 搜索",
-      "url": "https://github.com/TencentCloud/tencentcloud-sdk-python",
-      "stars": 710
-    },
     "minimax": {
       "command": "npx",
       "args": [
@@ -1110,38 +1065,6 @@
       "url": "https://github.com/handaas/mcp-server",
       "description": "HaaS 企业工商信息 MCP Server（远程 SSE）",
       "stars": 12
-    },
-    "thmc": {
-      "title": "瞳虎快递/发票",
-      "command": "npx",
-      "args": [
-        "-y",
-        "@flykid/thmc-mcp"
-      ],
-      "env": {
-        "THMC_APP_KEY": "<YOUR_APP_KEY>",
-        "THMC_APP_SECRET": "<YOUR_APP_SECRET>"
-      },
-      "description": "瞳虎快递查询/发票查验/运营商核验",
-      "url": "https://github.com/FLYKID/THMCP",
-      "stars": 6
-    },
-    "notify": {
-      "title": "多平台通知",
-      "command": "uvx",
-      "args": [
-        "mcp-notify"
-      ],
-      "env": {
-        "DISCORD_WEBHOOK_URL": "",
-        "SLACK_WEBHOOK_URL": "",
-        "WECOM_WEBHOOK_URL": "",
-        "TELEGRAM_BOT_TOKEN": "",
-        "TELEGRAM_CHAT_ID": ""
-      },
-      "description": "多平台通知 MCP Server（Discord/Slack/企微/Telegram）",
-      "url": "https://github.com/aahl/mcp-notify",
-      "stars": 29
     },
     "law-china": {
       "title": "中国法律检索",
