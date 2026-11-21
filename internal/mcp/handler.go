@@ -128,6 +128,8 @@ func (h *RPCHandler) Handle(ctx context.Context, method string, params json.RawM
 		return h.handleCredentialList(ctx)
 	case "mcp.credential.set_group":
 		return h.handleCredentialSetGroup(ctx, params)
+	case "mcp.oauth.providers":
+		return h.handleOAuthProviders(ctx)
 	case "mcp.oauth.device.start":
 		return h.handleOAuthDeviceStart(ctx, params)
 	case "mcp.oauth.device.poll":
@@ -596,6 +598,11 @@ func (h *RPCHandler) handleOAuthDeviceStart(ctx context.Context, raw json.RawMes
 		return nil, fmt.Errorf("invalid params: %w", err)
 	}
 	return h.mgr.StartDeviceFlow(p)
+}
+
+// handleOAuthProviders 列出可自动授权的服务商，界面据此渲染授权按钮（与文案无关）。
+func (h *RPCHandler) handleOAuthProviders(_ context.Context) (any, error) {
+	return map[string]any{"providers": h.mgr.OAuthProviders()}, nil
 }
 
 // handleOAuthDevicePoll 轮询一次授权结果；成功时凭据已落库、连接器已生效。

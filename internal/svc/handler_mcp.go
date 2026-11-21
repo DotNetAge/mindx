@@ -78,6 +78,14 @@ func (d *Daemon) handleMCPOAuthDeviceStart(ctx context.Context, params json.RawM
 	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.oauth.device.start", params)
 }
 
+// handleMCPOAuthProviders 处理 mcp.oauth.providers：可选授权服务商清单（只读）。
+func (d *Daemon) handleMCPOAuthProviders(ctx context.Context, params json.RawMessage) (any, error) {
+	if d.mcpMgr == nil {
+		return nil, errMCPServiceUnavailable
+	}
+	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.oauth.providers", params)
+}
+
 func (d *Daemon) handleMCPOAuthDevicePoll(ctx context.Context, params json.RawMessage) (any, error) {
 	if d.mcpMgr == nil {
 		return nil, errMCPServiceUnavailable

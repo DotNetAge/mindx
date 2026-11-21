@@ -22,7 +22,7 @@ func TestLoadClientProviders_BuiltInFile(t *testing.T) {
 	assert.False(t, qwenExists, "Qwen OAuth 已官方下线，不应再出现在注册表")
 	assert.True(t, registry.Configured("minimax"))
 	assert.False(t, registry.Configured("gemini"), "gemini 为机密客户端，client_id 留空")
-	assert.False(t, registry.Configured("github"))
+	assert.True(t, registry.Configured("github"), "github 改为 device_code 并预置公开 client_id")
 	assert.False(t, registry.Configured("google"))
 	assert.False(t, registry.Configured("gitlab"))
 

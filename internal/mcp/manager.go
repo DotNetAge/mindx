@@ -11,6 +11,8 @@ import (
 
 	"github.com/DotNetAge/goharness/tools"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/DotNetAge/mindx/internal/core"
 )
 
 // DefaultMarketMCPURL 是 COS 上 market 中 mcp.json 的默认地址。
@@ -45,6 +47,10 @@ type Manager struct {
 
 	// deviceFlow 是自动授权的一次性会话表（只存内存，不落盘）。
 	deviceFlow deviceFlowState
+
+	// oauthReg 是可选授权服务商注册表（来自 client-provider.yml，首次用时加载）。
+	oauthRegMu sync.Mutex
+	oauthReg   *core.OAuthProviderRegistry
 
 	// ── 热更新回调 ────────────────────────────────────────────────────────
 	// 当 server 配置发生变更（SetEnabled / AddServer / RemoveServer / Sync）时触发。

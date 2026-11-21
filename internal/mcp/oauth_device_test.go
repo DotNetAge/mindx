@@ -14,6 +14,21 @@ import (
 	"github.com/DotNetAge/mindx/internal/core"
 )
 
+// fakeProvider 把设备码流程指向假端点：授权方式由配置描述，测试只需给一份配置。
+func fakeProvider(name string, srv *httptest.Server) *core.OAuthProviderConfig {
+	return &core.OAuthProviderConfig{
+		Name:          name,
+		Title:         "GitHub",
+		Kind:          core.OAuthKindDeviceCode,
+		DeviceURL:     srv.URL + "/device/code",
+		TokenURL:      srv.URL + "/token",
+		ClientID:      "test-client",
+		Scopes:        []string{"repo", "read:org"},
+		UserInfoURL:   srv.URL + "/user",
+		UserNameField: "login",
+	}
+}
+
 // 设备码授权是一条闭环：申请短码 → 用户确认 → 轮询拿到 token → 落库 → 连接器生效。
 // 这里用假端点把整条链路跑一遍，避免真去 GitHub 授权（也无法自动完成人工确认）。
 func TestDeviceFlow_HappyPath(t *testing.T) {
@@ -41,25 +56,20 @@ func TestDeviceFlow_HappyPath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	origCode, origToken, origUser := githubDeviceCodeURL, githubTokenURL, githubUserURL
-	githubDeviceCodeURL, githubTokenURL, githubUserURL = srv.URL+"/device/code", srv.URL+"/token", srv.URL+"/user"
-	defer func() {
-		githubDeviceCodeURL, githubTokenURL, githubUserURL = origCode, origToken, origUser
-	}()
-
 	dir := t.TempDir()
 	path := filepath.Join(dir, "mcp.json")
 	require.NoError(t, os.WriteFile(path, []byte(`{"mcpServers":{"github":{"name":"github","title":"GitHub","enabled":false,"type":"stdio","command":"npx","args":["-y","x"],"env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"<YOUR_TOKEN>"}}}}`), 0o600))
 
 	store := core.NewMemoryCredentialStore()
 	mgr := NewManager(nil, store, path, "")
+	mgr.SetOAuthProviders([]*core.OAuthProviderConfig{fakeProvider("github", srv)})
 
 	start, err := mgr.StartDeviceFlow(DeviceFlowParams{
-		Provider: "github",
-		Group:    "github",
-		Field:    "GITHUB_PERSONAL_ACCESS_TOKEN",
-		Display:  "GitHub 授权",
-		Servers:  []string{"github"},
+		OAuthProvider: "github",
+		Group:         "github",
+		Field:         "GITHUB_PERSONAL_ACCESS_TOKEN",
+		Display:       "GitHub 授权",
+		Servers:       []string{"github"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "ABCD-1234", start.UserCode)
@@ -106,21 +116,45 @@ func TestDeviceFlow_DeviceFlowDisabledMessage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := githubDeviceCodeURL
-	githubDeviceCodeURL = srv.URL
-	defer func() { githubDeviceCodeURL = orig }()
-
 	mgr := NewManager(nil, core.NewMemoryCredentialStore(), filepath.Join(t.TempDir(), "mcp.json"), "")
+	mgr.SetOAuthProviders([]*core.OAuthProviderConfig{fakeProvider("github", srv)})
+	_, err := mgr.StartDeviceFlow(DeviceFlowParams{OAuthProvider: "github"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "设备码")
+}
+
+// 未注册或未配置的服务商要明确拒绝，不能静默失败。
+func TestDeviceFlow_UnknownProvider(t *testing.T) {
+	mgr := NewManager(nil, core.NewMemoryCredentialStore(), filepath.Join(t.TempDir(), "mcp.json"), "")
+	p := &core.OAuthProviderConfig{Name: "gitee", Kind: core.OAuthKindAuthorizationCode, ClientID: "cid"}
+	mgr.SetOAuthProviders([]*core.OAuthProviderConfig{p})
+
+	_, err := mgr.StartDeviceFlow(DeviceFlowParams{OAuthProvider: "gitee"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "手动填写")
+
+	_, err = mgr.StartDeviceFlow(DeviceFlowParams{OAuthProvider: "nope"})
+	require.Error(t, err)
+}
+
+// 旧字段 provider 仍然可用（历史界面传的是 provider）。
+func TestDeviceFlow_LegacyProviderField(t *testing.T) {
+	mgr := NewManager(nil, core.NewMemoryCredentialStore(), filepath.Join(t.TempDir(), "mcp.json"), "")
+	p := fakeProvider("github", httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "keep-going"})
+	})))
+	mgr.SetOAuthProviders([]*core.OAuthProviderConfig{p})
 	_, err := mgr.StartDeviceFlow(DeviceFlowParams{Provider: "github"})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "Enable Device Flow")
+	require.NotContains(t, err.Error(), "缺少授权服务商")
 }
 
 // 会话过期后不再反复打服务商。
 func TestDeviceFlow_ExpiredSession(t *testing.T) {
 	mgr := NewManager(nil, core.NewMemoryCredentialStore(), filepath.Join(t.TempDir(), "mcp.json"), "")
+	mgr.SetOAuthProviders([]*core.OAuthProviderConfig{{Name: "github", Kind: core.OAuthKindDeviceCode, ClientID: "cid"}})
 	mgr.deviceFlow.sessions = map[string]*DeviceFlowSession{
-		"s1": {provider: "github", expiresAt: time.Now().Add(-time.Minute)},
+		"s1": {oauthProvider: "github", expiresAt: time.Now().Add(-time.Minute)},
 	}
 	r, err := mgr.PollDeviceFlow("s1")
 	require.NoError(t, err)

@@ -44,6 +44,10 @@ type OAuthProviderConfig struct {
 	ClientSecret string `yaml:"client_secret,omitempty"`
 	// Scopes 授权范围
 	Scopes []string `yaml:"scopes,omitempty"`
+	// UserInfoURL 授权成功后取账号名的端点（可选；空 = 不展示账号名）
+	UserInfoURL string `yaml:"userinfo_url,omitempty"`
+	// UserNameField 账号名在 userinfo 响应里的字段（空 = login）
+	UserNameField string `yaml:"user_name_field,omitempty"`
 	// ExtraParams 附加授权参数（如 Google 的 access_type=offline）
 	ExtraParams map[string]string `yaml:"extra_params,omitempty"`
 	// UsePKCE 公共客户端恒 true（S256）

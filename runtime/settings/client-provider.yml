@@ -38,14 +38,15 @@ oauth_providers:
   # 用户在对应平台注册应用后，经设置面板将 client_id 填入 CredentialStore。
   - name: github
     title: GitHub
-    kind: authorization_code
-    authorize_url: https://github.com/login/oauth/authorize
+    kind: device_code
+    device_url: https://github.com/login/device/code
     token_url: https://github.com/login/oauth/access_token
-    client_id: ""
-    scopes: []
-    uses_pkce: false
-    listen_addr: "127.0.0.1:0"
-    interaction: callback
+    userinfo_url: https://api.github.com/user
+    # 公开 client_id（OAuth App 的公开标识，不是密钥）；设备码是公共客户端流程，
+    # client_secret 不参与，因此可以在配置里预置
+    client_id: Ov23likaZ2ZXJzRv8xgW
+    scopes: [repo, read:org]
+    interaction: device_code
 
   - name: google
     title: Google

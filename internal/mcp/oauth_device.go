@@ -14,47 +14,51 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/DotNetAge/mindx/internal/core"
 )
 
 // 连接器自动授权（第一层通道）：能自动拿到的凭据，不让用户去复制粘贴。
 //
-// 目前只接 GitHub 的设备码流程：用户在自己的浏览器里输入一段短码并确认，
-// daemon 轮询换回 token，直接写进凭据库并打组标记。选设备码是因为它不需要
-// 回调地址、不需要本地起端口，桌面端与容器里都能跑（容器只要能出网）。
+// 流程本身不认识任何具体服务商：端点、client_id、scope、取账号名的字段全部来自
+// client-provider.yml 的 kind: device_code 条目（见 oauth_providers.go）。这里只实现
+// RFC 8628 的两步（申请短码 / 轮询换 token），因此新增一家服务商不需要改这份代码。
 //
-// client_secret 一律不参与：设备码是公共客户端流程，只需要 client_id。
-
-// defaultGitHubClientID 是 MindX 注册的 OAuth App 的公开标识（不是密钥）。
-const defaultGitHubClientID = "Ov23likaZ2ZXJzRv8xgW"
-
-// GitHub 授权端点。做成变量是为了测试能指向 httptest，生产值不改。
-var (
-	githubDeviceCodeURL = "https://github.com/login/device/code"
-	githubTokenURL      = "https://github.com/login/oauth/access_token"
-	githubUserURL       = "https://api.github.com/user"
-)
+// 选设备码而不是授权码 + 本地回调，是因为它不需要回调地址、不需要起端口，桌面端与
+// 容器里都能跑（容器只要能出网）。client_secret 一律不参与：设备码是公共客户端流程。
 
 // DeviceFlowParams mcp.oauth.device.start 的入参。
 type DeviceFlowParams struct {
-	Provider string   `json:"provider"` // 目前只支持 github
-	Group    string   `json:"group"`    // 写进凭据库的组名
-	Field    string   `json:"field"`    // 组内字段名（如 GITHUB_PERSONAL_ACCESS_TOKEN）
-	Servers  []string `json:"servers"`  // 要打上组标记的连接器
-	Display  string   `json:"display"`  // 面板展示名
-	Scope    string   `json:"scope"`
+	// OAuthProvider 授权服务商名（client-provider.yml 里的 name），如 github
+	OAuthProvider string `json:"oauth_provider"`
+	// Provider 是旧字段（历史界面传 provider），保留兼容；与新字段同时出现时以新字段为准
+	Provider string   `json:"provider,omitempty"`
+	Group    string   `json:"group"`   // 写进凭据库的组名
+	Field    string   `json:"field"`   // 组内字段名（如 GITHUB_PERSONAL_ACCESS_TOKEN）
+	Servers  []string `json:"servers"` // 要打上组标记的连接器
+	Display  string   `json:"display"` // 面板展示名
+	Scope    string   `json:"scope"`   // 覆盖配置里的 scopes（一般不用）
+}
+
+// providerName 取服务商名，兼容旧字段。
+func (p DeviceFlowParams) providerName() string {
+	if v := strings.TrimSpace(p.OAuthProvider); v != "" {
+		return v
+	}
+	return strings.TrimSpace(p.Provider)
 }
 
 // DeviceFlowSession 是发起授权后留在 daemon 内存里的一次会话（不落盘）。
 type DeviceFlowSession struct {
-	provider   string
-	group      string
-	field      string
-	display    string
-	servers    []string
-	deviceCode string
-	interval   time.Duration
-	expiresAt  time.Time
-	slowDown   bool
+	oauthProvider string
+	group         string
+	field         string
+	display       string
+	servers       []string
+	deviceCode    string
+	interval      time.Duration
+	expiresAt     time.Time
+	slowDown      bool
 }
 
 type deviceFlowState struct {
@@ -86,41 +90,36 @@ type deviceApplied struct {
 	Enabled []string `json:"enabled"`
 }
 
-func githubClientID() string {
-	if v := strings.TrimSpace(envLookup("MINDX_GITHUB_CLIENT_ID")); v != "" {
-		return v
-	}
-	return defaultGitHubClientID
-}
-
 // StartDeviceFlow 申请短码。session 只是一次轮询的句柄，不携带任何秘密。
 func (m *Manager) StartDeviceFlow(p DeviceFlowParams) (*deviceStartResult, error) {
-	if p.Provider == "" || p.Provider == "github" {
-		return m.startGitHubDeviceFlow(p)
+	name := p.providerName()
+	if name == "" {
+		return nil, fmt.Errorf("缺少授权服务商（oauth_provider）")
 	}
-	return nil, fmt.Errorf("暂不支持 %s 的自动授权", p.Provider)
-}
-
-func (m *Manager) startGitHubDeviceFlow(p DeviceFlowParams) (*deviceStartResult, error) {
+	provider, err := m.deviceProvider(name)
+	if err != nil {
+		return nil, err
+	}
 	if p.Group == "" {
-		p.Group = "github"
+		p.Group = provider.Name
 	}
 	if p.Field == "" {
-		p.Field = "GITHUB_PERSONAL_ACCESS_TOKEN"
+		p.Field = defaultTokenField(provider.Name)
 	}
 	if p.Display == "" {
-		p.Display = "GitHub 授权"
+		p.Display = provider.Title + " 授权"
 	}
-	if p.Scope == "" {
-		// repo 覆盖仓库读写；read:org 覆盖组织信息。范围写死不给用户选，
-		// 少一个要理解的选项，也避免申请到用不上的权限。
-		p.Scope = "repo read:org"
+	scope := strings.TrimSpace(p.Scope)
+	if scope == "" {
+		scope = strings.Join(provider.Scopes, " ")
 	}
 
 	form := url.Values{}
-	form.Set("client_id", githubClientID())
-	form.Set("scope", p.Scope)
-	body, err := postForm(githubDeviceCodeURL, form)
+	form.Set("client_id", providerClientID(provider))
+	if scope != "" {
+		form.Set("scope", scope)
+	}
+	body, err := postForm(provider.DeviceURL, form)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +138,8 @@ func (m *Manager) startGitHubDeviceFlow(p DeviceFlowParams) (*deviceStartResult,
 	}
 	if resp.Error != "" {
 		if resp.Error == "device_flow_disabled" {
-			return nil, fmt.Errorf("这个 GitHub OAuth 应用还没开启设备码授权：请到 GitHub 设置里的该应用页面勾选 Enable Device Flow，再回来重试")
+			return nil, fmt.Errorf("这个 %s 授权应用还没开启设备码授权：请到 %s 的应用设置里打开设备码（Device Flow），再回来重试",
+				provider.Title, provider.Title)
 		}
 		return nil, fmt.Errorf("%s：%s", resp.Error, resp.ErrorDesc)
 	}
@@ -152,14 +152,14 @@ func (m *Manager) startGitHubDeviceFlow(p DeviceFlowParams) (*deviceStartResult,
 
 	session := randomToken(16)
 	sess := &DeviceFlowSession{
-		provider:   "github",
-		group:      p.Group,
-		field:      p.Field,
-		display:    p.Display,
-		servers:    p.Servers,
-		deviceCode: resp.DeviceCode,
-		interval:   time.Duration(resp.Interval) * time.Second,
-		expiresAt:  time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second),
+		oauthProvider: provider.Name,
+		group:         p.Group,
+		field:         p.Field,
+		display:       p.Display,
+		servers:       p.Servers,
+		deviceCode:    resp.DeviceCode,
+		interval:      time.Duration(resp.Interval) * time.Second,
+		expiresAt:     time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second),
 	}
 	m.deviceFlow.mu.Lock()
 	if m.deviceFlow.sessions == nil {
@@ -189,12 +189,17 @@ func (m *Manager) PollDeviceFlow(session string) (*devicePollResult, error) {
 		m.forgetDeviceFlow(session)
 		return &devicePollResult{Status: "expired", Error: "短码已过期"}, nil
 	}
+	provider, err := m.deviceProvider(sess.oauthProvider)
+	if err != nil {
+		m.forgetDeviceFlow(session)
+		return nil, err
+	}
 
 	form := url.Values{}
-	form.Set("client_id", githubClientID())
+	form.Set("client_id", providerClientID(provider))
 	form.Set("device_code", sess.deviceCode)
 	form.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
-	body, err := postForm(githubTokenURL, form)
+	body, err := postForm(provider.TokenURL, form)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +242,7 @@ func (m *Manager) PollDeviceFlow(session string) (*devicePollResult, error) {
 		return &devicePollResult{Status: "pending"}, nil
 	}
 
-	login := githubLogin(resp.AccessToken)
+	login := providerLogin(provider, resp.AccessToken)
 	applied, err := m.applyDeviceToken(sess, resp.AccessToken)
 	if err != nil {
 		return nil, err
@@ -306,25 +311,34 @@ func (m *Manager) forgetDeviceFlow(session string) {
 	m.deviceFlow.mu.Unlock()
 }
 
-// githubLogin 取账号名用于提示「已授权给 @xxx」；失败不影响授权结果。
-func githubLogin(token string) string {
-	req, err := http.NewRequest(http.MethodGet, githubUserURL, nil)
+// providerLogin 取账号名用于提示「已授权给 @xxx」；配置里没有 userinfo 端点或请求失败都不影响授权结果。
+func providerLogin(p *core.OAuthProviderConfig, token string) string {
+	if p.UserInfoURL == "" {
+		return ""
+	}
+	req, err := http.NewRequest(http.MethodGet, p.UserInfoURL, nil)
 	if err != nil {
 		return ""
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/vnd.github+json")
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return ""
 	}
 	defer resp.Body.Close()
-	var u struct {
-		Login string `json:"login"`
+	var decoded map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return ""
 	}
-	_ = json.NewDecoder(resp.Body).Decode(&u)
-	return u.Login
+	field := p.UserNameField
+	if field == "" {
+		field = "login"
+	}
+	if v, ok := decoded[field].(string); ok {
+		return v
+	}
+	return ""
 }
 
 func postForm(endpoint string, form url.Values) ([]byte, error) {
@@ -354,6 +368,14 @@ func containsName(list []string, name string) bool {
 		}
 	}
 	return false
+}
+
+// defaultTokenField 是连接器没声明字段名时的兜底键名。
+func defaultTokenField(provider string) string {
+	if provider == "github" {
+		return "GITHUB_PERSONAL_ACCESS_TOKEN"
+	}
+	return strings.ToUpper(strings.ReplaceAll(provider, "-", "_")) + "_ACCESS_TOKEN"
 }
 
 // randomToken 生成会话句柄（只需不可猜，不承载任何秘密）。
