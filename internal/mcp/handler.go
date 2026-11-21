@@ -123,6 +123,8 @@ func (h *RPCHandler) Handle(ctx context.Context, method string, params json.RawM
 		return h.handleServerSetEnabled(ctx, params)
 	case "mcp.server.list":
 		return h.handleServerList(ctx)
+	case "mcp.credential.list":
+		return h.handleCredentialList(ctx)
 	case "mcp.credential.set_group":
 		return h.handleCredentialSetGroup(ctx, params)
 	case "mcp.server.test":
@@ -310,9 +312,20 @@ func (h *RPCHandler) handleServerSetEnabled(ctx context.Context, raw json.RawMes
 	return map[string]bool{"ok": true}, nil
 }
 
+// handleCredentialList 列出账号级凭据组（只有展示名与是否已填，不回值）。
+func (h *RPCHandler) handleCredentialList(ctx context.Context) (any, error) {
+	groups, err := h.mgr.ListCredentialGroups()
+	if err != nil {
+		return nil, err
+	}
+	return groups, nil
+}
+
 // CredentialGroupParams is the parameter for mcp.credential.set_group.
 type CredentialGroupParams struct {
 	Name    string            `json:"group"`
+	Display string            `json:"display"`
+	Fields  map[string]string `json:"fields"`
 	Values  map[string]string `json:"values"`
 	Servers []string          `json:"servers"`
 }
@@ -337,6 +350,10 @@ func (h *RPCHandler) handleCredentialSetGroup(ctx context.Context, raw json.RawM
 		if err := h.mgr.credStore.Set("group:"+p.Name+":"+k, v); err != nil {
 			return nil, fmt.Errorf("store credential: %w", err)
 		}
+	}
+	// 展示名与字段中文名落元信息文件（值不进，只进 Keychain）
+	if err := h.mgr.SaveGroupMeta(p.Name, p.Display, p.Fields); err != nil {
+		return nil, fmt.Errorf("save credential meta: %w", err)
 	}
 	servers, err := LoadServers(h.mgr.ConfigPath())
 	if err != nil {

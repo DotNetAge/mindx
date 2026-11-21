@@ -54,6 +54,14 @@ func (d *Daemon) handleMCPServerTest(ctx context.Context, params json.RawMessage
 	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.server.test", params)
 }
 
+// handleMCPCredentialList 列出账号级凭据组（设置页用）。
+func (d *Daemon) handleMCPCredentialList(ctx context.Context, params json.RawMessage) (any, error) {
+	if d.mcpMgr == nil {
+		return nil, errMCPServiceUnavailable
+	}
+	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.credential.list", params)
+}
+
 // handleMCPCredentialSetGroup 写账号级凭据组（组存一份，连接器只记组名）。
 func (d *Daemon) handleMCPCredentialSetGroup(ctx context.Context, params json.RawMessage) (any, error) {
 	if d.mcpMgr == nil {

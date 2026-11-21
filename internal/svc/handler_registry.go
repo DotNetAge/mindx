@@ -224,6 +224,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"mcp.server.list":          r.daemon.handleMCPServerList,
 		"mcp.server.test":          r.daemon.handleMCPServerTest,
 		"mcp.server.discover":      r.daemon.handleMCPServerDiscover,
+		"mcp.credential.list":      r.daemon.handleMCPCredentialList,
 		"mcp.credential.set_group": r.daemon.handleMCPCredentialSetGroup,
 		"mcp.tool.call":            r.daemon.handleMCPToolCall,
 		"mcp.pending.list":         r.daemon.handleMCPPendingList,
