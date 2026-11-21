@@ -58,7 +58,6 @@ type DeviceFlowSession struct {
 	deviceCode    string
 	interval      time.Duration
 	expiresAt     time.Time
-	slowDown      bool
 }
 
 type deviceFlowState struct {
@@ -288,10 +287,9 @@ func (m *Manager) applyDeviceToken(sess *DeviceFlowSession, token string) (*devi
 				s.Headers[sess.field] = ""
 			}
 		}
-		enabled := s.Enabled
-		if !enabled {
+		// 授权完成后服务端默认可用；原先关闭的条目要显式打开，否则加了凭据也不会生效。
+		if !s.Enabled {
 			s.Enabled = true
-			enabled = true
 		}
 		if err := m.AddServer(context.Background(), *s); err != nil {
 			return nil, err

@@ -60,7 +60,8 @@ func (d *Daemon) withMetricHook(
 		if sub := getSubSessionID(); sub != "" && sub != sid {
 			return
 		}
-		d.recordRoundEvent(store, roundEventInput{
+		// 计量是旁路能力：落盘失败只丢这一条轮次事件，不打断会话主流程。
+		_, _ = d.recordRoundEvent(store, roundEventInput{
 			SessionID:       sid,
 			AgentName:       agentName,
 			TaskHint:        taskHint,
