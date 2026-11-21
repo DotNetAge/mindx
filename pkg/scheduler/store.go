@@ -12,22 +12,28 @@ import (
 )
 
 type ScheduleEntry struct {
-	ID         string    `json:"id"`
-	Agent      string    `json:"agent"`
-	SessionID  string    `json:"session_id,omitempty"`
-	ProjectDir string    `json:"project_dir,omitempty"`
-	Content    string    `json:"content"`
-	CronExpr   string    `json:"cron_expr"`
-	Enabled    bool      `json:"enabled"`
-	OneShot    bool      `json:"one_shot,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-	LastRunAt  time.Time `json:"last_run_at,omitempty"`
-	LastRunID  string    `json:"last_run_id,omitempty"`
-	LastStatus string    `json:"last_status,omitempty"`
-	LastError  string    `json:"last_error,omitempty"`
-	SuccessCnt int       `json:"success_count"`
-	FailureCnt int       `json:"failure_count"`
+	ID         string `json:"id"`
+	Agent      string `json:"agent"`
+	SessionID  string `json:"session_id,omitempty"`
+	ProjectDir string `json:"project_dir,omitempty"`
+	// Title 是用户给这条定时任务起的名字：新建会话时直接作为会话标题，
+	// 侧栏任务与会话因此一一对应（不必再让模型从提示词里提炼）。
+	Title    string `json:"title,omitempty"`
+	Content  string `json:"content"`
+	CronExpr string `json:"cron_expr"`
+	Enabled  bool   `json:"enabled"`
+	OneShot  bool   `json:"one_shot,omitempty"`
+	// ExpiresAt 有效期截止时刻：为空表示长期有效。到期后调度器不再注册该条目
+	// （见 addJob），已存的排期与留痕保留，用户仍可查看/续期。
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	LastRunAt  time.Time  `json:"last_run_at,omitempty"`
+	LastRunID  string     `json:"last_run_id,omitempty"`
+	LastStatus string     `json:"last_status,omitempty"`
+	LastError  string     `json:"last_error,omitempty"`
+	SuccessCnt int        `json:"success_count"`
+	FailureCnt int        `json:"failure_count"`
 	// RunHistory 是近几次执行的留痕：At 记录真实触发时刻，供前端把日历上的
 	// 「历史执行」与「理论排期」区分开（月视图过去日期只渲染真执行）。
 	RunHistory []RunRecord `json:"run_history,omitempty"`
@@ -190,6 +196,23 @@ func (s *FileSchedulerStore) UpdateLastRun(id string, runID string, err error) e
 			entry.SuccessCnt++
 			settleRunRecord(entry, runID, "success", "")
 		}
+		return true
+	})
+}
+
+// BindSession 把落实出来的会话 ID 写回存储（仅当条目仍是空/"new" 时生效）。
+// Agent 的 Cron 工具直写存储、会留下 "new" 哨兵；重复任务必须把首次解析出的
+// 会话持久化，之后每期才能在同一会话里续跑。用 updateRunStatus 做读改写，
+// 与执行统计的落盘互不覆盖。
+func (s *FileSchedulerStore) BindSession(id, sessionID string) error {
+	if sessionID == "" {
+		return nil
+	}
+	return s.updateRunStatus(id, func(entry *ScheduleEntry) bool {
+		if entry.SessionID != "" && entry.SessionID != "new" {
+			return false
+		}
+		entry.SessionID = sessionID
 		return true
 	})
 }

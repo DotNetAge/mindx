@@ -81,23 +81,33 @@ func (d *Daemon) handleScheduleAdd(_ context.Context, params json.RawMessage) (a
 		return nil, err
 	}
 
-	// 前端创建调度任务时通常不传 session_id：一律新建任务专属会话线（不走
-	// 人机会话复用，杜绝跨项目串线与对话污染）；CLI 的 "new" 哨兵同走此路径。
-	// 杜绝空绑定条目——否则任务到点因 load session 空 ID 失败、一次机会直接作废。
-	// 此时无首问，新建不带标题；首跑执行前再提炼（见 session_title.go）。
-	sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir, "")
-	if err != nil {
-		return nil, fmt.Errorf("落实调度任务会话失败: %w", err)
+	// 会话线策略按周期性区分：
+	//   - 重复任务：现在就落实一条任务专属会话线（标题=任务名），之后每期在同一
+	//     会话里续跑，侧栏一条任务对应一个会话，历史连续可回溯；
+	//   - 一次性任务：不预建会话，到点执行时现场新开一条（见 scheduled_exec.go），
+	//     避免用户刚建完任务就多出一个空会话。
+	if !oneShot {
+		sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir, "", strings.TrimSpace(p.Title))
+		if err != nil {
+			return nil, fmt.Errorf("落实调度任务会话失败: %w", err)
+		}
+		p.SessionID = sid
 	}
-	p.SessionID = sid
+
+	expiresAt, expErr := parseScheduleExpiry(p.ExpiresAt)
+	if expErr != nil {
+		return nil, expErr
+	}
 
 	entry := &scheduler.ScheduleEntry{
 		ID:         uuid.NewString()[:8],
 		Agent:      p.Agent,
 		SessionID:  p.SessionID,
 		ProjectDir: p.ProjectDir,
+		Title:      strings.TrimSpace(p.Title),
 		Content:    p.Content,
 		CronExpr:   p.CronExpr,
+		ExpiresAt:  expiresAt,
 		Enabled:    true,
 		OneShot:    oneShot,
 		CreatedAt:  time.Now(),
@@ -166,13 +176,25 @@ func (d *Daemon) handleScheduleUpdate(_ context.Context, params json.RawMessage)
 	if err := scheduler.ValidateCronExpr(p.CronExpr); err != nil {
 		return nil, err
 	}
-	// 改绑会话同创建口径：空 ID 与 "new" 哨兵都落实为可执行会话（回退最近或新建）
-	sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir, "")
-	if err != nil {
-		return nil, fmt.Errorf("落实调度任务会话失败: %w", err)
+	oldTitle := entry.Title
+	newTitle := strings.TrimSpace(p.Title)
+	// 会话线策略与创建同口径：重复任务落实专属会话线，一次性任务不预建
+	if !oneShot {
+		sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir, "", newTitle)
+		if err != nil {
+			return nil, fmt.Errorf("落实调度任务会话失败: %w", err)
+		}
+		p.SessionID = sid
+	} else if p.SessionID == "" {
+		p.SessionID = entry.SessionID
 	}
-	p.SessionID = sid
 
+	expiresAt, expErr := parseScheduleExpiry(p.ExpiresAt)
+	if expErr != nil {
+		return nil, expErr
+	}
+	entry.ExpiresAt = expiresAt
+	entry.Title = newTitle
 	entry.Agent = p.Agent
 	entry.SessionID = p.SessionID
 	entry.ProjectDir = p.ProjectDir
@@ -187,8 +209,48 @@ func (d *Daemon) handleScheduleUpdate(_ context.Context, params json.RawMessage)
 	if err := d.schedulerDB.Save(context.Background(), entry); err != nil {
 		return nil, fmt.Errorf("save schedule failed: %w", err)
 	}
+	// 任务名变更 → 绑定会话改名，保持「任务名 = 会话标题」严格一致；
+	// 用户已手动改过会话名、或会话里已有内容时以用户命名为准，不动。
+	if !oneShot && newTitle != "" && newTitle != oldTitle {
+		d.renameScheduleSessionIfSafe(entry.SessionID, oldTitle, newTitle)
+	}
 	d.broadcastScheduleChanged()
 	return entry, nil
+}
+
+// parseScheduleExpiry 解析有效期：空串 = 长期有效；非空必须是 RFC3339 且在未来。
+func parseScheduleExpiry(raw string) (*time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	at, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil, fmt.Errorf("有效期格式不正确，应为 RFC3339 时间（如 2026-12-31T23:59:59+08:00）")
+	}
+	if !at.After(time.Now()) {
+		return nil, fmt.Errorf("有效期必须晚于当前时间")
+	}
+	return &at, nil
+}
+
+// renameScheduleSessionIfSafe 任务名变更时同步会话标题。仅在会话仍是「任务名
+// 的镜像」时改名：标题为空、等于旧任务名、或会话尚无消息；否则视为用户自己
+// 命名过，保留用户选择。
+func (d *Daemon) renameScheduleSessionIfSafe(sessionID, oldTitle, newTitle string) {
+	if sessionID == "" || d.app == nil || d.app.SessDB() == nil {
+		return
+	}
+	meta, err := d.app.SessDB().GetSessionMeta(sessionID)
+	if err != nil || meta == nil {
+		return
+	}
+	if meta.MessageCount > 0 && meta.Title != "" && meta.Title != oldTitle {
+		return
+	}
+	if err := d.app.SessDB().RenameSession(sessionID, newTitle); err != nil {
+		d.logger.Warn("schedule title: rename bound session failed", "session_id", sessionID, "error", err)
+	}
 }
 
 func (d *Daemon) handleScheduleDelete(_ context.Context, params json.RawMessage) (any, error) {
@@ -283,7 +345,7 @@ func (d *Daemon) enqueueOneJobNow(agent, content string) error {
 		return err
 	}
 	// 会话落实与 schedule.add 同源：新建任务专属会话线，杜绝空绑定条目
-	sid, serr := d.ensureScheduleSession(agent, "", "", "")
+	sid, serr := d.ensureScheduleSession(agent, "", "", "", "")
 	if serr != nil {
 		return fmt.Errorf("落实叫醒会话失败: %w", serr)
 	}

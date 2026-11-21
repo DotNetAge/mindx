@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/DotNetAge/goharness/tools"
@@ -33,7 +34,8 @@ func (t *Cron) Info() *tools.ToolInfo {
 
 操作：
 - **list**：列出所有定时任务及其状态和下次运行信息。
-- **create**：创建新的定时任务。需要 agent、content（要发送的提示词），以及执行计划二者之一：cron_expr（6 字段 cron 表达式，支持秒级，如 "0 0 9 * * *" 表示每天 9 点）或 scheduled_at（一次性任务时间点，到点执行一次后自动禁用）。
+- **create**：创建新的定时任务。需要 agent、content（要发送的提示词），以及执行计划二者之一：cron_expr（6 字段 cron 表达式，支持秒级，如 "0 0 9 * * *" 表示每天 9 点）或 scheduled_at（一次性任务时间点，到点执行一次后自动禁用）。title 是任务名，也是绑定会话的标题，建议填写（省略时取 content 首行）。
+- 会话节奏：重复任务（cron_expr）绑定一条专属会话，每期在同一会话续跑，历史连续；一次性任务（scheduled_at）每次执行新开一条会话。
 - **update**：按 id 更新现有定时任务。只更新提供的字段。
 - **delete**：按 id 删除定时任务。`,
 		IsReadOnly: false,
@@ -64,6 +66,12 @@ func (t *Cron) Info() *tools.ToolInfo {
 				Required:    false,
 			},
 			{
+				Name:        "title",
+				Type:        "string",
+				Description: "任务名，同时作为绑定会话的标题（侧栏任务与会话因此一一对应）。建议简短具体，如\"每日 AI 新闻\"。省略时取 content 首行。update 时传入即改名并同步会话标题。",
+				Required:    false,
+			},
+			{
 				Name:        "cron_expr",
 				Type:        "string",
 				Description: "6 字段 cron 表达式，支持秒级（如 \"0 0 9 * * *\" 表示每天 9 点，\"0 */30 * * * *\" 表示每 30 分钟）。与 scheduled_at 二选一。",
@@ -73,6 +81,12 @@ func (t *Cron) Info() *tools.ToolInfo {
 				Name:        "scheduled_at",
 				Type:        "string",
 				Description: "一次性任务的时间点，格式 YYYY-MM-DDTHH:mm:ss（本地时区）或 RFC3339。提供时任务只执行一次，到点后自动禁用，无需手动删除。与 cron_expr 二选一。",
+				Required:    false,
+			},
+			{
+				Name:        "expires_at",
+				Type:        "string",
+				Description: "有效期截止时间（RFC3339，如 2026-12-31T23:59:59+08:00）。省略或空表示长期有效；到期后任务不再触发，排期与留痕保留。",
 				Required:    false,
 			},
 			{
@@ -221,9 +235,23 @@ func (t *Cron) createEntry(ctx context.Context, params map[string]any) (any, err
 		))
 	}
 
+	titleRaw, _ := getParam(params, "title")
+	title, _ := titleRaw.(string)
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = scheduler.DeriveTitle(content)
+	}
+
+	expiresAt, expErr := parseExpiresAt(params)
+	if expErr != nil {
+		return nil, expErr
+	}
+
 	entry := &scheduler.ScheduleEntry{
 		ID:         id,
 		Agent:      agent,
+		ExpiresAt:  expiresAt,
+		Title:      title,
 		Content:    content,
 		CronExpr:   cronExpr,
 		Enabled:    enabled,
@@ -264,6 +292,11 @@ func (t *Cron) updateEntry(ctx context.Context, params map[string]any) (any, err
 			existing.Agent = s
 		}
 	}
+	if v, ok := getParam(params, "title"); ok {
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+			existing.Title = strings.TrimSpace(s)
+		}
+	}
 	if v, ok := getParam(params, "content"); ok {
 		if s, ok := v.(string); ok && s != "" {
 			existing.Content = s
@@ -272,6 +305,15 @@ func (t *Cron) updateEntry(ctx context.Context, params map[string]any) (any, err
 	if v, ok := getParam(params, "cron_expr"); ok {
 		if s, ok := v.(string); ok && s != "" {
 			existing.CronExpr = s
+		}
+	}
+	if v, ok := getParam(params, "expires_at"); ok {
+		if s, ok := v.(string); ok {
+			at, perr := parseExpiresAtString(s)
+			if perr != nil {
+				return nil, perr
+			}
+			existing.ExpiresAt = at
 		}
 	}
 	if v, ok := getParam(params, "enabled"); ok {
@@ -303,6 +345,32 @@ func (t *Cron) updateEntry(ctx context.Context, params map[string]any) (any, err
 		"message": fmt.Sprintf("定时任务 %q 更新成功", id),
 		"entry":   existing,
 	}, nil
+}
+
+// parseExpiresAt 读取 expires_at 参数：空值 = 长期有效（nil）。
+func parseExpiresAt(params map[string]any) (*time.Time, error) {
+	raw, _ := getParam(params, "expires_at")
+	str, _ := raw.(string)
+	return parseExpiresAtString(str)
+}
+
+func parseExpiresAtString(raw string) (*time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	at, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil, fmt.Errorf("%s", tools.BuildGuide(
+			"创建定时任务被拒绝：expires_at 格式不正确",
+			fmt.Sprintf("expires_at %q 无法按 RFC3339 解析", raw),
+			"先自查：有效期写成 2026-12-31T23:59:59+08:00 这类带时区的完整时间，或省略表示长期有效",
+		))
+	}
+	if !at.After(time.Now()) {
+		return nil, fmt.Errorf("有效期必须晚于当前时间（expires_at=%s）", raw)
+	}
+	return &at, nil
 }
 
 func (t *Cron) deleteEntry(ctx context.Context, params map[string]any) (any, error) {

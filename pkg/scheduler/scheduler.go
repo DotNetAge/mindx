@@ -180,6 +180,11 @@ func (s *Scheduler) addJob(entry *ScheduleEntry) error {
 	if _, exists := s.entries[entry.ID]; exists {
 		return nil
 	}
+	// 已过有效期：不再注册。条目仍留在库里，前端显示「已过期」，续期后自动恢复。
+	if entry.ExpiresAt != nil && time.Now().After(*entry.ExpiresAt) {
+		s.logger.Info("schedule entry expired, skip registration", "id", entry.ID, "expires_at", entry.ExpiresAt)
+		return nil
+	}
 
 	e := *entry
 	id, err := s.cron.AddFunc(e.CronExpr, func() {
@@ -214,6 +219,11 @@ func (s *Scheduler) removeJob(id string) {
 // started 生命周期事件交给上层（Daemon）拉起 Runtime 在后台执行——
 // 执行主体在 daemon 侧，不依赖客户端在线。
 func (s *Scheduler) executeJob(entry *ScheduleEntry) {
+	// 过期条目到点也不执行（注册时已拦一次，这里兜住有效期正好落在触发窗口的情况）
+	if entry.ExpiresAt != nil && time.Now().After(*entry.ExpiresAt) {
+		s.logger.Info("schedule entry expired, skip execution", "id", entry.ID)
+		return
+	}
 	runID := uuid.New().String()[:8]
 	s.logger.Info("schedule job fired", "id", entry.ID, "agent", entry.Agent, "run_id", runID)
 

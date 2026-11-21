@@ -1309,7 +1309,10 @@ func (d *Daemon) resolveLatestSessionForAgent(agent string) string {
 // 上下文延续靠条目持久化的 session_id，与人机会话零接触。新建前先阻塞式
 // 提炼标题（firstQuestion 为提炼原料），标题随创建落库（见 session_title.go）。
 // 返回绑定后的会话 ID；调用方决定是否回写调度存储。
-func (d *Daemon) ensureScheduleSession(agent, sessionID, projectDir, firstQuestion string) (string, error) {
+// ensureScheduleSession 落实定时任务绑定的会话：已有绑定直接返回；
+// 空 / "new" 现场新建。preferredTitle 非空时直接用作用户给任务起的名字做会话标题
+// （不经模型提炼，任务名与会话名严格一致）；为空才退回由 firstQuestion 提炼。
+func (d *Daemon) ensureScheduleSession(agent, sessionID, projectDir, firstQuestion, preferredTitle string) (string, error) {
 	if sessionID != "" && sessionID != "new" {
 		return sessionID, nil
 	}
@@ -1320,9 +1323,11 @@ func (d *Daemon) ensureScheduleSession(agent, sessionID, projectDir, firstQuesti
 	if projectDir != "" {
 		opts = append(opts, goharnesssession.WithProjectDirOption(projectDir))
 	}
-	// 全新会话：先提炼标题，得到标题后再创建会话（标题随创建落库）；
-	// 提炼失败不阻塞创建，回退首条消息补录
-	if firstQuestion != "" {
+	// 全新会话：先定标题，得到标题后再创建会话（标题随创建落库）；
+	// 优先用任务名，其次提炼，失败不阻塞创建（回退首条消息补录）
+	if preferredTitle != "" {
+		opts = append(opts, mindxses.WithTitleOption(preferredTitle))
+	} else if firstQuestion != "" {
 		if title, terr := d.generateSessionTitle(firstQuestion); terr != nil {
 			d.logger.Warn("schedule entry: session title generation failed, create session without title",
 				"agent", agent, "error", terr)

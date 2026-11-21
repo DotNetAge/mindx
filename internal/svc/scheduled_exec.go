@@ -116,11 +116,20 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 	// 执行侧必须一并兜底，否则到点即报「会话 new 未找到」、一次性机会直接作废。
 	// 仅内存态生效，不回写存储（避免与调度器一次性禁用/执行统计落盘竞态）；
 	// 落实失败才按失败回写，任务状态不留悬空 started。
-	if entry.SessionID == "" || entry.SessionID == "new" {
+	// 一次性任务按用户的节奏规则：每次执行都新开一条会话，不继承历史绑定；
+	// 重复任务复用同一条会话线（周期任务的历史需要连续）。
+	if entry.OneShot {
+		sid, serr := d.ensureScheduleSession(entry.Agent, "", entry.ProjectDir, entry.Content, entry.Title)
+		if serr != nil {
+			d.scheduler.ReportResult(info.EntryID, info.RunID, serr)
+			return
+		}
+		entry.SessionID = sid
+	} else if entry.SessionID == "" || entry.SessionID == "new" {
 		// 首跑需要新建会话时，ensureScheduleSession 内部先阻塞式提炼标题
 		// （entry.Content 为提炼原料），得到标题后再创建会话（见 session_title.go）；
 		// 提炼失败也不重试，避免双重阻塞
-		sid, serr := d.ensureScheduleSession(entry.Agent, entry.SessionID, entry.ProjectDir, entry.Content)
+		sid, serr := d.ensureScheduleSession(entry.Agent, entry.SessionID, entry.ProjectDir, entry.Content, entry.Title)
 		if serr != nil {
 			serr = fmt.Errorf("任务未绑定会话且自动落实失败: %w", serr)
 			d.logger.Error("scheduled job: resolve session failed", serr, "entry_id", info.EntryID, "agent", entry.Agent)
@@ -128,6 +137,13 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 			return
 		}
 		entry.SessionID = sid
+		// 重复任务必须把解析出的会话写回存储：否则条目里始终是 "new"，
+		// 下一期又会新开一条会话，周期任务的历史就断了。
+		if !entry.OneShot {
+			if berr := d.schedulerDB.BindSession(info.EntryID, sid); berr != nil {
+				d.logger.Warn("scheduled job: persist session binding failed", "entry_id", info.EntryID, "error", berr)
+			}
+		}
 	} else {
 		// 复用已有会话（含客户端/上次运行留下的空壳）：全新会话的首跑在执行前
 		// 阻塞式提炼标题并落库（已有标题或已有消息的会话被门控跳过，见 session_title.go）

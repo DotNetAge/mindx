@@ -488,3 +488,33 @@ func TestFileSchedulerStore_RunHistory(t *testing.T) {
 		t.Errorf("oldest record should have been dropped")
 	}
 }
+
+func TestBindSessionOnlyWhenUnbound(t *testing.T) {
+	store, err := NewFileSchedulerStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	entry := &ScheduleEntry{ID: "bind-1", Agent: "a", Content: "c", CronExpr: "0 0 9 * * *", SessionID: "new"}
+	if err := store.Save(ctx, entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindSession("bind-1", "sid-1"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Load(ctx, "bind-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SessionID != "sid-1" {
+		t.Fatalf("会话应写回，得到 %q", got.SessionID)
+	}
+	// 已绑定后再写不应覆盖（避免用户改绑被后台执行改回去）
+	if err := store.BindSession("bind-1", "sid-2"); err != nil {
+		t.Fatal(err)
+	}
+	got2, _ := store.Load(ctx, "bind-1")
+	if got2.SessionID != "sid-1" {
+		t.Fatalf("已绑定的会话不应被覆盖，得到 %q", got2.SessionID)
+	}
+}

@@ -7,9 +7,13 @@ type ScheduleAddParams struct {
 	Agent      string `json:"agent"`
 	SessionID  string `json:"session_id,omitempty"`
 	ProjectDir string `json:"project_dir,omitempty"`
-	Content    string `json:"content"`
-	CronExpr   string `json:"cron_expr"`
-	Enabled    bool   `json:"enabled,omitempty"`
+	// Title 定时任务名称：新建会话时直接作为会话标题（可空，空则由模型提炼）。
+	Title   string `json:"title,omitempty"`
+	Content string `json:"content"`
+	// ExpiresAt 有效期截止（RFC3339）；空 = 长期有效。
+	ExpiresAt string `json:"expires_at,omitempty"`
+	CronExpr  string `json:"cron_expr"`
+	Enabled   bool   `json:"enabled,omitempty"`
 	// ScheduledAt 一次性任务的触发时间（如 "2026-08-06T14:30:00"）。
 	// 提供时由服务端转为一次性 cron 表达式（秒 分 时 日 月 *），
 	// 并在任务到点执行后自动禁用，与 CronExpr 二选一。
@@ -29,7 +33,9 @@ type ScheduleUpdateParams struct {
 	Agent       string `json:"agent"`
 	SessionID   string `json:"session_id,omitempty"`
 	ProjectDir  string `json:"project_dir,omitempty"`
+	Title       string `json:"title,omitempty"`
 	Content     string `json:"content"`
+	ExpiresAt   string `json:"expires_at,omitempty"`
 	CronExpr    string `json:"cron_expr"`
 	Enabled     bool   `json:"enabled"`
 	ScheduledAt string `json:"scheduled_at,omitempty"`

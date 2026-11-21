@@ -87,11 +87,11 @@ func TestEnsureScheduleSession(t *testing.T) {
 	defer cleanup()
 
 	// 已绑定且非哨兵 → 原样返回
-	if got, err := d.ensureScheduleSession("tester", "bound-sid", "", ""); err != nil || got != "bound-sid" {
+	if got, err := d.ensureScheduleSession("tester", "bound-sid", "", "", ""); err != nil || got != "bound-sid" {
 		t.Errorf("existing binding = %q, %v", got, err)
 	}
 	// 空绑定 → 新建（带项目目录）
-	got, err := d.ensureScheduleSession("tester", "", t.TempDir(), "")
+	got, err := d.ensureScheduleSession("tester", "", t.TempDir(), "", "")
 	if err != nil || got == "" {
 		t.Fatalf("create = %q, %v", got, err)
 	}
@@ -100,7 +100,7 @@ func TestEnsureScheduleSession(t *testing.T) {
 		t.Errorf("created meta project dir = %+v err = %v", meta, merr)
 	}
 	// "new" 哨兵 → 同样新建（project_dir 必填）
-	got2, err := d.ensureScheduleSession("tester", "new", t.TempDir(), "")
+	got2, err := d.ensureScheduleSession("tester", "new", t.TempDir(), "", "")
 	if err != nil || got2 == "" || got2 == got {
 		t.Errorf("sentinel create = %q, %v", got2, err)
 	}
