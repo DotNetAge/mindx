@@ -25,6 +25,13 @@ docker logs -f mindx
 
 `127.0.0.1:1314:1314` 的写法让端口只对本机开放——SSH 隧道正好从本机进来，公网完全摸不到，最安全。
 
+### 密钥存在哪里（Linux / Docker）
+
+Linux 没有系统钥匙串，模型 API Key、连接器密钥、市场登录态都以 AES-256-GCM 密文存成文件：
+`~/.mindx/settings/.credentials`，配套的本机密钥是旁边的 `.credentials.key`。两个文件必须一起备份、一起保留，只搬走一个就解不开。
+
+容器里如果不挂卷，`docker run` 重建后这些文件会随镜像一起清空，之前的密钥要重新填。上面推荐的 `-v ~/mindx-data:/home/mindx/.mindx` 已经把整个配置目录留在宿主机，密钥自然跟着保留。用仓库里的 `docker-compose.yml` 时，`mindx-credentials` 卷会把凭据单独存下来（`MINDX_CREDENTIALS_DIR` 指向该目录）；想改存放位置，设这个环境变量即可。
+
 ### 方式 B：直接安装二进制
 
 到 [GitHub Releases](https://github.com/DotNetAge/mindx/releases) 下载对应系统的包（Linux 用 `.deb` 或 `.rpm`，或直接下载 `linux-amd64.tar.gz` 解压）。

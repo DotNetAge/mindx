@@ -61,8 +61,9 @@ COPY --from=builder /usr/local/bin/mindx /usr/local/bin/mindx
 RUN adduser --disabled-password --gecos '' mindx && \
   mkdir -p /home/mindx/.mindx/logs \
   /home/mindx/.mindx/sessions \
+  /home/mindx/credentials \
   /home/mindx/workspaces && \
-  chown -R mindx:mindx /home/mindx/.mindx /home/mindx/workspaces
+  chown -R mindx:mindx /home/mindx/.mindx /home/mindx/credentials /home/mindx/workspaces
 
 USER mindx
 WORKDIR /home/mindx

@@ -164,6 +164,12 @@ func dropEntry(store CredentialStore, key string) error {
 }
 
 func NewCredentialStore(workspaceDir string) CredentialStore {
+	// MINDX_CREDENTIALS_DIR：把凭据文件（密文与本机密钥一起）放到指定目录。
+	// 容器里 /home/mindx/.mindx 随镜像重建而清空，挂一个卷到该目录即可让
+	// 已保存的密钥跨容器存活；这是显式配置，优先级高于平台默认。
+	if dir := strings.TrimSpace(os.Getenv("MINDX_CREDENTIALS_DIR")); dir != "" {
+		return &encryptedFileStore{path: filepath.Join(dir, ".credentials")}
+	}
 	switch runtime.GOOS {
 	case "darwin":
 		return &macKeychainStore{service: "mindx"}
@@ -273,13 +279,16 @@ func (s *macKeychainStore) Set(key, value string) error {
 	if err != nil {
 		return fmt.Errorf("keychain set %q: %w", key, err)
 	}
-	return touchCredentialIndex(s, key)
+	// 同上：索引写入失败不让主写入失败。
+	_ = touchCredentialIndex(s, key)
+	return nil
 }
 
 func (s *macKeychainStore) Delete(key string) error {
 	// 不存在按成功处理：删除是幂等操作，上层不该因「本来就没有」而报错。
 	_ = exec.Command("security", "delete-generic-password", "-s", s.service, "-a", key).Run()
-	return dropEntry(s, key)
+	_ = dropEntry(s, key)
+	return nil
 }
 
 func (s *macKeychainStore) SetMeta(key string, meta map[string]string) error {
@@ -352,7 +361,10 @@ func (s *encryptedFileStore) Set(key, value string) error {
 	if err := s.writeEncrypted(b.String()); err != nil {
 		return err
 	}
-	return touchCredentialIndex(s, key)
+	// 索引只是为了让上层能枚举，属附加能力：它失败不得连坐主写入，
+	// 否则老代码（模型 API Key、市场令牌、技能凭据）会把「已存好」报成失败。
+	_ = touchCredentialIndex(s, key)
+	return nil
 }
 
 func (s *encryptedFileStore) Delete(key string) error {
@@ -380,7 +392,8 @@ func (s *encryptedFileStore) Delete(key string) error {
 	if err := s.writeEncrypted(b.String()); err != nil {
 		return err
 	}
-	return dropEntry(s, key)
+	_ = dropEntry(s, key)
+	return nil
 }
 
 func (s *encryptedFileStore) SetMeta(key string, meta map[string]string) error {
@@ -479,7 +492,17 @@ func (s *encryptedFileStore) writeEncrypted(plaintext string) error {
 		return err
 	}
 
-	return os.WriteFile(s.path, encrypted, 0600)
+	// 先写临时文件再改名：写到一半被打断（容器被 kill、磁盘满）时，
+	// 旧密文仍然完整可用，不会把全部凭据变成解不开的残片。
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, encrypted, 0600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func (s *encryptedFileStore) encrypt(plaintext []byte) ([]byte, error) {
