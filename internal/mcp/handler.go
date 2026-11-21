@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // ── RPC Request/Response types ──────────────────────────────────────────────
@@ -263,9 +264,8 @@ func (h *RPCHandler) handleServerUpdate(ctx context.Context, raw json.RawMessage
 				}
 			}
 		}
-		// 对称键写入：<mcp_name>:<env_name>（同 add）。新凭据少于旧值时
-		// credStore 旧 key 残留（凭据存储接口无删除能力），可接受：多出的
-		// 残留值不会被 resolveCreds 引用（解析只认 env 声明中值为空的键）。
+		// 对称键写入：<mcp_name>:<env_name>（同 add）。本次没再声明的旧键
+		// 一并删掉，避免轮换后旧值还留在库里被误认为「仍有配置」。
 		for k, v := range p.Credential {
 			if err := h.mgr.credStore.Set(p.Name+":"+k, v); err != nil {
 				return nil, fmt.Errorf("store credential: %w", err)
@@ -351,7 +351,7 @@ func (h *RPCHandler) handleCredentialSetGroup(ctx context.Context, raw json.RawM
 			return nil, fmt.Errorf("store credential: %w", err)
 		}
 	}
-	// 展示名与字段中文名落元信息文件（值不进，只进 Keychain）
+	// 展示名与字段中文名作为凭据元信息写进同一凭据库（与值同层，不另建文件）
 	if err := h.mgr.SaveGroupMeta(p.Name, p.Display, p.Fields); err != nil {
 		return nil, fmt.Errorf("save credential meta: %w", err)
 	}
@@ -365,6 +365,14 @@ func (h *RPCHandler) handleCredentialSetGroup(ctx context.Context, raw json.RawM
 		if !contains(p.Servers, s.Name) {
 			continue
 		}
+		for _, staleExtra := range groupKeysOf(h.mgr.credStore, s.Name+":") {
+			field := strings.TrimPrefix(staleExtra, s.Name+":")
+			if _, alive := p.Values[field]; !alive {
+				if err := h.mgr.credStore.Delete(staleExtra); err != nil {
+					h.mgr.log.Warn("删除旧凭据失败", "key", staleExtra, "err", err)
+				}
+			}
+		}
 		s.CredentialGroup = p.Name
 		if err := h.mgr.AddServer(ctx, *s); err != nil {
 			return nil, err
@@ -375,6 +383,22 @@ func (h *RPCHandler) handleCredentialSetGroup(ctx context.Context, raw json.RawM
 		stamped = append(stamped, s.Name)
 	}
 	return map[string]any{"ok": true, "servers": stamped}, nil
+}
+
+// groupKeysOf 列出某前缀下的已有凭据键（索引来自凭据库本身）。
+func groupKeysOf(store CredentialStore, prefix string) []string {
+	if store == nil {
+		return nil
+	}
+	entries, err := store.List(prefix)
+	if err != nil {
+		return nil
+	}
+	keys := make([]string, 0, len(entries))
+	for _, e := range entries {
+		keys = append(keys, e.Key)
+	}
+	return keys
 }
 
 func contains(list []string, v string) bool {

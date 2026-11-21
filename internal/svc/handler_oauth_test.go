@@ -36,6 +36,17 @@ func (f *fakeCredStore) Set(key, value string) error {
 	return nil
 }
 
+func (f *fakeCredStore) Delete(key string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.m, key)
+	return nil
+}
+
+func (f *fakeCredStore) SetMeta(string, map[string]string) error { return nil }
+
+func (f *fakeCredStore) List(string) ([]core.CredentialEntry, error) { return nil, nil }
+
 // TestEffectiveProviderConfig_StoreOverlay 凭据库覆盖值优先于 yml 预置；
 // 两处皆空即未配置态报错；yml 路径 UseState 恒开。
 func TestEffectiveProviderConfig_StoreOverlay(t *testing.T) {

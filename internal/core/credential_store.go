@@ -6,18 +6,161 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
+	"sync"
+	"time"
 )
 
+// CredentialEntry 是枚举结果里的单条凭据：键名与元信息，不含值。
+//
+// Meta 由调用方定义语义（如 display、label），机制层只负责随凭据一起存取，
+// 不做解释——应用约定与平台实现因此保持分层。
+type CredentialEntry struct {
+	Key       string            `json:"key"`
+	Meta      map[string]string `json:"meta,omitempty"`
+	UpdatedAt time.Time         `json:"updated_at"`
+}
+
+// CredentialStore 是凭据的机制层：只承诺「按键存取值、删值、带元信息、可枚举」。
+// 平台差异（钥匙串 / 加密文件）必须收敛在各实现内部，上层不得依赖任何后端文件
+// 形态；需要名字、备注之类的语义，一律通过 Meta 传，不要另建旁挂文件。
 type CredentialStore interface {
 	Get(key string) (string, error)
 	Set(key, value string) error
+	Delete(key string) error
+	SetMeta(key string, meta map[string]string) error
+	List(prefix string) ([]CredentialEntry, error)
+}
+
+// credentialIndexKey 是存在同一存储里的索引项：平台后端不一定能枚举已有条目
+// （钥匙串就是如此），索引把「有哪些键、各自元信息」记在机制内部，两个后端走
+// 同一条代码路径，也就不会为某一平台单独造文件。
+const credentialIndexKey = "__mindx_credentials_index_v1"
+
+func loadCredentialIndex(store CredentialStore) (map[string]CredentialEntry, error) {
+	raw, err := store.Get(credentialIndexKey)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]CredentialEntry{}, nil
+		}
+		return nil, err
+	}
+	if raw == "" {
+		return map[string]CredentialEntry{}, nil
+	}
+	idx := map[string]CredentialEntry{}
+	if err := json.Unmarshal([]byte(raw), &idx); err == nil {
+		return idx, nil
+	}
+	// 兼容早期写入：macOS 的 security 对含非 ASCII 的值按十六进制回读，
+	// 索引里带中文展示名就会变成一长串 hex。能解就解，下面的 Set 会按
+	// ASCII 安全形式重写一遍。
+	if decoded, err := hex.DecodeString(strings.TrimSpace(raw)); err == nil {
+		if err := json.Unmarshal(decoded, &idx); err == nil {
+			return idx, nil
+		}
+	}
+	return nil, fmt.Errorf("凭据索引损坏")
+}
+
+func saveCredentialIndex(store CredentialStore, idx map[string]CredentialEntry) error {
+	data, err := json.Marshal(idx)
+	if err != nil {
+		return err
+	}
+	// 索引值必须保持纯 ASCII：macOS 的 security 对含非 ASCII 的条目按 hex
+	// 回读，写进去的 JSON 下次读回来就不再是 JSON 了。转义后语义不变。
+	return store.Set(credentialIndexKey, asciiJSON(string(data)))
+}
+
+// asciiJSON 把 JSON 文本里的非 ASCII 字符转成 \uXXXX 转义。
+// 非 ASCII 只可能出现在字符串内部，因此逐字符转义是安全的。
+func asciiJSON(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r < 0x80 {
+			b.WriteRune(r)
+			continue
+		}
+		fmt.Fprintf(&b, "\\u%04x", r)
+	}
+	return b.String()
+}
+
+func touchCredentialIndex(store CredentialStore, key string) error {
+	if key == credentialIndexKey {
+		return nil
+	}
+	idx, err := loadCredentialIndex(store)
+	if err != nil {
+		return err
+	}
+	e := idx[key]
+	e.Key = key
+	e.UpdatedAt = time.Now()
+	idx[key] = e
+	return saveCredentialIndex(store, idx)
+}
+
+func setEntryMeta(store CredentialStore, key string, meta map[string]string) error {
+	if key == credentialIndexKey {
+		return fmt.Errorf("索引键不允许挂元信息")
+	}
+	idx, err := loadCredentialIndex(store)
+	if err != nil {
+		return err
+	}
+	e := idx[key]
+	e.Key = key
+	if e.Meta == nil {
+		e.Meta = map[string]string{}
+	}
+	for k, v := range meta {
+		if v != "" {
+			e.Meta[k] = v
+		}
+	}
+	if e.UpdatedAt.IsZero() {
+		e.UpdatedAt = time.Now()
+	}
+	idx[key] = e
+	return saveCredentialIndex(store, idx)
+}
+
+func listEntries(store CredentialStore, prefix string) ([]CredentialEntry, error) {
+	idx, err := loadCredentialIndex(store)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]CredentialEntry, 0, len(idx))
+	for key, e := range idx {
+		if key == credentialIndexKey || !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		e.Key = key
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out, nil
+}
+
+func dropEntry(store CredentialStore, key string) error {
+	idx, err := loadCredentialIndex(store)
+	if err != nil {
+		return err
+	}
+	delete(idx, key)
+	return saveCredentialIndex(store, idx)
 }
 
 func NewCredentialStore(workspaceDir string) CredentialStore {
@@ -62,6 +205,49 @@ func ResolveSkillCredential(store CredentialStore, skillName, envName string) (s
 	return "", false
 }
 
+// memoryCredentialStore 是进程内实现：测试与「只在本次会话可用」的场景使用，
+// 与真实后端走同一套索引逻辑，避免测试里另造一套行为。
+type memoryCredentialStore struct {
+	mu   sync.Mutex
+	data map[string]string
+}
+
+func (s *memoryCredentialStore) Get(key string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if v, ok := s.data[key]; ok {
+		return v, nil
+	}
+	return "", nil
+}
+
+func (s *memoryCredentialStore) Set(key, value string) error {
+	s.mu.Lock()
+	s.data[key] = value
+	s.mu.Unlock()
+	return touchCredentialIndex(s, key)
+}
+
+func (s *memoryCredentialStore) Delete(key string) error {
+	s.mu.Lock()
+	delete(s.data, key)
+	s.mu.Unlock()
+	return dropEntry(s, key)
+}
+
+func (s *memoryCredentialStore) SetMeta(key string, meta map[string]string) error {
+	return setEntryMeta(s, key, meta)
+}
+
+func (s *memoryCredentialStore) List(prefix string) ([]CredentialEntry, error) {
+	return listEntries(s, prefix)
+}
+
+// NewMemoryCredentialStore 创建进程内凭据库（测试专用，不落盘）。
+func NewMemoryCredentialStore() CredentialStore {
+	return &memoryCredentialStore{data: map[string]string{}}
+}
+
 type macKeychainStore struct {
 	service string
 }
@@ -70,6 +256,12 @@ func (s *macKeychainStore) Get(key string) (string, error) {
 	out, err := exec.Command("security", "find-generic-password",
 		"-s", s.service, "-a", key, "-w").Output()
 	if err != nil {
+		// 条目不存在时 security 返回 44；把它当「没有这个键」而不是故障，
+		// 与加密文件后端保持一致，否则首次写入索引就会失败。
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 44 {
+			return "", nil
+		}
 		return "", fmt.Errorf("keychain get %q: %w", key, err)
 	}
 	return strings.TrimSpace(string(out)), nil
@@ -81,7 +273,21 @@ func (s *macKeychainStore) Set(key, value string) error {
 	if err != nil {
 		return fmt.Errorf("keychain set %q: %w", key, err)
 	}
-	return nil
+	return touchCredentialIndex(s, key)
+}
+
+func (s *macKeychainStore) Delete(key string) error {
+	// 不存在按成功处理：删除是幂等操作，上层不该因「本来就没有」而报错。
+	_ = exec.Command("security", "delete-generic-password", "-s", s.service, "-a", key).Run()
+	return dropEntry(s, key)
+}
+
+func (s *macKeychainStore) SetMeta(key string, meta map[string]string) error {
+	return setEntryMeta(s, key, meta)
+}
+
+func (s *macKeychainStore) List(prefix string) ([]CredentialEntry, error) {
+	return listEntries(s, prefix)
 }
 
 type encryptedFileStore struct {
@@ -143,7 +349,46 @@ func (s *encryptedFileStore) Set(key, value string) error {
 		b.WriteString("\n")
 	}
 
-	return s.writeEncrypted(b.String())
+	if err := s.writeEncrypted(b.String()); err != nil {
+		return err
+	}
+	return touchCredentialIndex(s, key)
+}
+
+func (s *encryptedFileStore) Delete(key string) error {
+	data, err := s.readEncrypted()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	var b strings.Builder
+	scanner := bufio.NewScanner(strings.NewReader(data))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 && parts[0] == key {
+			continue
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	if err := s.writeEncrypted(b.String()); err != nil {
+		return err
+	}
+	return dropEntry(s, key)
+}
+
+func (s *encryptedFileStore) SetMeta(key string, meta map[string]string) error {
+	return setEntryMeta(s, key, meta)
+}
+
+func (s *encryptedFileStore) List(prefix string) ([]CredentialEntry, error) {
+	return listEntries(s, prefix)
 }
 
 // keyFilePath 本机密钥落点：与密文同目录、名字固定后缀 .key。

@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/DotNetAge/mindx/internal/core"
 )
 
 // fakeCredStoreForPool 连接池解析用的内存凭据库
@@ -15,6 +17,14 @@ func (f *fakeCredStoreForPool) Get(key string) (string, error) { return f.m[key]
 func (f *fakeCredStoreForPool) Set(key, value string) error {
 	f.m[key] = value
 	return nil
+}
+func (f *fakeCredStoreForPool) Delete(key string) error {
+	delete(f.m, key)
+	return nil
+}
+func (f *fakeCredStoreForPool) SetMeta(key string, meta map[string]string) error { return nil }
+func (f *fakeCredStoreForPool) List(prefix string) ([]core.CredentialEntry, error) {
+	return nil, nil
 }
 
 // TestResolveCreds_SymmetricKeys 对称键解析：env 声明中值为空的变量按

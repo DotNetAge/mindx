@@ -6,15 +6,22 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/DotNetAge/mindx/internal/core"
 )
 
 // ── Credential Resolver ─────────────────────────────────────────────────────
 
 // CredentialStore resolves and stores credential references.
 // Matches core.CredentialStore interface so Daemon can pass it directly.
+// 元信息（展示名、字段中文名）与枚举都走这一层：连接器侧不碰钥匙串/加密文件的
+// 存储形态，换平台实现时这里无需改动。
 type CredentialStore interface {
 	Get(key string) (string, error)
 	Set(key, value string) error
+	Delete(key string) error
+	SetMeta(key string, meta map[string]string) error
+	List(prefix string) ([]core.CredentialEntry, error)
 }
 
 // ── ConnectionPool ──────────────────────────────────────────────────────────

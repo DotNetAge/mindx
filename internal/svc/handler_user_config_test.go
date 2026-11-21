@@ -17,6 +17,13 @@ type failingCredStore struct{}
 
 func (failingCredStore) Get(string) (string, error) { return "", nil }
 func (failingCredStore) Set(string, string) error   { return errors.New("keychain locked") }
+func (failingCredStore) Delete(string) error        { return errors.New("keychain locked") }
+func (failingCredStore) SetMeta(string, map[string]string) error {
+	return errors.New("keychain locked")
+}
+func (failingCredStore) List(string) ([]core.CredentialEntry, error) {
+	return nil, errors.New("keychain locked")
+}
 
 // withFailingCredStore 把凭据库构造替换成失败实现，返回还原函数。
 func withFailingCredStore(t *testing.T) {

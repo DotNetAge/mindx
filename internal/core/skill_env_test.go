@@ -15,6 +15,14 @@ type fakeCredentialStore struct {
 	values map[string]string
 }
 
+func (f *fakeCredentialStore) backend() CredentialStore {
+	store := NewMemoryCredentialStore()
+	for k, v := range f.values {
+		_ = store.Set(k, v)
+	}
+	return &seedOnSet{store: store, seed: f.values}
+}
+
 func (f *fakeCredentialStore) Get(key string) (string, error) {
 	if v, ok := f.values[key]; ok {
 		return v, nil
@@ -25,6 +33,32 @@ func (f *fakeCredentialStore) Get(key string) (string, error) {
 func (f *fakeCredentialStore) Set(key, value string) error {
 	f.values[key] = value
 	return nil
+}
+
+func (f *fakeCredentialStore) Delete(key string) error {
+	delete(f.values, key)
+	return nil
+}
+
+func (f *fakeCredentialStore) SetMeta(key string, meta map[string]string) error { return nil }
+
+func (f *fakeCredentialStore) List(prefix string) ([]CredentialEntry, error) { return nil, nil }
+
+// seedOnSet 保留原始 values 映射，写入时同步回映射，便于测试断言。
+type seedOnSet struct {
+	store CredentialStore
+	seed  map[string]string
+}
+
+func (s *seedOnSet) Get(key string) (string, error) { return s.store.Get(key) }
+func (s *seedOnSet) Delete(key string) error        { return s.store.Delete(key) }
+func (s *seedOnSet) SetMeta(key string, meta map[string]string) error {
+	return s.store.SetMeta(key, meta)
+}
+func (s *seedOnSet) List(prefix string) ([]CredentialEntry, error) { return s.store.List(prefix) }
+func (s *seedOnSet) Set(key, value string) error {
+	s.seed[key] = value
+	return s.store.Set(key, value)
 }
 
 // writeEnvSkill 在全局技能库写入一个技能目录（SKILL.md 内容由调用方给定）。
