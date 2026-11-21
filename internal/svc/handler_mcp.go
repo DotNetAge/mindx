@@ -70,6 +70,21 @@ func (d *Daemon) handleMCPCredentialSetGroup(ctx context.Context, params json.Ra
 	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.credential.set_group", params)
 }
 
+// handleMCPOAuthDeviceStart / Poll：连接器自动授权（设备码），凭据仍走同一凭据库。
+func (d *Daemon) handleMCPOAuthDeviceStart(ctx context.Context, params json.RawMessage) (any, error) {
+	if d.mcpMgr == nil {
+		return nil, errMCPServiceUnavailable
+	}
+	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.oauth.device.start", params)
+}
+
+func (d *Daemon) handleMCPOAuthDevicePoll(ctx context.Context, params json.RawMessage) (any, error) {
+	if d.mcpMgr == nil {
+		return nil, errMCPServiceUnavailable
+	}
+	return d.mcpMgr.RPCHandler().Handle(ctx, "mcp.oauth.device.poll", params)
+}
+
 func (d *Daemon) handleMCPServerDiscover(ctx context.Context, params json.RawMessage) (any, error) {
 	if d.mcpMgr == nil {
 		return nil, errMCPServiceUnavailable

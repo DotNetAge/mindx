@@ -43,6 +43,9 @@ type Manager struct {
 	marketURL string
 	httpCli   *http.Client // 复用，非 nil
 
+	// deviceFlow 是自动授权的一次性会话表（只存内存，不落盘）。
+	deviceFlow deviceFlowState
+
 	// ── 热更新回调 ────────────────────────────────────────────────────────
 	// 当 server 配置发生变更（SetEnabled / AddServer / RemoveServer / Sync）时触发。
 	// 典型用途：App 侧注册 InvalidateRuntimes，使下一轮对话的 Runtime 重新装配工具。

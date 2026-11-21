@@ -128,6 +128,10 @@ func (h *RPCHandler) Handle(ctx context.Context, method string, params json.RawM
 		return h.handleCredentialList(ctx)
 	case "mcp.credential.set_group":
 		return h.handleCredentialSetGroup(ctx, params)
+	case "mcp.oauth.device.start":
+		return h.handleOAuthDeviceStart(ctx, params)
+	case "mcp.oauth.device.poll":
+		return h.handleOAuthDevicePoll(ctx, params)
 	case "mcp.server.test":
 		return h.handleServerTest(ctx, params)
 	case "mcp.server.discover":
@@ -583,4 +587,24 @@ func (h *RPCHandler) handlePendingConfirm(raw json.RawMessage) (any, error) {
 		return nil, err
 	}
 	return map[string]any{"enabled": moved}, nil
+}
+
+// handleOAuthDeviceStart 发起设备码授权，返回用户要看的短码与地址。
+func (h *RPCHandler) handleOAuthDeviceStart(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p DeviceFlowParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	return h.mgr.StartDeviceFlow(p)
+}
+
+// handleOAuthDevicePoll 轮询一次授权结果；成功时凭据已落库、连接器已生效。
+func (h *RPCHandler) handleOAuthDevicePoll(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p struct {
+		Session string `json:"session"`
+	}
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	return h.mgr.PollDeviceFlow(p.Session)
 }
