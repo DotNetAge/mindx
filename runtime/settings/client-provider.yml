@@ -3,6 +3,9 @@
 # 硬约束：client_secret 绝不写入本文件（预置他人 secret = 冒用；自己的 secret 明文分发 = 泄露），
 # 机密客户端凭据仅经 CredentialStore 存放。
 oauth_providers:
+# 连接器「一键授权」只认 kind: device_code 的条目：加一条即可，代码不用改。
+# 新增步骤与硬约束（client_secret 永不入本文件、双份配置、验证顺序）见
+# .agents/notes/assistant-经验-新增一键授权服务商的三步与硬约束.md
   # ── 第一层：CLI 复用型（公开 client_id 的 PKCE 公共客户端，完整预置）──
   # qwen（Qwen Code）已移除：Qwen OAuth 免费层于 2026-04-15 官方下线，
   # device_code 端点仍发码但 token 端点被服务端阻断（HTTP 405），流程永久无法完成。
