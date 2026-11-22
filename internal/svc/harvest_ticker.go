@@ -263,7 +263,7 @@ func (d *Daemon) processHarvestIntent(ctx context.Context, intent *harvestIntent
 		"session_id", sid, "agent", agentName, "reported", len(reported),
 		"total", len(intent.SubSessions), "attempts", intent.Attempts)
 
-	d.runBackgroundTurn(sid, agentName, content, harvestCancelClientID, func(err error) {
+	d.runBackgroundTurn(sid, agentName, content, content, harvestCancelClientID, func(err error) {
 		if err == nil {
 			// 结果已送达：无条件回收本批目标的控制平面条目（见
 			// unregisterHarvestBatch）——回收只依赖「送达成功」这一事实，
@@ -386,13 +386,13 @@ func (d *Daemon) processHarvestIntent(ctx context.Context, intent *harvestIntent
 			// 放弃不等于静默：强制回灌一条说明（尽力而为，失败仅记日志），
 			// 兑现 CollectResults 回执「不会静默丢失」的承诺（第三轮审计：
 			// 连续失败直接删文件会让已向用户承诺「结果自动送达」的主会话永久沉默）。
-			notice := "[系统收割] 收割结果多次自动送达失败，已停止本轮自动送达。相关子任务的结果仍完整保留在其会话记录中，请直接查看对应子代理的对话获取结果；如需继续跟进可重新发起任务。"
-			d.runBackgroundTurn(sid, agentName, notice, harvestCancelClientID, func(nerr error) {
+			notice := "[结果收集] 收集结果多次自动送达失败，已停止本轮自动送达。相关子任务的结果仍完整保留在其会话记录中，请直接查看对应子代理的对话获取结果；如需继续跟进可重新发起任务。"
+			d.runBackgroundTurn(sid, agentName, notice, notice, harvestCancelClientID, func(nerr error) {
 				if nerr != nil {
 					d.logger.Warn("harvest ticker: give-up notice delivery failed",
 						"error", nerr, "session_id", sid)
 				}
-			})
+			}, false)
 			return
 		}
 		latest.Status = harvestStatusPending
@@ -407,7 +407,7 @@ func (d *Daemon) processHarvestIntent(ctx context.Context, intent *harvestIntent
 			d.logger.Info("harvest ticker: feedback failed, reverted to pending",
 				"session_id", sid, "attempts", latest.Attempts, "error", err)
 		}
-	})
+	}, false)
 }
 
 // classifyHarvestTarget 判定单个收割目标的当前状态。

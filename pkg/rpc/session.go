@@ -89,6 +89,12 @@ type SessionRepairParams struct {
 	DryRun bool `json:"dry_run,omitempty"`
 }
 
+// SessionRetryLastParams are the params for session.retry_last.
+// 失败重试：不改动既有上下文，基于当前会话窗口原样重发上一次请求。
+type SessionRetryLastParams struct {
+	SessionID string `json:"session_id"`
+}
+
 // SessionRepairResult 是 session.repair_pairing 的结果。
 type SessionRepairResult struct {
 	SessionID string `json:"session_id"`
@@ -210,4 +216,10 @@ func (c *Client) SessionRepairPairing(sessionID string, dryRun bool) (json.RawMe
 		SessionID: sessionID,
 		DryRun:    dryRun,
 	})
+}
+
+// SessionRetryLast 失败重试：不截断、不删除既有上下文，基于当前会话窗口
+// 原样重发上一次请求。执行经会话串行队列异步展开，事件走广播链路。
+func (c *Client) SessionRetryLast(sessionID string) (json.RawMessage, error) {
+	return c.CallWithTimeout("session.retry_last", SessionRetryLastParams{SessionID: sessionID})
 }

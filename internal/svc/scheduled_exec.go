@@ -160,11 +160,11 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 
 	// 后台执行链与收割回灌共用 runBackgroundTurn（广播版事件链、串行队列、
 	// 虚拟客户端取消登记）；调度任务按本轮结果回写任务状态。
-	d.runBackgroundTurn(entry.SessionID, entry.Agent, entry.Content, scheduledCancelClientID, func(err error) {
+	d.runBackgroundTurn(entry.SessionID, entry.Agent, entry.Content, entry.Content, scheduledCancelClientID, func(err error) {
 		// 终态回写：取消按 missed，其余失败按 failed，成功按 success；
 		// ReportResult 内部广播 completed/failed/missed，前端日历据此刷新。
 		d.scheduler.ReportResult(info.EntryID, info.RunID, err)
-	})
+	}, false)
 }
 
 // runBackgroundTurn 程序化发起主会话一轮执行（后台通道共用实现）。
@@ -178,7 +178,11 @@ func (d *Daemon) runScheduledJob(info scheduler.JobLifecycleInfo) {
 //   - 事件走广播版链路（无人在线自然丢弃，会话历史照常落盘）；
 //   - 取消登记在虚拟客户端集合：message.cancel 按会话取消一并覆盖；
 //   - onDone 在本轮结束后调用（含排队取消场景，err=ctx.Err()）。
-func (d *Daemon) runBackgroundTurn(sid, agentName, content, virtualClientID string, onDone func(error)) {
+//
+// question 是注入 AskBuilder 的用户提问；hint 仅用于计量埋点与轮次日志
+// （续跑场景 question 为空、hint 取上一条用户原文）。reuseHistory 开启续跑
+// 模式：不向会话追加新消息，直接以当前窗口驱动循环（失败重试语义）。
+func (d *Daemon) runBackgroundTurn(sid, agentName, question, hint, virtualClientID string, onDone func(error), reuseHistory bool) {
 	rt, err := d.app.ResolveRuntime(agentName)
 	if err != nil {
 		d.logger.Error("background turn: resolve runtime failed", err,
@@ -278,13 +282,16 @@ func (d *Daemon) runBackgroundTurn(sid, agentName, content, virtualClientID stri
 		turnLogLenBefore := len(s.All())
 		turnLogStart := time.Now()
 
-		builder := rt.Ask(agentName, content, s).
+		builder := rt.Ask(agentName, question, s).
 			WithContext(ctx).
 			OnEvent(func(ev events.ReactEvent) {
 				currentAgentName = ev.AgentName
 				eventSubSessionID = ev.SessionID
 			})
-		builder = d.withMetricHook(builder, sid, agentName, getSubSessionID, content).
+		if reuseHistory {
+			builder = builder.ReuseHistory()
+		}
+		builder = d.withMetricHook(builder, sid, agentName, getSubSessionID, hint).
 			OnEvent(func(ev events.ReactEvent) {
 				// Compact 事件广播：与 defaultHandler 同款（MicroCompact 已拆除）。
 				switch ev.Type {
@@ -321,7 +328,7 @@ func (d *Daemon) runBackgroundTurn(sid, agentName, content, virtualClientID stri
 		}
 
 		// 轮次日志落盘（旁路采集，失败不影响执行结果）。
-		d.appendTurnLog(s, agentName, content, turnLogLenBefore, turnLogStart)
+		d.appendTurnLog(s, agentName, hint, turnLogLenBefore, turnLogStart)
 		onDone(err)
 	})
 }

@@ -32,6 +32,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"session.rollback_files":             r.daemon.handleSessionRollbackFiles,
 		"session.context":                    r.daemon.handleSessionContext,
 		"session.truncate":                   r.daemon.handleSessionTruncate,
+		"session.retry_last":                 r.daemon.handleSessionRetryLast,
 		"session.delete_round":               r.daemon.handleSessionDeleteRound,
 		"session.compact":                    r.daemon.handleSessionCompact,
 		"session.repair_pairing":             r.daemon.handleSessionRepairPairing,

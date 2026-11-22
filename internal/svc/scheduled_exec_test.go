@@ -144,9 +144,9 @@ func TestRunBackgroundTurn_ResolveRuntimeFails(t *testing.T) {
 	defer cleanup()
 
 	done := make(chan error, 1)
-	d.runBackgroundTurn("sess-x", "no-such-agent", "内容", scheduledCancelClientID, func(err error) {
+	d.runBackgroundTurn("sess-x", "no-such-agent", "内容", "内容", scheduledCancelClientID, func(err error) {
 		done <- err
-	})
+	}, false)
 
 	select {
 	case err := <-done:

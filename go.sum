@@ -10,8 +10,14 @@ github.com/DotNetAge/goagent v0.1.3 h1:RNKcfuLSGJMPsfrivEWccpSu8tm1wWVZjIf7pCK8x
 github.com/DotNetAge/goagent v0.1.3/go.mod h1:MP1b+zshywbr/DrWGALxwO+9VZgiolkbpl/LYUF/uvQ=
 github.com/DotNetAge/gochat v0.2.13 h1:qO3lYmWRyU04dBhYyql57NA+ZDZnSBJw+MJ+uhkWoWg=
 github.com/DotNetAge/gochat v0.2.13/go.mod h1:Sg+RpD3wq1b6/lEONInN7vrly31Z3C65rpNcUoljlvY=
+github.com/DotNetAge/gochat v0.2.14 h1:rsjaJDLB0yGo1mJJqlArsePS2lQkcxh5n+bViz/MqRw=
+github.com/DotNetAge/gochat v0.2.14/go.mod h1:Sg+RpD3wq1b6/lEONInN7vrly31Z3C65rpNcUoljlvY=
 github.com/DotNetAge/goharness v0.2.82 h1:NovsRL1y9usoDZQdKQPWUpwNo3Ft4LBr/AG2iFXYPlQ=
 github.com/DotNetAge/goharness v0.2.82/go.mod h1:IBNOyYPw3egRvBOY4/B8WSMgX/tC9CdDEwuCr3EU438=
+github.com/DotNetAge/goharness v0.2.83 h1:pnQWOqug3lY3PMgip/voQ9cmnZa4LmN70nDHvRyebzU=
+github.com/DotNetAge/goharness v0.2.83/go.mod h1:hgEkSKMHAzO7fpb56CtJEItbf9hv5erHedS4gA5DlKk=
+github.com/DotNetAge/goharness v0.2.84 h1:O9G1XUmdU/bJTCSvO9t+0tmkVN9Kpl77cX8YTLo+pYA=
+github.com/DotNetAge/goharness v0.2.84/go.mod h1:hgEkSKMHAzO7fpb56CtJEItbf9hv5erHedS4gA5DlKk=
 github.com/DotNetAge/gort v0.1.11 h1:MW8nz5+Pw9ZM3J2oYeObgGkr+a0/l1nQc+DCRrN6tno=
 github.com/DotNetAge/gort v0.1.11/go.mod h1:ZutZ10OYaJk9Pn355wuDIK+L1ADuAwabkSZ8y96OVSU=
 github.com/DotNetAge/gort v0.1.12 h1:OS6VPRGZjLd55iEqzsNnToNXR/hUXsHfv7Esa53vYzw=
