@@ -24,9 +24,9 @@ require (
 )
 
 require (
-	github.com/DotNetAge/goagent v0.1.5
-	github.com/DotNetAge/gochat v0.2.15
-	github.com/DotNetAge/goharness v0.2.85
+	github.com/DotNetAge/goagent v0.1.6
+	github.com/DotNetAge/gochat v0.2.16
+	github.com/DotNetAge/goharness v0.2.86
 	github.com/DotNetAge/gort v0.1.12
 	github.com/creack/pty v1.1.24
 	github.com/grandcat/zeroconf v1.0.0
