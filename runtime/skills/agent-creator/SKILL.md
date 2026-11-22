@@ -6,7 +6,7 @@ description: >
   或复盘产出单个 Agent 招募提议时使用；需要成建制多成员协作时不适用。
 metadata:
   name_zh: 招募智能体
-  version: 1.4.1
+  version: 1.4.2
   author: Ray
 ---
 
@@ -63,7 +63,7 @@ metadata:
 
 ```bash
 mindx agent list --all --json
-mindx market list --kind agent --filter "<领域关键词>"
+mindx market list --kind agent --q "<领域关键词>"
 ```
 
 注意：`agent list` 默认只显示已雇佣的智能体，查重时**必须加 `--all`**。

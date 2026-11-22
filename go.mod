@@ -27,10 +27,11 @@ require (
 	github.com/DotNetAge/goagent v0.1.3
 	github.com/DotNetAge/gochat v0.2.13
 	github.com/DotNetAge/goharness v0.2.82
-	github.com/DotNetAge/gort v0.1.10
+	github.com/DotNetAge/gort v0.1.11
 	github.com/creack/pty v1.1.24
 	github.com/grandcat/zeroconf v1.0.0
 	go.etcd.io/bbolt v1.4.3
+	golang.org/x/image v0.41.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/text v0.43.0
 )
@@ -92,12 +93,8 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
-	golang.org/x/image v0.41.0 // indirect
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	mvdan.cc/sh/v3 v3.13.1 // indirect
 )
-
-// gort 用本地副本（跳过 go.sum 校验）：差异核对与升级流程见 third_party/gort/MINDX_VENDOR.md
-replace github.com/DotNetAge/gort => ./third_party/gort

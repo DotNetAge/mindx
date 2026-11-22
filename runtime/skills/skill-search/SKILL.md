@@ -2,7 +2,7 @@
 name: skill-search
 description: 发现与加载技能：先用 mindx cli 查本地技能库（项目级 .agents/skills 与已注入的内置技能），未命中再查 mindx 市场技能库（market list/install）。当用户问"如何做某事"、"找一个能做 X 的技能"、"有没有能...的技能"，或表达扩展能力的兴趣时使用。
 metadata:
-  version: 1.0.0
+  version: 1.0.1
   author: Ray
   name_zh: 查找技能
 ---
@@ -48,7 +48,7 @@ mindx 内置市场（需 daemon 运行，即已执行 `mindx start`）：
 
 ```bash
 mindx market list --kind skill                          # 列出全部技能包
-mindx market list --kind skill --filter <关键词> --json  # 按关键词过滤（匹配名称/描述/类别，结构化输出）
+mindx market list --kind skill --q <关键词> --json  # 按关键词过滤（匹配名称/描述，结构化输出）
 ```
 
 - 在市场清单中按 `name`/`description`/`category` 匹配用户需求；

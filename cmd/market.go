@@ -56,8 +56,12 @@ Examples:
 
 func init() {
 	marketListCmd.Flags().Bool("json", false, "Output structured JSON (requires mindx start)")
-	marketListCmd.Flags().String("kind", "", "Filter by package type: agent, skill or team")
+	marketListCmd.Flags().String("kind", "", "Filter by package type: agent, skill, team or plugin")
 	marketListCmd.Flags().String("q", "", "Server-side keyword search against name/description")
+	// 兼容旧文档里的 --filter：等价 --q，自身隐藏且弃用提示，避免存量技能文档报 unknown flag。
+	marketListCmd.Flags().String("filter", "", "Alias of --q (deprecated)")
+	_ = marketListCmd.Flags().MarkDeprecated("filter", "use --q instead")
+	_ = marketListCmd.Flags().MarkHidden("filter")
 	marketListCmd.Flags().String("sort", "", "Server-side sort: likes, newest or downloads")
 	marketListCmd.Flags().Int("page", 0, "Page number (1-based; server-side pagination)")
 	marketListCmd.Flags().Int("page-size", 0, "Page size (server-side, default 50, max 200)")
@@ -134,6 +138,9 @@ Examples:
 		useJSON, _ := cmd.Flags().GetBool("json")
 		kind, _ := cmd.Flags().GetString("kind")
 		q, _ := cmd.Flags().GetString("q")
+		if q == "" { // --filter 为 --q 的兼容别名
+			q, _ = cmd.Flags().GetString("filter")
+		}
 		sortBy, _ := cmd.Flags().GetString("sort")
 		page, _ := cmd.Flags().GetInt("page")
 		pageSize, _ := cmd.Flags().GetInt("page-size")
