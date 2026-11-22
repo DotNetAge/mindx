@@ -87,6 +87,7 @@ func (r *RPCHandlerRegistry) handlers() map[string]gateway.MethodHandler {
 		"skill.prepare.confirm_install":      r.daemon.handleSkillPrepareConfirmInstall,
 		"skill.credential.set":               r.daemon.handleSkillCredentialSet,
 		"market.list":                        r.daemon.handleMarketList,
+		"market.search":                      r.daemon.handleMarketSearch,
 		"market.org.list":                    r.daemon.handleMarketOrgs,
 		"market.sources":                     r.daemon.handleMarketSources,
 		"market.install":                     r.daemon.handleMarketInstall,

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -257,6 +258,29 @@ type marketPackageDTO struct {
 	PublishedAt string   `json:"published_at,omitempty"`
 	// 衍生谱系（§4）：卡片「进化自 XXX」小字（原创不透出）
 	DerivedFrom *bundle.DerivedRef `json:"derived_from,omitempty"`
+}
+
+// handleMarketSearch 单货架语义检索：服务端排序，不分页、不做跨货架融合。
+// 只在用户明确问"哪个包能做这件事"时调用；结果只含名字与描述。
+func (d *Daemon) handleMarketSearch(_ context.Context, params json.RawMessage) (any, error) {
+	var p rpc.MarketSearchParams
+	if params != nil {
+		_ = json.Unmarshal(params, &p)
+	}
+	q := strings.TrimSpace(p.Q)
+	if q == "" {
+		return nil, errors.New("检索词不能为空")
+	}
+	kind := strings.TrimSpace(p.Kind)
+	if kind == "" {
+		kind = "skill"
+	}
+	switch kind {
+	case "skill", "agent", "team", "plugin", "article":
+	default:
+		return nil, fmt.Errorf("不支持的货架：%s", kind)
+	}
+	return d.app.Market().Search(kind, q, p.K)
 }
 
 // handleMarketList 市场浏览：全部走服务端分页 API（清单机制已废除，

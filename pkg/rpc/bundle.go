@@ -41,6 +41,13 @@ type MarketListParams struct {
 	OrgSlug string `json:"org_slug,omitempty"`
 }
 
+// MarketSearchParams are the params for market.search（单货架语义检索）。
+type MarketSearchParams struct {
+	Kind string `json:"kind"` // skill | agent | team | plugin | article
+	Q    string `json:"q"`
+	K    int    `json:"k,omitempty"`
+}
+
 // MarketInstallParams are the params for market.install（下载市场分发包并安装）。
 type MarketInstallParams struct {
 	Kind string `json:"kind"` // "agent" | "skill"
@@ -177,6 +184,11 @@ func (c *Client) SkillImport(path string, overwrite bool) (json.RawMessage, erro
 
 func (c *Client) MarketList(params MarketListParams) (json.RawMessage, error) {
 	return c.CallWithTimeout("market.list", params)
+}
+
+// MarketSearch 语义检索单货架包（不返回文件路径或正文片段）。
+func (c *Client) MarketSearch(params MarketSearchParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.search", params)
 }
 
 // MarketSources 拉取可用市场源清单（商户源可见性由 daemon 侧配置的访问令牌决定）。

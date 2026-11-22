@@ -106,12 +106,72 @@ func init() {
 	marketArticleDeleteCmd.Flags().Bool("yes", false, "跳过删除确认（脚本场景用）")
 	marketUnpublishCmd.Flags().Bool("yes", false, "跳过下架确认（脚本场景用）")
 
+	marketSearchCmd.Flags().String("kind", "skill", "Which shelf to search: skill, agent, team, plugin or article")
+	marketSearchCmd.Flags().Int("k", 5, "Number of results (1-20)")
+	marketSearchCmd.Flags().Bool("json", false, "Output structured JSON")
+	marketCmd.AddCommand(marketSearchCmd)
 	marketCmd.AddCommand(marketListCmd, marketInstallCmd, marketCanonicalizeAgentsCmd, marketPackAgentsCmd,
 		marketPublishCmd, marketSubmitCmd, marketSubmissionsCmd, marketRateCmd, marketWhoamiCmd, marketArticleCmd)
 	marketSubmissionsCmd.AddCommand(marketSubmissionsListCmd, marketSubmissionsDecideCmd)
 	marketCmd.AddCommand(marketUnpublishCmd, marketUpdateCmd, marketAdoptCmd)
 	marketArticleCmd.AddCommand(marketArticlePublishCmd, marketArticleReadCmd, marketArticleListCmd, marketArticleDeleteCmd)
 	rootCmd.AddCommand(marketCmd)
+}
+
+// ── market search：单货架语义检索（消费端，需 daemon） ─────────────
+
+var marketSearchCmd = &cobra.Command{
+	Use:   "search <intent>",
+	Short: "Semantic search one market shelf by intent (requires mindx start)",
+	Long: `Search one shelf semantically and return the packages that can handle the
+intent. One shelf per call: skill, agent, team, plugin or article. Results carry
+only kind, name, description and score — install the package to use it.
+
+Examples:
+  mindx market search "把 Excel 表格做透视分析并出图"
+  mindx market search --kind agent "分析上市公司财报"
+  mindx market search --kind team --k 3 "从零开发一个 iOS App"`,
+	Args: cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		useJSON, _ := cmd.Flags().GetBool("json")
+		kind, _ := cmd.Flags().GetString("kind")
+		topK, _ := cmd.Flags().GetInt("k")
+		q := strings.Join(args, " ")
+
+		cl, err := rpc.Dial(daemonAddr)
+		if err != nil {
+			return fmt.Errorf("cannot connect to daemon: %w", err)
+		}
+		defer func() { _ = cl.Close() }()
+
+		raw, err := cl.MarketSearch(rpc.MarketSearchParams{Kind: kind, Q: q, K: topK})
+		if err != nil {
+			return err
+		}
+		if useJSON {
+			fmt.Println(string(raw))
+			return nil
+		}
+		var res bundle.MarketSearchResult
+		if err := json.Unmarshal(raw, &res); err != nil {
+			fmt.Println(string(raw))
+			return nil
+		}
+		if len(res.Results) == 0 {
+			fmt.Println("没有匹配的分发包。换个说法，或加大 --k。")
+			return nil
+		}
+		table := render.NewTable([]string{"Name", "Kind", "Score", "Description"}, 100)
+		for _, r := range res.Results {
+			desc := r.Description
+			if desc == "" {
+				desc = "—"
+			}
+			table.AddRow([]string{r.Name, r.Kind, fmt.Sprintf("%.3f", r.Score), desc})
+		}
+		fmt.Println(table.Render())
+		return nil
+	},
 }
 
 // ── market list：市场货架检索（消费端，需 daemon） ─────────────

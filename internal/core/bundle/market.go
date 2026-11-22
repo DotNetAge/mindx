@@ -1328,6 +1328,53 @@ func (m *MarketClient) ListPage(q MarketQuery) (*MarketPage, error) {
 	return m.fetchAPIPage(q)
 }
 
+// MarketSearchHit 语义检索结果条目。不含文件路径、章节名或正文片段：
+// 客户端拿到名字后应走安装/加载流程。
+type MarketSearchHit struct {
+	Kind        string  `json:"kind"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Score       float64 `json:"score"`
+}
+
+// MarketSearchResult 单货架语义检索响应。
+type MarketSearchResult struct {
+	Kind    string            `json:"kind"`
+	Query   string            `json:"query"`
+	Model   string            `json:"model,omitempty"`
+	Results []MarketSearchHit `json:"results"`
+}
+
+// Search 语义检索单货架（服务端 GET /api/v1/search）。不做跨货架融合。
+func (m *MarketClient) Search(kind, query string, k int) (*MarketSearchResult, error) {
+	params := url.Values{}
+	params.Set("kind", kind)
+	params.Set("q", query)
+	if k > 0 {
+		params.Set("k", strconv.Itoa(k))
+	}
+	resp, err := m.authedGet(m.apiBase + "/search?" + params.Encode())
+	if err != nil {
+		return nil, fmt.Errorf("社区暂时无法访问：%w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("语义检索 API 响应状态 %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, apiMaxSize))
+	if err != nil {
+		return nil, err
+	}
+	var out MarketSearchResult
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("解析检索响应失败：%w", err)
+	}
+	if out.Results == nil {
+		out.Results = []MarketSearchHit{}
+	}
+	return &out, nil
+}
+
 // apiPackageMeta 服务端包条目的嵌套元数据（meta 对象，列表/详情共用结构）。
 type apiPackageMeta struct {
 	Icon       string            `json:"icon"`
