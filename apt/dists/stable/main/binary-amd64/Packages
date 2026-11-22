@@ -224,22 +224,6 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
 
 Package: mindx
 Version: 2.6.13
-Architecture: arm64
-Maintainer: DotNetAge <ray@dotnetage.com>
-Installed-Size: 38592
-Filename: pool/stable/m/mindx/mindx_2.6.13_arm64.deb
-Size: 15803704
-MD5sum: 7f774966f91f54680da297a85b8caa2e
-SHA1: c1e4d27189426cf16a75ca91320614dce885c127
-SHA256: 1a259d4a33a34db64f14bde6a47477ae0253e31ccf40d4dbd09f447b799997c0
-Section: utils
-Priority: optional
-Homepage: https://github.com/DotNetAge/mindx
-Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
- A powerful CLI tool for managing AI agents, providers, and conversations.
-
-Package: mindx
-Version: 2.6.13
 Architecture: amd64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38592
@@ -255,15 +239,15 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
  A powerful CLI tool for managing AI agents, providers, and conversations.
 
 Package: mindx
-Version: 2.6.14
+Version: 2.6.13
 Architecture: arm64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38592
-Filename: pool/stable/m/mindx/mindx_2.6.14_arm64.deb
-Size: 15806500
-MD5sum: dee53f9af3e0ccf77e54f7b7265f09ae
-SHA1: 0f9fa1707fdd89e25d0460fc8efc1563970e8e25
-SHA256: 6f6933bf7f26f9b131f624d196e6b6d200cc1aa1e485bedcdd480305f5ca7bd7
+Filename: pool/stable/m/mindx/mindx_2.6.13_arm64.deb
+Size: 15803704
+MD5sum: 7f774966f91f54680da297a85b8caa2e
+SHA1: c1e4d27189426cf16a75ca91320614dce885c127
+SHA256: 1a259d4a33a34db64f14bde6a47477ae0253e31ccf40d4dbd09f447b799997c0
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -287,15 +271,15 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
  A powerful CLI tool for managing AI agents, providers, and conversations.
 
 Package: mindx
-Version: 2.6.15
+Version: 2.6.14
 Architecture: arm64
 Maintainer: DotNetAge <ray@dotnetage.com>
-Installed-Size: 38656
-Filename: pool/stable/m/mindx/mindx_2.6.15_arm64.deb
-Size: 15810000
-MD5sum: 274b40d76eecd606f7b96d370435ee1e
-SHA1: 249aa751e75c09b0844b35bbf5d8bda724e1c608
-SHA256: 14c7b6f342cc995f6cf44fa3454b0f0c2be628702ff503af411551eb3b3c6ea9
+Installed-Size: 38592
+Filename: pool/stable/m/mindx/mindx_2.6.14_arm64.deb
+Size: 15806500
+MD5sum: dee53f9af3e0ccf77e54f7b7265f09ae
+SHA1: 0f9fa1707fdd89e25d0460fc8efc1563970e8e25
+SHA256: 6f6933bf7f26f9b131f624d196e6b6d200cc1aa1e485bedcdd480305f5ca7bd7
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -312,6 +296,22 @@ Size: 15809992
 MD5sum: 1795fdf7c9f9b12df103a4cd31b433a3
 SHA1: b23204822daaaa0bac7def6b0ffa24b6d6bc84c8
 SHA256: 1a0289e6928b4baaa6cf42313302d5dbaf0470c3935a0dda9261f0de0d2919dc
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.15
+Architecture: arm64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 38656
+Filename: pool/stable/m/mindx/mindx_2.6.15_arm64.deb
+Size: 15810000
+MD5sum: 274b40d76eecd606f7b96d370435ee1e
+SHA1: 249aa751e75c09b0844b35bbf5d8bda724e1c608
+SHA256: 14c7b6f342cc995f6cf44fa3454b0f0c2be628702ff503af411551eb3b3c6ea9
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -416,22 +416,6 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
 
 Package: mindx
 Version: 2.6.19
-Architecture: arm64
-Maintainer: DotNetAge <ray@dotnetage.com>
-Installed-Size: 38720
-Filename: pool/stable/m/mindx/mindx_2.6.19_arm64.deb
-Size: 15837964
-MD5sum: 495ef9fde7bae872ace85a507de58a09
-SHA1: 82b87f490f1e49676e52327ad494745ad563d87a
-SHA256: 69429d94a7d049188b79d3cf4a29710de6cdc8b010e2bd45cc95a25146ebada5
-Section: utils
-Priority: optional
-Homepage: https://github.com/DotNetAge/mindx
-Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
- A powerful CLI tool for managing AI agents, providers, and conversations.
-
-Package: mindx
-Version: 2.6.19
 Architecture: amd64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38720
@@ -440,6 +424,22 @@ Size: 15837964
 MD5sum: d160d04e4e875d4181211e455c21b9f4
 SHA1: d10040b483219c8412b9a0dc52c000107d56a89a
 SHA256: c9f86a6153af2adc4afaab0884391ab2d352c6c6b678509d0c47f77e0b533fe6
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.19
+Architecture: arm64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 38720
+Filename: pool/stable/m/mindx/mindx_2.6.19_arm64.deb
+Size: 15837964
+MD5sum: 495ef9fde7bae872ace85a507de58a09
+SHA1: 82b87f490f1e49676e52327ad494745ad563d87a
+SHA256: 69429d94a7d049188b79d3cf4a29710de6cdc8b010e2bd45cc95a25146ebada5
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -512,22 +512,6 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
 
 Package: mindx
 Version: 2.6.21
-Architecture: amd64
-Maintainer: DotNetAge <ray@dotnetage.com>
-Installed-Size: 38720
-Filename: pool/stable/m/mindx/mindx_2.6.21_amd64.deb
-Size: 15837640
-MD5sum: 2fd14c5b875f58f83788659f6e6de940
-SHA1: 853ab6bb6b90a8da79e5329ea1582a0d9655a265
-SHA256: 24752981a62058c037dd086ef3bbb60a5716824b662634b4c909e8b798ee3e4f
-Section: utils
-Priority: optional
-Homepage: https://github.com/DotNetAge/mindx
-Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
- A powerful CLI tool for managing AI agents, providers, and conversations.
-
-Package: mindx
-Version: 2.6.21
 Architecture: arm64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38720
@@ -536,6 +520,22 @@ Size: 15837640
 MD5sum: 2b1fee6b5e12b02d2fbcf66511156d38
 SHA1: 9227874d19fbcecd923ff1d42d2e92e05439674d
 SHA256: 4607a0a0f4056c6fdc92ff464a6a17b74aeea5edde19768f44018858b3ae3765
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.21
+Architecture: amd64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 38720
+Filename: pool/stable/m/mindx/mindx_2.6.21_amd64.deb
+Size: 15837640
+MD5sum: 2fd14c5b875f58f83788659f6e6de940
+SHA1: 853ab6bb6b90a8da79e5329ea1582a0d9655a265
+SHA256: 24752981a62058c037dd086ef3bbb60a5716824b662634b4c909e8b798ee3e4f
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -576,22 +576,6 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
 
 Package: mindx
 Version: 2.6.23
-Architecture: amd64
-Maintainer: DotNetAge <ray@dotnetage.com>
-Installed-Size: 38720
-Filename: pool/stable/m/mindx/mindx_2.6.23_amd64.deb
-Size: 15831874
-MD5sum: 390a7e6f63a25d5c60e124ea67a3d649
-SHA1: d3e7a7f0b45f288af976433d50815456228578a7
-SHA256: 2225a67d4f95a19ae0925858e812e1f8ff46d3e4fe1fadf38e2672865479fb81
-Section: utils
-Priority: optional
-Homepage: https://github.com/DotNetAge/mindx
-Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
- A powerful CLI tool for managing AI agents, providers, and conversations.
-
-Package: mindx
-Version: 2.6.23
 Architecture: arm64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38720
@@ -607,15 +591,15 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
  A powerful CLI tool for managing AI agents, providers, and conversations.
 
 Package: mindx
-Version: 2.6.24
+Version: 2.6.23
 Architecture: amd64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38720
-Filename: pool/stable/m/mindx/mindx_2.6.24_amd64.deb
-Size: 15831944
-MD5sum: 335bdf5d30f5a504a0cfa71bd8fe000b
-SHA1: 52b66768769d970f54d6d6e188702cc3daf9fa2f
-SHA256: 0f7255a0ff096ed3256fa478a4fce2fe8edc430e02d223b21e77cd65f7ef689a
+Filename: pool/stable/m/mindx/mindx_2.6.23_amd64.deb
+Size: 15831874
+MD5sum: 390a7e6f63a25d5c60e124ea67a3d649
+SHA1: d3e7a7f0b45f288af976433d50815456228578a7
+SHA256: 2225a67d4f95a19ae0925858e812e1f8ff46d3e4fe1fadf38e2672865479fb81
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -639,15 +623,15 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
  A powerful CLI tool for managing AI agents, providers, and conversations.
 
 Package: mindx
-Version: 2.6.25
+Version: 2.6.24
 Architecture: amd64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38720
-Filename: pool/stable/m/mindx/mindx_2.6.25_amd64.deb
-Size: 15854536
-MD5sum: 2debc8f2d4b4252d7212fc23fcfd3147
-SHA1: ce5fcad6a05440cf53b839ae978ab75109e97787
-SHA256: fa3bb2faf5abacd9ba8e2e6f3c852d2aa16521838c606afd42449a07bd40edf5
+Filename: pool/stable/m/mindx/mindx_2.6.24_amd64.deb
+Size: 15831944
+MD5sum: 335bdf5d30f5a504a0cfa71bd8fe000b
+SHA1: 52b66768769d970f54d6d6e188702cc3daf9fa2f
+SHA256: 0f7255a0ff096ed3256fa478a4fce2fe8edc430e02d223b21e77cd65f7ef689a
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -671,15 +655,15 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
  A powerful CLI tool for managing AI agents, providers, and conversations.
 
 Package: mindx
-Version: 2.6.26
+Version: 2.6.25
 Architecture: amd64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38720
-Filename: pool/stable/m/mindx/mindx_2.6.26_amd64.deb
-Size: 15854754
-MD5sum: 982083da8c0be645b83058a36f8db61c
-SHA1: 78887dfedcc604dd2aa0c787323809334e85bd0b
-SHA256: d7eacca8593e8dc727d5c94be474b294dcc64d0a165e7cb32a107cc0d7581d64
+Filename: pool/stable/m/mindx/mindx_2.6.25_amd64.deb
+Size: 15854536
+MD5sum: 2debc8f2d4b4252d7212fc23fcfd3147
+SHA1: ce5fcad6a05440cf53b839ae978ab75109e97787
+SHA256: fa3bb2faf5abacd9ba8e2e6f3c852d2aa16521838c606afd42449a07bd40edf5
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -696,6 +680,22 @@ Size: 15854754
 MD5sum: e6e1be46f6ea6028b83b4f28acdd58fe
 SHA1: cbc09d80853faad687e7945696aca3e483df88e9
 SHA256: 069fb2f303947b193136403064221e38de75081c4a726bcb1e24cd80e4863067
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.26
+Architecture: amd64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 38720
+Filename: pool/stable/m/mindx/mindx_2.6.26_amd64.deb
+Size: 15854754
+MD5sum: 982083da8c0be645b83058a36f8db61c
+SHA1: 78887dfedcc604dd2aa0c787323809334e85bd0b
+SHA256: d7eacca8593e8dc727d5c94be474b294dcc64d0a165e7cb32a107cc0d7581d64
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -864,22 +864,6 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
 
 Package: mindx
 Version: 2.6.31
-Architecture: amd64
-Maintainer: DotNetAge <ray@dotnetage.com>
-Installed-Size: 38336
-Filename: pool/stable/m/mindx/mindx_2.6.31_amd64.deb
-Size: 15839706
-MD5sum: 5b81e1072b2893f864e021a43161c6e6
-SHA1: 25fda54cdba5dcb7214ce761b5242573060f649a
-SHA256: 5f262242be9cd98f1cfeb3a5c963ac30ad31de1132e2ab38a602ebb10f370642
-Section: utils
-Priority: optional
-Homepage: https://github.com/DotNetAge/mindx
-Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
- A powerful CLI tool for managing AI agents, providers, and conversations.
-
-Package: mindx
-Version: 2.6.31
 Architecture: arm64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38336
@@ -888,6 +872,22 @@ Size: 15839706
 MD5sum: b09f69addd8ce5ed44349ce5eba8f13a
 SHA1: 976ffdcfa4f47b3d74edc537709c3af84b615b56
 SHA256: 560878a49b43437713b40625f92bae98545aaa14411c4afa152fc29bf45444a5
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.31
+Architecture: amd64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 38336
+Filename: pool/stable/m/mindx/mindx_2.6.31_amd64.deb
+Size: 15839706
+MD5sum: 5b81e1072b2893f864e021a43161c6e6
+SHA1: 25fda54cdba5dcb7214ce761b5242573060f649a
+SHA256: 5f262242be9cd98f1cfeb3a5c963ac30ad31de1132e2ab38a602ebb10f370642
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -960,22 +960,6 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
 
 Package: mindx
 Version: 2.6.35
-Architecture: amd64
-Maintainer: DotNetAge <ray@dotnetage.com>
-Installed-Size: 38528
-Filename: pool/stable/m/mindx/mindx_2.6.35_amd64.deb
-Size: 15925764
-MD5sum: f8252715c1cb860ddd9059d0e9a7eede
-SHA1: 716fd73ca618e1595c02a76b298ff4a0ffc5c111
-SHA256: 8ff3749a2730c52e3d447afa61b32a0ed148e8a4f42eed748587f9e68a1a1e6f
-Section: utils
-Priority: optional
-Homepage: https://github.com/DotNetAge/mindx
-Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
- A powerful CLI tool for managing AI agents, providers, and conversations.
-
-Package: mindx
-Version: 2.6.35
 Architecture: arm64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38528
@@ -984,6 +968,22 @@ Size: 15925764
 MD5sum: db4d61e26e6785368c4cdd464fd3d73d
 SHA1: c43e9931a9ab3c613a81cffd22f8f2fe0921fa7a
 SHA256: c36d389473d5e395b8d6758516e9f2584aa4a86766128d526d455155350cf5ec
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.35
+Architecture: amd64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 38528
+Filename: pool/stable/m/mindx/mindx_2.6.35_amd64.deb
+Size: 15925764
+MD5sum: f8252715c1cb860ddd9059d0e9a7eede
+SHA1: 716fd73ca618e1595c02a76b298ff4a0ffc5c111
+SHA256: 8ff3749a2730c52e3d447afa61b32a0ed148e8a4f42eed748587f9e68a1a1e6f
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -1024,22 +1024,6 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
 
 Package: mindx
 Version: 2.6.37
-Architecture: arm64
-Maintainer: DotNetAge <ray@dotnetage.com>
-Installed-Size: 40832
-Filename: pool/stable/m/mindx/mindx_2.6.37_arm64.deb
-Size: 18203058
-MD5sum: 0d045b041620071ba060c40d77cebee0
-SHA1: 47c79353f55934a242e4d84697df1302192d3b23
-SHA256: b8663f1cf4497373c9d746b65cfb8a2db9af1af020d4d822c3aa69de49981a57
-Section: utils
-Priority: optional
-Homepage: https://github.com/DotNetAge/mindx
-Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
- A powerful CLI tool for managing AI agents, providers, and conversations.
-
-Package: mindx
-Version: 2.6.37
 Architecture: amd64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 40832
@@ -1048,6 +1032,22 @@ Size: 18203056
 MD5sum: a98f6519d1f81987f0d5985796112f5e
 SHA1: fc3a0ff2635a09b3502c42e9214dfa67148f1b5a
 SHA256: 23f10d3a33f89d094b2cb68b68ce2f6e0e275aecaee3931feefe8a66b8bca8f8
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.37
+Architecture: arm64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 40832
+Filename: pool/stable/m/mindx/mindx_2.6.37_arm64.deb
+Size: 18203058
+MD5sum: 0d045b041620071ba060c40d77cebee0
+SHA1: 47c79353f55934a242e4d84697df1302192d3b23
+SHA256: b8663f1cf4497373c9d746b65cfb8a2db9af1af020d4d822c3aa69de49981a57
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -1151,15 +1151,31 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
  A powerful CLI tool for managing AI agents, providers, and conversations.
 
 Package: mindx
-Version: 2.6.5
+Version: 2.6.40
 Architecture: arm64
 Maintainer: DotNetAge <ray@dotnetage.com>
-Installed-Size: 38592
-Filename: pool/stable/m/mindx/mindx_2.6.5_arm64.deb
-Size: 15791510
-MD5sum: 34e877f167d85fff849ded7912a7f9fa
-SHA1: ea18d6c696da7d37050f777144bc318265bc538f
-SHA256: 2dcc43d49a43bb9daf0df5665db3b94f1824d481dab64dffe54a8373de5e211f
+Installed-Size: 40960
+Filename: pool/stable/m/mindx/mindx_2.6.40_arm64.deb
+Size: 18241952
+MD5sum: 2f968a5bb274ffcc420da6cf995370e7
+SHA1: d60f71aadd257d62850b2803f560342803cde665
+SHA256: 367a2536dcb01517d4c55be87d6d829ba2579c3263102339da81272439de0cd7
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.40
+Architecture: amd64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 40960
+Filename: pool/stable/m/mindx/mindx_2.6.40_amd64.deb
+Size: 18241954
+MD5sum: 82680b47bed4d10f8e7a7631e7e8f24c
+SHA1: f5a0f50c738602b04a9669908dea36d6efee637a
+SHA256: dffca717e5a3d869e25d674e310db08076109f35a00387fc58ef813ad92454bd
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -1176,6 +1192,22 @@ Size: 15791510
 MD5sum: d5daed44e32cbaa0c002a858cea31752
 SHA1: 86bad0186ec634d356852057753a8f628fc27748
 SHA256: aac74a94bfa4bf25aefd4cd54d0ba0f4a1ec70885ba8f52a3ceee170067bafea
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.5
+Architecture: arm64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 38592
+Filename: pool/stable/m/mindx/mindx_2.6.5_arm64.deb
+Size: 15791510
+MD5sum: 34e877f167d85fff849ded7912a7f9fa
+SHA1: ea18d6c696da7d37050f777144bc318265bc538f
+SHA256: 2dcc43d49a43bb9daf0df5665db3b94f1824d481dab64dffe54a8373de5e211f
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -1216,22 +1248,6 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
 
 Package: mindx
 Version: 2.6.7
-Architecture: amd64
-Maintainer: DotNetAge <ray@dotnetage.com>
-Installed-Size: 38592
-Filename: pool/stable/m/mindx/mindx_2.6.7_amd64.deb
-Size: 15799870
-MD5sum: ebd1fa72e1f0af84c1f0be5c6c1ff546
-SHA1: 5436e80935d7043699e5c123b49c05db8a7f11ca
-SHA256: 58a0f18492a267fe4b2eb51150c3d3ca327ecb5f79a80af39aa8ddd8fc444b2f
-Section: utils
-Priority: optional
-Homepage: https://github.com/DotNetAge/mindx
-Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
- A powerful CLI tool for managing AI agents, providers, and conversations.
-
-Package: mindx
-Version: 2.6.7
 Architecture: arm64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38592
@@ -1240,6 +1256,22 @@ Size: 15799870
 MD5sum: 5a98f67be84645680c609deb6f51ab70
 SHA1: db75c31a4340dfb000e7070899911ae1dd4a52bb
 SHA256: 4a8cf192e00d8f4c42335fa9bb36b9b64be62edf6a4bc309e99655a225328662
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.7
+Architecture: amd64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 38592
+Filename: pool/stable/m/mindx/mindx_2.6.7_amd64.deb
+Size: 15799870
+MD5sum: ebd1fa72e1f0af84c1f0be5c6c1ff546
+SHA1: 5436e80935d7043699e5c123b49c05db8a7f11ca
+SHA256: 58a0f18492a267fe4b2eb51150c3d3ca327ecb5f79a80af39aa8ddd8fc444b2f
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
@@ -1280,22 +1312,6 @@ Description: MindX - AI-native multi-agent conversation platform with OPC capabi
 
 Package: mindx
 Version: 2.6.9
-Architecture: arm64
-Maintainer: DotNetAge <ray@dotnetage.com>
-Installed-Size: 38592
-Filename: pool/stable/m/mindx/mindx_2.6.9_arm64.deb
-Size: 15800622
-MD5sum: 0fa5f2b884555d5fe5654f76e575ad4e
-SHA1: 42c875623e6365cf895d92d041796b6545e029d1
-SHA256: 2f8168526f4f09f65f8f69a8de81c26bd7e5f92abd2be6c17eabffece7ca6b06
-Section: utils
-Priority: optional
-Homepage: https://github.com/DotNetAge/mindx
-Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
- A powerful CLI tool for managing AI agents, providers, and conversations.
-
-Package: mindx
-Version: 2.6.9
 Architecture: amd64
 Maintainer: DotNetAge <ray@dotnetage.com>
 Installed-Size: 38592
@@ -1304,6 +1320,22 @@ Size: 15800624
 MD5sum: fb00ea86b2460f30d0f2fbe85401de5d
 SHA1: 90a2cb76335fcbe4bcba3e29fd04f802b946ea8f
 SHA256: 3da93ed6aa80a597408c54180a4e5d3cf1f347b8eabbe089d7391a13c408fc3c
+Section: utils
+Priority: optional
+Homepage: https://github.com/DotNetAge/mindx
+Description: MindX - AI-native multi-agent conversation platform with OPC capabilities.
+ A powerful CLI tool for managing AI agents, providers, and conversations.
+
+Package: mindx
+Version: 2.6.9
+Architecture: arm64
+Maintainer: DotNetAge <ray@dotnetage.com>
+Installed-Size: 38592
+Filename: pool/stable/m/mindx/mindx_2.6.9_arm64.deb
+Size: 15800622
+MD5sum: 0fa5f2b884555d5fe5654f76e575ad4e
+SHA1: 42c875623e6365cf895d92d041796b6545e029d1
+SHA256: 2f8168526f4f09f65f8f69a8de81c26bd7e5f92abd2be6c17eabffece7ca6b06
 Section: utils
 Priority: optional
 Homepage: https://github.com/DotNetAge/mindx
