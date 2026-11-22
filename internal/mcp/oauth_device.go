@@ -50,6 +50,7 @@ func (p DeviceFlowParams) providerName() string {
 
 // DeviceFlowSession 是发起授权后留在 daemon 内存里的一次会话（不落盘）。
 type DeviceFlowSession struct {
+	mu            sync.Mutex // 保护 interval：轮询会并发改它
 	oauthProvider string
 	group         string
 	field         string
@@ -58,6 +59,20 @@ type DeviceFlowSession struct {
 	deviceCode    string
 	interval      time.Duration
 	expiresAt     time.Time
+}
+
+// getInterval 读取当前轮询间隔（slow_down 会被服务端调大）。
+func (s *DeviceFlowSession) getInterval() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.interval
+}
+
+// setInterval 更新轮询间隔。
+func (s *DeviceFlowSession) setInterval(d time.Duration) {
+	s.mu.Lock()
+	s.interval = d
+	s.mu.Unlock()
 }
 
 type deviceFlowState struct {
@@ -164,6 +179,13 @@ func (m *Manager) StartDeviceFlow(p DeviceFlowParams) (*deviceStartResult, error
 	if m.deviceFlow.sessions == nil {
 		m.deviceFlow.sessions = map[string]*DeviceFlowSession{}
 	}
+	// 顺手清掉超时没人轮询的会话：它们不会再被使用，留着只占内存。
+	now := time.Now()
+	for id, old := range m.deviceFlow.sessions {
+		if now.After(old.expiresAt) {
+			delete(m.deviceFlow.sessions, id)
+		}
+	}
 	m.deviceFlow.sessions[session] = sess
 	m.deviceFlow.mu.Unlock()
 
@@ -172,7 +194,7 @@ func (m *Manager) StartDeviceFlow(p DeviceFlowParams) (*deviceStartResult, error
 		UserCode:        resp.UserCode,
 		VerificationURI: resp.VerificationURI,
 		ExpiresIn:       resp.ExpiresIn,
-		Interval:        int(sess.interval.Seconds()),
+		Interval:        int(sess.getInterval().Seconds()),
 	}, nil
 }
 
@@ -221,11 +243,11 @@ func (m *Manager) PollDeviceFlow(session string) (*devicePollResult, error) {
 			return &devicePollResult{Status: "pending"}, nil
 		case "slow_down":
 			if resp.Interval > 0 {
-				sess.interval = time.Duration(resp.Interval) * time.Second
+				sess.setInterval(time.Duration(resp.Interval) * time.Second)
 			} else {
-				sess.interval += 5 * time.Second
+				sess.setInterval(sess.getInterval() + 5*time.Second)
 			}
-			return &devicePollResult{Status: "slow_down", Interval: int(sess.interval.Seconds())}, nil
+			return &devicePollResult{Status: "slow_down", Interval: int(sess.getInterval().Seconds())}, nil
 		case "expired_token":
 			m.forgetDeviceFlow(session)
 			return &devicePollResult{Status: "expired", Error: "短码已过期，请重新发起"}, nil
@@ -271,11 +293,23 @@ func (m *Manager) applyDeviceToken(sess *DeviceFlowSession, token string) (*devi
 		return nil, err
 	}
 	applied := &deviceApplied{Group: sess.group, Servers: []string{}}
+	// 逐个生效，中途失败要把已经改过的条目恢复原样：授权是「要么都生效、
+	// 要么都不生效」的动作，留一半条目指向不存在的凭据组会让连接器直接坏掉。
+	var rollback []ServerConfig
+	restore := func() {
+		for i := len(rollback) - 1; i >= 0; i-- {
+			prev := rollback[i]
+			if rbErr := m.AddServer(context.Background(), prev); rbErr != nil {
+				m.log.Warn("授权回滚失败，连接器配置可能只改了一半", "server", prev.Name, "err", rbErr)
+			}
+		}
+	}
 	for i := range servers {
 		s := &servers[i]
 		if !containsName(sess.servers, s.Name) {
 			continue
 		}
+		before := *s
 		s.CredentialGroup = sess.group
 		if s.Env != nil {
 			if _, ok := s.Env[sess.field]; ok {
@@ -292,8 +326,10 @@ func (m *Manager) applyDeviceToken(sess *DeviceFlowSession, token string) (*devi
 			s.Enabled = true
 		}
 		if err := m.AddServer(context.Background(), *s); err != nil {
+			restore()
 			return nil, err
 		}
+		rollback = append(rollback, before)
 		m.pool.Disconnect(s.Name)
 		applied.Servers = append(applied.Servers, s.Name)
 		if s.Enabled {

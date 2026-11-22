@@ -132,3 +132,21 @@ func TestDaemonAccessors(t *testing.T) {
 		t.Error("addr/ws path should not be empty")
 	}
 }
+
+func TestSameProjectDir(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"", "", true},
+		{"", "/tmp/a", false},
+		{"/tmp/a", "/tmp/a", true},
+		{" /tmp/a ", "/tmp/a", true},
+		{"/tmp/a", "/tmp/b", false},
+	}
+	for _, c := range cases {
+		if got := sameProjectDir(c.a, c.b); got != c.want {
+			t.Errorf("sameProjectDir(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}

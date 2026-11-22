@@ -57,7 +57,10 @@ func (d *Daemon) withMetricHook(
 
 	b.OnExecutionSummary(func(data goharnessevents.ExecutionSummaryData) {
 		// 子会话摘要不落轮次事件：主 Agent 的对外交付才是计量对象。
+		// 子会话里暂存的判定同样没有可挂载的事件，按子会话自己的 ID 丢弃，
+		// 不能误伤主会话在同一轮里已暂存的判定。
 		if sub := getSubSessionID(); sub != "" && sub != sid {
+			d.discardPendingJudgments(sub, "sub-session summary skipped")
 			return
 		}
 		// 计量是旁路能力：落盘失败只丢这一条轮次事件，不打断会话主流程。
@@ -113,6 +116,8 @@ func (d *Daemon) recordRoundEvent(store *metric.FileMetricStore, in roundEventIn
 	if err != nil {
 		d.logger.Warn("metric: 写入轮次事件失败",
 			"session_id", in.SessionID, "error", err)
+		// 这一轮没有事件可挂：暂存的判定不能漂到下一轮。
+		d.discardPendingJudgments(in.SessionID, "append round event failed")
 		return metric.MetricEvent{}, err
 	}
 	// 轮内上报的判定此刻才可挂载：该轮事件已存在，且正是 Agent 所处的

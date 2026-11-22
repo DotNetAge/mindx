@@ -42,10 +42,52 @@ type CredentialStore interface {
 	List(prefix string) ([]CredentialEntry, error)
 }
 
+// serializedStore 给任意后端加一把进程内互斥：凭据索引的读改写与后端自身的
+// 全量读写都不是并发安全的（钥匙串 CLI、加密文件共用临时名都会互相踩），
+// 而调用方从多个 goroutine 同时读写是常态。后端实现内部只操作原始存储，
+// 索引函数拿到的是内层实例，所以不会重复加锁。
+type serializedStore struct {
+	mu    sync.Mutex
+	inner CredentialStore
+}
+
+func (s *serializedStore) Get(key string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.inner.Get(key)
+}
+
+func (s *serializedStore) Set(key, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.inner.Set(key, value)
+}
+
+func (s *serializedStore) Delete(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.inner.Delete(key)
+}
+
+func (s *serializedStore) SetMeta(key string, meta map[string]string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.inner.SetMeta(key, meta)
+}
+
+func (s *serializedStore) List(prefix string) ([]CredentialEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.inner.List(prefix)
+}
+
 // credentialIndexKey 是存在同一存储里的索引项：平台后端不一定能枚举已有条目
 // （钥匙串就是如此），索引把「有哪些键、各自元信息」记在机制内部，两个后端走
 // 同一条代码路径，也就不会为某一平台单独造文件。
 const credentialIndexKey = "__mindx_credentials_index_v1"
+
+// warnCorruptIndexOnce 保证索引损坏的提示只出现一次，不让每次读写都刷屏。
+var warnCorruptIndexOnce sync.Once
 
 func loadCredentialIndex(store CredentialStore) (map[string]CredentialEntry, error) {
 	raw, err := store.Get(credentialIndexKey)
@@ -70,7 +112,13 @@ func loadCredentialIndex(store CredentialStore) (map[string]CredentialEntry, err
 			return idx, nil
 		}
 	}
-	return nil, fmt.Errorf("凭据索引损坏")
+	// 解析不出来说明索引已经写坏（并发覆盖、外部手改、磁盘截断都可能）。
+	// 索引只承载「有哪些键 + 展示元信息」，凭据值仍在原处，因此不让坏档
+	// 永久卡死整个凭据库：退回空索引继续跑，下一次写入会按实际条目重建。
+	warnCorruptIndexOnce.Do(func() {
+		fmt.Fprintf(os.Stderr, "[credential] 凭据索引损坏，已按空索引继续（条目元信息会逐步重建）\n")
+	})
+	return map[string]CredentialEntry{}, nil
 }
 
 func saveCredentialIndex(store CredentialStore, idx map[string]CredentialEntry) error {
@@ -168,15 +216,15 @@ func NewCredentialStore(workspaceDir string) CredentialStore {
 	// 容器里 /home/mindx/.mindx 随镜像重建而清空，挂一个卷到该目录即可让
 	// 已保存的密钥跨容器存活；这是显式配置，优先级高于平台默认。
 	if dir := strings.TrimSpace(os.Getenv("MINDX_CREDENTIALS_DIR")); dir != "" {
-		return &encryptedFileStore{path: filepath.Join(dir, ".credentials")}
+		return &serializedStore{inner: &encryptedFileStore{path: filepath.Join(dir, ".credentials")}}
 	}
 	switch runtime.GOOS {
 	case "darwin":
-		return &macKeychainStore{service: "mindx"}
+		return &serializedStore{inner: &macKeychainStore{service: "mindx"}}
 	default:
-		return &encryptedFileStore{
+		return &serializedStore{inner: &encryptedFileStore{
 			path: filepath.Join(workspaceDir, "settings", ".credentials"),
-		}
+		}}
 	}
 }
 
@@ -251,7 +299,7 @@ func (s *memoryCredentialStore) List(prefix string) ([]CredentialEntry, error) {
 
 // NewMemoryCredentialStore 创建进程内凭据库（测试专用，不落盘）。
 func NewMemoryCredentialStore() CredentialStore {
-	return &memoryCredentialStore{data: map[string]string{}}
+	return &serializedStore{inner: &memoryCredentialStore{data: map[string]string{}}}
 }
 
 type macKeychainStore struct {
@@ -274,10 +322,17 @@ func (s *macKeychainStore) Get(key string) (string, error) {
 }
 
 func (s *macKeychainStore) Set(key, value string) error {
-	err := exec.Command("security", "add-generic-password",
-		"-s", s.service, "-a", key, "-w", value, "-U").Run()
-	if err != nil {
-		return fmt.Errorf("keychain set %q: %w", key, err)
+	// 密码不进 argv：`-w` 作为最后一个参数时 security 会从 stdin 读两遍
+	// （密码 + 确认），而同机其他进程能看到命令行参数。含换行的值无法用
+	// 这种方式安全传输，直接拒绝，不让它把两行拼成「确认不一致」。
+	if strings.ContainsAny(value, "\r\n") {
+		return fmt.Errorf("keychain set %q: 凭据值不能包含换行", key)
+	}
+	cmd := exec.Command("security", "add-generic-password",
+		"-s", s.service, "-a", key, "-U", "-w")
+	cmd.Stdin = strings.NewReader(value + "\n" + value + "\n")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("keychain set %q: %w（%s）", key, err, strings.TrimSpace(string(out)))
 	}
 	// 同上：索引写入失败不让主写入失败。
 	_ = touchCredentialIndex(s, key)
@@ -285,8 +340,19 @@ func (s *macKeychainStore) Set(key, value string) error {
 }
 
 func (s *macKeychainStore) Delete(key string) error {
-	// 不存在按成功处理：删除是幂等操作，上层不该因「本来就没有」而报错。
-	_ = exec.Command("security", "delete-generic-password", "-s", s.service, "-a", key).Run()
+	// 不存在（exit 44）按成功处理：删除是幂等操作，上层不该因「本来就没有」
+	// 而报错；但钥匙串被锁、磁盘/权限故障要如实上报，否则界面会显示「已清除」
+	// 而条目仍在。
+	err := exec.Command("security", "delete-generic-password",
+		"-s", s.service, "-a", key).Run()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 44 {
+			_ = dropEntry(s, key)
+			return nil
+		}
+		return fmt.Errorf("keychain delete %q: %w", key, err)
+	}
 	_ = dropEntry(s, key)
 	return nil
 }
@@ -493,13 +559,36 @@ func (s *encryptedFileStore) writeEncrypted(plaintext string) error {
 	}
 
 	// 先写临时文件再改名：写到一半被打断（容器被 kill、磁盘满）时，
-	// 旧密文仍然完整可用，不会把全部凭据变成解不开的残片。
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, encrypted, 0600); err != nil {
+	// 旧密文仍然完整可用，不会把全部凭据变成解不开的残片。临时名必须唯一，
+	// 固定名会让两个写者交叉覆盖同一份密文。
+	tmp, err := os.CreateTemp(dir, filepath.Base(s.path)+".tmp-*")
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, s.path); err != nil {
-		_ = os.Remove(tmp)
+	tmpName := tmp.Name()
+	cleanup := func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+	}
+	if err := tmp.Chmod(0600); err != nil {
+		cleanup()
+		return err
+	}
+	if _, err := tmp.Write(encrypted); err != nil {
+		cleanup()
+		return err
+	}
+	// 先落盘再改名：rename 只保证目录项原子，不保证数据已经写到介质。
+	if err := tmp.Sync(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, s.path); err != nil {
+		_ = os.Remove(tmpName)
 		return err
 	}
 	return nil

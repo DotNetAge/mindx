@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -178,11 +179,30 @@ func (d *Daemon) handleScheduleUpdate(_ context.Context, params json.RawMessage)
 	}
 	oldTitle := entry.Title
 	newTitle := strings.TrimSpace(p.Title)
-	// 会话线策略与创建同口径：重复任务落实专属会话线，一次性任务不预建
+	// 会话线策略与创建同口径：重复任务落实专属会话线，一次性任务不预建。
+	// 历史条目可能没存 session_id：先用条目里已有的绑定，避免每次编辑都新建会话。
 	if !oneShot {
-		sid, err := d.ensureScheduleSession(p.Agent, p.SessionID, p.ProjectDir, "", newTitle)
-		if err != nil {
-			return nil, fmt.Errorf("落实调度任务会话失败: %w", err)
+		sid := strings.TrimSpace(p.SessionID)
+		if sid == "" || sid == "new" {
+			sid = strings.TrimSpace(entry.SessionID)
+		}
+		// 工作目录变更：旧会话寄存在旧目录里，继续复用会让新配置的任务仍然
+		// 在旧目录执行（会话元信息里的 project_dir 才是执行时的真实工作目录）。
+		// 因此换目录必须换一条会话线，标题沿用任务名。空目录视为「未提供」，
+		// 保持原绑定不动。
+		if sid != "" && sid != "new" && strings.TrimSpace(p.ProjectDir) != "" &&
+			!sameProjectDir(entry.ProjectDir, p.ProjectDir) {
+			d.logger.Info("schedule entry: project dir changed, rebind session",
+				"schedule_id", entry.ID, "old_project_dir", entry.ProjectDir,
+				"new_project_dir", p.ProjectDir, "old_session_id", sid)
+			sid = ""
+		}
+		if sid == "" || sid == "new" {
+			newSid, err := d.ensureScheduleSession(p.Agent, "", p.ProjectDir, "", newTitle)
+			if err != nil {
+				return nil, fmt.Errorf("落实调度任务会话失败: %w", err)
+			}
+			sid = newSid
 		}
 		p.SessionID = sid
 	} else if p.SessionID == "" {
@@ -361,4 +381,18 @@ func (d *Daemon) enqueueOneJobNow(agent, content string) error {
 		UpdatedAt: time.Now(),
 	}
 	return d.schedulerDB.Save(context.Background(), entry)
+}
+
+// sameProjectDir 判断两处工作目录是否指向同一路径（忽略空串、相对写法差异）。
+func sameProjectDir(a, b string) bool {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	if a == "" || b == "" {
+		return a == b
+	}
+	aa, errA := filepath.Abs(a)
+	bb, errB := filepath.Abs(b)
+	if errA != nil || errB != nil {
+		return filepath.Clean(a) == filepath.Clean(b)
+	}
+	return filepath.Clean(aa) == filepath.Clean(bb)
 }

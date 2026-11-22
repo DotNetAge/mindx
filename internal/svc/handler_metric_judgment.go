@@ -247,6 +247,17 @@ func (d *Daemon) stashPendingJudgment(sessionID string, pj pendingJudgment) {
 	list.mu.Unlock()
 }
 
+// discardPendingJudgments 丢掉落单的轮内判定（该轮没有成功落盘的 round 事件）。
+// 判定必须挂在它被评价的那一轮：留到下一轮会把赞踩/返工算到错误的目标上，
+// 比直接丢弃更糟。丢弃时留一条日志，保留可追溯性。
+func (d *Daemon) discardPendingJudgments(sessionID, reason string) {
+	items := d.takePendingJudgments(sessionID)
+	if len(items) == 0 {
+		return
+	}
+	d.logger.Warn("metric: 该轮未落盘，丢弃轮内判定", "session_id", sessionID, "count", len(items), "reason", reason)
+}
+
 // takePendingJudgments 取出并清空该会话的待挂载判定。
 func (d *Daemon) takePendingJudgments(sessionID string) []pendingJudgment {
 	v, ok := d.pendingJudgments.Load(sessionID)
@@ -442,11 +453,12 @@ func (d *Daemon) writeMetricNote(sessionID, agentName, text string) string {
 	content := fmt.Sprintf("# 用户主观反馈（%s）\n\n- 记录时间：%s\n- Agent：%s\n- 来源：决策量表评价\n\n%s\n",
 		time.Now().Format("2006-01-02 15:04:05"), time.Now().Format("2006-01-02 15:04:05"), agentName, text)
 
-	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+	// 这份笔记含用户反馈原文，只给本机当前用户读：目录 0700、文件 0600。
+	if err := os.MkdirAll(agentsDir, 0o700); err != nil {
 		d.logger.Warn("metric: 写入 notes 失败（无法创建目录）", "error", err)
 		return ""
 	}
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		d.logger.Warn("metric: 写入 notes 失败", "path", path, "error", err)
 		return ""
 	}

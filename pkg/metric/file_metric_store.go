@@ -30,7 +30,24 @@ type FileMetricStore struct {
 
 // NewFileMetricStore 创建以 dataDir 为根的 FileMetricStore。
 func NewFileMetricStore(dataDir string) *FileMetricStore {
-	return &FileMetricStore{dataDir: dataDir}
+	s := &FileMetricStore{dataDir: dataDir}
+	s.tightenExistingFiles()
+	return s
+}
+
+// tightenExistingFiles 把历史遗留的宽权限文件收紧到 0600。
+// 旧版本用 0644 创建计量文件，里面存着用户任务原文；新写入虽然已经是 0600，
+// 但没人再写的老文件会一直向同机其他用户敞开，启动时顺手修掉。
+func (s *FileMetricStore) tightenExistingFiles() {
+	for _, p := range []string{s.eventsPath(), s.confoundingsPath()} {
+		if info, err := os.Stat(p); err != nil || info.Mode().Perm() == 0o600 {
+			continue
+		}
+		if err := os.Chmod(p, 0o600); err != nil {
+			// 权限不足时不要阻塞启动：下一次原子写入会自然换成 0600。
+			continue
+		}
+	}
 }
 
 func (s *FileMetricStore) eventsPath() string {
@@ -63,10 +80,47 @@ func (s *FileMetricStore) saveEvents(events []MetricEvent) error {
 	if err != nil {
 		return fmt.Errorf("marshal metric events: %w", err)
 	}
-	if err := os.MkdirAll(s.dataDir, 0755); err != nil {
+	return s.writeAtomic(s.eventsPath(), data)
+}
+
+// writeAtomic 先写同目录唯一临时文件、落盘后再改名，最后把权限钉成 0600。
+// 旧实现直接覆盖目标文件：进程被杀/磁盘满会留下截断的 YAML；历史文件若是
+// 0644，新的权限参数也不会生效（os.WriteFile 只在创建时应用），而计量里
+// 存着用户任务原文，不该让同机其他用户读到。
+func (s *FileMetricStore) writeAtomic(path string, data []byte) error {
+	if err := os.MkdirAll(s.dataDir, 0o700); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
-	return os.WriteFile(s.eventsPath(), data, 0o600)
+	tmp, err := os.CreateTemp(s.dataDir, filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		cleanup()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		cleanup()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
 }
 
 // loadConfoundings 读取全部混杂登记；文件不存在时返回空切片。
@@ -91,10 +145,7 @@ func (s *FileMetricStore) saveConfoundings(events []ConfoundingEvent) error {
 	if err != nil {
 		return fmt.Errorf("marshal metric confoundings: %w", err)
 	}
-	if err := os.MkdirAll(s.dataDir, 0755); err != nil {
-		return fmt.Errorf("create data directory: %w", err)
-	}
-	return os.WriteFile(s.confoundingsPath(), data, 0o600)
+	return s.writeAtomic(s.confoundingsPath(), data)
 }
 
 // AppendEvent 写入一条计量事件（round / rating / overall）。

@@ -457,6 +457,8 @@ func (d *Daemon) Start(ctx context.Context) error {
 
 	// ── 自动升级检查（启动时 + 每日一次） ─────────────────
 	go d.autoUpdateLoop(ctx)
+	// ── 计量明细滚动清理（启动时 + 每日一次） ─────────────
+	d.startMetricRetention(ctx)
 
 	// ── 等待标记启动清扫 ─────────────────
 	// daemon 重启后进程内等待必然消亡，上一轮残留的 session-wait.json 在

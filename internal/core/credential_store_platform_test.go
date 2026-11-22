@@ -54,7 +54,7 @@ func TestEncryptedFileStore_MetaListDelete(t *testing.T) {
 	require.Equal(t, "sk-legacy", legacy)
 }
 
-// 索引坏掉不得连坐：即使索引值被写坏，老代码的 Get/Set 照常工作。
+// 索引坏掉不得连坐：索引被写坏时按空索引继续，并能自愈重写。
 func TestEncryptedFileStore_CorruptIndexDoesNotBreakGetSet(t *testing.T) {
 	dir := t.TempDir()
 	store := &encryptedFileStore{path: filepath.Join(dir, "settings", ".credentials")}
@@ -65,8 +65,17 @@ func TestEncryptedFileStore_CorruptIndexDoesNotBreakGetSet(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "sk-1", v)
 
-	_, err = store.List("group:")
-	require.Error(t, err) // 枚举会明确报错，而不是假装没有
+	// 索引解析失败按空索引处理：不报错，也不假装有残留条目。
+	entries, err := store.List("group:")
+	require.NoError(t, err)
+	require.Empty(t, entries)
+
+	// 自愈：坏索引在同一次 Set 里被重写成合法 JSON，重开后能正常枚举。
+	reopened := &encryptedFileStore{path: store.path}
+	entries, err = reopened.List("ai:")
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, "ai:deepseek", entries[0].Key)
 }
 
 // MINDX_CREDENTIALS_DIR 优先级最高：容器里把凭据落到挂载卷上靠的就是它。

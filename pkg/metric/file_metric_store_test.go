@@ -3,9 +3,39 @@ package metric
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
+
+// 计量文件含用户任务原文：新建写入必须是 0600，历史 0644 文件在打开时被收紧。
+func TestMetricFilesArePrivate(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "metric_events.yml"), []byte("[]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := NewFileMetricStore(dir)
+
+	info, err := os.Stat(filepath.Join(dir, "metric_events.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("existing file perm = %o, want 600", perm)
+	}
+
+	if _, err := store.AppendEvent(context.Background(), MetricEvent{Kind: KindRound, SessionID: "s"}); err != nil {
+		t.Fatalf("AppendEvent: %v", err)
+	}
+	info, err = os.Stat(filepath.Join(dir, "metric_events.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("rewritten file perm = %o, want 600", perm)
+	}
+}
 
 func TestAppendRoundAssignsIDAndTimestamp(t *testing.T) {
 	dir := t.TempDir()

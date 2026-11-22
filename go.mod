@@ -99,4 +99,5 @@ require (
 	mvdan.cc/sh/v3 v3.13.1 // indirect
 )
 
+// gort 用本地副本（跳过 go.sum 校验）：差异核对与升级流程见 third_party/gort/MINDX_VENDOR.md
 replace github.com/DotNetAge/gort => ./third_party/gort
