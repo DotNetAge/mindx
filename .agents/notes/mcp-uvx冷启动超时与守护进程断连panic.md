@@ -13,9 +13,13 @@
 channel，触发 `panic: send on closed channel`（server.go:947，由 handleRequest.func1 触发）。
 一个连接器的超时能带走整个 daemon，其他连接器跟着一起不可用——这就是「装上了但跑不起来」的放大器。
 
-修法（third_party/gort 本地补丁 + go.mod replace）：给 client 加 `sendMu sync.RWMutex` 与
-`sendClosed bool`，`sendToClient` 持读锁期间写入，`removeClient` 持写锁置位后再 close。通道关闭后
-写入变成丢弃 + debug 日志，而不是 panic。
+修法：给 client 加 `sendMu sync.RWMutex` 与 `sendClosed bool`，`sendToClient` 持读锁期间写入，
+`removeClient` 持写锁置位后再 close。通道关闭后写入变成丢弃 + debug 日志，而不是 panic。
+
+补丁去向：早先以 `third_party/gort` 副本 + `go.mod replace` 落地；后来 gort 升 v0.1.11 时删了 replace，
+副本未删也不参与构建，防护等于丢失。现已回流上游 gort 并发 v0.1.12（上游 commit 2f99a08），
+mindx `go.mod` require `v0.1.12`，`third_party/gort` 整目录删除。改动派发前核对
+`go env GOMODCACHE` 下 `gort@v0.1.12/pkg/gateway/server.go` 含 `sendClosed` 即可确认防护在位。
 
 ## 真凶二：uvx 冷启动解析依赖，直连 pypi.org 在国内长时间挂住
 
