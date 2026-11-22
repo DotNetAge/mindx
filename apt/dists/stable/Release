@@ -4,16 +4,16 @@ Suite: stable
 Codename: stable
 Architectures: amd64 arm64
 Components: main
-Date: Sun, 22 Nov 2026 11:02:56 +0000
+Date: Sun, 22 Nov 2026 12:00:16 +0000
 MD5Sum:
- 018e53ae0d0bd1f0a4af64410a9aa891 148 Release
- e25ffb74e41533d7975f7cb7697c7623 51620 main/binary-amd64/Packages
- 1626161049b45a3291cccc42c1a24c11 9459 main/binary-amd64/Packages.gz
- e25ffb74e41533d7975f7cb7697c7623 51620 main/binary-arm64/Packages
- 1626161049b45a3291cccc42c1a24c11 9459 main/binary-arm64/Packages.gz
+ a43247b334b0784de8d9e80e60e2c374 148 Release
+ f5bfbe0526aada72e891f203a00735f5 52794 main/binary-amd64/Packages
+ b45d5e66e128ac326d3691463084c8fc 9661 main/binary-amd64/Packages.gz
+ f5bfbe0526aada72e891f203a00735f5 52794 main/binary-arm64/Packages
+ b45d5e66e128ac326d3691463084c8fc 9661 main/binary-arm64/Packages.gz
 SHA256:
- 08e49e7e88fbe24701d9dc19a33dcfdee78efcc418d4067da502e2199ce67806 474 Release
- 95896b0029f42978f067766f6a85e738c0bf02bc159bdbd05b4fc09428d77c8f 51620 main/binary-amd64/Packages
- d7f03d3b3a42c38c380548d33973d0f445d7ea303d58ee4dfe73e4c69b64620a 9459 main/binary-amd64/Packages.gz
- 95896b0029f42978f067766f6a85e738c0bf02bc159bdbd05b4fc09428d77c8f 51620 main/binary-arm64/Packages
- d7f03d3b3a42c38c380548d33973d0f445d7ea303d58ee4dfe73e4c69b64620a 9459 main/binary-arm64/Packages.gz
+ ce54789e39cdac72fda7bdd7dbfd8eace989efe2ef3f747beb4a9267a69a9a32 474 Release
+ 0702c509695f5374974326a658c65f888dcc558d2c177861cd56c8068c6cbe38 52794 main/binary-amd64/Packages
+ 7eb6ebcd9206909492d6b1fc9aca6eefbee8b6b9c95310d1bbc0f3990e75a464 9661 main/binary-amd64/Packages.gz
+ 0702c509695f5374974326a658c65f888dcc558d2c177861cd56c8068c6cbe38 52794 main/binary-arm64/Packages
+ 7eb6ebcd9206909492d6b1fc9aca6eefbee8b6b9c95310d1bbc0f3990e75a464 9661 main/binary-arm64/Packages.gz
