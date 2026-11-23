@@ -139,6 +139,11 @@ type SessionDoneMsg struct {
 
 type UserSendMsg struct {
 	Text string
+	// ControlReply 标记本条不是新的用户提问，而是对当前轮控制消息的应答：
+	//   ask-answer        AskUser 表单/输入作答，归入当前轮，不切新轮
+	//   permission-answer 授权允许/拒绝魔术词，不落成用户气泡
+	// 空值 = 普通提问，开启新一轮。
+	ControlReply string
 }
 
 type AgentSwitchMsg struct {

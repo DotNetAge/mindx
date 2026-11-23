@@ -3,11 +3,98 @@ package svc
 import (
 	"context"
 	"strings"
+	"time"
 
 	agents "github.com/DotNetAge/goharness/agents"
 	goharnessevents "github.com/DotNetAge/goharness/events"
+	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/pkg/metric"
 )
+
+// metricRoundAccum 是同一用户轮被 AskUser / 授权挂起切开后的前段执行快照。
+// 挂起段本身不是一轮：它的 token、时长、迭代数与技能序列要并入最终段，
+// 否则后端 round 号会按「执行段」膨胀，与用户看到的轮次脱节。
+type metricRoundAccum struct {
+	TaskHint        string
+	Tokens          int
+	Duration        time.Duration
+	Iterations      int
+	Skills          []string
+	RouteCorrection int
+}
+
+// stashMetricAccum 累积一个挂起段的执行量。
+func (d *Daemon) stashMetricAccum(sid, taskHint string, data goharnessevents.ExecutionSummaryData, routeCorrection int, skills []string) {
+	d.metricAccumMu.Lock()
+	defer d.metricAccumMu.Unlock()
+	if d.metricAccums == nil {
+		d.metricAccums = map[string]*metricRoundAccum{}
+	}
+	a := d.metricAccums[sid]
+	if a == nil {
+		a = &metricRoundAccum{TaskHint: taskHint}
+		d.metricAccums[sid] = a
+	}
+	if a.TaskHint == "" {
+		a.TaskHint = taskHint
+	}
+	a.Tokens += data.TokensUsed.ActualTokens()
+	a.Duration += data.TotalDuration
+	a.Iterations += data.TotalIterations
+	a.Skills = append(a.Skills, skills...)
+	a.RouteCorrection += routeCorrection
+}
+
+// takeMetricAccum 取出并清空挂起段累计；没有累计时返回 nil。
+func (d *Daemon) takeMetricAccum(sid string) *metricRoundAccum {
+	d.metricAccumMu.Lock()
+	defer d.metricAccumMu.Unlock()
+	if d.metricAccums == nil {
+		return nil
+	}
+	a := d.metricAccums[sid]
+	delete(d.metricAccums, sid)
+	return a
+}
+
+// clearMetricAccum 在真实新提问开始时清掉上一轮残留的挂起段累计。
+func (d *Daemon) clearMetricAccum(sid string) {
+	d.metricAccumMu.Lock()
+	defer d.metricAccumMu.Unlock()
+	if d.metricAccums != nil {
+		delete(d.metricAccums, sid)
+	}
+}
+
+// isSuspendedSummaryReason 判断本次执行是否以「等待用户输入」结束：
+// AskUser 与工具授权都会收尾当前 Ask，但都属于同一用户轮的中断点，
+// 不能各自落一条 round 事件。
+func isSuspendedSummaryReason(reason string) bool {
+	return reason == "ask_user_pending" || reason == "permission_pending"
+}
+
+// mergeMetricAccum 把挂起段的执行量并入最终段：token 取净量相加，
+// 时长/迭代/技能序列累加，任务意图保留本轮最初的用户提问。
+func mergeMetricAccum(
+	data *goharnessevents.ExecutionSummaryData,
+	taskHint *string,
+	routeCorrection *int,
+	skillsUsed *[]string,
+	a *metricRoundAccum,
+) {
+	// round 事件只按净 token 计量：把前段净量并入 prompt 槽，
+	// ActualTokens 会算出两段之和。
+	data.TokensUsed = goharnesssession.TokenUsage{
+		PromptTokens: a.Tokens + data.TokensUsed.ActualTokens(),
+	}
+	data.TotalDuration += a.Duration
+	data.TotalIterations += a.Iterations
+	*routeCorrection += a.RouteCorrection
+	*skillsUsed = append(a.Skills, *skillsUsed...)
+	if a.TaskHint != "" {
+		*taskHint = a.TaskHint
+	}
+}
 
 // withMetricHook 在 AskBuilder 上追加决策计量埋点
 // （白皮书《决策量表：Agent 生态的绩效系统》第 4 章采集层）。
@@ -18,6 +105,9 @@ import (
 //     并统计相邻技能切换次数（q_route_correction 的 v1 简化口径）；
 //   - ExecutionSummary 落一条 round 事件（S/E 客观量 + 技能序列 + 任务意图提示）。
 //
+// continuation 表示本次 Ask 由 AskUser 作答或授权决策触发，属于上一用户轮的
+// 续跑而非新轮：挂起段先暂存，最终段合并后只落一条 round 事件。
+//
 // 归属规则（白皮书 7.2 要点 5）：事件归负责交付的主 Agent——"负责人对结果负责"
 // 的计量化。子会话（SubAgent 委托）的事件不在此处重复计量：其质量由委托链
 // 客观埋点（t_delegation_rebound，M2）承担，主观评价归属主 Agent。
@@ -26,10 +116,14 @@ func (d *Daemon) withMetricHook(
 	sid, agentName string,
 	getSubSessionID func() string,
 	taskHint string,
+	continuation bool,
 ) *agents.AskBuilder {
 	store := d.app.MetricStore()
 	if store == nil {
 		return b
+	}
+	if !continuation {
+		d.clearMetricAccum(sid)
 	}
 
 	var skillsUsed []string
@@ -62,6 +156,23 @@ func (d *Daemon) withMetricHook(
 		if sub := getSubSessionID(); sub != "" && sub != sid {
 			d.discardPendingJudgments(sub, "sub-session summary skipped")
 			return
+		}
+		// AskUser / 工具授权挂起只是同一用户轮的中断点，不是新一轮：
+		// 暂存本段执行量，等续跑收尾时合并成一条 round 事件。
+		if isSuspendedSummaryReason(data.TerminationReason) {
+			d.stashMetricAccum(sid, taskHint, data, routeCorrection, skillsUsed)
+			return
+		}
+		// 授权魔术词被路由到子会话时，主会话本轮没有实际工作：
+		// 已有挂起段就合并成一条收尾事件，没有就完全不落轮，避免零迭代假轮。
+		if continuation && data.TerminationReason == "magicword_consumed" {
+			a := d.takeMetricAccum(sid)
+			if a == nil {
+				return
+			}
+			mergeMetricAccum(&data, &taskHint, &routeCorrection, &skillsUsed, a)
+		} else if a := d.takeMetricAccum(sid); a != nil {
+			mergeMetricAccum(&data, &taskHint, &routeCorrection, &skillsUsed, a)
 		}
 		// 计量是旁路能力：落盘失败只丢这一条轮次事件，不打断会话主流程。
 		_, _ = d.recordRoundEvent(store, roundEventInput{

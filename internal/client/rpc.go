@@ -845,7 +845,9 @@ func (m *rootModel) rpcSendMagicWord(magicWord string) {
 		m.rpcSendMessage(magicWord)
 		return
 	}
-	m.program.Send(clientmsg.UserSendMsg{Text: magicWord})
+	// 本地模式经 UserSendMsg 进入内嵌 runtime；标记为控制应答，
+	// 避免授权魔术词被当作新提问切开轮次或渲染成用户消息。
+	m.program.Send(clientmsg.UserSendMsg{Text: magicWord, ControlReply: "permission-answer"})
 }
 
 func (m *rootModel) rpcCancelExecution() {

@@ -291,7 +291,7 @@ func (d *Daemon) runBackgroundTurn(sid, agentName, question, hint, virtualClient
 		if reuseHistory {
 			builder = builder.ReuseHistory()
 		}
-		builder = d.withMetricHook(builder, sid, agentName, getSubSessionID, hint).
+		builder = d.withMetricHook(builder, sid, agentName, getSubSessionID, hint, false).
 			OnEvent(func(ev events.ReactEvent) {
 				// Compact 事件广播：与 defaultHandler 同款（MicroCompact 已拆除）。
 				switch ev.Type {

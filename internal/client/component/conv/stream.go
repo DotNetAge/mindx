@@ -3,6 +3,7 @@ package conv
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,10 @@ import (
 )
 
 const tickInterval = 250 * time.Millisecond
+
+// permissionControlRE 匹配授权决策魔术词（可带 :payload 后缀）。
+// 这类文本是协议载荷，不是用户提问：历史还原时不能当作新一轮的起点。
+var permissionControlRE = regexp.MustCompile(`^Permission(?:AllowSession|Allow|Deny)(?::\s*[0-9A-Za-z_-]+)?$`)
 
 // ─────────────────────────────────────────────────────────────
 // 事件驱动的对话流模型
@@ -551,6 +556,20 @@ func (l *StreamList) AppendUserMessage(sessionID, agentName, question string) {
 	l.Streams = append(l.Streams, NewStream(sessionID, agentName, question))
 }
 
+// AppendReply 把 AskUser 作答归入指定会话的最后一条流：控制应答不是新提问，
+// 不能开启新一轮（否则轮次显示与用量统计都会在回答处断开）。
+// 会话流不存在时（例如刚打开历史）退化为一条新流，保证答案不丢。
+func (l *StreamList) AppendReply(sessionID, agentName, text string) {
+	for i := len(l.Streams) - 1; i >= 0; i-- {
+		if l.Streams[i].SessionID == sessionID {
+			l.Streams[i].append(Item{Kind: itemQuestion, Text: text})
+			l.Streams[i].Status = StatusThinking
+			return
+		}
+	}
+	l.Streams = append(l.Streams, NewStream(sessionID, agentName, text))
+}
+
 // AppendQuestion 向指定会话的最后一条流追加 AskUser 问题条目；
 // 会话流不存在时创建空流再追加（问题文本不是用户消息，禁止混用）。
 func (l *StreamList) AppendQuestion(sessionID, question string) {
@@ -649,6 +668,11 @@ func StreamsFromMessages(sessionID, agentName string, msgs []session.Message) []
 	for _, m := range msgs {
 		switch m.Role {
 		case "user":
+			// 授权魔术词即使被旧数据落成 user 消息，也只是当前轮的控制应答，
+			// 不是新提问：跳过它，避免历史恢复凭空多切出一轮。
+			if permissionControlRE.MatchString(strings.TrimSpace(m.Content)) {
+				continue
+			}
 			streams = append(streams, NewStream(sessionID, agentName, m.Content))
 			cur = len(streams) - 1
 			streams[cur].Status = StatusDone

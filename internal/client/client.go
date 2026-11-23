@@ -672,9 +672,8 @@ func (m *rootModel) mapAskUserReply(isMulti bool, index int, indices []int, cust
 			m.rpcSendMessage(answer)
 		}
 	} else {
-		// Local path: use the question text as a new user message.
-		// The answer is appended to the session as user input.
-		m.program.Send(clientmsg.UserSendMsg{Text: answer})
+		// Local path: AskUser 作答是当前轮的控制应答，不能开新轮。
+		m.program.Send(clientmsg.UserSendMsg{Text: answer, ControlReply: "ask-answer"})
 	}
 }
 
@@ -1253,7 +1252,16 @@ func (m *rootModel) handleSend(e clientmsg.UserSendMsg) (tea.Model, tea.Cmd) {
 		preview = string([]rune(preview)[:80]) + "..."
 	}
 
-	m.streamList.AppendUserMessage(sessionID, agentName, e.Text)
+	// 控制应答（AskUser 作答 / 授权决策）不是新提问：归入当前轮，
+	// 授权魔术词只用于放行挂起的权限，不能作为用户气泡落进会话流。
+	switch e.ControlReply {
+	case "ask-answer":
+		m.streamList.AppendReply(sessionID, agentName, e.Text)
+	case "permission-answer":
+		// 不渲染：魔术词是协议载荷，不是用户可见内容。
+	default:
+		m.streamList.AppendUserMessage(sessionID, agentName, e.Text)
+	}
 
 	// Use RPC path when connected to daemon
 	if m.rpcConnected {

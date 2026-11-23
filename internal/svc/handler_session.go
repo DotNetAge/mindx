@@ -700,7 +700,7 @@ func (d *Daemon) reclaimLastRound(ctx context.Context, sessionID string) (int, e
 	msgs := sess.All()
 	lastUserIdx := -1
 	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == "user" {
+		if isRoundAnchorUserMessage(msgs[i]) {
 			lastUserIdx = i
 			break
 		}
@@ -742,7 +742,7 @@ func (d *Daemon) reclaimRoundFrom(ctx context.Context, sessionID string, expectT
 	msgs := sess.All()
 	idx := -1
 	for i, m := range msgs {
-		if m.Role == "user" && m.Timestamp == expectTimestamp {
+		if isRoundAnchorUserMessage(m) && m.Timestamp == expectTimestamp {
 			idx = i
 			break
 		}

@@ -61,7 +61,7 @@ func (d *Daemon) handleSessionRetryLast(_ context.Context, params json.RawMessag
 	hint := ""
 	hasUser := false
 	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == "user" {
+		if isRoundAnchorUserMessage(msgs[i]) {
 			hasUser = true
 			hint = msgs[i].Content
 			break

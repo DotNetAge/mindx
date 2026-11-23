@@ -574,7 +574,9 @@ func (d *Daemon) sessionQuestionAnchors(sessionID string) []goharnesssession.Mes
 	msgs := sess.All()
 	anchors := make([]goharnesssession.Message, 0, len(msgs)/4)
 	for _, m := range msgs {
-		if m.Role == "user" {
+		// 授权魔术词可能在旧数据里落成 user：它是当前轮的控制应答，
+		// 不能作为轮次锚点，否则同一轮的 token 会被拆到「PermissionAllow」名下。
+		if isRoundAnchorUserMessage(m) {
 			anchors = append(anchors, m)
 		}
 	}

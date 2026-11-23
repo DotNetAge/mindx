@@ -88,6 +88,12 @@ type Daemon struct {
 	// 未挂载的判定丢失优于挂到错误的轮次上。
 	pendingJudgments sync.Map
 
+	// metricAccumMu / metricAccums 暂存同一用户轮被 AskUser/授权挂起切开的
+	// 多段执行：挂起段不落独立 round 事件，等最终段把 token、时长、迭代数
+	// 与技能序列合并成一条，避免后端轮次号与真实提问轮脱节。
+	metricAccumMu sync.Mutex
+	metricAccums  map[string]*metricRoundAccum
+
 	// global key-value store (bbolt)
 	kvStore *bbolt.DB
 
@@ -826,6 +832,9 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 	// 选择）> 会话绑定 agent_name > 全局当前 agent」裁定——输入框选定的 agent
 	// 若只落在会话上或被全局回退吃掉，会出现其它 agent 抢答。
 	sessionID := d.resolveSessionID(msg.SessionID, providedSessionID)
+	// 本次 Ask 是否续跑上一用户轮：AskUser 作答 / 授权决策发生时，本轮
+	// 执行已挂起（sessionBlock 非空），它必须合并进同一轮计量。
+	metricContinuation := d.sessionBlockOf(sessionID) != ""
 	sessionMeta, metaErr := d.getSessionMeta(sessionID)
 	resolvedAgentName := agentName
 	if resolvedAgentName == "" {
@@ -1045,7 +1054,7 @@ func (d *Daemon) defaultHandler(msg *gateway.Message) {
 			})
 		// 决策计量埋点：在 UI emitter 之外独立注册（OnXxx 追加语义），
 		// 每次任务执行结束落一条 round 事件（白皮书第 4 章采集层）。
-		builder = d.withMetricHook(builder, sid, resolvedAgentName, func() string { return eventSubSessionID }, content).
+		builder = d.withMetricHook(builder, sid, resolvedAgentName, func() string { return eventSubSessionID }, content, metricContinuation).
 			OnEvent(func(ev events.ReactEvent) {
 				// Forward Compact events as JSON-RPC broadcast notifications
 				// so all connected clients get real-time context window
