@@ -83,6 +83,47 @@ func TestReclaimRoundFrom_TruncatesFromEarlierRound(t *testing.T) {
 	require.Equal(t, "init", after[0].Content, "第一轮必须原样保留")
 }
 
+// TestDeleteRoundOnly_PreservesLaterRounds 单轮撤销只删目标轮，后续轮次保留。
+func TestDeleteRoundOnly_PreservesLaterRounds(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	sessionID := mustCreateSession(t, d.app.SessDB(), "test-agent")
+	sess := loadTestSession(t, d, sessionID, "test-agent")
+	secondTs := appendRound(t, sess, "second")
+	appendRound(t, sess, "third")
+
+	res, err := d.handleSessionDeleteRoundOnly(context.Background(),
+		json.RawMessage(fmt.Sprintf(`{"session_id":%q,"id":%d}`, sessionID, secondTs)))
+	require.NoError(t, err)
+	require.Equal(t, true, res.(map[string]any)["deleted"])
+	require.Equal(t, 2, res.(map[string]any)["removed"])
+
+	after := loadTestSession(t, d, sessionID, "test-agent").All()
+	require.Len(t, after, 3, "第一轮与第三轮必须保留，只删第二轮的两条消息")
+	require.Equal(t, "init", after[0].Content)
+	require.Equal(t, "user", after[1].Role)
+	require.Equal(t, "third", after[1].Content)
+}
+
+// TestDeleteRoundOnly_RefusesRunningTurn 执行中的会话拒绝单轮撤销。
+func TestDeleteRoundOnly_RefusesRunningTurn(t *testing.T) {
+	d, cleanup := newTestDaemon(t)
+	defer cleanup()
+
+	sessionID := mustCreateSession(t, d.app.SessDB(), "test-agent")
+	sess := loadTestSession(t, d, sessionID, "test-agent")
+	firstTs := sess.All()[0].Timestamp
+	release := make(chan struct{})
+	d.sessionQueueFor(sessionID).Enqueue(func() { <-release })
+
+	_, err := d.handleSessionDeleteRoundOnly(context.Background(),
+		json.RawMessage(fmt.Sprintf(`{"session_id":%q,"id":%d}`, sessionID, firstTs)))
+	require.ErrorIs(t, err, errTurnInFlight)
+
+	close(release)
+}
+
 // TestReclaimRoundFrom_UnknownTimestamp 时间戳对不上任何 user 消息时明确拒绝，
 // 不做「猜一轮」的破坏性操作。
 func TestReclaimRoundFrom_UnknownTimestamp(t *testing.T) {

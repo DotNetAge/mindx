@@ -835,6 +835,69 @@ func (d *Daemon) handleSessionDeleteRound(ctx context.Context, params json.RawMe
 	}, nil
 }
 
+// handleSessionDeleteRoundOnly 处理 session.delete_round_only：只删除指定
+// 的那一轮（user 消息起到下一条 user 消息前），后续轮次原样保留。
+//
+// 与 session.delete_round 的区别：后者是「回到这一轮之前重来」的截断，会把
+// 该轮及其之后全部作废；本方法服务异常轮的「撤销」，只清理这一轮自身。
+// 中间删除会让该点之后的前缀缓存失效，但这是用户明确发起的破坏性操作，
+// 用一次显式失效换取「不误删后续工作」是正确取舍；存储与内存仍按
+// goharness Session.DeleteRound 的存储优先约定保持一致。
+func (d *Daemon) handleSessionDeleteRoundOnly(ctx context.Context, params json.RawMessage) (any, error) {
+	var p rpc.SessionDeleteRoundParams
+	if err := unmarshalParams(params, &p); err != nil {
+		return nil, err
+	}
+	if p.SessionID == "" {
+		return nil, fmt.Errorf("session_id is required")
+	}
+
+	sess, err := d.getOrLoadSession(p.SessionID)
+	if err != nil {
+		return nil, fmt.Errorf("打开会话失败：%w", err)
+	}
+
+	msgs := sess.All()
+	targetIdx := -1
+	for i, m := range msgs {
+		if isRoundAnchorUserMessage(m) && m.Timestamp == p.MessageID {
+			targetIdx = i
+			break
+		}
+	}
+	if targetIdx < 0 {
+		return nil, errNoReclaimableRound
+	}
+	if cursor := sess.Cursor(); targetIdx < cursor {
+		return nil, errRoundNotInWindow
+	}
+	if d.sessionTurnBusy(p.SessionID) {
+		return nil, errTurnInFlight
+	}
+
+	before := len(msgs)
+	if err := sess.DeleteRound(ctx, p.MessageID); err != nil {
+		return nil, fmt.Errorf("删除轮次失败：%w", err)
+	}
+
+	after := len(sess.All())
+	d.logger.Info("session round deleted only",
+		"session_id", p.SessionID,
+		"message_id", p.MessageID,
+		"messages_before", before,
+		"messages_after", after,
+	)
+
+	return map[string]any{
+		"session_id":      p.SessionID,
+		"message_id":      p.MessageID,
+		"messages_before": before,
+		"messages_kept":   after,
+		"removed":         before - after,
+		"deleted":         true,
+	}, nil
+}
+
 func (d *Daemon) handleSessionCompact(ctx context.Context, params json.RawMessage) (any, error) {
 	var p rpc.SessionCompactParams
 	if err := unmarshalParams(params, &p); err != nil {

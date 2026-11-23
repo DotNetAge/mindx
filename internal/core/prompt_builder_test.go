@@ -10,9 +10,47 @@ import (
 	"github.com/DotNetAge/goharness/logging"
 	goharnesssession "github.com/DotNetAge/goharness/session"
 	"github.com/DotNetAge/mindx/internal/core/agentstore"
+	"github.com/DotNetAge/mindx/internal/core/skillstore"
 	"github.com/DotNetAge/mindx/internal/core/teamstore"
 	mindxses "github.com/DotNetAge/mindx/pkg/session"
 )
+
+// TestSkillsSectionIsHardGate 锁定技能目录段的语义：它是执行前置门禁，
+// 不是“遇到陌生领域才查的参考资料”。模型自述“知道自己有技能但没去用”，
+// 暴露出旧文案只是疑问句、且自检只覆盖读文件动作；这里防止文案再退化。
+func TestSkillsSectionIsHardGate(t *testing.T) {
+	tmp := t.TempDir()
+	globalDir := filepath.Join(tmp, "skills")
+	if err := os.MkdirAll(filepath.Join(globalDir, "golang-testing"), 0o755); err != nil {
+		t.Fatalf("创建技能目录失败: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(globalDir, "golang-testing", "SKILL.md"),
+		[]byte("---\nname: golang-testing\ndescription: Go 测试模式\n---\n\n正文\n"), 0o644); err != nil {
+		t.Fatalf("写入技能失败: %v", err)
+	}
+	skills, err := skillstore.NewStore(globalDir, filepath.Join(tmp, "agents"))
+	if err != nil {
+		t.Fatalf("构造技能库失败: %v", err)
+	}
+	pb := NewPromptBuilder(nil, skills, nil, "", "", nil)
+	agent := &agentstore.Agent{Meta: agentstore.AgentMeta{Name: "tester", Skills: []string{"golang-testing"}}}
+
+	section := pb.buildSkillsSection(agent)
+	for _, want := range []string{
+		"## 可用技能（执行前置门禁）",
+		"开始回答或执行任务前，先核对下列技能是否覆盖当前任务",
+		"即使你凭经验能直接完成，也不得跳过",
+		"必须先调用 Skill 工具加载该技能",
+		"匹配而未加载，不得开始回答或执行",
+	} {
+		if !strings.Contains(section, want) {
+			t.Errorf("技能目录段缺少硬性语义 %q，实际输出:\n%s", want, section)
+		}
+	}
+	if strings.Contains(section, "执行前自检") {
+		t.Errorf("技能段不应再出现第二个触发点“执行前自检”，实际输出:\n%s", section)
+	}
+}
 
 // mustLeaderTestSession 构造挂在临时工作目录上的会话（Build 需要 Session 载体）。
 // teamName 非空时会话绑定团队（WithTeamNameOption，模拟团队会话）。

@@ -323,6 +323,9 @@ func newBroadcastAskHandlers(
 			}, gateway.WithSessionID(effectiveEventSession(sid, getSubSessionID)), withAgent())
 		},
 		AskUserPending: func(data goharnessevents.AskUserPendingData) {
+			// 模型可能把 options 传成 [{label, description}] 对象；goharness 的
+			// 旧解析只收字符串数组，会在事件里丢空。这里用已落盘的原始工具调用参数补回。
+			enrichAskUserPendingFromToolCall(d.askUserEventSession(s, data.SessionID), &data)
 			// 挂起登记（蜂群侧栏气球）：与 client 版同语义（子会话提问统一登记到父会话）。
 			d.markSessionBlock(sid, "ask")
 			if data.SessionID != "" && data.SessionID != sid {

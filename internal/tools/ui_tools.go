@@ -219,6 +219,7 @@ medium 尽快关注（黄色）、low 仅知会（绿色）、normal 紧急程�
 				Type:        "string",
 				Description: "紧急程度：high（红，立即处理）/ medium（黄，尽快处理）/ low（绿，仅知会）/ normal（普通，默认）。",
 				Required:    false,
+				Enum:        []any{"high", "medium", "low", "normal"},
 			},
 		},
 	}
@@ -355,12 +356,14 @@ task 要写成用户自己会说出口的那句话：替他把缺的上下文补
 				Type:        "string",
 				Description: "会话形态：new（默认，开新会话）| resume（复用该智能体在同一目录下已有的会话）。",
 				Required:    false,
+				Enum:        []any{"new", "resume"},
 			},
 			{
 				Name:        "deliver",
 				Type:        "string",
 				Description: "交付方式：draft（默认，只把任务填进对方输入框，用户自己按发送键；用户没让你替他把话说死时一律用这个）| send（直接以用户身份发出，仅在用户明确要求「直接交给它办」时用）。",
 				Required:    false,
+				Enum:        []any{"draft", "send"},
 			},
 		},
 	}
