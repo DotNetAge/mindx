@@ -364,3 +364,52 @@ func TestNormalizeCategory(t *testing.T) {
 		}
 	}
 }
+
+func TestMarketDefinitionOverridesMetaSnapshot(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/packages" && r.URL.Path != "/api/v1/packages/agent/demo" {
+			http.NotFound(w, r)
+			return
+		}
+		pkg := map[string]any{
+			"kind": "agent", "name": "demo",
+			"meta": map[string]any{
+				"skills": []string{"old-skill"},
+				"icon":   "fallback-icon",
+			},
+			"definition": map[string]any{
+				"kind": "agent", "name": "demo", "version": "1.0.2",
+				"skills": []string{"new-skill"},
+			},
+		}
+		if r.URL.Path == "/api/v1/packages" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"total": 1, "page": 1, "packages": []any{pkg}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(pkg)
+	}))
+	defer srv.Close()
+
+	client := NewMarketClient(srv.URL, t.TempDir())
+	page, err := client.ListPage(MarketQuery{Page: 1, Kind: "agent"})
+	if err != nil || len(page.Packages) != 1 {
+		t.Fatalf("列表失败: %v %+v", err, page)
+	}
+	if got := page.Packages[0].Skills; len(got) != 1 || got[0] != "new-skill" {
+		t.Fatalf("列表未以 DB 定义覆盖旧 meta: %+v", got)
+	}
+	if page.Packages[0].Version != "1.0.2" {
+		t.Fatalf("版本应取定义: %q", page.Packages[0].Version)
+	}
+	if page.Packages[0].Icon != "fallback-icon" {
+		t.Fatalf("图标兜底丢失: %q", page.Packages[0].Icon)
+	}
+
+	detail, err := client.PackageByKindName("agent", "demo")
+	if err != nil {
+		t.Fatalf("详情失败: %v", err)
+	}
+	if got := detail.Skills; len(got) != 1 || got[0] != "new-skill" {
+		t.Fatalf("详情未以 DB 定义覆盖旧 meta: %+v", got)
+	}
+}

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
 fapprox —— 记忆精简先验：计算 .agents/memory/ 各条目的引用密度 F_approx。
-用法: python3 fapprox.py <agents_dir> [--json]
+用法: python3 fapprox.py <agents_dir> [--skip-newer-than HOURS] [--json]
 F ≈ 1 - (引用次数 / 字符数归一化)。verdict 判读：
-  P0 未被引用 → 建议删除 | P1 高F大文件 → 提取引用段后精简
+  P0 未被引用 → 先查来源，非本轮新建才可归档 | P1 高F大文件 → 提取引用段后精简
   P2 中间态 → 暂不处理 | P3 低F（≤0.3）→ 核心资产保留
+--skip-newer-than 排除最近 N 小时新建的条目，防止本轮刚提炼的记忆被 P0 判死。
 本脚本是 F_approx 算法与阈值的唯一实现；文档只描述调用与判读。
 """
-import sys, json, argparse
+import sys, json, argparse, time
 from pathlib import Path
 
 TEXT_EXTS = {".md", ".json", ".csv", ".py", ".sh", ".yaml", ".yml"}
@@ -33,6 +34,8 @@ def count_cites(stem: str, roots: list[Path], self_path: Path) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("agents_dir", help="项目 .agents 目录")
+    ap.add_argument("--skip-newer-than", type=float, default=0,
+                    help="排除最近 N 小时新建的条目（默认 0，不排除；自省建议 24）")
     ap.add_argument("--json", action="store_true", help="输出 JSON（默认就是 JSON，占位保持兼容）")
     args = ap.parse_args()
     agents = Path(args.agents_dir)
@@ -43,6 +46,11 @@ def main() -> int:
 
     roots = [agents / d for d in SCAN_DIRS]
     files = [f for f in mem_dir.rglob("*.md") if f.is_file() and ".archive" not in f.parts]
+    now = time.time()
+    if args.skip_newer_than > 0:
+        files = [f for f in files if (now - f.stat().st_mtime) >= args.skip_newer_than * 3600]
+    skipped_new = len([f for f in mem_dir.rglob("*.md")
+                       if f.is_file() and ".archive" not in f.parts]) - len(files)
 
     sizes = {f: f.stat().st_size for f in files}
     mean_size = max(sum(sizes.values()) / len(sizes), 100) if sizes else 1
@@ -63,9 +71,11 @@ def main() -> int:
         else:
             verdict = "P2-暂不处理"
         out.append({"file": str(f.relative_to(agents)), "cites": cites, "size": size,
+                    "age_hours": round((now - f.stat().st_mtime) / 3600, 1),
                     "f": round(f_approx, 3), "verdict": verdict})
 
-    print(json.dumps({"entries": out, "count": len(out)}, ensure_ascii=False, indent=1))
+    print(json.dumps({"entries": out, "count": len(out), "skipped_new": skipped_new},
+                     ensure_ascii=False, indent=1))
     return 0
 
 

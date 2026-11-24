@@ -1241,10 +1241,18 @@ type apiPackage struct {
 	DerivedFrom  *DerivedRef    `json:"derived_from"`
 	DerivedCount int64          `json:"derived_count"`
 	Meta         apiPackageMeta `json:"meta"`
+	// Definition 最新版完整定义（服务端 package_versions.manifest_json）。
+	// 有它时以它覆盖 meta：meta 只是展示投影，不能反过来决定装配。
+	Definition json.RawMessage `json:"definition"`
 }
 
 // toMarketPackage 转为统一包条目（分类归一；版本优先取 meta.version，回退顶层）。
 func (ap apiPackage) toMarketPackage() MarketPackage {
+	// 服务端定义是权威源；JSON 反序列化只覆盖定义里出现的字段，
+	// 因此 meta 中独有的图标等展示资产不会被清空。
+	if len(ap.Definition) > 0 {
+		_ = json.Unmarshal(ap.Definition, &ap.Meta)
+	}
 	version := ap.Meta.Version
 	if version == "" {
 		version = ap.Version

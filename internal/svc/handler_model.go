@@ -160,11 +160,24 @@ func (d *Daemon) handleProviderCreate(_ context.Context, params json.RawMessage)
 		}
 	}
 
+	// 用户填的是真实密钥时，先存进本机凭据库，YAML 只留引用（provider name）——
+	// 与 provider.update 同一口径。少了这一步会有两个后果：明文密钥落进
+	// providers.yml，而 provider.list 按凭据库判定「是否已配置」，于是刚填过
+	// Key 的新供应商会一直显示「未配置」。
+	providerAPIKey := p.APIKey
+	if providerAPIKey != "" && !p.IsLocal {
+		if err := storeAndResolveProviderAPIKey(d, p.Name, providerAPIKey); err != nil {
+			d.logger.Error("provider.create: 凭据写入失败", err, "provider", p.Name)
+			return nil, fmt.Errorf("API Key 没能存进本机的安全存储，这次添加没有生效。请确认系统钥匙串没有被锁定后重试。")
+		}
+		providerAPIKey = p.Name
+	}
+
 	newProvider := &goharnessconfig.ProviderConfig{
 		Name:      p.Name,
 		Title:     p.Title,
 		BaseURL:   p.BaseURL,
-		APIKey:    p.APIKey,
+		APIKey:    providerAPIKey,
 		AuthToken: p.AuthToken,
 		IsLocal:   p.IsLocal,
 	}
@@ -205,7 +218,7 @@ func (d *Daemon) handleProviderUpdate(_ context.Context, params json.RawMessage)
 			found = true
 			// 凭据先落盘，再改内存中的 provider 配置：反过来做，一旦凭据写入失败
 			// 就会出现「YAML 指向新引用、密钥却没存」的半成品状态。
-			if paramsContainsKey(params, "api_key") {
+			if paramsContainsKey(params, "api_key") && p.APIKey != "" {
 				if err := storeAndResolveProviderAPIKey(d, ep.Name, p.APIKey); err != nil {
 					d.logger.Error("provider.update: 凭据写入失败", err, "provider", ep.Name)
 					return nil, fmt.Errorf("API Key 没能存进本机的安全存储，这次修改没有生效。请确认系统钥匙串没有被锁定后重试。")
@@ -220,7 +233,10 @@ func (d *Daemon) handleProviderUpdate(_ context.Context, params json.RawMessage)
 			// 规则4: WebUI设置api_key时，先从环境变量尝试读取实际值，
 			// 有值则以provider name为键存CredentialStore；无值则以用户输入为值存CredentialStore。
 			// 绝不将原始值明文写入YAML配置文件。
-			if paramsContainsKey(params, "api_key") {
+			// 只有真的写进了新密钥才改 YAML 引用：把空值也当成一次「设置」，会把
+			// 原本指向环境变量的引用改成 provider name，而凭据库里又没有东西，
+			// 结果就是保存成功、界面反而变成「未配置」。
+			if paramsContainsKey(params, "api_key") && p.APIKey != "" {
 				existing[i].APIKey = existing[i].Name // YAML中只存引用（provider name）
 			}
 			if paramsContainsKey(params, "auth_token") {
