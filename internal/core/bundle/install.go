@@ -20,6 +20,9 @@ type InstallOptions struct {
 	GlobalDir string
 	// Overwrite 目标已存在同名 Agent / 团队 / 技能时是否覆盖（由用户在界面确认后传入）。
 	Overwrite bool
+	// Policy 冲突处置策略。零值 = 保守语义（冲突报错，覆盖需 Overwrite）；
+	// ConflictSmart = 市场招募语义（一致不重写、本地旧则覆盖、其余保留本地）。
+	Policy ConflictPolicy
 }
 
 // Install 将分发包展开落库（分发格式 ≠ 存储格式，冗余只存在于传输层）：
@@ -29,7 +32,8 @@ type InstallOptions struct {
 //   - Team 包：team/ → teams/<name>/；包内 agents/<n>/ 逐成员按 Agent 包规则落位
 //     （整队招聘：团队与成员一次装齐，落地后恢复纯引用）；
 //   - 同名冲突默认拒绝（返回错误），由界面确认后带 Overwrite 重试；
-//     但包内容与盘上逐字节一致（未修改的重复安装）时静默放行，不要求确认。
+//     但包内容与盘上逐字节一致（未修改的重复安装）时静默放行，不要求确认；
+//   - Policy=ConflictSmart 时改由 decideConflict 自行取舍，不向用户抛冲突。
 //
 // 全量条目先读入内存并完成冲突预检后才写盘，避免"写一半失败"的中间态。
 // 调用方负责安装后的注册表重载（ReloadAgents / ReloadTeams / ReloadSkills）与运行时失效。
@@ -80,19 +84,31 @@ func installAgent(entries []zipEntry, manifest *Manifest, opts InstallOptions) (
 		return nil, err
 	}
 
-	// 冲突预检：目标 Agent 已存在时默认拒绝（包内技能无冲突——同名落 Agent 级、
-	// 不同名进全局库，规则本身消除了技能层的同名写入冲突）；
-	// 盘上内容与包逐字节一致（未修改的重复安装）时静默放行
+	// 冲突预检：按策略决定覆盖 / 跳过 / 保留本地（包内技能无冲突——同名落
+	// Agent 级、不同名进全局库，规则本身消除了技能层的同名写入冲突）
 	if _, err := os.Stat(agentDir); err == nil {
-		if !opts.Overwrite && !agentPrefixContentIdentical(entries, zipPrefixAgent, agentDir, opts.GlobalDir, globalNames) {
-			return nil, fmt.Errorf("已存在同名智能体 %q，如需覆盖请在界面中确认后重试", manifest.Name)
+		identical := agentPrefixContentIdentical(entries, zipPrefixAgent, agentDir, opts.GlobalDir, globalNames)
+		switch decideConflict(opts.Policy, opts.Overwrite, identical, localVersion(KindAgent, agentDir), manifest.Version) {
+		case ConflictSkipIdentical:
+			// 内容与包一致：不重写文件，但沿用 Overwritten 表示「命中了已存在目标」
+			return &InstallResult{Kind: KindAgent, Name: manifest.Name, Overwritten: true, Outcome: OutcomeIdentical}, nil
+		case ConflictKeepLocal:
+			return &InstallResult{Kind: KindAgent, Name: manifest.Name, Outcome: OutcomeKeptLocal}, nil
+		case ConflictOverwrite:
+			overwritten = true
+		default:
+			return nil, fmt.Errorf("已存在同名智能体 %q，与本机内容不同；覆盖安装需显式指定 overwrite（CLI 用 --overwrite）", manifest.Name)
 		}
-		overwritten = true
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("检查智能体目录失败：%w", err)
 	}
 
-	result := &InstallResult{Kind: KindAgent, Name: manifest.Name, Overwritten: overwritten}
+	result := &InstallResult{
+		Kind:        KindAgent,
+		Name:        manifest.Name,
+		Overwritten: overwritten,
+		Outcome:     outcomeOf(overwritten),
+	}
 	skillGlobal := make(map[string]bool)
 	skillAgent := make(map[string]bool)
 
@@ -141,7 +157,7 @@ func installTeam(entries []zipEntry, manifest *Manifest, opts InstallOptions) (*
 	}
 	overwritten := false
 	conflict := func(existing, label string) error {
-		return fmt.Errorf("已存在同名%s %q，如需覆盖请在界面中确认后重试", label, existing)
+		return fmt.Errorf("已存在同名%s %q，与本机内容不同；覆盖安装需显式指定 overwrite（CLI 用 --overwrite）", label, existing)
 	}
 	teamExists := false
 	if _, err := os.Stat(teamDir); err == nil {
@@ -160,15 +176,24 @@ func installTeam(entries []zipEntry, manifest *Manifest, opts InstallOptions) (*
 			return nil, fmt.Errorf("检查智能体目录失败：%w", err)
 		}
 	}
-	if teamExists || anyMemberExists {
-		if opts.Overwrite {
+	if teamExists {
+		identical := anyMemberExists && teamUnmodified(entries, teamDir, packedAgents, opts)
+		members := sortedNames(packedAgents)
+		switch decideConflict(opts.Policy, opts.Overwrite, identical, localVersion(KindTeam, teamDir), manifest.Version) {
+		case ConflictSkipIdentical:
+			return &InstallResult{Kind: KindTeam, Name: manifest.Name, Members: members, Overwritten: true, Outcome: OutcomeIdentical}, nil
+		case ConflictKeepLocal:
+			return &InstallResult{Kind: KindTeam, Name: manifest.Name, Members: members, Outcome: OutcomeKeptLocal}, nil
+		case ConflictOverwrite:
 			overwritten = true
-		} else if teamExists && anyMemberExists && teamUnmodified(entries, teamDir, packedAgents, opts) {
+		default:
+			return nil, conflict("团队", manifest.Name)
+		}
+	} else if anyMemberExists {
+		// 团队本体缺失但成员已在（装了一半的状态）：补齐本体，按覆盖处理
+		if opts.Overwrite || opts.Policy == ConflictSmart {
 			overwritten = true
 		} else {
-			if teamExists {
-				return nil, conflict("团队", manifest.Name)
-			}
 			for _, name := range sortedNames(packedAgents) {
 				if memberExists[name] {
 					return nil, conflict("智能体", name)
@@ -208,7 +233,12 @@ func installTeam(entries []zipEntry, manifest *Manifest, opts InstallOptions) (*
 	}
 
 	// 成员 Agent 逐个落位（复用 Agent 包展开逻辑；技能跨成员共享计数）
-	result := &InstallResult{Kind: KindTeam, Name: manifest.Name, Overwritten: overwritten}
+	result := &InstallResult{
+		Kind:        KindTeam,
+		Name:        manifest.Name,
+		Overwritten: overwritten,
+		Outcome:     outcomeOf(overwritten),
+	}
 	skillGlobal := make(map[string]bool)
 	skillAgent := make(map[string]bool)
 	for _, name := range sortedNames(packedAgents) {
@@ -397,12 +427,30 @@ func installSkill(entries []zipEntry, manifest *Manifest, opts InstallOptions) (
 			}
 		}
 	}
+	// skipWrite 记录按策略不落盘的技能名（一致或保留本地），写入阶段整体跳过
+	skipWrite := make(map[string]bool)
+	identicals, keptLocals := 0, 0
 	for _, name := range sortedNames(packedSkills) {
-		if _, err := os.Stat(filepath.Join(opts.GlobalDir, name)); err == nil {
-			if !opts.Overwrite {
-				return nil, fmt.Errorf("全局库已存在同名技能 %q，如需覆盖请在界面中确认后重试", name)
+		dir := filepath.Join(opts.GlobalDir, name)
+		if _, err := os.Stat(dir); err == nil {
+			identical := skillPrefixContentIdentical(entries, zipPrefixSkills+name+"/", dir)
+			// 保守语义下技能库同名一律拒绝（历史契约，本地导入与 CLI 依赖它）；
+			// 只有 smart 策略才把「内容一致」当作无需重写的理由
+			if identical && opts.Policy != ConflictSmart && !opts.Overwrite {
+				return nil, fmt.Errorf("全局库已存在同名技能 %q；覆盖安装需显式指定 overwrite（CLI 用 --overwrite）", name)
 			}
-			overwritten = true
+			switch decideConflict(opts.Policy, opts.Overwrite, identical, localVersion(KindSkill, dir), manifest.Version) {
+			case ConflictSkipIdentical:
+				skipWrite[name] = true
+				identicals++
+			case ConflictKeepLocal:
+				skipWrite[name] = true
+				keptLocals++
+			case ConflictOverwrite:
+				overwritten = true
+			default:
+				return nil, fmt.Errorf("全局库已存在同名技能 %q；覆盖安装需显式指定 overwrite（CLI 用 --overwrite）", name)
+			}
 		} else if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("检查技能目录失败：%w", err)
 		}
@@ -416,16 +464,29 @@ func installSkill(entries []zipEntry, manifest *Manifest, opts InstallOptions) (
 		if rel == "" {
 			continue
 		}
+		if name, _, ok := strings.Cut(rel, "/"); ok && skipWrite[name] {
+			continue
+		}
 		if err := writeEntryFile(filepath.Join(opts.GlobalDir, filepath.FromSlash(rel)), e.Content); err != nil {
 			return nil, err
 		}
 	}
 
+	outcome := OutcomeInstalled
+	if len(packedSkills) > 0 && identicals+keptLocals == len(packedSkills) {
+		outcome = OutcomeIdentical
+		if keptLocals > 0 {
+			outcome = OutcomeKeptLocal
+		}
+	} else if overwritten {
+		outcome = OutcomeOverwritten
+	}
 	return &InstallResult{
 		Kind:         KindSkill,
 		Name:         manifest.Name,
 		SkillsGlobal: sortedNames(packedSkills),
 		Overwritten:  overwritten,
+		Outcome:      outcome,
 	}, nil
 }
 
@@ -484,4 +545,30 @@ func sortedNames(set map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// outcomeOf 把「是否覆盖」折算成落位结果标签。
+func outcomeOf(overwritten bool) string {
+	if overwritten {
+		return OutcomeOverwritten
+	}
+	return OutcomeInstalled
+}
+
+// skillPrefixContentIdentical 判断包内某技能目录（prefix 之下）的每个文件
+// 与盘上现有内容是否逐字节一致；盘上多出的文件（如本地 notes/）不参与判断。
+func skillPrefixContentIdentical(entries []zipEntry, prefix, dir string) bool {
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name, prefix) {
+			continue
+		}
+		rel := strings.TrimPrefix(e.Name, prefix)
+		if rel == "" || strings.HasSuffix(rel, "/") {
+			continue
+		}
+		if !fileMatches(filepath.Join(dir, filepath.FromSlash(rel)), e.Content) {
+			return false
+		}
+	}
+	return true
 }

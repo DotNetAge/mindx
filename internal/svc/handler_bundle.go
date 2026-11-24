@@ -437,8 +437,12 @@ func (d *Daemon) handleMarketInstall(ctx context.Context, params json.RawMessage
 	installOpts := bundle.InstallOptions{
 		GlobalDir: d.app.Skills().GlobalDir(),
 		TeamsDir:  d.app.Teams().Dir(),
-		// 在线安装首次落地不做覆盖；目标已存在时由前端二次确认后携带 overwrite 重试
+		// 在线安装首次落地不做覆盖；目标已存在时由前端二次确认后携带 overwrite 重试。
+		// conflict_policy=smart 时改由安装器按版本与改动自行取舍，不再把冲突报给用户。
 		Overwrite: p.Overwrite,
+		// 市场安装固定 smart：界面没有「确认覆盖」入口，缺省保守语义只会把冲突
+		// 变成一条用户无法处置的报错。取舍规则见 bundle.decideConflict。
+		Policy: bundle.ConflictSmart,
 	}
 	if bundle.PackageKind(p.Kind) == bundle.KindAgent || bundle.PackageKind(p.Kind) == bundle.KindTeam {
 		installOpts.AgentsDir = d.app.Agents().Dir()

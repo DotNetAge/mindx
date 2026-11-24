@@ -54,6 +54,9 @@ type MarketInstallParams struct {
 	Name string `json:"name"`
 	// Overwrite 目标已存在时覆盖安装（前端二次确认后才携带）。
 	Overwrite bool `json:"overwrite,omitempty"`
+	// ConflictPolicy 预留的冲突策略参数：市场安装当前固定按 smart 处理
+	// （内容一致不重写、本地旧于包则覆盖、其余保留本地），传值不影响行为。
+	ConflictPolicy string `json:"conflict_policy,omitempty"`
 	// SkipDeps 跳过依赖检查和安装。
 	SkipDeps bool `json:"skip_deps,omitempty"`
 	// AutoInstall 保留字段，已不再改变行为：安装命令一律需要用户显式确认。
@@ -265,7 +268,13 @@ func (c *Client) OrgMemberRemove(p OrgMemberRemoveParams) (json.RawMessage, erro
 }
 
 func (c *Client) MarketInstall(kind, name string, overwrite, skipDeps, autoInstall bool) (json.RawMessage, error) {
-	return c.CallWithTimeout("market.install", MarketInstallParams{Kind: kind, Name: name, Overwrite: overwrite, SkipDeps: skipDeps, AutoInstall: autoInstall})
+	return c.MarketInstallWithPolicy(MarketInstallParams{Kind: kind, Name: name, Overwrite: overwrite, SkipDeps: skipDeps, AutoInstall: autoInstall})
+}
+
+// MarketInstallWithPolicy 用完整参数安装市场包（conflict_policy=smart 时由安装器
+// 按「一致不重写 / 本地旧则覆盖 / 其余保留本地」自行取舍）。
+func (c *Client) MarketInstallWithPolicy(p MarketInstallParams) (json.RawMessage, error) {
+	return c.CallWithTimeout("market.install", p)
 }
 
 func (c *Client) MarketPackageRead(name string) (json.RawMessage, error) {

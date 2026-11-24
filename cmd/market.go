@@ -66,6 +66,7 @@ func init() {
 	marketListCmd.Flags().Int("page", 0, "Page number (1-based; server-side pagination)")
 	marketListCmd.Flags().Int("page-size", 0, "Page size (server-side, default 50, max 200)")
 	marketInstallCmd.Flags().Bool("overwrite", false, "Overwrite existing target (agent dir or skill with the same name)")
+	marketInstallCmd.Flags().Bool("smart", false, "Resolve same-name conflict automatically: identical = skip, local older than remote = overwrite, otherwise keep local edits")
 	marketInstallCmd.Flags().Bool("auto", false, "Auto-install missing dependencies without prompting")
 	marketInstallCmd.Flags().Bool("skip-deps", false, "Skip dependency checking and installation")
 	marketUpdateCmd.Flags().Bool("check", false, "只检查并列出可升级的包，不做任何改动")
@@ -351,6 +352,11 @@ Examples:
 		overwrite, _ := cmd.Flags().GetBool("overwrite")
 		skipDeps, _ := cmd.Flags().GetBool("skip-deps")
 		autoInstall, _ := cmd.Flags().GetBool("auto")
+		smart, _ := cmd.Flags().GetBool("smart")
+		conflictPolicy := ""
+		if smart {
+			conflictPolicy = "smart"
+		}
 
 		cl, err := rpc.Dial(daemonAddr)
 		if err != nil {
@@ -358,7 +364,14 @@ Examples:
 		}
 		defer func() { _ = cl.Close() }()
 
-		result, err := cl.MarketInstall(kind, name, overwrite, skipDeps, autoInstall)
+		result, err := cl.MarketInstallWithPolicy(rpc.MarketInstallParams{
+			Kind:           kind,
+			Name:           name,
+			Overwrite:      overwrite,
+			SkipDeps:       skipDeps,
+			AutoInstall:    autoInstall,
+			ConflictPolicy: conflictPolicy,
+		})
 		if err != nil {
 			return err
 		}

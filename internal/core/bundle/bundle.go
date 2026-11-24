@@ -177,4 +177,7 @@ type InstallResult struct {
 	Members []string `json:"members,omitempty"`
 	// Overwritten 是否覆盖了已存在的同名目标（用户显式确认）。
 	Overwritten bool `json:"overwritten,omitempty"`
+	// Outcome 落位结果：installed / identical（内容一致未重写）/
+	// overwritten（覆盖写入）/ kept_local（保留本地改动）。
+	Outcome string `json:"outcome,omitempty"`
 }
