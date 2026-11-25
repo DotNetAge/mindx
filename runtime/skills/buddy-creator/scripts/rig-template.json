@@ -1,0 +1,210 @@
+{
+  "schema": "mindx.buddy.rig/1",
+  "model": {
+    "frontAxis": "+x",
+    "upAxis": "+y"
+  },
+  "orientation": {
+    "facingYaw": -1.5707963267948966,
+    "viewYaw": 0.58
+  },
+  "normalize": {
+    "heightTo": 1,
+    "groundY": 0.5
+  },
+  "head": {
+    "select": {
+      "maxYAbove": 0.55
+    },
+    "pivot": "largestVertCountCenter"
+  },
+  "parts": [
+    {
+      "name": "ear",
+      "inheritHead": true,
+      "select": {
+        "absZAbove": 0.34
+      },
+      "root": {
+        "x": "center",
+        "y": "center",
+        "z": {
+          "from": "inner",
+          "offset": -0.05
+        }
+      },
+      "rot": {
+        "axis": "x",
+        "signFrom": "z",
+        "sweepAxis": "y"
+      },
+      "idle": {
+        "amp": 0.018,
+        "speed": 1.7
+      },
+      "play": {
+        "amp": 0.12,
+        "speed": 17,
+        "sweepAmp": 0.26,
+        "sweepSpeedFactor": 0.8,
+        "sweepPhase": 0.5
+      },
+      "question": {
+        "perk": 0.14,
+        "jitterAmp": 0.022,
+        "jitterSpeed": 6.5
+      }
+    },
+    {
+      "name": "eye",
+      "inheritHead": true,
+      "select": {
+        "centerXAbove": 0.05,
+        "centerYBetween": [
+          0.6,
+          0.75
+        ],
+        "absZBelow": 0.2
+      },
+      "root": {
+        "x": "center",
+        "y": "center",
+        "z": "center"
+      },
+      "blink": {
+        "period": 10,
+        "duration": 0.16,
+        "close": 0.92,
+        "axis": "y"
+      }
+    },
+    {
+      "name": "hand",
+      "select": {
+        "minYAbove": 0.19,
+        "maxYBelow": 0.4,
+        "maxXBelow": 0.25
+      },
+      "root": {
+        "x": {
+          "from": "min",
+          "offset": 0.03
+        },
+        "y": {
+          "from": "max",
+          "offset": -0.05
+        },
+        "z": "center"
+      },
+      "busy": {
+        "axis": "z",
+        "base": 0.015,
+        "amp": 0.16,
+        "speed": 20.1,
+        "phase": "indexPi"
+      }
+    },
+    {
+      "name": "tail",
+      "select": {
+        "maxXBelow": -0.3
+      },
+      "root": {
+        "x": {
+          "from": "max",
+          "offset": 0.02
+        },
+        "y": "center",
+        "z": "center"
+      },
+      "idle": {
+        "amp": 0.025,
+        "speed": 1.1
+      },
+      "question": {
+        "amp": 0.1,
+        "speed": 1.8
+      },
+      "play": {
+        "ampY": 0.5,
+        "speed": 12.5,
+        "ampX": 0.12,
+        "phase": 0.9
+      }
+    }
+  ],
+  "skullCap": {
+    "enable": false,
+    "uv": [
+      0.4882,
+      0.1172
+    ],
+    "radius": 0.222,
+    "depth": 0.075,
+    "rise": 0.006,
+    "color": "#f1ede2",
+    "roughness": 0.82,
+    "segments": [
+      64,
+      16
+    ]
+  },
+  "headFollow": {
+    "yawMax": 1.3,
+    "pitchMax": 0.65,
+    "rollMax": 0.06,
+    "easeK": 1.5,
+    "lambda": 12,
+    "busyYawWeight": 0.35,
+    "busyPitchWeight": 0.7,
+    "busyLookDown": 0.34,
+    "questionYawWeight": 0.55,
+    "questionPitchWeight": 0.45
+  },
+  "question": {
+    "yaw": -0.18,
+    "roll": 0.2,
+    "pitch": -0.05,
+    "duration": 2.9
+  },
+  "breath": {
+    "posAmp": 0.005,
+    "posSpeed": 1.7,
+    "rollAmp": 0.01,
+    "rollSpeed": 0.9
+  },
+  "play": {
+    "decay": 1.35,
+    "rollAmp": 0.022,
+    "rollSpeed": 9,
+    "headRollAmp": 0.045,
+    "headRollSpeed": 14
+  },
+  "jump": {
+    "height": 0.2,
+    "duration": 0.5
+  },
+  "fx": {
+    "enable": false,
+    "anchorY": 1.02,
+    "pool": 16,
+    "burst": 5,
+    "spriteScale": 0.16,
+    "anchorFactor": 0.79,
+    "spread": 0.92,
+    "zSpread": 0.16,
+    "sizeBase": 0.62,
+    "sizeVar": 0.38,
+    "riseBase": 0.04,
+    "riseVar": 0.05,
+    "y0Var": 0.09,
+    "driftVar": 0.18,
+    "life": 1.15,
+    "delayStep": 0.15,
+    "scaleBase": 0.075,
+    "scaleGrow": 0.05,
+    "wiggleAmp": 0.02,
+    "wiggleSpeed": 7,
+    "fadeK": 1.6
+  }
+}
