@@ -50,9 +50,9 @@
         "sweepPhase": 0.5
       },
       "question": {
-        "perk": 0.14,
-        "jitterAmp": 0.022,
-        "jitterSpeed": 6.5
+        "perk": 0.34,
+        "jitterAmp": 0.06,
+        "jitterSpeed": 7.2
       }
     },
     {
@@ -122,8 +122,8 @@
         "speed": 1.1
       },
       "question": {
-        "amp": 0.1,
-        "speed": 1.8
+        "amp": 0.22,
+        "speed": 2.4
       },
       "play": {
         "ampY": 0.5,
@@ -162,10 +162,10 @@
     "questionPitchWeight": 0.45
   },
   "question": {
-    "yaw": -0.18,
-    "roll": 0.2,
-    "pitch": -0.05,
-    "duration": 2.9
+    "yaw": -0.3,
+    "roll": 0.34,
+    "pitch": -0.14,
+    "duration": 4.2
   },
   "breath": {
     "posAmp": 0.005,
