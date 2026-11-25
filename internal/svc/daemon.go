@@ -109,7 +109,7 @@ type Daemon struct {
 	// runtimeFS 是嵌入式文件系统，包含 runtime/ 目录下的资源文件。
 	runtimeFS fs.FS
 
-	// updater 负责自动升级检查与安装。
+	// updater 负责按需升级检查与安装（由壳/客户端显式触发，进程内不自查）
 	updater *update.Updater
 
 	// restartCh 接收重启信号；Start() 主循环通过 select 监听。
@@ -126,6 +126,10 @@ type Daemon struct {
 	// chMgr 是 AgentHub 中继管理器（手机连接）：连接中继、配对同意闸、
 	// 网关桥接。在 gateway 启动成功后开启，停机时关闭。
 	chMgr *channel.Manager
+
+	// relayMgr 是账号中继上行注册通道：凭登录令牌外连 Hub 登记出口端，
+	// 与 chMgr 的配对组通路相互独立。
+	relayMgr *channel.RelayManager
 
 	// devGate 是设备接入闸（Mac 间互连）：允许接入开关、接入请求同意闸、
 	// 已授权设备表与已验证连接登记。RPC 注册层强制闸与其共用。
@@ -379,68 +383,6 @@ func (d *Daemon) sessionProjectDir(sessionID string) string {
 	return meta.ProjectDir
 }
 
-// autoUpdateLoop 在启动时进行一次检查，之后每 24 小时检查一次。
-func (d *Daemon) autoUpdateLoop(ctx context.Context) {
-	// 启动后稍等 10 秒再检查，避免启动流程堵塞
-	timer := time.NewTimer(10 * time.Second)
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-timer.C:
-			d.logger.Info("auto-update: checking for updates...")
-			info := d.updater.Check(true)
-			if info.Error != "" {
-				d.logger.Warn("auto-update: check failed", "error", info.Error)
-			} else if info.UpdateAvailable {
-				d.logger.Info("auto-update: update available!",
-					"current", info.CurrentVersion,
-					"latest", info.LatestVersion,
-				)
-				// 通知客户端更新即将开始
-				if d.gw != nil {
-					d.gw.BroadcastNotification("update_started", map[string]any{
-						"type": "update_started",
-						"data": map[string]string{
-							"version": info.LatestVersion,
-						},
-					})
-				}
-				// 自动下载并替换二进制（不停自己、不重启——替换即生效于下次重启；
-				// 下载阶段服务照常跑，替换是秒级 rename。服务重启只由用户触发）
-				stageBinary, ver, cleanup, err := d.updater.Download(ctx)
-				if err != nil {
-					d.logger.Warn("auto-update: download failed", "error", err)
-				} else if stageBinary == "" {
-					d.logger.Info("auto-update: already up-to-date", "version", ver)
-				} else if err := d.updater.InstallFromStage(stageBinary, ver); err != nil {
-					d.logger.Warn("auto-update: install staged binary failed", "error", err)
-					cleanup()
-				} else {
-					cleanup()
-					d.logger.Info("auto-update: update installed. User should restart the daemon.")
-					if d.gw != nil {
-						d.gw.BroadcastNotification("update_installed", map[string]any{
-							"type": "update_installed",
-							"data": map[string]string{
-								"version": info.LatestVersion,
-							},
-						})
-					}
-				}
-			} else {
-				d.logger.Info("auto-update: already up-to-date", "version", info.CurrentVersion)
-			}
-			// 检查完毕后，每 24 小时检查一次
-			timer.Reset(24 * time.Hour)
-
-		case <-ctx.Done():
-			d.logger.Info("auto-update: stopping")
-			return
-		}
-	}
-}
-
 func (d *Daemon) Start(ctx context.Context) error {
 	d.startTime = time.Now()
 	d.logger.Info("daemon start called", "addr", d.addr, "wsPath", d.wsPath)
@@ -461,8 +403,10 @@ func (d *Daemon) Start(ctx context.Context) error {
 		d.logger.Info("no scheduler configured, skipping")
 	}
 
-	// ── 自动升级检查（启动时 + 每日一次） ─────────────────
-	go d.autoUpdateLoop(ctx)
+	// ── 自动升级不在进程内自查 ─────────────────
+	// 升级检查由壳（MindX.app）统一驱动：壳与核同批检查、同一份提示，需要时由壳执行
+	// mindx upgrade 替换二进制。daemon 侧只保留按需接口（handler_update.go），
+	// 供壳或外部显式调用。
 	// ── 计量明细滚动清理（启动时 + 每日一次） ─────────────
 	d.startMetricRetention(ctx)
 
@@ -523,6 +467,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 		d.chMgr.Start(ctx)
 		d.logger.Info("channel manager started")
 	}
+	d.initRelayManager(ctx)
 
 	// ── mDNS 局域网广播：服务就绪后开启，iOS App 同一 WiFi 下零配置发现 daemon ──
 	d.startMDNS()
@@ -660,6 +605,9 @@ func (d *Daemon) stopBackgroundServices() {
 			d.chMgr.Stop()
 		}
 	})
+	if d.relayMgr != nil {
+		d.relayMgr.Stop()
+	}
 
 	// 注销 mDNS 广播，避免退出后 iOS 端仍发现已下线的 daemon。
 	d.stopService("mDNS 广播", func() {

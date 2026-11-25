@@ -103,6 +103,7 @@ func (d *Daemon) finishMarketBind(authToken string) (user *bundle.MarketUser, mi
 		d.logger.Warn("登录史标记写入失败（不影响本次登录）", "error", kvErr)
 	}
 	d.logger.Info("MindX 账号绑定完成", "login", user.Login, "migrated", migrated)
+	d.notifyRelayReconnect() // 上行通道拿到新令牌后重新注册
 	return user, migrated, nil
 }
 
@@ -246,6 +247,7 @@ func (d *Daemon) handleMarketAccountLogout(_ context.Context, _ json.RawMessage)
 	}
 	d.marketLoggedOut = true
 	d.logger.Info("MindX 账号已退出登录，本次运行期不再自动登录")
+	d.notifyRelayReconnect() // 上行通道感知令牌清空，断开待重连
 	return map[string]any{"logged_out": true}, nil
 }
 

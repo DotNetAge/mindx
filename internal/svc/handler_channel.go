@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -42,6 +44,55 @@ func (d *Daemon) initChannelManager() {
 		return
 	}
 	d.chMgr = mgr
+}
+
+// notifyRelayReconnect 登录态变化后通知上行通道重连；通道未装配时忽略。
+func (d *Daemon) notifyRelayReconnect() {
+	if d.relayMgr != nil {
+		d.relayMgr.Reconnect()
+	}
+}
+
+// initRelayManager 创建账号中继上行注册通道（新通路，与旧配对组独立）。
+func (d *Daemon) initRelayManager(ctx context.Context) {
+	hubURL := d.app.Config().RelayHubURL
+	if hubURL == "" {
+		hubURL = deriveRelayHubURL(d.app.Config().MarketActiveBase, d.app.Config().MarketAPIBase)
+	}
+	if hubURL == "" {
+		d.logger.Warn("relay: 未取得 Hub 地址，账号中继上行注册未启用")
+		return
+	}
+	mgr := channel.NewRelayManager(channel.RelayConfig{
+		URL:         hubURL,
+		Logger:      d.logger,
+		GatewayDial: d.dialGatewayForBridge,
+	})
+	mgr.Start(ctx, d.app.MarketAuthToken)
+	d.relayMgr = mgr
+	d.logger.Info("relay: 账号中继上行注册通道已启动", "url", hubURL)
+}
+
+// deriveRelayHubURL 由 market HTTP(S) base 推导 Hub WebSocket 根路径；
+// active base 优先，空则跟随引导基址。只取 base 的协议与主机（含端口），
+// 丢弃原有路径前缀，避免 base 带 /api 等前缀时拼出错误的 WS 路径。
+func deriveRelayHubURL(bases ...string) string {
+	for _, base := range bases {
+		base = strings.TrimSpace(base)
+		if base == "" {
+			continue
+		}
+		u, err := url.Parse(base)
+		if err != nil || u.Host == "" {
+			continue
+		}
+		scheme := "wss"
+		if u.Scheme == "http" {
+			scheme = "ws"
+		}
+		return scheme + "://" + u.Host + "/hub/ws"
+	}
+	return ""
 }
 
 // dialGatewayForBridge 建桥自拨网关：凭证走 Authorization Bearer 头

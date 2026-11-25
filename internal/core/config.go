@@ -66,6 +66,10 @@ type MindxConfig struct {
 	// 为空表示未启用手机连接，daemon 不与中继建立连接。
 	ChannelURL string `json:"channel_url,omitempty"`
 
+	// RelayHubURL 是账号中继（云端 AgentHub）上行注册地址（wss://<market-host>/hub/ws）。
+	// 为空时由 market base 推导；未登录不上行注册。
+	RelayHubURL string `json:"relay_hub_url,omitempty"`
+
 	// MarketAPIBase 是源目录引导基址：可用源清单恒从此处拉取（/api/v1/sources），
 	// 换源不改变此字段；空 = 官方 DefaultMarketBase。由部署/配置文件给定，不作为
 	// 用户手填项。

@@ -20,6 +20,7 @@ const (
 	msgWaitingPeer = "waiting_peer" // 证书有效，等待对端上线
 	msgPeerOffline = "peer_offline" // 对端已断开
 	msgRevoked     = "revoked"      // 通道已被吊销
+	msgReady       = "ready"        // 鉴权通过，可承载业务帧
 	msgError       = "error"        // 错误
 )
 
@@ -27,6 +28,13 @@ const (
 const (
 	msgSubmitCode = "submit_code" // 提交短码（桌面端不使用）
 	msgAuthCert   = "auth_cert"   // 携带设备证书重连鉴权
+	msgAuth       = "auth"        // 账号令牌鉴权（新中继通路）
+)
+
+// 连接角色（新中继通路）
+const (
+	RoleDaemon = "daemon"
+	RolePhone  = "phone"
 )
 
 // 服务端错误码（仅客户端需要识别的子集）
@@ -49,6 +57,10 @@ type clientMsg struct {
 	Type string `json:"type"`
 	Code string `json:"code,omitempty"`
 	Cert string `json:"cert,omitempty"`
+	// 新中继通路：账号令牌鉴权
+	Token  string `json:"token,omitempty"`
+	Role   string `json:"role,omitempty"`
+	Device string `json:"device,omitempty"`
 }
 
 // serverMsg 服务端控制消息（JSON 文本帧），字段按消息类型选用
