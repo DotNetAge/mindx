@@ -3,7 +3,7 @@ name: buddy-creator
 description: 开发 MindX 桌面宠物（Buddy）组件。当用户要「做一个宠物、换个宠物形象、做 2D 宠物、开发 Buddy 组件、校验宠物包、把宠物放上架」时使用；提到 Buddy 接口、宠物组件 时主动使用。
 metadata:
   name_zh: 宠物组件开发
-  version: 1.0.0
+  version: 1.1.0
   author: Ray
 ---
 
@@ -87,6 +87,9 @@ interface Buddy {
 | `sound`    | 否   | 气泡音效，缺省用内置音                                            |
 | `frames`   | 否   | sprite 专用：`{ "count": 8, "cols": 4, "fps": 10 }`               |
 | `rig`      | 否   | procedural 必填：同目录 `rig.json` 文件名                          |
+| `yaw`      | 否   | gltf-clip 专用：模型自身偏航修正（弧度）。每个模型都不同，必须实测 |
+| `heightTo` | 否   | gltf-clip 专用：归一化总高，默认 1                               |
+| `groundY`  | 否   | gltf-clip 专用：底边落点，默认 0.5                               |
 
 `rig.json` 里 `parts[]` 默认**逐网格建 pivot**（左右耳、双眼、双手各自独立侧向与相位）；多段组成的单体部件（如分节尾巴）加 `"per": "group"` 让整组共用 pivot。`jump` 段可选，缺省则该宠物不做弹跳。
 

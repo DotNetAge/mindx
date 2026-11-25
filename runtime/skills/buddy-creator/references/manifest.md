@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-25
+updated: 2026-11-26
 scope: buddy.json v1
 ---
 
@@ -20,8 +20,10 @@ scope: buddy.json v1
 | `frames`      | object                                        | sprite 必填 | `count` ≥1，`cols` ≥1，`count ≤ cols × rows`，`fps` 1–30 |
 | `viewport`    | object                                        | 否   | `width/height` 16–512 整数，`anchor` ∈ `bottom-center/bottom-left/bottom-right/center` |
 | `sound`       | string                                        | 否   | `.wav`/`.mp3`，≤512 KB                                     |
-| `durations`   | object                                        | 否   | 键同 `clips`，值 200–3000 毫秒，供壳判定瞬发动作结束       |
-| `yaw`         | number                                        | 否   | `-3.14..3.14`，模型初始朝向偏角                            |
+| `durations`   | object                                        | 否   | 键同 `clips`，值 200–3000 毫秒。壳判定瞬发动作结束；`gltf-clip` 装载器同时拿它截断过长的 clip |
+| `yaw`         | number                                        | 否   | 模型初始朝向偏角（弧度）。`gltf-clip` 直接用它，默认 0；每个模型都不同，必须实测 |
+| `heightTo`    | number                                        | 否   | `gltf-clip` 专用：等比缩放后的总高，默认 1；窗口里给动作留余量时可调到 0.9 |
+| `groundY`     | number                                        | 否   | `gltf-clip` 专用：模型底边落点，默认 0.5                   |
 | `scale`       | number                                        | 否   | `0.2..3.0`，在 `ctx.size` 内的等比缩放                     |
 | `rig`         | string                                        | procedural 必填 | 同目录 `rig.json` 的文件名；内容为部件判据与动作参数，字段见 `branches.md` 分支五 |
 
@@ -72,7 +74,7 @@ scope: buddy.json v1
 }
 ```
 
-`clips` 的键是语义名，值是 GLB 里 `AnimationClip.name`，必须逐字一致（大小写敏感），拼错时壳只能静默不播，因此必须过 `verify_buddy.py`。
+`clips` 的键是语义名，值是 GLB 里 `AnimationClip.name`。装载器做过大小写与 `_`/`-`/空格的归一化匹配，但仍应逐字一致：拼错时壳只能静默不播，因此必须过 `verify_buddy.py`。`idle` 必填，其余键可缺；缺的语义没有反应，壳不兜底。
 
 ## 最小可运行清单
 
