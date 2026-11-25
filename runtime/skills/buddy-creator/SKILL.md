@@ -88,6 +88,8 @@ interface Buddy {
 | `frames`   | 否   | sprite 专用：`{ "count": 8, "cols": 4, "fps": 10 }`               |
 | `rig`      | 否   | procedural 必填：同目录 `rig.json` 文件名                          |
 
+`rig.json` 里 `parts[]` 默认**逐网格建 pivot**（左右耳、双眼、双手各自独立侧向与相位）；多段组成的单体部件（如分节尾巴）加 `"per": "group"` 让整组共用 pivot。`jump` 段可选，缺省则该宠物不做弹跳。
+
 组件目录内的资源用相对路径引用，壳把目录挂到 `mx-buddy://<id>/`，组件只认 `ctx.assets`。
 
 ## 部署与加载（与插件同构）
