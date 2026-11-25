@@ -33,6 +33,7 @@ scope: sprite / gltf-clip / custom 三种渲染器
 - 播放：`idle` 常驻循环；`busy(on)` 切 `busy` 循环、关闭回 `idle`；`question` / `play` / `jump` 用 `LoopOnce` 播一次后回基础动作。
 - 过渡：220 ms 交叉淡入淡出。
 - 一次性动作截断：按 `durations`（毫秒）截断，缺省 play 3 s / question 2.5 s / jump 2 s。作者常交出 12 秒的 cheer / dance，不截断会在 107 px 窗口里播半分钟。
+- idle 速率：`idleSpeed` 默认 1；设 0 冻结在 clip 首帧（完全静止），0.1–0.3 为慢放。素材里只有舞蹈 / 跑步、没有真正的 idle 时，把它塞进 `clips.idle` 全速播会让宠物一启动就在跳舞——用慢放或冻结，别硬凑。
 - 视线跟随：模型里存在名字含 `head` 的骨骼时，`lookat` 叠在该骨骼上（每帧 mixer 更新后追加一次，不累积）；没有 head 骨骼则不做跟随。
 - 命中：整身 raycast，命中点高于包围盒七成高度算摸头。
 - 性能：单 scene、单 skinned mesh 优先，贴图 ≤1024；三角面与体积走 SKILL.md 的准入线（350k / 10 MB）。60k 只是 107 px 下的经验值，不是硬线，不要当校验条件。

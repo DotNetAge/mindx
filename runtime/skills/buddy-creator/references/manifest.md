@@ -24,6 +24,7 @@ scope: buddy.json v1
 | `yaw`         | number                                        | 否   | 模型初始朝向偏角（弧度）。`gltf-clip` 直接用它，默认 0；每个模型都不同，必须实测 |
 | `heightTo`    | number                                        | 否   | `gltf-clip` 专用：等比缩放后的总高，默认 1；窗口里给动作留余量时可调到 0.9 |
 | `groundY`     | number                                        | 否   | `gltf-clip` 专用：模型底边落点，默认 0.5                   |
+| `idleSpeed`   | number                                        | 否   | `gltf-clip` 专用：idle 播放速率，0..3，默认 1；0 冻结首帧 |
 | `scale`       | number                                        | 否   | `0.2..3.0`，在 `ctx.size` 内的等比缩放                     |
 | `rig`         | string                                        | procedural 必填 | 同目录 `rig.json` 的文件名；内容为部件判据与动作参数，字段见 `branches.md` 分支五 |
 

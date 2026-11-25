@@ -90,6 +90,7 @@ interface Buddy {
 | `yaw`      | 否   | gltf-clip 专用：模型自身偏航修正（弧度）。每个模型都不同，必须实测 |
 | `heightTo` | 否   | gltf-clip 专用：归一化总高，默认 1                               |
 | `groundY`  | 否   | gltf-clip 专用：底边落点，默认 0.5                               |
+| `idleSpeed`| 否   | gltf-clip 专用：idle 播放速率，默认 1；0 冻结首帧、0.1–0.3 慢放   |
 
 `rig.json` 里 `parts[]` 默认**逐网格建 pivot**（左右耳、双眼、双手各自独立侧向与相位）；多段组成的单体部件（如分节尾巴）加 `"per": "group"` 让整组共用 pivot。`jump` 段可选，缺省则该宠物不做弹跳。
 
