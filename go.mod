@@ -100,3 +100,5 @@ require (
 )
 
 replace github.com/DotNetAge/goharness => ../core/goharness
+
+replace github.com/DotNetAge/goagent => ../core/goagent
