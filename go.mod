@@ -24,9 +24,9 @@ require (
 )
 
 require (
-	github.com/DotNetAge/goagent v0.1.7
-	github.com/DotNetAge/gochat v0.2.18
-	github.com/DotNetAge/goharness v0.2.88
+	github.com/DotNetAge/goagent v0.1.8
+	github.com/DotNetAge/gochat v0.2.20
+	github.com/DotNetAge/goharness v0.2.89
 	github.com/DotNetAge/gort v0.1.12
 	github.com/creack/pty v1.1.24
 	github.com/grandcat/zeroconf v1.0.0
@@ -98,9 +98,3 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	mvdan.cc/sh/v3 v3.13.1 // indirect
 )
-
-replace github.com/DotNetAge/goharness => ../core/goharness
-
-replace github.com/DotNetAge/goagent => ../core/goagent
-
-replace github.com/DotNetAge/gochat => ../core/gochat
