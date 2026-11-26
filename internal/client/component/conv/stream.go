@@ -668,9 +668,15 @@ func StreamsFromMessages(sessionID, agentName string, msgs []session.Message) []
 	for _, m := range msgs {
 		switch m.Role {
 		case "user":
-			// 授权魔术词即使被旧数据落成 user 消息，也只是当前轮的控制应答，
-			// 不是新提问：跳过它，避免历史恢复凭空多切出一轮。
+			// 授权魔术词即使被旧数据落成 user 消息，也只是当前轮的控制应答，不是
+			// 新提问：跳过它，避免历史恢复凭空多切出一轮。
 			if permissionControlRE.MatchString(strings.TrimSpace(m.Content)) {
+				continue
+			}
+			// 宿主注入的消息（工具读图附件、任务板提醒）同样以 user 角色传输，
+			// 但不是用户发言：跳过，否则历史还原会凭空多切一轮、并把宿主文案
+			// 渲染成一张「用户提问卡」。判定统一走 session.Message.IsRoundAnchor。
+			if !m.IsRoundAnchor() {
 				continue
 			}
 			streams = append(streams, NewStream(sessionID, agentName, m.Content))
