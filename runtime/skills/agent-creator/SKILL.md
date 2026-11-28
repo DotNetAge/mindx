@@ -6,7 +6,7 @@ description: >
   或复盘产出单个 Agent 招募提议时使用；需要成建制多成员协作时不适用。
 metadata:
   name_zh: 招募智能体
-  version: 1.4.2
+  version: 1.4.3
   author: Ray
 ---
 
@@ -63,10 +63,10 @@ metadata:
 
 ```bash
 mindx agent list --all --json
-mindx market list --kind agent --q "<领域关键词>"
+mindx market search --kind agent --k 5 "<岗位职责 + 领域整句>" --json
 ```
 
-注意：`agent list` 默认只显示已雇佣的智能体，查重时**必须加 `--all`**。
+注意：`agent list` 默认只显示已雇佣的智能体，查重时**必须加 `--all`**；市场一侧按 `finder` 技能的裁决规则执行——分数 ≥0.65 且描述对口才算命中，低于阈值或职责不对口的当没找到。
 
 按以下顺序决策，**能复用绝不新建**：
 
@@ -95,7 +95,7 @@ mindx skill list --json
 ```
 
 - 只选择**实现智能体所需行为**的领域相关技能，最多 10 个（每个技能都消耗上下文）
-- **本地缺所需技能时**，按 `skill-search` 技能查找与安装（先本地后市场，市场命中直接安装、热重载生效）
+- **本地缺所需技能时**，按 `finder` 技能检索市场并对照本机是否已装；用户明确要使用该技能时再安装
 - **本地与市场都没有时**，先 WebSearch 检索该领域的现成方案，三条出路按序尝试：
   1. **找到现成 CLI 或公开技能规范** → 规划匹配的技能（同类能力归并为一个，守住 10 个上限），路由 `skill-creator` 走创建流程生成并落位 `.agents/skills/`，完成后回本步骤装配——本技能不直接编写 SKILL.md（单写者原则）
   2. **找到合适的 MCP 服务** → 不造技能，列入 `allows_tools`（见步骤 4）

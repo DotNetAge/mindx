@@ -6,7 +6,7 @@ description: >
 metadata:
   author: Ray
   name_zh: 插件立项
-  version: "0.2.7"
+  version: "0.2.8"
 ---
 
 # 插件立项
@@ -50,7 +50,7 @@ metadata:
 - `.agents/dashboards/` 与已装插件（`mw plugin list --json`）→ 已固化的可视化需求与已有能力，防撞车
 - 工作日志（logs）与 TODO.md → 真实行为序列与未决事项——实际做了什么比说了什么更接近真实需求
 - `.agents/plans/plugin-charter.md`（历史立项卡）→ 历史裁决：被判"暂不做"的方向不重复提议，除非出现新证据
-- 市场货架（`mindx market list --kind plugin --q <关键词>`）→ 社区有没有现成方案（只读检索，静默执行）
+- 市场货架（按 `finder` 技能执行 `mindx market search --kind plugin --k 5 "<功能整句>" --json`）→ 社区有没有现成方案（只读检索，静默执行；分数 ≥0.65 且描述对口才算命中）
 
 ### 第二步 行为分析与功能预判（双源）
 

@@ -6,7 +6,7 @@ description: >
   只招单个 Agent 时不适用。
 metadata:
   name_zh: 组建团队
-  version: "0.9.1"
+  version: "0.9.2"
   author: Ray
 ---
 
@@ -47,7 +47,7 @@ metadata:
 
 先查有没有现成团队可以直接整队接手，禁止跳过本步直接考古设岗：
 
-1. 整队检索：本地 `mindx team list --json` + 市场 `mindx market list --kind team --q "<关键词>"`。检索词必须覆盖需求的全流程词（如「软件研发」「全流程交付」「内容营销」），禁止只搜单个岗位词——岗位词只匹配得到单 Agent，必然漏掉成建制团队
+1. 整队检索：本地 `mindx team list --json` 查已有编制；市场检索按 `finder` 技能执行 `mindx market search --kind team --k 5 "<整句全流程需求>" --json`（分数 ≥0.65 且描述对口才算命中）。query 传整句需求（如「软件研发团队从立项到交付的全流程」），禁止只搜单个岗位词——岗位词只匹配得到单 Agent，必然漏掉成建制团队
 2. 命中契合的现成团队 → 会话内呈现其编制与定位，向用户确认后整队复用（`mindx market install team <name>`），跳到步骤 5 建制——免考古免拆解，团队 Profile 与成员定义已由包自带，不重写不转录
 3. 整队无命中 → 进入步骤 2；逐岗位的 Agent 复用检索放到步骤 4，此时岗位清单已定
 
@@ -78,7 +78,7 @@ metadata:
 | ---- | ---------------------------------------- | -------- | -------- | ----------------- |
 
 - 岗位概览写法（概览三问）按 agent-creator 技能的 references/agent-writing.md 执行。共享技能是全团队一致性的方法论（如代码审查、测试生成、根因调试），独享技能是岗位专有做法（如特定框架开发）——只装配该岗位需要的，每个技能都消耗上下文
-- 逐岗位复用检索：本地无对应 Agent 时先 `mindx market list --kind agent --q "<领域关键词>"`，命中即 `mindx market install agent <name>`；无现成的按 agent-creator 技能的单 Agent 工作流从零创建（考古结论此时就是它的领域上下文来源）
+- 逐岗位复用检索：本地无对应 Agent 时按 `finder` 技能检索市场（`mindx market search --kind agent --k 5 "<岗位职责 + 领域>" --json`，分数 ≥0.65 且描述对口才算命中），命中并经用户确认后 `mindx market install agent <name>` + `mindx agent hire <name>`；无现成的按 agent-creator 技能的单 Agent 工作流从零创建（考古结论此时就是它的领域上下文来源）
 - 负责人选定：通常选职责横跨多领域或主导集成度的岗位。leader 岗硬性要求：1 门管理技能（任务拆解/派工/验收类，等价能力可替换）+ 1 门领域手艺技能（能抽查验证成员产出——验收取证由它承担，计划技能不做执行），缺一即空心领导，禁止注册
 - 确认后的编制决策记录按 runtime/AGENTS.md 随手记规则落项目 `.agents/notes/`（决策类、轻量：岗位清单、来源、负责人理由）。禁止落 `.agents/plans/` 之类的持久蓝图文档——持久蓝图会被执行期 LLM 当作唯一事实源，盖过 TEAM.md 与成员 IDENTITY/SOUL 的定义，把职责与协作流程锁死在招聘时刻的快照上；职责唯一出处是成员 IDENTITY/SOUL，协作流程唯一出处是 TEAM.md Profile
 
@@ -106,7 +106,7 @@ metadata:
 
 ## 反模式
 
-- **跳过复用检索直接考古设岗** —— 整队检索（本地 + 市场 `--kind team`，全流程词）不跑或检索词只含岗位词，成建制现成团队漏网，重复建制烧双份编制
+- **跳过复用检索直接考古设岗** —— 整队检索（本地 `team list` + 市场按 `finder` 语义检索，query 传整句全流程需求）不跑或 query 只含岗位词，成建制现成团队漏网，重复建制烧双份编制
 - **把编制设计落成持久蓝图文档** —— 持久蓝图会被执行期 LLM 当作唯一事实源，无视 TEAM.md 与成员 IDENTITY/SOUL 的既有定义；职责归成员 IDENTITY/SOUL，协作流程归 TEAM.md Profile，编制决策只落 `.agents/notes/` 轻量记录
 - **编制未确认就建制** —— 批量创建实体必须先过确认门
 - **一个岗位包整个项目** —— 与"能单不多"矛盾：真只需一个 Agent 时不要组建团队
